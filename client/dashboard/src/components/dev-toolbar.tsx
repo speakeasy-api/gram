@@ -22,7 +22,7 @@ const STORAGE_KEY = "gram-rbac-dev-override";
 const HIDDEN_KEY = "gram-dev-toolbar-hidden";
 const SUPER_ADMIN_KEY = "gram-dev-super-admin";
 
-type ResourceType = "org" | "project" | "mcp";
+type ResourceType = "org" | "project" | "environment" | "mcp";
 
 const SCOPE_DEFS: {
   scope: string;
@@ -53,6 +53,18 @@ const SCOPE_DEFS: {
     label: "project:write",
     resourceType: "project",
     description: "Modify projects & build resources",
+  },
+  {
+    scope: "environment:read",
+    label: "environment:read",
+    resourceType: "environment",
+    description: "View environments & their entries",
+  },
+  {
+    scope: "environment:write",
+    label: "environment:write",
+    resourceType: "environment",
+    description: "Create, edit, clone & delete environments",
   },
   {
     scope: "mcp:read",
@@ -102,20 +114,39 @@ function loadState(): OverrideState {
       ) {
         return {
           enabled: parsed.enabled,
-          scopes: Object.fromEntries(
-            Object.entries(parsed.scopes).map(([scope, enabled]) => [
-              scope,
-              { enabled: enabled as boolean, resources: null },
-            ]),
+          scopes: mergeWithDefaults(
+            Object.fromEntries(
+              Object.entries(parsed.scopes).map(([scope, enabled]) => [
+                scope,
+                { enabled: enabled as boolean, resources: null },
+              ]),
+            ),
           ),
         };
       }
-      return parsed;
+      // Merge SCOPE_DEFS defaults so any newly added scopes (since the user last
+      // saved state) are materialized in localStorage. Without this, new entries
+      // render as visually "enabled" via the per-row fallback in the JSX, but
+      // getRBACScopeOverrideHeader only iterates keys that exist in state.scopes
+      // — so the override header omits them and the kebab is disabled despite
+      // looking checked.
+      return {
+        enabled: parsed.enabled ?? false,
+        scopes: mergeWithDefaults(parsed.scopes ?? {}),
+      };
     }
   } catch {
     // ignore malformed localStorage
   }
   return { enabled: false, scopes: defaultScopeState() };
+}
+
+// mergeWithDefaults overlays existing scope state on top of defaultScopeState
+// so every scope in SCOPE_DEFS is present, but explicit user toggles win.
+function mergeWithDefaults(
+  existing: Record<string, ScopeState>,
+): Record<string, ScopeState> {
+  return { ...defaultScopeState(), ...existing };
 }
 
 function saveState(state: OverrideState) {
@@ -164,6 +195,7 @@ function loadPosition(): { x: number; y: number } | null {
 const GROUP_ORDER: { key: ResourceType; label: string }[] = [
   { key: "org", label: "Organization" },
   { key: "project", label: "Project" },
+  { key: "environment", label: "Environments" },
   { key: "mcp", label: "MCP" },
 ];
 
@@ -361,16 +393,19 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
 
   const toggleScope = useCallback(
     (scope: string) => {
-      setState((prev) => ({
-        ...prev,
-        scopes: {
-          ...prev.scopes,
-          [scope]: {
-            ...prev.scopes[scope],
-            enabled: !prev.scopes[scope]?.enabled,
+      setState((prev) => {
+        const existing = prev.scopes[scope] ?? {
+          enabled: true,
+          resources: null,
+        };
+        return {
+          ...prev,
+          scopes: {
+            ...prev.scopes,
+            [scope]: { ...existing, enabled: !existing.enabled },
           },
-        },
-      }));
+        };
+      });
       if (state.enabled) invalidate();
     },
     [state.enabled, invalidate],
@@ -378,13 +413,19 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
 
   const setScopeResources = useCallback(
     (scope: string, resources: string[] | null) => {
-      setState((prev) => ({
-        ...prev,
-        scopes: {
-          ...prev.scopes,
-          [scope]: { ...prev.scopes[scope], resources },
-        },
-      }));
+      setState((prev) => {
+        const existing = prev.scopes[scope] ?? {
+          enabled: true,
+          resources: null,
+        };
+        return {
+          ...prev,
+          scopes: {
+            ...prev.scopes,
+            [scope]: { ...existing, resources },
+          },
+        };
+      });
       if (state.enabled) invalidate();
     },
     [state.enabled, invalidate],
@@ -569,8 +610,10 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
                             enabled: true,
                             resources: null,
                           };
+                          // Defensive: legacy localStorage may have entries without `resources`.
+                          // Use loose != null so both null and undefined skip the length read.
                           const isRestricted =
-                            scopeState.resources !== null &&
+                            scopeState.resources != null &&
                             scopeState.resources.length > 0;
                           let knownResources: { id: string; label: string }[] =
                             [];

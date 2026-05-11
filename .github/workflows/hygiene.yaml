@@ -24,7 +24,7 @@ jobs:
             exit 0
           fi
 
-          if [[ "$PR_TITLE" =~ ^(chore|fix|feat|mig)(\([a-zA-Z0-9_-]+\))?!?:\ [a-z] ]]; then
+          if [[ "$PR_TITLE" =~ ^(chore|fix|feat|mig)(\([a-zA-Z0-9_-]+\))?!?:\ [a-zA-Z] ]]; then
             echo "PR title format is valid."
           else
             echo "PR title must:"
@@ -44,7 +44,7 @@ jobs:
           fi
 
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Detect changed files
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1

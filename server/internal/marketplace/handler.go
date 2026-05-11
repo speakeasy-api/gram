@@ -1,8 +1,6 @@
 package marketplace
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,47 +16,38 @@ import (
 )
 
 // RoutePrefix is the single top-level path segment reserved by the marketplace
-// proxy. All proxy routes (manifest + git Smart HTTP) live under this prefix
-// so the main mux only carves out one namespace, and so the dispatch logic
-// stays here rather than leaking into the server bootstrap.
+// proxy. All proxy routes live under this prefix so the main mux only carves
+// out one namespace, and so the dispatch logic stays here rather than leaking
+// into the server bootstrap.
 const RoutePrefix = "/marketplace/"
 
-// publishedManifestRef pins manifest fetches to the same branch the publish
-// flow writes to (see plugins/impl.go). If the publish flow ever stops
-// hardcoding "main", this needs to track that.
-const publishedManifestRef = "main"
-
-// Server hosts the URL-based marketplace.json endpoint and the git Smart HTTP
-// proxy for plugin sources. Both stream directly from GitHub against an
-// installation token minted by the resolver — no local mirror state.
+// Server hosts the git Smart HTTP proxy for plugin source clones. Streams
+// directly from GitHub against an installation token minted by the resolver —
+// no local mirror state.
 type Server struct {
-	resolver      Resolver
-	httpClient    *guardian.HTTPClient
-	publicBaseURL string
-	logger        *slog.Logger
+	resolver   Resolver
+	httpClient *guardian.HTTPClient
+	logger     *slog.Logger
 }
 
 func NewServer(
 	resolver Resolver,
 	httpClient *guardian.HTTPClient,
-	publicBaseURL string,
 	logger *slog.Logger,
 ) *Server {
 	return &Server{
-		resolver:      resolver,
-		httpClient:    httpClient,
-		publicBaseURL: publicBaseURL,
-		logger:        logger,
+		resolver:   resolver,
+		httpClient: httpClient,
+		logger:     logger,
 	}
 }
 
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET "+RoutePrefix+"m/{token}/marketplace.json", s.handleManifest)
 	// {slug} captures "<token>.git"; the handler strips the suffix. Go 1.22's
 	// ServeMux disallows mixing literals with wildcards inside one segment.
-	mux.HandleFunc("GET "+RoutePrefix+"p/{slug}/info/refs", s.handleInfoRefs)
-	mux.HandleFunc("POST "+RoutePrefix+"p/{slug}/git-upload-pack", s.handleUploadPack)
+	mux.HandleFunc("GET "+RoutePrefix+"{slug}/info/refs", s.handleInfoRefs)
+	mux.HandleFunc("POST "+RoutePrefix+"{slug}/git-upload-pack", s.handleUploadPack)
 	mux.HandleFunc("GET "+RoutePrefix+"healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, "ok")
 	})
@@ -100,148 +89,6 @@ func tokenFromSlug(slug string) string {
 		return ""
 	}
 	return token
-}
-
-// handleManifest fetches the upstream's published .claude-plugin/marketplace.json
-// via the GitHub Contents API and rewrites each plugin's source to an absolute
-// git URL on this proxy.
-func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	token := r.PathValue("token")
-	if !isValidToken(token) {
-		http.NotFound(w, r)
-		return
-	}
-
-	up, err := s.resolver.Resolve(ctx, token)
-	if err != nil {
-		s.errorResponse(w, r, err)
-		return
-	}
-
-	raw, err := s.fetchPublishedManifest(ctx, up)
-	if err != nil {
-		var nf *upstreamNotFoundError
-		if errors.As(err, &nf) {
-			http.Error(w, "marketplace.json missing in upstream", http.StatusNotFound)
-			return
-		}
-		s.logger.ErrorContext(ctx, "fetch published manifest", attr.SlogError(err))
-		http.Error(w, "manifest unavailable", http.StatusBadGateway)
-		return
-	}
-
-	rewritten, err := s.rewriteManifest(raw, token)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "rewrite manifest", attr.SlogError(err))
-		http.Error(w, "manifest rewrite failed", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache")
-	_, _ = w.Write(rewritten)
-}
-
-// upstreamNotFoundError signals that the upstream returned 404 for the
-// resource being fetched (file missing in the repo or repo not found).
-type upstreamNotFoundError struct{ resource string }
-
-func (e *upstreamNotFoundError) Error() string {
-	return "upstream not found: " + e.resource
-}
-
-// fetchPublishedManifest returns the raw bytes of the marketplace.json file at
-// the published ref via the GitHub Contents API. Using the raw media type
-// avoids a base64 round-trip through the metadata response.
-func (s *Server) fetchPublishedManifest(ctx context.Context, up Upstream) ([]byte, error) {
-	apiURL := fmt.Sprintf(
-		"https://api.github.com/repos/%s/%s/contents/.claude-plugin/marketplace.json?ref=%s",
-		url.PathEscape(up.Owner), url.PathEscape(up.Repo), url.QueryEscape(publishedManifestRef),
-	)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("build manifest request: %w", err)
-	}
-	req.Header.Set("Accept", "application/vnd.github.raw+json")
-	req.Header.Set("Authorization", "Bearer "+up.AccessToken)
-	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("contents api request: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
-
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, &upstreamNotFoundError{resource: ".claude-plugin/marketplace.json"}
-	}
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return nil, fmt.Errorf("contents api: status %d: %s", resp.StatusCode, body)
-	}
-
-	// Bound the read so a misbehaving upstream can't blow our memory.
-	const maxManifestBytes = 4 << 20 // 4 MiB
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxManifestBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("read manifest body: %w", err)
-	}
-	if len(body) > maxManifestBytes {
-		return nil, fmt.Errorf("manifest exceeds %d bytes", maxManifestBytes)
-	}
-	return body, nil
-}
-
-// rewriteManifest transforms a git-based manifest (string-typed plugin sources
-// like "./foo") into a URL-based one (object-typed sources pointing at the
-// proxy). Object sources are passed through unmodified.
-func (s *Server) rewriteManifest(raw []byte, token string) ([]byte, error) {
-	var m map[string]any
-	if err := json.Unmarshal(raw, &m); err != nil {
-		return nil, fmt.Errorf("unmarshal manifest: %w", err)
-	}
-	pluginsRaw, ok := m["plugins"].([]any)
-	if !ok {
-		return nil, errors.New("manifest missing plugins array")
-	}
-	gitURL := fmt.Sprintf("%s%sp/%s.git", s.publicBaseURL, RoutePrefix, token)
-	for _, p := range pluginsRaw {
-		entry, ok := p.(map[string]any)
-		if !ok {
-			continue
-		}
-		src, hasSource := entry["source"]
-		if !hasSource {
-			continue
-		}
-		if pathStr, isString := src.(string); isString {
-			// Per the official Claude Code marketplace schema (schemastore.org/
-			// claude-code-marketplace.json), `git-subdir` is the source type for
-			// "clone this URL, the plugin lives at the given subdirectory". The
-			// plain "git" source type doesn't exist; the four supported types
-			// are npm | url | github | git-subdir.
-			entry["source"] = map[string]any{
-				"source": "git-subdir",
-				"url":    gitURL,
-				"path":   trimRelPrefix(pathStr),
-			}
-		}
-	}
-	out, err := json.MarshalIndent(m, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal rewritten manifest: %w", err)
-	}
-	return out, nil
-}
-
-func trimRelPrefix(s string) string {
-	for _, prefix := range []string{"./", "/"} {
-		if len(s) >= len(prefix) && s[:len(prefix)] == prefix {
-			return s[len(prefix):]
-		}
-	}
-	return s
 }
 
 // handleInfoRefs streams the Smart HTTP ref-advertisement straight from

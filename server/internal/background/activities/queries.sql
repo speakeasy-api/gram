@@ -91,7 +91,6 @@ WHERE id = @id;
 SELECT
     o.id,
     o.organization_id,
-    o.public_id,
     o.event_type,
     o.payload,
     COALESCE(r.attempts, 0)::int AS attempts

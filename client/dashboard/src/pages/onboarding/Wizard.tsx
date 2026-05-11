@@ -39,6 +39,7 @@ import {
   FileCode,
   FileJson2,
   MessageSquare,
+  Network,
   RefreshCcw,
   ServerCog,
   SquareFunction,
@@ -392,11 +393,15 @@ export const InitialChoiceStep = ({
   const navigate = useNavigate();
   const telemetry = useTelemetry();
 
+  const isRemoteMcpEnabled =
+    telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
+
   const onChoiceSelected = (
     choice:
       | "connect_to_data"
       | "deploy_data_integrated_chat"
-      | "connect_to_popular_mcps",
+      | "connect_to_popular_mcps"
+      | "connect_to_custom_remote_mcp",
   ) => {
     telemetry.capture("onboarding_choice_selected", { choice });
     if (choice === "deploy_data_integrated_chat") {
@@ -448,6 +453,17 @@ export const InitialChoiceStep = ({
           title="Connect to Popular MCPs"
           description="Browse and connect to official and community-maintained MCP servers"
         />
+        {isRemoteMcpEnabled && (
+          <ChoiceCard
+            onClick={() => {
+              onChoiceSelected("connect_to_custom_remote_mcp");
+              routes.sources.addRemoteMcp.goTo();
+            }}
+            icon={Network}
+            title="Custom Remote MCP"
+            description="Connect to an existing MCP server by URL"
+          />
+        )}
         <ChoiceCard
           onClick={handleConnectToData}
           icon={Database}

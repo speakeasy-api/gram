@@ -30,6 +30,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"github.com/workos/workos-go/v6/pkg/events"
+	"github.com/workos/workos-go/v6/pkg/webhooks"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
@@ -417,12 +418,13 @@ func newBillingProvider(
 	switch {
 	case c.String("polar-api-key") != "":
 		catalog := &polar.Catalog{
-			ProductIDBase:    c.String("polar-product-id-free"),
-			ProductIDPro:     c.String("polar-product-id-pro"),
-			ProductIDsTopUp:  c.StringSlice("polar-product-ids-topup"),
-			MeterIDToolCalls: c.String("polar-meter-id-tool-calls"),
-			MeterIDServers:   c.String("polar-meter-id-servers"),
-			MeterIDCredits:   c.String("polar-meter-id-credits"),
+			ProductIDBase:       c.String("polar-product-id-free"),
+			ProductIDPro:        c.String("polar-product-id-pro"),
+			ProductIDsTopUp:     c.StringSlice("polar-product-ids-topup"),
+			ProductIDAssistants: c.String("polar-product-id-assistants"),
+			MeterIDToolCalls:    c.String("polar-meter-id-tool-calls"),
+			MeterIDServers:      c.String("polar-meter-id-servers"),
+			MeterIDCredits:      c.String("polar-meter-id-credits"),
 		}
 		if err := catalog.Validate(); err != nil {
 			return nil, nil, fmt.Errorf("invalid polar catalog configuration: %w", err)
@@ -510,6 +512,14 @@ func newWorkOSEventsClient(c *cli.Context, guardianPolicy *guardian.Policy) (*ev
 		HTTPClient: guardianPolicy.PooledClient(),
 		Endpoint:   workosClientOpts(c).Endpoint,
 	}, nil
+}
+
+func newWorkOSWebhooksClient(c *cli.Context) *webhooks.Client {
+	secret := c.String("workos-webhook-secret")
+	if secret == "" {
+		return nil
+	}
+	return webhooks.NewClient(secret)
 }
 
 func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*assets.TigrisStore, func(context.Context) error, error) {
@@ -711,6 +721,7 @@ func newTriggersApp(
 	enc *encryption.Client,
 	temporalEnv *temporal.Environment,
 	telemetryLogger *telemetry.Logger,
+	auditLogger *audit.Logger,
 	serverURL *url.URL,
 ) *bgtriggers.App {
 	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)
@@ -739,6 +750,7 @@ func newTriggersApp(
 				Attributes: entry.Attributes,
 			})
 		}),
+		auditLogger,
 		serverURL,
 		bgtriggers.NewNoopDispatcher(logger),
 	)

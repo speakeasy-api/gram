@@ -23,8 +23,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/google/uuid"
-
 	"github.com/speakeasy-api/gram/server/internal/outbox/repo"
 )
 
@@ -45,7 +43,6 @@ type InsertParams struct {
 type InsertResult struct {
 	ID             int64
 	OrganizationID string
-	PublicID       uuid.UUID
 }
 
 // Append inserts a new outbox event for an organization and returns identifiers
@@ -66,7 +63,6 @@ func Append(ctx context.Context, dbtx repo.DBTX, p InsertParams) (InsertResult, 
 	}
 	return InsertResult{
 		ID:             row.ID,
-		PublicID:       row.PublicID,
 		OrganizationID: p.OrganizationID,
 	}, nil
 }

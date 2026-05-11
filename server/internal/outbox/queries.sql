@@ -3,4 +3,4 @@
 -- needed for downstream relay/signal coordination.
 INSERT INTO outbox (organization_id, event_type, payload)
 VALUES (@organization_id, @event_type, @payload)
-RETURNING id, public_id, created_at;
+RETURNING id, created_at;

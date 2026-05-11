@@ -160,6 +160,7 @@ VALUES (@id, @name, @slug);
 SELECT *
 FROM organization_metadata
 WHERE workos_id = @workos_id
+ORDER BY id = @workos_id, created_at ASC
 LIMIT 1;
 
 -- name: GetOrganizationRelationshipForUser :one

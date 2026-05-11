@@ -56,3 +56,9 @@ plog:
   - "go.mod"
   - "go.sum"
   - "plog/**"
+
+# Subset of `server` that gates the prompt-injection accuracy comment job.
+# Strict subset of server/** so server-test (which uploads the metrics
+# artifact) is guaranteed to have run when this is true.
+risk_accuracy:
+  - "server/internal/background/activities/risk_analysis/**"

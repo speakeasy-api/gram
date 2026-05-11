@@ -12,7 +12,9 @@ import { RequireScope } from "@/components/require-scope";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useOrgRoutes } from "@/routes";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useChallenges } from "@gram/client/react-query/challenges.js";
+import { Outcome } from "@gram/client/models/operations/listchallengebuckets.js";
+import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
+import { ChallengesEmptyState } from "@/pages/access/ChallengesTab";
 import { useChallengeRowColumns } from "@/pages/access/useChallengeRowColumns";
 import { useGrantFlow } from "@/pages/access/useGrantFlow";
 import { Table } from "@speakeasy-api/moonshine";
@@ -223,11 +225,15 @@ function RecentChallenges() {
   const { hasScope } = useRBAC();
   const canAdmin = hasScope("org:admin");
   const { actionsColumn, grantFlowPortals } = useGrantFlow();
+  const { data, isLoading } = useChallengeBuckets({
+    outcome: Outcome.Deny,
+    resolved: false,
+    limit: 5,
+  });
+
+  const buckets = data?.buckets ?? [];
+
   const challengeRowColumns = useChallengeRowColumns();
-  const { data: challengesData } = useChallenges({ limit: 5 });
-  const recentChallenges = (challengesData?.challenges ?? []).filter(
-    (c) => !!c.scope,
-  );
 
   const columns = useMemo(
     () =>
@@ -235,7 +241,7 @@ function RecentChallenges() {
     [canAdmin, challengeRowColumns, actionsColumn],
   );
 
-  if (recentChallenges.length === 0) return null;
+  if (isLoading) return null;
 
   return (
     <div className="mt-12">
@@ -245,11 +251,11 @@ function RecentChallenges() {
           Show more
         </orgRoutes.access.challenges.Link>
       </div>
-      <Table
-        columns={columns}
-        data={recentChallenges}
-        rowKey={(row) => row.id}
-      />
+      {buckets.length === 0 ? (
+        <ChallengesEmptyState outcomeFilter="deny" />
+      ) : (
+        <Table columns={columns} data={buckets} rowKey={(row) => row.id} />
+      )}
       {grantFlowPortals}
     </div>
   );

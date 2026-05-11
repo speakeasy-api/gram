@@ -1,14 +1,19 @@
 -- Remote MCP Servers
 
 -- name: CreateServer :one
-INSERT INTO remote_mcp_servers (project_id, transport_type, url)
-VALUES (@project_id, @transport_type, @url)
+INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
+VALUES (@id, @project_id, @name, @slug, @transport_type, @url)
 RETURNING *;
 
 -- name: GetServerByID :one
 SELECT *
 FROM remote_mcp_servers
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: GetServerBySlug :one
+SELECT *
+FROM remote_mcp_servers
+WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: ListServersByProjectID :many
 SELECT *
@@ -19,6 +24,8 @@ ORDER BY created_at DESC;
 -- name: UpdateServer :one
 UPDATE remote_mcp_servers
 SET
+    name = @name,
+    slug = @slug,
     transport_type = COALESCE(@transport_type, transport_type),
     url = COALESCE(@url, url),
     updated_at = clock_timestamp()

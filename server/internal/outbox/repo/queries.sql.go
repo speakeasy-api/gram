@@ -8,14 +8,13 @@ package repo
 import (
 	"context"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const insertOutboxEntry = `-- name: InsertOutboxEntry :one
 INSERT INTO outbox (organization_id, event_type, payload)
 VALUES ($1, $2, $3)
-RETURNING id, public_id, created_at
+RETURNING id, created_at
 `
 
 type InsertOutboxEntryParams struct {
@@ -26,7 +25,6 @@ type InsertOutboxEntryParams struct {
 
 type InsertOutboxEntryRow struct {
 	ID        int64
-	PublicID  uuid.UUID
 	CreatedAt pgtype.Timestamptz
 }
 
@@ -35,6 +33,6 @@ type InsertOutboxEntryRow struct {
 func (q *Queries) InsertOutboxEntry(ctx context.Context, arg InsertOutboxEntryParams) (InsertOutboxEntryRow, error) {
 	row := q.db.QueryRow(ctx, insertOutboxEntry, arg.OrganizationID, arg.EventType, arg.Payload)
 	var i InsertOutboxEntryRow
-	err := row.Scan(&i.ID, &i.PublicID, &i.CreatedAt)
+	err := row.Scan(&i.ID, &i.CreatedAt)
 	return i, err
 }

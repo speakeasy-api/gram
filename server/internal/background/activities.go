@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -62,6 +63,7 @@ type Activities struct {
 	generateToolsetEmbeddings       *activities.GenerateToolsetEmbeddings
 	dispatchTrigger                 *activities.DispatchTrigger
 	processScheduledTrigger         *activities.ProcessScheduledTrigger
+	markTriggerFired                *activities.MarkTriggerFired
 	segmentChat                     *resolution_activities.SegmentChat
 	deleteChatResolutions           *resolution_activities.DeleteChatResolutions
 	analyzeSegment                  *resolution_activities.AnalyzeSegment
@@ -73,10 +75,12 @@ type Activities struct {
 	expireAssistantThreadRuntime    *activities.ExpireAssistantThreadRuntime
 	reapStuckAssistantRuntimes      *activities.ReapStuckAssistantRuntimes
 	reapInactiveAssistantRuntimes   *activities.ReapInactiveAssistantRuntimes
+	reapSoftDeletedAssistantMems    *activities.ReapSoftDeletedAssistantMemories
 	signalAssistantCoordinator      *activities.SignalAssistantCoordinator
 	signalAssistantThread           *activities.SignalAssistantThread
 	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
-	processWorkOSMembershipEvents   *activities.ProcessWorkOSMembershipEvents
+	processWorkOSGlobalRoleEvents   *activities.ProcessWorkOSGlobalRoleEvents
+	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
 	outboxSvixRelay                 *outbox_svix_relay.Relay
 }
 
@@ -118,10 +122,10 @@ func NewActivities(
 	// configured. Local dev without a key passes nil; the wrapper method below
 	// returns a clear error if the activity is invoked unconfigured.
 	var processWorkOSOrgEvents *activities.ProcessWorkOSOrganizationEvents
-	var processWorkOSMembershipEvents *activities.ProcessWorkOSMembershipEvents
+	var processWorkOSGlobalRoleEvents *activities.ProcessWorkOSGlobalRoleEvents
 	if workosEventsClient != nil {
 		processWorkOSOrgEvents = activities.NewProcessWorkOSOrganizationEvents(logger, db, workosEventsClient)
-		processWorkOSMembershipEvents = activities.NewProcessWorkOSMembershipEvents(logger, db, workosEventsClient)
+		processWorkOSGlobalRoleEvents = activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosEventsClient)
 	}
 
 	return &Activities{
@@ -147,10 +151,11 @@ func NewActivities(
 		generateToolsetEmbeddings:       activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
 		dispatchTrigger:                 activities.NewDispatchTrigger(triggerApp),
 		processScheduledTrigger:         activities.NewProcessScheduledTrigger(triggerApp),
+		markTriggerFired:                activities.NewMarkTriggerFired(triggerApp),
 		segmentChat:                     resolution_activities.NewSegmentChat(logger, db, chatClient),
 		deleteChatResolutions:           resolution_activities.NewDeleteChatResolutions(db),
 		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
-		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(db),
+		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
 		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, shadowMCPClient),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
@@ -158,10 +163,12 @@ func NewActivities(
 		expireAssistantThreadRuntime:    activities.NewExpireAssistantThreadRuntime(assistantsCore),
 		reapStuckAssistantRuntimes:      activities.NewReapStuckAssistantRuntimes(assistantsCore),
 		reapInactiveAssistantRuntimes:   activities.NewReapInactiveAssistantRuntimes(logger, assistantsCore),
+		reapSoftDeletedAssistantMems:    activities.NewReapSoftDeletedAssistantMemories(logger, db),
 		signalAssistantCoordinator:      activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		signalAssistantThread:           activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		processWorkOSOrganizationEvents: processWorkOSOrgEvents,
-		processWorkOSMembershipEvents:   processWorkOSMembershipEvents,
+		processWorkOSGlobalRoleEvents:   processWorkOSGlobalRoleEvents,
+		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
 		outboxSvixRelay:                 outbox_svix_relay.New(logger, tracerProvider, db, svixClient),
 	}
 }
@@ -173,11 +180,11 @@ func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params
 	return a.processWorkOSOrganizationEvents.Do(ctx, params)
 }
 
-func (a *Activities) ProcessWorkOSMembershipEvents(ctx context.Context, params activities.ProcessWorkOSMembershipEventsParams) (*activities.ProcessWorkOSMembershipEventsResult, error) {
-	if a.processWorkOSMembershipEvents == nil {
+func (a *Activities) ProcessWorkOSGlobalRoleEvents(ctx context.Context, params activities.ProcessWorkOSGlobalRoleEventsParams) (*activities.ProcessWorkOSGlobalRoleEventsResult, error) {
+	if a.processWorkOSGlobalRoleEvents == nil {
 		return nil, fmt.Errorf("WorkOS events client is not configured")
 	}
-	return a.processWorkOSMembershipEvents.Do(ctx, params)
+	return a.processWorkOSGlobalRoleEvents.Do(ctx, params)
 }
 
 func (a *Activities) TransitionDeployment(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID, status string) (*activities.TransitionDeploymentResult, error) {
@@ -298,6 +305,10 @@ func (a *Activities) ProcessScheduledTrigger(ctx context.Context, input activiti
 	return a.processScheduledTrigger.Do(ctx, input)
 }
 
+func (a *Activities) MarkTriggerFired(ctx context.Context, input activities.MarkTriggerFiredInput) error {
+	return a.markTriggerFired.Do(ctx, input)
+}
+
 func (a *Activities) FetchUnanalyzedMessages(ctx context.Context, input risk_analysis.FetchUnanalyzedArgs) (*risk_analysis.FetchUnanalyzedResult, error) {
 	result, err := a.fetchUnanalyzedMessages.Do(ctx, input)
 	if err != nil {
@@ -337,12 +348,20 @@ func (a *Activities) ReapInactiveAssistantRuntimes(ctx context.Context, req acti
 	return a.reapInactiveAssistantRuntimes.Do(ctx, req)
 }
 
+func (a *Activities) ReapSoftDeletedAssistantMemories(ctx context.Context, cutoff time.Time) (int64, error) {
+	return a.reapSoftDeletedAssistantMems.Do(ctx, cutoff)
+}
+
 func (a *Activities) SignalAssistantCoordinator(ctx context.Context, input activities.SignalAssistantCoordinatorInput) error {
 	return a.signalAssistantCoordinator.Do(ctx, input)
 }
 
 func (a *Activities) SignalAssistantThread(ctx context.Context, input activities.SignalAssistantThreadInput) error {
 	return a.signalAssistantThread.Do(ctx, input)
+}
+
+func (a *Activities) CancelAssistantsSubscription(ctx context.Context, args activities.CancelAssistantsSubscriptionArgs) error {
+	return a.cancelAssistantsSubscription.Do(ctx, args)
 }
 
 func (a *Activities) FetchPendingSvixEvents(ctx context.Context, events outbox_svix_relay.FetchEventArgs) (outbox_svix_relay.FetchEventsResult, error) {

@@ -73,6 +73,26 @@ type Assistant struct {
 	Deleted         bool
 }
 
+type AssistantMemory struct {
+	ID             uuid.UUID
+	AssistantID    uuid.NullUUID
+	ProjectID      uuid.NullUUID
+	OrganizationID string
+	Content        string
+	Embedding      pgvector_go.HalfVector
+	SupersedesID   uuid.NullUUID
+	SupersededAt   pgtype.Timestamptz
+	ValidAt        pgtype.Timestamptz
+	Tags           []string
+	OriginThreadID uuid.NullUUID
+	OriginChatID   uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	LastAccess     pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type AssistantRuntime struct {
 	ID                  uuid.UUID
 	AssistantThreadID   uuid.UUID
@@ -835,7 +855,6 @@ type OrganizationUserRelationship struct {
 
 type Outbox struct {
 	ID             int64
-	PublicID       uuid.UUID
 	OrganizationID string
 	EventType      string
 	Payload        []byte
@@ -1164,6 +1183,7 @@ type Toolset struct {
 	CustomDomainID         uuid.NullUUID
 	ExternalOauthServerID  uuid.NullUUID
 	OauthProxyServerID     uuid.NullUUID
+	UserSessionIssuerID    uuid.NullUUID
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
@@ -1276,6 +1296,63 @@ type UserOauthToken struct {
 	UpdatedAt             pgtype.Timestamptz
 	DeletedAt             pgtype.Timestamptz
 	Deleted               bool
+}
+
+type UserSession struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	UserSessionClientID uuid.NullUUID
+	SubjectUrn          urn.SessionSubject
+	Jti                 string
+	RefreshTokenHash    string
+	RefreshExpiresAt    pgtype.Timestamptz
+	ExpiresAt           pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+}
+
+type UserSessionClient struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	ClientID              string
+	ClientSecretHash      pgtype.Text
+	ClientName            string
+	RedirectUris          []string
+	ClientIDIssuedAt      pgtype.Timestamptz
+	ClientSecretExpiresAt pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+}
+
+type UserSessionConsent struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	SubjectUrn          urn.SessionSubject
+	UserSessionClientID uuid.UUID
+	RemoteSetHash       string
+	ConsentedAt         pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+}
+
+type UserSessionIssuer struct {
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	Slug               string
+	AuthnChallengeMode string
+	SessionDuration    pgtype.Interval
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
 }
 
 type WorkosOrganizationSync struct {

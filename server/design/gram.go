@@ -8,6 +8,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/access"
 	_ "github.com/speakeasy-api/gram/server/design/admin"
 	_ "github.com/speakeasy-api/gram/server/design/assets"
+	_ "github.com/speakeasy-api/gram/server/design/assistantmemories"
 	_ "github.com/speakeasy-api/gram/server/design/assistants"
 	_ "github.com/speakeasy-api/gram/server/design/auditlogs"
 	_ "github.com/speakeasy-api/gram/server/design/auth"
@@ -17,6 +18,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/deployments"
 	_ "github.com/speakeasy-api/gram/server/design/domains"
 	_ "github.com/speakeasy-api/gram/server/design/environments"
+	_ "github.com/speakeasy-api/gram/server/design/external"
 	_ "github.com/speakeasy-api/gram/server/design/externalmcp"
 	_ "github.com/speakeasy-api/gram/server/design/functions"
 	_ "github.com/speakeasy-api/gram/server/design/hooks"
@@ -41,6 +43,10 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/toolsets"
 	_ "github.com/speakeasy-api/gram/server/design/triggers"
 	_ "github.com/speakeasy-api/gram/server/design/usage"
+	_ "github.com/speakeasy-api/gram/server/design/usersessionclients"
+	_ "github.com/speakeasy-api/gram/server/design/usersessionconsents"
+	_ "github.com/speakeasy-api/gram/server/design/usersessionissuers"
+	_ "github.com/speakeasy-api/gram/server/design/usersessions"
 	_ "github.com/speakeasy-api/gram/server/design/variations"
 )
 

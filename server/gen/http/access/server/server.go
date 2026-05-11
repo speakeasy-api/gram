@@ -18,21 +18,22 @@ import (
 
 // Server lists the access service endpoint HTTP handlers.
 type Server struct {
-	Mounts           []*MountPoint
-	ListRoles        http.Handler
-	GetRole          http.Handler
-	CreateRole       http.Handler
-	UpdateRole       http.Handler
-	DeleteRole       http.Handler
-	ListScopes       http.Handler
-	ListMembers      http.Handler
-	ListGrants       http.Handler
-	UpdateMemberRole http.Handler
-	GetRBACStatus    http.Handler
-	EnableRBAC       http.Handler
-	DisableRBAC      http.Handler
-	ListChallenges   http.Handler
-	ResolveChallenge http.Handler
+	Mounts               []*MountPoint
+	ListRoles            http.Handler
+	GetRole              http.Handler
+	CreateRole           http.Handler
+	UpdateRole           http.Handler
+	DeleteRole           http.Handler
+	ListScopes           http.Handler
+	ListMembers          http.Handler
+	ListGrants           http.Handler
+	UpdateMemberRole     http.Handler
+	GetRBACStatus        http.Handler
+	EnableRBAC           http.Handler
+	DisableRBAC          http.Handler
+	ListChallenges       http.Handler
+	ListChallengeBuckets http.Handler
+	ResolveChallenge     http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -75,22 +76,24 @@ func New(
 			{"EnableRBAC", "POST", "/rpc/access.enableRBAC"},
 			{"DisableRBAC", "POST", "/rpc/access.disableRBAC"},
 			{"ListChallenges", "GET", "/rpc/access.listChallenges"},
+			{"ListChallengeBuckets", "GET", "/rpc/access.listChallengeBuckets"},
 			{"ResolveChallenge", "POST", "/rpc/access.resolveChallenge"},
 		},
-		ListRoles:        NewListRolesHandler(e.ListRoles, mux, decoder, encoder, errhandler, formatter),
-		GetRole:          NewGetRoleHandler(e.GetRole, mux, decoder, encoder, errhandler, formatter),
-		CreateRole:       NewCreateRoleHandler(e.CreateRole, mux, decoder, encoder, errhandler, formatter),
-		UpdateRole:       NewUpdateRoleHandler(e.UpdateRole, mux, decoder, encoder, errhandler, formatter),
-		DeleteRole:       NewDeleteRoleHandler(e.DeleteRole, mux, decoder, encoder, errhandler, formatter),
-		ListScopes:       NewListScopesHandler(e.ListScopes, mux, decoder, encoder, errhandler, formatter),
-		ListMembers:      NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
-		ListGrants:       NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
-		UpdateMemberRole: NewUpdateMemberRoleHandler(e.UpdateMemberRole, mux, decoder, encoder, errhandler, formatter),
-		GetRBACStatus:    NewGetRBACStatusHandler(e.GetRBACStatus, mux, decoder, encoder, errhandler, formatter),
-		EnableRBAC:       NewEnableRBACHandler(e.EnableRBAC, mux, decoder, encoder, errhandler, formatter),
-		DisableRBAC:      NewDisableRBACHandler(e.DisableRBAC, mux, decoder, encoder, errhandler, formatter),
-		ListChallenges:   NewListChallengesHandler(e.ListChallenges, mux, decoder, encoder, errhandler, formatter),
-		ResolveChallenge: NewResolveChallengeHandler(e.ResolveChallenge, mux, decoder, encoder, errhandler, formatter),
+		ListRoles:            NewListRolesHandler(e.ListRoles, mux, decoder, encoder, errhandler, formatter),
+		GetRole:              NewGetRoleHandler(e.GetRole, mux, decoder, encoder, errhandler, formatter),
+		CreateRole:           NewCreateRoleHandler(e.CreateRole, mux, decoder, encoder, errhandler, formatter),
+		UpdateRole:           NewUpdateRoleHandler(e.UpdateRole, mux, decoder, encoder, errhandler, formatter),
+		DeleteRole:           NewDeleteRoleHandler(e.DeleteRole, mux, decoder, encoder, errhandler, formatter),
+		ListScopes:           NewListScopesHandler(e.ListScopes, mux, decoder, encoder, errhandler, formatter),
+		ListMembers:          NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
+		ListGrants:           NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
+		UpdateMemberRole:     NewUpdateMemberRoleHandler(e.UpdateMemberRole, mux, decoder, encoder, errhandler, formatter),
+		GetRBACStatus:        NewGetRBACStatusHandler(e.GetRBACStatus, mux, decoder, encoder, errhandler, formatter),
+		EnableRBAC:           NewEnableRBACHandler(e.EnableRBAC, mux, decoder, encoder, errhandler, formatter),
+		DisableRBAC:          NewDisableRBACHandler(e.DisableRBAC, mux, decoder, encoder, errhandler, formatter),
+		ListChallenges:       NewListChallengesHandler(e.ListChallenges, mux, decoder, encoder, errhandler, formatter),
+		ListChallengeBuckets: NewListChallengeBucketsHandler(e.ListChallengeBuckets, mux, decoder, encoder, errhandler, formatter),
+		ResolveChallenge:     NewResolveChallengeHandler(e.ResolveChallenge, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -112,6 +115,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.EnableRBAC = m(s.EnableRBAC)
 	s.DisableRBAC = m(s.DisableRBAC)
 	s.ListChallenges = m(s.ListChallenges)
+	s.ListChallengeBuckets = m(s.ListChallengeBuckets)
 	s.ResolveChallenge = m(s.ResolveChallenge)
 }
 
@@ -133,6 +137,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountEnableRBACHandler(mux, h.EnableRBAC)
 	MountDisableRBACHandler(mux, h.DisableRBAC)
 	MountListChallengesHandler(mux, h.ListChallenges)
+	MountListChallengeBucketsHandler(mux, h.ListChallengeBuckets)
 	MountResolveChallengeHandler(mux, h.ResolveChallenge)
 }
 
@@ -807,6 +812,59 @@ func NewListChallengesHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listChallenges")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListChallengeBucketsHandler configures the mux to serve the "access"
+// service "listChallengeBuckets" endpoint.
+func MountListChallengeBucketsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listChallengeBuckets", f)
+}
+
+// NewListChallengeBucketsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "listChallengeBuckets" endpoint.
+func NewListChallengeBucketsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListChallengeBucketsRequest(mux, decoder)
+		encodeResponse = EncodeListChallengeBucketsResponse(encoder)
+		encodeError    = EncodeListChallengeBucketsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listChallengeBuckets")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

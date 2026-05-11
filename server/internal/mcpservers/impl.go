@@ -88,7 +88,7 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
@@ -160,7 +160,7 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
@@ -189,13 +189,31 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
-	servers, err := repo.New(s.db).ListMCPServersByProjectID(ctx, *authCtx.ProjectID)
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	remoteMcpServerID, err := conv.PtrToNullUUID(payload.RemoteMcpServerID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_mcp_server_id").Log(ctx, logger)
+	}
+	toolsetID, err := conv.PtrToNullUUID(payload.ToolsetID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, logger)
+	}
+	if remoteMcpServerID.Valid && toolsetID.Valid {
+		return nil, oops.E(oops.CodeInvalid, nil, "at most one of remote_mcp_server_id or toolset_id may be provided").Log(ctx, logger)
+	}
+
+	servers, err := repo.New(s.db).ListMCPServersByProjectID(ctx, repo.ListMCPServersByProjectIDParams{
+		ProjectID:         *authCtx.ProjectID,
+		RemoteMcpServerID: remoteMcpServerID,
+		ToolsetID:         toolsetID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers").Log(ctx, logger)
 	}
 
 	return &gen.ListMcpServersResult{McpServers: mv.BuildMcpServerListView(servers)}, nil
@@ -207,7 +225,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
@@ -305,7 +323,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return err
 	}
 

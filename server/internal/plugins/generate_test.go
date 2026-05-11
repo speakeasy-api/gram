@@ -434,7 +434,8 @@ func TestRenderHookScriptClaudeUsesGramKeyAndProjectHeaders(t *testing.T) {
 	}
 	script := string(renderHookScript(cfg, "claude"))
 
-	require.Contains(t, script, "https://app.getgram.ai/rpc/hooks.claude")
+	require.Contains(t, script, "${server_url}/rpc/hooks.claude")
+	require.Contains(t, script, "https://app.getgram.ai", "server URL must appear as the env var default")
 	require.NotContains(t, script, "/hooks/claude", "must not use the legacy /hooks/<platform> path")
 	require.Contains(t, script, "Gram-Key: gram_local_secret_xyz")
 	require.Contains(t, script, "Gram-Project: acme-prod")
@@ -452,7 +453,8 @@ func TestRenderHookScriptCursorUsesGramKeyAndProjectHeaders(t *testing.T) {
 	}
 	script := string(renderHookScript(cfg, "cursor"))
 
-	require.Contains(t, script, "https://app.getgram.ai/rpc/hooks.cursor")
+	require.Contains(t, script, "${server_url}/rpc/hooks.cursor")
+	require.Contains(t, script, "https://app.getgram.ai", "server URL must appear as the env var default")
 	require.NotContains(t, script, "/hooks/cursor", "must not use the legacy /hooks/<platform> path")
 	require.Contains(t, script, `Gram-Key: gram_local_secret_xyz`, "cursor reads Gram-Key, not Authorization")
 	require.NotContains(t, script, "Authorization", "cursor endpoint does not read Authorization")

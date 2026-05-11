@@ -19,6 +19,10 @@ export type CreateServerForm = {
    */
   headers: Array<HeaderInput>;
   /**
+   * Optional human-readable name for the remote MCP server. Empty values are stored as null.
+   */
+  name?: string | undefined;
+  /**
    * The transport type for the remote MCP server (e.g. streamable-http)
    */
   transportType: string;
@@ -31,6 +35,7 @@ export type CreateServerForm = {
 /** @internal */
 export type CreateServerForm$Outbound = {
   headers: Array<HeaderInput$Outbound>;
+  name?: string | undefined;
   transport_type: string;
   url: string;
 };
@@ -42,6 +47,7 @@ export const CreateServerForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     headers: z.array(HeaderInput$outboundSchema),
+    name: z.optional(z.string()),
     transportType: z.string(),
     url: z.string(),
   }),

@@ -37,8 +37,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpclient"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
+	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -232,6 +234,13 @@ func newWorkerCommand() *cli.Command {
 			Aliases:  []string{"polar.meter_id_credits"},
 			Usage:    "The ID of the credits meter in Polar",
 			EnvVars:  []string{"POLAR_METER_ID_CREDITS"},
+			Required: false,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:     "polar-product-id-assistants",
+			Aliases:  []string{"polar.product_id_assistants"},
+			Usage:    "The product ID granting the assistants benefit in Polar (auto-attached on assistants-disposition signup)",
+			EnvVars:  []string{"POLAR_PRODUCT_ID_ASSISTANTS"},
 			Required: false,
 		}),
 		&cli.StringSliceFlag{
@@ -549,16 +558,27 @@ func newWorkerCommand() *cli.Command {
 			}
 
 			speakeasyIDPClient := speakeasyclient.NewClient(logger, tracerProvider, guardianPolicy, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), db, nil, posthogClient)
-			sessionManager := sessions.NewManager(logger, tracerProvider, guardianPolicy, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, billingRepo, nil, speakeasyIDPClient)
+			sessionManager := sessions.NewManager(logger, tracerProvider, guardianPolicy, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, billingRepo, speakeasyIDPClient)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
 
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, guardianPolicy)
-			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, serverURL)
+			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL)
 
 			assistantTokenManager := assistanttokens.New(c.String("jwt-signing-key"), db, authzEngine)
 
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient))
+
+			memorySvc := memory.NewMemoryService(
+				logger,
+				tracerProvider,
+				meterProvider,
+				db,
+				completionsClient,
+				auditLogger,
+			)
+			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
+			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			mcpService := mcp.NewService(
 				logger,
@@ -586,6 +606,8 @@ func newWorkerCommand() *cli.Command {
 				assistantTokenManager,
 				shadowMCPClient,
 				auditLogger,
+				memoryTools,
+				platformFeatureChecker,
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -601,7 +623,9 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, db, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger)
+			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
+			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, db, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver)
+			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
 			triggerApp.RegisterDispatcher(assistantsSvc)
 

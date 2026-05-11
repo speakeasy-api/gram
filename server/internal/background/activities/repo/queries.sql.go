@@ -8,7 +8,6 @@ package repo
 import (
 	"context"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -16,7 +15,6 @@ const fetchOutboxRowsByIDs = `-- name: FetchOutboxRowsByIDs :many
 SELECT
     o.id,
     o.organization_id,
-    o.public_id,
     o.event_type,
     o.payload,
     COALESCE(r.attempts, 0)::int AS attempts
@@ -29,7 +27,6 @@ ORDER BY o.id ASC
 type FetchOutboxRowsByIDsRow struct {
 	ID             int64
 	OrganizationID string
-	PublicID       uuid.UUID
 	EventType      string
 	Payload        []byte
 	Attempts       int32
@@ -50,7 +47,6 @@ func (q *Queries) FetchOutboxRowsByIDs(ctx context.Context, ids []int64) ([]Fetc
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrganizationID,
-			&i.PublicID,
 			&i.EventType,
 			&i.Payload,
 			&i.Attempts,

@@ -1,6 +1,5 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -24,6 +23,7 @@ import {
 } from "./policy-data";
 import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { MetricCard } from "@/components/chart/MetricCard";
 
 const RULE_ID_TO_CATEGORY = new Map<string, RuleCategory>();
 for (const [category, rules] of Object.entries(DETECTION_RULES)) {
@@ -32,34 +32,45 @@ for (const [category, rules] of Object.entries(DETECTION_RULES)) {
   }
 }
 
+const SOURCE_TO_CATEGORY = new Map<string, RuleCategory>([
+  ["destructive_tool", "destructive_tool"],
+  ["shadow_mcp", "shadow_mcp"],
+  ["prompt_injection", "prompt_injection"],
+]);
+
 function getCategoryForFinding(
   source: string | undefined,
   ruleId: string | undefined,
 ): RuleCategory | null {
-  if (source === "destructive_tool") return "destructive_tool";
-  if (source === "shadow_mcp") return "shadow_mcp";
+  const sourceCategory = source ? SOURCE_TO_CATEGORY.get(source) : null;
+  if (sourceCategory) return sourceCategory;
   if (!ruleId) return null;
   return RULE_ID_TO_CATEGORY.get(ruleId) ?? null;
 }
 
-function CategoryBadge({
+function CategoryLabel({
   source,
   ruleId,
 }: {
-  source: string | undefined;
-  ruleId: string | undefined;
+  source?: string;
+  ruleId?: string;
 }) {
   const category = getCategoryForFinding(source, ruleId);
-  if (!category) return null;
-  return (
-    <Badge variant="secondary">{RULE_CATEGORY_META[category].label}</Badge>
-  );
+  const label = category ? RULE_CATEGORY_META[category].label : null;
+  return <span className="font-mono text-xs">{label}</span>;
 }
 
 export default function SecurityOverview() {
   return (
     <RequireScope scope="org:admin" level="page">
-      <SecurityOverviewContent />
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs />
+        </Page.Header>
+        <Page.Body>
+          <SecurityOverviewContent />
+        </Page.Body>
+      </Page>
     </RequireScope>
   );
 }
@@ -169,8 +180,6 @@ function SecurityOverviewContent() {
     () => resultsQuery.data?.pages.flatMap((p) => p.results) ?? [],
     [resultsQuery.data],
   );
-  const totalFindings =
-    resultsQuery.data?.pages[0]?.totalCount ?? results.length;
   const recentChats = useMemo(
     () => chatSummaryQuery.data?.pages.flatMap((p) => p.chats) ?? [],
     [chatSummaryQuery.data],
@@ -181,39 +190,25 @@ function SecurityOverviewContent() {
 
   if (isInitialLoading) {
     return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <div className="flex items-center justify-center py-20">
-            <p className="text-muted-foreground text-sm">Loading...</p>
-          </div>
-        </Page.Body>
-      </Page>
+      <div className="flex items-center justify-center py-20">
+        <p className="text-muted-foreground text-sm">Loading...</p>
+      </div>
     );
   }
 
   if (policies.length === 0) {
     return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <div className="flex flex-col items-center justify-center gap-4 py-20">
-            <Shield className="text-muted-foreground h-12 w-12" />
-            <h2 className="text-lg font-semibold">Risk Analysis</h2>
-            <p className="text-muted-foreground max-w-md text-center text-sm">
-              Monitor your chat messages for leaked secrets and sensitive data.
-              Set up a risk policy to get started.
-            </p>
-            <Button onClick={() => routes.policyCenter.goTo()}>
-              Go to Policy Center
-            </Button>
-          </div>
-        </Page.Body>
-      </Page>
+      <div className="flex flex-col items-center justify-center gap-4 py-20">
+        <Shield className="text-muted-foreground h-12 w-12" />
+        <h2 className="text-lg font-semibold">Risk Analysis</h2>
+        <p className="text-muted-foreground max-w-md text-center text-sm">
+          Monitor your chat messages for leaked secrets and sensitive data. Set
+          up a risk policy to get started.
+        </p>
+        <Button onClick={() => routes.policyCenter.goTo()}>
+          Go to Policy Center
+        </Button>
+      </div>
     );
   }
 
@@ -221,58 +216,60 @@ function SecurityOverviewContent() {
     (max, p) => Math.max(max, p.totalMessages - p.pendingMessages),
     0,
   );
+  const totalFindings =
+    resultsQuery.data?.pages[0]?.totalCount ?? results.length;
 
   const hasData = recentChats.length > 0 || results.length > 0;
 
   return (
     <>
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">Risk Overview</h2>
-              <p className="text-muted-foreground text-sm">
-                Recent findings from risk analysis scans across your project.
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => routes.policyCenter.goTo()}
-            >
-              Manage Policies
-            </Button>
-          </div>
+      <Page.Section>
+        <Page.Section.Title>Risk Overview</Page.Section.Title>
 
+        <Page.Section.Description>
+          Recent findings from risk analysis scans across your project.
+        </Page.Section.Description>
+
+        <Page.Section.CTA>
+          <Button variant="outline" onClick={() => routes.policyCenter.goTo()}>
+            Manage Policies
+          </Button>
+        </Page.Section.CTA>
+
+        <Page.Section.Body>
           <div className="mt-4 grid grid-cols-2 gap-4">
-            <div className="rounded-lg border p-4">
-              <p className="text-muted-foreground text-sm">Events Scanned</p>
-              <p className="text-2xl font-bold">
-                {totalScanned.toLocaleString()}
-              </p>
-            </div>
-            <div className="rounded-lg border p-4">
-              <p className="text-muted-foreground text-sm">Recent Findings</p>
-              <p className="text-2xl font-bold">
-                {totalFindings.toLocaleString()}
-              </p>
-            </div>
+            <MetricCard
+              title="Events Scanned"
+              value={totalScanned}
+              format="number"
+              icon="scan-search"
+            />
+            <MetricCard
+              title="Recent Findings"
+              value={totalFindings}
+              format="number"
+              icon="flag"
+            />
           </div>
+        </Page.Section.Body>
+      </Page.Section>
 
-          {hasData ? (
-            <>
-              {recentChats.length > 0 && (
-                <div className="mt-6">
-                  <h3 className="mb-2 text-sm font-semibold">Recent Chats</h3>
+      {hasData ? (
+        <>
+          {recentChats.length > 0 && (
+            <Page.Section>
+              <Page.Section.Title>Recent Chats</Page.Section.Title>
+              <Page.Section.Body>
+                <div className="max-h-[412px] overflow-auto rounded-md border **:data-[slot=table-container]:overflow-visible">
                   <Table>
-                    <TableHeader>
+                    <TableHeader className="bg-background sticky top-0 z-10">
                       <TableRow>
-                        <TableHead>Chat</TableHead>
-                        <TableHead>User</TableHead>
-                        <TableHead>Findings</TableHead>
-                        <TableHead>Latest Detected</TableHead>
+                        <TableHead className="w-6/12 pl-4">Chat</TableHead>
+                        <TableHead className="w-3/12">User</TableHead>
+                        <TableHead className="w-1/12">Findings</TableHead>
+                        <TableHead className="w-2/12 pr-4">
+                          Latest Detected
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -282,16 +279,16 @@ function SecurityOverviewContent() {
                           className="cursor-pointer"
                           onClick={() => setSelectedChatId(chat.chatId)}
                         >
-                          <TableCell className="text-muted-foreground max-w-[300px] truncate text-xs">
+                          <TableCell className="text-muted-foreground truncate pl-4">
                             {chat.chatTitle ?? "Untitled"}
                           </TableCell>
-                          <TableCell className="text-muted-foreground text-xs">
+                          <TableCell className="text-muted-foreground">
                             {chat.userId ?? "-"}
                           </TableCell>
-                          <TableCell className="font-mono text-xs">
+                          <TableCell className="text-foreground font-mono">
                             {chat.findingsCount}
                           </TableCell>
-                          <TableCell className="text-muted-foreground text-xs">
+                          <TableCell className="text-muted-foreground pr-4">
                             {chat.latestDetected
                               ? new Date(chat.latestDetected).toLocaleString()
                               : "-"}
@@ -300,38 +297,40 @@ function SecurityOverviewContent() {
                       ))}
                     </TableBody>
                   </Table>
-                  {chatSummaryQuery.hasNextPage && (
-                    <div className="mt-2 flex justify-center">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={chatSummaryQuery.isFetchingNextPage}
-                        onClick={() => chatSummaryQuery.fetchNextPage()}
-                      >
-                        {chatSummaryQuery.isFetchingNextPage
-                          ? "Loading..."
-                          : "Load More"}
-                      </Button>
-                    </div>
-                  )}
                 </div>
-              )}
+                {chatSummaryQuery.hasNextPage && (
+                  <div className="flex justify-center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={chatSummaryQuery.isFetchingNextPage}
+                      onClick={() => chatSummaryQuery.fetchNextPage()}
+                    >
+                      {chatSummaryQuery.isFetchingNextPage
+                        ? "Loading..."
+                        : "Load More"}
+                    </Button>
+                  </div>
+                )}
+              </Page.Section.Body>
+            </Page.Section>
+          )}
 
-              {results.length > 0 && (
-                <div className="mt-6">
-                  <h3 className="mb-2 text-sm font-semibold">
-                    Recent Findings
-                  </h3>
+          {results.length > 0 && (
+            <Page.Section>
+              <Page.Section.Title>Recent Findings</Page.Section.Title>
+              <Page.Section.Body>
+                <div className="max-h-[412px] overflow-auto rounded-md border **:data-[slot=table-container]:overflow-visible">
                   <Table>
-                    <TableHeader>
+                    <TableHeader className="bg-background sticky top-0 z-10">
                       <TableRow>
-                        <TableHead>Category</TableHead>
-                        <TableHead>Rule</TableHead>
-                        <TableHead>Chat</TableHead>
-                        <TableHead>User</TableHead>
-                        <TableHead className="w-[200px]">Match</TableHead>
-                        <TableHead className="w-[240px]">Policy Note</TableHead>
-                        <TableHead>Detected</TableHead>
+                        <TableHead className="w-1/12 pl-4">Category</TableHead>
+                        <TableHead className="w-1/12">Rule</TableHead>
+                        <TableHead className="w-1/12">Chat</TableHead>
+                        <TableHead className="w-1/12">User</TableHead>
+                        <TableHead className="w-1/12">Match</TableHead>
+                        <TableHead className="w-1/12">Policy Note</TableHead>
+                        <TableHead className="w-1/12 pr-4">Detected</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -349,31 +348,33 @@ function SecurityOverviewContent() {
                               }
                             }}
                           >
-                            <TableCell>
-                              <CategoryBadge
+                            <TableCell className="pl-4">
+                              <CategoryLabel
                                 source={result.source}
                                 ruleId={result.ruleId}
                               />
                             </TableCell>
-                            <TableCell className="font-mono text-xs">
-                              {result.ruleId ?? "-"}
+                            <TableCell>
+                              <span className="font-mono text-xs">
+                                {result.ruleId ? result.ruleId : "-"}
+                              </span>
                             </TableCell>
-                            <TableCell className="text-muted-foreground max-w-[200px] truncate text-xs">
+                            <TableCell className="text-muted-foreground truncate">
                               {result.chatTitle ?? "Untitled"}
                             </TableCell>
-                            <TableCell className="text-muted-foreground text-xs">
+                            <TableCell className="text-muted-foreground">
                               {result.userId ?? "-"}
                             </TableCell>
-                            <TableCell className="w-[200px] max-w-[200px] truncate">
+                            <TableCell className="truncate">
                               <MaskedMatch value={result.match} />
                             </TableCell>
                             <TableCell
-                              className="text-muted-foreground w-[240px] max-w-[240px] truncate text-xs italic"
+                              className="text-muted-foreground truncate italic"
                               title={policyNote ?? undefined}
                             >
                               {policyNote ?? "-"}
                             </TableCell>
-                            <TableCell className="text-muted-foreground text-xs">
+                            <TableCell className="text-muted-foreground pr-4">
                               {result.createdAt
                                 ? new Date(result.createdAt).toLocaleString()
                                 : "-"}
@@ -383,40 +384,39 @@ function SecurityOverviewContent() {
                       })}
                     </TableBody>
                   </Table>
-                  {resultsQuery.hasNextPage && (
-                    <div className="mt-2 flex justify-center">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={resultsQuery.isFetchingNextPage}
-                        onClick={() => resultsQuery.fetchNextPage()}
-                      >
-                        {resultsQuery.isFetchingNextPage
-                          ? "Loading..."
-                          : "Load More"}
-                      </Button>
-                    </div>
-                  )}
                 </div>
-              )}
-            </>
-          ) : (
-            <div className="mt-8 text-center">
-              <p className="text-muted-foreground text-sm">
-                No findings yet. Findings will appear here as messages are
-                analyzed.
-              </p>
-            </div>
+                {resultsQuery.hasNextPage && (
+                  <div className="flex justify-center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={resultsQuery.isFetchingNextPage}
+                      onClick={() => resultsQuery.fetchNextPage()}
+                    >
+                      {resultsQuery.isFetchingNextPage
+                        ? "Loading..."
+                        : "Load More"}
+                    </Button>
+                  </div>
+                )}
+              </Page.Section.Body>
+            </Page.Section>
           )}
-        </Page.Body>
-      </Page>
+        </>
+      ) : (
+        <div className="mt-8 text-center">
+          <p className="text-muted-foreground text-sm">
+            No findings yet. Findings will appear here as messages are analyzed.
+          </p>
+        </div>
+      )}
 
       <Drawer
         open={!!selectedChatId}
         onOpenChange={(open) => !open && setSelectedChatId(null)}
         direction="right"
       >
-        <DrawerContent className="!w-[720px] sm:!max-w-[720px]">
+        <DrawerContent className="data-[vaul-drawer-direction=right]:w-[720px] data-[vaul-drawer-direction=right]:sm:max-w-[720px]">
           {selectedChatId && (
             <ChatDetailPanel
               chatId={selectedChatId}

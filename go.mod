@@ -1,6 +1,6 @@
 module github.com/speakeasy-api/gram
 
-go 1.26.0
+go 1.26.3
 
 tool (
 	github.com/sqlc-dev/sqlc/cmd/sqlc

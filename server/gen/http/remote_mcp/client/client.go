@@ -33,6 +33,10 @@ type Client struct {
 	// updateServer endpoint.
 	UpdateServerDoer goahttp.Doer
 
+	// VerifyURL Doer is the HTTP client used to make requests to the verifyURL
+	// endpoint.
+	VerifyURLDoer goahttp.Doer
+
 	// DeleteServer Doer is the HTTP client used to make requests to the
 	// deleteServer endpoint.
 	DeleteServerDoer goahttp.Doer
@@ -61,6 +65,7 @@ func NewClient(
 		ListServersDoer:     doer,
 		GetServerDoer:       doer,
 		UpdateServerDoer:    doer,
+		VerifyURLDoer:       doer,
 		DeleteServerDoer:    doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
@@ -161,6 +166,30 @@ func (c *Client) UpdateServer() goa.Endpoint {
 		resp, err := c.UpdateServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("remoteMcp", "updateServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// VerifyURL returns an endpoint that makes HTTP requests to the remoteMcp
+// service verifyURL server.
+func (c *Client) VerifyURL() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeVerifyURLRequest(c.encoder)
+		decodeResponse = DecodeVerifyURLResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildVerifyURLRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.VerifyURLDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteMcp", "verifyURL", err)
 		}
 		return decodeResponse(resp)
 	}

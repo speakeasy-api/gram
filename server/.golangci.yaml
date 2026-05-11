@@ -121,6 +121,12 @@ linters:
         linters:
           - forbidigo
         text: GG008|GG009
+      # logger.go is the one sanctioned place that calls InsertAuditLog directly;
+      # all other callers must go through (*audit.Logger).log().
+      - path: internal/audit/logger\.go|_test\.go
+        linters:
+          - forbidigo
+        text: GG010
   settings:
     custom:
       glint:
@@ -184,6 +190,8 @@ linters:
         - pattern: ^noop\.NewMeterProvider$
           pkg: ^go\.opentelemetry\.io/otel/metric/noop$
           msg: "GG009: Use testenv.NewMeterProvider(t) in tests instead of constructing a noop meter provider inline."
+        - pattern: '\.InsertAuditLog\('
+          msg: "GG010: Call (*audit.Logger).log() instead of (*repo.Queries).InsertAuditLog directly."
     sloglint:
       no-mixed-args: true
       attr-only: true
@@ -331,6 +339,7 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).Filter("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).PrepareContext("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Require("
+        - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).RequireAny("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Filter("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).ShouldEnforce("
         - "github.com/speakeasy-api/gram/server/internal/authz.GrantsForRole("

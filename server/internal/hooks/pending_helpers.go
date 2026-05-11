@@ -3,14 +3,17 @@ package hooks
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 )
@@ -29,6 +32,30 @@ func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen
 	)
 
 	return nil
+}
+
+// resolveUserByEmail looks up a connected user by email within an org.
+// Returns the user ID if found, or empty string if not found or if email is empty.
+func (s *Service) resolveUserByEmail(ctx context.Context, email, orgID string) string {
+	lookup := strings.ToLower(strings.TrimSpace(email))
+	if lookup == "" {
+		return ""
+	}
+	user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
+		Email:          lookup,
+		OrganizationID: orgID,
+	})
+	if err == nil {
+		return user.ID
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		s.logger.WarnContext(ctx, "failed to resolve hook user by email",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+			attr.SlogAuthUserEmail(email),
+		)
+	}
+	return ""
 }
 
 // persistToolCallEvent writes a hook event to ClickHouse with full session context
@@ -104,6 +131,12 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		attr.ProjectIDKey:      metadata.ProjectID,
 		attr.OrganizationIDKey: metadata.GramOrgID,
 		attr.HookSourceKey:     hookSource,
+	}
+	if metadata.UserID == "" {
+		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+	}
+	if metadata.UserID != "" {
+		attrs[attr.UserIDKey] = metadata.UserID
 	}
 
 	if payload.Error != nil {
@@ -187,11 +220,38 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		return
 	}
 
+	// Resolve each unique email to a userID once before the loop so multiple
+	// data points sharing the same email don't each trigger a DB round-trip.
+	emailToUserID := make(map[string]string)
+	for _, m := range metrics {
+		email := strings.ToLower(strings.TrimSpace(m.UserEmail))
+		if email == "" {
+			continue
+		}
+		if _, seen := emailToUserID[email]; seen {
+			continue
+		}
+		user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
+			Email:          email,
+			OrganizationID: orgID,
+		})
+		if err == nil {
+			emailToUserID[email] = user.ID
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			s.logger.WarnContext(ctx, "failed to resolve hook user by email",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(orgID),
+				attr.SlogAuthUserEmail(m.UserEmail),
+			)
+		}
+	}
+
 	// Write each metric data point as a separate log entry
 	for _, m := range metrics {
 		urn := "claude-code:usage:metrics"
 
 		attrs := map[attr.Key]any{
+			attr.EventSourceKey:    string(telemetry.EventSourceHook),
 			attr.LogBodyKey:        "Claude Code usage metrics",
 			attr.ProjectIDKey:      projectID,
 			attr.OrganizationIDKey: orgID,
@@ -219,6 +279,9 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		}
 		if m.UserEmail != "" {
 			attrs[attr.UserEmailKey] = m.UserEmail
+			if userID := emailToUserID[strings.ToLower(strings.TrimSpace(m.UserEmail))]; userID != "" {
+				attrs[attr.UserIDKey] = userID
+			}
 		}
 		if m.SessionID != "" {
 			attrs[attr.GenAIConversationIDKey] = m.SessionID

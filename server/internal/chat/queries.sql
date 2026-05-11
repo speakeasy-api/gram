@@ -166,6 +166,16 @@ WHERE cm.chat_id = @chat_id
   AND cm.generation = (SELECT MAX(generation) FROM chat_messages WHERE chat_id = @chat_id)
 ORDER BY cm.seq ASC;
 
+-- name: ListChatMessagesByGeneration :many
+-- Returns rows for an explicit generation, used to pin a snapshot across
+-- multiple reads (e.g. across Temporal activities) so indices stay stable
+-- even if a new generation is appended mid-workflow.
+SELECT cm.* FROM chat_messages cm
+WHERE cm.chat_id = @chat_id
+  AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+  AND cm.generation = @generation::integer
+ORDER BY cm.seq ASC;
+
 -- name: GetMaxGenerationForChat :one
 SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages WHERE chat_id = @chat_id;
 

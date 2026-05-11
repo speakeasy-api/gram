@@ -167,6 +167,8 @@ func TestCalculateSubScopes(t *testing.T) {
 		{scope: string(ScopeProjectRead), want: []string{}},
 		{scope: string(ScopeRoot), want: []string{}},
 		{scope: string(ScopeMCPConnect), want: []string{}},
+		{scope: string(ScopeEnvironmentRead), want: []string{}},
+		{scope: string(ScopeEnvironmentWrite), want: []string{string(ScopeEnvironmentRead)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.scope, func(t *testing.T) {

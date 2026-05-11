@@ -121,6 +121,7 @@ export function CreateRoleDialog({
     const groupOrder: { label: string; resourceType: string }[] = [
       { label: "Organization", resourceType: "org" },
       { label: "Build & Deploy", resourceType: "project" },
+      { label: "Environments", resourceType: "environment" },
       { label: "MCP Servers", resourceType: "mcp" },
     ];
     return groupOrder.map((g) => ({

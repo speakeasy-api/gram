@@ -9,29 +9,63 @@ import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { AuthzChallenge } from "@gram/client/models/components/authzchallenge.js";
+import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
+import { Outcome } from "@gram/client/models/operations/listchallengebuckets.js";
+import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { useChallenges } from "@gram/client/react-query/challenges.js";
 import {
   Badge as MoonshineBadge,
   type Column,
   Table,
 } from "@speakeasy-api/moonshine";
-import { Check } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Check, Loader2 } from "lucide-react";
+import { keepPreviousData } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
-import { countChallenges, scopeChallenges } from "./challengeHelpers";
 import { useChallengeRowColumns } from "./useChallengeRowColumns";
 import { useGrantFlow } from "./useGrantFlow";
 
-export type { AuthzChallenge } from "@gram/client/models/components/authzchallenge.js";
+export type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 
-type Outcome = AuthzChallenge["outcome"];
+type BucketOutcome = ChallengeBucket["outcome"];
 type OutcomeFilter = "all" | "deny" | "allow" | "resolved";
+
+/** Map an individual AuthzChallenge to a ChallengeBucket shape so the same table columns render it. */
+function challengeToBucket(c: AuthzChallenge): ChallengeBucket {
+  return {
+    id: c.id,
+    lastSeen: c.timestamp,
+    firstSeen: c.timestamp,
+    organizationId: c.organizationId,
+    projectId: c.projectId,
+    principalUrn: c.principalUrn,
+    principalType: c.principalType,
+    userEmail: c.userEmail,
+    photoUrl: c.photoUrl,
+    operation: c.operation,
+    outcome: c.outcome,
+    reason: c.reason,
+    scope: c.scope,
+    resourceKind: c.resourceKind,
+    resourceId: c.resourceId,
+    roleSlugs: c.roleSlugs,
+    evaluatedGrantCount: c.evaluatedGrantCount,
+    matchedGrantCount: c.matchedGrantCount,
+    challengeCount: 1,
+    challengeIds: [c.id],
+    resolvedAt: c.resolvedAt,
+    resolutionType: c.resolutionType,
+    resolvedBy: c.resolvedBy,
+    resolutionRoleSlug: c.resolutionRoleSlug,
+  };
+}
 
 export function OutcomeBadge({
   outcome,
   resolved,
 }: {
-  outcome: Outcome;
+  outcome: BucketOutcome;
   resolved?: boolean;
 }) {
   if (resolved) {
@@ -43,7 +77,7 @@ export function OutcomeBadge({
   }
 
   const config: Record<
-    Outcome,
+    BucketOutcome,
     { variant: "destructive" | "success" | "neutral"; label: string }
   > = {
     deny: { variant: "destructive", label: "Denied" },
@@ -68,7 +102,7 @@ function FilterPill({
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
-  count: number;
+  count?: number;
 }) {
   return (
     <button
@@ -82,16 +116,128 @@ function FilterPill({
       )}
     >
       {children}
-      <span
-        className={cn(
-          "tabular-nums",
-          active ? "text-primary/70" : "text-muted-foreground/70",
-        )}
-      >
-        {count}
-      </span>
+      {count !== undefined && (
+        <span
+          className={cn(
+            "tabular-nums",
+            active ? "text-primary/70" : "text-muted-foreground/70",
+          )}
+        >
+          {count}
+        </span>
+      )}
     </button>
   );
+}
+
+export function ChallengesEmptyState({
+  outcomeFilter,
+}: {
+  outcomeFilter: OutcomeFilter;
+}) {
+  return (
+    <div className="border-border/50 bg-muted/20 rounded-lg border px-6 py-16 text-center">
+      <div className="bg-primary/10 mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+        <Check className="text-primary h-6 w-6" />
+      </div>
+      <Type variant="body" className="font-medium">
+        {outcomeFilter === "deny"
+          ? "No denied access attempts"
+          : outcomeFilter === "resolved"
+            ? "No resolved challenges yet"
+            : "No challenges found"}
+      </Type>
+      <Type variant="body" className="text-muted-foreground mt-1 text-sm">
+        {outcomeFilter === "deny"
+          ? "All authorization checks are passing. Your team's permissions look good."
+          : outcomeFilter === "resolved"
+            ? "Denied challenges that are resolved by granting access will appear here."
+            : "Authorization challenges will appear here as your team uses the platform."}
+      </Type>
+    </div>
+  );
+}
+
+function useOutcomeApiParam(outcomeFilter: OutcomeFilter): {
+  outcome?: Outcome;
+  resolved?: boolean;
+} {
+  if (outcomeFilter === "deny")
+    return { outcome: Outcome.Deny, resolved: false };
+  if (outcomeFilter === "allow") return { outcome: Outcome.Allow };
+  if (outcomeFilter === "resolved") return { resolved: true };
+  return {};
+}
+
+const EXPANDED_PREVIEW_LIMIT = 10;
+
+/** Fetch individual challenges for all currently-expanded buckets (first 10 only). */
+function useExpandedChallenges(
+  expandedIds: Set<string>,
+  buckets: ChallengeBucket[],
+): Map<string, ChallengeBucket[]> {
+  // Only fetch the first EXPANDED_PREVIEW_LIMIT IDs per bucket.
+  const allIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const b of buckets) {
+      if (expandedIds.has(b.id) && b.challengeCount > 1) {
+        ids.push(...b.challengeIds.slice(0, EXPANDED_PREVIEW_LIMIT));
+      }
+    }
+    return ids;
+  }, [expandedIds, buckets]);
+
+  const { data } = useChallenges(
+    allIds.length > 0 ? { ids: allIds } : undefined,
+  );
+
+  return useMemo(() => {
+    const map = new Map<string, ChallengeBucket[]>();
+    if (!data?.challenges) return map;
+
+    const byId = new Map<string, AuthzChallenge>();
+    for (const c of data.challenges) {
+      byId.set(c.id, c);
+    }
+
+    for (const b of buckets) {
+      if (!expandedIds.has(b.id) || b.challengeCount <= 1) continue;
+      const rows: ChallengeBucket[] = [];
+      for (const id of b.challengeIds.slice(0, EXPANDED_PREVIEW_LIMIT)) {
+        const c = byId.get(id);
+        if (c) rows.push(challengeToBucket(c));
+      }
+      if (rows.length > 0) map.set(b.id, rows);
+    }
+    return map;
+  }, [data, buckets, expandedIds]);
+}
+
+type FlatRow =
+  | { kind: "bucket"; bucket: ChallengeBucket }
+  | { kind: "child"; bucket: ChallengeBucket }
+  | { kind: "overflow"; bucketId: string; remaining: number };
+
+/** Flatten buckets with expanded rows and overflow indicators interleaved. */
+function flattenWithExpanded(
+  buckets: ChallengeBucket[],
+  expandedMap: Map<string, ChallengeBucket[]>,
+): FlatRow[] {
+  const result: FlatRow[] = [];
+  for (const b of buckets) {
+    result.push({ kind: "bucket", bucket: b });
+    const expanded = expandedMap.get(b.id);
+    if (expanded) {
+      for (const child of expanded) {
+        result.push({ kind: "child", bucket: child });
+      }
+      const remaining = b.challengeCount - EXPANDED_PREVIEW_LIMIT;
+      if (remaining > 0) {
+        result.push({ kind: "overflow", bucketId: b.id, remaining });
+      }
+    }
+  }
+  return result;
 }
 
 export function ChallengesTab() {
@@ -109,118 +255,141 @@ export function ChallengesTab() {
     setPrincipalFilter(identity ?? "all");
   }
   const [scopeFilter, setScopeFilter] = useState("all");
-  const groupSiblingIdsRef = useRef<Map<string, string[]>>(new Map());
-  const getGroupChallengeIds = useCallback(
-    (id: string) => groupSiblingIdsRef.current.get(id) ?? [id],
-    [],
-  );
+
   const {
     actionsColumn,
     grantFlowPortals,
-    recentlyResolvedIds,
     animatingOutIds,
-  } = useGrantFlow(getGroupChallengeIds);
+    recentlyResolvedIds,
+  } = useGrantFlow();
 
-  const { data, isLoading } = useChallenges({ limit: 200 });
-  const challenges = useMemo(
-    () => (data?.challenges ?? []).filter((c) => !!c.scope),
-    [data?.challenges],
+  const PAGE_SIZE = 50;
+  const [accumulated, setAccumulated] = useState<ChallengeBucket[]>([]);
+  const [pageCount, setPageCount] = useState(1);
+
+  const outcomeParam = useOutcomeApiParam(outcomeFilter);
+  const offset = (pageCount - 1) * PAGE_SIZE;
+
+  const { data, isLoading, isFetching } = useChallengeBuckets(
+    {
+      ...outcomeParam,
+      principalUrn: principalFilter !== "all" ? principalFilter : undefined,
+      scope: scopeFilter !== "all" ? scopeFilter : undefined,
+      limit: PAGE_SIZE,
+      offset,
+    },
+    undefined,
+    { placeholderData: keepPreviousData },
   );
 
-  const scopedChallenges = useMemo(
-    () => scopeChallenges(challenges, principalFilter, scopeFilter),
-    [challenges, principalFilter, scopeFilter],
-  );
+  // Reset accumulated data when filters change.
+  const filterKey = `${outcomeFilter}|${principalFilter}|${scopeFilter}`;
+  const prevFilterKeyRef = useRef(filterKey);
+  if (filterKey !== prevFilterKeyRef.current) {
+    prevFilterKeyRef.current = filterKey;
+    setAccumulated([]);
+    setPageCount(1);
+  }
 
-  const counts = useMemo(
-    () => countChallenges(scopedChallenges),
-    [scopedChallenges],
-  );
+  // Accumulate results as pages load.
+  useEffect(() => {
+    if (!data?.buckets) return;
+    if (pageCount === 1) {
+      setAccumulated(data.buckets);
+    } else {
+      setAccumulated((prev) => {
+        const existingIds = new Set(prev.map((b) => b.id));
+        const newItems = data.buckets.filter((b) => !existingIds.has(b.id));
+        return [...prev, ...newItems];
+      });
+    }
+  }, [data, pageCount]);
 
+  const totalBuckets = data?.total ?? 0;
+  const hasMore = accumulated.length < totalBuckets;
+  const isLoadingMore = isFetching && pageCount > 1;
+
+  // Pill counts: fetch totals for each tab (lightweight, limit=1).
+  const baseFilters = {
+    principalUrn: principalFilter !== "all" ? principalFilter : undefined,
+    scope: scopeFilter !== "all" ? scopeFilter : undefined,
+    limit: 1,
+    offset: 0,
+  };
+  const { data: denyData } = useChallengeBuckets({
+    ...baseFilters,
+    outcome: Outcome.Deny,
+    resolved: false,
+  });
+  const { data: resolvedData } = useChallengeBuckets({
+    ...baseFilters,
+    resolved: true,
+  });
+  const { data: allData } = useChallengeBuckets(baseFilters);
+
+  // Unique values for filter dropdowns (from loaded data).
   const uniquePrincipals = useMemo(() => {
-    const set = new Set(challenges.map((c) => c.userEmail ?? c.principalUrn));
+    const set = new Set(accumulated.map((b) => b.userEmail ?? b.principalUrn));
     return [...set].filter(Boolean).sort();
-  }, [challenges]);
+  }, [accumulated]);
 
   const uniqueScopes = useMemo(() => {
-    const set = new Set(challenges.map((c) => c.scope));
+    const set = new Set(accumulated.map((b) => b.scope));
     return [...set].filter(Boolean).sort();
-  }, [challenges]);
+  }, [accumulated]);
 
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+  // Expansion state.
+  const [expandedBucketIds, setExpandedBucketIds] = useState<Set<string>>(
     () => new Set(),
   );
-  const toggleGroup = useCallback((groupKey: string) => {
-    setExpandedGroups((prev) => {
+  const toggleBucket = useCallback((bucketId: string) => {
+    setExpandedBucketIds((prev) => {
       const next = new Set(prev);
-      if (next.has(groupKey)) next.delete(groupKey);
-      else next.add(groupKey);
+      if (next.has(bucketId)) next.delete(bucketId);
+      else next.add(bucketId);
       return next;
     });
   }, []);
 
-  const { filtered, groupCounts, groupKeys } = useMemo(() => {
-    let base = scopedChallenges;
-    if (outcomeFilter === "resolved") {
-      base = base.filter(
-        (c) => !!c.resolvedAt && !recentlyResolvedIds.has(c.id),
-      );
-    } else if (outcomeFilter !== "all") {
-      base = base.filter(
-        (c) =>
-          (c.outcome === outcomeFilter && !c.resolvedAt) ||
-          recentlyResolvedIds.has(c.id),
-      );
-    }
-    const sorted = [...base].sort((a, b) => {
-      const order = (o: Outcome) => (o === "deny" ? 0 : o === "error" ? 1 : 2);
-      const diff = order(a.outcome) - order(b.outcome);
-      if (diff !== 0) return diff;
-      return b.timestamp.getTime() - a.timestamp.getTime();
-    });
+  const expandedMap = useExpandedChallenges(expandedBucketIds, accumulated);
+  const flatData = useMemo(
+    () => flattenWithExpanded(accumulated, expandedMap),
+    [accumulated, expandedMap],
+  );
 
-    // Group by (principal, scope, outcome, resource)
-    const groups = new Map<string, AuthzChallenge[]>();
-    for (const c of sorted) {
-      const displayIdentity = c.userEmail ?? c.principalUrn;
-      const key = `${displayIdentity}|${c.scope}|${c.outcome}|${c.resourceKind ?? ""}|${c.resourceId ?? ""}`;
-      const arr = groups.get(key);
-      if (arr) arr.push(c);
-      else groups.set(key, [c]);
-    }
-
-    const result: AuthzChallenge[] = [];
-    const counts = new Map<string, number>();
-    const keys = new Map<string, string>();
-    const siblingIds = new Map<string, string[]>();
-    for (const [key, members] of groups) {
-      const memberIds = members.map((m) => m.id);
-      counts.set(members[0].id, members.length);
-      for (const m of members) {
-        keys.set(m.id, key);
-        siblingIds.set(m.id, memberIds);
-      }
-      if (expandedGroups.has(key)) {
-        result.push(...members);
-      } else {
-        result.push(members[0]);
+  // IDs of individual challenge rows (expanded children) for styling and column hiding.
+  // Exclude bucket trigger row IDs so they keep their avatar/identity/outcome.
+  const expandedChildIds = useMemo(() => {
+    const bucketIds = new Set(accumulated.map((b) => b.id));
+    const ids = new Set<string>();
+    for (const rows of expandedMap.values()) {
+      for (const r of rows) {
+        if (!bucketIds.has(r.id)) ids.add(r.id);
       }
     }
-    groupSiblingIdsRef.current = siblingIds;
-    return { filtered: result, groupCounts: counts, groupKeys: keys };
-  }, [scopedChallenges, outcomeFilter, recentlyResolvedIds, expandedGroups]);
+    return ids;
+  }, [expandedMap, accumulated]);
 
   const challengeRowColumns = useChallengeRowColumns(
     animatingOutIds,
-    groupCounts,
-    groupKeys,
-    toggleGroup,
     outcomeFilter,
+    toggleBucket,
+    expandedChildIds,
+    recentlyResolvedIds,
   );
 
-  const columns: Column<AuthzChallenge>[] = [
+  const wrappedActionsColumn: Column<ChallengeBucket> = useMemo(
+    () => ({
+      ...actionsColumn,
+      render: (row: ChallengeBucket) =>
+        expandedChildIds.has(row.id) ? null : actionsColumn.render?.(row),
+    }),
+    [actionsColumn, expandedChildIds],
+  );
+
+  const columns: Column<ChallengeBucket>[] = [
     ...challengeRowColumns,
-    actionsColumn,
+    wrappedActionsColumn,
   ];
 
   return (
@@ -229,21 +398,21 @@ export function ChallengesTab() {
         <FilterPill
           active={outcomeFilter === "deny"}
           onClick={() => setOutcomeFilter("deny")}
-          count={counts.deny}
+          count={denyData?.total}
         >
           Denied
         </FilterPill>
         <FilterPill
           active={outcomeFilter === "resolved"}
           onClick={() => setOutcomeFilter("resolved")}
-          count={counts.resolved}
+          count={resolvedData?.total}
         >
           Resolved
         </FilterPill>
         <FilterPill
           active={outcomeFilter === "all"}
           onClick={() => setOutcomeFilter("all")}
-          count={counts.all}
+          count={allData?.total}
         >
           All
         </FilterPill>
@@ -279,30 +448,72 @@ export function ChallengesTab() {
         </Select>
       </div>
 
-      {isLoading ? (
+      {isLoading && accumulated.length === 0 ? (
         <SkeletonTable />
-      ) : filtered.length === 0 ? (
-        <div className="border-border/50 bg-muted/20 rounded-lg border px-6 py-16 text-center">
-          <div className="bg-primary/10 mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-            <Check className="text-primary h-6 w-6" />
-          </div>
-          <Type variant="body" className="font-medium">
-            {outcomeFilter === "deny"
-              ? "No denied access attempts"
-              : outcomeFilter === "resolved"
-                ? "No resolved challenges yet"
-                : "No challenges found"}
-          </Type>
-          <Type variant="body" className="text-muted-foreground mt-1 text-sm">
-            {outcomeFilter === "deny"
-              ? "All authorization checks are passing. Your team's permissions look good."
-              : outcomeFilter === "resolved"
-                ? "Denied challenges that are resolved by granting access will appear here."
-                : "Authorization challenges will appear here as your team uses the platform."}
-          </Type>
-        </div>
+      ) : accumulated.length === 0 ? (
+        <ChallengesEmptyState outcomeFilter={outcomeFilter} />
       ) : (
-        <Table columns={columns} data={filtered} rowKey={(row) => row.id} />
+        <>
+          <Table columns={columns}>
+            <Table.Header columns={columns} />
+            <Table.Body>
+              {flatData.map((row) => {
+                if (row.kind === "overflow") {
+                  return (
+                    <tr
+                      key={`overflow-${row.bucketId}`}
+                      className="bg-muted/50"
+                    >
+                      <td
+                        colSpan={columns.length}
+                        className="text-muted-foreground px-4 py-2 text-center text-xs"
+                      >
+                        + {row.remaining.toLocaleString()} more
+                      </td>
+                    </tr>
+                  );
+                }
+                return (
+                  <Table.Row
+                    key={row.bucket.id}
+                    row={row.bucket}
+                    columns={columns}
+                    className={row.kind === "child" ? "bg-muted/50" : undefined}
+                  />
+                );
+              })}
+            </Table.Body>
+          </Table>
+          {(accumulated.length > 0 || isLoadingMore) && (
+            <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
+              <Type muted small>
+                Showing {accumulated.length.toLocaleString()} of{" "}
+                {totalBuckets.toLocaleString()}
+              </Type>
+              {hasMore ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPageCount((p) => p + 1)}
+                  disabled={isLoadingMore}
+                >
+                  {isLoadingMore ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    "Load more"
+                  )}
+                </Button>
+              ) : (
+                <Type muted small>
+                  All results loaded
+                </Type>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       <div className="border-border/50 bg-muted/30 mt-8 rounded-md border px-4 py-3">

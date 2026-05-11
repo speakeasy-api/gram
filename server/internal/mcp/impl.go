@@ -61,6 +61,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -99,6 +100,7 @@ type Service struct {
 	enc                 *encryption.Client
 	authz               *authz.Engine
 	shadowMCPClient     *shadowmcp.Client
+	platformExtras      []platformtools.ExternalTool
 }
 
 type oauthTokenInputs struct {
@@ -147,6 +149,8 @@ func NewService(
 	assistantTokens *assistanttokens.Manager,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
+	platformExtras []platformtools.ExternalTool,
+	platformFeatureChecker platformtools.FeatureChecker,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -159,6 +163,8 @@ func NewService(
 		auditLogger,
 		platformtoolsruntime.WithTriggerTools(triggerApp),
 		platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
+		platformtoolsruntime.WithExternalTools(platformExtras),
+		platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
 	)
 
 	return &Service{
@@ -202,6 +208,7 @@ func NewService(
 		enc:                 enc,
 		authz:               authzEngine,
 		shadowMCPClient:     shadowMCPClient,
+		platformExtras:      platformExtras,
 	}
 }
 
@@ -587,7 +594,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 			if err != nil {
 				return oops.E(oops.CodeUnexpected, err, "failed to load access grants").Log(ctx, s.logger)
 			}
-			if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceKind: "", ResourceID: toolset.ID.String(), Dimensions: nil}); err != nil {
+			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())); err != nil {
 				return err
 			}
 		}
@@ -699,7 +706,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 // (or if the toolset has no security requirements).
 func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_repo.Toolset, payload *mcpInputs) (bool, error) {
 	projectID := mv.ProjectID(payload.projectID)
-	described, err := mv.DescribeToolset(ctx, s.logger, s.db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), &s.toolsetCache)
+	described, err := mv.DescribeToolset(ctx, s.logger, s.db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), &s.toolsetCache, s.platformExtras...)
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "failed to describe toolset for security check").Log(ctx, s.logger)
 	}
@@ -892,17 +899,17 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.shadowMCPClient)
+		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.shadowMCPClient, s.platformExtras)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.platformExtras)
 	case "prompts/list":
-		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
+		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case "prompts/get":
 		return handlePromptsGet(ctx, s.logger, s.db, payload, req)
 	case "resources/list":
-		return handleResourcesList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
+		return handleResourcesList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case "resources/read":
-		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger)
+		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras)
 	default:
 		return nil, &rpcError{
 			ID:      req.ID,
@@ -1141,6 +1148,7 @@ func (s *Service) HandleToolsList(
 		s.vectorToolStore,
 		s.temporal,
 		s.shadowMCPClient,
+		s.platformExtras,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("handle tools list: %w", err)
@@ -1215,6 +1223,7 @@ func (s *Service) HandleToolsCall(
 		s.vectorToolStore,
 		s.temporal,
 		s.mcpMetadataRepo,
+		s.platformExtras,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("handle tool call: %w", err)

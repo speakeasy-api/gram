@@ -179,6 +179,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		ToolIoLogsEnabled:            isEnabled(FeatureToolIOLogs),
 		SessionCaptureEnabled:        isEnabled(FeatureSessionCapture),
 		AuthzChallengeLoggingEnabled: isEnabled(FeatureAuthzChallengeLogging),
+		AssistantMemoryEnabled:       isEnabled(FeatureAssistantMemory),
 	}, nil
 }
 

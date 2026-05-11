@@ -542,7 +542,7 @@ CREATE TABLE IF NOT EXISTS trigger_instances (
   target_ref TEXT NOT NULL CHECK (target_ref <> '' AND CHAR_LENGTH(target_ref) <= 255),
   target_display TEXT NOT NULL CHECK (target_display <> '' AND CHAR_LENGTH(target_display) <= 255),
   config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-  status TEXT NOT NULL CHECK (status IN ('active', 'paused')) DEFAULT 'active',
+  status TEXT NOT NULL DEFAULT 'active',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -696,6 +696,119 @@ CREATE UNIQUE INDEX IF NOT EXISTS oauth_proxy_providers_project_slug_key
 ON oauth_proxy_providers (project_id, slug)
 WHERE deleted IS FALSE;
 
+-- User Session Issuers house configuration for when Gram acts as an Authorization Server for MCP Clients
+-- See: https://datatracker.ietf.org/doc/html/rfc8414
+CREATE TABLE IF NOT EXISTS user_session_issuers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
+  authn_challenge_mode TEXT NOT NULL, -- One of ('chain', 'interactive'). chain exists for backwards compatibility and should be phased out. interactive will be the main mode going forward
+  session_duration INTERVAL NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_session_issuers_pkey PRIMARY KEY (id),
+  CONSTRAINT user_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_slug_key
+ON user_session_issuers (project_id, slug)
+WHERE deleted IS FALSE;
+
+-- User Session Clients are MCP Clients that have registered themselves with Gram
+-- See: https://datatracker.ietf.org/doc/html/rfc6749#section-1.1
+CREATE TABLE IF NOT EXISTS user_session_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  user_session_issuer_id uuid NOT NULL,
+
+  client_id TEXT NOT NULL,
+  client_secret_hash TEXT,
+  client_name TEXT NOT NULL,
+  redirect_uris TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+
+  client_id_issued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  client_secret_expires_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_session_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT user_session_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_clients_issuer_client_id_key
+ON user_session_clients (user_session_issuer_id, client_id)
+WHERE deleted IS FALSE;
+
+-- User Session Consents track records of consent between Clients and Issuers
+-- Consents are scoped to given sets of underlying credentials so they can be reused between login events
+CREATE TABLE IF NOT EXISTS user_session_consents (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  subject_urn TEXT NOT NULL,
+  user_session_client_id uuid NOT NULL,
+  remote_set_hash TEXT NOT NULL,
+
+  consented_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_session_consents_pkey PRIMARY KEY (id),
+  CONSTRAINT user_session_consents_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_consents_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_consents_subject_client_set_key
+ON user_session_consents (subject_urn, user_session_client_id, remote_set_hash)
+WHERE deleted IS FALSE;
+
+-- User Sessions are records representing active Gram sessions for a given Subject
+-- They contain token grant information to allow for validating and exchanging tokens
+CREATE TABLE IF NOT EXISTS user_sessions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  user_session_issuer_id uuid NOT NULL,
+  user_session_client_id uuid,
+  subject_urn TEXT NOT NULL,
+  jti TEXT NOT NULL,
+  refresh_token_hash TEXT NOT NULL,
+  refresh_expires_at timestamptz NOT NULL,
+  expires_at timestamptz NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT user_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_sessions_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
+  CONSTRAINT user_sessions_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS user_sessions_user_session_client_id_idx
+ON user_sessions (user_session_client_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_sessions_refresh_token_hash_key
+ON user_sessions (refresh_token_hash)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS user_sessions_subject_idx
+ON user_sessions (subject_urn, user_session_issuer_id)
+WHERE deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS toolsets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
@@ -717,6 +830,10 @@ CREATE TABLE IF NOT EXISTS toolsets (
   external_oauth_server_id uuid,
   oauth_proxy_server_id uuid,
 
+  -- New unified gate (spike §4.1 Toolset link). Nullable opt-in; runtime
+  -- behaviour is gated only when this is set, so legacy paths stay unchanged.
+  user_session_issuer_id uuid,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -727,6 +844,7 @@ CREATE TABLE IF NOT EXISTS toolsets (
   CONSTRAINT toolsets_custom_domain_id_fkey FOREIGN key (custom_domain_id) REFERENCES custom_domains (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_external_oauth_server_id_fkey FOREIGN KEY (external_oauth_server_id) REFERENCES external_oauth_server_metadata (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_oauth_proxy_server_id_fkey FOREIGN KEY (oauth_proxy_server_id) REFERENCES oauth_proxy_servers (id) ON DELETE SET NULL,
+  CONSTRAINT toolsets_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_oauth_exclusivity CHECK ((external_oauth_server_id IS NULL) != (oauth_proxy_server_id IS NULL) OR (external_oauth_server_id IS NULL AND oauth_proxy_server_id IS NULL))
 );
 
@@ -1558,6 +1676,47 @@ CREATE INDEX IF NOT EXISTS toolset_embeddings_tags_idx
 ON toolset_embeddings
 USING GIN (tags);
 
+CREATE TABLE IF NOT EXISTS assistant_memories (
+  id               uuid NOT NULL DEFAULT generate_uuidv7(),
+  assistant_id     uuid,
+  project_id       uuid,
+  organization_id  TEXT NOT NULL,
+  content          TEXT NOT NULL,
+  embedding        halfvec(4000) NOT NULL,
+  supersedes_id    uuid,
+  superseded_at    timestamptz,
+  valid_at         timestamptz NOT NULL DEFAULT clock_timestamp(),
+  tags             TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  origin_thread_id uuid,
+  origin_chat_id   uuid,
+  created_at       timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at       timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_access      timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at       timestamptz,
+  deleted          boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT assistant_memories_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_memories_assistant_id_fkey
+    FOREIGN KEY (assistant_id) REFERENCES assistants(id) ON DELETE SET NULL,
+  CONSTRAINT assistant_memories_project_id_fkey
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+  CONSTRAINT assistant_memories_supersedes_id_fkey
+    FOREIGN KEY (supersedes_id) REFERENCES assistant_memories(id) ON DELETE SET NULL,
+  CONSTRAINT assistant_memories_content_size_check CHECK (octet_length(content) <= 8192)
+);
+
+CREATE INDEX IF NOT EXISTS assistant_memories_embedding_hnsw
+  ON assistant_memories USING hnsw (embedding halfvec_cosine_ops)
+  WHERE deleted IS FALSE AND superseded_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS assistant_memories_assistant_active
+  ON assistant_memories (assistant_id, created_at DESC)
+  WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS assistant_memories_tags_gin
+  ON assistant_memories USING gin (tags)
+  WHERE deleted IS FALSE;
+
 -- Agent executions table
 CREATE TABLE IF NOT EXISTS agent_executions (
   id TEXT NOT NULL,
@@ -2328,7 +2487,6 @@ ON authz_challenge_resolutions (organization_id, principal_urn);
 
 CREATE TABLE IF NOT EXISTS outbox (
   id BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY,
-  public_id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
 
   event_type TEXT NOT NULL,

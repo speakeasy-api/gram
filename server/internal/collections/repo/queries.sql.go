@@ -466,7 +466,7 @@ func (q *Queries) IsServerAttachedToOrganizationMcpCollection(ctx context.Contex
 }
 
 const listOrganizationMcpCollectionServerAttachments = `-- name: ListOrganizationMcpCollectionServerAttachments :many
-SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.created_at, t.updated_at, t.deleted_at, t.deleted FROM toolsets t
+SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.user_session_issuer_id, t.created_at, t.updated_at, t.deleted_at, t.deleted FROM toolsets t
 JOIN organization_mcp_collection_server_attachments rt ON t.id = rt.toolset_id
 JOIN organization_mcp_collections c ON c.id = rt.collection_id
 WHERE
@@ -508,6 +508,7 @@ func (q *Queries) ListOrganizationMcpCollectionServerAttachments(ctx context.Con
 			&i.CustomDomainID,
 			&i.ExternalOauthServerID,
 			&i.OauthProxyServerID,
+			&i.UserSessionIssuerID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
