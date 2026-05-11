@@ -38,7 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
-	"github.com/workos/workos-go/v6/pkg/events"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 type WorkerOptions struct {
@@ -68,7 +68,7 @@ type WorkerOptions struct {
 	PIIScanner          risk_analysis.PIIScanner
 	ShadowMCPClient     *shadowmcp.Client
 	AuditLogger         *audit.Logger
-	WorkOSEventsClient  *events.Client
+	WorkOSClient        *workos.Client
 }
 
 func ForDeploymentProcessing(
@@ -108,7 +108,7 @@ func ForDeploymentProcessing(
 		TemporalEnv:         nil,
 		PIIScanner:          nil,
 		ShadowMCPClient:     nil,
-		WorkOSEventsClient:  nil,
+		WorkOSClient:        nil,
 	}
 }
 
@@ -146,7 +146,7 @@ func NewTemporalWorker(
 		PIIScanner:          nil,
 		ShadowMCPClient:     nil,
 		AuditLogger:         nil,
-		WorkOSEventsClient:  nil,
+		WorkOSClient:        nil,
 	}
 
 	for _, o := range options {
@@ -177,7 +177,7 @@ func NewTemporalWorker(
 			PIIScanner:          conv.Default(o.PIIScanner, opts.PIIScanner),
 			ShadowMCPClient:     conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
 			AuditLogger:         conv.Default(o.AuditLogger, opts.AuditLogger),
-			WorkOSEventsClient:  conv.Default(o.WorkOSEventsClient, opts.WorkOSEventsClient),
+			WorkOSClient:        conv.Default(o.WorkOSClient, opts.WorkOSClient),
 		}
 	}
 
@@ -225,7 +225,7 @@ func NewTemporalWorker(
 		opts.PIIScanner,
 		opts.ShadowMCPClient,
 		opts.AuditLogger,
-		opts.WorkOSEventsClient,
+		opts.WorkOSClient,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -269,6 +269,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.SignalAssistantCoordinator)
 	temporalWorker.RegisterActivity(activities.SignalAssistantThread)
 	// WorkOS sync activities
+	temporalWorker.RegisterActivity(activities.ListWorkOSOrganizations)
+	temporalWorker.RegisterActivity(activities.BackfillWorkOSOrganization)
+	temporalWorker.RegisterActivity(activities.BackfillWorkOSGlobalRoles)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSGlobalRoleEvents)
 
@@ -303,6 +306,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflowDebounced)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSGlobalRoleEventsWorkflow)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSGlobalRoleEventsWorkflowDebounced)
+	temporalWorker.RegisterWorkflow(BackfillWorkOSWorkflow)
 	// Assistants signup followups
 	temporalWorker.RegisterWorkflow(CancelAssistantsSubscriptionWorkflow)
 

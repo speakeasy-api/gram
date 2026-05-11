@@ -28,7 +28,6 @@ import (
 	"github.com/superfly/fly-go/tokens"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
-	"github.com/workos/workos-go/v6/pkg/events"
 	"github.com/workos/workos-go/v6/pkg/webhooks"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
@@ -491,25 +490,6 @@ func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *w
 	}
 
 	return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), haveAPIKey, nil
-}
-
-func newWorkOSEventsClient(c *cli.Context, guardianPolicy *guardian.Policy) (*events.Client, error) {
-	apiKey := c.String("workos-api-key")
-	if apiKey == "" || apiKey == "unset" {
-		if c.String("environment") != "local" {
-			return nil, errors.New("WorkOS API key not provided")
-		}
-		// Local dev without a configured key: return nil so the activity can
-		// surface a clear "not configured" error rather than calling WorkOS
-		// with an empty key and getting an opaque API failure.
-		return nil, nil
-	}
-
-	return &events.Client{
-		APIKey:     apiKey,
-		HTTPClient: guardianPolicy.PooledClient(),
-		Endpoint:   workosClientOpts(c).Endpoint,
-	}, nil
 }
 
 func newWorkOSWebhooksClient(c *cli.Context) *webhooks.Client {

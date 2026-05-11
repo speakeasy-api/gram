@@ -26,7 +26,7 @@ import (
 
 const workosOrgEventsPageSize = 100
 
-// EventsLister is the subset of the WorkOS events client used by this activity.
+// EventsLister is the subset of the WorkOS client used by this activity.
 type EventsLister interface {
 	ListEvents(ctx context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error)
 }
@@ -54,14 +54,14 @@ type ProcessWorkOSOrganizationEventsResult struct {
 type ProcessWorkOSOrganizationEvents struct {
 	db           *pgxpool.Pool
 	logger       *slog.Logger
-	eventsClient EventsLister
+	workosClient EventsLister
 }
 
-func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, eventsClient EventsLister) *ProcessWorkOSOrganizationEvents {
+func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient EventsLister) *ProcessWorkOSOrganizationEvents {
 	return &ProcessWorkOSOrganizationEvents{
 		db:           db,
 		logger:       logger,
-		eventsClient: eventsClient,
+		workosClient: workosClient,
 	}
 }
 
@@ -84,7 +84,7 @@ func (p *ProcessWorkOSOrganizationEvents) Do(ctx context.Context, params Process
 		}
 	}
 
-	resp, err := p.eventsClient.ListEvents(ctx, events.ListEventsOpts{
+	resp, err := p.workosClient.ListEvents(ctx, events.ListEventsOpts{
 		Events: []string{
 			string(workos.EventKindOrganizationCreated),
 			string(workos.EventKindOrganizationUpdated),

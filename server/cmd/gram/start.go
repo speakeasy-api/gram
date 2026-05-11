@@ -505,11 +505,6 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create WorkOS client: %w", err)
 			}
 
-			workosEventsClient, err := newWorkOSEventsClient(c, guardianPolicy)
-			if err != nil {
-				return fmt.Errorf("failed to create WorkOS events client: %w", err)
-			}
-
 			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
@@ -1013,7 +1008,7 @@ func newStartCommand() *cli.Command {
 						PIIScanner:          piiScanner,
 						ShadowMCPClient:     shadowMCPClient,
 						AuditLogger:         auditLogger,
-						WorkOSEventsClient:  workosEventsClient,
+						WorkOSClient:        conv.Ternary(workosAvailable, workosClient, nil),
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))

@@ -286,7 +286,7 @@ func newWorkerCommand() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:     "workos-api-key",
-			Usage:    "WorkOS API key for the events client",
+			Usage:    "WorkOS API key for WorkOS API calls",
 			EnvVars:  []string{"WORKOS_API_KEY"},
 			Required: false,
 		},
@@ -490,9 +490,9 @@ func newWorkerCommand() *cli.Command {
 				authz.EngineOpts{DevMode: c.String("environment") == "local"},
 			)
 
-			workosEventsClient, err := newWorkOSEventsClient(c, guardianPolicy)
+			workosClient, _, err := newWorkOSClient(guardianPolicy, c)
 			if err != nil {
-				return fmt.Errorf("failed to create WorkOS events client: %w", err)
+				return fmt.Errorf("failed to create WorkOS client: %w", err)
 			}
 
 			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
@@ -657,7 +657,7 @@ func newWorkerCommand() *cli.Command {
 				PIIScanner:          piiScanner,
 				ShadowMCPClient:     shadowMCPClient,
 				AuditLogger:         auditLogger,
-				WorkOSEventsClient:  workosEventsClient,
+				WorkOSClient:        workosClient,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

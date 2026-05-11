@@ -9,10 +9,12 @@ import (
 )
 
 type StubClient struct {
-	mut   sync.Mutex
-	orgs  map[string]*stubOrgState
-	next  int
-	nowFn func() time.Time
+	mut         sync.Mutex
+	orgs        map[string]*stubOrgState
+	globalRoles map[string]Role
+	globalOrder []string
+	next        int
+	nowFn       func() time.Time
 }
 
 type stubOrgState struct {
@@ -26,10 +28,12 @@ type stubOrgState struct {
 
 func NewStubClient() *StubClient {
 	return &StubClient{
-		mut:   sync.Mutex{},
-		orgs:  make(map[string]*stubOrgState),
-		next:  1,
-		nowFn: time.Now,
+		mut:         sync.Mutex{},
+		orgs:        make(map[string]*stubOrgState),
+		globalRoles: stubDefaultGlobalRoles(),
+		globalOrder: []string{"admin", "member"},
+		next:        1,
+		nowFn:       time.Now,
 	}
 }
 
@@ -56,11 +60,23 @@ func (s *StubClient) CreateRole(_ context.Context, orgID string, opts CreateRole
 	}
 
 	now := s.nowFn().UTC().Format(time.RFC3339)
-	role := Role{ID: s.nextRoleID(), Name: opts.Name, Slug: opts.Slug, Description: opts.Description, CreatedAt: now, UpdatedAt: now}
+	role := Role{ID: s.nextRoleID(), Name: opts.Name, Slug: opts.Slug, Description: opts.Description, Type: "OrganizationRole", CreatedAt: now, UpdatedAt: now}
 	state.roles[role.Slug] = role
 	state.roleOrder = append(state.roleOrder, role.Slug)
 
 	return &role, nil
+}
+
+func (s *StubClient) ListGlobalRoles(_ context.Context) ([]Role, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	roles := make([]Role, 0, len(s.globalOrder))
+	for _, slug := range s.globalOrder {
+		roles = append(roles, s.globalRoles[slug])
+	}
+
+	return roles, nil
 }
 
 func (s *StubClient) UpdateRole(_ context.Context, orgID string, roleSlug string, opts UpdateRoleOpts) (*Role, error) {
@@ -329,8 +345,8 @@ func (s *StubClient) orgState(orgID string) *stubOrgState {
 
 	state = &stubOrgState{
 		roles: map[string]Role{
-			"admin":  {ID: "role_admin", Name: "Admin", Slug: "admin", Description: "", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},
-			"member": {ID: "role_member", Name: "Member", Slug: "member", Description: "", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},
+			"admin":  {ID: "role_admin", Name: "Admin", Slug: "admin", Description: "", Type: "EnvironmentRole", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},
+			"member": {ID: "role_member", Name: "Member", Slug: "member", Description: "", Type: "EnvironmentRole", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},
 		},
 		roleOrder:   []string{"admin", "member"},
 		memberships: make(map[string]Member),
@@ -341,6 +357,13 @@ func (s *StubClient) orgState(orgID string) *stubOrgState {
 	s.orgs[orgID] = state
 
 	return state
+}
+
+func stubDefaultGlobalRoles() map[string]Role {
+	return map[string]Role{
+		"admin":  {ID: "role_admin", Name: "Admin", Slug: "admin", Description: "", Type: "EnvironmentRole", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},
+		"member": {ID: "role_member", Name: "Member", Slug: "member", Description: "", Type: "EnvironmentRole", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},
+	}
 }
 
 func (s *StubClient) nextRoleID() string {
