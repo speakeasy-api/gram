@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "madprocs": {
+      "type": "http",
+      "url": "https://localhost:35294/mcp"
+    }
+  }
+}
