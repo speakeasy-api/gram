@@ -4,7 +4,7 @@
 //
 // The mode is only mounted when GRAM_IDP_MODE=workos.
 // When mounted, every request hits the live WorkOS API (or whatever
-// WORKOS_HOST points at) using the configured API key.
+// WORKOS_API_URL points at) using the configured API key.
 package workos
 
 import (

@@ -24,6 +24,7 @@
 package mockworkos
 
 import (
+	"context"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
@@ -198,7 +199,7 @@ func (h *Handler) handleWorkosListUsers(w http.ResponseWriter, r *http.Request) 
 	if email := q.Get("email"); email != "" {
 		emailNarg = sql.NullString{String: email, Valid: true}
 	}
-	orgFilter, err := optionalQueryUUID(q, "organization_id")
+	orgFilter, err := h.optionalQueryOrgID(ctx, q, "organization_id")
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, err.Error())
 		return
@@ -270,7 +271,7 @@ func (h *Handler) handleWorkosListMemberships(w http.ResponseWriter, r *http.Req
 		writeWorkosError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	orgFilter, err := optionalQueryUUID(q, "organization_id")
+	orgFilter, err := h.optionalQueryOrgID(ctx, q, "organization_id")
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, err.Error())
 		return
@@ -587,9 +588,62 @@ func (h *Handler) handleWorkosAcceptInvitation(w http.ResponseWriter, r *http.Re
 // Roles
 // =============================================================================
 
+// resolveOrgID maps an external organization ID (which may be a UUID or an
+// opaque string like a Gram KSUID "org_01KMD...") to the dev-idp's internal
+// UUID. Resolution order:
+//  1. Try UUID parse → direct lookup by organizations.id
+//  2. Lookup by organizations.workos_id (text match)
+//  3. Auto-associate: stamp workos_id on the first org without one (the
+//     default "Speakeasy" org seeded by bootstrap) so subsequent requests
+//     resolve instantly.
+func (h *Handler) resolveOrgID(ctx context.Context, raw string) (uuid.UUID, error) {
+	queries := repo.New(h.db)
+
+	// Fast path: raw is already a UUID matching an org's primary key.
+	if parsed, err := uuid.Parse(raw); err == nil {
+		if _, err := queries.GetOrganization(ctx, parsed); err == nil {
+			return parsed, nil
+		}
+	}
+
+	// Lookup by workos_id text.
+	narg := sql.NullString{String: raw, Valid: true}
+	if org, err := queries.GetOrganizationByWorkosID(ctx, narg); err == nil {
+		return org.ID, nil
+	}
+
+	// Auto-associate: stamp workos_id on the default org.
+	org, err := queries.SetOrganizationWorkosID(ctx, repo.SetOrganizationWorkosIDParams{
+		WorkosID: narg,
+		Ts:       time.Now(),
+	})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("resolve org %q: no org available to associate: %w", raw, err)
+	}
+	h.logger.InfoContext(ctx, "auto-associated external org ID with dev-idp org",
+		slog.String("external_id", raw),
+		slog.String("dev_idp_org_id", org.ID.String()),
+	)
+	return org.ID, nil
+}
+
+// optionalQueryOrgID is like optionalQueryUUID but routes non-UUID org IDs
+// through resolveOrgID so that Gram KSUIDs work transparently.
+func (h *Handler) optionalQueryOrgID(ctx context.Context, q map[string][]string, key string) (uuid.NullUUID, error) {
+	raw := firstQuery(q, key)
+	if raw == "" {
+		return uuid.NullUUID{}, nil
+	}
+	resolved, err := h.resolveOrgID(ctx, raw)
+	if err != nil {
+		return uuid.NullUUID{}, fmt.Errorf("invalid %s", key)
+	}
+	return uuid.NullUUID{UUID: resolved, Valid: true}, nil
+}
+
 func (h *Handler) handleWorkosListRoles(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	orgID, err := uuid.Parse(r.PathValue("id"))
+	orgID, err := h.resolveOrgID(ctx, r.PathValue("id"))
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, "invalid organization id")
 		return
@@ -612,7 +666,7 @@ func (h *Handler) handleWorkosListRoles(w http.ResponseWriter, r *http.Request) 
 
 func (h *Handler) handleWorkosCreateRole(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	orgID, err := uuid.Parse(r.PathValue("id"))
+	orgID, err := h.resolveOrgID(ctx, r.PathValue("id"))
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, "invalid organization id")
 		return
@@ -647,7 +701,7 @@ func (h *Handler) handleWorkosCreateRole(w http.ResponseWriter, r *http.Request)
 
 func (h *Handler) handleWorkosUpdateRole(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	orgID, err := uuid.Parse(r.PathValue("id"))
+	orgID, err := h.resolveOrgID(ctx, r.PathValue("id"))
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, "invalid organization id")
 		return
@@ -682,7 +736,7 @@ func (h *Handler) handleWorkosUpdateRole(w http.ResponseWriter, r *http.Request)
 
 func (h *Handler) handleWorkosDeleteRole(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	orgID, err := uuid.Parse(r.PathValue("id"))
+	orgID, err := h.resolveOrgID(ctx, r.PathValue("id"))
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, "invalid organization id")
 		return

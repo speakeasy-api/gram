@@ -126,8 +126,9 @@ GRAM_IDP_CLIENT_ID = "gram-local-dev"
 ## IDP mode: "mock-workos" (default) or "workos".
 ##
 ## mock-workos — fully local, zero config. dev-idp emulates the WorkOS API.
-## workos      — real WorkOS via dev-idp proxy. Requires WORKOS_API_KEY and
-##               GRAM_IDP_CLIENT_ID override in mise.local.toml.
+## workos      — real WorkOS via dev-idp proxy. Requires WORKOS_API_KEY,
+##               GRAM_IDP_CLIENT_ID, and WORKOS_API_URL="https://api.workos.com"
+##               overrides in mise.local.toml.
 ##
 ## See CONTRIBUTING.md "Local auth and identity" for details.
 GRAM_IDP_MODE = "mock-workos"

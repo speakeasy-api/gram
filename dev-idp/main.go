@@ -62,7 +62,7 @@ func run() error {
 	rsaKey := flag.String("rsa-private-key", os.Getenv("GRAM_DEVIDP_RSA_PRIVATE_KEY"), "PEM-encoded RSA private key (omit to generate a fresh ephemeral key)")
 	idpMode := flag.String("idp-mode", envOr("GRAM_IDP_MODE", "mock-workos"), "IDP mode: mock-workos (default) or workos")
 	workosKey := flag.String("workos-api-key", os.Getenv("WORKOS_API_KEY"), "WorkOS API key (required when --idp-mode=workos)")
-	workosHost := flag.String("workos-host", envOr("WORKOS_HOST", "https://api.workos.com"), "Base URL of the WorkOS API")
+	workosHost := flag.String("workos-host", envOr("WORKOS_API_URL", "https://api.workos.com"), "Base URL of the WorkOS API")
 	flag.Parse()
 
 	logger := plog.NewLogger(os.Stderr).With(slog.String("component", "dev-idp"))
