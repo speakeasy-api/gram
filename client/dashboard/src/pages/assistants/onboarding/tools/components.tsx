@@ -331,12 +331,12 @@ export function ShowSlackAppGuideComponent({
   if (settled && r?.installed) {
     return (
       <ToolCard
-        title="Slack app installed"
+        title="Slack connection installed"
         tone="success"
         icon={<Check className="text-emerald-600" size={16} />}
       >
         <Type small muted>
-          Ready to paste your tokens.
+          Next: paste your tokens.
         </Type>
       </ToolCard>
     );
@@ -344,9 +344,10 @@ export function ShowSlackAppGuideComponent({
 
   if (settled && r?.cancelled) {
     return (
-      <ToolCard title="Slack app guide — skipped">
+      <ToolCard title="Slack install — skipped">
         <Type small muted>
-          You can come back to this from the Environments page later.
+          You can come back to this anytime — just ask me to retry the Slack
+          setup.
         </Type>
       </ToolCard>
     );
@@ -359,104 +360,92 @@ export function ShowSlackAppGuideComponent({
     draft.resolvePending(toolCallId, { success: false, cancelled: true });
   };
 
+  const steps: React.ReactNode[] = [
+    <>
+      Click <strong>Open Slack</strong> below. A new tab opens with the setup
+      already filled in for you.
+    </>,
+    <>
+      In Slack, pick the workspace this assistant should live in, then click{" "}
+      <strong>Create</strong>.
+    </>,
+    <>
+      In Slack's left sidebar, click <strong>Install App</strong>, then{" "}
+      <strong>Install to Workspace</strong>, then approve. Slack will only hand
+      out a login token <em>after</em> this step — skipping it is the most
+      common reason setup gets stuck.
+    </>,
+    webhookLive ? (
+      <>
+        <span className="text-amber-600 dark:text-amber-400">
+          Easy to miss, but required.
+        </span>{" "}
+        In Slack's left sidebar, click <strong>Event Subscriptions</strong>.
+        Next to the request URL we filled in, click <strong>Retry</strong>, then
+        click <strong>Save Changes</strong> in the bottom-right. Without this,
+        Slack won't deliver any messages to your assistant and it will look
+        broken.
+      </>
+    ) : null,
+    <>
+      Come back here and click <strong>I'm done</strong> below. I'll ask for
+      your tokens next.
+    </>,
+  ].filter(Boolean);
+
   return (
     <ToolCard
-      title="Create the Slack App"
+      title="Install your Slack connection"
       tone="info"
       icon={<Icon name="bot" className="text-muted-foreground h-4 w-4" />}
     >
       <p className="text-muted-foreground mb-4 text-sm leading-relaxed">
-        This link opens Slack with a manifest pre-filled — name
-        {scopes.length > 0 ? ", bot scopes" : ""}
-        {userScopes.length > 0 ? ", user scopes" : ""}
-        {webhookLive ? ", and webhook URL" : ""}. You'll still need to install
-        it to your workspace and copy your tokens back here.
+        Slack calls each integration an "app" in their dashboard — same thing.
+        I've pre-filled the setup so you just need to install it in your
+        workspace
+        {webhookLive ? " and tell Slack our webhook is ready" : ""}.
       </p>
 
       <ol className="space-y-3 text-sm leading-relaxed">
-        {[
-          <>
-            Click <strong>Open Slack</strong>. Pick your workspace, review the
-            manifest, click <strong>Create</strong>.
-            {webhookLive ? (
-              <span className="text-muted-foreground mt-1.5 block text-xs leading-relaxed">
-                Slack will verify the webhook URL immediately. If it says the
-                URL didn't respond, click Retry — our endpoint is already live.
-              </span>
-            ) : null}
-          </>,
-          <>
-            On the app page, click <strong>Install to Workspace</strong> (green
-            banner or <em>OAuth &amp; Permissions</em> sidebar) and approve.
-            This is a separate step from Create — without it you won't have a
-            bot token.
-          </>,
-          <>
-            Copy the <strong>Bot User OAuth Token</strong> from{" "}
-            <em>OAuth &amp; Permissions</em>. It starts with <code>xoxb-</code>.
-            Not <code>xoxp-</code>; not the Client Secret.
-          </>,
-          webhookLive ? (
-            <>
-              Copy the <strong>Signing Secret</strong> from{" "}
-              <em>Basic Information → App Credentials</em>. Not the Verification
-              Token (deprecated) and not the Client Secret.
-            </>
-          ) : null,
-          userScopes.length > 0 ? (
-            <>
-              Copy the <strong>User OAuth Token</strong> from{" "}
-              <em>OAuth &amp; Permissions</em>. It starts with{" "}
-              <code>xoxp-</code>. User scopes were pre-granted by the manifest —
-              no extra setup needed.
-            </>
-          ) : null,
-          <>
-            Click <strong>I've installed it</strong> below when done. The token
-            form will appear next.
-          </>,
-        ]
-          .filter(Boolean)
-          .map((step, i) => (
-            <li key={i} className="flex gap-3">
-              <span className="text-muted-foreground shrink-0 tabular-nums">
-                {i + 1}.
-              </span>
-              <div className="flex-1">{step}</div>
-            </li>
-          ))}
+        {steps.map((step, i) => (
+          <li key={i} className="flex gap-3">
+            <span className="text-muted-foreground shrink-0 tabular-nums">
+              {i + 1}.
+            </span>
+            <div className="flex-1">{step}</div>
+          </li>
+        ))}
       </ol>
 
       {(scopes.length > 0 || userScopes.length > 0 || botEvents.length > 0) && (
-        <div className="border-border bg-muted/30 mt-4 rounded-md border p-3 text-xs">
-          <Type small muted className="mb-1.5 font-medium">
-            Pre-filled in the manifest
-          </Type>
-          {scopes.length > 0 && (
-            <div className="mb-1.5">
-              <span className="text-muted-foreground">Bot scopes: </span>
-              <span className="font-mono">{scopes.join(", ")}</span>
-            </div>
-          )}
-          {userScopes.length > 0 && (
-            <div className="mb-1.5">
-              <span className="text-muted-foreground">User scopes: </span>
-              <span className="font-mono">{userScopes.join(", ")}</span>
-            </div>
-          )}
-          {botEvents.length > 0 && (
-            <div>
-              <span className="text-muted-foreground">Bot events: </span>
-              <span className="font-mono">{botEvents.join(", ")}</span>
-            </div>
-          )}
-        </div>
+        <details className="border-border bg-muted/30 mt-4 rounded-md border p-3 text-xs">
+          <summary className="text-muted-foreground cursor-pointer font-medium">
+            What's pre-filled (advanced)
+          </summary>
+          <div className="mt-2 space-y-1.5">
+            {scopes.length > 0 && (
+              <div>
+                <span className="text-muted-foreground">Bot permissions: </span>
+                <span className="font-mono">{scopes.join(", ")}</span>
+              </div>
+            )}
+            {userScopes.length > 0 && (
+              <div>
+                <span className="text-muted-foreground">
+                  User permissions:{" "}
+                </span>
+                <span className="font-mono">{userScopes.join(", ")}</span>
+              </div>
+            )}
+            {botEvents.length > 0 && (
+              <div>
+                <span className="text-muted-foreground">Listens for: </span>
+                <span className="font-mono">{botEvents.join(", ")}</span>
+              </div>
+            )}
+          </div>
+        </details>
       )}
-
-      <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
-        Heads up: if you need to add a scope later, Slack requires a re-install
-        to grant it. We've included every scope this assistant needs upfront.
-      </p>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
         <Button asChild>
@@ -469,7 +458,7 @@ export function ShowSlackAppGuideComponent({
           <Button variant="ghost" onClick={skip}>
             Skip
           </Button>
-          <Button onClick={markInstalled}>I've installed it</Button>
+          <Button onClick={markInstalled}>I'm done</Button>
         </div>
       </div>
     </ToolCard>
