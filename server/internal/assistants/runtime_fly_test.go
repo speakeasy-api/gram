@@ -438,6 +438,81 @@ func TestFlyRuntimeBackendReapWithoutMetadataIsNoop(t *testing.T) {
 	require.Equal(t, 0, apiClient.deleteCalls)
 }
 
+func TestFlyRuntimeBackendReapDestroysMachineThenDeletesEmptyApp(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t, true)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	flapsClient.listMachines = []*fly.Machine{
+		{ID: "machine-1", State: fly.MachineStateDestroying},
+	}
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:   "gram-asst-only-thread",
+		MachineID: "machine-1",
+	})
+	require.NoError(t, err)
+
+	err = backend.Reap(context.Background(), assistantRuntimeRecord{
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, flapsClient.destroyCalls)
+	require.Equal(t, "machine-1", flapsClient.destroyInputs[0].ID)
+	require.True(t, flapsClient.destroyInputs[0].Kill)
+	require.Equal(t, 1, apiClient.deleteCalls, "no live siblings — app should be deleted")
+}
+
+func TestFlyRuntimeBackendReapKeepsAppWhenSiblingMachineActive(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t, true)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	flapsClient.listMachines = []*fly.Machine{
+		{ID: "machine-1", State: fly.MachineStateDestroying},
+		{ID: "machine-2", State: fly.MachineStateStarted},
+	}
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:   "gram-asst-shared",
+		MachineID: "machine-1",
+	})
+	require.NoError(t, err)
+
+	err = backend.Reap(context.Background(), assistantRuntimeRecord{
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, flapsClient.destroyCalls)
+	require.Equal(t, 0, apiClient.deleteCalls, "another thread's machine still alive — app must not be deleted")
+}
+
+func TestFlyRuntimeBackendReapToleratesMissingMachine(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t, true)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	flapsClient.destroyErr = errors.New("not found")
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:   "gram-asst-shared",
+		MachineID: "machine-already-gone",
+	})
+	require.NoError(t, err)
+
+	err = backend.Reap(context.Background(), assistantRuntimeRecord{
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, apiClient.deleteCalls, "missing machine should not block app cleanup when no siblings remain")
+}
+
 func TestFlyRuntimeBackendReapTreatsAppNotFoundAsSuccess(t *testing.T) {
 	t.Parallel()
 
@@ -767,6 +842,67 @@ func TestFlyRuntimeBackendEnsureRecyclesWhenStateProbeErrors(t *testing.T) {
 	require.True(t, result.ColdStart)
 }
 
+func TestFlyRuntimeBackendPinsRequestsToOwningMachine(t *testing.T) {
+	t.Parallel()
+
+	// With one app shared across an assistant's threads, the Fly proxy round
+	// robins to any active machine unless the request explicitly pins to
+	// one. Configure and RunTurn would otherwise land on a sibling, returning
+	// 409 (configure) or — worse — enqueueing a turn onto the wrong thread's
+	// runtime.
+	var (
+		configureHeader string
+		turnHeader      string
+		stateHeader     string
+	)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("/state", func(w http.ResponseWriter, r *http.Request) {
+		stateHeader = r.Header.Get("Fly-Force-Instance-Id")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(runnerStateResponse{Configured: true})
+	})
+	mux.HandleFunc("/configure", func(w http.ResponseWriter, r *http.Request) {
+		configureHeader = r.Header.Get("Fly-Force-Instance-Id")
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("/turn", func(w http.ResponseWriter, r *http.Request) {
+		turnHeader = r.Header.Get("Fly-Force-Instance-Id")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"finish_reason":"accepted","final_text":""}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	backend, _, _ := newTestFlyRuntimeBackend(t, srv)
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:   "gram-asst-shared",
+		AppID:     "app-1",
+		AppURL:    srv.URL,
+		MachineID: "machine-thread-A",
+	})
+	require.NoError(t, err)
+
+	rec := assistantRuntimeRecord{
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	}
+
+	require.NoError(t, backend.Configure(context.Background(), rec, runtimeStartupConfig{}))
+	require.Equal(t, "machine-thread-A", configureHeader, "configure must pin to the owning machine")
+
+	require.NoError(t, backend.RunTurn(context.Background(), rec, "idem-1", "tok", "hi"))
+	require.Equal(t, "machine-thread-A", turnHeader, "run turn must pin to the owning machine")
+
+	_, err = backend.Status(context.Background(), rec)
+	require.NoError(t, err)
+	require.Equal(t, "machine-thread-A", stateHeader, "status must pin to the owning machine")
+}
+
 func TestFlyRuntimeBackendServerURLRejectsLoopback(t *testing.T) {
 	t.Parallel()
 
@@ -846,11 +982,20 @@ type testFlyRuntimeFlapsClient struct {
 	startErr      error
 	stopErr       error
 	stopCalls     int
+	destroyErr    error
+	destroyCalls  int
+	destroyInputs []fly.RemoveMachineInput
 	updateMachine *fly.Machine
 	updateErr     error
 	updateCalls   int
 	updateInputs  []fly.LaunchMachineInput
 	waitErr       error
+}
+
+func (c *testFlyRuntimeFlapsClient) Destroy(_ context.Context, _ string, in fly.RemoveMachineInput, _ string) error {
+	c.destroyCalls++
+	c.destroyInputs = append(c.destroyInputs, in)
+	return c.destroyErr
 }
 
 func (c *testFlyRuntimeFlapsClient) Get(_ context.Context, _ string, _ string) (*fly.Machine, error) {

@@ -77,13 +77,17 @@ export function ToolsList(props: { deploymentId?: string }) {
     value: tag,
   }));
   const tagsFilter = (
-    <MultiSelect
-      options={tagFilterItems}
-      selectedValues={tagFilters}
-      setSelectedValues={setTagFilters}
-      placeholder="Filter by tag"
-      className="w-fit capitalize"
-    />
+    <div className="relative mb-4 w-full">
+      <MultiSelect
+        options={tagFilterItems}
+        defaultValue={tagFilters}
+        onValueChange={setTagFilters}
+        placeholder="Filter by tag"
+        className="capitalize"
+        hideSelectAll={true}
+        autoSize={true}
+      />
+    </div>
   );
 
   const filteredGroups = useMemo(() => {
@@ -146,7 +150,7 @@ export function ToolsList(props: { deploymentId?: string }) {
               hideHeader
               renderExpandedContent={(group) => (
                 // This div is necessary to apply the bottom border to the table
-                <div className="dark:bg-card max-h-[500px] overflow-y-auto border-b-1 bg-stone-50">
+                <div className="dark:bg-card max-h-[500px] overflow-y-auto border-b bg-stone-50">
                   <Table
                     columns={columns}
                     data={group.tools}

@@ -1,5 +1,21 @@
 # dashboard
 
+## 0.50.0
+
+### Minor Changes
+
+- 575c0ac: Overhauled MultiSelect component: new onValueChange/defaultValue API, option grouping, per-option styling, and singleLine fixed-height mode.
+
+### Patch Changes
+
+- 0ac8dba: Refactor Security Overview to use Page.Section wrappers, scrollable tables, and a lighter category label.
+
+## 0.49.1
+
+### Patch Changes
+
+- 6b070cd: Assistant onboarding now installs a Slack app reliably end-to-end: the install card stays in view until you click "I've installed it", a single approval grants both the bot and user OAuth tokens, and the generated manifest can no longer be rejected by Slack. Slack-touching assistants now get a Slack trigger by default — additive with any cron or other trigger you asked for — so the bot is reachable bidirectionally and you can talk back to it.
+
 ## 0.49.0
 
 ### Minor Changes

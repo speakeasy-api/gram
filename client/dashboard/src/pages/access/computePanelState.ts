@@ -18,6 +18,7 @@ export interface CollectionGroup {
 
 export type PanelState =
   | AllPanel
+  | ProjectsPanel
   | ServersPanel
   | ToolsSelectPanel
   | ToolsAnnotationPanel
@@ -25,6 +26,12 @@ export type PanelState =
 
 interface AllPanel {
   activePanel: "all";
+  label: string;
+}
+
+interface ProjectsPanel {
+  activePanel: "projects";
+  selectedProjectIds: string[];
   label: string;
 }
 
@@ -78,6 +85,23 @@ export function computePanelState(
       activePanel: "servers",
       selectedServerIds: [],
       label: "Select...",
+    };
+  }
+
+  // Project-scoped selectors (resource_kind=mcp, resource_id=*, projectId set)
+  const hasProjectId = selectors.some((s) => s.projectId);
+  if (hasProjectId) {
+    const selectedProjectIds = selectors
+      .filter((s) => s.projectId)
+      .map((s) => s.projectId!);
+    const count = selectedProjectIds.length;
+    return {
+      activePanel: "projects",
+      selectedProjectIds,
+      label:
+        count === 0
+          ? "Select..."
+          : `${count} project${count === 1 ? "" : "s"} selected`,
     };
   }
 

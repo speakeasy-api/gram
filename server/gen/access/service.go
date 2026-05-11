@@ -460,6 +460,9 @@ type Selector struct {
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).
 	Tool *string
+	// Project filter (MCP scopes only). When set with resource_id='*', grants
+	// access to all servers in the project.
+	ProjectID *string
 }
 
 // UpdateMemberRolePayload is the payload type of the access service
