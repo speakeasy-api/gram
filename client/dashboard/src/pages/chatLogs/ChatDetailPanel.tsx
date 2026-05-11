@@ -249,6 +249,10 @@ function MessageItem({
   collapseNonRisk?: boolean;
 }) {
   const hasRisk = riskResults && riskResults.length > 0;
+  const hasSensitiveContent =
+    riskResults?.some(
+      (r) => r.source === "gitleaks" || r.source === "presidio",
+    ) ?? false;
   const [expanded, setExpanded] = useState(false);
   const [contentRevealed, setContentRevealed] = useState(false);
   const isCollapsed = collapseNonRisk && !hasRisk && !expanded;
@@ -329,7 +333,7 @@ function MessageItem({
                   <RiskBadgePopover results={riskResults} />
                 )}
               </div>
-              {hasRisk && !contentRevealed ? (
+              {hasSensitiveContent && !contentRevealed ? (
                 <MaskedContent onReveal={() => setContentRevealed(true)} />
               ) : (
                 <div className="bg-background overflow-hidden rounded-lg border text-sm">
@@ -401,7 +405,7 @@ function MessageItem({
                 <RiskBadgePopover results={riskResults} />
               )}
             </div>
-            {hasRisk && !contentRevealed ? (
+            {hasSensitiveContent && !contentRevealed ? (
               <MaskedContent onReveal={() => setContentRevealed(true)} />
             ) : message.role === "system" ? (
               <details className="bg-muted/30 group overflow-hidden rounded-lg border text-sm">
