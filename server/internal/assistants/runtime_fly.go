@@ -81,6 +81,7 @@ type flyRuntimeAPIClient interface {
 }
 
 type flyRuntimeFlapsClient interface {
+	Destroy(ctx context.Context, appName string, in fly.RemoveMachineInput, nonce string) error
 	Get(ctx context.Context, appName, machineID string) (*fly.Machine, error)
 	Launch(ctx context.Context, appName string, input fly.LaunchMachineInput) (*fly.Machine, error)
 	List(ctx context.Context, appName, state string) ([]*fly.Machine, error)
@@ -219,7 +220,7 @@ func (f *FlyRuntimeBackend) ensureExisting(
 ) (RuntimeBackendEnsureResult, error) {
 	appName := metadata.AppName
 	if appName == "" {
-		appName = f.appName(runtime.AssistantThreadID)
+		appName = f.appName(runtime.AssistantID)
 	}
 
 	appURL := metadata.AppURL
@@ -884,6 +885,11 @@ func (f *FlyRuntimeBackend) Stop(ctx context.Context, runtime assistantRuntimeRe
 	return nil
 }
 
+// Reap tears down one thread's slot in the assistant's Fly app: destroys
+// the thread's machine, then deletes the app only if no other thread still
+// holds a machine in it. Legacy per-thread apps (one machine each) collapse
+// to app deletion in one call; new per-assistant apps survive until the
+// last thread's machine is reaped.
 func (f *FlyRuntimeBackend) Reap(ctx context.Context, runtime assistantRuntimeRecord) error {
 	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
 		return err
@@ -895,6 +901,38 @@ func (f *FlyRuntimeBackend) Reap(ctx context.Context, runtime assistantRuntimeRe
 	if metadata.AppName == "" {
 		return nil
 	}
+
+	flapsClient, err := f.flapsFactory.New(ctx)
+	if err != nil {
+		return fmt.Errorf("create fly runtime flaps client: %w", err)
+	}
+
+	if metadata.MachineID != "" {
+		if err := flapsClient.Destroy(ctx, metadata.AppName, fly.RemoveMachineInput{
+			ID:   metadata.MachineID,
+			Kill: true,
+		}, ""); err != nil && !isFlyNotFound(err) {
+			return fmt.Errorf("destroy assistant fly runtime machine: %w", err)
+		}
+	}
+
+	machines, err := flapsClient.List(ctx, metadata.AppName, "")
+	switch {
+	case err == nil:
+		for _, m := range machines {
+			if m == nil || m.ID == metadata.MachineID {
+				continue
+			}
+			if m.IsActive() {
+				return nil
+			}
+		}
+	case isFlyNotFound(err):
+		return nil
+	default:
+		return fmt.Errorf("list assistant fly runtime machines: %w", err)
+	}
+
 	return f.deleteApp(ctx, metadata.AppName)
 }
 
@@ -1062,8 +1100,12 @@ func (f *FlyRuntimeBackend) runtimeRequest(ctx context.Context, target flyRuntim
 	return body, nil
 }
 
-func (f *FlyRuntimeBackend) appName(threadID uuid.UUID) string {
-	return fmt.Sprintf("%s-%s", f.config.AppNamePrefix, strings.ToLower(threadID.String()))
+// appName derives the Fly app name from the assistant ID. One app per
+// assistant, many machines (one per thread) inside it. Legacy rows whose
+// metadata still records a per-thread app name keep using that app until
+// Reap drains it.
+func (f *FlyRuntimeBackend) appName(assistantID uuid.UUID) string {
+	return fmt.Sprintf("%s-%s", f.config.AppNamePrefix, strings.ToLower(assistantID.String()))
 }
 
 func decodeFlyRuntimeMetadata(raw []byte) (flyRuntimeMetadata, error) {
