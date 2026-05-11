@@ -27,14 +27,37 @@ import (
 // GitHub, Stripe, …) describe their signing scheme + field extraction via
 // configuration rather than vendor-specific Go.
 type webhookTriggerConfig struct {
-	Signature         webhookSignatureConfig `json:"signature"`
-	Extractors        webhookExtractors      `json:"extractors"`
-	AllowedEventTypes []string               `json:"allowed_event_types,omitempty"`
-	FilterExpr        string                 `json:"filter,omitempty"`
+	Signature         *webhookSignatureConfig `json:"signature,omitempty"`
+	Extractors        *webhookExtractors      `json:"extractors,omitempty"`
+	AllowedEventTypes []string                `json:"allowed_event_types,omitempty"`
+	FilterExpr        string                  `json:"filter,omitempty"`
 
 	compiledFilter        cel.Program
 	compiledEventType     cel.Program
 	compiledCorrelationID cel.Program
+}
+
+func (c webhookTriggerConfig) signature() webhookSignatureConfig {
+	if c.Signature == nil {
+		return webhookSignatureConfig{
+			Algorithm:            "",
+			Header:               "",
+			Encoding:             "",
+			Prefix:               "",
+			SignTemplate:         "",
+			TimestampHeader:      "",
+			TimestampSkewSeconds: 0,
+			SecretEnv:            "",
+		}
+	}
+	return *c.Signature
+}
+
+func (c webhookTriggerConfig) extractors() webhookExtractors {
+	if c.Extractors == nil {
+		return webhookExtractors{EventType: "", CorrelationID: ""}
+	}
+	return *c.Extractors
 }
 
 type webhookSignatureConfig struct {
@@ -123,17 +146,17 @@ func newWebhookDefinition() Definition {
 			if err != nil {
 				return nil, err
 			}
-			if err := validateWebhookSignatureConfig(cfg.Signature); err != nil {
+			if err := validateWebhookSignatureConfig(cfg.signature()); err != nil {
 				return nil, err
 			}
 			extractorEnv, err := newWebhookExtractorEnv()
 			if err != nil {
 				return nil, err
 			}
-			if cfg.compiledEventType, err = compileWebhookExtractor(extractorEnv, cfg.Extractors.EventType); err != nil {
+			if cfg.compiledEventType, err = compileWebhookExtractor(extractorEnv, cfg.extractors().EventType); err != nil {
 				return nil, fmt.Errorf("compile event_type extractor: %w", err)
 			}
-			if cfg.compiledCorrelationID, err = compileWebhookExtractor(extractorEnv, cfg.Extractors.CorrelationID); err != nil {
+			if cfg.compiledCorrelationID, err = compileWebhookExtractor(extractorEnv, cfg.extractors().CorrelationID); err != nil {
 				return nil, fmt.Errorf("compile correlation_id extractor: %w", err)
 			}
 			prog, err := compileCELFilter(reflect.TypeFor[webhookTriggerEvent](), cfg.FilterExpr)
@@ -148,18 +171,18 @@ func newWebhookDefinition() Definition {
 			if !ok {
 				return fmt.Errorf("expected webhookTriggerConfig, got %T", config)
 			}
-			if cfg.Signature.Algorithm == "" || cfg.Signature.Algorithm == "none" {
+			if cfg.signature().Algorithm == "" || cfg.signature().Algorithm == "none" {
 				return nil
 			}
-			if cfg.Signature.SecretEnv == "" {
+			if cfg.signature().SecretEnv == "" {
 				return fmt.Errorf("signature.secret_env is required when algorithm is set")
 			}
 			ciEnv := toolconfig.CIEnvFrom(env)
-			signingSecret := ciEnv.Get(cfg.Signature.SecretEnv)
+			signingSecret := ciEnv.Get(cfg.signature().SecretEnv)
 			if signingSecret == "" {
-				return fmt.Errorf("missing %s", cfg.Signature.SecretEnv)
+				return fmt.Errorf("missing %s", cfg.signature().SecretEnv)
 			}
-			return validateWebhookSignature(body, headers, signingSecret, cfg.Signature)
+			return validateWebhookSignature(body, headers, signingSecret, cfg.signature())
 		},
 		HandleWebhook: func(body []byte, headers http.Header, config Config) (*WebhookIngressResult, error) {
 			cfg, ok := config.(webhookTriggerConfig)
