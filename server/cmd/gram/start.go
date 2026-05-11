@@ -524,6 +524,11 @@ func newStartCommand() *cli.Command {
 				idpClientSecret = c.String("workos-api-key")
 			}
 
+			umClient := newIDPUserManagementClient(guardianPolicy, idpClientSecret, c)
+			if umClient == nil {
+				return fmt.Errorf("failed to create IDP user management client: idp-client-secret (or workos-api-key) is required")
+			}
+
 			sessionManager := sessions.NewManager(
 				logger,
 				tracerProvider,
@@ -532,7 +537,7 @@ func newStartCommand() *cli.Command {
 				cache.SuffixNone,
 				c.String("idp-base-url"),
 				c.String("idp-client-id"),
-				newIDPUserManagementClient(guardianPolicy, idpClientSecret, c),
+				umClient,
 				pylonClient,
 				posthogClient,
 				billingRepo,
