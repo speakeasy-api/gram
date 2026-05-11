@@ -15,6 +15,7 @@ import { Collections } from "./collections.js";
 import { Deployments } from "./deployments.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
+import { External } from "./external.js";
 import { Features } from "./features.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
@@ -44,7 +45,6 @@ import { UserSessionConsents } from "./usersessionconsents.js";
 import { UserSessionIssuers } from "./usersessionissuers.js";
 import { UserSessions } from "./usersessions.js";
 import { Variations } from "./variations.js";
-import { Workos } from "./workos.js";
 
 export class Gram extends ClientSDK {
   private _access?: Access;
@@ -107,9 +107,9 @@ export class Gram extends ClientSDK {
     return (this._environments ??= new Environments(this._options));
   }
 
-  private _workos?: Workos;
-  get workos(): Workos {
-    return (this._workos ??= new Workos(this._options));
+  private _external?: External;
+  get external(): External {
+    return (this._external ??= new External(this._options));
   }
 
   private _hooks?: Hooks;

@@ -248,6 +248,10 @@ run();
 * [setToolsetLink](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 * [updateBySlug](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 
+### [External](docs/sdks/external/README.md)
+
+* [receiveWorkOSWebhook](docs/sdks/external/README.md#receiveworkoswebhook) - receiveWorkOSWebhook external
+
 ### [Features](docs/sdks/features/README.md)
 
 * [get](docs/sdks/features/README.md#get) - getProductFeatures features
@@ -486,10 +490,6 @@ run();
 * [listGlobal](docs/sdks/variations/README.md#listglobal) - listGlobal variations
 * [upsertGlobal](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
 
-### [Workos](docs/sdks/workos/README.md)
-
-* [receiveWorkOSWebhook](docs/sdks/workos/README.md#receiveworkoswebhook) - receiveWorkOSWebhook workos
-
 </details>
 <!-- End Available Resources and Operations [operations] -->
 
@@ -588,6 +588,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`environmentsSetSourceLink`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`environmentsSetToolsetLink`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 - [`environmentsUpdateBySlug`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
+- [`externalReceiveWorkOSWebhook`](docs/sdks/external/README.md#receiveworkoswebhook) - receiveWorkOSWebhook external
 - [`featuresGet`](docs/sdks/features/README.md#get) - getProductFeatures features
 - [`featuresSet`](docs/sdks/features/README.md#set) - setProductFeature features
 - [`hooksHooksNumberClaude`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
@@ -736,7 +737,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`variationsDeleteGlobal`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`variationsListGlobal`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
 - [`variationsUpsertGlobal`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
-- [`workosReceiveWorkOSWebhook`](docs/sdks/workos/README.md#receiveworkoswebhook) - receiveWorkOSWebhook workos
 
 </details>
 <!-- End Standalone functions [standalone-funcs] -->

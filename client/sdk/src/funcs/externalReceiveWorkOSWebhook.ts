@@ -25,12 +25,12 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * receiveWorkOSWebhook workos
+ * receiveWorkOSWebhook external
  *
  * @remarks
  * Receive and enqueue a WorkOS webhook event.
  */
-export function workosReceiveWorkOSWebhook(
+export function externalReceiveWorkOSWebhook(
   client: GramCore,
   request?: operations.ReceiveWorkOSWebhookRequest | undefined,
   options?: RequestOptions,
