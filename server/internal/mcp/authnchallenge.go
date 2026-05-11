@@ -40,9 +40,10 @@ import (
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// supportedGrantTypes / supportedResponseTypes / supportedAuthMethods mirror
-// the values HandleGetAuthorizationServer advertises. Keep in sync — registered
-// clients must request only what the AS metadata claims to support.
+// supportedGrantTypes / supportedResponseTypes / supportedAuthMethods /
+// supportedBearerMethods mirror the values HandleGetAuthorizationServer and
+// HandleGetProtectedResource advertise. Keep in sync — registered clients
+// must request only what the AS metadata claims to support.
 var (
 	supportedGrantTypes    = []string{"authorization_code", "refresh_token"}
 	supportedResponseTypes = []string{"code"}
@@ -50,7 +51,9 @@ var (
 	// MCP clients in the wild use it. PKCE provides per-flow integrity; the
 	// only guard against cross-flow client-id confusion is the consent
 	// prompt itself, which we always render (HandleConsent never skips).
-	supportedAuthMethods = []string{"client_secret_basic", "client_secret_post", "none"}
+	supportedAuthMethods          = []string{"client_secret_basic", "client_secret_post", "none"}
+	supportedBearerMethods        = []string{"header"}
+	supportedCodeChallengeMethods = []string{"S256"}
 )
 
 // dcrMaxBodyBytes caps the RFC 7591 §3.1 client metadata document size on
@@ -253,7 +256,7 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 			Resource:               resource,
 			AuthorizationServers:   []string{resource},
 			ScopesSupported:        nil,
-			BearerMethodsSupported: []string{"header"},
+			BearerMethodsSupported: supportedBearerMethods,
 		})
 	}
 
@@ -318,7 +321,7 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 			ResponseTypesSupported:            supportedResponseTypes,
 			GrantTypesSupported:               supportedGrantTypes,
 			TokenEndpointAuthMethodsSupported: supportedAuthMethods,
-			CodeChallengeMethodsSupported:     []string{"S256"},
+			CodeChallengeMethodsSupported:     supportedCodeChallengeMethods,
 		})
 	}
 
