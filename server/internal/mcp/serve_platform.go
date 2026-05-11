@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -112,6 +114,13 @@ func (s *Service) handlePlatformToolsetRequest(
 	toolset platformtools.Toolset,
 	req *rawRequest,
 ) (json.RawMessage, error) {
+	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
+		start := time.Now()
+		defer func() {
+			s.metrics.RecordMCPRequestDuration(ctx, req.Method, requestContext.Host+requestContext.ReqURL, time.Since(start))
+		}()
+	}
+
 	switch req.Method {
 	case "ping":
 		return handlePing(ctx, s.logger, req.ID)
@@ -127,7 +136,7 @@ func (s *Service) handlePlatformToolsetRequest(
 		return nil, &rpcError{
 			ID:      req.ID,
 			Code:    methodNotFound,
-			Message: methodNotFound.UserMessage(),
+			Message: fmt.Sprintf("%s: %s", req.Method, methodNotFound.UserMessage()),
 			Data:    nil,
 		}
 	}
@@ -284,12 +293,17 @@ func (s *Service) callPlatformToolsetTool(
 }
 
 // platformToolFeatureAvailable reports whether a platform tool gated on
-// `feature` should be visible to `orgID`. A nil cache means "do not memoize";
-// a non-nil cache is read and written so callers iterating over many tools
-// avoid duplicate checker calls for the same feature.
+// `feature` should be visible to `orgID`. Tools without a required feature
+// are always available; gated tools without a wired-in checker fail closed so
+// a missing dependency can't silently unmask a gated tool. A nil cache
+// disables memoization; a non-nil cache is read and written so callers
+// iterating over many tools avoid duplicate checker calls.
 func (s *Service) platformToolFeatureAvailable(ctx context.Context, orgID, feature string, cache map[string]bool) bool {
-	if feature == "" || s.platformFeatureChecker == nil {
+	if feature == "" {
 		return true
+	}
+	if s.platformFeatureChecker == nil {
+		return false
 	}
 	if cache != nil {
 		if v, ok := cache[feature]; ok {

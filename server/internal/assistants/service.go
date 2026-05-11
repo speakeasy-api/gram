@@ -1794,12 +1794,14 @@ func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetR
 
 	// Implicit platform toolsets granted to every assistant runtime; not
 	// surfaced as user-managed toolsets and not persisted in
-	// assistant_toolsets so users can't detach them.
+	// assistant_toolsets so users can't detach them. The "_platform-" ID
+	// prefix can't collide with user toolset slugs because the slug grammar
+	// strips underscores.
 	for _, slug := range platformToolsets {
 		servers = append(servers, runtimeMCPServer{
 			ID:      "_platform-" + slug,
 			URL:     platformtools.PlatformToolsetURL(serverURL, slug),
-			Headers: map[string]string{},
+			Headers: nil,
 		})
 	}
 

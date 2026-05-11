@@ -30,13 +30,20 @@ var toolsetRegistry = []toolsetBuilder{
 }
 
 // BuildToolsets materializes every registered platform toolset against the
-// supplied dependencies. Callers wire it into the MCP service once at
-// startup; adding a new toolset is a single registry entry and (optionally)
-// a new dependency field.
-func BuildToolsets(deps ToolsetDependencies) []Toolset {
-	out := make([]Toolset, 0, len(toolsetRegistry))
+// supplied dependencies and returns them indexed by slug. Panics on
+// misconfiguration (empty slug or duplicate slug) so registry mistakes
+// surface at startup instead of as runtime 404s.
+func BuildToolsets(deps ToolsetDependencies) map[string]Toolset {
+	out := make(map[string]Toolset, len(toolsetRegistry))
 	for _, b := range toolsetRegistry {
-		out = append(out, b(deps))
+		ts := b(deps)
+		if ts.Slug == "" {
+			panic("platformtools: registered toolset has empty slug")
+		}
+		if _, dup := out[ts.Slug]; dup {
+			panic("platformtools: duplicate toolset slug " + ts.Slug)
+		}
+		out[ts.Slug] = ts
 	}
 	return out
 }

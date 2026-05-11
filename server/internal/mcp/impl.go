@@ -167,7 +167,7 @@ func NewService(
 	auditLogger *audit.Logger,
 	platformExtras []platformtools.ExternalTool,
 	platformFeatureChecker platformtools.FeatureChecker,
-	platformToolsets []platformtools.Toolset,
+	platformToolsets map[string]platformtools.Toolset,
 	idpClient *speakeasyclient.Client,
 	userSessionSigner *usersessions.Signer,
 ) *Service {
@@ -229,7 +229,7 @@ func NewService(
 		shadowMCPClient:        shadowMCPClient,
 		platformExtras:         platformExtras,
 		platformFeatureChecker: platformFeatureChecker,
-		platformToolsets:       indexPlatformToolsets(platformToolsets),
+		platformToolsets:       platformToolsets,
 		authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](
 			logger.With(attr.SlogCacheNamespace("authn_challenge")),
 			cacheImpl,
@@ -243,17 +243,6 @@ func NewService(
 		idpClient:         idpClient,
 		userSessionSigner: userSessionSigner,
 	}
-}
-
-func indexPlatformToolsets(toolsets []platformtools.Toolset) map[string]platformtools.Toolset {
-	index := make(map[string]platformtools.Toolset, len(toolsets))
-	for _, ts := range toolsets {
-		if ts.Slug == "" {
-			continue
-		}
-		index[ts.Slug] = ts
-	}
-	return index
 }
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
