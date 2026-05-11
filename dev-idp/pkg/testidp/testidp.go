@@ -6,6 +6,7 @@ package testidp
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -73,6 +74,7 @@ func Handler(cfg Config) http.Handler {
 	s := &server{cfg: cfg}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /user_management/authenticate", s.handleAuthenticate)
+	mux.HandleFunc("POST /user_management/sessions/revoke", s.handleRevokeSession)
 	return mux
 }
 
@@ -121,6 +123,8 @@ func (s *server) handleAuthenticate(w http.ResponseWriter, r *http.Request) {
 		pictureURL = *s.cfg.User.PhotoURL
 	}
 
+	sessionID := "mock_session_" + randomID()
+
 	resp := authenticateResponse{
 		User: authenticateUser{
 			ID:                s.cfg.User.ID,
@@ -129,10 +133,15 @@ func (s *server) handleAuthenticate(w http.ResponseWriter, r *http.Request) {
 			LastName:          lastName,
 			ProfilePictureURL: pictureURL,
 		},
-		AccessToken:  randomID(),
+		AccessToken:  mockJWT(sessionID),
 		RefreshToken: randomID(),
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleRevokeSession is a no-op mock of POST /user_management/sessions/revoke.
+func (s *server) handleRevokeSession(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -147,4 +156,13 @@ func randomID() string {
 		panic(fmt.Sprintf("crypto/rand failure: %v", err))
 	}
 	return hex.EncodeToString(b)
+}
+
+// mockJWT builds a minimal unsigned JWT with a "sid" claim so that
+// extractSessionIDFromJWT in the sessions package can parse it.
+func mockJWT(sessionID string) string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
+	payload, _ := json.Marshal(map[string]string{"sid": sessionID})
+	payloadEnc := base64.RawURLEncoding.EncodeToString(payload)
+	return header + "." + payloadEnc + "."
 }

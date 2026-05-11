@@ -25,6 +25,7 @@ package mockworkos
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -59,6 +60,7 @@ const (
 
 func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /user_management/authenticate", h.handleWorkosAuthenticate)
+	mux.HandleFunc("POST /user_management/sessions/revoke", h.handleWorkosRevokeSession)
 	mux.HandleFunc("GET /user_management/users/{id}", h.handleWorkosGetUser)
 	mux.HandleFunc("GET /user_management/users", h.handleWorkosListUsers)
 
@@ -127,6 +129,7 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 	}
 
 	first, last := splitName(user.DisplayName)
+	sessionID := "mock_session_" + randomToken()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user": map[string]any{
 			"id":                  user.ID.String(),
@@ -138,9 +141,23 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 			"created_at":          user.CreatedAt.UTC().Format(time.RFC3339),
 			"updated_at":          user.UpdatedAt.UTC().Format(time.RFC3339),
 		},
-		"access_token":  randomToken(),
+		"access_token":  mockJWT(sessionID),
 		"refresh_token": randomToken(),
 	})
+}
+
+// handleWorkosRevokeSession is a no-op mock of POST /user_management/sessions/revoke.
+func (h *Handler) handleWorkosRevokeSession(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+// mockJWT builds a minimal unsigned JWT with a "sid" claim so that
+// extractSessionIDFromJWT in the sessions package can parse it.
+func mockJWT(sessionID string) string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
+	payload, _ := json.Marshal(map[string]string{"sid": sessionID})
+	payloadEnc := base64.RawURLEncoding.EncodeToString(payload)
+	return header + "." + payloadEnc + "."
 }
 
 // =============================================================================

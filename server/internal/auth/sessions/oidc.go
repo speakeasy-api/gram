@@ -2,6 +2,8 @@ package sessions
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -15,12 +17,13 @@ import (
 	"go.opentelemetry.io/otel/codes"
 )
 
-// IDPUserInfo represents the response from the OIDC /userinfo endpoint.
+// IDPUserInfo represents the user identity returned by the IDP after code exchange.
 type IDPUserInfo struct {
-	Sub     string  `json:"sub"`
-	Email   string  `json:"email"`
-	Name    string  `json:"name"`
-	Picture *string `json:"picture,omitempty"`
+	Sub             string  `json:"sub"`
+	Email           string  `json:"email"`
+	Name            string  `json:"name"`
+	Picture         *string `json:"picture,omitempty"`
+	WorkOSSessionID string  `json:"-"`
 }
 
 // ExchangeCodeForTokens exchanges an authorization code for user identity
@@ -54,11 +57,33 @@ func (s *Manager) ExchangeCodeForTokens(ctx context.Context, code string) (_ *ID
 	}
 
 	return &IDPUserInfo{
-		Sub:     resp.User.ID,
-		Email:   resp.User.Email,
-		Name:    name,
-		Picture: picture,
+		Sub:             resp.User.ID,
+		Email:           resp.User.Email,
+		Name:            name,
+		Picture:         picture,
+		WorkOSSessionID: extractSessionIDFromJWT(resp.AccessToken),
 	}, nil
+}
+
+// extractSessionIDFromJWT decodes the JWT payload (without verification) to
+// extract the "sid" claim. The access token signature is already validated by
+// WorkOS — we only need the session ID for logout/revocation.
+func extractSessionIDFromJWT(token string) string {
+	parts := strings.SplitN(token, ".", 3)
+	if len(parts) < 2 {
+		return ""
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return ""
+	}
+	var claims struct {
+		SID string `json:"sid"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return ""
+	}
+	return claims.SID
 }
 
 // UpsertUserFromIDP upserts a user record from OIDC identity claims and

@@ -159,6 +159,24 @@ func (s *Manager) UpdateSession(ctx context.Context, session Session) error {
 }
 
 func (s *Manager) ClearSession(ctx context.Context, session Session) error {
+	// Look up the full cached session to retrieve the WorkOS session ID
+	// before deleting it.
+	if stored, err := s.sessionCache.Get(ctx, SessionCacheKey(session.SessionID)); err == nil {
+		session = stored
+	}
+
+	// Revoke the WorkOS AuthKit session so the user is prompted to sign in
+	// again on next login rather than being auto-authenticated.
+	if session.WorkOSSessionID != "" {
+		if err := s.umClient.RevokeSession(ctx, usermanagement.RevokeSessionOpts{
+			SessionID: session.WorkOSSessionID,
+		}); err != nil {
+			// Non-fatal: the Gram session is still cleared, and the WorkOS
+			// session will expire naturally.
+			s.logger.ErrorContext(ctx, "failed to revoke WorkOS session", attr.SlogError(err))
+		}
+	}
+
 	err := s.sessionCache.Delete(ctx, session)
 	if err != nil {
 		return fmt.Errorf("clear session: %w", err)

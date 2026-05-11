@@ -165,6 +165,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		SessionID:            sessionID,
 		UserID:               userID,
 		ActiveOrganizationID: "",
+		WorkOSSessionID:      idpUser.WorkOSSessionID,
 	}
 
 	if len(userInfo.Organizations) == 0 {

@@ -86,6 +86,7 @@ func (p *GramProvider) ExchangeToken(
 		SessionID:            sessionID,
 		UserID:               userInfo.UserID,
 		ActiveOrganizationID: toolset.OrganizationID,
+		WorkOSSessionID:      idpUser.WorkOSSessionID,
 	}
 
 	if err := p.sessions.StoreSession(ctx, session); err != nil {
