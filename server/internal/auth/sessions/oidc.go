@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"go.opentelemetry.io/otel/codes"
 )
@@ -140,8 +142,10 @@ func (s *Manager) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) (
 }
 
 // BuildUserInfoFromDB constructs a CachedUserInfo by querying user data and
-// org memberships from the database. This replaces the old Speakeasy IDP
-// /validate call.
+// org memberships from the database. When the local DB has no org memberships
+// for the user (e.g. first login before the WorkOS sync job runs), it falls
+// back to the WorkOS API to fetch memberships, upserts them into the DB, and
+// returns the freshly-created records.
 func (s *Manager) BuildUserInfoFromDB(ctx context.Context, userID string) (*CachedUserInfo, error) {
 	ctx, span := s.tracer.Start(ctx, "sessions.buildUserInfoFromDB")
 	defer span.End()
@@ -156,6 +160,17 @@ func (s *Manager) BuildUserInfoFromDB(ctx context.Context, userID string) (*Cach
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("list organizations for user: %w", err)
+	}
+
+	// Fallback: when the DB has no memberships and the user has a WorkOS
+	// identity, fetch memberships directly from the WorkOS API so the first
+	// login doesn't require the sync job to have run already.
+	if len(orgRows) == 0 && user.WorkosID.Valid && s.workosClient != nil {
+		if synced, err := s.syncMembershipsFromWorkOS(ctx, userID, user.WorkosID.String); err != nil {
+			s.logger.ErrorContext(ctx, "workos membership fallback failed", attr.SlogError(err))
+		} else {
+			orgRows = synced
+		}
 	}
 
 	organizations := make([]Organization, len(orgRows))
@@ -195,6 +210,65 @@ func (s *Manager) BuildUserInfoFromDB(ctx context.Context, userID string) (*Cach
 		UserPylonSignature: pylonSignature,
 		Organizations:      organizations,
 	}, nil
+}
+
+var slugifyRe = regexp.MustCompile(`[^a-z0-9]+`)
+
+func slugify(name string) string {
+	s := strings.ToLower(strings.TrimSpace(name))
+	s = slugifyRe.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	return s
+}
+
+// syncMembershipsFromWorkOS fetches the user's org memberships from WorkOS,
+// upserts the organizations and relationships into the local DB, then returns
+// the freshly-created org rows so BuildUserInfoFromDB can use them immediately.
+func (s *Manager) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, workosUserID string) ([]orgRepo.ListOrganizationsForUserRow, error) {
+	members, err := s.workosClient.ListUserMemberships(ctx, workosUserID)
+	if err != nil {
+		return nil, fmt.Errorf("list workos memberships: %w", err)
+	}
+	if len(members) == 0 {
+		return nil, nil
+	}
+
+	for _, m := range members {
+		org, err := s.workosClient.GetOrganization(ctx, m.OrganizationID)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "workos get organization failed", attr.SlogError(err))
+			continue
+		}
+
+		slug := slugify(org.Name)
+		if slug == "" {
+			slug = m.OrganizationID
+		}
+
+		if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+			ID:          m.OrganizationID,
+			Name:        org.Name,
+			Slug:        slug,
+			WorkosID:    pgtype.Text{String: m.OrganizationID, Valid: true},
+			Whitelisted: pgtype.Bool{Valid: false},
+		}); err != nil {
+			s.logger.ErrorContext(ctx, "upsert org metadata from workos failed", attr.SlogError(err))
+			continue
+		}
+
+		if err := s.orgRepo.UpsertOrganizationUserRelationshipFromWorkOS(ctx, orgRepo.UpsertOrganizationUserRelationshipFromWorkOSParams{
+			OrganizationID:     m.OrganizationID,
+			UserID:             gramUserID,
+			WorkosMembershipID: pgtype.Text{String: m.ID, Valid: m.ID != ""},
+			WorkosUpdatedAt:    pgtype.Timestamptz{Valid: false},
+			WorkosLastEventID:  pgtype.Text{Valid: false},
+		}); err != nil {
+			s.logger.ErrorContext(ctx, "upsert org user relationship from workos failed", attr.SlogError(err))
+		}
+	}
+
+	// Re-read from DB to get the canonical rows with all columns populated.
+	return s.orgRepo.ListOrganizationsForUser(ctx, gramUserID)
 }
 
 // GetUserInfo returns cached user info, falling back to a DB lookup on cache

@@ -135,7 +135,7 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-client-id", umClient, pylon, posthog, billingClient)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-client-id", umClient, nil, pylon, posthog, billingClient)
 
 	authConfigs := auth.AuthConfigurations{
 		IDPBaseURL:        mockServer.URL,
@@ -180,7 +180,7 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-client-id", umClient, pylon, posthog, billingClient)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-client-id", umClient, nil, pylon, posthog, billingClient)
 
 	authConfigs := auth.AuthConfigurations{
 		IDPBaseURL:        mockServer.URL,

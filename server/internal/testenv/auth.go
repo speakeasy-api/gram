@@ -56,6 +56,7 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 		srv.URL,
 		"test-client-id",
 		umClient,
+		nil, // no WorkOS client in tests — fallback won't fire
 		fakePylon,
 		fakePosthog,
 		billingRepo,

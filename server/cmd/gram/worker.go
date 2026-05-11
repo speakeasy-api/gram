@@ -562,7 +562,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create IDP user management client: idp-client-secret (or workos-api-key) is required")
 			}
 
-			sessionManager := sessions.NewManager(logger, tracerProvider, db, redisClient, cache.SuffixNone, c.String("idp-base-url"), c.String("idp-client-id"), umClient, pylonClient, posthogClient, billingRepo)
+			sessionManager := sessions.NewManager(logger, tracerProvider, db, redisClient, cache.SuffixNone, c.String("idp-base-url"), c.String("idp-client-id"), umClient, nil, pylonClient, posthogClient, billingRepo)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
 
