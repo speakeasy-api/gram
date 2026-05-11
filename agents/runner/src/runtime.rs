@@ -138,6 +138,10 @@ pub async fn build_runtime(
         http::HeaderValue::from_str(&config.chat_id)
             .map_err(|source| RunnerError::HeaderValue { source })?,
     );
+    default_headers.insert(
+        http::HeaderName::from_static("x-gram-source"),
+        http::HeaderValue::from_static("assistant"),
+    );
 
     let http_client = reqwest::Client::builder()
         .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))
@@ -191,8 +195,14 @@ pub async fn build_runtime(
     // treats the compactor's "summarise this transcript" turn as a divergence
     // and the next replay loads the compactor's transcript instead of the
     // user's.
+    let mut compactor_headers = http::HeaderMap::new();
+    compactor_headers.insert(
+        http::HeaderName::from_static("x-gram-source"),
+        http::HeaderValue::from_static("assistant"),
+    );
     let compactor_http_client = reqwest::Client::builder()
         .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))
+        .default_headers(compactor_headers)
         .build()?;
     let compactor_http = build_http(compactor_http_client, tokens.clone());
     let compactor_adapter = CompletionsAdapter::with_client(provider, compactor_http);
