@@ -881,7 +881,6 @@ func newStartCommand() *cli.Command {
 				db,
 				sessionManager,
 				authzEngine,
-				productFeatures,
 				memorySvc,
 			))
 			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, riskScanner, shadowMCPClient, chatWriter))

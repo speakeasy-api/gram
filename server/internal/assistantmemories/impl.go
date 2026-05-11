@@ -17,24 +17,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/memory/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
-// requireMemoryAccess validates auth context, gates on the assistant memory
-// feature flag, and runs the requested authz check. Returns the resolved
-// AuthContext on success.
+// requireMemoryAccess validates auth context and runs the requested authz
+// check. Returns the resolved AuthContext on success.
 func (s *Service) requireMemoryAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureAssistantMemory)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "check assistant memory feature").Log(ctx, s.logger)
-	}
-	if !enabled {
-		return nil, oops.E(oops.CodeForbidden, nil, "assistant memory feature is not enabled for this organization")
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
