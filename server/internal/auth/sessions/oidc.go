@@ -265,6 +265,7 @@ func (s *Manager) BuildAuthorizationURL(ctx context.Context, params AuthURLParam
 	q.Set("redirect_uri", params.CallbackURL)
 	q.Set("state", params.State)
 	q.Set("scope", "openid email profile")
+	q.Set("provider", "authkit")
 
 	authURL, err := url.Parse(fmt.Sprintf("%s/authorize?%s", s.idpBaseURL, q.Encode()))
 	if err != nil {
