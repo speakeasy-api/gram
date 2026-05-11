@@ -13,6 +13,15 @@ func PtrToNullString(p *string) sql.NullString {
 	return sql.NullString{String: *p, Valid: true}
 }
 
+// StringOrNull returns sql.NullString{} for "" and a valid NullString otherwise.
+// Use this when callers pass a raw string and want "" to mean "leave NULL".
+func StringOrNull(s string) sql.NullString {
+	if s == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: s, Valid: true}
+}
+
 // FromNullString returns a *string from sql.NullString. Invalid -> nil.
 func FromNullString(n sql.NullString) *string {
 	if !n.Valid {
