@@ -331,39 +331,38 @@ func TestProcessWorkOSOrganizationEvents_OrganizationDeletedSetsDisabled(t *test
 	require.Equal(t, "event_01HZDEL", row.WorkosLastEventID.String)
 }
 
-func TestProcessWorkOSOrganizationEvents_GlobalRoleUpsertAndDelete(t *testing.T) {
+func TestProcessWorkOSGlobalRoleEvents_UpsertAndDelete(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conn := newOrgEventsTestConn(t, "workos_org_events_global_role")
+	conn := newOrgEventsTestConn(t, "workos_global_role_events_upsert_delete")
 	logger := testenv.NewLogger(t)
 
-	const workosOrgID = "org_01HZGLOBALROLE"
 	const slug = "platform-admin"
 
 	stub := &stubWorkOSEventsClient{
 		pages: [][]events.Event{{
 			{
 				ID:        "event_01HZG1",
-				Event:     "organization_role.created",
+				Event:     "role.created",
 				CreatedAt: time.Now(),
-				Data: []byte(`{"id":"role_01","object":"role","organization_id":"","slug":"` + slug + `","name":"Platform Admin",` +
+				Data: []byte(`{"id":"role_01","object":"role","slug":"` + slug + `","name":"Platform Admin",` +
 					`"description":"env-level admin","type":"EnvironmentRole",` +
 					`"created_at":"2026-05-06T10:00:00Z","updated_at":"2026-05-06T10:00:00Z"}`),
 			},
 			{
 				ID:        "event_01HZG2",
-				Event:     "organization_role.deleted",
+				Event:     "role.deleted",
 				CreatedAt: time.Now(),
-				Data: []byte(`{"id":"role_01","object":"role","organization_id":"","slug":"` + slug + `","name":"Platform Admin",` +
+				Data: []byte(`{"id":"role_01","object":"role","slug":"` + slug + `","name":"Platform Admin",` +
 					`"type":"EnvironmentRole","created_at":"2026-05-06T10:00:00Z","updated_at":"2026-05-06T11:00:00Z",` +
 					`"deleted_at":"2026-05-06T11:00:00Z"}`),
 			},
 		}},
 	}
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
-	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	activity := activities.NewProcessWorkOSGlobalRoleEvents(logger, conn, stub)
+	_, err := activity.Do(ctx, activities.ProcessWorkOSGlobalRoleEventsParams{})
 	require.NoError(t, err)
 
 	role, err := accessrepo.New(conn).GetGlobalRoleBySlug(ctx, slug)
