@@ -21,7 +21,9 @@ use serde_json::Value;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::{Mutex as AsyncMutex, Notify, oneshot};
 
-use crate::compaction::build_compaction;
+use agentkit_compaction::AgentBuilderCompactorExt;
+
+use crate::compaction::build_compactor;
 use crate::errors::RunnerError;
 use crate::http_layer::{McpRotatingClient, TokenRegistry, build_http};
 use crate::idempotency::IdempotencyCache;
@@ -195,7 +197,11 @@ pub async fn build_runtime(
     let compactor_http = build_http(compactor_http_client, tokens.clone());
     let compactor_adapter = CompletionsAdapter::with_client(provider, compactor_http);
 
-    let compaction = build_compaction(config.context_window.unwrap_or(0), compactor_adapter);
+    let compactor = build_compactor(
+        &config.chat_id,
+        config.context_window.unwrap_or(0),
+        compactor_adapter,
+    )?;
 
     let mut transcript = Vec::new();
     if let Some(instructions) = &config.instructions {
@@ -213,13 +219,12 @@ pub async fn build_runtime(
         .observer(TracingReporter::new())
         .transcript(transcript);
 
-    if let Some((compaction_config, input_token_observer)) = compaction {
-        builder = builder
-            .compaction(compaction_config)
-            .observer(input_token_observer);
+    if let Some(compactor) = compactor {
+        builder = builder.compactor(compactor);
     }
 
-    let agent = builder.build()
+    let agent = builder
+        .build()
         .map_err(|e| RunnerError::AgentBuild(e.to_string()))?;
 
     let session = SessionConfig::new(config.chat_id.clone())
