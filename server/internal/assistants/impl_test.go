@@ -260,7 +260,7 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 		logger:   logger,
 		auth:     nil,
 		authz:    authzEngine,
-		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendLocal, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, nil),
+		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendLocal, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil),
 		signaler: nil,
 	}
 

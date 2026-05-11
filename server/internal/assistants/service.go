@@ -273,17 +273,16 @@ type WakeCanceller interface {
 }
 
 type ServiceCore struct {
-	logger           *slog.Logger
-	tracer           trace.Tracer
-	db               *pgxpool.Pool
-	runtime          RuntimeBackend
-	slackClient      *slackclient.SlackClient
-	assistantTokens  *assistanttokens.Manager
-	serverURL        *url.URL
-	telemetryLogger  *telemetry.Logger
-	contextWindow    *openrouter.ContextWindowResolver
-	wakeCanceller    WakeCanceller
-	platformToolsets []platformtools.Toolset
+	logger          *slog.Logger
+	tracer          trace.Tracer
+	db              *pgxpool.Pool
+	runtime         RuntimeBackend
+	slackClient     *slackclient.SlackClient
+	assistantTokens *assistanttokens.Manager
+	serverURL       *url.URL
+	telemetryLogger *telemetry.Logger
+	contextWindow   *openrouter.ContextWindowResolver
+	wakeCanceller   WakeCanceller
 }
 
 func NewServiceCore(
@@ -296,20 +295,18 @@ func NewServiceCore(
 	serverURL *url.URL,
 	telemetryLogger *telemetry.Logger,
 	contextWindow *openrouter.ContextWindowResolver,
-	platformToolsets []platformtools.Toolset,
 ) *ServiceCore {
 	return &ServiceCore{
-		logger:           logger,
-		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
-		db:               db,
-		runtime:          newTelemetryRuntimeBackend(runtime, telemetryLogger),
-		slackClient:      slackClient,
-		assistantTokens:  assistantTokens,
-		serverURL:        serverURL,
-		telemetryLogger:  telemetryLogger,
-		contextWindow:    contextWindow,
-		wakeCanceller:    nil,
-		platformToolsets: platformToolsets,
+		logger:          logger,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
+		db:              db,
+		runtime:         newTelemetryRuntimeBackend(runtime, telemetryLogger),
+		slackClient:     slackClient,
+		assistantTokens: assistantTokens,
+		serverURL:       serverURL,
+		telemetryLogger: telemetryLogger,
+		contextWindow:   contextWindow,
+		wakeCanceller:   nil,
 	}
 }
 
@@ -1680,7 +1677,7 @@ func (s *ServiceCore) buildRuntimeStartupConfig(
 		return runtimeStartupConfig{}, fmt.Errorf("resolve assistant runtime server URL: %w", err)
 	}
 
-	mcpServers, err := resolveAssistantMCPServers(runtimeServerURL, assistant.Toolsets, s.platformToolsets)
+	mcpServers, err := resolveAssistantMCPServers(runtimeServerURL, assistant.Toolsets)
 	if err != nil {
 		return runtimeStartupConfig{}, err
 	}
@@ -1766,7 +1763,8 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 	return strings.Join(parts, "\n\n"), nil
 }
 
-func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetRow, platformToolsets []platformtools.Toolset) ([]runtimeMCPServer, error) {
+func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetRow) ([]runtimeMCPServer, error) {
+	platformToolsets := []string{platformtools.AssistantsPlatformToolsetSlug}
 	servers := make([]runtimeMCPServer, 0, len(toolsets)+len(platformToolsets))
 	for _, t := range toolsets {
 		if !t.McpEnabled {
@@ -1797,10 +1795,10 @@ func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetR
 	// Implicit platform toolsets granted to every assistant runtime; not
 	// surfaced as user-managed toolsets and not persisted in
 	// assistant_toolsets so users can't detach them.
-	for _, pt := range platformToolsets {
+	for _, slug := range platformToolsets {
 		servers = append(servers, runtimeMCPServer{
-			ID:      "_platform-" + pt.Slug,
-			URL:     platformtools.PlatformToolsetURL(serverURL, pt.Slug),
+			ID:      "_platform-" + slug,
+			URL:     platformtools.PlatformToolsetURL(serverURL, slug),
 			Headers: map[string]string{},
 		})
 	}
