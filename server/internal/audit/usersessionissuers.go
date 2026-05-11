@@ -30,7 +30,7 @@ type LogUserSessionIssuerCreateEvent struct {
 	Slug                 string
 }
 
-func LogUserSessionIssuerCreate(ctx context.Context, dbtx repo.DBTX, event LogUserSessionIssuerCreateEvent) error {
+func (l *Logger) LogUserSessionIssuerCreate(ctx context.Context, dbtx repo.DBTX, event LogUserSessionIssuerCreateEvent) error {
 	action := ActionUserSessionIssuerCreate
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -53,11 +53,7 @@ func LogUserSessionIssuerCreate(ctx context.Context, dbtx repo.DBTX, event LogUs
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogUserSessionIssuerUpdateEvent struct {
@@ -74,7 +70,7 @@ type LogUserSessionIssuerUpdateEvent struct {
 	UserSessionIssuerSnapshotAfter  *types.UserSessionIssuer
 }
 
-func LogUserSessionIssuerUpdate(ctx context.Context, dbtx repo.DBTX, event LogUserSessionIssuerUpdateEvent) error {
+func (l *Logger) LogUserSessionIssuerUpdate(ctx context.Context, dbtx repo.DBTX, event LogUserSessionIssuerUpdateEvent) error {
 	action := ActionUserSessionIssuerUpdate
 
 	beforeSnapshot, err := marshalAuditPayload(event.UserSessionIssuerSnapshotBefore)
@@ -108,11 +104,7 @@ func LogUserSessionIssuerUpdate(ctx context.Context, dbtx repo.DBTX, event LogUs
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogUserSessionIssuerDeleteEvent struct {
@@ -127,7 +119,7 @@ type LogUserSessionIssuerDeleteEvent struct {
 	Slug                 string
 }
 
-func LogUserSessionIssuerDelete(ctx context.Context, dbtx repo.DBTX, event LogUserSessionIssuerDeleteEvent) error {
+func (l *Logger) LogUserSessionIssuerDelete(ctx context.Context, dbtx repo.DBTX, event LogUserSessionIssuerDeleteEvent) error {
 	action := ActionUserSessionIssuerDelete
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -150,9 +142,5 @@ func LogUserSessionIssuerDelete(ctx context.Context, dbtx repo.DBTX, event LogUs
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
