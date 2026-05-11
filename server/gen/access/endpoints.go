@@ -16,20 +16,21 @@ import (
 
 // Endpoints wraps the "access" service endpoints.
 type Endpoints struct {
-	ListRoles        goa.Endpoint
-	GetRole          goa.Endpoint
-	CreateRole       goa.Endpoint
-	UpdateRole       goa.Endpoint
-	DeleteRole       goa.Endpoint
-	ListScopes       goa.Endpoint
-	ListMembers      goa.Endpoint
-	ListGrants       goa.Endpoint
-	UpdateMemberRole goa.Endpoint
-	GetRBACStatus    goa.Endpoint
-	EnableRBAC       goa.Endpoint
-	DisableRBAC      goa.Endpoint
-	ListChallenges   goa.Endpoint
-	ResolveChallenge goa.Endpoint
+	ListRoles            goa.Endpoint
+	GetRole              goa.Endpoint
+	CreateRole           goa.Endpoint
+	UpdateRole           goa.Endpoint
+	DeleteRole           goa.Endpoint
+	ListScopes           goa.Endpoint
+	ListMembers          goa.Endpoint
+	ListGrants           goa.Endpoint
+	UpdateMemberRole     goa.Endpoint
+	GetRBACStatus        goa.Endpoint
+	EnableRBAC           goa.Endpoint
+	DisableRBAC          goa.Endpoint
+	ListChallenges       goa.Endpoint
+	ListChallengeBuckets goa.Endpoint
+	ResolveChallenge     goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "access" service with endpoints.
@@ -37,20 +38,21 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListRoles:        NewListRolesEndpoint(s, a.APIKeyAuth),
-		GetRole:          NewGetRoleEndpoint(s, a.APIKeyAuth),
-		CreateRole:       NewCreateRoleEndpoint(s, a.APIKeyAuth),
-		UpdateRole:       NewUpdateRoleEndpoint(s, a.APIKeyAuth),
-		DeleteRole:       NewDeleteRoleEndpoint(s, a.APIKeyAuth),
-		ListScopes:       NewListScopesEndpoint(s, a.APIKeyAuth),
-		ListMembers:      NewListMembersEndpoint(s, a.APIKeyAuth),
-		ListGrants:       NewListGrantsEndpoint(s, a.APIKeyAuth),
-		UpdateMemberRole: NewUpdateMemberRoleEndpoint(s, a.APIKeyAuth),
-		GetRBACStatus:    NewGetRBACStatusEndpoint(s, a.APIKeyAuth),
-		EnableRBAC:       NewEnableRBACEndpoint(s, a.APIKeyAuth),
-		DisableRBAC:      NewDisableRBACEndpoint(s, a.APIKeyAuth),
-		ListChallenges:   NewListChallengesEndpoint(s, a.APIKeyAuth),
-		ResolveChallenge: NewResolveChallengeEndpoint(s, a.APIKeyAuth),
+		ListRoles:            NewListRolesEndpoint(s, a.APIKeyAuth),
+		GetRole:              NewGetRoleEndpoint(s, a.APIKeyAuth),
+		CreateRole:           NewCreateRoleEndpoint(s, a.APIKeyAuth),
+		UpdateRole:           NewUpdateRoleEndpoint(s, a.APIKeyAuth),
+		DeleteRole:           NewDeleteRoleEndpoint(s, a.APIKeyAuth),
+		ListScopes:           NewListScopesEndpoint(s, a.APIKeyAuth),
+		ListMembers:          NewListMembersEndpoint(s, a.APIKeyAuth),
+		ListGrants:           NewListGrantsEndpoint(s, a.APIKeyAuth),
+		UpdateMemberRole:     NewUpdateMemberRoleEndpoint(s, a.APIKeyAuth),
+		GetRBACStatus:        NewGetRBACStatusEndpoint(s, a.APIKeyAuth),
+		EnableRBAC:           NewEnableRBACEndpoint(s, a.APIKeyAuth),
+		DisableRBAC:          NewDisableRBACEndpoint(s, a.APIKeyAuth),
+		ListChallenges:       NewListChallengesEndpoint(s, a.APIKeyAuth),
+		ListChallengeBuckets: NewListChallengeBucketsEndpoint(s, a.APIKeyAuth),
+		ResolveChallenge:     NewResolveChallengeEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -69,6 +71,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.EnableRBAC = m(e.EnableRBAC)
 	e.DisableRBAC = m(e.DisableRBAC)
 	e.ListChallenges = m(e.ListChallenges)
+	e.ListChallengeBuckets = m(e.ListChallengeBuckets)
 	e.ResolveChallenge = m(e.ResolveChallenge)
 }
 
@@ -488,6 +491,41 @@ func NewListChallengesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			return nil, err
 		}
 		return s.ListChallenges(ctx, p)
+	}
+}
+
+// NewListChallengeBucketsEndpoint returns an endpoint function that calls the
+// method "listChallengeBuckets" of service "access".
+func NewListChallengeBucketsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListChallengeBucketsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"consumer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListChallengeBuckets(ctx, p)
 	}
 }
 

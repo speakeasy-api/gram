@@ -9,26 +9,24 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export const AuthzChallengeOperation = {
+export const Operation = {
   Require: "require",
   RequireAny: "require_any",
   Filter: "filter",
 } as const;
-export type AuthzChallengeOperation = ClosedEnum<
-  typeof AuthzChallengeOperation
->;
+export type Operation = ClosedEnum<typeof Operation>;
 
-export const AuthzChallengeOutcome = {
+export const Outcome = {
   Allow: "allow",
   Deny: "deny",
   Error: "error",
 } as const;
-export type AuthzChallengeOutcome = ClosedEnum<typeof AuthzChallengeOutcome>;
+export type Outcome = ClosedEnum<typeof Outcome>;
 
 /**
  * Kind of principal.
  */
-export const AuthzChallengePrincipalType = {
+export const PrincipalType = {
   User: "user",
   ApiKey: "api_key",
   Assistant: "assistant",
@@ -36,11 +34,9 @@ export const AuthzChallengePrincipalType = {
 /**
  * Kind of principal.
  */
-export type AuthzChallengePrincipalType = ClosedEnum<
-  typeof AuthzChallengePrincipalType
->;
+export type PrincipalType = ClosedEnum<typeof PrincipalType>;
 
-export const AuthzChallengeReason = {
+export const Reason = {
   GrantMatched: "grant_matched",
   NoGrants: "no_grants",
   ScopeUnsatisfied: "scope_unsatisfied",
@@ -48,41 +44,58 @@ export const AuthzChallengeReason = {
   RbacSkippedApikey: "rbac_skipped_apikey",
   DevOverride: "dev_override",
 } as const;
-export type AuthzChallengeReason = ClosedEnum<typeof AuthzChallengeReason>;
+export type Reason = ClosedEnum<typeof Reason>;
 
 /**
- * How the challenge was resolved.
+ * How the bucket was resolved.
  */
-export const AuthzChallengeResolutionType = {
+export const ResolutionType = {
   RoleAssigned: "role_assigned",
   Dismissed: "dismissed",
 } as const;
 /**
- * How the challenge was resolved.
+ * How the bucket was resolved.
  */
-export type AuthzChallengeResolutionType = ClosedEnum<
-  typeof AuthzChallengeResolutionType
->;
+export type ResolutionType = ClosedEnum<typeof ResolutionType>;
 
-export type AuthzChallenge = {
+/**
+ * A group of consecutive challenges with the same dimensions that occurred within a 10-minute window.
+ */
+export type ChallengeBucket = {
+  /**
+   * Number of individual challenges in this bucket.
+   */
+  challengeCount: number;
+  /**
+   * IDs of all challenges in this bucket.
+   */
+  challengeIds: Array<string>;
   /**
    * Total grants evaluated.
    */
   evaluatedGrantCount: number;
   /**
-   * Unique challenge identifier.
+   * Timestamp of the earliest challenge in the bucket.
+   */
+  firstSeen: Date;
+  /**
+   * ID of the most recent challenge in the bucket.
    */
   id: string;
+  /**
+   * Timestamp of the most recent challenge in the bucket.
+   */
+  lastSeen: Date;
   /**
    * Number of grants that matched.
    */
   matchedGrantCount: number;
-  operation: AuthzChallengeOperation;
+  operation: Operation;
   /**
    * Organization the principal was acting in.
    */
   organizationId: string;
-  outcome: AuthzChallengeOutcome;
+  outcome: Outcome;
   /**
    * User avatar URL when available.
    */
@@ -90,7 +103,7 @@ export type AuthzChallenge = {
   /**
    * Kind of principal.
    */
-  principalType: AuthzChallengePrincipalType;
+  principalType: PrincipalType;
   /**
    * Principal URN e.g. user:<uuid> or api_key:<id>.
    */
@@ -99,17 +112,17 @@ export type AuthzChallenge = {
    * Project scope (empty for org-level checks).
    */
   projectId?: string | undefined;
-  reason: AuthzChallengeReason;
+  reason: Reason;
   /**
    * Role slug assigned (when resolution_type=role_assigned).
    */
   resolutionRoleSlug?: string | undefined;
   /**
-   * How the challenge was resolved.
+   * How the bucket was resolved.
    */
-  resolutionType?: AuthzChallengeResolutionType | undefined;
+  resolutionType?: ResolutionType | undefined;
   /**
-   * When the challenge was resolved by an admin.
+   * When the bucket was resolved by an admin.
    */
   resolvedAt?: Date | undefined;
   /**
@@ -133,59 +146,64 @@ export type AuthzChallenge = {
    */
   scope: string;
   /**
-   * When the authz decision was made.
-   */
-  timestamp: Date;
-  /**
    * Email when available.
    */
   userEmail?: string | undefined;
 };
 
 /** @internal */
-export const AuthzChallengeOperation$inboundSchema: z.ZodMiniEnum<
-  typeof AuthzChallengeOperation
-> = z.enum(AuthzChallengeOperation);
+export const Operation$inboundSchema: z.ZodMiniEnum<typeof Operation> = z.enum(
+  Operation,
+);
 
 /** @internal */
-export const AuthzChallengeOutcome$inboundSchema: z.ZodMiniEnum<
-  typeof AuthzChallengeOutcome
-> = z.enum(AuthzChallengeOutcome);
+export const Outcome$inboundSchema: z.ZodMiniEnum<typeof Outcome> = z.enum(
+  Outcome,
+);
 
 /** @internal */
-export const AuthzChallengePrincipalType$inboundSchema: z.ZodMiniEnum<
-  typeof AuthzChallengePrincipalType
-> = z.enum(AuthzChallengePrincipalType);
+export const PrincipalType$inboundSchema: z.ZodMiniEnum<typeof PrincipalType> =
+  z.enum(PrincipalType);
 
 /** @internal */
-export const AuthzChallengeReason$inboundSchema: z.ZodMiniEnum<
-  typeof AuthzChallengeReason
-> = z.enum(AuthzChallengeReason);
+export const Reason$inboundSchema: z.ZodMiniEnum<typeof Reason> = z.enum(
+  Reason,
+);
 
 /** @internal */
-export const AuthzChallengeResolutionType$inboundSchema: z.ZodMiniEnum<
-  typeof AuthzChallengeResolutionType
-> = z.enum(AuthzChallengeResolutionType);
+export const ResolutionType$inboundSchema: z.ZodMiniEnum<
+  typeof ResolutionType
+> = z.enum(ResolutionType);
 
 /** @internal */
-export const AuthzChallenge$inboundSchema: z.ZodMiniType<
-  AuthzChallenge,
+export const ChallengeBucket$inboundSchema: z.ZodMiniType<
+  ChallengeBucket,
   unknown
 > = z.pipe(
   z.object({
+    challenge_count: z.int(),
+    challenge_ids: z.array(z.string()),
     evaluated_grant_count: z.int(),
+    first_seen: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
+    ),
     id: z.string(),
+    last_seen: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
+    ),
     matched_grant_count: z.int(),
-    operation: AuthzChallengeOperation$inboundSchema,
+    operation: Operation$inboundSchema,
     organization_id: z.string(),
-    outcome: AuthzChallengeOutcome$inboundSchema,
+    outcome: Outcome$inboundSchema,
     photo_url: z.optional(z.string()),
-    principal_type: AuthzChallengePrincipalType$inboundSchema,
+    principal_type: PrincipalType$inboundSchema,
     principal_urn: z.string(),
     project_id: z.optional(z.string()),
-    reason: AuthzChallengeReason$inboundSchema,
+    reason: Reason$inboundSchema,
     resolution_role_slug: z.optional(z.string()),
-    resolution_type: z.optional(AuthzChallengeResolutionType$inboundSchema),
+    resolution_type: z.optional(ResolutionType$inboundSchema),
     resolved_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -194,15 +212,15 @@ export const AuthzChallenge$inboundSchema: z.ZodMiniType<
     resource_kind: z.optional(z.string()),
     role_slugs: z.array(z.string()),
     scope: z.string(),
-    timestamp: z.pipe(
-      z.iso.datetime({ offset: true }),
-      z.transform(v => new Date(v)),
-    ),
     user_email: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "challenge_count": "challengeCount",
+      "challenge_ids": "challengeIds",
       "evaluated_grant_count": "evaluatedGrantCount",
+      "first_seen": "firstSeen",
+      "last_seen": "lastSeen",
       "matched_grant_count": "matchedGrantCount",
       "organization_id": "organizationId",
       "photo_url": "photoUrl",
@@ -221,12 +239,12 @@ export const AuthzChallenge$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function authzChallengeFromJSON(
+export function challengeBucketFromJSON(
   jsonString: string,
-): SafeParseResult<AuthzChallenge, SDKValidationError> {
+): SafeParseResult<ChallengeBucket, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => AuthzChallenge$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'AuthzChallenge' from JSON`,
+    (x) => ChallengeBucket$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ChallengeBucket' from JSON`,
   );
 }

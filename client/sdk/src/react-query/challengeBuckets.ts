@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildChallengesQuery,
-  ChallengesQueryData,
-  prefetchChallenges,
-  queryKeyChallenges,
-} from "./challenges.core.js";
+  buildChallengeBucketsQuery,
+  ChallengeBucketsQueryData,
+  prefetchChallengeBuckets,
+  queryKeyChallengeBuckets,
+} from "./challengeBuckets.core.js";
 export {
-  buildChallengesQuery,
-  type ChallengesQueryData,
-  prefetchChallenges,
-  queryKeyChallenges,
+  buildChallengeBucketsQuery,
+  type ChallengeBucketsQueryData,
+  prefetchChallengeBuckets,
+  queryKeyChallengeBuckets,
 };
 
-export type ChallengesQueryError =
+export type ChallengeBucketsQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -53,19 +53,22 @@ export type ChallengesQueryError =
   | SDKValidationError;
 
 /**
- * listChallenges access
+ * listChallengeBuckets access
  *
  * @remarks
- * List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
+ * List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
  */
-export function useChallenges(
-  request?: operations.ListChallengesRequest | undefined,
-  security?: operations.ListChallengesSecurity | undefined,
-  options?: QueryHookOptions<ChallengesQueryData, ChallengesQueryError>,
-): UseQueryResult<ChallengesQueryData, ChallengesQueryError> {
+export function useChallengeBuckets(
+  request?: operations.ListChallengeBucketsRequest | undefined,
+  security?: operations.ListChallengeBucketsSecurity | undefined,
+  options?: QueryHookOptions<
+    ChallengeBucketsQueryData,
+    ChallengeBucketsQueryError
+  >,
+): UseQueryResult<ChallengeBucketsQueryData, ChallengeBucketsQueryError> {
   const client = useGramContext();
   return useQuery({
-    ...buildChallengesQuery(
+    ...buildChallengeBucketsQuery(
       client,
       request,
       security,
@@ -76,19 +79,25 @@ export function useChallenges(
 }
 
 /**
- * listChallenges access
+ * listChallengeBuckets access
  *
  * @remarks
- * List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
+ * List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
  */
-export function useChallengesSuspense(
-  request?: operations.ListChallengesRequest | undefined,
-  security?: operations.ListChallengesSecurity | undefined,
-  options?: SuspenseQueryHookOptions<ChallengesQueryData, ChallengesQueryError>,
-): UseSuspenseQueryResult<ChallengesQueryData, ChallengesQueryError> {
+export function useChallengeBucketsSuspense(
+  request?: operations.ListChallengeBucketsRequest | undefined,
+  security?: operations.ListChallengeBucketsSecurity | undefined,
+  options?: SuspenseQueryHookOptions<
+    ChallengeBucketsQueryData,
+    ChallengeBucketsQueryError
+  >,
+): UseSuspenseQueryResult<
+  ChallengeBucketsQueryData,
+  ChallengeBucketsQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildChallengesQuery(
+    ...buildChallengeBucketsQuery(
       client,
       request,
       security,
@@ -98,39 +107,37 @@ export function useChallengesSuspense(
   });
 }
 
-export function setChallengesData(
+export function setChallengeBucketsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      outcome?: operations.QueryParamOutcome | undefined;
+      outcome?: operations.Outcome | undefined;
       principalUrn?: string | undefined;
       scope?: string | undefined;
       projectId?: string | undefined;
       resolved?: boolean | undefined;
-      ids?: Array<string> | undefined;
       limit?: number | undefined;
       offset?: number | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     },
   ],
-  data: ChallengesQueryData,
-): ChallengesQueryData | undefined {
-  const key = queryKeyChallenges(...queryKeyBase);
+  data: ChallengeBucketsQueryData,
+): ChallengeBucketsQueryData | undefined {
+  const key = queryKeyChallengeBuckets(...queryKeyBase);
 
-  return client.setQueryData<ChallengesQueryData>(key, data);
+  return client.setQueryData<ChallengeBucketsQueryData>(key, data);
 }
 
-export function invalidateChallenges(
+export function invalidateChallengeBuckets(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      outcome?: operations.QueryParamOutcome | undefined;
+      outcome?: operations.Outcome | undefined;
       principalUrn?: string | undefined;
       scope?: string | undefined;
       projectId?: string | undefined;
       resolved?: boolean | undefined;
-      ids?: Array<string> | undefined;
       limit?: number | undefined;
       offset?: number | undefined;
       gramKey?: string | undefined;
@@ -141,16 +148,21 @@ export function invalidateChallenges(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "access", "listChallenges", ...queryKeyBase],
+    queryKey: [
+      "@gram/client",
+      "access",
+      "listChallengeBuckets",
+      ...queryKeyBase,
+    ],
   });
 }
 
-export function invalidateAllChallenges(
+export function invalidateAllChallengeBuckets(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "access", "listChallenges"],
+    queryKey: ["@gram/client", "access", "listChallengeBuckets"],
   });
 }

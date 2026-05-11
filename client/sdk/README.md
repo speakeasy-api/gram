@@ -140,6 +140,7 @@ run();
 * [enableRBAC](docs/sdks/access/README.md#enablerbac) - enableRBAC access
 * [getRBACStatus](docs/sdks/access/README.md#getrbacstatus) - getRBACStatus access
 * [getRole](docs/sdks/access/README.md#getrole) - getRole access
+* [listChallengeBuckets](docs/sdks/access/README.md#listchallengebuckets) - listChallengeBuckets access
 * [listChallenges](docs/sdks/access/README.md#listchallenges) - listChallenges access
 * [listGrants](docs/sdks/access/README.md#listgrants) - listGrants access
 * [listMembers](docs/sdks/access/README.md#listmembers) - listMembers access
@@ -514,6 +515,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`accessEnableRBAC`](docs/sdks/access/README.md#enablerbac) - enableRBAC access
 - [`accessGetRBACStatus`](docs/sdks/access/README.md#getrbacstatus) - getRBACStatus access
 - [`accessGetRole`](docs/sdks/access/README.md#getrole) - getRole access
+- [`accessListChallengeBuckets`](docs/sdks/access/README.md#listchallengebuckets) - listChallengeBuckets access
 - [`accessListChallenges`](docs/sdks/access/README.md#listchallenges) - listChallenges access
 - [`accessListGrants`](docs/sdks/access/README.md#listgrants) - listGrants access
 - [`accessListMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
@@ -775,6 +777,7 @@ To learn about this feature and how to get started, check
 - [`useAssistantsUpdateMutation`](docs/sdks/assistants/README.md#update) - updateAssistant assistants
 - [`useAuditLogFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
 - [`useAuditLogs`](docs/sdks/auditlogs/README.md#list) - list auditlogs
+- [`useChallengeBuckets`](docs/sdks/access/README.md#listchallengebuckets) - listChallengeBuckets access
 - [`useChallenges`](docs/sdks/access/README.md#listchallenges) - listChallenges access
 - [`useChatDeleteMutation`](docs/sdks/chat/README.md#delete) - deleteChat chat
 - [`useChatGenerateTitleMutation`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat

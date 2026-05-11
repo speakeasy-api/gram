@@ -6,7 +6,7 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
-export type ListChallengesSecurity = {
+export type ListChallengeBucketsSecurity = {
   apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
@@ -14,20 +14,20 @@ export type ListChallengesSecurity = {
 /**
  * Filter by outcome.
  */
-export const QueryParamOutcome = {
+export const Outcome = {
   Allow: "allow",
   Deny: "deny",
 } as const;
 /**
  * Filter by outcome.
  */
-export type QueryParamOutcome = ClosedEnum<typeof QueryParamOutcome>;
+export type Outcome = ClosedEnum<typeof Outcome>;
 
-export type ListChallengesRequest = {
+export type ListChallengeBucketsRequest = {
   /**
    * Filter by outcome.
    */
-  outcome?: QueryParamOutcome | undefined;
+  outcome?: Outcome | undefined;
   /**
    * Filter by principal URN.
    */
@@ -45,15 +45,11 @@ export type ListChallengesRequest = {
    */
   resolved?: boolean | undefined;
   /**
-   * Fetch specific challenges by ID. When set, other filters and pagination are ignored.
-   */
-  ids?: Array<string> | undefined;
-  /**
-   * Maximum number of results to return.
+   * Maximum number of buckets to return.
    */
   limit?: number | undefined;
   /**
-   * Number of results to skip.
+   * Number of buckets to skip.
    */
   offset?: number | undefined;
   /**
@@ -67,15 +63,15 @@ export type ListChallengesRequest = {
 };
 
 /** @internal */
-export type ListChallengesSecurity$Outbound = {
+export type ListChallengeBucketsSecurity$Outbound = {
   "apikey_header_Gram-Key"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
-export const ListChallengesSecurity$outboundSchema: z.ZodMiniType<
-  ListChallengesSecurity$Outbound,
-  ListChallengesSecurity
+export const ListChallengeBucketsSecurity$outboundSchema: z.ZodMiniType<
+  ListChallengeBucketsSecurity$Outbound,
+  ListChallengeBucketsSecurity
 > = z.pipe(
   z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
@@ -89,27 +85,28 @@ export const ListChallengesSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function listChallengesSecurityToJSON(
-  listChallengesSecurity: ListChallengesSecurity,
+export function listChallengeBucketsSecurityToJSON(
+  listChallengeBucketsSecurity: ListChallengeBucketsSecurity,
 ): string {
   return JSON.stringify(
-    ListChallengesSecurity$outboundSchema.parse(listChallengesSecurity),
+    ListChallengeBucketsSecurity$outboundSchema.parse(
+      listChallengeBucketsSecurity,
+    ),
   );
 }
 
 /** @internal */
-export const QueryParamOutcome$outboundSchema: z.ZodMiniEnum<
-  typeof QueryParamOutcome
-> = z.enum(QueryParamOutcome);
+export const Outcome$outboundSchema: z.ZodMiniEnum<typeof Outcome> = z.enum(
+  Outcome,
+);
 
 /** @internal */
-export type ListChallengesRequest$Outbound = {
+export type ListChallengeBucketsRequest$Outbound = {
   outcome?: string | undefined;
   principal_urn?: string | undefined;
   scope?: string | undefined;
   project_id?: string | undefined;
   resolved?: boolean | undefined;
-  ids?: Array<string> | undefined;
   limit: number;
   offset: number;
   "Gram-Key"?: string | undefined;
@@ -117,17 +114,16 @@ export type ListChallengesRequest$Outbound = {
 };
 
 /** @internal */
-export const ListChallengesRequest$outboundSchema: z.ZodMiniType<
-  ListChallengesRequest$Outbound,
-  ListChallengesRequest
+export const ListChallengeBucketsRequest$outboundSchema: z.ZodMiniType<
+  ListChallengeBucketsRequest$Outbound,
+  ListChallengeBucketsRequest
 > = z.pipe(
   z.object({
-    outcome: z.optional(QueryParamOutcome$outboundSchema),
+    outcome: z.optional(Outcome$outboundSchema),
     principalUrn: z.optional(z.string()),
     scope: z.optional(z.string()),
     projectId: z.optional(z.string()),
     resolved: z.optional(z.boolean()),
-    ids: z.optional(z.array(z.string())),
     limit: z._default(z.int(), 50),
     offset: z._default(z.int(), 0),
     gramKey: z.optional(z.string()),
@@ -143,10 +139,12 @@ export const ListChallengesRequest$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function listChallengesRequestToJSON(
-  listChallengesRequest: ListChallengesRequest,
+export function listChallengeBucketsRequestToJSON(
+  listChallengeBucketsRequest: ListChallengeBucketsRequest,
 ): string {
   return JSON.stringify(
-    ListChallengesRequest$outboundSchema.parse(listChallengesRequest),
+    ListChallengeBucketsRequest$outboundSchema.parse(
+      listChallengeBucketsRequest,
+    ),
   );
 }

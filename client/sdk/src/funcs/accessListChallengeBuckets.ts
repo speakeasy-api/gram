@@ -28,19 +28,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listChallenges access
+ * listChallengeBuckets access
  *
  * @remarks
- * List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
+ * List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
  */
-export function accessListChallenges(
+export function accessListChallengeBuckets(
   client: GramCore,
-  request?: operations.ListChallengesRequest | undefined,
-  security?: operations.ListChallengesSecurity | undefined,
+  request?: operations.ListChallengeBucketsRequest | undefined,
+  security?: operations.ListChallengeBucketsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.ListChallengesResult,
+    components.ListChallengeBucketsResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -62,13 +62,13 @@ export function accessListChallenges(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListChallengesRequest | undefined,
-  security?: operations.ListChallengesSecurity | undefined,
+  request?: operations.ListChallengeBucketsRequest | undefined,
+  security?: operations.ListChallengeBucketsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.ListChallengesResult,
+      components.ListChallengeBucketsResult,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -86,7 +86,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        z.optional(operations.ListChallengesRequest$outboundSchema),
+        z.optional(operations.ListChallengeBucketsRequest$outboundSchema),
         value,
       ),
     "Input validation failed",
@@ -97,10 +97,9 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/access.listChallenges")();
+  const path = pathToFunc("/rpc/access.listChallengeBuckets")();
 
   const query = encodeFormQuery({
-    "ids": payload?.ids,
     "limit": payload?.limit,
     "offset": payload?.offset,
     "outcome": payload?.outcome,
@@ -142,7 +141,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listChallenges",
+    operationID: "listChallengeBuckets",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -198,7 +197,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.ListChallengesResult,
+    components.ListChallengeBucketsResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -209,7 +208,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.ListChallengesResult$inboundSchema),
+    M.json(200, components.ListChallengeBucketsResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,
