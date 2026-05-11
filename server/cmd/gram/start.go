@@ -763,6 +763,8 @@ func newStartCommand() *cli.Command {
 				auditLogger,
 				memoryTools,
 				platformFeatureChecker,
+				speakeasyIDPClient,
+				usersessions.NewSigner(c.String("jwt-signing-key")),
 			)
 
 			chatClient := chat.NewAgenticChatClient(

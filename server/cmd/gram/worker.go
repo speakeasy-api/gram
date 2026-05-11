@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
 func newWorkerCommand() *cli.Command {
@@ -599,6 +600,8 @@ func newWorkerCommand() *cli.Command {
 				auditLogger,
 				memoryTools,
 				platformFeatureChecker,
+				speakeasyIDPClient,
+				usersessions.NewSigner(c.String("jwt-signing-key")),
 			)
 
 			chatClient := chat.NewAgenticChatClient(

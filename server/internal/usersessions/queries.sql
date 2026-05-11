@@ -75,6 +75,17 @@ FROM user_session_clients AS cli
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
 WHERE cli.id = @id AND iss.project_id = @project_id AND cli.deleted IS FALSE;
 
+-- name: GetUserSessionClientByClientID :one
+-- Lookup a registered DCR client by its issuer-scoped client_id. Used by the
+-- /authorize, /token, and /revoke handlers to resolve the client behind the
+-- request. Project scoping is intentionally NOT applied here — the OAuth
+-- surface is public and the issuer_id is the authoritative scope.
+SELECT cli.*
+FROM user_session_clients AS cli
+WHERE cli.user_session_issuer_id = @user_session_issuer_id
+  AND cli.client_id = @client_id
+  AND cli.deleted IS FALSE;
+
 -- name: ListUserSessionClientsByProjectID :many
 -- Operator visibility into all DCR-issued clients in the project, with optional
 -- filter by user_session_issuer_id. Joins through issuers for project scoping.
@@ -178,6 +189,19 @@ WHERE s.id = @id
   AND iss.project_id = @project_id
   AND s.deleted IS FALSE
 RETURNING s.*;
+
+-- name: RevokeUserSessionByRefreshTokenHash :one
+-- Soft-deletes the session matching the supplied refresh-token hash, scoped
+-- to the issuer. Used by the OAuth /revoke endpoint (RFC 7009) on the public
+-- MCP surface, where project scoping isn't applicable -- the issuer_id is
+-- the authoritative scope. Returns the affected row so the handler can push
+-- the jti into the revocation cache.
+UPDATE user_sessions
+SET deleted_at = clock_timestamp()
+WHERE user_session_issuer_id = @user_session_issuer_id
+  AND refresh_token_hash = @refresh_token_hash
+  AND deleted IS FALSE
+RETURNING *;
 
 -- The Create* queries below are exercised by tests and by the OAuth surface
 -- that lands in milestone #2 (DCR registration, /token exchange, /authorize
