@@ -72,6 +72,26 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: SetTriggerInstanceStatusByID :one
+UPDATE trigger_instances
+SET
+    status = @status,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND status = @expected_status
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: ListActiveTriggerInstancesByTarget :many
+SELECT *
+FROM trigger_instances ti
+WHERE ti.project_id = @project_id
+  AND ti.definition_slug = @definition_slug
+  AND ti.target_kind = @target_kind
+  AND ti.target_ref = @target_ref
+  AND ti.status = 'active'
+  AND ti.deleted IS FALSE;
+
 -- name: DeleteTriggerInstance :one
 UPDATE trigger_instances
 SET

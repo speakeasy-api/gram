@@ -42,6 +42,10 @@ func triggerDispatchWorkflowID(eventID string) string {
 	return "v1:trigger-dispatch-workflow:" + eventID
 }
 
+func TriggerWakeWorkflowID(id uuid.UUID) string {
+	return "v1:trigger-wake-workflow:" + id.String()
+}
+
 type ScheduleTriggerCronWorkflowOptions struct {
 	InstanceID     uuid.UUID
 	InstanceStatus string
@@ -149,4 +153,43 @@ func ExecuteTriggerDispatchWorkflow(ctx context.Context, temporalEnv *tenv.Envir
 func isTemporalNotFound(err error) bool {
 	var notFound *serviceerror.NotFound
 	return errors.As(err, &notFound)
+}
+
+// ExecuteTriggerWakeWorkflow is idempotent: the deterministic per-instance
+// workflow ID makes repeated scheduling of the same wake a Temporal-level
+// no-op (WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE).
+func ExecuteTriggerWakeWorkflow(ctx context.Context, temporalEnv *tenv.Environment, instanceID uuid.UUID, fireAt time.Time) error {
+	tclient := temporalEnv.Client()
+	queue := temporalEnv.Queue()
+
+	delay := max(time.Until(fireAt), 0)
+
+	_, err := tclient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:                    TriggerWakeWorkflowID(instanceID),
+		TaskQueue:             string(queue),
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		StartDelay:            delay,
+	}, "TriggerWakeWorkflow", ScheduleWorkflowInput{
+		TriggerInstanceID: instanceID.String(),
+		FiredAt:           "",
+	})
+	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+	switch {
+	case errors.As(err, &alreadyStarted):
+		return nil
+	case err != nil:
+		return fmt.Errorf("start trigger wake workflow: %w", err)
+	default:
+		return nil
+	}
+}
+
+// CancelTriggerWakeWorkflow: the workflow body honours cancellation by
+// exiting before dispatch. NotFound is swallowed so cancelling an already-
+// fired or never-started wake is a no-op.
+func CancelTriggerWakeWorkflow(ctx context.Context, temporalEnv *tenv.Environment, instanceID uuid.UUID) error {
+	if err := temporalEnv.Client().CancelWorkflow(ctx, TriggerWakeWorkflowID(instanceID), ""); err != nil && !isTemporalNotFound(err) {
+		return fmt.Errorf("cancel trigger wake workflow: %w", err)
+	}
+	return nil
 }
