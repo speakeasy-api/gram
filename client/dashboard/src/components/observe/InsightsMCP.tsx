@@ -567,7 +567,7 @@ export function InsightsOverviewShell({
   subtitle = "Monitor agent sessions, tool performance, and system health",
 }: {
   children: (props: InsightsContentProps) => React.ReactNode;
-  noDataKind: "tools" | "chats";
+  noDataKind: "tools" | "agent_sessions";
   showMcpFilter: boolean;
   filterDimensions?: FilterDimension[];
   userFilterType?: UserFilterType;
@@ -840,6 +840,20 @@ export function InsightsOverviewShell({
       });
     return `Viewing data from ${formatDate(from)} to ${formatDate(to)}`;
   }, [from, to]);
+  const sessionSuggestion =
+    noDataKind === "agent_sessions"
+      ? {
+          title: "Resolution Summary",
+          label: "Summarize agent session resolutions",
+          prompt:
+            "Summarize the agent session resolution metrics for the current period. What's the success rate?",
+        }
+      : {
+          title: "Resolution Summary",
+          label: "Summarize chat resolutions",
+          prompt:
+            "Summarize the chat resolution metrics for the current period. What's the success rate?",
+        };
 
   return (
     <>
@@ -850,12 +864,7 @@ export function InsightsOverviewShell({
         contextInfo={dateRangeContext}
         hideTrigger={isLogsDisabled}
         suggestions={[
-          {
-            title: "Resolution Summary",
-            label: "Summarize chat resolutions",
-            prompt:
-              "Summarize the chat resolution metrics for the current period. What's the success rate?",
-          },
+          sessionSuggestion,
           {
             title: "Tool Failures",
             label: "Analyze failing tools",
@@ -1081,7 +1090,7 @@ function InsightsOverviewContent({
   refetch: () => void;
   hasSeenSetupModal: boolean;
   onSetupModalSeen: () => void;
-  noDataKind: "tools" | "chats";
+  noDataKind: "tools" | "agent_sessions";
   filterDimension: FilterDimension;
   selectedFilterValue: string | null;
   filterParams: OverviewFilterParams;

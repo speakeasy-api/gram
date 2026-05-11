@@ -105,14 +105,14 @@ export function InsightsAgentsContent() {
 
   return (
     <InsightsOverviewShell
-      noDataKind="chats"
+      noDataKind="agent_sessions"
       showMcpFilter={false}
       filterDimensions={["all", "user", "agent"]}
       userFilterType="internal"
       fixedEventSource="hook"
       mapFilterOptions={mapFilterOptions}
-      title="Token Usage Overview"
-      subtitle="Monitor token consumption and tool usage across your team"
+      title="Agent Session Usage Overview"
+      subtitle="Monitor token consumption and tool usage across your team's agent sessions"
     >
       {(props) => (
         <InsightsAgentsInner
