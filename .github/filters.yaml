@@ -60,8 +60,8 @@ plog:
   - "go.sum"
   - "plog/**"
 
-# Subset of `server` that gates the prompt-injection accuracy comment job.
-# Strict subset of server/** so server-test (which uploads the metrics
-# artifact) is guaranteed to have run when this is true.
+# Subset of `server` that gates the prompt-injection risk report job.
 risk_accuracy:
+  - ".mise-tasks/risk/**"
   - "server/internal/background/activities/risk_analysis/**"
+  - "server/cmd/risk-pi-report/**"

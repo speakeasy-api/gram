@@ -62,10 +62,10 @@ func init() {
 		},
 		{
 			id:          "pi.encoded-payload",
-			description: "Long encoded blob adjacent to decode/execute verb",
+			description: "Long encoded blob with explicit decode/eval intent",
 			family:      familyEncodedPayload,
 			confidence:  0.7,
-			pattern:     regexp.MustCompile(`(?i)\b(decode|execute|eval|run)\b.{0,40}([A-Za-z0-9+/]{40,}={0,2}|[0-9a-fA-F]{64,})`),
+			pattern:     regexp.MustCompile(`(?i)\b(decode|eval|execute)\b.{0,30}\b(base64|hex|encoded|payload|following|this)\b.{0,40}([A-Za-z0-9+/]{40,}={0,2}|[0-9a-fA-F]{64,})`),
 		},
 	}
 
