@@ -45,6 +45,7 @@ type Toolset struct {
 	CustomDomainID         uuid.NullUUID
 	ExternalOauthServerID  uuid.NullUUID
 	OauthProxyServerID     uuid.NullUUID
+	UserSessionIssuerID    uuid.NullUUID
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz

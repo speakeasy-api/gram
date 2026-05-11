@@ -827,6 +827,10 @@ CREATE TABLE IF NOT EXISTS toolsets (
   external_oauth_server_id uuid,
   oauth_proxy_server_id uuid,
 
+  -- New unified gate (spike §4.1 Toolset link). Nullable opt-in; runtime
+  -- behaviour is gated only when this is set, so legacy paths stay unchanged.
+  user_session_issuer_id uuid,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -837,6 +841,7 @@ CREATE TABLE IF NOT EXISTS toolsets (
   CONSTRAINT toolsets_custom_domain_id_fkey FOREIGN key (custom_domain_id) REFERENCES custom_domains (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_external_oauth_server_id_fkey FOREIGN KEY (external_oauth_server_id) REFERENCES external_oauth_server_metadata (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_oauth_proxy_server_id_fkey FOREIGN KEY (oauth_proxy_server_id) REFERENCES oauth_proxy_servers (id) ON DELETE SET NULL,
+  CONSTRAINT toolsets_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_oauth_exclusivity CHECK ((external_oauth_server_id IS NULL) != (oauth_proxy_server_id IS NULL) OR (external_oauth_server_id IS NULL AND oauth_proxy_server_id IS NULL))
 );
 
