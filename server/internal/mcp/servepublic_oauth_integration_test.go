@@ -14,7 +14,9 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
@@ -393,4 +395,55 @@ func pkceVerifier(t *testing.T) string {
 func pkceChallenge(verifier string) string {
 	sum := sha256.Sum256([]byte(verifier))
 	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+// TestServePublic_ExternalOAuth21_ExpiredUpstreamJWTStillForwarded pins
+// down the strongest form of the external-mode non-validation contract:
+// even a properly-formed JWT signed by dev-idp's actual key but with an
+// `exp` claim in the past is accepted at /mcp/{slug} without Gram doing
+// any validation of its own.
+//
+// TestServePublic_ExternalOAuth21_PassthroughAcceptsUpstreamToken proves
+// a fresh upstream-issued token is forwarded;
+// TestServePublicOAuth_ExternalNoSecurityDefs_ValidToken_Succeeds proves
+// a literal "some-external-token" string is forwarded. This test closes
+// the remaining gap: a token that LOOKS valid (real signature, real
+// issuer claim) but is semantically expired must still flow through
+// untouched, because external-mode is non-validating by contract. If
+// Gram ever starts parsing JWT claims here, this test must be updated
+// in the same change.
+func TestServePublic_ExternalOAuth21_ExpiredUpstreamJWTStillForwarded(t *testing.T) {
+	t.Parallel()
+
+	idp := devidptest.Launch(t, devidptest.LaunchOpts{})
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	result := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
+		Slug:     "ext-oauth21-expired-jwt",
+		IsPublic: true,
+		Metadata: idp.OAuth21Metadata(t),
+	})
+
+	// Mint an RS256 JWT signed with dev-idp's actual key, but with `exp`
+	// one hour in the past. Any JWT-parsing validator would reject this.
+	pastExp := time.Now().Add(-1 * time.Hour)
+	claims := jwt.RegisteredClaims{
+		Issuer:    idp.OAuth21URL,
+		Audience:  jwt.ClaimStrings{"integration-test-client"},
+		Subject:   idp.DefaultUser.ID.String(),
+		IssuedAt:  jwt.NewNumericDate(pastExp.Add(-time.Hour)),
+		ExpiresAt: jwt.NewNumericDate(pastExp),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	expiredJWT, err := token.SignedString(idp.SigningKey())
+	require.NoError(t, err)
+
+	w, err := servePublicHTTP(t, t.Context(), ti, result.Toolset.McpSlug.String, makeInitializeBody(), expiredJWT, nil)
+	require.NoError(t, err, "external/passthrough mode must NOT validate JWT claims; expired upstream JWT should be forwarded")
+	require.Empty(t, w.Header().Get("WWW-Authenticate"),
+		"WWW-Authenticate must NOT be set in passthrough mode regardless of bearer freshness")
 }

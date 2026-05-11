@@ -476,6 +476,179 @@ func TestServePublic_PrivateWithoutOAuth_ValidAPIKey_Succeeds(t *testing.T) {
 // New test: expired Gram token returns 401
 // ---------------------------------------------------------------------------
 
+// assertCustomProxyRefreshFailsClosed is the shared assertion body for
+// the TestServePublic_CustomProxy_UpstreamRefreshFails_*_WithSecurity_Returns401
+// cluster. The upstream /token endpoint returns the supplied status (4xx
+// for credential-class failure, 5xx for transient), and the test verifies
+// that with security defs deployed Gram fails closed at /mcp/{slug}
+// rather than letting a stale upstream secret proceed.
+//
+// We can't use setupCustomOAuthToolset here because it hardcodes
+// SecurityKeyNames=["api_key"], which would fail the security check via
+// key mismatch — masking the actual property under test.
+func assertCustomProxyRefreshFailsClosed(t *testing.T, slugPrefix string, upstreamStatus int) {
+	t.Helper()
+
+	const securityKey = "TEST_API_KEY"
+
+	failServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(upstreamStatus)
+		_, _ = w.Write([]byte(`{"error":"upstream_failure"}`))
+	}))
+	t.Cleanup(failServer.Close)
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	oauthRepo := oauth_repo.New(ti.conn)
+	oauthServer, err := oauthRepo.UpsertOAuthProxyServer(ctx, oauth_repo.UpsertOAuthProxyServerParams{
+		ProjectID: *authCtx.ProjectID,
+		Slug:      slugPrefix + "-server-" + uuid.New().String()[:8],
+	})
+	require.NoError(t, err)
+
+	_, err = oauthRepo.UpsertOAuthProxyProvider(ctx, oauth_repo.UpsertOAuthProxyProviderParams{
+		ProjectID:                         *authCtx.ProjectID,
+		OauthProxyServerID:                oauthServer.ID,
+		Slug:                              slugPrefix + "-provider-" + uuid.New().String()[:8],
+		ProviderType:                      string(oauth.OAuthProxyProviderTypeCustom),
+		ScopesSupported:                   []string{},
+		ResponseTypesSupported:            []string{},
+		ResponseModesSupported:            []string{},
+		GrantTypesSupported:               []string{},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_post"},
+		SecurityKeyNames:                  []string{securityKey},
+		Secrets:                           []byte(`{"client_id":"cid","client_secret":"csec"}`),
+		TokenEndpoint:                     pgtype.Text{String: failServer.URL + "/token", Valid: true},
+	})
+	require.NoError(t, err)
+
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+	slug := slugPrefix + "-mcp-" + uuid.New().String()[:8]
+	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Refresh-Fail MCP",
+		Slug:                   slug,
+		Description:            conv.ToPGText("Custom OAuth toolset with matching security key"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                conv.ToPGText(slug),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
+		Name:                   toolset.Name,
+		Description:            toolset.Description,
+		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
+		McpSlug:                toolset.McpSlug,
+		McpIsPublic:            true,
+		McpEnabled:             toolset.McpEnabled,
+		Slug:                   toolset.Slug,
+		ProjectID:              toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	_, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
+		OauthProxyServerID: uuid.NullUUID{UUID: oauthServer.ID, Valid: true},
+		Slug:               toolset.Slug,
+		ProjectID:          *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	ti.addToolWithSecurity(ctx, t, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+
+	pastExpiry := time.Now().Add(-1 * time.Minute)
+	issuer := oauthtest.NewTokenIssuer(t, ti.cacheAdapter, ti.enc)
+	issued := issuer.IssueToken(t, ctx, toolset.ID, "stale-upstream-access", "upstream-refresh", &pastExpiry, []string{securityKey})
+	issuer.ExpireExternalSecrets(t, ctx, toolset.ID, issued.AccessToken, time.Now().Add(-1*time.Minute))
+
+	w, err := servePublicHTTP(t, context.Background(), ti, toolset.McpSlug.String, makeInitializeBody(), issued.AccessToken, nil)
+	require.Error(t, err, "upstream refresh failure with security defs must fail closed")
+	require.Contains(t, err.Error(), "unauthorized")
+	require.NotEmpty(t, w.Header().Get("WWW-Authenticate"),
+		"WWW-Authenticate must be set so MCP clients can re-auth via discovery")
+}
+
+// TestServePublic_CustomProxy_UpstreamRefreshFails4xx_WithSecurity_Returns401
+// verifies Gram's fail-closed behavior when upstream /token refresh returns
+// a 4xx (credential-class failure, e.g. invalid_grant) on a custom-proxy
+// toolset that has security definitions deployed. The request is rejected
+// with 401 + WWW-Authenticate so the MCP client can re-auth, rather than
+// being allowed to proceed with a stale upstream secret that would only
+// fail at the actual tool-call boundary.
+//
+// Distinct from TestServePublic_CustomProxy_UpstreamRefreshFailureAllowsInitialize,
+// which exercises the no-security-defs branch where initialize trivially
+// succeeds because there's nothing to satisfy. This test adds matching
+// security defs so the resolved-env-vars path is forced to consider the
+// expired external secret — and the impl correctly fails closed.
+func TestServePublic_CustomProxy_UpstreamRefreshFails4xx_WithSecurity_Returns401(t *testing.T) {
+	t.Parallel()
+	assertCustomProxyRefreshFailsClosed(t, "refresh-fail-4xx", http.StatusBadRequest)
+}
+
+// TestServePublic_CustomProxy_UpstreamRefreshFails5xx_WithSecurity_Returns401
+// verifies the same fail-closed behavior for transient (5xx) upstream
+// failures. Listed separately from the 4xx case so any future divergence
+// (e.g. treating 5xx as retryable and returning a stale secret) becomes
+// an explicit, separately-tested change rather than a silent regression
+// of the more permissive variant.
+func TestServePublic_CustomProxy_UpstreamRefreshFails5xx_WithSecurity_Returns401(t *testing.T) {
+	t.Parallel()
+	assertCustomProxyRefreshFailsClosed(t, "refresh-fail-5xx", http.StatusServiceUnavailable)
+}
+
+// TestServePublic_PrivateWithOAuth_WrongToolsetToken_Returns401 verifies the
+// audience-binding property: a Gram OAuth token issued for one toolset must
+// not authenticate requests to a different toolset, even when both toolsets
+// share the same OAuth proxy configuration.
+//
+// This is the OAuth 2.0 "confused deputy" defense (OAuth 2.1 BCP §4.10).
+// Today ValidateAccessToken takes toolsetID as a lookup key, so a token
+// bound to toolset A produces no cache hit when looked up under toolset B.
+// The test pins that down end-to-end through /mcp/{slug} so future caching
+// or lookup changes cannot silently break the property.
+func TestServePublic_PrivateWithOAuth_WrongToolsetToken_Returns401(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	// Two independent private OAuth toolsets in the same project.
+	toolsetA := createPrivateOAuthToolset(t, ctx, ti.conn, authCtx, "wrong-aud-a")
+	toolsetB := createPrivateOAuthToolset(t, ctx, ti.conn, authCtx, "wrong-aud-b")
+
+	// Issue a real Gram OAuth token bound to toolset A. Use a session as
+	// the upstream credential, mirroring the pattern in
+	// TestServePublic_PrivateWithOAuth_ValidToken_Succeeds.
+	sessionToken := ti.getSessionToken(ctx, t)
+	require.NotEmpty(t, sessionToken)
+
+	upstreamExpiry := time.Now().Add(24 * time.Hour)
+	issuer := oauthtest.NewTokenIssuer(t, ti.cacheAdapter, ti.enc)
+	issuedForA := issuer.IssueToken(t, ctx, toolsetA.ID, sessionToken, "", &upstreamExpiry, []string{})
+
+	// Sanity check: the token works against its intended toolset.
+	w, err := servePublicHTTP(t, context.Background(), ti, toolsetA.McpSlug.String, makeInitializeBody(), issuedForA.AccessToken, nil)
+	require.NoError(t, err, "token should authenticate against its bound toolset")
+	require.Empty(t, w.Header().Get("WWW-Authenticate"))
+
+	// Now present the same token against toolset B. Must 401 with
+	// WWW-Authenticate so the client knows to re-auth for the right resource.
+	w, err = servePublicHTTP(t, context.Background(), ti, toolsetB.McpSlug.String, makeInitializeBody(), issuedForA.AccessToken, nil)
+	require.Error(t, err, "token bound to toolset A must not authenticate at toolset B")
+	require.Contains(t, err.Error(), "expired or invalid access token")
+	require.NotEmpty(t, w.Header().Get("WWW-Authenticate"),
+		"WWW-Authenticate must point at toolset B's protected-resource so the client re-auths for the right audience")
+	require.Contains(t, w.Header().Get("WWW-Authenticate"), toolsetB.McpSlug.String,
+		"WWW-Authenticate resource_metadata must reference toolset B (the requested resource), not toolset A")
+}
+
 // TestServePublic_CustomProxy_ExpiredGramToken_Returns401 verifies that when
 // the Gram access token itself is expired (not the upstream external secrets),
 // the request is rejected with 401 and a WWW-Authenticate header.
