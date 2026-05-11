@@ -69,13 +69,10 @@ async function setupRealWorkOS() {
     process.exit(1);
   }
 
-  const devidpURL =
-    process.env["GRAM_DEVIDP_EXTERNAL_URL"] || "http://localhost:35291";
-
   await $`touch mise.local.toml`;
   await $`mise set --file mise.local.toml GRAM_IDP_MODE=workos`;
   await $`mise set --file mise.local.toml WORKOS_API_KEY=${key.trim()}`;
-  await $`mise set --file mise.local.toml WORKOS_API_URL=${devidpURL}/workos`;
+  await $`mise set --file mise.local.toml WORKOS_API_URL=https://api.workos.com`;
   await $`mise set --file mise.local.toml GRAM_IDP_CLIENT_ID=${clientId.trim()}`;
 
   console.log();
