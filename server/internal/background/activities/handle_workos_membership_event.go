@@ -10,148 +10,15 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/workos/workos-go/v6/pkg/events"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
-
-const workosMembershipEventsPageSize = 100
-
-type ProcessWorkOSMembershipEventsParams struct {
-	// SinceEventID lets a caller override the DB cursor for this run. Workflow
-	// triggers pass nil and let the activity load the singleton cursor from
-	// `workos_user_syncs`.
-	SinceEventID *string `json:"since_event_id,omitempty"`
-}
-
-type ProcessWorkOSMembershipEventsResult struct {
-	SinceEventID string `json:"since_event_id"`
-	LastEventID  string `json:"last_event_id"`
-	HasMore      bool   `json:"has_more"`
-}
-
-// ProcessWorkOSMembershipEvents processes the global organization_membership.*
-// stream. Membership events are not filtered by WorkOS organization because
-// WorkOS users may move across orgs and the cursor is intentionally singleton.
-type ProcessWorkOSMembershipEvents struct {
-	db           *pgxpool.Pool
-	logger       *slog.Logger
-	eventsClient EventsLister
-}
-
-func NewProcessWorkOSMembershipEvents(logger *slog.Logger, db *pgxpool.Pool, eventsClient EventsLister) *ProcessWorkOSMembershipEvents {
-	return &ProcessWorkOSMembershipEvents{
-		db:           db,
-		logger:       logger,
-		eventsClient: eventsClient,
-	}
-}
-
-func (p *ProcessWorkOSMembershipEvents) Do(ctx context.Context, params ProcessWorkOSMembershipEventsParams) (*ProcessWorkOSMembershipEventsResult, error) {
-	logger := p.logger
-
-	sinceEventID := conv.PtrValOr(params.SinceEventID, "")
-	if sinceEventID == "" {
-		cursor, err := workosrepo.New(p.db).GetUserSyncLastEventID(ctx)
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			// No cursor yet: full sync from the beginning.
-		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "get user sync last event ID").Log(ctx, logger)
-		default:
-			sinceEventID = cursor
-		}
-	}
-
-	resp, err := p.eventsClient.ListEvents(ctx, events.ListEventsOpts{
-		Events: []string{
-			string(workos.EventKindOrganizationMembershipCreated),
-			string(workos.EventKindOrganizationMembershipDeleted),
-			string(workos.EventKindOrganizationMembershipUpdated),
-		},
-		Limit:          workosMembershipEventsPageSize,
-		After:          sinceEventID,
-		OrganizationId: "",
-		RangeStart:     "",
-		RangeEnd:       "",
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list WorkOS membership events").Log(ctx, logger)
-	}
-
-	lastEventID, err := p.handlePage(ctx, logger, resp.Data)
-	if err != nil {
-		return nil, err
-	}
-
-	return &ProcessWorkOSMembershipEventsResult{
-		SinceEventID: sinceEventID,
-		LastEventID:  lastEventID,
-		HasMore:      len(resp.Data) == workosMembershipEventsPageSize,
-	}, nil
-}
-
-func (p *ProcessWorkOSMembershipEvents) handlePage(ctx context.Context, logger *slog.Logger, page []events.Event) (string, error) {
-	var lastEventID string
-	for _, event := range page {
-		eventLogger := logger.With(
-			attr.SlogWorkOSEventID(event.ID),
-			attr.SlogWorkOSEventType(event.Event),
-		)
-
-		eventID, err := p.handleEvent(ctx, eventLogger, event)
-		if err != nil {
-			return lastEventID, oops.E(oops.CodeUnexpected, err, "handle WorkOS membership event").Log(ctx, eventLogger)
-		}
-		if eventID != "" {
-			lastEventID = eventID
-		}
-	}
-
-	return lastEventID, nil
-}
-
-func (p *ProcessWorkOSMembershipEvents) handleEvent(ctx context.Context, logger *slog.Logger, event events.Event) (string, error) {
-	dbtx, err := p.db.Begin(ctx)
-	if err != nil {
-		return "", fmt.Errorf("begin transaction: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	if err := handleMembershipEvent(ctx, logger, dbtx, event); err != nil {
-		return "", err
-	}
-
-	if _, err := workosrepo.New(dbtx).SetUserSyncLastEventID(ctx, event.ID); err != nil {
-		return "", fmt.Errorf("set user sync last event ID: %w", err)
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return "", fmt.Errorf("commit transaction: %w", err)
-	}
-
-	return event.ID, nil
-}
-
-func handleMembershipEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
-	switch event.Event {
-	case string(workos.EventKindOrganizationMembershipCreated), string(workos.EventKindOrganizationMembershipUpdated):
-		return handleOrganizationMembershipUpsert(ctx, logger, dbtx, event)
-	case string(workos.EventKindOrganizationMembershipDeleted):
-		return handleOrganizationMembershipDeleted(ctx, logger, dbtx, event)
-	}
-
-	return oops.Permanent(fmt.Errorf("unhandled workos membership event type: %s", event.Event))
-}
 
 type workosMembershipRole struct {
 	Slug string `json:"slug"`

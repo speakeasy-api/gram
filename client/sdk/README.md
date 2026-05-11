@@ -249,6 +249,10 @@ run();
 * [setToolsetLink](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 * [updateBySlug](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 
+### [External](docs/sdks/external/README.md)
+
+* [receiveWorkOSWebhook](docs/sdks/external/README.md#receiveworkoswebhook) - receiveWorkOSWebhook external
+
 ### [Features](docs/sdks/features/README.md)
 
 * [get](docs/sdks/features/README.md#get) - getProductFeatures features
@@ -586,6 +590,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`environmentsSetSourceLink`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`environmentsSetToolsetLink`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 - [`environmentsUpdateBySlug`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
+- [`externalReceiveWorkOSWebhook`](docs/sdks/external/README.md#receiveworkoswebhook) - receiveWorkOSWebhook external
 - [`featuresGet`](docs/sdks/features/README.md#get) - getProductFeatures features
 - [`featuresSet`](docs/sdks/features/README.md#set) - setProductFeature features
 - [`hooksHooksNumberClaude`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
@@ -1204,7 +1209,7 @@ run();
 ### Error Classes
 **Primary errors:**
 * [`GramError`](./src/models/errors/gramerror.ts): The base class for HTTP error responses.
-  * [`ServiceError`](./src/models/errors/serviceerror.ts): unauthorized access.
+  * [`ServiceError`](./src/models/errors/serviceerror.ts): unauthorized access. *
 
 <details><summary>Less common errors (6)</summary>
 
@@ -1222,6 +1227,8 @@ run();
 * [`ResponseValidationError`](./src/models/errors/responsevalidationerror.ts): Type mismatch between the data returned from the server and the structure expected by the SDK. See `error.rawValue` for the raw value and `error.pretty()` for a nicely formatted multi-line string.
 
 </details>
+
+\* Check [the method documentation](#available-resources-and-operations) to see if the error is applicable.
 <!-- End Error Handling [errors] -->
 
 <!-- Start Server Selection [server] -->

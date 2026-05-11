@@ -166,6 +166,7 @@ export * from "./logout.js";
 export * from "./pausetriggerinstance.js";
 export * from "./publish.js";
 export * from "./publishplugins.js";
+export * from "./receiveworkoswebhook.js";
 export * from "./redeploydeployment.js";
 export * from "./register.js";
 export * from "./registerdomain.js";

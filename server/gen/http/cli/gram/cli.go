@@ -27,6 +27,7 @@ import (
 	deploymentsc "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
 	domainsc "github.com/speakeasy-api/gram/server/gen/http/domains/client"
 	environmentsc "github.com/speakeasy-api/gram/server/gen/http/environments/client"
+	externalc "github.com/speakeasy-api/gram/server/gen/http/external/client"
 	featuresc "github.com/speakeasy-api/gram/server/gen/http/features/client"
 	functionsc "github.com/speakeasy-api/gram/server/gen/http/functions/client"
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
@@ -66,6 +67,7 @@ import (
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() []string {
 	return []string{
+		"external receive-work-os-webhook",
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-role|get-rbac-status|enable-rbac|disable-rbac|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"admin poke",
@@ -115,11 +117,11 @@ func UsageCommands() []string {
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + " " + "about openapi" + "\n" +
+	return os.Args[0] + " " + "external receive-work-os-webhook --workos-signature \"abc123\" --stream \"goa.png\"" + "\n" +
+		os.Args[0] + " " + "about openapi" + "\n" +
 		os.Args[0] + " " + "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "admin poke" + "\n" +
 		os.Args[0] + " " + "assets serve-image --id \"abc123\"" + "\n" +
-		os.Args[0] + " " + "assistant-memories list-assistant-memories --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --tags '[\n      \"abc123\"\n   ]' --include-deleted false --cursor \"abc123\" --limit 2 --session-token \"abc123\" --project-slug-input \"abc123\"" + "\n" +
 		""
 }
 
@@ -133,6 +135,12 @@ func ParseEndpoint(
 	restore bool,
 ) (goa.Endpoint, any, error) {
 	var (
+		externalFlags = flag.NewFlagSet("external", flag.ContinueOnError)
+
+		externalReceiveWorkOSWebhookFlags               = flag.NewFlagSet("receive-work-os-webhook", flag.ExitOnError)
+		externalReceiveWorkOSWebhookWorkosSignatureFlag = externalReceiveWorkOSWebhookFlags.String("workos-signature", "", "")
+		externalReceiveWorkOSWebhookStreamFlag          = externalReceiveWorkOSWebhookFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
+
 		aboutFlags = flag.NewFlagSet("about", flag.ContinueOnError)
 
 		aboutOpenapiFlags = flag.NewFlagSet("openapi", flag.ExitOnError)
@@ -1492,6 +1500,9 @@ func ParseEndpoint(
 		variationsListGlobalApikeyTokenFlag      = variationsListGlobalFlags.String("apikey-token", "", "")
 		variationsListGlobalProjectSlugInputFlag = variationsListGlobalFlags.String("project-slug-input", "", "")
 	)
+	externalFlags.Usage = externalUsage
+	externalReceiveWorkOSWebhookFlags.Usage = externalReceiveWorkOSWebhookUsage
+
 	aboutFlags.Usage = aboutUsage
 	aboutOpenapiFlags.Usage = aboutOpenapiUsage
 
@@ -1827,6 +1838,8 @@ func ParseEndpoint(
 	{
 		svcn = flag.Arg(0)
 		switch svcn {
+		case "external":
+			svcf = externalFlags
 		case "about":
 			svcf = aboutFlags
 		case "access":
@@ -1930,6 +1943,13 @@ func ParseEndpoint(
 	{
 		epn = svcf.Arg(0)
 		switch svcn {
+		case "external":
+			switch epn {
+			case "receive-work-os-webhook":
+				epf = externalReceiveWorkOSWebhookFlags
+
+			}
+
 		case "about":
 			switch epn {
 			case "openapi":
@@ -2822,6 +2842,16 @@ func ParseEndpoint(
 	)
 	{
 		switch svcn {
+		case "external":
+			c := externalc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "receive-work-os-webhook":
+				endpoint = c.ReceiveWorkOSWebhook()
+				data, err = externalc.BuildReceiveWorkOSWebhookPayload(*externalReceiveWorkOSWebhookWorkosSignatureFlag)
+				if err == nil {
+					data, err = externalc.BuildReceiveWorkOSWebhookStreamPayload(data, *externalReceiveWorkOSWebhookStreamFlag)
+				}
+			}
 		case "about":
 			c := aboutc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -3710,6 +3740,36 @@ func ParseEndpoint(
 	}
 
 	return endpoint, data, nil
+}
+
+// externalUsage displays the usage of the external command and its subcommands.
+func externalUsage() {
+	fmt.Fprintln(os.Stderr, `Endpoints for external services to interact with gram.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] external COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    receive-work-os-webhook: Receive and enqueue a WorkOS webhook event.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s external COMMAND --help\n", os.Args[0])
+}
+func externalReceiveWorkOSWebhookUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external receive-work-os-webhook", os.Args[0])
+	fmt.Fprint(os.Stderr, " -workos-signature STRING")
+	fmt.Fprint(os.Stderr, " -stream STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Receive and enqueue a WorkOS webhook event.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -workos-signature STRING: `)
+	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external receive-work-os-webhook --workos-signature \"abc123\" --stream \"goa.png\"")
 }
 
 // aboutUsage displays the usage of the about command and its subcommands.
