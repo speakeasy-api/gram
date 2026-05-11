@@ -30,6 +30,7 @@ import (
 	"github.com/urfave/cli/v2/altsrc"
 	"github.com/workos/workos-go/v6/pkg/events"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
+	"github.com/workos/workos-go/v6/pkg/webhooks"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
@@ -529,6 +530,14 @@ func newIDPUserManagementClient(guardianPolicy *guardian.Policy, apiKey string, 
 		um.Endpoint = ep
 	}
 	return um
+}
+
+func newWorkOSWebhooksClient(c *cli.Context) *webhooks.Client {
+	secret := c.String("workos-webhook-secret")
+	if secret == "" {
+		return nil
+	}
+	return webhooks.NewClient(secret)
 }
 
 func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*assets.TigrisStore, func(context.Context) error, error) {
