@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"github.com/workos/workos-go/v6/pkg/usermanagement"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -32,6 +33,7 @@ type Manager struct {
 	idpClientID     string
 	idpClientSecret string
 	idpHTTPClient   *guardian.HTTPClient
+	umClient        *usermanagement.Client // nil = fall back to raw OIDC HTTP (tests/dev-idp)
 	orgRepo         *orgRepo.Queries
 	userRepo        *userRepo.Queries
 	pylon           *pylon.Pylon
@@ -49,6 +51,7 @@ func NewManager(
 	idpBaseURL string,
 	idpClientID string,
 	idpClientSecret string,
+	umClient *usermanagement.Client,
 	pylon *pylon.Pylon,
 	posthog *posthog.Posthog,
 	billingRepo billing.Repository,
@@ -66,6 +69,7 @@ func NewManager(
 		idpClientID:     idpClientID,
 		idpClientSecret: idpClientSecret,
 		idpHTTPClient:   idpHTTPClient,
+		umClient:        umClient,
 		orgRepo:         orgRepo.New(db),
 		userRepo:        userRepo.New(db),
 		pylon:           pylon,

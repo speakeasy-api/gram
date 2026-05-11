@@ -49,6 +49,7 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 		srv.URL+"/oauth2",
 		"test-client-id",
 		"",
+		nil, // no WorkOS SDK client in tests — uses mock OIDC IDP
 		fakePylon,
 		fakePosthog,
 		billingRepo,

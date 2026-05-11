@@ -102,6 +102,11 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpt
 	}
 }
 
+// UserManagement returns the underlying WorkOS user-management SDK client.
+func (wc *Client) UserManagement() *usermanagement.Client {
+	return wc.um
+}
+
 // do performs a raw HTTP request against the WorkOS REST API.
 // Pass a non-nil out pointer to decode a JSON response body; pass nil to discard it (e.g. DELETE).
 func (wc *Client) do(ctx context.Context, method, path string, body []byte, out any) error {

@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/workos/workos-go/v6/pkg/usermanagement"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -22,8 +24,10 @@ type IDPUserInfo struct {
 	Picture *string `json:"picture,omitempty"`
 }
 
-// ExchangeCodeForTokens exchanges an authorization code for an access token
-// via the IDP's /token endpoint (standard OIDC token exchange).
+// ExchangeCodeForTokens exchanges an authorization code for an access token.
+// When a WorkOS user-management client is configured (production), this uses
+// the SDK's AuthenticateWithCode. Otherwise it falls back to a raw OIDC
+// /token POST (tests / dev-idp).
 func (s *Manager) ExchangeCodeForTokens(ctx context.Context, code, redirectURI string) (accessToken string, err error) {
 	ctx, span := s.tracer.Start(ctx, "sessions.exchangeCodeForTokens")
 	defer func() {
@@ -33,6 +37,29 @@ func (s *Manager) ExchangeCodeForTokens(ctx context.Context, code, redirectURI s
 		span.End()
 	}()
 
+	if s.umClient != nil {
+		return s.exchangeCodeViaSDK(ctx, code)
+	}
+	return s.exchangeCodeViaHTTP(ctx, code, redirectURI)
+}
+
+// exchangeCodeViaSDK uses the WorkOS user-management SDK to exchange the code.
+func (s *Manager) exchangeCodeViaSDK(ctx context.Context, code string) (string, error) {
+	resp, err := s.umClient.AuthenticateWithCode(ctx, usermanagement.AuthenticateWithCodeOpts{
+		ClientID: s.idpClientID,
+		Code:     code,
+	})
+	if err != nil {
+		return "", fmt.Errorf("workos authenticate with code: %w", err)
+	}
+
+	return resp.AccessToken, nil
+}
+
+// exchangeCodeViaHTTP performs a standard OIDC token exchange against the
+// IDP's /token endpoint. Used when no WorkOS SDK client is available
+// (e.g. tests backed by the mock IDP).
+func (s *Manager) exchangeCodeViaHTTP(ctx context.Context, code, redirectURI string) (string, error) {
 	data := url.Values{}
 	data.Set("grant_type", "authorization_code")
 	data.Set("code", code)
