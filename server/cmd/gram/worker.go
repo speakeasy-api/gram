@@ -571,7 +571,9 @@ func newWorkerCommand() *cli.Command {
 				auditLogger,
 			)
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
-			assistantsPlatformToolset := platformtools.NewAssistantsToolset(memoryTools...)
+			platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
+				AssistantMemoryTools: memoryTools,
+			})
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			mcpService := mcp.NewService(
@@ -602,7 +604,7 @@ func newWorkerCommand() *cli.Command {
 				auditLogger,
 				memoryTools,
 				platformFeatureChecker,
-				[]platformtools.Toolset{assistantsPlatformToolset},
+				platformToolsets,
 				speakeasyIDPClient,
 				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
 			)

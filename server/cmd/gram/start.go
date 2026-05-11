@@ -724,7 +724,9 @@ func newStartCommand() *cli.Command {
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
-			assistantsPlatformToolset := platformtools.NewAssistantsToolset(memoryTools...)
+			platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
+				AssistantMemoryTools: memoryTools,
+			})
 
 			platformSvc := platformtoolsruntime.NewService(
 				logger,
@@ -765,7 +767,7 @@ func newStartCommand() *cli.Command {
 				auditLogger,
 				memoryTools,
 				platformFeatureChecker,
-				[]platformtools.Toolset{assistantsPlatformToolset},
+				platformToolsets,
 				speakeasyIDPClient,
 				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
 			)
