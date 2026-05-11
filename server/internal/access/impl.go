@@ -1325,33 +1325,16 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 		return s.buildChallengeResult(ctx, authCtx, challenges, len(challenges))
 	}
 
-	outcome := ""
-	if payload.Outcome != nil {
-		outcome = *payload.Outcome
-	}
-	principalURN := ""
-	if payload.PrincipalUrn != nil {
-		principalURN = *payload.PrincipalUrn
-	}
-	scopeFilter := ""
-	if payload.Scope != nil {
-		scopeFilter = *payload.Scope
-	}
-	projectID := ""
-	if payload.ProjectID != nil {
-		projectID = *payload.ProjectID
-	}
-
 	// When resolved filter is active, skip CH-side pagination – fetch all matching rows,
 	// apply the resolved filter in Go, then slice for the requested page.
 	skipPagination := payload.Resolved != nil
 
 	filters := chrepo.ChallengeListFilters{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-		Outcome:        outcome,
-		PrincipalURN:   principalURN,
-		Scope:          scopeFilter,
+		ProjectID:      payload.ProjectID,
+		Outcome:        payload.Outcome,
+		PrincipalURN:   payload.PrincipalUrn,
+		Scope:          payload.Scope,
 		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
 		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 		SkipPagination: skipPagination,
@@ -1547,31 +1530,14 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		attr.UserID(authCtx.UserID),
 	)
 
-	outcome := ""
-	if payload.Outcome != nil {
-		outcome = *payload.Outcome
-	}
-	principalURN := ""
-	if payload.PrincipalUrn != nil {
-		principalURN = *payload.PrincipalUrn
-	}
-	scopeFilter := ""
-	if payload.Scope != nil {
-		scopeFilter = *payload.Scope
-	}
-	projectID := ""
-	if payload.ProjectID != nil {
-		projectID = *payload.ProjectID
-	}
-
 	skipPagination := payload.Resolved != nil
 
 	filters := chrepo.ChallengeListFilters{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-		Outcome:        outcome,
-		PrincipalURN:   principalURN,
-		Scope:          scopeFilter,
+		ProjectID:      payload.ProjectID,
+		Outcome:        payload.Outcome,
+		PrincipalURN:   payload.PrincipalUrn,
+		Scope:          payload.Scope,
 		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
 		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 		SkipPagination: skipPagination,

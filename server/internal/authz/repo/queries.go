@@ -3,10 +3,13 @@ package repo
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/Masterminds/squirrel"
 )
+
+// sq is the squirrel statement builder pre-configured for ClickHouse (uses ? placeholders).
+var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
 // InsertChallenge writes a single challenge row using server-side async insert.
 // The call is fire-and-forget from CH's perspective: it acks once the row is
@@ -126,40 +129,42 @@ func (q *Queries) InsertChallenge(ctx context.Context, row ChallengeRow) error {
 }
 
 // ChallengeListFilters controls which rows ListChallenges returns.
+// Nil pointer fields are omitted from the WHERE clause.
 type ChallengeListFilters struct {
 	OrganizationID string
-	ProjectID      string // empty = no filter
-	Outcome        string // empty = no filter
-	PrincipalURN   string // empty = no filter
-	Scope          string // empty = no filter
+	ProjectID      *string
+	Outcome        *string
+	PrincipalURN   *string
+	Scope          *string
 	Limit          uint64
 	Offset         uint64
 	SkipPagination bool // when true, omit LIMIT/OFFSET (used when resolved filter requires post-join pagination)
 }
 
-// challengeWhereClause builds a WHERE clause and args slice from ChallengeListFilters.
-func challengeWhereClause(f ChallengeListFilters) (string, []any) {
-	conditions := []string{"organization_id = ?"}
-	args := []any{f.OrganizationID}
+// challengeWhere applies ChallengeListFilters to a squirrel SelectBuilder.
+func challengeWhere(sb squirrel.SelectBuilder, f ChallengeListFilters) squirrel.SelectBuilder {
+	sb = sb.Where("organization_id = ?", f.OrganizationID)
+	if f.ProjectID != nil {
+		sb = sb.Where("project_id = ?", *f.ProjectID)
+	}
+	if f.Outcome != nil {
+		sb = sb.Where("outcome = ?", *f.Outcome)
+	}
+	if f.PrincipalURN != nil {
+		sb = sb.Where("principal_urn = ?", *f.PrincipalURN)
+	}
+	if f.Scope != nil {
+		sb = sb.Where("scope = ?", *f.Scope)
+	}
+	return sb
+}
 
-	if f.ProjectID != "" {
-		conditions = append(conditions, "project_id = ?")
-		args = append(args, f.ProjectID)
+// challengePagination applies LIMIT/OFFSET to a squirrel SelectBuilder when not skipped.
+func challengePagination(sb squirrel.SelectBuilder, f ChallengeListFilters) squirrel.SelectBuilder {
+	if !f.SkipPagination {
+		sb = sb.Limit(f.Limit).Offset(f.Offset)
 	}
-	if f.Outcome != "" {
-		conditions = append(conditions, "outcome = ?")
-		args = append(args, f.Outcome)
-	}
-	if f.PrincipalURN != "" {
-		conditions = append(conditions, "principal_urn = ?")
-		args = append(args, f.PrincipalURN)
-	}
-	if f.Scope != "" {
-		conditions = append(conditions, "scope = ?")
-		args = append(args, f.Scope)
-	}
-
-	return strings.Join(conditions, " AND "), args
+	return sb
 }
 
 // ChallengeSummary is the subset of a challenge row returned by ListChallenges.
@@ -183,33 +188,63 @@ type ChallengeSummary struct {
 	MatchedGrantCount   uint64
 }
 
+var challengeSummaryColumns = []string{
+	"id",
+	"formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS ts",
+	"organization_id",
+	"project_id",
+	"principal_urn",
+	"principal_type",
+	"user_id",
+	"user_email",
+	"operation",
+	"outcome",
+	"reason",
+	"scope",
+	"resource_kind",
+	"resource_id",
+	"role_slugs",
+	"evaluated_grant_count",
+	"length(matched_grants.scope) AS matched_grant_count",
+}
+
+func scanChallengeSummary(rows interface{ Scan(dest ...any) error }) (ChallengeSummary, error) {
+	var r ChallengeSummary
+	if err := rows.Scan(
+		&r.ID,
+		&r.Timestamp,
+		&r.OrganizationID,
+		&r.ProjectID,
+		&r.PrincipalURN,
+		&r.PrincipalType,
+		&r.UserID,
+		&r.UserEmail,
+		&r.Operation,
+		&r.Outcome,
+		&r.Reason,
+		&r.Scope,
+		&r.ResourceKind,
+		&r.ResourceID,
+		&r.RoleSlugs,
+		&r.EvaluatedGrantCount,
+		&r.MatchedGrantCount,
+	); err != nil {
+		return r, err
+	}
+	return r, nil
+}
+
 // ListChallenges queries ClickHouse for authz challenge events.
 func (q *Queries) ListChallenges(ctx context.Context, f ChallengeListFilters) ([]ChallengeSummary, error) {
-	where, args := challengeWhereClause(f)
-	query := `SELECT
-		id,
-		formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS ts,
-		organization_id,
-		project_id,
-		principal_urn,
-		principal_type,
-		user_id,
-		user_email,
-		operation,
-		outcome,
-		reason,
-		scope,
-		resource_kind,
-		resource_id,
-		role_slugs,
-		evaluated_grant_count,
-		length(matched_grants.scope) AS matched_grant_count
-	FROM authz_challenges
-	WHERE ` + where + `
-	ORDER BY timestamp DESC`
+	sb := sq.Select(challengeSummaryColumns...).
+		From("authz_challenges").
+		OrderBy("timestamp DESC")
+	sb = challengeWhere(sb, f)
+	sb = challengePagination(sb, f)
 
-	if !f.SkipPagination {
-		query += fmt.Sprintf(" LIMIT %d OFFSET %d", f.Limit, f.Offset)
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build list challenges query: %w", err)
 	}
 
 	rows, err := q.conn.Query(ctx, query, args...)
@@ -220,26 +255,8 @@ func (q *Queries) ListChallenges(ctx context.Context, f ChallengeListFilters) ([
 
 	var results []ChallengeSummary
 	for rows.Next() {
-		var r ChallengeSummary
-		if err := rows.Scan(
-			&r.ID,
-			&r.Timestamp,
-			&r.OrganizationID,
-			&r.ProjectID,
-			&r.PrincipalURN,
-			&r.PrincipalType,
-			&r.UserID,
-			&r.UserEmail,
-			&r.Operation,
-			&r.Outcome,
-			&r.Reason,
-			&r.Scope,
-			&r.ResourceKind,
-			&r.ResourceID,
-			&r.RoleSlugs,
-			&r.EvaluatedGrantCount,
-			&r.MatchedGrantCount,
-		); err != nil {
+		r, err := scanChallengeSummary(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan challenge row: %w", err)
 		}
 		results = append(results, r)
@@ -252,8 +269,13 @@ func (q *Queries) ListChallenges(ctx context.Context, f ChallengeListFilters) ([
 
 // CountChallenges returns the total number of matching challenges for pagination.
 func (q *Queries) CountChallenges(ctx context.Context, f ChallengeListFilters) (uint64, error) {
-	where, args := challengeWhereClause(f)
-	query := "SELECT count(*) FROM authz_challenges WHERE " + where
+	sb := sq.Select("count(*)").From("authz_challenges")
+	sb = challengeWhere(sb, f)
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("build count challenges query: %w", err)
+	}
 
 	rows, err := q.conn.Query(ctx, query, args...)
 	if err != nil {
@@ -273,31 +295,21 @@ func (q *Queries) CountChallenges(ctx context.Context, f ChallengeListFilters) (
 // ListChallengesByIDs fetches full challenge rows for a set of IDs.
 func (q *Queries) ListChallengesByIDs(ctx context.Context, orgID string, ids []string) ([]ChallengeSummary, error) {
 	if len(ids) == 0 {
-		return nil, nil
+		return []ChallengeSummary{}, nil
 	}
-	query := `SELECT
-		id,
-		formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS ts,
-		organization_id,
-		project_id,
-		principal_urn,
-		principal_type,
-		user_id,
-		user_email,
-		operation,
-		outcome,
-		reason,
-		scope,
-		resource_kind,
-		resource_id,
-		role_slugs,
-		evaluated_grant_count,
-		length(matched_grants.scope) AS matched_grant_count
-	FROM authz_challenges
-	WHERE organization_id = ? AND id IN ?
-	ORDER BY timestamp DESC`
 
-	rows, err := q.conn.Query(ctx, query, orgID, ids)
+	sb := sq.Select(challengeSummaryColumns...).
+		From("authz_challenges").
+		Where("organization_id = ?", orgID).
+		Where(squirrel.Eq{"id": ids}).
+		OrderBy("timestamp DESC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build list challenges by ids query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("exec list challenges by ids: %w", err)
 	}
@@ -305,26 +317,8 @@ func (q *Queries) ListChallengesByIDs(ctx context.Context, orgID string, ids []s
 
 	var results []ChallengeSummary
 	for rows.Next() {
-		var r ChallengeSummary
-		if err := rows.Scan(
-			&r.ID,
-			&r.Timestamp,
-			&r.OrganizationID,
-			&r.ProjectID,
-			&r.PrincipalURN,
-			&r.PrincipalType,
-			&r.UserID,
-			&r.UserEmail,
-			&r.Operation,
-			&r.Outcome,
-			&r.Reason,
-			&r.Scope,
-			&r.ResourceKind,
-			&r.ResourceID,
-			&r.RoleSlugs,
-			&r.EvaluatedGrantCount,
-			&r.MatchedGrantCount,
-		); err != nil {
+		r, err := scanChallengeSummary(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan challenge by id row: %w", err)
 		}
 		results = append(results, r)
@@ -363,37 +357,43 @@ type ChallengeBucket struct {
 	FirstSeen      string // RFC 3339
 }
 
+var challengeBucketColumns = []string{
+	"argMax(id, timestamp) AS rep_id",
+	"formatDateTime(max(timestamp), '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS last_seen",
+	"organization_id",
+	"project_id",
+	"principal_urn",
+	"argMax(principal_type, timestamp) AS principal_type",
+	"argMax(user_id, timestamp) AS user_id",
+	"argMax(user_email, timestamp) AS user_email",
+	"argMax(operation, timestamp) AS operation",
+	"outcome",
+	"argMax(reason, timestamp) AS reason",
+	"scope",
+	"resource_kind",
+	"resource_id",
+	"argMax(role_slugs, timestamp) AS role_slugs",
+	"argMax(evaluated_grant_count, timestamp) AS evaluated_grant_count",
+	"max(length(matched_grants.scope)) AS matched_grant_count",
+	"count(*) AS challenge_count",
+	"arrayMap(x -> toString(x), groupArray(id)) AS challenge_ids",
+	"formatDateTime(min(timestamp), '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS first_seen",
+}
+
+const challengeBucketGroupBy = "organization_id, project_id, principal_urn, scope, outcome, resource_kind, resource_id"
+
 // ListChallengeBuckets returns challenges grouped by dimensions, paginated.
 func (q *Queries) ListChallengeBuckets(ctx context.Context, f ChallengeListFilters) ([]ChallengeBucket, error) {
-	where, args := challengeWhereClause(f)
-	query := `SELECT
-	argMax(id, timestamp) AS rep_id,
-	formatDateTime(max(timestamp), '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS last_seen,
-	organization_id,
-	project_id,
-	principal_urn,
-	argMax(principal_type, timestamp) AS principal_type,
-	argMax(user_id, timestamp) AS user_id,
-	argMax(user_email, timestamp) AS user_email,
-	argMax(operation, timestamp) AS operation,
-	outcome,
-	argMax(reason, timestamp) AS reason,
-	scope,
-	resource_kind,
-	resource_id,
-	argMax(role_slugs, timestamp) AS role_slugs,
-	argMax(evaluated_grant_count, timestamp) AS evaluated_grant_count,
-	max(length(matched_grants.scope)) AS matched_grant_count,
-	count(*) AS challenge_count,
-	arrayMap(x -> toString(x), groupArray(id)) AS challenge_ids,
-	formatDateTime(min(timestamp), '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS first_seen
-FROM authz_challenges
-WHERE ` + where + `
-GROUP BY organization_id, project_id, principal_urn, scope, outcome, resource_kind, resource_id
-ORDER BY max(timestamp) DESC`
+	sb := sq.Select(challengeBucketColumns...).
+		From("authz_challenges").
+		GroupBy(challengeBucketGroupBy).
+		OrderBy("max(timestamp) DESC")
+	sb = challengeWhere(sb, f)
+	sb = challengePagination(sb, f)
 
-	if !f.SkipPagination {
-		query += fmt.Sprintf(" LIMIT %d OFFSET %d", f.Limit, f.Offset)
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build list challenge buckets query: %w", err)
 	}
 
 	rows, err := q.conn.Query(ctx, query, args...)
@@ -439,13 +439,18 @@ ORDER BY max(timestamp) DESC`
 
 // CountChallengeBuckets returns the total number of dimension groups for pagination.
 func (q *Queries) CountChallengeBuckets(ctx context.Context, f ChallengeListFilters) (uint64, error) {
-	where, args := challengeWhereClause(f)
-	query := `SELECT count(*) FROM (
-	SELECT 1
-	FROM authz_challenges
-	WHERE ` + where + `
-	GROUP BY organization_id, project_id, principal_urn, scope, outcome, resource_kind, resource_id
-)`
+	inner := sq.Select("1").
+		From("authz_challenges").
+		GroupBy(challengeBucketGroupBy)
+	inner = challengeWhere(inner, f)
+
+	innerQuery, args, err := inner.ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("build count challenge buckets query: %w", err)
+	}
+
+	// Wrap in outer SELECT count(*) — squirrel doesn't natively support subquery counts.
+	query := "SELECT count(*) FROM (" + innerQuery + ")"
 
 	rows, err := q.conn.Query(ctx, query, args...)
 	if err != nil {
