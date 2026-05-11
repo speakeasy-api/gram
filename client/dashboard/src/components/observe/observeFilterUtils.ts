@@ -53,7 +53,7 @@ export function buildLogFilters(
   for (const [path, values] of byPath) {
     filters.push({
       path,
-      operator: values.length > 1 ? Operator.In : Operator.Contains,
+      operator: Operator.In,
       values,
     });
   }
