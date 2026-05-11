@@ -305,7 +305,7 @@ func (f *FlyRuntimeBackend) ensureExisting(
 		coldStart = true
 	}
 
-	target := flyRuntimeTarget{URL: appURL, IP: appIP}
+	target := flyRuntimeTarget{URL: appURL, IP: appIP, MachineID: machine.ID}
 	if err := f.tracedWaitHealth(ctx, target, coldStart); err != nil {
 		return RuntimeBackendEnsureResult{}, fmt.Errorf("wait for assistant fly runtime health: %w", err)
 	}
@@ -587,7 +587,7 @@ func (f *FlyRuntimeBackend) maybeRecycleImage(
 		return nil, nil
 	}
 
-	target := flyRuntimeTarget{URL: appURL, IP: appIP}
+	target := flyRuntimeTarget{URL: appURL, IP: appIP, MachineID: machine.ID}
 	if machine.State == fly.MachineStateStarted {
 		state, stateErr := f.runtimeState(ctx, target)
 		// /state probe success + idle_seconds==0 means a turn is in flight
@@ -1004,14 +1004,17 @@ func (f *FlyRuntimeBackend) machineConfig(runtime assistantRuntimeRecord) *fly.M
 // calls can bypass public DNS — a freshly created app's A record can take
 // 30-60s to propagate, but the shared IP is routable the moment Fly's proxy
 // sees the allocation. Dial the IP directly, keep the hostname on the URL so
-// SNI + wildcard cert verification still pass.
+// SNI + wildcard cert verification still pass. MachineID pins the Fly proxy
+// to this thread's VM via fly-force-instance-id so siblings sharing the
+// per-assistant app can't intercept the request.
 type flyRuntimeTarget struct {
-	URL string
-	IP  string
+	URL       string
+	IP        string
+	MachineID string
 }
 
 func targetFromMetadata(md flyRuntimeMetadata) flyRuntimeTarget {
-	return flyRuntimeTarget{URL: md.AppURL, IP: md.AppIP}
+	return flyRuntimeTarget{URL: md.AppURL, IP: md.AppIP, MachineID: md.MachineID}
 }
 
 func (f *FlyRuntimeBackend) waitForRuntimeHealth(ctx context.Context, target flyRuntimeTarget) error {
@@ -1079,6 +1082,14 @@ func (f *FlyRuntimeBackend) runtimeRequest(ctx context.Context, target flyRuntim
 	}
 	if request.IdempotencyKey != "" {
 		req.Header.Set("X-Idempotency-Key", request.IdempotencyKey)
+	}
+	if target.MachineID != "" {
+		// Pin the request to this thread's VM. With many machines on the
+		// per-assistant app, the proxy would otherwise round-robin and let
+		// /configure, /turn, /state hit a sibling — cross-thread leak that
+		// the runner cannot recover from (configure returns 409, turn
+		// enqueues onto the wrong runtime).
+		req.Header.Set("Fly-Force-Instance-Id", target.MachineID)
 	}
 
 	client := f.clientForTarget(target)

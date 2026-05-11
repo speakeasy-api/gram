@@ -842,6 +842,67 @@ func TestFlyRuntimeBackendEnsureRecyclesWhenStateProbeErrors(t *testing.T) {
 	require.True(t, result.ColdStart)
 }
 
+func TestFlyRuntimeBackendPinsRequestsToOwningMachine(t *testing.T) {
+	t.Parallel()
+
+	// With one app shared across an assistant's threads, the Fly proxy round
+	// robins to any active machine unless the request explicitly pins to
+	// one. Configure and RunTurn would otherwise land on a sibling, returning
+	// 409 (configure) or — worse — enqueueing a turn onto the wrong thread's
+	// runtime.
+	var (
+		configureHeader string
+		turnHeader      string
+		stateHeader     string
+	)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("/state", func(w http.ResponseWriter, r *http.Request) {
+		stateHeader = r.Header.Get("Fly-Force-Instance-Id")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(runnerStateResponse{Configured: true})
+	})
+	mux.HandleFunc("/configure", func(w http.ResponseWriter, r *http.Request) {
+		configureHeader = r.Header.Get("Fly-Force-Instance-Id")
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("/turn", func(w http.ResponseWriter, r *http.Request) {
+		turnHeader = r.Header.Get("Fly-Force-Instance-Id")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"finish_reason":"accepted","final_text":""}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	backend, _, _ := newTestFlyRuntimeBackend(t, srv)
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:   "gram-asst-shared",
+		AppID:     "app-1",
+		AppURL:    srv.URL,
+		MachineID: "machine-thread-A",
+	})
+	require.NoError(t, err)
+
+	rec := assistantRuntimeRecord{
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	}
+
+	require.NoError(t, backend.Configure(context.Background(), rec, runtimeStartupConfig{}))
+	require.Equal(t, "machine-thread-A", configureHeader, "configure must pin to the owning machine")
+
+	require.NoError(t, backend.RunTurn(context.Background(), rec, "idem-1", "tok", "hi"))
+	require.Equal(t, "machine-thread-A", turnHeader, "run turn must pin to the owning machine")
+
+	_, err = backend.Status(context.Background(), rec)
+	require.NoError(t, err)
+	require.Equal(t, "machine-thread-A", stateHeader, "status must pin to the owning machine")
+}
+
 func TestFlyRuntimeBackendServerURLRejectsLoopback(t *testing.T) {
 	t.Parallel()
 
