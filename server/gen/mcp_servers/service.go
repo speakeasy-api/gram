@@ -20,7 +20,7 @@ import (
 type Service interface {
 	// Create a new MCP server
 	CreateMcpServer(context.Context, *CreateMcpServerPayload) (res *types.McpServer, err error)
-	// Get an MCP server by ID
+	// Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
 	GetMcpServer(context.Context, *GetMcpServerPayload) (res *types.McpServer, err error)
 	// List MCP servers for a project. Accepts optional remote_mcp_server_id or
 	// toolset_id filters to scope the result to a single backend; at most one
@@ -95,8 +95,10 @@ type DeleteMcpServerPayload struct {
 // GetMcpServerPayload is the payload type of the mcpServers service
 // getMcpServer method.
 type GetMcpServerPayload struct {
-	// The ID of the MCP server
-	ID               string
+	// The ID of the MCP server. Mutually exclusive with slug.
+	ID *string
+	// The slug of the MCP server. Mutually exclusive with id.
+	Slug             *string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

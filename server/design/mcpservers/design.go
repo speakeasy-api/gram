@@ -41,13 +41,13 @@ var _ = Service("mcpServers", func() {
 	})
 
 	Method("getMcpServer", func() {
-		Description("Get an MCP server by ID")
+		Description("Get an MCP server by ID or slug. Exactly one of id or slug must be provided.")
 
 		Payload(func() {
-			Attribute("id", String, "The ID of the MCP server", func() {
+			Attribute("id", String, "The ID of the MCP server. Mutually exclusive with slug.", func() {
 				Format(FormatUUID)
 			})
-			Required("id")
+			Attribute("slug", String, "The slug of the MCP server. Mutually exclusive with id.")
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -58,6 +58,7 @@ var _ = Service("mcpServers", func() {
 		HTTP(func() {
 			GET("/rpc/mcpServers.get")
 			Param("id")
+			Param("slug")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()

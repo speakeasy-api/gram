@@ -193,15 +193,34 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 		return nil, err
 	}
 
-	serverID, err := uuid.Parse(payload.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id").Log(ctx, s.logger)
+	idProvided := payload.ID != nil && *payload.ID != ""
+	slugProvided := payload.Slug != nil && *payload.Slug != ""
+	if !idProvided && !slugProvided {
+		return nil, oops.E(oops.CodeBadRequest, nil, "id or slug is required").Log(ctx, s.logger)
+	}
+	if idProvided && slugProvided {
+		return nil, oops.E(oops.CodeBadRequest, nil, "id and slug are mutually exclusive").Log(ctx, s.logger)
 	}
 
-	server, err := repo.New(s.db).GetMCPServerByID(ctx, repo.GetMCPServerByIDParams{
-		ID:        serverID,
-		ProjectID: *authCtx.ProjectID,
-	})
+	r := repo.New(s.db)
+
+	var server repo.McpServer
+	var err error
+	if idProvided {
+		serverID, parseErr := uuid.Parse(*payload.ID)
+		if parseErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid mcp server id").Log(ctx, s.logger)
+		}
+		server, err = r.GetMCPServerByID(ctx, repo.GetMCPServerByIDParams{
+			ID:        serverID,
+			ProjectID: *authCtx.ProjectID,
+		})
+	} else {
+		server, err = r.GetMCPServerBySlug(ctx, repo.GetMCPServerBySlugParams{
+			Slug:      conv.ToPGText(*payload.Slug),
+			ProjectID: *authCtx.ProjectID,
+		})
+	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)

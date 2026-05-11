@@ -11263,17 +11263,23 @@ paths:
         name: DeleteMcpServer
   /rpc/mcpServers.get:
     get:
-      description: Get an MCP server by ID
+      description: Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
       operationId: getMcpServer
       parameters:
         - allowEmptyValue: true
-          description: The ID of the MCP server
+          description: The ID of the MCP server. Mutually exclusive with slug.
           in: query
           name: id
-          required: true
           schema:
-            description: The ID of the MCP server
+            description: The ID of the MCP server. Mutually exclusive with slug.
             format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The slug of the MCP server. Mutually exclusive with id.
+          in: query
+          name: slug
+          schema:
+            description: The slug of the MCP server. Mutually exclusive with id.
             type: string
         - allowEmptyValue: true
           description: Session header

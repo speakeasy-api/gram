@@ -30,6 +30,11 @@ SELECT *
 FROM mcp_servers
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
+-- name: GetMCPServerBySlug :one
+SELECT *
+FROM mcp_servers
+WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
+
 -- name: ListMCPServersByProjectID :many
 SELECT *
 FROM mcp_servers

@@ -55,10 +55,10 @@ export class McpServers extends ClientSDK {
    * getMcpServer mcpServers
    *
    * @remarks
-   * Get an MCP server by ID
+   * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
    */
   async get(
-    request: operations.GetMcpServerRequest,
+    request?: operations.GetMcpServerRequest | undefined,
     security?: operations.GetMcpServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.McpServer> {
