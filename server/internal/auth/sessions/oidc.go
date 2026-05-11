@@ -46,8 +46,11 @@ func (s *Manager) ExchangeCodeForTokens(ctx context.Context, code, redirectURI s
 // exchangeCodeViaSDK uses the WorkOS user-management SDK to exchange the code.
 func (s *Manager) exchangeCodeViaSDK(ctx context.Context, code string) (string, error) {
 	resp, err := s.umClient.AuthenticateWithCode(ctx, usermanagement.AuthenticateWithCodeOpts{
-		ClientID: s.idpClientID,
-		Code:     code,
+		ClientID:     s.idpClientID,
+		Code:         code,
+		CodeVerifier: "",
+		IPAddress:    "",
+		UserAgent:    "",
 	})
 	if err != nil {
 		return "", fmt.Errorf("workos authenticate with code: %w", err)
