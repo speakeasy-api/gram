@@ -477,7 +477,7 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPol
 	if c.String("environment") == "local" {
 		opts := workosClientOpts(c)
 		if opts.Endpoint != "" {
-			logger.InfoContext(ctx, "using dev-idp mock-workos as access role provider", slog.String("endpoint", opts.Endpoint))
+			logger.InfoContext(ctx, "using dev-idp mock-workos as access role provider")
 			return workos.NewClient(guardianPolicy, "dev-idp-mock", opts), nil
 		}
 		if apiKey == "" || apiKey == "unset" {
