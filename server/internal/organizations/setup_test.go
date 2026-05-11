@@ -89,9 +89,10 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	// workos_id is set by InitAuthContext via UpsertOrganizationMetadata (from the mock IDP's workos_id).
-
-	err = userrepo.New(conn).SetUserWorkosID(ctx, userrepo.SetUserWorkosIDParams{
+	// UpsertUserFromIDP (called inside InitAuthContext) now backfills workos_id
+	// with the mock IDP's user ID. Override it to the test-specific WorkOS user
+	// ID so that mock expectations on GetOrgMembership match.
+	err = userrepo.New(conn).OverwriteUserWorkosID(ctx, userrepo.OverwriteUserWorkosIDParams{
 		ID:       authCtx.UserID,
 		WorkosID: conv.ToPGText(testAuthUserWorkOSID),
 	})
@@ -135,9 +136,10 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	// workos_id is set by InitAuthContext via UpsertOrganizationMetadata (from the mock IDP's workos_id).
-
-	err = userrepo.New(conn).SetUserWorkosID(ctx, userrepo.SetUserWorkosIDParams{
+	// UpsertUserFromIDP (called inside InitAuthContext) now backfills workos_id
+	// with the mock IDP's user ID. Override it to the test-specific WorkOS user
+	// ID so that mock expectations on GetOrgMembership match.
+	err = userrepo.New(conn).OverwriteUserWorkosID(ctx, userrepo.OverwriteUserWorkosIDParams{
 		ID:       authCtx.UserID,
 		WorkosID: conv.ToPGText(testAuthUserWorkOSID),
 	})
