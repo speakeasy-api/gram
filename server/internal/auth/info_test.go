@@ -38,6 +38,7 @@ func TestService_Info(t *testing.T) {
 			SessionID:            "test-session-id",
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
+			WorkOSSessionID:      "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -107,6 +108,7 @@ func TestService_Info(t *testing.T) {
 			SessionID:            "test-session-id",
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID, // First org is active
+			WorkOSSessionID:      "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -211,6 +213,7 @@ func TestService_Info(t *testing.T) {
 			SessionID:            "test-session-id",
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
+			WorkOSSessionID:      "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -265,6 +268,7 @@ func TestService_Info_ProjectFiltering(t *testing.T) {
 			SessionID:            "filter-test-session",
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
+			WorkOSSessionID:      "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -395,6 +399,7 @@ func TestService_Info_AdminVisitingCustomerOrgDoesNotUpsertRelationship(t *testi
 		SessionID:            "admin-customer-session-id",
 		UserID:               userInfo.UserID,
 		ActiveOrganizationID: customerOrgID,
+		WorkOSSessionID:      "",
 	}
 	err = instance.sessionManager.StoreSession(ctx, session)
 	require.NoError(t, err)

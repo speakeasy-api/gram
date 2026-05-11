@@ -338,6 +338,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		SessionID:            *authCtx.SessionID,
 		ActiveOrganizationID: authCtx.ActiveOrganizationID,
 		UserID:               authCtx.UserID,
+		WorkOSSessionID:      "",
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating auth session").Log(ctx, s.logger)
 	}
@@ -363,6 +364,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 		SessionID:            *authCtx.SessionID,
 		ActiveOrganizationID: authCtx.ActiveOrganizationID,
 		UserID:               authCtx.UserID,
+		WorkOSSessionID:      "",
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error clearing session").Log(ctx, s.logger)
 	}
@@ -508,6 +510,7 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		SessionID:            *authCtx.SessionID,
 		UserID:               authCtx.UserID,
 		ActiveOrganizationID: org.ID,
+		WorkOSSessionID:      "",
 	}
 
 	if err := s.sessions.StoreSession(ctx, session); err != nil {

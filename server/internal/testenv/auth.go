@@ -108,6 +108,7 @@ func InitAuthContext(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sess
 		SessionID:            sessionID,
 		UserID:               userID,
 		ActiveOrganizationID: activeOrg.ID,
+		WorkOSSessionID:      "",
 	}
 	err = sessionManager.StoreSession(ctx, session)
 	require.NoError(t, err)
