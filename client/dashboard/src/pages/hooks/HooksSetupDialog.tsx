@@ -9,7 +9,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
-import { Plus, Sparkles } from "lucide-react";
+import { ExternalLink, Plus, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { HookSourceIcon } from "./HookSourceIcon";
