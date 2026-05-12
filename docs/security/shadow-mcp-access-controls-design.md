@@ -9,7 +9,7 @@
 
 Make Shadow MCP access production-ready by expanding existing Risk Policy and Roles systems instead of creating a separate control plane.
 
-Risk Policy decides whether Shadow MCP usage is blocked or flagged. Roles and `mcp:connect` grants decide whether a role may use a managed Shadow MCP server when a blocking policy applies. Admin changes are audited.
+Risk Policy decides whether Shadow MCP usage is blocked or flagged. Roles and dedicated `shadow_mcp:connect` grants decide whether a role may use a managed Shadow MCP server when a blocking policy applies. Admin changes are audited.
 
 ## Non-goals
 
@@ -114,20 +114,22 @@ Use a partial uniqueness guard for active rules by organization, match breadth, 
 
 Do not add a separate role-to-rule join table for v1.
 
-Use existing `principal_grants` rows:
+Use existing `principal_grants` rows, but keep Shadow MCP in its own scope/resource family:
 
-- `scope = 'mcp:connect'`
+- `scope = 'shadow_mcp:connect'`
 - `principal_urn = role principal`
-- selector `resource_kind = 'mcp'`
+- selector `resource_kind = 'shadow_mcp'`
 - selector `resource_id = <shadow_mcp_access_rules.id>`
 
-At runtime, a matching allowed Access Rule becomes the MCP resource checked through existing RBAC:
+At runtime, a matching allowed Access Rule becomes the Shadow MCP resource checked through RBAC:
 
 ```text
-authz.MCPCheck(authz.ScopeMCPConnect, access_rule.id, "")
+authz.ShadowMCPConnectCheck(access_rule.id, project_id)
 ```
 
-If we later need project-specific Shadow MCP grants, use the existing MCP `project_id` selector dimension rather than a new permission model.
+Do not model this with hosted MCP `mcp:connect`. Current built-in roles can carry broad hosted-MCP grants, and those grants must not satisfy Shadow MCP approval checks. `shadow_mcp:connect` should not be seeded into built-in admin/member role grants by default; access comes from explicit rule approval or manual Access Rule assignment.
+
+If we later need project-specific Shadow MCP grants, keep the `shadow_mcp:connect` scope and use a `project_id` selector dimension under the `shadow_mcp` resource kind rather than falling back to hosted MCP selectors.
 
 ## Management API
 
@@ -164,7 +166,7 @@ Proposed route group:
 - Auth: require `org:admin`.
 - Inputs: request id, match breadth, optional edited match value, role ids, admin note.
 - Creates an `allowed` Access Rule when needed.
-- Adds `mcp:connect` grants for selected roles to the allowed rule.
+- Adds `shadow_mcp:connect` grants for selected roles to the allowed rule.
 - Marks request `approved`.
 - Runs in one transaction.
 
@@ -216,7 +218,7 @@ When a Shadow MCP connection/tool call is detected:
 4. Match active denied Access Rules first.
 5. If any deny rule matches, block.
 6. Match active allowed Access Rules.
-7. For each matching allowed rule, require `mcp:connect` on that rule id.
+7. For each matching allowed rule, require `shadow_mcp:connect` on that rule id.
 8. If the user has a matching role grant, allow.
 9. Otherwise block with the configured Risk Policy message plus request-access guidance when enabled.
 
@@ -253,7 +255,7 @@ Production frontend should:
 - Make deny-rule creation optional when denying a request.
 - Default approval role selection from requester context when available.
 - Show role impact, such as member counts.
-- Integrate allowed Shadow MCP rules into the existing MCP permission picker as an external/shadow server section.
+- Integrate allowed Shadow MCP rules into the existing permission picker as an external/shadow server section backed by `shadow_mcp:connect`, not hosted MCP `mcp:connect`.
 - Continue to separate hosted Gram MCP servers from external/shadow entries.
 
 ## Audit logging
@@ -302,7 +304,7 @@ Backend:
 - Approve creates or reuses allowed rule and grants selected roles.
 - Deny marks the request denied and only creates a deny rule when requested.
 - Deny rules override allowed rules.
-- Role without `mcp:connect` to a matching allow rule remains blocked.
+- Role without `shadow_mcp:connect` to a matching allow rule remains blocked.
 - Soft-deleted rules do not enforce.
 - Mutations require `org:admin`.
 - Audit events are emitted for every mutation.
