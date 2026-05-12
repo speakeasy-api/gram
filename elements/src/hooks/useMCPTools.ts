@@ -12,7 +12,8 @@ type MCPToolsResult = Awaited<
 
 interface NormalizedServer {
   url: string;
-  name: string;
+  /** Namespace prefix for this server's tools; only consulted when more than one server is configured. */
+  name: string | undefined;
   environment: string | undefined;
 }
 
@@ -29,6 +30,7 @@ export function useMCPTools({
   mcps: MCPServerEntry[] | undefined;
   environment: Record<string, unknown>;
   toolsToInclude?: ToolsFilter;
+  /** Fallback `Gram-Environment` for the legacy single-`mcp` path only; ignored when `mcps` is set. */
   gramEnvironment?: string;
 }): UseQueryResult<MCPToolsResult, Error> & {
   mcpHeaders: Record<string, string>;
@@ -45,7 +47,7 @@ export function useMCPTools({
     ([k, v]) => `${k}:${v}`,
   );
   const serversQueryKey = servers.map(
-    (s) => `${s.url}|${s.name}|${s.environment ?? ""}`,
+    (s) => `${s.url}|${s.name ?? ""}|${s.environment ?? ""}`,
   );
 
   // Each MCP transport stores a direct reference to its headers object and
@@ -76,7 +78,7 @@ export function useMCPTools({
   const mcpHeaders = headersProxyRef.current;
 
   const queryResult = useQuery({
-    queryKey: ["mcpTools", ...serversQueryKey, ...envQueryKey, ...authQueryKey],
+    queryKey: ["mcpTools", serversQueryKey, envQueryKey, authQueryKey],
     queryFn: async () => {
       assert(!auth.isLoading, "No auth found");
       assert(servers.length > 0, "No MCP server configured");
@@ -109,8 +111,11 @@ export function useMCPTools({
       const merged: MCPToolsResult = {};
       const namespaced = servers.length > 1;
       for (const { server, tools } of perServerTools) {
+        const prefix = namespaced
+          ? (server.name ?? deriveNameFromUrl(server.url))
+          : null;
         for (const [toolName, tool] of Object.entries(tools)) {
-          const key = namespaced ? `${server.name}__${toolName}` : toolName;
+          const key = prefix ? `${prefix}__${toolName}` : toolName;
           merged[key] = tool;
         }
       }
@@ -153,16 +158,26 @@ function normalizeServers(
   fallbackEnv: string | undefined,
 ): NormalizedServer[] {
   if (mcps && mcps.length > 0) {
+    if (mcp) warnMcpAndMcpsBothSet();
     return mcps.map((entry) => ({
       url: entry.url,
-      name: entry.name ?? deriveNameFromUrl(entry.url),
+      name: entry.name,
       environment: entry.environment,
     }));
   }
   if (mcp) {
-    return [{ url: mcp, name: "Unknown", environment: fallbackEnv }];
+    return [{ url: mcp, name: undefined, environment: fallbackEnv }];
   }
   return [];
+}
+
+let warnedAboutBoth = false;
+function warnMcpAndMcpsBothSet() {
+  if (warnedAboutBoth) return;
+  warnedAboutBoth = true;
+  console.warn(
+    "[gram-elements] Both `mcp` and `mcps` are set on ElementsConfig; `mcps` takes precedence and `mcp` is ignored.",
+  );
 }
 
 function deriveNameFromUrl(url: string): string {
