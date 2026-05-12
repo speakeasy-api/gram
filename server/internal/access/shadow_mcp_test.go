@@ -264,6 +264,35 @@ func TestService_ShadowMCPAccessRule_ManualLifecycle(t *testing.T) {
 	require.Empty(t, result.Rules)
 }
 
+func TestService_CreateShadowMCPAccessRule_NormalizesMatchValue(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{}, nil).Once()
+
+	rule, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
+		Disposition:  shadowMCPRuleDenied,
+		MatchBreadth: "url_host",
+		MatchValue:   "HTTPS://Example.COM:443/path",
+		DisplayName:  "Example Shadow MCP",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "example.com", rule.MatchValue)
+
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{}, nil).Once()
+	_, err = ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
+		Disposition:  shadowMCPRuleDenied,
+		MatchBreadth: "url_host",
+		MatchValue:   "example.com",
+		DisplayName:  "Duplicate Example Shadow MCP",
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+}
+
 func TestService_CreateShadowMCPAccessRule_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 

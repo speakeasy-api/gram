@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"strings"
 	"time"
 
@@ -146,7 +148,8 @@ func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid request id").Log(ctx, s.logger)
 	}
-	if err := validateShadowMCPMatch(payload.MatchBreadth, payload.MatchValue); err != nil {
+	matchValue, err := normalizeShadowMCPMatchValue(payload.MatchBreadth, payload.MatchValue)
+	if err != nil {
 		return nil, err
 	}
 
@@ -176,7 +179,7 @@ func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *
 	rule, err := s.getOrCreateShadowMCPAccessRule(ctx, queries, ac, shadowMCPAccessRuleInput{
 		Disposition:            shadowMCPRuleAllowed,
 		MatchBreadth:           payload.MatchBreadth,
-		MatchValue:             payload.MatchValue,
+		MatchValue:             matchValue,
 		DisplayName:            payload.DisplayName,
 		ObservedFullURL:        coalesceString(payload.ObservedFullURL, conv.FromPGText[string](request.ObservedFullUrl)),
 		ObservedURLHost:        coalesceString(payload.ObservedURLHost, conv.FromPGText[string](request.ObservedUrlHost)),
@@ -229,7 +232,7 @@ func (s *Service) DenyShadowMCPApprovalRequest(ctx context.Context, payload *gen
 		if payload.MatchBreadth == nil || payload.MatchValue == nil || payload.DisplayName == nil {
 			return nil, oops.E(oops.CodeBadRequest, nil, "match_breadth, match_value, and display_name are required when creating a deny rule").Log(ctx, s.logger)
 		}
-		if err := validateShadowMCPMatch(*payload.MatchBreadth, *payload.MatchValue); err != nil {
+		if _, err := normalizeShadowMCPMatchValue(*payload.MatchBreadth, *payload.MatchValue); err != nil {
 			return nil, err
 		}
 	}
@@ -254,10 +257,14 @@ func (s *Service) DenyShadowMCPApprovalRequest(ctx context.Context, payload *gen
 
 	var rule *repo.ShadowMcpAccessRule
 	if payload.CreateDenyRule {
+		matchValue, err := normalizeShadowMCPMatchValue(*payload.MatchBreadth, *payload.MatchValue)
+		if err != nil {
+			return nil, err
+		}
 		created, err := s.getOrCreateShadowMCPAccessRule(ctx, queries, ac, shadowMCPAccessRuleInput{
 			Disposition:            shadowMCPRuleDenied,
 			MatchBreadth:           *payload.MatchBreadth,
-			MatchValue:             *payload.MatchValue,
+			MatchValue:             matchValue,
 			DisplayName:            *payload.DisplayName,
 			ObservedFullURL:        coalesceString(payload.ObservedFullURL, conv.FromPGText[string](request.ObservedFullUrl)),
 			ObservedURLHost:        coalesceString(payload.ObservedURLHost, conv.FromPGText[string](request.ObservedUrlHost)),
@@ -347,7 +354,8 @@ func (s *Service) CreateShadowMCPAccessRule(ctx context.Context, payload *gen.Cr
 	if err != nil {
 		return nil, err
 	}
-	if err := validateShadowMCPMatch(payload.MatchBreadth, payload.MatchValue); err != nil {
+	matchValue, err := normalizeShadowMCPMatchValue(payload.MatchBreadth, payload.MatchValue)
+	if err != nil {
 		return nil, err
 	}
 	if err := validateShadowMCPDisposition(payload.Disposition); err != nil {
@@ -369,7 +377,7 @@ func (s *Service) CreateShadowMCPAccessRule(ctx context.Context, payload *gen.Cr
 		OrganizationID:         ac.ActiveOrganizationID,
 		Disposition:            payload.Disposition,
 		MatchBreadth:           payload.MatchBreadth,
-		MatchValue:             payload.MatchValue,
+		MatchValue:             matchValue,
 		DisplayName:            payload.DisplayName,
 		ObservedFullUrl:        conv.PtrToPGTextEmpty(payload.ObservedFullURL),
 		ObservedUrlHost:        conv.PtrToPGTextEmpty(payload.ObservedURLHost),
@@ -401,7 +409,8 @@ func (s *Service) UpdateShadowMCPAccessRule(ctx context.Context, payload *gen.Up
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid rule id").Log(ctx, s.logger)
 	}
-	if err := validateShadowMCPMatch(payload.MatchBreadth, payload.MatchValue); err != nil {
+	matchValue, err := normalizeShadowMCPMatchValue(payload.MatchBreadth, payload.MatchValue)
+	if err != nil {
 		return nil, err
 	}
 	if err := validateShadowMCPDisposition(payload.Disposition); err != nil {
@@ -422,7 +431,7 @@ func (s *Service) UpdateShadowMCPAccessRule(ctx context.Context, payload *gen.Up
 	rule, err := queries.UpdateShadowMCPAccessRule(ctx, repo.UpdateShadowMCPAccessRuleParams{
 		Disposition:            payload.Disposition,
 		MatchBreadth:           payload.MatchBreadth,
-		MatchValue:             payload.MatchValue,
+		MatchValue:             matchValue,
 		DisplayName:            payload.DisplayName,
 		ObservedFullUrl:        conv.PtrToPGTextEmpty(payload.ObservedFullURL),
 		ObservedUrlHost:        conv.PtrToPGTextEmpty(payload.ObservedURLHost),
@@ -769,6 +778,49 @@ func validateShadowMCPMatch(matchBreadth string, matchValue string) error {
 	default:
 		return oops.E(oops.CodeBadRequest, nil, "invalid match_breadth")
 	}
+}
+
+func normalizeShadowMCPMatchValue(matchBreadth string, matchValue string) (string, error) {
+	if err := validateShadowMCPMatch(matchBreadth, matchValue); err != nil {
+		return "", err
+	}
+	value := strings.TrimSpace(matchValue)
+	switch matchBreadth {
+	case "full_url":
+		u, err := url.Parse(value)
+		if err != nil || u.Scheme == "" || u.Host == "" {
+			return "", oops.E(oops.CodeBadRequest, err, "match_value must be a full URL")
+		}
+		u.Scheme = strings.ToLower(u.Scheme)
+		u.Host = normalizeShadowMCPHost(u.Host)
+		u.Fragment = ""
+		return u.String(), nil
+	case "url_host":
+		if strings.Contains(value, "://") {
+			u, err := url.Parse(value)
+			if err != nil || u.Host == "" {
+				return "", oops.E(oops.CodeBadRequest, err, "match_value must include a URL host")
+			}
+			value = u.Host
+		}
+		return normalizeShadowMCPHost(value), nil
+	case "server_identity":
+		return strings.ToLower(value), nil
+	default:
+		return "", oops.E(oops.CodeBadRequest, nil, "invalid match_breadth")
+	}
+}
+
+func normalizeShadowMCPHost(host string) string {
+	host = strings.ToLower(strings.TrimSpace(host))
+	name, port, err := net.SplitHostPort(host)
+	if err != nil {
+		return host
+	}
+	if port == "80" || port == "443" {
+		return name
+	}
+	return net.JoinHostPort(name, port)
 }
 
 func validateShadowMCPDisposition(disposition string) error {
