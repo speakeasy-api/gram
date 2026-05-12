@@ -20,6 +20,14 @@ var ProductFeaturesResult = ResultType("application/vnd.gram.product-features", 
 	})
 })
 
+// SessionCaptureExclusionsResult lists the Gram user IDs whose agent sessions
+// must be excluded from session capture even when session_capture is enabled.
+var SessionCaptureExclusionsResult = Type("SessionCaptureExclusionsResult", func() {
+	Description("List of users excluded from session capture for the active organization.")
+	Attribute("user_ids", ArrayOf(String), "Gram user IDs (matching access.listMembers IDs) excluded from session capture.")
+	Required("user_ids")
+})
+
 var _ = Service("features", func() {
 	Description("Manage product level feature controls.")
 
@@ -67,5 +75,47 @@ var _ = Service("features", func() {
 
 		Meta("openapi:operationId", "setProductFeature")
 		Meta("openapi:extension:x-speakeasy-name-override", "set")
+	})
+
+	Method("listSessionCaptureExclusions", func() {
+		Description("List the Gram user IDs excluded from session capture for the active organization.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(SessionCaptureExclusionsResult)
+
+		HTTP(func() {
+			GET("/rpc/productFeatures.listSessionCaptureExclusions")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listSessionCaptureExclusions")
+		Meta("openapi:extension:x-speakeasy-name-override", "listSessionCaptureExclusions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SessionCaptureExclusions"}`)
+	})
+
+	Method("setSessionCaptureExclusions", func() {
+		Description("Replace the set of users excluded from session capture for the active organization with the provided list of Gram user IDs.")
+
+		Payload(func() {
+			Attribute("user_ids", ArrayOf(String), "Gram user IDs to exclude. The provided list replaces any existing exclusions for the organization.")
+			Required("user_ids")
+			security.SessionPayload()
+		})
+
+		Result(SessionCaptureExclusionsResult)
+
+		HTTP(func() {
+			POST("/rpc/productFeatures.setSessionCaptureExclusions")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setSessionCaptureExclusions")
+		Meta("openapi:extension:x-speakeasy-name-override", "setSessionCaptureExclusions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetSessionCaptureExclusions"}`)
 	})
 })

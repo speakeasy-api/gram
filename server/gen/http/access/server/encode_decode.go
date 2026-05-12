@@ -3417,12 +3417,13 @@ func marshalAccessScopeDefinitionToScopeDefinitionResponseBody(v *access.ScopeDe
 // *AccessMemberResponseBody from a value of type *access.AccessMember.
 func marshalAccessAccessMemberToAccessMemberResponseBody(v *access.AccessMember) *AccessMemberResponseBody {
 	res := &AccessMemberResponseBody{
-		ID:       v.ID,
-		Name:     v.Name,
-		Email:    v.Email,
-		PhotoURL: v.PhotoURL,
-		RoleID:   v.RoleID,
-		JoinedAt: v.JoinedAt,
+		ID:              v.ID,
+		Name:            v.Name,
+		Email:           v.Email,
+		PhotoURL:        v.PhotoURL,
+		RoleID:          v.RoleID,
+		JoinedAt:        v.JoinedAt,
+		LoggingExcluded: v.LoggingExcluded,
 	}
 
 	return res

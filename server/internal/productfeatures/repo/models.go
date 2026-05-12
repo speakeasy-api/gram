@@ -17,3 +17,13 @@ type OrganizationFeature struct {
 	DeletedAt      pgtype.Timestamptz
 	Deleted        bool
 }
+
+type SessionCaptureExclusion struct {
+	ID             int64
+	OrganizationID string
+	UserID         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}

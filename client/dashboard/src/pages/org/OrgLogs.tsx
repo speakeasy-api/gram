@@ -1,14 +1,29 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
 import { FeatureName } from "@gram/client/models/components";
 import { useFeaturesGet } from "@gram/client/react-query/featuresGet";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
+import {
+  invalidateAllMembers,
+  useMembers,
+} from "@gram/client/react-query/members";
+import {
+  invalidateAllMembers,
+  useMembers,
+} from "@gram/client/react-query/members";
+import {
+  invalidateAllSessionCaptureExclusions,
+  useSessionCaptureExclusions,
+} from "@gram/client/react-query/sessionCaptureExclusions";
+import { useSetSessionCaptureExclusionsMutation } from "@gram/client/react-query/setSessionCaptureExclusions";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Eye, FileText, Monitor } from "lucide-react";
-import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Eye, FileText, Monitor, UserMinus } from "lucide-react";
+import { useMemo, useState } from "react";
 
 export default function OrgLogs() {
   return (
@@ -26,7 +41,12 @@ export default function OrgLogs() {
 }
 
 export function OrgLogsInner() {
+  const queryClient = useQueryClient();
   const { data: featuresData, isLoading: featuresLoading } = useFeaturesGet();
+  const { data: membersData, isLoading: membersLoading } = useMembers();
+  const { data: exclusionsData, isLoading: exclusionsLoading } =
+    useSessionCaptureExclusions();
+
   const [logsEnabled, setLogsEnabled] = useState<boolean | null>(null);
   const [toolIoLogsEnabled, setToolIoLogsEnabled] = useState<boolean | null>(
     null,
@@ -41,6 +61,35 @@ export function OrgLogsInner() {
     toolIoLogsEnabled ?? featuresData?.toolIoLogsEnabled ?? false;
   const effectiveSessionCaptureEnabled =
     sessionCaptureEnabled ?? featuresData?.sessionCaptureEnabled ?? false;
+
+  const memberOptions = useMemo(
+    () =>
+      [...(membersData?.members ?? [])]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((member) => ({
+          label: member.name
+            ? `${member.name} (${member.email})`
+            : member.email,
+          value: member.id,
+        })),
+    [membersData],
+  );
+
+  const excludedUserIds = exclusionsData?.userIds ?? [];
+
+  const { mutate: setExclusions, status: exclusionsMutationStatus } =
+    useSetSessionCaptureExclusionsMutation({
+      onSuccess: async () => {
+        // Members table renders the "Logging exclusion" badge from the same
+        // shared response, so invalidate it together with the exclusions query.
+        await Promise.all([
+          invalidateAllSessionCaptureExclusions(queryClient),
+          invalidateAllMembers(queryClient),
+        ]);
+      },
+    });
+
+  const isMutatingExclusions = exclusionsMutationStatus === "pending";
 
   const { mutate: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
@@ -200,6 +249,45 @@ export function OrgLogsInner() {
                 />
               </RequireScope>
             )}
+          </Stack>
+
+          <div className="border-border border-t" />
+
+          <Stack gap={2}>
+            <Stack direction="horizontal" align="center" gap={2}>
+              <UserMinus className="text-muted-foreground h-4 w-4" />
+              <Type variant="body" className="font-medium">
+                Excluded Members
+              </Type>
+            </Stack>
+            <Type variant="body" className="text-muted-foreground ml-6 text-sm">
+              Pick team members whose agent sessions should never be captured
+              even while session capture is on for the organization.
+            </Type>
+            <div className="ml-6">
+              <RequireScope scope="org:admin" level="component">
+                <MultiSelect
+                  options={memberOptions}
+                  defaultValue={excludedUserIds}
+                  onValueChange={(userIds) =>
+                    setExclusions({
+                      request: {
+                        setSessionCaptureExclusionsRequestBody: { userIds },
+                      },
+                    })
+                  }
+                  placeholder="No members excluded"
+                  searchable
+                  disabled={
+                    membersLoading ||
+                    exclusionsLoading ||
+                    isMutatingExclusions ||
+                    !effectiveSessionCaptureEnabled
+                  }
+                  className="bg-background"
+                />
+              </RequireScope>
+            </div>
           </Stack>
         </Stack>
       </div>

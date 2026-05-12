@@ -472,3 +472,469 @@ func DecodeSetProductFeatureResponse(decoder func(*http.Response) goahttp.Decode
 		}
 	}
 }
+
+// BuildListSessionCaptureExclusionsRequest instantiates a HTTP request object
+// with method and path set to call the "features" service
+// "listSessionCaptureExclusions" endpoint
+func (c *Client) BuildListSessionCaptureExclusionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListSessionCaptureExclusionsFeaturesPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("features", "listSessionCaptureExclusions", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListSessionCaptureExclusionsRequest returns an encoder for requests
+// sent to the features listSessionCaptureExclusions server.
+func EncodeListSessionCaptureExclusionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*features.ListSessionCaptureExclusionsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("features", "listSessionCaptureExclusions", "*features.ListSessionCaptureExclusionsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListSessionCaptureExclusionsResponse returns a decoder for responses
+// returned by the features listSessionCaptureExclusions endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeListSessionCaptureExclusionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListSessionCaptureExclusionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListSessionCaptureExclusionsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "listSessionCaptureExclusions", err)
+			}
+			err = ValidateListSessionCaptureExclusionsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "listSessionCaptureExclusions", err)
+			}
+			res := NewListSessionCaptureExclusionsSessionCaptureExclusionsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListSessionCaptureExclusionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "listSessionCaptureExclusions", err)
+			}
+			err = ValidateListSessionCaptureExclusionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "listSessionCaptureExclusions", err)
+			}
+			return nil, NewListSessionCaptureExclusionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListSessionCaptureExclusionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "listSessionCaptureExclusions", err)
+			}
+			err = ValidateListSessionCaptureExclusionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "listSessionCaptureExclusions", err)
+			}
+			return nil, NewListSessionCaptureExclusionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListSessionCaptureExclusionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "listSessionCaptureExclusions", err)
+			}
+			err = ValidateListSessionCaptureExclusionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "listSessionCaptureExclusions", err)
+			}
+			return nil, NewListSessionCaptureExclusionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListSessionCaptureExclusionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "listSessionCaptureExclusions", err)
+			}
+			err = ValidateListSessionCaptureExclusionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "listSessionCaptureExclusions", err)
+			}
+			return nil, NewListSessionCaptureExclusionsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListSessionCaptureExclusionsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "listSessionCaptureExclusions", err)
+			}
+			err = ValidateListSessionCaptureExclusionsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "listSessionCaptureExclusions", err)
+			}
+			return nil, NewListSessionCaptureExclusionsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListSessionCaptureExclusionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "listSessionCaptureExclusions", err)
+			}
+			err = ValidateListSessionCaptureExclusionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "listSessionCaptureExclusions", err)
+			}
+			return nil, NewListSessionCaptureExclusionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListSessionCaptureExclusionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "listSessionCaptureExclusions", err)
+			}
+			err = ValidateListSessionCaptureExclusionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "listSessionCaptureExclusions", err)
+			}
+			return nil, NewListSessionCaptureExclusionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListSessionCaptureExclusionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("features", "listSessionCaptureExclusions", err)
+				}
+				err = ValidateListSessionCaptureExclusionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("features", "listSessionCaptureExclusions", err)
+				}
+				return nil, NewListSessionCaptureExclusionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListSessionCaptureExclusionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("features", "listSessionCaptureExclusions", err)
+				}
+				err = ValidateListSessionCaptureExclusionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("features", "listSessionCaptureExclusions", err)
+				}
+				return nil, NewListSessionCaptureExclusionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("features", "listSessionCaptureExclusions", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListSessionCaptureExclusionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "listSessionCaptureExclusions", err)
+			}
+			err = ValidateListSessionCaptureExclusionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "listSessionCaptureExclusions", err)
+			}
+			return nil, NewListSessionCaptureExclusionsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("features", "listSessionCaptureExclusions", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetSessionCaptureExclusionsRequest instantiates a HTTP request object
+// with method and path set to call the "features" service
+// "setSessionCaptureExclusions" endpoint
+func (c *Client) BuildSetSessionCaptureExclusionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetSessionCaptureExclusionsFeaturesPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("features", "setSessionCaptureExclusions", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetSessionCaptureExclusionsRequest returns an encoder for requests
+// sent to the features setSessionCaptureExclusions server.
+func EncodeSetSessionCaptureExclusionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*features.SetSessionCaptureExclusionsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("features", "setSessionCaptureExclusions", "*features.SetSessionCaptureExclusionsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSetSessionCaptureExclusionsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("features", "setSessionCaptureExclusions", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetSessionCaptureExclusionsResponse returns a decoder for responses
+// returned by the features setSessionCaptureExclusions endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSetSessionCaptureExclusionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetSessionCaptureExclusionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetSessionCaptureExclusionsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "setSessionCaptureExclusions", err)
+			}
+			err = ValidateSetSessionCaptureExclusionsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "setSessionCaptureExclusions", err)
+			}
+			res := NewSetSessionCaptureExclusionsSessionCaptureExclusionsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetSessionCaptureExclusionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "setSessionCaptureExclusions", err)
+			}
+			err = ValidateSetSessionCaptureExclusionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "setSessionCaptureExclusions", err)
+			}
+			return nil, NewSetSessionCaptureExclusionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetSessionCaptureExclusionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "setSessionCaptureExclusions", err)
+			}
+			err = ValidateSetSessionCaptureExclusionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "setSessionCaptureExclusions", err)
+			}
+			return nil, NewSetSessionCaptureExclusionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetSessionCaptureExclusionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "setSessionCaptureExclusions", err)
+			}
+			err = ValidateSetSessionCaptureExclusionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "setSessionCaptureExclusions", err)
+			}
+			return nil, NewSetSessionCaptureExclusionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetSessionCaptureExclusionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "setSessionCaptureExclusions", err)
+			}
+			err = ValidateSetSessionCaptureExclusionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "setSessionCaptureExclusions", err)
+			}
+			return nil, NewSetSessionCaptureExclusionsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetSessionCaptureExclusionsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "setSessionCaptureExclusions", err)
+			}
+			err = ValidateSetSessionCaptureExclusionsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "setSessionCaptureExclusions", err)
+			}
+			return nil, NewSetSessionCaptureExclusionsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetSessionCaptureExclusionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "setSessionCaptureExclusions", err)
+			}
+			err = ValidateSetSessionCaptureExclusionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "setSessionCaptureExclusions", err)
+			}
+			return nil, NewSetSessionCaptureExclusionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetSessionCaptureExclusionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "setSessionCaptureExclusions", err)
+			}
+			err = ValidateSetSessionCaptureExclusionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "setSessionCaptureExclusions", err)
+			}
+			return nil, NewSetSessionCaptureExclusionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetSessionCaptureExclusionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("features", "setSessionCaptureExclusions", err)
+				}
+				err = ValidateSetSessionCaptureExclusionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("features", "setSessionCaptureExclusions", err)
+				}
+				return nil, NewSetSessionCaptureExclusionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetSessionCaptureExclusionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("features", "setSessionCaptureExclusions", err)
+				}
+				err = ValidateSetSessionCaptureExclusionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("features", "setSessionCaptureExclusions", err)
+				}
+				return nil, NewSetSessionCaptureExclusionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("features", "setSessionCaptureExclusions", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetSessionCaptureExclusionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "setSessionCaptureExclusions", err)
+			}
+			err = ValidateSetSessionCaptureExclusionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "setSessionCaptureExclusions", err)
+			}
+			return nil, NewSetSessionCaptureExclusionsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("features", "setSessionCaptureExclusions", resp.StatusCode, string(body))
+		}
+	}
+}

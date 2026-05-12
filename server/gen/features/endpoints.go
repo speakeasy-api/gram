@@ -16,8 +16,10 @@ import (
 
 // Endpoints wraps the "features" service endpoints.
 type Endpoints struct {
-	GetProductFeatures goa.Endpoint
-	SetProductFeature  goa.Endpoint
+	GetProductFeatures           goa.Endpoint
+	SetProductFeature            goa.Endpoint
+	ListSessionCaptureExclusions goa.Endpoint
+	SetSessionCaptureExclusions  goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "features" service with endpoints.
@@ -25,8 +27,10 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetProductFeatures: NewGetProductFeaturesEndpoint(s, a.APIKeyAuth),
-		SetProductFeature:  NewSetProductFeatureEndpoint(s, a.APIKeyAuth),
+		GetProductFeatures:           NewGetProductFeaturesEndpoint(s, a.APIKeyAuth),
+		SetProductFeature:            NewSetProductFeatureEndpoint(s, a.APIKeyAuth),
+		ListSessionCaptureExclusions: NewListSessionCaptureExclusionsEndpoint(s, a.APIKeyAuth),
+		SetSessionCaptureExclusions:  NewSetSessionCaptureExclusionsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -34,6 +38,8 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetProductFeatures = m(e.GetProductFeatures)
 	e.SetProductFeature = m(e.SetProductFeature)
+	e.ListSessionCaptureExclusions = m(e.ListSessionCaptureExclusions)
+	e.SetSessionCaptureExclusions = m(e.SetSessionCaptureExclusions)
 }
 
 // NewGetProductFeaturesEndpoint returns an endpoint function that calls the
@@ -84,5 +90,51 @@ func NewSetProductFeatureEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return nil, s.SetProductFeature(ctx, p)
+	}
+}
+
+// NewListSessionCaptureExclusionsEndpoint returns an endpoint function that
+// calls the method "listSessionCaptureExclusions" of service "features".
+func NewListSessionCaptureExclusionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListSessionCaptureExclusionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListSessionCaptureExclusions(ctx, p)
+	}
+}
+
+// NewSetSessionCaptureExclusionsEndpoint returns an endpoint function that
+// calls the method "setSessionCaptureExclusions" of service "features".
+func NewSetSessionCaptureExclusionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetSessionCaptureExclusionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetSessionCaptureExclusions(ctx, p)
 	}
 }

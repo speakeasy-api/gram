@@ -169,6 +169,9 @@ type UpdateMemberRoleResponseBody struct {
 	RoleID string `form:"role_id" json:"role_id" xml:"role_id"`
 	// When the member joined the organization.
 	JoinedAt string `form:"joined_at" json:"joined_at" xml:"joined_at"`
+	// Whether this member is excluded from session capture for the active
+	// organization.
+	LoggingExcluded bool `form:"logging_excluded" json:"logging_excluded" xml:"logging_excluded"`
 }
 
 // GetRBACStatusResponseBody is the type of the "access" service
@@ -2985,6 +2988,9 @@ type AccessMemberResponseBody struct {
 	RoleID string `form:"role_id" json:"role_id" xml:"role_id"`
 	// When the member joined the organization.
 	JoinedAt string `form:"joined_at" json:"joined_at" xml:"joined_at"`
+	// Whether this member is excluded from session capture for the active
+	// organization.
+	LoggingExcluded bool `form:"logging_excluded" json:"logging_excluded" xml:"logging_excluded"`
 }
 
 // ListRoleGrantResponseBody is used to define fields on response body types.
@@ -3298,12 +3304,13 @@ func NewListGrantsResponseBody(res *access.ListUserGrantsResult) *ListGrantsResp
 // result of the "updateMemberRole" endpoint of the "access" service.
 func NewUpdateMemberRoleResponseBody(res *access.AccessMember) *UpdateMemberRoleResponseBody {
 	body := &UpdateMemberRoleResponseBody{
-		ID:       res.ID,
-		Name:     res.Name,
-		Email:    res.Email,
-		PhotoURL: res.PhotoURL,
-		RoleID:   res.RoleID,
-		JoinedAt: res.JoinedAt,
+		ID:              res.ID,
+		Name:            res.Name,
+		Email:           res.Email,
+		PhotoURL:        res.PhotoURL,
+		RoleID:          res.RoleID,
+		JoinedAt:        res.JoinedAt,
+		LoggingExcluded: res.LoggingExcluded,
 	}
 	return body
 }

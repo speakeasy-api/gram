@@ -71,6 +71,7 @@ type HookSpecificOutput struct {
 // ProductFeaturesClient checks whether product features are enabled for an org.
 type ProductFeaturesClient interface {
 	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
+	IsUserSessionCaptureExcluded(ctx context.Context, organizationID string, userID string) (bool, error)
 }
 
 // ChatTitleGenerator schedules async chat title generation.

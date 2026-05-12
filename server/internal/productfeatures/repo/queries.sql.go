@@ -9,6 +9,68 @@ import (
 	"context"
 )
 
+const addSessionCaptureExclusion = `-- name: AddSessionCaptureExclusion :one
+INSERT INTO session_capture_exclusions (
+    organization_id,
+    user_id
+) VALUES (
+    $1,
+    $2
+)
+ON CONFLICT (organization_id, user_id) WHERE (deleted IS FALSE)
+DO UPDATE SET updated_at = clock_timestamp()
+RETURNING id, organization_id, user_id, created_at, updated_at, deleted_at, deleted
+`
+
+type AddSessionCaptureExclusionParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) AddSessionCaptureExclusion(ctx context.Context, arg AddSessionCaptureExclusionParams) (SessionCaptureExclusion, error) {
+	row := q.db.QueryRow(ctx, addSessionCaptureExclusion, arg.OrganizationID, arg.UserID)
+	var i SessionCaptureExclusion
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const clearSessionCaptureExclusions = `-- name: ClearSessionCaptureExclusions :many
+UPDATE session_capture_exclusions
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND deleted IS FALSE
+RETURNING user_id
+`
+
+func (q *Queries) ClearSessionCaptureExclusions(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, clearSessionCaptureExclusions, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var user_id string
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteFeature = `-- name: DeleteFeature :one
 UPDATE organization_features
 SET deleted_at = clock_timestamp(),
@@ -90,4 +152,122 @@ func (q *Queries) IsFeatureEnabled(ctx context.Context, arg IsFeatureEnabledPara
 	var enabled bool
 	err := row.Scan(&enabled)
 	return enabled, err
+}
+
+const isUserSessionCaptureExcluded = `-- name: IsUserSessionCaptureExcluded :one
+SELECT EXISTS (
+        SELECT 1
+        FROM session_capture_exclusions
+        WHERE organization_id = $1
+            AND user_id = $2
+            AND deleted IS FALSE
+) AS excluded
+`
+
+type IsUserSessionCaptureExcludedParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) IsUserSessionCaptureExcluded(ctx context.Context, arg IsUserSessionCaptureExcludedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isUserSessionCaptureExcluded, arg.OrganizationID, arg.UserID)
+	var excluded bool
+	err := row.Scan(&excluded)
+	return excluded, err
+}
+
+const listSessionCaptureExclusions = `-- name: ListSessionCaptureExclusions :many
+SELECT user_id
+FROM session_capture_exclusions
+WHERE organization_id = $1
+  AND deleted IS FALSE
+ORDER BY user_id
+`
+
+func (q *Queries) ListSessionCaptureExclusions(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listSessionCaptureExclusions, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var user_id string
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSessionCaptureExclusionsForUsers = `-- name: ListSessionCaptureExclusionsForUsers :many
+SELECT organization_id, user_id
+FROM session_capture_exclusions
+WHERE organization_id = $1
+  AND user_id = ANY($2::text[])
+  AND deleted IS FALSE
+`
+
+type ListSessionCaptureExclusionsForUsersParams struct {
+	OrganizationID string
+	UserIds        []string
+}
+
+type ListSessionCaptureExclusionsForUsersRow struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) ListSessionCaptureExclusionsForUsers(ctx context.Context, arg ListSessionCaptureExclusionsForUsersParams) ([]ListSessionCaptureExclusionsForUsersRow, error) {
+	rows, err := q.db.Query(ctx, listSessionCaptureExclusionsForUsers, arg.OrganizationID, arg.UserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSessionCaptureExclusionsForUsersRow
+	for rows.Next() {
+		var i ListSessionCaptureExclusionsForUsersRow
+		if err := rows.Scan(&i.OrganizationID, &i.UserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const removeSessionCaptureExclusion = `-- name: RemoveSessionCaptureExclusion :one
+UPDATE session_capture_exclusions
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND user_id = $2
+  AND deleted IS FALSE
+RETURNING id, organization_id, user_id, created_at, updated_at, deleted_at, deleted
+`
+
+type RemoveSessionCaptureExclusionParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) RemoveSessionCaptureExclusion(ctx context.Context, arg RemoveSessionCaptureExclusionParams) (SessionCaptureExclusion, error) {
+	row := q.db.QueryRow(ctx, removeSessionCaptureExclusion, arg.OrganizationID, arg.UserID)
+	var i SessionCaptureExclusion
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }

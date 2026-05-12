@@ -658,6 +658,15 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 		}
 	}
 
+	excludedUserIDs, err := pfRepo.New(s.db).ListSessionCaptureExclusions(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list session capture exclusions").Log(ctx, s.logger)
+	}
+	excludedSet := make(map[string]struct{}, len(excludedUserIDs))
+	for _, uid := range excludedUserIDs {
+		excludedSet[uid] = struct{}{}
+	}
+
 	result := make([]*gen.AccessMember, 0, len(members))
 	for _, member := range members {
 		user, ok := users[member.UserID]
@@ -670,13 +679,16 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 			continue
 		}
 
+		_, loggingExcluded := excludedSet[local.ID]
+
 		result = append(result, &gen.AccessMember{
-			ID:       local.ID,
-			Name:     formatUserName(user),
-			Email:    user.Email,
-			PhotoURL: conv.FromPGText[string](local.PhotoUrl),
-			RoleID:   roleIDBySlug[member.RoleSlug],
-			JoinedAt: conv.Default(member.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
+			ID:              local.ID,
+			Name:            formatUserName(user),
+			Email:           user.Email,
+			PhotoURL:        conv.FromPGText[string](local.PhotoUrl),
+			RoleID:          roleIDBySlug[member.RoleSlug],
+			JoinedAt:        conv.Default(member.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
+			LoggingExcluded: loggingExcluded,
 		})
 	}
 
@@ -848,21 +860,31 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 		return nil, oops.E(oops.CodeNotFound, nil, "member user not found").Log(ctx, logger)
 	}
 
+	memberLoggingExcluded, err := pfRepo.New(s.db).IsUserSessionCaptureExcluded(ctx, pfRepo.IsUserSessionCaptureExcludedParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		UserID:         connectedUser.ID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check session capture exclusion").Log(ctx, logger)
+	}
+
 	beforeMember := &gen.AccessMember{
-		ID:       connectedUser.ID,
-		Name:     formatUserName(user),
-		Email:    user.Email,
-		PhotoURL: conv.FromPGText[string](connectedUser.PhotoUrl),
-		RoleID:   roleIDBySlug[existingMember.RoleSlug],
-		JoinedAt: conv.Default(existingMember.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
+		ID:              connectedUser.ID,
+		Name:            formatUserName(user),
+		Email:           user.Email,
+		PhotoURL:        conv.FromPGText[string](connectedUser.PhotoUrl),
+		RoleID:          roleIDBySlug[existingMember.RoleSlug],
+		JoinedAt:        conv.Default(existingMember.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
+		LoggingExcluded: memberLoggingExcluded,
 	}
 	afterMember := &gen.AccessMember{
-		ID:       connectedUser.ID,
-		Name:     formatUserName(user),
-		Email:    user.Email,
-		PhotoURL: conv.FromPGText[string](connectedUser.PhotoUrl),
-		RoleID:   payload.RoleID,
-		JoinedAt: conv.Default(updatedMember.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
+		ID:              connectedUser.ID,
+		Name:            formatUserName(user),
+		Email:           user.Email,
+		PhotoURL:        conv.FromPGText[string](connectedUser.PhotoUrl),
+		RoleID:          payload.RoleID,
+		JoinedAt:        conv.Default(updatedMember.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
+		LoggingExcluded: memberLoggingExcluded,
 	}
 
 	if err := s.audit.LogAccessMemberRoleUpdate(ctx, s.db, audit.LogAccessMemberRoleUpdateEvent{

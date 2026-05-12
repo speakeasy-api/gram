@@ -564,7 +564,7 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 })
 
 var MemberModel = Type("AccessMember", func() {
-	Required("id", "name", "email", "role_id", "joined_at")
+	Required("id", "name", "email", "role_id", "joined_at", "logging_excluded")
 
 	Attribute("id", String, "User ID.")
 	Attribute("name", String, "Display name.")
@@ -575,6 +575,7 @@ var MemberModel = Type("AccessMember", func() {
 		Description("When the member joined the organization.")
 		Format(FormatDateTime)
 	})
+	Attribute("logging_excluded", Boolean, "Whether this member is excluded from session capture for the active organization.")
 })
 
 var ListMembersResult = Type("ListMembersResult", func() {

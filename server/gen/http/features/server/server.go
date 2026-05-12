@@ -18,9 +18,11 @@ import (
 
 // Server lists the features service endpoint HTTP handlers.
 type Server struct {
-	Mounts             []*MountPoint
-	GetProductFeatures http.Handler
-	SetProductFeature  http.Handler
+	Mounts                       []*MountPoint
+	GetProductFeatures           http.Handler
+	SetProductFeature            http.Handler
+	ListSessionCaptureExclusions http.Handler
+	SetSessionCaptureExclusions  http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -52,9 +54,13 @@ func New(
 		Mounts: []*MountPoint{
 			{"GetProductFeatures", "GET", "/rpc/productFeatures.get"},
 			{"SetProductFeature", "POST", "/rpc/productFeatures.set"},
+			{"ListSessionCaptureExclusions", "GET", "/rpc/productFeatures.listSessionCaptureExclusions"},
+			{"SetSessionCaptureExclusions", "POST", "/rpc/productFeatures.setSessionCaptureExclusions"},
 		},
-		GetProductFeatures: NewGetProductFeaturesHandler(e.GetProductFeatures, mux, decoder, encoder, errhandler, formatter),
-		SetProductFeature:  NewSetProductFeatureHandler(e.SetProductFeature, mux, decoder, encoder, errhandler, formatter),
+		GetProductFeatures:           NewGetProductFeaturesHandler(e.GetProductFeatures, mux, decoder, encoder, errhandler, formatter),
+		SetProductFeature:            NewSetProductFeatureHandler(e.SetProductFeature, mux, decoder, encoder, errhandler, formatter),
+		ListSessionCaptureExclusions: NewListSessionCaptureExclusionsHandler(e.ListSessionCaptureExclusions, mux, decoder, encoder, errhandler, formatter),
+		SetSessionCaptureExclusions:  NewSetSessionCaptureExclusionsHandler(e.SetSessionCaptureExclusions, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -65,6 +71,8 @@ func (s *Server) Service() string { return "features" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetProductFeatures = m(s.GetProductFeatures)
 	s.SetProductFeature = m(s.SetProductFeature)
+	s.ListSessionCaptureExclusions = m(s.ListSessionCaptureExclusions)
+	s.SetSessionCaptureExclusions = m(s.SetSessionCaptureExclusions)
 }
 
 // MethodNames returns the methods served.
@@ -74,6 +82,8 @@ func (s *Server) MethodNames() []string { return features.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetProductFeaturesHandler(mux, h.GetProductFeatures)
 	MountSetProductFeatureHandler(mux, h.SetProductFeature)
+	MountListSessionCaptureExclusionsHandler(mux, h.ListSessionCaptureExclusions)
+	MountSetSessionCaptureExclusionsHandler(mux, h.SetSessionCaptureExclusions)
 }
 
 // Mount configures the mux to serve the features endpoints.
@@ -164,6 +174,114 @@ func NewSetProductFeatureHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "setProductFeature")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "features")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListSessionCaptureExclusionsHandler configures the mux to serve the
+// "features" service "listSessionCaptureExclusions" endpoint.
+func MountListSessionCaptureExclusionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/productFeatures.listSessionCaptureExclusions", f)
+}
+
+// NewListSessionCaptureExclusionsHandler creates a HTTP handler which loads
+// the HTTP request and calls the "features" service
+// "listSessionCaptureExclusions" endpoint.
+func NewListSessionCaptureExclusionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListSessionCaptureExclusionsRequest(mux, decoder)
+		encodeResponse = EncodeListSessionCaptureExclusionsResponse(encoder)
+		encodeError    = EncodeListSessionCaptureExclusionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listSessionCaptureExclusions")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "features")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetSessionCaptureExclusionsHandler configures the mux to serve the
+// "features" service "setSessionCaptureExclusions" endpoint.
+func MountSetSessionCaptureExclusionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/productFeatures.setSessionCaptureExclusions", f)
+}
+
+// NewSetSessionCaptureExclusionsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "features" service "setSessionCaptureExclusions"
+// endpoint.
+func NewSetSessionCaptureExclusionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetSessionCaptureExclusionsRequest(mux, decoder)
+		encodeResponse = EncodeSetSessionCaptureExclusionsResponse(encoder)
+		encodeError    = EncodeSetSessionCaptureExclusionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setSessionCaptureExclusions")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "features")
 		payload, err := decodeRequest(r)
 		if err != nil {

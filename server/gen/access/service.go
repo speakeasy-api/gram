@@ -90,6 +90,9 @@ type AccessMember struct {
 	RoleID string
 	// When the member joined the organization.
 	JoinedAt string
+	// Whether this member is excluded from session capture for the active
+	// organization.
+	LoggingExcluded bool
 }
 
 type AuthzChallenge struct {
