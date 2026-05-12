@@ -52,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -213,8 +214,8 @@ func NewService(
 }
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
-	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.ServePublic).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", oops.ErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
+	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, service.ServePublic).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return service.HandleGetServer(w, r, metadataService)
 	}).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
@@ -238,27 +239,7 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 		}
 	}
 
-	body, err := json.Marshal(rpcError{
-		ID:      msgID{format: 0, String: "", Number: 0},
-		Code:    methodNotAllowed,
-		Message: "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.",
-		Data:    nil,
-	})
-	if err != nil {
-		s.logger.ErrorContext(r.Context(), "failed to marshal MCP 405 response", attr.SlogError(err))
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		return fmt.Errorf("failed to marshal MCP 405 response: %w", err)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusMethodNotAllowed)
-	_, writeErr := w.Write(body)
-	if writeErr != nil {
-		s.logger.ErrorContext(r.Context(), "failed to write response body", attr.SlogError(writeErr))
-		return fmt.Errorf("failed to write response body: %w", writeErr)
-	}
-
-	return nil
+	return oops.E(oops.CodeMethodNotAllowed, nil, "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.")
 }
 
 // handleWellKnownMetadata handles OAuth 2.1 authorization server metadata discovery
@@ -455,6 +436,18 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
 	}
 
+	bodyBytes, bodyReadErr := io.ReadAll(r.Body)
+	if bodyReadErr == nil {
+		var req struct {
+			ID mcpjsonrpc.ID `json:"id"`
+		}
+		if err := json.Unmarshal(bodyBytes, &req); err == nil {
+			if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok && req.ID.IsSet() {
+				rpcCtx.ID = req.ID
+			}
+		}
+	}
+
 	// Extract tokens from headers separately:
 	// - authToken: from Authorization header (for OAuth flows)
 	// - sessionToken: from Gram-Chat-Session header (for chat session fallback on non-OAuth endpoints)
@@ -607,12 +600,11 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	// Decode the raw body first to check for batch requests
-	bodyBytes, err := io.ReadAll(r.Body)
 	switch {
-	case errors.Is(err, io.EOF) || len(bodyBytes) == 0:
+	case errors.Is(bodyReadErr, io.EOF) || len(bodyBytes) == 0:
 		return nil
-	case err != nil:
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, s.logger)
+	case bodyReadErr != nil:
+		return oops.E(oops.CodeBadRequest, bodyReadErr, "failed to read request body").Log(ctx, s.logger)
 	}
 
 	// Reject batch (array) requests — batch is deprecated in the MCP spec
@@ -680,7 +672,11 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
 	case err != nil:
-		bs, merr := json.Marshal(NewErrorFromCause(req.ID, err))
+		mcpID := mcpjsonrpc.NullID()
+		if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok && rpcCtx.ID.IsSet() {
+			mcpID = rpcCtx.ID
+		}
+		bs, merr := json.Marshal(oops.NewMCPErrorFromCause(mcpID, err))
 		if merr != nil {
 			return oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").Log(ctx, s.logger)
 		}
@@ -911,12 +907,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "resources/read":
 		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras)
 	default:
-		return nil, &rpcError{
-			ID:      req.ID,
-			Code:    methodNotFound,
-			Message: fmt.Sprintf("%s: %s", req.Method, methodNotFound.UserMessage()),
-			Data:    nil,
-		}
+		return nil, oops.E(oops.CodeNotImplemented, nil, "%s: %s", req.Method, oops.MCPCodeMethodNotFound.Message())
 	}
 }
 
@@ -1128,7 +1119,7 @@ func (s *Service) HandleToolsList(
 	// Create a dummy rawRequest for the internal handler
 	req := &rawRequest{
 		JSONRPC: "2.0",
-		ID:      msgID{format: 1, Number: 1, String: ""},
+		ID:      mcpjsonrpc.NumberID(1),
 		Method:  "tools/list",
 		Params:  json.RawMessage("{}"),
 	}
@@ -1199,7 +1190,7 @@ func (s *Service) HandleToolsCall(
 
 	req := &rawRequest{
 		JSONRPC: "2.0",
-		ID:      msgID{format: 1, Number: 1, String: ""},
+		ID:      mcpjsonrpc.NumberID(1),
 		Method:  "tools/call",
 		Params:  params,
 	}

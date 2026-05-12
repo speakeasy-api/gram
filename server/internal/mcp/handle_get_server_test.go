@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -86,39 +87,31 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 			// Create a response recorder
 			rr := httptest.NewRecorder()
 
-			// Call the handler
-			err := testInstance.service.HandleGetServer(rr, req, metadataService)
+			handler := oops.MCPErrHandle(testInstance.logger, func(w http.ResponseWriter, r *http.Request) error {
+				return testInstance.service.HandleGetServer(w, r, metadataService)
+			})
+			handler.ServeHTTP(rr, req)
 
 			if tt.shouldReturnJSON {
-				// For JSON responses, we expect the handler to write the response and return nil (success)
-				require.NoError(t, err, "Expected no error for successful JSON response")
 				assert.Equal(t, tt.expectedStatusCode, rr.Code)
 				assert.Equal(t, tt.expectedContentType, rr.Header().Get("Content-Type"))
 
-				// Verify it's valid JSON with the expected structure
 				var response struct {
-					ID      any    `json:"id"`
-					Code    int    `json:"code"`
-					Message string `json:"message"`
-					Data    any    `json:"data"`
+					JSONRPC string `json:"jsonrpc"`
+					Error   struct {
+						Code    oops.MCPCode `json:"code"`
+						Message string       `json:"message"`
+					} `json:"error"`
 				}
 				unmarshalErr := json.Unmarshal(rr.Body.Bytes(), &response)
 				require.NoError(t, unmarshalErr, "Response should be valid JSON")
-				assert.Equal(t, -32000, response.Code) // methodNotAllowed errorCode value
-				assert.NotEmpty(t, response.Message)
+				assert.Equal(t, "2.0", response.JSONRPC)
+				assert.Equal(t, oops.MCPCodeServerError, response.Error.Code)
+				assert.NotEmpty(t, response.Error.Message)
 			} else {
 				// For HTML responses, we expect delegation to metadata service
 				// The key test here is content negotiation - we should NOT return JSON
 				assert.NotEqual(t, "application/json", rr.Header().Get("Content-Type"))
-
-				// The metadata service will likely error because "test-slug" doesn't exist in the test DB,
-				// but that's expected - we're testing content negotiation, not data retrieval.
-				// The important thing is that we took the HTML delegation path instead of JSON error path.
-				if err != nil {
-					t.Logf("Expected metadata service error for non-existent slug: %v", err)
-				} else {
-					t.Log("Metadata service successfully handled HTML request")
-				}
 			}
 		})
 	}

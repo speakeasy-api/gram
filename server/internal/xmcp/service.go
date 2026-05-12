@@ -107,7 +107,7 @@ func NewService(
 // for parity with /mcp; the .well-known routes are owned by xmcp directly
 // so they can dispatch per-backend (see [Service.HandleWellKnownOAuthServerMetadata]).
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
-	handler := oops.ErrHandle(service.logger, service.ServeMCP).ServeHTTP
+	handler := oops.MCPErrHandle(service.logger, service.ServeMCP).ServeHTTP
 	o11y.AttachHandler(mux, http.MethodDelete, RuntimePath, handler)
 	o11y.AttachHandler(mux, http.MethodGet, RuntimePath, handler)
 	o11y.AttachHandler(mux, http.MethodPost, RuntimePath, handler)
