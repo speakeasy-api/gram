@@ -92,8 +92,14 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "redirect_uri is not registered for this client")
 	}
 
+	// At this point the redirect_uri is trusted (matched against the
+	// registered set on the client row), so RFC 6749 §4.1.2.1 requires that
+	// any remaining validation errors are forwarded to the client by 302
+	// rather than rendered inline — otherwise the MCP client has no way to
+	// observe the failure. The two-phase Validate split exists to make this
+	// switch unambiguous.
 	if err := req.ValidatePostRedirect(); err != nil {
-		return writeAuthorizeOAuthError(ctx, w, logger, http.StatusBadRequest, err)
+		return redirectAuthorizeOAuthError(ctx, w, r, logger, req.RedirectURI, req.State, err)
 	}
 
 	challengeID := uuid.NewString()
@@ -155,6 +161,28 @@ func writeAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, logger
 		return writeAuthorizeError(ctx, w, logger, status, oauthErr.Code, oauthErr.Description)
 	}
 	return writeAuthorizeError(ctx, w, logger, status, "invalid_request", err.Error())
+}
+
+// redirectAuthorizeOAuthError redirects the user agent back to the (already
+// trusted) redirect_uri with `error` / `error_description` / `state` query
+// parameters per RFC 6749 §4.1.2.1. Callers must only invoke this AFTER the
+// supplied redirect_uri has been validated against the registered set on
+// the OAuth client row — passing through an untrusted URI here would turn
+// the AS into an open redirector.
+func redirectAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, redirectURI, originalState string, err error) error {
+	code := "invalid_request"
+	description := err.Error()
+	var oauthErr *usersessions.OAuthError
+	if errors.As(err, &oauthErr) {
+		code = oauthErr.Code
+		description = oauthErr.Description
+	}
+	logger.InfoContext(ctx, "authorize request rejected (post-redirect)",
+		attr.SlogOAuthError(code),
+		attr.SlogOAuthErrorDescription(description),
+	)
+	http.Redirect(w, r, buildClientRedirect(redirectURI, "", originalState, code, description), http.StatusFound)
+	return nil
 }
 
 // writeAuthorizeError emits an OAuth 2.1 authorization error (RFC 6749
