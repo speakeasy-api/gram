@@ -110,7 +110,7 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 		return oops.E(oops.CodeUnexpected, err, "revoke user session").Log(ctx, logger)
 	}
 
-	if err := audit.LogUserSessionRevoke(ctx, dbtx, audit.LogUserSessionRevokeEvent{
+	if err := s.audit.LogUserSessionRevoke(ctx, dbtx, audit.LogUserSessionRevokeEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

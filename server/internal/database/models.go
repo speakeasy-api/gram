@@ -855,6 +855,7 @@ type OrganizationUserRelationship struct {
 
 type Outbox struct {
 	ID             int64
+	PublicID       uuid.UUID
 	OrganizationID string
 	EventType      string
 	Payload        []byte

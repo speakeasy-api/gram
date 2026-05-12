@@ -25,6 +25,7 @@ import (
 	issuersgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
 	sessionsgen "github.com/speakeasy-api/gram/server/gen/user_sessions"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -42,6 +43,7 @@ type Service struct {
 	auth         *auth.Auth
 	authz        *authz.Engine
 	chatSessions *chatsessions.Manager
+	audit        *audit.Logger
 }
 
 var (
@@ -58,7 +60,7 @@ var (
 // NewService constructs a Service ready to be Attached against each of the
 // four user_session* Goa services. chatSessionsManager is used by the
 // userSessions revoke handler to push revoked jtis into the revocation cache.
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager *chatsessions.Manager, authzEngine *authz.Engine) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager *chatsessions.Manager, authzEngine *authz.Engine, auditLogger *audit.Logger) *Service {
 	logger = logger.With(attr.SlogComponent("usersessions"))
 
 	return &Service{
@@ -68,6 +70,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		auth:         auth.New(logger, db, sessionManager, authzEngine),
 		authz:        authzEngine,
 		chatSessions: chatSessionsManager,
+		audit:        auditLogger,
 	}
 }
 

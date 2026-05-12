@@ -35,8 +35,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Check, ChevronDown } from "lucide-react";
-import { McpIcon } from "@/components/ui/mcp-icon";
+import { Check, ChevronRight, ChevronDown } from "lucide-react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -49,11 +48,12 @@ import {
   type TooltipItem,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
-import { ChevronRight } from "lucide-react";
 import { useRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@speakeasy-api/moonshine";
+import { MCPServerFilter } from "@/components/observe/ObserveFilterBar";
+import { isValidPreset } from "@/components/observe/observeFilterUtils";
 
 function hasTimeSeriesData(
   timeSeries: Array<{

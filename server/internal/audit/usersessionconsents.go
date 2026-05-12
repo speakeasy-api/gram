@@ -2,7 +2,6 @@ package audit
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
 
@@ -27,7 +26,7 @@ type LogUserSessionConsentRevokeEvent struct {
 	Principal             urn.SessionSubject
 }
 
-func LogUserSessionConsentRevoke(ctx context.Context, dbtx repo.DBTX, event LogUserSessionConsentRevokeEvent) error {
+func (l *Logger) LogUserSessionConsentRevoke(ctx context.Context, dbtx repo.DBTX, event LogUserSessionConsentRevokeEvent) error {
 	action := ActionUserSessionConsentRevoke
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -50,9 +49,5 @@ func LogUserSessionConsentRevoke(ctx context.Context, dbtx repo.DBTX, event LogU
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

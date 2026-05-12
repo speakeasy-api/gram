@@ -1,5 +1,12 @@
 # dashboard
 
+## 0.51.0
+
+### Minor Changes
+
+- 1f34b03: Unified the Observe filter bar for Insights Tools and Logs Tools views; server, email, and type filters are now multi-select dropdowns with OR semantics.
+- 5d80d8c: Rebuild the assistant-onboarding Slack install step as two separate cards: an install card (workspace pick, install, Event Subscriptions Retry) followed by a tokens card. Copy rewritten for non-technical users, with the Event Subscriptions Retry step called out as the most common silent failure.
+
 ## 0.50.0
 
 ### Minor Changes

@@ -18,9 +18,9 @@ const (
 	ActionTriggerInstanceDelete Action = "trigger-instance:delete"
 	ActionTriggerInstancePause  Action = "trigger-instance:pause"
 	ActionTriggerInstanceResume Action = "trigger-instance:resume"
-	ActionWakeScheduled         Action = "wake:scheduled"
-	ActionWakeFired             Action = "wake:fired"
 	ActionWakeCancelled         Action = "wake:cancelled"
+	ActionWakeFired             Action = "wake:fired"
+	ActionWakeScheduled         Action = "wake:scheduled"
 )
 
 type LogTriggerInstanceCreateEvent struct {
@@ -59,11 +59,7 @@ func (l *Logger) LogTriggerInstanceCreate(ctx context.Context, dbtx repo.DBTX, e
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogTriggerInstanceUpdateEvent struct {
@@ -115,11 +111,7 @@ func (l *Logger) LogTriggerInstanceUpdate(ctx context.Context, dbtx repo.DBTX, e
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogTriggerInstanceDeleteEvent struct {
@@ -158,11 +150,7 @@ func (l *Logger) LogTriggerInstanceDelete(ctx context.Context, dbtx repo.DBTX, e
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogTriggerInstancePauseEvent struct {
@@ -201,11 +189,7 @@ func (l *Logger) LogTriggerInstancePause(ctx context.Context, dbtx repo.DBTX, ev
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogTriggerInstanceResumeEvent struct {
@@ -244,14 +228,10 @@ func (l *Logger) LogTriggerInstanceResume(ctx context.Context, dbtx repo.DBTX, e
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
-// LogWakeEvent is shared by wake.scheduled / wake.fired / wake.cancelled.
+// LogWakeEvent is shared by wake:scheduled / wake:fired / wake:cancelled.
 // Subject is the wake's trigger_instance URN; metadata carries the target
 // thread's correlation_id and the wake's scheduled fire_at.
 type LogWakeEvent struct {
@@ -298,20 +278,17 @@ func (l *Logger) logWakeEvent(ctx context.Context, dbtx repo.DBTX, action Action
 		Metadata:       metadata,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
-func (l *Logger) LogWakeScheduled(ctx context.Context, dbtx repo.DBTX, event LogWakeEvent) error {
-	return l.logWakeEvent(ctx, dbtx, ActionWakeScheduled, event)
+func (l *Logger) LogWakeCancelled(ctx context.Context, dbtx repo.DBTX, event LogWakeEvent) error {
+	return l.logWakeEvent(ctx, dbtx, ActionWakeCancelled, event)
 }
 
 func (l *Logger) LogWakeFired(ctx context.Context, dbtx repo.DBTX, event LogWakeEvent) error {
 	return l.logWakeEvent(ctx, dbtx, ActionWakeFired, event)
 }
 
-func (l *Logger) LogWakeCancelled(ctx context.Context, dbtx repo.DBTX, event LogWakeEvent) error {
-	return l.logWakeEvent(ctx, dbtx, ActionWakeCancelled, event)
+func (l *Logger) LogWakeScheduled(ctx context.Context, dbtx repo.DBTX, event LogWakeEvent) error {
+	return l.logWakeEvent(ctx, dbtx, ActionWakeScheduled, event)
 }

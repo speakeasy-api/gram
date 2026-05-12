@@ -44,7 +44,7 @@ INSERT INTO audit_logs (
   $13,
   $14
 )
-RETURNING id
+RETURNING id, organization_id
 `
 
 type InsertAuditLogParams struct {
@@ -64,7 +64,12 @@ type InsertAuditLogParams struct {
 	Metadata           []byte
 }
 
-func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (uuid.UUID, error) {
+type InsertAuditLogRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (InsertAuditLogRow, error) {
 	row := q.db.QueryRow(ctx, insertAuditLog,
 		arg.OrganizationID,
 		arg.ProjectID,
@@ -81,9 +86,9 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 		arg.AfterSnapshot,
 		arg.Metadata,
 	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i InsertAuditLogRow
+	err := row.Scan(&i.ID, &i.OrganizationID)
+	return i, err
 }
 
 const listAuditActionFacets = `-- name: ListAuditActionFacets :many

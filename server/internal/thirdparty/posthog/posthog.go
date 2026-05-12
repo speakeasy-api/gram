@@ -97,6 +97,27 @@ func (p *Posthog) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinct
 	return string(j) == "true", nil
 }
 
+func (p *Posthog) IdentifyUser(ctx context.Context, distinctID string, personProperties map[string]any) error {
+	if p.disabled {
+		p.logger.InfoContext(ctx, "posthog is disabled, dropping identify")
+		return nil
+	}
+
+	properties := posthog.NewProperties()
+	for k, v := range personProperties {
+		properties.Set(k, v)
+	}
+
+	if err := p.client.Enqueue(posthog.Identify{
+		DistinctId: distinctID,
+		Properties: properties,
+	}); err != nil {
+		return fmt.Errorf("failed to enqueue identify: %w", err)
+	}
+
+	return nil
+}
+
 func (p *Posthog) CaptureEvent(ctx context.Context, eventName string, distinctID string, eventProperties map[string]any) error {
 	// If posthog is disabled, we return true so we don't block the user from using the product
 	if p.disabled {

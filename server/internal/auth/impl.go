@@ -605,6 +605,12 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, idToken string
 		return "", fmt.Errorf("store session: %w", err)
 	}
 
+	if err := s.posthog.IdentifyUser(ctx, userInfo.Email, map[string]any{
+		"disposition": dispositionAssistants,
+	}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to set assistants disposition person property", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
+	}
+
 	if err := s.posthog.CaptureEvent(ctx, "gram_assistants_signup", userInfo.Email, map[string]any{
 		"email":                       userInfo.Email,
 		"organization_id":             org.ID,

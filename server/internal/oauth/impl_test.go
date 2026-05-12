@@ -56,11 +56,11 @@ func TestRefreshProxyToken_Success(t *testing.T) {
 
 	// Issue token with upstream credentials
 	upstreamExpiry := time.Now().Add(-1 * time.Minute) // expired so refresh is needed
-	token, _, _ := env.issueToken(t, ctx, toolsetID,
+	issued := env.IssueToken(t, ctx, toolsetID,
 		"old-upstream-access", "old-upstream-refresh", &upstreamExpiry, []string{"api_key"})
 
 	// Validate to get the hashed-access-token variant that RefreshExternalSecrets expects
-	validated, err := env.tokenService.ValidateAccessToken(ctx, toolsetID, token.AccessToken)
+	validated, err := env.TokenService.ValidateAccessToken(ctx, toolsetID, issued.AccessToken)
 	require.ErrorIs(t, err, oauth.ErrExpiredExternalSecrets)
 	require.NotNil(t, validated)
 
@@ -75,7 +75,7 @@ func TestRefreshProxyToken_Success(t *testing.T) {
 	provider := customProvider(upstream.URL + "/token")
 	toolset := minimalToolset(toolsetID)
 
-	refreshed, err := env.service.RefreshProxyToken(ctx, toolsetID, validated, &provider, toolset)
+	refreshed, err := env.Service.RefreshProxyToken(ctx, toolsetID, validated, &provider, toolset)
 	require.NoError(t, err)
 	require.NotNil(t, refreshed)
 	require.Len(t, refreshed.ExternalSecrets, 1)
@@ -91,10 +91,10 @@ func TestRefreshProxyToken_PreservesRefreshToken(t *testing.T) {
 	toolsetID := uuid.New()
 
 	upstreamExpiry := time.Now().Add(-1 * time.Minute)
-	token, _, _ := env.issueToken(t, ctx, toolsetID,
+	issued := env.IssueToken(t, ctx, toolsetID,
 		"old-upstream-access", "original-upstream-refresh", &upstreamExpiry, []string{"api_key"})
 
-	validated, err := env.tokenService.ValidateAccessToken(ctx, toolsetID, token.AccessToken)
+	validated, err := env.TokenService.ValidateAccessToken(ctx, toolsetID, issued.AccessToken)
 	require.ErrorIs(t, err, oauth.ErrExpiredExternalSecrets)
 
 	// Upstream does NOT return a new refresh_token (non-rotating provider)
@@ -107,7 +107,7 @@ func TestRefreshProxyToken_PreservesRefreshToken(t *testing.T) {
 	provider := customProvider(upstream.URL + "/token")
 	toolset := minimalToolset(toolsetID)
 
-	refreshed, err := env.service.RefreshProxyToken(ctx, toolsetID, validated, &provider, toolset)
+	refreshed, err := env.Service.RefreshProxyToken(ctx, toolsetID, validated, &provider, toolset)
 	require.NoError(t, err)
 	require.Len(t, refreshed.ExternalSecrets, 1)
 	require.Equal(t, "new-upstream-access", refreshed.ExternalSecrets[0].Token)
@@ -123,10 +123,10 @@ func TestRefreshProxyToken_NoUpstreamRefreshToken(t *testing.T) {
 
 	// Issue token WITHOUT an upstream refresh token
 	upstreamExpiry := time.Now().Add(-1 * time.Minute)
-	token, _, _ := env.issueToken(t, ctx, toolsetID,
+	issued := env.IssueToken(t, ctx, toolsetID,
 		"upstream-access", "", &upstreamExpiry, []string{"api_key"})
 
-	_, err := env.tokenService.ValidateAccessToken(ctx, toolsetID, token.AccessToken)
+	_, err := env.TokenService.ValidateAccessToken(ctx, toolsetID, issued.AccessToken)
 	require.ErrorIs(t, err, oauth.ErrExpiredAccessToken)
 }
 
@@ -137,10 +137,10 @@ func TestRefreshProxyToken_UpstreamError(t *testing.T) {
 	toolsetID := uuid.New()
 
 	upstreamExpiry := time.Now().Add(-1 * time.Minute)
-	token, _, _ := env.issueToken(t, ctx, toolsetID,
+	issued := env.IssueToken(t, ctx, toolsetID,
 		"upstream-access", "upstream-refresh", &upstreamExpiry, []string{"api_key"})
 
-	validated, err := env.tokenService.ValidateAccessToken(ctx, toolsetID, token.AccessToken)
+	validated, err := env.TokenService.ValidateAccessToken(ctx, toolsetID, issued.AccessToken)
 	require.ErrorIs(t, err, oauth.ErrExpiredExternalSecrets)
 
 	// Upstream returns 401
@@ -152,7 +152,7 @@ func TestRefreshProxyToken_UpstreamError(t *testing.T) {
 	provider := customProvider(upstream.URL + "/token")
 	toolset := minimalToolset(toolsetID)
 
-	_, err = env.service.RefreshProxyToken(ctx, toolsetID, validated, &provider, toolset)
+	_, err = env.Service.RefreshProxyToken(ctx, toolsetID, validated, &provider, toolset)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "upstream token refresh failed")
 }
@@ -180,11 +180,11 @@ func TestRefreshProxyToken_SecretsVisibleAfterRefresh(t *testing.T) {
 	toolsetID := uuid.New()
 
 	upstreamExpiry := time.Now().Add(-1 * time.Minute)
-	token, _, _ := env.issueToken(t, ctx, toolsetID,
+	issued := env.IssueToken(t, ctx, toolsetID,
 		"old-access", "old-refresh", &upstreamExpiry, []string{"key"})
-	rawAccess := token.AccessToken
+	rawAccess := issued.AccessToken
 
-	validated, _ := env.tokenService.ValidateAccessToken(ctx, toolsetID, rawAccess)
+	validated, _ := env.TokenService.ValidateAccessToken(ctx, toolsetID, rawAccess)
 
 	upstream := fakeUpstream(t, 200, map[string]any{
 		"access_token":  "refreshed-access",
@@ -196,11 +196,11 @@ func TestRefreshProxyToken_SecretsVisibleAfterRefresh(t *testing.T) {
 	provider := customProvider(upstream.URL + "/token")
 	toolset := minimalToolset(toolsetID)
 
-	_, err := env.service.RefreshProxyToken(ctx, toolsetID, validated, &provider, toolset)
+	_, err := env.Service.RefreshProxyToken(ctx, toolsetID, validated, &provider, toolset)
 	require.NoError(t, err)
 
 	// Read back via the original raw access token
-	reloaded, err := env.tokenService.ValidateAccessToken(ctx, toolsetID, rawAccess)
+	reloaded, err := env.TokenService.ValidateAccessToken(ctx, toolsetID, rawAccess)
 	require.NoError(t, err)
 	require.Len(t, reloaded.ExternalSecrets, 1)
 	require.Equal(t, "refreshed-access", reloaded.ExternalSecrets[0].Token)

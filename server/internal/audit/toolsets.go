@@ -59,11 +59,7 @@ func (l *Logger) LogToolsetCreate(ctx context.Context, dbtx repo.DBTX, event Log
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogToolsetUpdateEvent struct {
@@ -136,11 +132,7 @@ func (l *Logger) LogToolsetUpdate(ctx context.Context, dbtx repo.DBTX, event Log
 		Metadata:       metadata,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogToolsetDeleteEvent struct {
@@ -179,11 +171,7 @@ func (l *Logger) LogToolsetDelete(ctx context.Context, dbtx repo.DBTX, event Log
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogToolsetAttachExternalOAuthEvent struct {
@@ -236,11 +224,7 @@ func (l *Logger) LogToolsetAttachExternalOAuth(ctx context.Context, dbtx repo.DB
 		AfterSnapshot:  nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogToolsetDetachExternalOAuthEvent struct {
@@ -293,11 +277,7 @@ func (l *Logger) LogToolsetDetachExternalOAuth(ctx context.Context, dbtx repo.DB
 		AfterSnapshot:  nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogToolsetAttachOAuthProxyEvent struct {
@@ -350,11 +330,7 @@ func (l *Logger) LogToolsetAttachOAuthProxy(ctx context.Context, dbtx repo.DBTX,
 		AfterSnapshot:  nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogToolsetDetachOAuthProxyEvent struct {
@@ -407,11 +383,7 @@ func (l *Logger) LogToolsetDetachOAuthProxy(ctx context.Context, dbtx repo.DBTX,
 		AfterSnapshot:  nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogToolsetUpdateOAuthProxyEvent struct {
@@ -490,9 +462,5 @@ func (l *Logger) LogToolsetUpdateOAuthProxy(ctx context.Context, dbtx repo.DBTX,
 		AfterSnapshot:  afterSnapshot,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

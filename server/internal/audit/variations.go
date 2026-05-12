@@ -72,11 +72,8 @@ func (l *Logger) LogVariationUpdateGlobal(ctx context.Context, dbtx repo.DBTX, e
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogVariationDeleteGlobalEvent struct {
@@ -121,9 +118,6 @@ func (l *Logger) LogVariationDeleteGlobal(ctx context.Context, dbtx repo.DBTX, e
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
