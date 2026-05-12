@@ -8,6 +8,17 @@ on:
     branches:
       - main
   merge_group:
+  workflow_dispatch:
+    inputs:
+      risk_accuracy_l1:
+        description: "Run prompt-injection risk accuracy with the L1 classifier sidecar"
+        required: false
+        default: false
+        type: boolean
+      pr_number:
+        description: "PR number to update with the risk accuracy comment when manually dispatched"
+        required: false
+        type: string
 
 permissions:
   id-token: write
@@ -52,6 +63,7 @@ jobs:
         env:
           HAS_PREVIEW_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'preview') }}
           HAS_FULL_CI_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+          HAS_MANUAL_RISK_L1: ${{ github.event_name == 'workflow_dispatch' && inputs.risk_accuracy_l1 }}
         run: |
           if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "server=true" >> $GITHUB_OUTPUT
@@ -123,7 +135,7 @@ jobs:
             echo "SDK generation check will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.risk_accuracy }}" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.risk_accuracy }}" == "true" || "$HAS_MANUAL_RISK_L1" == "true" ]]; then
             echo "risk_accuracy=true" >> $GITHUB_OUTPUT
             echo "Risk accuracy comment job will run."
           else
@@ -739,6 +751,9 @@ jobs:
     if: needs.changes.outputs.risk_accuracy == 'true'
     env:
       GOMAXPROCS: 8
+      RUN_L1_RISK_ACCURACY: ${{ github.event_name == 'workflow_dispatch' && inputs.risk_accuracy_l1 }}
+      PI_CLASSIFIER_PORT: 5051
+      PI_CLASSIFIER_URL: http://127.0.0.1:5051
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
@@ -767,8 +782,34 @@ jobs:
       - name: Install Go deps
         run: mise run install:go
 
+      - name: Start prompt-injection classifier
+        if: env.RUN_L1_RISK_ACCURACY == 'true'
+        run: |
+          set -euo pipefail
+          docker compose up -d --build gram-pi-classifier
+          for _ in $(seq 1 120); do
+            if curl -fsS "$PI_CLASSIFIER_URL/health" >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs gram-pi-classifier
+          exit 1
+
       - name: Generate risk accuracy report
-        run: mise run risk:report
+        run: |
+          set -euo pipefail
+          if [[ "$RUN_L1_RISK_ACCURACY" == "true" ]]; then
+            mise run risk:report --classifier-url "$PI_CLASSIFIER_URL"
+          else
+            mise run risk:report --no-classifier
+          fi
+
+      - name: Stop prompt-injection classifier
+        if: always() && env.RUN_L1_RISK_ACCURACY == 'true'
+        run: |
+          docker compose stop gram-pi-classifier || true
+          docker compose rm -f gram-pi-classifier || true
 
       - name: Upload risk accuracy metrics
         if: always() && hashFiles('server/risk_accuracy_metrics.json') != ''
@@ -784,7 +825,7 @@ jobs:
     if: |
       !cancelled() &&
       needs.changes.outputs.risk_accuracy == 'true' &&
-      github.event_name == 'pull_request' &&
+      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') &&
       (needs.risk_accuracy.result == 'success' || needs.risk_accuracy.result == 'failure')
     permissions:
       contents: read
@@ -851,10 +892,18 @@ jobs:
       - name: Post or update sticky comment
         if: steps.gate.outputs.skip != 'true'
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER_INPUT: ${{ github.event.pull_request.number || inputs.pr_number }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          PR_NUMBER="${PR_NUMBER_INPUT:-}"
+          if [ -z "$PR_NUMBER" ]; then
+            PR_NUMBER=$(gh pr view --json number --jq '.number // empty')
+          fi
+          if [ -z "$PR_NUMBER" ]; then
+            echo "no PR number found for sticky risk accuracy comment; pass workflow_dispatch input pr_number"
+            exit 1
+          fi
           MARKER='<!-- risk-accuracy-metrics -->'
           EXISTING=$(gh api -X GET \
             "repos/$REPO/issues/$PR_NUMBER/comments" \

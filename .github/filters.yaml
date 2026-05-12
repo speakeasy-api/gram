@@ -62,6 +62,8 @@ plog:
 
 # Subset of `server` that gates the prompt-injection risk report job.
 risk_accuracy:
+  - ".github/scripts/risk-metrics-comment.*"
+  - ".github/workflows/pr.yaml"
   - ".mise-tasks/risk/**"
   - "server/internal/background/activities/risk_analysis/**"
   - "server/cmd/risk-pi-report/**"

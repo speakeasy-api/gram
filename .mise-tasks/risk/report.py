@@ -2,6 +2,7 @@
 #MISE description="Run the prompt-injection risk report harness and print metrics"
 #USAGE flag "--classifier-url <url>" help="Base URL for the L1 prompt-injection classifier sidecar. Also reads PI_CLASSIFIER_URL."
 #USAGE flag "--metrics-file <path>" help="Path to the JSON metrics artifact. Defaults to server/risk_accuracy_metrics.json."
+#USAGE flag "--no-classifier" help="Disable classifier use even if PI_CLASSIFIER_URL is set by the environment."
 #USAGE flag "--no-run" help="Only print an existing metrics artifact without running the evaluator harness."
 # /// script
 # requires-python = ">=3.11"
@@ -27,7 +28,7 @@ def main() -> int:
     metrics_file = args.metrics_file
 
     env = os.environ.copy()
-    classifier_url = first_nonempty(args.classifier_url, env.get("PI_CLASSIFIER_URL"))
+    classifier_url = None if args.no_classifier else first_nonempty(args.classifier_url, env.get("PI_CLASSIFIER_URL"))
 
     if classifier_url:
         env["PI_CLASSIFIER_URL"] = classifier_url
@@ -69,6 +70,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path(os.environ.get("usage_metrics_file") or DEFAULT_METRICS_FILE),
         help=f"Path to metrics JSON. Default: {DEFAULT_METRICS_FILE}",
+    )
+    parser.add_argument(
+        "--no-classifier",
+        action="store_true",
+        default=os.environ.get("usage_no_classifier") == "true",
+        help="Disable L1 classifier evaluation even if PI_CLASSIFIER_URL is set.",
     )
     parser.add_argument(
         "--no-run",
