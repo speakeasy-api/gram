@@ -2050,6 +2050,35 @@ CREATE TABLE IF NOT EXISTS hooks_server_name_overrides (
 
 CREATE INDEX IF NOT EXISTS hooks_server_name_overrides_project_id_display_name_idx ON hooks_server_name_overrides(project_id, display_name);
 
+-- OTEL forwarding configs: forward raw OTLP payloads received on
+-- /rpc/hooks.otel/v1/* to a customer-owned endpoint. project_id is nullable
+-- because v1 ships as org-wide config; the column is retained so future UX
+-- can add per-project overrides without a schema change.
+CREATE TABLE IF NOT EXISTS otel_forwarding_configs (
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  endpoint_url TEXT NOT NULL,
+  headers_encrypted TEXT,
+  organization_id TEXT NOT NULL,
+  project_id uuid,
+  enabled boolean NOT NULL DEFAULT true,
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT otel_forwarding_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+-- Only one org-wide row per org
+CREATE UNIQUE INDEX IF NOT EXISTS otel_forwarding_configs_org_key
+  ON otel_forwarding_configs (organization_id)
+  WHERE project_id IS NULL AND deleted IS FALSE;
+
+-- Only one per-project row per (org, project)
+CREATE UNIQUE INDEX IF NOT EXISTS otel_forwarding_configs_org_project_key
+  ON otel_forwarding_configs (organization_id, project_id)
+  WHERE project_id IS NOT NULL AND deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS principal_grants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,

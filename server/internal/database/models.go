@@ -854,6 +854,19 @@ type OrganizationUserRelationship struct {
 	Deleted            bool
 }
 
+type OtelForwardingConfig struct {
+	CreatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	EndpointUrl      string
+	HeadersEncrypted pgtype.Text
+	OrganizationID   string
+	ProjectID        uuid.NullUUID
+	Enabled          bool
+	ID               uuid.UUID
+	Deleted          bool
+}
+
 type Outbox struct {
 	ID             int64
 	PublicID       uuid.UUID
