@@ -122,7 +122,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
-	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, guardianPolicy)
+	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, nil, guardianPolicy)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, nil, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)

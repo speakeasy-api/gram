@@ -28,11 +28,11 @@ func TestExternalID_Priority2_WorkOSExternalID(t *testing.T) {
 
 	ctx, instance := newTestAuthService(t, userInfo)
 
-	idpUser, err := instance.sessionManager.ExchangeCodeForTokens(ctx, "test-code")
+	idpUser, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "test-code")
 	require.NoError(t, err)
 	require.Equal(t, externalID, idpUser.ExternalID, "mock should return external_id")
 
-	returnedID, err := instance.sessionManager.UpsertUserFromIDP(ctx, idpUser)
+	returnedID, err := instance.identityResolver.UpsertUserFromIDP(ctx, idpUser)
 	require.NoError(t, err)
 	require.Equal(t, externalID, returnedID, "should use WorkOS external_id as Gram user ID")
 
@@ -77,10 +77,10 @@ func TestExternalID_EmailMatchWinsOverExternalID(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	idpUser, err := instance.sessionManager.ExchangeCodeForTokens(ctx, "test-code")
+	idpUser, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "test-code")
 	require.NoError(t, err)
 
-	returnedID, err := instance.sessionManager.UpsertUserFromIDP(ctx, idpUser)
+	returnedID, err := instance.identityResolver.UpsertUserFromIDP(ctx, idpUser)
 	require.NoError(t, err)
 
 	// Existing email match always wins — IDs are immutable.
@@ -115,11 +115,11 @@ func TestExternalID_Priority1_EmailMatch(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	idpUser, err := instance.sessionManager.ExchangeCodeForTokens(ctx, "test-code")
+	idpUser, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "test-code")
 	require.NoError(t, err)
 	require.Empty(t, idpUser.ExternalID, "no external_id set")
 
-	returnedID, err := instance.sessionManager.UpsertUserFromIDP(ctx, idpUser)
+	returnedID, err := instance.identityResolver.UpsertUserFromIDP(ctx, idpUser)
 	require.NoError(t, err)
 	require.Equal(t, legacyUUID, returnedID, "should reuse existing legacy UUID")
 
@@ -147,10 +147,10 @@ func TestExternalID_Priority3_DeterministicUUIDv5(t *testing.T) {
 
 	ctx, instance := newTestAuthService(t, userInfo)
 
-	idpUser, err := instance.sessionManager.ExchangeCodeForTokens(ctx, "test-code")
+	idpUser, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "test-code")
 	require.NoError(t, err)
 
-	returnedID, err := instance.sessionManager.UpsertUserFromIDP(ctx, idpUser)
+	returnedID, err := instance.identityResolver.UpsertUserFromIDP(ctx, idpUser)
 	require.NoError(t, err)
 
 	// Should be a deterministic UUIDv5.
@@ -190,16 +190,16 @@ func TestExternalID_Deterministic(t *testing.T) {
 	ctx, instance := newTestAuthService(t, userInfo)
 
 	// First login.
-	idpUser1, err := instance.sessionManager.ExchangeCodeForTokens(ctx, "test-code")
+	idpUser1, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "test-code")
 	require.NoError(t, err)
-	id1, err := instance.sessionManager.UpsertUserFromIDP(ctx, idpUser1)
+	id1, err := instance.identityResolver.UpsertUserFromIDP(ctx, idpUser1)
 	require.NoError(t, err)
 
 	// Second login — same user, should resolve to email match (priority 2)
 	// which returns the same ID that was created by priority 3 on first login.
-	idpUser2, err := instance.sessionManager.ExchangeCodeForTokens(ctx, "test-code")
+	idpUser2, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "test-code")
 	require.NoError(t, err)
-	id2, err := instance.sessionManager.UpsertUserFromIDP(ctx, idpUser2)
+	id2, err := instance.identityResolver.UpsertUserFromIDP(ctx, idpUser2)
 	require.NoError(t, err)
 
 	require.Equal(t, id1, id2, "repeated logins must produce the same user ID")

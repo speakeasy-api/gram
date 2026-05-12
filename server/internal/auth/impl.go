@@ -24,6 +24,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/auth/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -64,6 +65,7 @@ type Service struct {
 	logger              *slog.Logger
 	db                  *pgxpool.Pool
 	sessions            *sessions.Manager
+	identity            *identity.Resolver
 	cfg                 AuthConfigurations
 	authz               *authz.Engine
 	billing             billing.Repository
@@ -81,6 +83,7 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
+	identityResolver *identity.Resolver,
 	cfg AuthConfigurations,
 	authzEngine *authz.Engine,
 	billingRepo billing.Repository,
@@ -94,6 +97,7 @@ func NewService(
 		logger:              logger,
 		db:                  db,
 		sessions:            sessions,
+		identity:            identityResolver,
 		cfg:                 cfg,
 		authz:               authzEngine,
 		billing:             billingRepo,
@@ -145,17 +149,17 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrCodeLookup, errors.New("code is required"))
 	}
 
-	idpUser, err := s.sessions.ExchangeCodeForTokens(ctx, payload.Code)
+	idpUser, err := s.identity.ExchangeCodeForTokens(ctx, payload.Code)
 	if err != nil {
 		return redirectWithError(authErrCodeLookup, err)
 	}
 
-	userID, err := s.sessions.UpsertUserFromIDP(ctx, idpUser)
+	userID, err := s.identity.UpsertUserFromIDP(ctx, idpUser)
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}
 
-	userInfo, err := s.sessions.BuildUserInfoFromDB(ctx, userID)
+	userInfo, err := s.identity.BuildUserInfoFromDB(ctx, userID)
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}
@@ -236,7 +240,7 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	callbackURL := s.buildCallbackURL(ctx)
 	state := encodeStateParam(payload)
 
-	authURL, err := s.sessions.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
+	authURL, err := s.identity.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
 		CallbackURL:     callbackURL,
 		State:           state,
 		Scope:           "",
@@ -483,12 +487,19 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	}
 
 	slug := slugify(payload.OrgName)
+	gramOrgID := "org_" + uuid.New().String()
+
+	// Provision the WorkOS org first so it exists before we create the Gram org.
+	workosOrgID, err := s.identity.ProvisionOrgInWorkOS(ctx, gramOrgID, payload.OrgName, authCtx.UserID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error provisioning organization in WorkOS").Log(ctx, s.logger)
+	}
 
 	org, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:          "org_" + uuid.New().String(),
+		ID:          gramOrgID,
 		Name:        payload.OrgName,
 		Slug:        slug,
-		WorkosID:    pgtype.Text{String: "", Valid: false},
+		WorkosID:    pgtype.Text{String: workosOrgID, Valid: workosOrgID != ""},
 		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
 	})
 	if err != nil {
@@ -522,11 +533,19 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 
 func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sessions.CachedUserInfo, session *sessions.Session) (string, error) {
 	orgName := generateLegibleOrgName()
+	gramOrgID := "org_" + uuid.New().String()
+
+	// Provision the WorkOS org first so it exists before we create the Gram org.
+	workosOrgID, err := s.identity.ProvisionOrgInWorkOS(ctx, gramOrgID, orgName, userInfo.UserID)
+	if err != nil {
+		return "", fmt.Errorf("provision org in WorkOS: %w", err)
+	}
+
 	org, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:          "org_" + uuid.New().String(),
+		ID:          gramOrgID,
 		Name:        orgName,
 		Slug:        slugify(orgName),
-		WorkosID:    pgtype.Text{String: "", Valid: false},
+		WorkosID:    pgtype.Text{String: workosOrgID, Valid: workosOrgID != ""},
 		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
 	})
 	if err != nil {

@@ -118,7 +118,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
-	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, guardianPolicy)
+	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, nil, guardianPolicy)
 	billingStub := billing.NewStubClient(logger, tracerProvider)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, nil, nil, nil, nil, nil)

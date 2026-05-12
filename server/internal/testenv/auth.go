@@ -16,20 +16,22 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
+	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // NewTestManager creates a sessions.Manager backed by a mock WorkOS httptest.Server.
-// The mock serves /user_management/authenticate (the WorkOS SDK endpoint) and
-// a usermanagement.Client is pointed at it, matching the single code path used
-// in production.
+// It also creates an identity.Resolver internally and wires it into the session
+// manager as the UserResolver, matching the production wiring in start.go.
 func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, billingRepo billing.Repository) *sessions.Manager {
 	t.Helper()
 
@@ -47,36 +49,49 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 
 	fakePosthog := posthog.New(context.Background(), logger, "test-posthog-key", "test-posthog-host", "")
 
+	resolver := identity.NewResolver(
+		logger,
+		tracerProvider,
+		cache.NewRedisCacheAdapter(redisClient),
+		srv.URL,
+		"test-client-id",
+		umClient,
+		nil, // no WorkOS client in tests — fallback won't fire
+		orgRepo.New(db),
+		userRepo.New(db),
+		fakePylon,
+		fakePosthog,
+	)
+
 	return sessions.NewManager(
 		logger,
 		tracerProvider,
 		db,
 		redisClient,
 		suffix,
-		srv.URL,
-		"test-client-id",
 		umClient,
-		nil, // no WorkOS client in tests — fallback won't fire
-		fakePylon,
-		fakePosthog,
 		billingRepo,
+		resolver,
 	)
 }
 
-// InitAuthContext creates a fully authenticated context by exercising the real
-// auth flow against the mock OIDC IDP. It exchanges a code for a token, fetches
-// user info, upserts the user, creates org metadata, stores a UUID session, and
-// authenticates. A test project is also created.
+// InitAuthContext creates a fully authenticated context by inserting test data
+// directly into the database. It creates a user, organization, org-user
+// relationship, session, and project, then authenticates the session.
 func InitAuthContext(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sessionManager *sessions.Manager) context.Context {
 	t.Helper()
 
-	// Exchange a mock code for user identity (calls mock-workos /user_management/authenticate)
-	idpUser, err := sessionManager.ExchangeCodeForTokens(ctx, "test-code")
+	// Insert user directly into DB (instead of IDP code exchange).
+	usersQueries := userRepo.New(conn)
+	user, err := usersQueries.UpsertUser(ctx, userRepo.UpsertUserParams{
+		ID:          mockidp.MockUserID,
+		Email:       mockidp.MockUserEmail,
+		DisplayName: "Dev User",
+		PhotoUrl:    conv.PtrToPGText(nil),
+		Admin:       false,
+	})
 	require.NoError(t, err)
-
-	// Upsert user in DB
-	userID, err := sessionManager.UpsertUserFromIDP(ctx, idpUser)
-	require.NoError(t, err)
+	userID := user.ID
 
 	// Upsert organization metadata in the database
 	orgQueries := orgRepo.New(conn)
@@ -96,19 +111,12 @@ func InitAuthContext(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sess
 	})
 	require.NoError(t, err)
 
-	// Build user info from DB to populate cache
-	userInfo, err := sessionManager.BuildUserInfoFromDB(ctx, userID)
-	require.NoError(t, err)
-	require.NotEmpty(t, userInfo.Organizations, "mock IDP must return at least one organization")
-
-	activeOrg := userInfo.Organizations[0]
-
 	// Mint our own session ID and store
 	sessionID := uuid.New().String()
 	session := sessions.Session{
 		SessionID:            sessionID,
 		UserID:               userID,
-		ActiveOrganizationID: activeOrg.ID,
+		ActiveOrganizationID: mockidp.MockOrgID,
 		WorkOSSessionID:      "",
 	}
 	err = sessionManager.StoreSession(ctx, session)

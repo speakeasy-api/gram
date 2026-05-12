@@ -13,6 +13,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -34,6 +35,18 @@ import (
 type mockWorkOSFetcher struct {
 	members map[string][]workos.Member      // keyed by WorkOS user ID
 	orgs    map[string]*workos.Organization // keyed by WorkOS org ID
+
+	// Track calls to CreateOrganization / CreateOrganizationMembership.
+	createdOrgs        []createdOrgRecord
+	createdMemberships []createdMembershipRecord
+}
+
+type createdOrgRecord struct {
+	Name, ExternalID string
+}
+
+type createdMembershipRecord struct {
+	WorkOSUserID, WorkOSOrgID string
 }
 
 func (m *mockWorkOSFetcher) ListUserMemberships(_ context.Context, userID string) ([]workos.Member, error) {
@@ -52,6 +65,16 @@ func (m *mockWorkOSFetcher) EnsureUserExternalID(_ context.Context, _, _ string)
 }
 
 func (m *mockWorkOSFetcher) EnsureOrgExternalID(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (m *mockWorkOSFetcher) CreateOrganization(_ context.Context, name, gramOrgID string) (string, error) {
+	m.createdOrgs = append(m.createdOrgs, createdOrgRecord{Name: name, ExternalID: gramOrgID})
+	return "workos_org_" + gramOrgID, nil
+}
+
+func (m *mockWorkOSFetcher) CreateOrganizationMembership(_ context.Context, workosUserID, workosOrgID string) error {
+	m.createdMemberships = append(m.createdMemberships, createdMembershipRecord{WorkOSUserID: workosUserID, WorkOSOrgID: workosOrgID})
 	return nil
 }
 
@@ -88,15 +111,15 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	var wf sessions.WorkOSClient
+	var wf identity.WorkOSClient
 	if fetcher != nil {
 		wf = fetcher
 	}
 
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", umClient, wf, orgRepo.New(conn), usersRepo.New(conn), pylonClient, posthogClient)
 	sessionManager := sessions.NewManager(
 		logger, tracerProvider, conn, redisClient, cache.Suffix("gram-e2e"),
-		mockServer.URL, "test-client-id", umClient, wf,
-		pylonClient, posthogClient, billingClient,
+		umClient, billingClient, resolver,
 	)
 
 	authConfigs := auth.AuthConfigurations{
@@ -110,9 +133,9 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 	require.NoError(t, err)
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient)
 
-	ti := newTestAuthServiceResult(t, svc, conn, sessionManager, mockServer, authConfigs)
+	ti := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs)
 	return ctx, &e2eInstance{testInstance: *ti, fetcher: fetcher}
 }
 
@@ -754,6 +777,60 @@ func TestE2E_Register_ZeroOrgUserCreatesOrg(t *testing.T) {
 	assert.Equal(t, "my-new-org", infoResult.Organizations[0].Slug)
 	assert.NotEmpty(t, infoResult.ActiveOrganizationID)
 	assert.NotEmpty(t, infoResult.Organizations[0].Projects, "default project should be auto-created")
+}
+
+// TestE2E_Register_CreatesWorkOSOrg verifies that Register provisions the org
+// in WorkOS with the Gram org ID as external_id, and creates a membership
+// linking the user to the new WorkOS org.
+func TestE2E_Register_CreatesWorkOSOrg(t *testing.T) {
+	t.Parallel()
+
+	const workosUserID = "user_01REG_WORKOS"
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{},
+		orgs:    map[string]*workos.Organization{},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "register-workos@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	// Login → Callback (zero orgs)
+	callbackResult, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	require.NoError(t, err)
+	require.NotEmpty(t, callbackResult.SessionToken)
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	require.NoError(t, err)
+
+	// Register — should provision WorkOS org.
+	err = inst.service.Register(ctx, &gen.RegisterPayload{OrgName: "WorkOS Test Org"})
+	require.NoError(t, err)
+
+	// Assert WorkOS CreateOrganization was called with the Gram org ID as external_id.
+	require.Len(t, fetcher.createdOrgs, 1, "should have called CreateOrganization once")
+	assert.Equal(t, "WorkOS Test Org", fetcher.createdOrgs[0].Name)
+	assert.NotEmpty(t, fetcher.createdOrgs[0].ExternalID, "external_id should be the Gram org ID")
+
+	// Assert WorkOS membership was created.
+	require.Len(t, fetcher.createdMemberships, 1, "should have called CreateOrganizationMembership once")
+	assert.Equal(t, workosUserID, fetcher.createdMemberships[0].WorkOSUserID)
+	assert.Equal(t, "workos_org_"+fetcher.createdOrgs[0].ExternalID, fetcher.createdMemberships[0].WorkOSOrgID)
+
+	// Verify workos_id was stored on the Gram org row.
+	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	require.NoError(t, err)
+	orgQueries := orgRepo.New(inst.conn)
+	gramOrgID := fetcher.createdOrgs[0].ExternalID
+	dbOrg, err := orgQueries.GetOrganizationMetadata(ctx, gramOrgID)
+	require.NoError(t, err)
+	assert.True(t, dbOrg.WorkosID.Valid, "workos_id should be stored on org")
+	assert.Equal(t, "workos_org_"+gramOrgID, dbOrg.WorkosID.String)
 }
 
 // TestE2E_Register_RejectsWhenOrgAlreadyActive verifies that Register returns

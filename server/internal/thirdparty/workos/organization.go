@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/workos/workos-go/v6/pkg/organizations"
+	"github.com/workos/workos-go/v6/pkg/usermanagement"
 )
 
 // Organization represents a WorkOS organization with the fields used by Gram.
@@ -30,6 +31,38 @@ func (wc *Client) GetOrganization(ctx context.Context, orgID string) (*Organizat
 		CreatedAt:  o.CreatedAt,
 		UpdatedAt:  o.UpdatedAt,
 	}, nil
+}
+
+// CreateOrganization creates a WorkOS organization with the given name and
+// sets its external_id to the Gram org ID. Returns the WorkOS org ID.
+func (wc *Client) CreateOrganization(ctx context.Context, name, gramOrgID string) (string, error) {
+	o, err := wc.orgs.CreateOrganization(ctx, organizations.CreateOrganizationOpts{
+		Name:                             name,
+		AllowProfilesOutsideOrganization: false,
+		Domains:                          nil,
+		DomainData:                       nil,
+		ExternalID:                       gramOrgID,
+		IdempotencyKey:                   gramOrgID,
+		Metadata:                         nil,
+	})
+	if err != nil {
+		return "", fmt.Errorf("create organization: %w", err)
+	}
+
+	return o.ID, nil
+}
+
+// CreateOrganizationMembership adds a WorkOS user to a WorkOS organization.
+func (wc *Client) CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID string) error {
+	_, err := wc.um.CreateOrganizationMembership(ctx, usermanagement.CreateOrganizationMembershipOpts{
+		UserID:         workosUserID,
+		OrganizationID: workosOrgID,
+		RoleSlug:       "admin",
+	})
+	if err != nil {
+		return fmt.Errorf("create organization membership: %w", err)
+	}
+	return nil
 }
 
 // EnsureOrgExternalID sets the WorkOS organization's external_id to gramOrgID

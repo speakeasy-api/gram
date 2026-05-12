@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -72,6 +73,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/packages"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -93,6 +95,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/usage"
+	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/variations"
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
@@ -529,19 +532,29 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create IDP user management client: idp-client-secret (or workos-api-key) is required")
 			}
 
+			identityResolver := identity.NewResolver(
+				logger,
+				tracerProvider,
+				cache.NewRedisCacheAdapter(redisClient),
+				c.String("idp-base-url"),
+				c.String("idp-client-id"),
+				umClient,
+				workosClient,
+				orgRepo.New(db),
+				userRepo.New(db),
+				pylonClient,
+				posthogClient,
+			)
+
 			sessionManager := sessions.NewManager(
 				logger,
 				tracerProvider,
 				db,
 				redisClient,
 				cache.SuffixNone,
-				c.String("idp-base-url"),
-				c.String("idp-client-id"),
 				umClient,
-				workosClient,
-				pylonClient,
-				posthogClient,
 				billingRepo,
+				identityResolver,
 			)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
@@ -718,7 +731,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, guardianPolicy)
+			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, identityResolver, guardianPolicy)
 			externalOAuthService := oauth.NewExternalOAuthService(logger, guardianPolicy, db, cache.NewRedisCacheAdapter(redisClient), authorizer, encryptionClient, externalMcpOAuthConfig)
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient))
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL)
@@ -887,6 +900,7 @@ func newStartCommand() *cli.Command {
 				tracerProvider,
 				db,
 				sessionManager,
+				identityResolver,
 				auth.AuthConfigurations{
 					IDPBaseURL:        c.String("idp-base-url"),
 					GramServerURL:     c.String("server-url"),

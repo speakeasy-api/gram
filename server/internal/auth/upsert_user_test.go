@@ -39,11 +39,11 @@ func TestUpsertUserFromIDP_ReusesExistingIDOnEmailMatch(t *testing.T) {
 
 	// Step 2: Call ExchangeCodeForTokens + UpsertUserFromIDP — this is the
 	// production login path. The mock server returns workosUserID as the sub.
-	idpUser, err := instance.sessionManager.ExchangeCodeForTokens(ctx, "test-code")
+	idpUser, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "test-code")
 	require.NoError(t, err)
 	require.Equal(t, workosUserID, idpUser.Sub, "mock should return WorkOS-format ID")
 
-	returnedID, err := instance.sessionManager.UpsertUserFromIDP(ctx, idpUser)
+	returnedID, err := instance.identityResolver.UpsertUserFromIDP(ctx, idpUser)
 	require.NoError(t, err)
 
 	// Step 3: Assert the returned ID is the legacy UUID, NOT the WorkOS ID.
@@ -72,10 +72,10 @@ func TestUpsertUserFromIDP_NewUserGetsDeterministicUUIDv5(t *testing.T) {
 	ctx, instance := newTestAuthService(t, userInfo)
 
 	// No pre-existing user — first login ever.
-	idpUser, err := instance.sessionManager.ExchangeCodeForTokens(ctx, "test-code")
+	idpUser, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "test-code")
 	require.NoError(t, err)
 
-	returnedID, err := instance.sessionManager.UpsertUserFromIDP(ctx, idpUser)
+	returnedID, err := instance.identityResolver.UpsertUserFromIDP(ctx, idpUser)
 	require.NoError(t, err)
 
 	// New users get a deterministic UUIDv5 derived from the WorkOS user ID.
@@ -113,10 +113,10 @@ func TestUpsertUserFromIDP_PreservesAdminStatus(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	idpUser, err := instance.sessionManager.ExchangeCodeForTokens(ctx, "test-code")
+	idpUser, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "test-code")
 	require.NoError(t, err)
 
-	returnedID, err := instance.sessionManager.UpsertUserFromIDP(ctx, idpUser)
+	returnedID, err := instance.identityResolver.UpsertUserFromIDP(ctx, idpUser)
 	require.NoError(t, err)
 	require.Equal(t, legacyUUID, returnedID)
 

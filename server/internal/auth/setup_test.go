@@ -15,6 +15,7 @@ import (
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -27,7 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 var (
@@ -60,11 +61,12 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *auth.Service
-	conn           *pgxpool.Pool
-	sessionManager *sessions.Manager
-	mockAuthServer *httptest.Server
-	authConfigs    auth.AuthConfigurations
+	service          *auth.Service
+	conn             *pgxpool.Pool
+	sessionManager   *sessions.Manager
+	identityResolver *identity.Resolver
+	mockAuthServer   *httptest.Server
+	authConfigs      auth.AuthConfigurations
 }
 
 // MockUserInfo represents the user info used by the mock OIDC server
@@ -137,7 +139,8 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-client-id", umClient, nil, pylon, posthog, billingClient)
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", umClient, nil, orgRepo.New(conn), userRepo.New(conn), pylon, posthog)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), umClient, billingClient, resolver)
 
 	authConfigs := auth.AuthConfigurations{
 		IDPBaseURL:        mockServer.URL,
@@ -150,9 +153,9 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 	require.NoError(t, err)
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog)
 
-	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, mockServer, authConfigs)
+	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs)
 }
 
 func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.Context, *testInstance) {
@@ -182,7 +185,8 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-client-id", umClient, nil, pylon, posthog, billingClient)
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", umClient, nil, orgRepo.New(conn), userRepo.New(conn), pylon, posthog)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), umClient, billingClient, resolver)
 
 	authConfigs := auth.AuthConfigurations{
 		IDPBaseURL:        mockServer.URL,
@@ -195,18 +199,19 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 	require.NoError(t, err)
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog)
 
-	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, mockServer, authConfigs)
+	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs)
 }
 
-func newTestAuthServiceResult(_ *testing.T, svc *auth.Service, conn *pgxpool.Pool, sessionManager *sessions.Manager, mockServer *httptest.Server, authConfigs auth.AuthConfigurations) *testInstance {
+func newTestAuthServiceResult(_ *testing.T, svc *auth.Service, conn *pgxpool.Pool, sessionManager *sessions.Manager, resolver *identity.Resolver, mockServer *httptest.Server, authConfigs auth.AuthConfigurations) *testInstance {
 	return &testInstance{
-		service:        svc,
-		conn:           conn,
-		sessionManager: sessionManager,
-		mockAuthServer: mockServer,
-		authConfigs:    authConfigs,
+		service:          svc,
+		conn:             conn,
+		sessionManager:   sessionManager,
+		identityResolver: resolver,
+		mockAuthServer:   mockServer,
+		authConfigs:      authConfigs,
 	}
 }
 
@@ -269,8 +274,8 @@ func adminMockUserInfo() *MockUserInfo {
 
 // createTestUser creates a user record in the database for testing
 func (ti *testInstance) createTestUser(ctx context.Context, userInfo *MockUserInfo) error {
-	usersQueries := usersRepo.New(ti.conn)
-	_, err := usersQueries.UpsertUser(ctx, usersRepo.UpsertUserParams{
+	usersQueries := userRepo.New(ti.conn)
+	_, err := usersQueries.UpsertUser(ctx, userRepo.UpsertUserParams{
 		ID:          userInfo.UserID,
 		Email:       userInfo.Email,
 		DisplayName: userInfo.Email,

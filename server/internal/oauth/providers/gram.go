@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -19,13 +20,15 @@ import (
 type GramProvider struct {
 	logger   *slog.Logger
 	sessions *sessions.Manager
+	identity *identity.Resolver
 }
 
 // NewGramProvider creates a new Gram OAuth provider
-func NewGramProvider(logger *slog.Logger, sessions *sessions.Manager) *GramProvider {
+func NewGramProvider(logger *slog.Logger, sessions *sessions.Manager, identity *identity.Resolver) *GramProvider {
 	return &GramProvider{
 		logger:   logger,
 		sessions: sessions,
+		identity: identity,
 	}
 }
 
@@ -40,7 +43,7 @@ func (p *GramProvider) ExchangeToken(
 	serverURL *url.URL,
 	_ string,
 ) (*TokenExchangeResult, error) {
-	idpUser, err := p.sessions.ExchangeCodeForTokens(ctx, code)
+	idpUser, err := p.identity.ExchangeCodeForTokens(ctx, code)
 	if err != nil {
 		p.logger.ErrorContext(ctx, "failed to exchange code for token from oauth gram provider",
 			attr.SlogOAuthProvider(provider.Slug),
@@ -48,7 +51,7 @@ func (p *GramProvider) ExchangeToken(
 		return nil, fmt.Errorf("exchange code for token: %w", err)
 	}
 
-	userID, err := p.sessions.UpsertUserFromIDP(ctx, idpUser)
+	userID, err := p.identity.UpsertUserFromIDP(ctx, idpUser)
 	if err != nil {
 		p.logger.ErrorContext(ctx, "failed to upsert user from oauth gram provider",
 			attr.SlogOAuthProvider(provider.Slug),
@@ -56,7 +59,7 @@ func (p *GramProvider) ExchangeToken(
 		return nil, fmt.Errorf("upsert user: %w", err)
 	}
 
-	userInfo, err := p.sessions.BuildUserInfoFromDB(ctx, userID)
+	userInfo, err := p.identity.BuildUserInfoFromDB(ctx, userID)
 	if err != nil {
 		p.logger.ErrorContext(ctx, "failed to build user info from oauth gram provider",
 			attr.SlogOAuthProvider(provider.Slug),

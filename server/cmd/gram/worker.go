@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -39,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -50,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 func newWorkerCommand() *cli.Command {
@@ -562,11 +565,25 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create IDP user management client: idp-client-secret (or workos-api-key) is required")
 			}
 
-			sessionManager := sessions.NewManager(logger, tracerProvider, db, redisClient, cache.SuffixNone, c.String("idp-base-url"), c.String("idp-client-id"), umClient, nil, pylonClient, posthogClient, billingRepo)
+			identityResolver := identity.NewResolver(
+				logger,
+				tracerProvider,
+				cache.NewRedisCacheAdapter(redisClient),
+				c.String("idp-base-url"),
+				c.String("idp-client-id"),
+				umClient,
+				nil, // no WorkOS client in worker
+				orgRepo.New(db),
+				userRepo.New(db),
+				pylonClient,
+				posthogClient,
+			)
+
+			sessionManager := sessions.NewManager(logger, tracerProvider, db, redisClient, cache.SuffixNone, umClient, billingRepo, identityResolver)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
 
-			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, guardianPolicy)
+			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, identityResolver, guardianPolicy)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL)
 
 			assistantTokenManager := assistanttokens.New(c.String("jwt-signing-key"), db, authzEngine)
