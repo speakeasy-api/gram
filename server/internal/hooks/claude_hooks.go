@@ -563,7 +563,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			SessionID:   sessionID,
 			ServiceName: "",
 			UserEmail:   "",
-			UserID:      "",
+			UserID:      authCtx.UserID,
 			ClaudeOrgID: "",
 			GramOrgID:   authCtx.ActiveOrganizationID,
 			ProjectID:   authCtx.ProjectID.String(),
@@ -603,7 +603,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		return result, nil
 	}
 
-	detail, denied := s.enforceShadowMCPToolAccess(ctx, metadata.GramOrgID, metadata.ProjectID, payload.ToolInput, mcpToolName, claudeShadowMCPEvidence(rawToolName))
+	detail, denied := s.enforceShadowMCPToolAccess(ctx, metadata.GramOrgID, metadata.ProjectID, metadata.UserID, payload.ToolInput, mcpToolName, claudeShadowMCPEvidence(rawToolName))
 	if denied {
 		s.logger.With(
 			attr.SlogHookSource("claude"),

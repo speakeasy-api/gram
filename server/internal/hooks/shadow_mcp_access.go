@@ -8,7 +8,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -30,6 +29,7 @@ func (s *Service) enforceShadowMCPToolAccess(
 	ctx context.Context,
 	organizationID string,
 	projectID string,
+	userID string,
 	toolInput any,
 	toolName string,
 	evidence shadowmcp.AccessEvidence,
@@ -41,11 +41,6 @@ func (s *Service) enforceShadowMCPToolAccess(
 	detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, toolInput, toolName, organizationID)
 	if !denied {
 		return "", false
-	}
-
-	var userID string
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
-		userID = authCtx.UserID
 	}
 
 	decision := s.shadowMCPClient.EvaluateAccessRules(ctx, shadowMCPAccessRuleAuthorizer{engine: s.authz}, organizationID, projectID, userID, evidence)
@@ -62,9 +57,6 @@ func (s *Service) enforceShadowMCPToolAccess(
 	)
 	if decision.Allows() {
 		return "", false
-	}
-	if decision.Reason != "" {
-		return decision.Reason, true
 	}
 	return detail, true
 }
