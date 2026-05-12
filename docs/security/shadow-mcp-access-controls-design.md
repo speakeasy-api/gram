@@ -121,6 +121,8 @@ Use existing `principal_grants` rows, but keep Shadow MCP in its own scope/resou
 - selector `resource_kind = 'shadow_mcp'`
 - selector `resource_id = <shadow_mcp_access_rules.id>`
 
+Access Rule approval and manual Access Rule assignment must only assign editable/custom roles. Built-in system roles (`admin`, `member`) are seeded from `SystemRoleGrants` and are not editable through the normal role editor, so Shadow MCP approval must not mutate those grants as a side effect. If admins need broad access, they can assign `shadow_mcp:connect` with a wildcard selector to an editable role through the normal permission picker; do not seed that wildcard grant by default.
+
 At runtime, a matching allowed Access Rule becomes the Shadow MCP resource checked through RBAC:
 
 ```text
@@ -273,14 +275,15 @@ Audit actions:
 - access rule create
 - access rule update
 - access rule delete
-- role grant add/remove caused by request approval or rule mutation
+
+For v1, role assignment changes caused by request approval or Access Rule mutation are captured as part of the `shadow_mcp_access_rule` before/after snapshots and audit metadata. Do not add separate role grant add/remove audit actions unless the audit product later needs role-grant lifecycle events as independently filterable subjects.
 
 Audit entries should include before/after snapshots for updates and metadata for:
 
 - match breadth changes
 - match value changes
 - source request id
-- affected role ids
+- affected role ids or role slugs
 - requester user id/email where applicable
 
 All audited mutations must run in the same transaction as the data changes.
