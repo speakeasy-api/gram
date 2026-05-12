@@ -1,9 +1,15 @@
 package access
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -14,6 +20,7 @@ import (
 const (
 	shadowMCPApprovalRequestTokenIssuer  = "gram"
 	shadowMCPApprovalRequestTokenSubject = "shadow_mcp_approval_request" // #nosec G101 -- JWT subject label, not a credential.
+	shadowMCPApprovalRequestTokenPrefix  = "smar1."
 )
 
 type ShadowMCPApprovalRequestTokenInput struct {
@@ -80,30 +87,28 @@ func GenerateShadowMCPApprovalRequestToken(jwtSecret string, input ShadowMCPAppr
 		return "", time.Time{}, err
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString([]byte(jwtSecret))
+	plaintext, err := json.Marshal(claims)
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("sign shadow mcp approval request token: %w", err)
+		return "", time.Time{}, fmt.Errorf("marshal shadow mcp approval request token: %w", err)
 	}
-	return signed, expiry, nil
+	token, err := encryptShadowMCPApprovalRequestToken(jwtSecret, plaintext)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return token, expiry, nil
 }
 
 func parseShadowMCPApprovalRequestToken(jwtSecret string, tokenString string) (*shadowMCPApprovalRequestClaims, error) {
 	if strings.TrimSpace(jwtSecret) == "" {
 		return nil, fmt.Errorf("jwt secret is required")
 	}
-	var claims shadowMCPApprovalRequestClaims
-	token, err := jwt.ParseWithClaims(tokenString, &claims, func(token *jwt.Token) (any, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return []byte(jwtSecret), nil
-	}, jwt.WithIssuer(shadowMCPApprovalRequestTokenIssuer), jwt.WithSubject(shadowMCPApprovalRequestTokenSubject), jwt.WithExpirationRequired())
+	plaintext, err := decryptShadowMCPApprovalRequestToken(jwtSecret, tokenString)
 	if err != nil {
-		return nil, fmt.Errorf("parse shadow mcp approval request token: %w", err)
+		return nil, err
 	}
-	if !token.Valid {
-		return nil, fmt.Errorf("invalid shadow mcp approval request token")
+	var claims shadowMCPApprovalRequestClaims
+	if err := json.Unmarshal(plaintext, &claims); err != nil {
+		return nil, fmt.Errorf("unmarshal shadow mcp approval request token: %w", err)
 	}
 	if err := validateShadowMCPApprovalRequestClaims(&claims); err != nil {
 		return nil, err
@@ -112,6 +117,22 @@ func parseShadowMCPApprovalRequestToken(jwtSecret string, tokenString string) (*
 }
 
 func validateShadowMCPApprovalRequestClaims(claims *shadowMCPApprovalRequestClaims) error {
+	if claims.Issuer != shadowMCPApprovalRequestTokenIssuer {
+		return fmt.Errorf("invalid issuer")
+	}
+	if claims.Subject != shadowMCPApprovalRequestTokenSubject {
+		return fmt.Errorf("invalid subject")
+	}
+	now := time.Now()
+	if claims.ExpiresAt == nil {
+		return fmt.Errorf("expiration is required")
+	}
+	if !now.Before(claims.ExpiresAt.Time) {
+		return fmt.Errorf("token is expired")
+	}
+	if claims.NotBefore != nil && now.Before(claims.NotBefore.Time) {
+		return fmt.Errorf("token is not valid yet")
+	}
 	if strings.TrimSpace(claims.OrganizationID) == "" {
 		return fmt.Errorf("organization_id is required")
 	}
@@ -119,6 +140,57 @@ func validateShadowMCPApprovalRequestClaims(claims *shadowMCPApprovalRequestClai
 		return fmt.Errorf("invalid project_id: %w", err)
 	}
 	return validateShadowMCPEvidence(claims.ObservedFullURL, claims.ObservedURLHost, claims.ObservedServerIdentity)
+}
+
+func encryptShadowMCPApprovalRequestToken(jwtSecret string, plaintext []byte) (string, error) {
+	gcm, err := shadowMCPApprovalRequestTokenCipher(jwtSecret)
+	if err != nil {
+		return "", err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", fmt.Errorf("read shadow mcp approval request token nonce: %w", err)
+	}
+	ciphertext := gcm.Seal(nil, nonce, plaintext, []byte(shadowMCPApprovalRequestTokenSubject))
+	raw := append(nonce, ciphertext...)
+	return shadowMCPApprovalRequestTokenPrefix + base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+func decryptShadowMCPApprovalRequestToken(jwtSecret string, tokenString string) ([]byte, error) {
+	if !strings.HasPrefix(tokenString, shadowMCPApprovalRequestTokenPrefix) {
+		return nil, fmt.Errorf("invalid shadow mcp approval request token format")
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(tokenString, shadowMCPApprovalRequestTokenPrefix))
+	if err != nil {
+		return nil, fmt.Errorf("decode shadow mcp approval request token: %w", err)
+	}
+	gcm, err := shadowMCPApprovalRequestTokenCipher(jwtSecret)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) <= gcm.NonceSize() {
+		return nil, fmt.Errorf("invalid shadow mcp approval request token length")
+	}
+	nonce := raw[:gcm.NonceSize()]
+	ciphertext := raw[gcm.NonceSize():]
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, []byte(shadowMCPApprovalRequestTokenSubject))
+	if err != nil {
+		return nil, fmt.Errorf("decrypt shadow mcp approval request token: %w", err)
+	}
+	return plaintext, nil
+}
+
+func shadowMCPApprovalRequestTokenCipher(jwtSecret string) (cipher.AEAD, error) {
+	key := sha256.Sum256([]byte(shadowMCPApprovalRequestTokenSubject + "\x00" + jwtSecret))
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return nil, fmt.Errorf("create shadow mcp approval request token cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("create shadow mcp approval request token gcm: %w", err)
+	}
+	return gcm, nil
 }
 
 func shadowMCPApprovalRequestFingerprint(claims *shadowMCPApprovalRequestClaims) string {
