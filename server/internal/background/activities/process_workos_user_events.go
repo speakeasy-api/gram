@@ -208,7 +208,10 @@ func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, dbtx dat
 	}
 
 	if payload.ExternalID == "" {
-		return &workosUserExternalIDUpdate{workosUserID: payload.ID, externalID: gramUserID}, nil
+		return &workosUserExternalIDUpdate{
+			workosUserID: payload.ID,
+			externalID:   gramUserID,
+		}, nil
 	}
 
 	return nil, nil
