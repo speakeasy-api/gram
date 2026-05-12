@@ -1228,7 +1228,8 @@ func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectI
 	for _, tool := range tools {
 		toolURN, err := conv.GetToolURN(*tool)
 		if err != nil || toolURN == nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
+			logger.WarnContext(ctx, "skipping variation lookup for tool with invalid urn", attr.SlogError(err))
+			continue
 		}
 		toolUrns = append(toolUrns, toolURN.String())
 	}
@@ -1269,7 +1270,7 @@ func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectI
 		}
 		toolURN, err := conv.GetToolURN(*tool)
 		if err != nil || toolURN == nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
+			continue
 		}
 
 		v, ok := urnToVariation[toolURN.String()]
