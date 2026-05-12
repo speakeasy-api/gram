@@ -858,6 +858,7 @@ type OtelForwardingConfig struct {
 	CreatedAt        pgtype.Timestamptz
 	DeletedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
+	Name             string
 	EndpointUrl      string
 	HeadersEncrypted pgtype.Text
 	OrganizationID   string
@@ -865,6 +866,26 @@ type OtelForwardingConfig struct {
 	Enabled          bool
 	ID               uuid.UUID
 	Deleted          bool
+}
+
+type OtelForwardingDelivery struct {
+	OutboxID       int64
+	DestinationID  uuid.UUID
+	ProcessedAt    pgtype.Timestamptz
+	DeadLettered   bool
+	Attempts       int32
+	LastStatusCode pgtype.Int4
+	LastError      pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type OtelForwardingOutbox struct {
+	ID             int64
+	OrganizationID string
+	ContentType    string
+	Payload        []byte
+	ReceivedAt     pgtype.Timestamptz
 }
 
 type Outbox struct {
