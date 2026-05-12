@@ -12,7 +12,7 @@ import (
 )
 
 const getConnectedUserByEmail = `-- name: GetConnectedUserByEmail :one
-SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.workos_deleted, u.deleted_at, u.created_at, u.updated_at FROM users u
+SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE u.email = $1
   AND our.organization_id = $2
@@ -39,7 +39,6 @@ func (q *Queries) GetConnectedUserByEmail(ctx context.Context, arg GetConnectedU
 		&i.WorkosCreatedAt,
 		&i.WorkosUpdatedAt,
 		&i.WorkosDeletedAt,
-		&i.WorkosDeleted,
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -48,7 +47,7 @@ func (q *Queries) GetConnectedUserByEmail(ctx context.Context, arg GetConnectedU
 }
 
 const getConnectedUsersByWorkosIDs = `-- name: GetConnectedUsersByWorkosIDs :many
-SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.workos_deleted, u.deleted_at, u.created_at, u.updated_at FROM users u
+SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE u.workos_id = ANY($1::text[])
   AND our.organization_id = $2
@@ -80,7 +79,6 @@ func (q *Queries) GetConnectedUsersByWorkosIDs(ctx context.Context, arg GetConne
 			&i.WorkosCreatedAt,
 			&i.WorkosUpdatedAt,
 			&i.WorkosDeletedAt,
-			&i.WorkosDeleted,
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -96,7 +94,7 @@ func (q *Queries) GetConnectedUsersByWorkosIDs(ctx context.Context, arg GetConne
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, workos_deleted, deleted_at, created_at, updated_at FROM users
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at FROM users
 WHERE id = $1
 `
 
@@ -114,7 +112,6 @@ func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
 		&i.WorkosCreatedAt,
 		&i.WorkosUpdatedAt,
 		&i.WorkosDeletedAt,
-		&i.WorkosDeleted,
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -123,7 +120,7 @@ func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, workos_deleted, deleted_at, created_at, updated_at FROM users
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at FROM users
 WHERE email = $1
 `
 
@@ -141,7 +138,6 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.WorkosCreatedAt,
 		&i.WorkosUpdatedAt,
 		&i.WorkosDeletedAt,
-		&i.WorkosDeleted,
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -163,7 +159,7 @@ func (q *Queries) GetUserIDByWorkosID(ctx context.Context, workosID pgtype.Text)
 }
 
 const getUsersByIDs = `-- name: GetUsersByIDs :many
-SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, workos_deleted, deleted_at, created_at, updated_at FROM users
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at FROM users
 WHERE id = ANY($1::text[])
 `
 
@@ -187,7 +183,6 @@ func (q *Queries) GetUsersByIDs(ctx context.Context, ids []string) ([]User, erro
 			&i.WorkosCreatedAt,
 			&i.WorkosUpdatedAt,
 			&i.WorkosDeletedAt,
-			&i.WorkosDeleted,
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -203,7 +198,7 @@ func (q *Queries) GetUsersByIDs(ctx context.Context, ids []string) ([]User, erro
 }
 
 const getUsersByWorkosIDs = `-- name: GetUsersByWorkosIDs :many
-SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, workos_deleted, deleted_at, created_at, updated_at FROM users
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at FROM users
 WHERE workos_id = ANY($1::text[])
 `
 
@@ -227,7 +222,6 @@ func (q *Queries) GetUsersByWorkosIDs(ctx context.Context, workosIds []string) (
 			&i.WorkosCreatedAt,
 			&i.WorkosUpdatedAt,
 			&i.WorkosDeletedAt,
-			&i.WorkosDeleted,
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -270,7 +264,7 @@ ON CONFLICT (id) DO UPDATE SET
   admin = EXCLUDED.admin,
   last_login = clock_timestamp(),
   updated_at = clock_timestamp()
-RETURNING id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, workos_deleted, deleted_at, created_at, updated_at, (xmax = 0) AS was_created
+RETURNING id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at, (xmax = 0) AS was_created
 `
 
 type UpsertUserParams struct {
@@ -292,7 +286,6 @@ type UpsertUserRow struct {
 	WorkosCreatedAt pgtype.Timestamptz
 	WorkosUpdatedAt pgtype.Timestamptz
 	WorkosDeletedAt pgtype.Timestamptz
-	WorkosDeleted   bool
 	DeletedAt       pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -319,7 +312,6 @@ func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (UpsertU
 		&i.WorkosCreatedAt,
 		&i.WorkosUpdatedAt,
 		&i.WorkosDeletedAt,
-		&i.WorkosDeleted,
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,

@@ -19,7 +19,6 @@ type User struct {
 	WorkosCreatedAt pgtype.Timestamptz
 	WorkosUpdatedAt pgtype.Timestamptz
 	WorkosDeletedAt pgtype.Timestamptz
-	WorkosDeleted   bool
 	DeletedAt       pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
