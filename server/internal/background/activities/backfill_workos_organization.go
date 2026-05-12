@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -162,7 +161,7 @@ func backfillOrganizationRoles(ctx context.Context, logger *slog.Logger, dbtx pg
 	snapshotSlugs := make(map[string]time.Time)
 
 	for _, role := range roles {
-		if !isWorkOSOrganizationRole(role) {
+		if role.Type != "OrganizationRole" {
 			continue
 		}
 		createdAt, err := parseWorkOSTime(role.CreatedAt)
@@ -303,13 +302,13 @@ type membershipCursor struct {
 	updatedAt   *time.Time
 }
 
-// latestMembershipCursor returns the newest local WorkOS state
-// for a membership before applying a snapshot. Membership backfill writes two
-// local shapes: organization_user_relationships when the WorkOS user is linked
-// to a Gram user, and organization_role_assignments even when the user is still
-// unknown locally. Both can be updated by event processing, so the snapshot must
-// compare against the freshest cursor/timestamp from both tables before it
-// overwrites either table.
+// latestMembershipCursor returns the newest local WorkOS state for a membership
+// before applying a snapshot. Membership backfill writes two local shapes:
+// organization_user_relationships when the WorkOS user is linked to a Gram
+// user, and organization_role_assignments even when the user is still unknown
+// locally. Both can be updated by event processing, so the snapshot must compare
+// against the freshest cursor/timestamp from both tables before it overwrites
+// either table.
 func latestMembershipCursor(ctx context.Context, repo *orgrepo.Queries, organizationID, gramUserID, workosUserID string) (membershipCursor, error) {
 	var cursor membershipCursor
 
@@ -324,7 +323,7 @@ func latestMembershipCursor(ctx context.Context, repo *orgrepo.Queries, organiza
 		moveMembershipCursor(&cursor, assignment.WorkosLastEventID, assignment.WorkosUpdatedAt)
 	}
 
-	// we don't have a relationship for a user with no gram user ID, so return the membership cursor
+	// No relationship row exists when the WorkOS user is not linked to a Gram user.
 	if gramUserID == "" {
 		return cursor, nil
 	}
@@ -353,13 +352,10 @@ func parseWorkOSTime(raw string) (time.Time, error) {
 	return t, nil
 }
 
-func isWorkOSOrganizationRole(role workos.Role) bool {
-	if role.Type != "" {
-		return role.Type == "OrganizationRole"
-	}
-	return strings.HasPrefix(role.Slug, "org-")
-}
-
+// moveMembershipCursor tracks per-field upper bounds rather than a coherent
+// row state. Backfill only uses the cursor as a conservative skip signal, so any
+// newer event ID or updated timestamp from either local membership shape should
+// block an older snapshot from overwriting local state.
 func moveMembershipCursor(cursor *membershipCursor, eventID pgtype.Text, updatedAt pgtype.Timestamptz) {
 	if eventID.Valid {
 		if cursor.lastEventID == nil || eventID.String > *cursor.lastEventID {
