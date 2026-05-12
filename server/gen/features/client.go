@@ -15,15 +15,19 @@ import (
 
 // Client is the "features" service client.
 type Client struct {
-	GetProductFeaturesEndpoint goa.Endpoint
-	SetProductFeatureEndpoint  goa.Endpoint
+	GetProductFeaturesEndpoint           goa.Endpoint
+	SetProductFeatureEndpoint            goa.Endpoint
+	ListSessionCaptureExclusionsEndpoint goa.Endpoint
+	SetSessionCaptureExclusionsEndpoint  goa.Endpoint
 }
 
 // NewClient initializes a "features" service client given the endpoints.
-func NewClient(getProductFeatures, setProductFeature goa.Endpoint) *Client {
+func NewClient(getProductFeatures, setProductFeature, listSessionCaptureExclusions, setSessionCaptureExclusions goa.Endpoint) *Client {
 	return &Client{
-		GetProductFeaturesEndpoint: getProductFeatures,
-		SetProductFeatureEndpoint:  setProductFeature,
+		GetProductFeaturesEndpoint:           getProductFeatures,
+		SetProductFeatureEndpoint:            setProductFeature,
+		ListSessionCaptureExclusionsEndpoint: listSessionCaptureExclusions,
+		SetSessionCaptureExclusionsEndpoint:  setSessionCaptureExclusions,
 	}
 }
 
@@ -67,4 +71,50 @@ func (c *Client) GetProductFeatures(ctx context.Context, p *GetProductFeaturesPa
 func (c *Client) SetProductFeature(ctx context.Context, p *SetProductFeaturePayload) (err error) {
 	_, err = c.SetProductFeatureEndpoint(ctx, p)
 	return
+}
+
+// ListSessionCaptureExclusions calls the "listSessionCaptureExclusions"
+// endpoint of the "features" service.
+// ListSessionCaptureExclusions may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListSessionCaptureExclusions(ctx context.Context, p *ListSessionCaptureExclusionsPayload) (res *SessionCaptureExclusionsResult, err error) {
+	var ires any
+	ires, err = c.ListSessionCaptureExclusionsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SessionCaptureExclusionsResult), nil
+}
+
+// SetSessionCaptureExclusions calls the "setSessionCaptureExclusions" endpoint
+// of the "features" service.
+// SetSessionCaptureExclusions may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetSessionCaptureExclusions(ctx context.Context, p *SetSessionCaptureExclusionsPayload) (res *SessionCaptureExclusionsResult, err error) {
+	var ires any
+	ires, err = c.SetSessionCaptureExclusionsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SessionCaptureExclusionsResult), nil
 }

@@ -146,6 +146,16 @@ func (s *Service) insertMessageWithFallbackUpsert(
 		return nil
 	}
 
+	// Honor per-user opt-out: org admins can exclude specific members from
+	// session capture even when the org-level flag is on.
+	excluded, err := s.productFeatures.IsUserSessionCaptureExcluded(ctx, metadata.GramOrgID, metadata.UserID)
+	if err != nil {
+		return fmt.Errorf("check session_capture exclusion: %w", err)
+	}
+	if excluded {
+		return nil
+	}
+
 	// Try to insert the message (Write handles notification on success).
 	_, err = s.writer.Write(ctx, projectID, []chatRepo.CreateChatMessageParams{msgParams})
 	if err == nil {

@@ -169,6 +169,9 @@ type UpdateMemberRoleResponseBody struct {
 	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
 	// When the member joined the organization.
 	JoinedAt *string `form:"joined_at,omitempty" json:"joined_at,omitempty" xml:"joined_at,omitempty"`
+	// Whether this member is excluded from session capture for the active
+	// organization.
+	LoggingExcluded *bool `form:"logging_excluded,omitempty" json:"logging_excluded,omitempty" xml:"logging_excluded,omitempty"`
 }
 
 // GetRBACStatusResponseBody is the type of the "access" service
@@ -3008,6 +3011,9 @@ type AccessMemberResponseBody struct {
 	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
 	// When the member joined the organization.
 	JoinedAt *string `form:"joined_at,omitempty" json:"joined_at,omitempty" xml:"joined_at,omitempty"`
+	// Whether this member is excluded from session capture for the active
+	// organization.
+	LoggingExcluded *bool `form:"logging_excluded,omitempty" json:"logging_excluded,omitempty" xml:"logging_excluded,omitempty"`
 }
 
 // ListRoleGrantResponseBody is used to define fields on response body types.
@@ -4559,12 +4565,13 @@ func NewListGrantsGatewayError(body *ListGrantsGatewayErrorResponseBody) *goa.Se
 // "updateMemberRole" endpoint result from a HTTP "OK" response.
 func NewUpdateMemberRoleAccessMemberOK(body *UpdateMemberRoleResponseBody) *access.AccessMember {
 	v := &access.AccessMember{
-		ID:       *body.ID,
-		Name:     *body.Name,
-		Email:    *body.Email,
-		PhotoURL: body.PhotoURL,
-		RoleID:   *body.RoleID,
-		JoinedAt: *body.JoinedAt,
+		ID:              *body.ID,
+		Name:            *body.Name,
+		Email:           *body.Email,
+		PhotoURL:        body.PhotoURL,
+		RoleID:          *body.RoleID,
+		JoinedAt:        *body.JoinedAt,
+		LoggingExcluded: *body.LoggingExcluded,
 	}
 
 	return v
@@ -5892,6 +5899,9 @@ func ValidateUpdateMemberRoleResponseBody(body *UpdateMemberRoleResponseBody) (e
 	}
 	if body.JoinedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("joined_at", "body"))
+	}
+	if body.LoggingExcluded == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("logging_excluded", "body"))
 	}
 	if body.JoinedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.joined_at", *body.JoinedAt, goa.FormatDateTime))
@@ -9719,6 +9729,9 @@ func ValidateAccessMemberResponseBody(body *AccessMemberResponseBody) (err error
 	}
 	if body.JoinedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("joined_at", "body"))
+	}
+	if body.LoggingExcluded == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("logging_excluded", "body"))
 	}
 	if body.JoinedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.joined_at", *body.JoinedAt, goa.FormatDateTime))

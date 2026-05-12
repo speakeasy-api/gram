@@ -65,3 +65,55 @@ func BuildSetProductFeaturePayload(featuresSetProductFeatureBody string, feature
 
 	return v, nil
 }
+
+// BuildListSessionCaptureExclusionsPayload builds the payload for the features
+// listSessionCaptureExclusions endpoint from CLI flags.
+func BuildListSessionCaptureExclusionsPayload(featuresListSessionCaptureExclusionsSessionToken string) (*features.ListSessionCaptureExclusionsPayload, error) {
+	var sessionToken *string
+	{
+		if featuresListSessionCaptureExclusionsSessionToken != "" {
+			sessionToken = &featuresListSessionCaptureExclusionsSessionToken
+		}
+	}
+	v := &features.ListSessionCaptureExclusionsPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetSessionCaptureExclusionsPayload builds the payload for the features
+// setSessionCaptureExclusions endpoint from CLI flags.
+func BuildSetSessionCaptureExclusionsPayload(featuresSetSessionCaptureExclusionsBody string, featuresSetSessionCaptureExclusionsSessionToken string) (*features.SetSessionCaptureExclusionsPayload, error) {
+	var err error
+	var body SetSessionCaptureExclusionsRequestBody
+	{
+		err = json.Unmarshal([]byte(featuresSetSessionCaptureExclusionsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"user_ids\": [\n         \"abc123\"\n      ]\n   }'")
+		}
+		if body.UserIds == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("user_ids", "body"))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if featuresSetSessionCaptureExclusionsSessionToken != "" {
+			sessionToken = &featuresSetSessionCaptureExclusionsSessionToken
+		}
+	}
+	v := &features.SetSessionCaptureExclusionsPayload{}
+	if body.UserIds != nil {
+		v.UserIds = make([]string, len(body.UserIds))
+		for i, val := range body.UserIds {
+			v.UserIds[i] = val
+		}
+	} else {
+		v.UserIds = []string{}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}

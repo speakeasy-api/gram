@@ -95,7 +95,7 @@ func UsageCommands() []string {
 		"organizations (send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|get-publish-status|publish-plugins)",
-		"features (get-product-features|set-product-feature)",
+		"features (get-product-features|set-product-feature|list-session-capture-exclusions|set-session-capture-exclusions)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|verify-url|delete-server)",
 		"resources list-resources",
@@ -942,6 +942,13 @@ func ParseEndpoint(
 		featuresSetProductFeatureBodyFlag         = featuresSetProductFeatureFlags.String("body", "REQUIRED", "")
 		featuresSetProductFeatureSessionTokenFlag = featuresSetProductFeatureFlags.String("session-token", "", "")
 
+		featuresListSessionCaptureExclusionsFlags            = flag.NewFlagSet("list-session-capture-exclusions", flag.ExitOnError)
+		featuresListSessionCaptureExclusionsSessionTokenFlag = featuresListSessionCaptureExclusionsFlags.String("session-token", "", "")
+
+		featuresSetSessionCaptureExclusionsFlags            = flag.NewFlagSet("set-session-capture-exclusions", flag.ExitOnError)
+		featuresSetSessionCaptureExclusionsBodyFlag         = featuresSetSessionCaptureExclusionsFlags.String("body", "REQUIRED", "")
+		featuresSetSessionCaptureExclusionsSessionTokenFlag = featuresSetSessionCaptureExclusionsFlags.String("session-token", "", "")
+
 		projectsFlags = flag.NewFlagSet("projects", flag.ContinueOnError)
 
 		projectsGetProjectFlags            = flag.NewFlagSet("get-project", flag.ExitOnError)
@@ -1699,6 +1706,8 @@ func ParseEndpoint(
 	featuresFlags.Usage = featuresUsage
 	featuresGetProductFeaturesFlags.Usage = featuresGetProductFeaturesUsage
 	featuresSetProductFeatureFlags.Usage = featuresSetProductFeatureUsage
+	featuresListSessionCaptureExclusionsFlags.Usage = featuresListSessionCaptureExclusionsUsage
+	featuresSetSessionCaptureExclusionsFlags.Usage = featuresSetSessionCaptureExclusionsUsage
 
 	projectsFlags.Usage = projectsUsage
 	projectsGetProjectFlags.Usage = projectsGetProjectUsage
@@ -2482,6 +2491,12 @@ func ParseEndpoint(
 
 			case "set-product-feature":
 				epf = featuresSetProductFeatureFlags
+
+			case "list-session-capture-exclusions":
+				epf = featuresListSessionCaptureExclusionsFlags
+
+			case "set-session-capture-exclusions":
+				epf = featuresSetSessionCaptureExclusionsFlags
 
 			}
 
@@ -3396,6 +3411,12 @@ func ParseEndpoint(
 			case "set-product-feature":
 				endpoint = c.SetProductFeature()
 				data, err = featuresc.BuildSetProductFeaturePayload(*featuresSetProductFeatureBodyFlag, *featuresSetProductFeatureSessionTokenFlag)
+			case "list-session-capture-exclusions":
+				endpoint = c.ListSessionCaptureExclusions()
+				data, err = featuresc.BuildListSessionCaptureExclusionsPayload(*featuresListSessionCaptureExclusionsSessionTokenFlag)
+			case "set-session-capture-exclusions":
+				endpoint = c.SetSessionCaptureExclusions()
+				data, err = featuresc.BuildSetSessionCaptureExclusionsPayload(*featuresSetSessionCaptureExclusionsBodyFlag, *featuresSetSessionCaptureExclusionsSessionTokenFlag)
 			}
 		case "projects":
 			c := projectsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -7321,6 +7342,8 @@ func featuresUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-product-features: Get the current state of all product feature flags.`)
 	fmt.Fprintln(os.Stderr, `    set-product-feature: Enable or disable an organization feature flag.`)
+	fmt.Fprintln(os.Stderr, `    list-session-capture-exclusions: List the Gram user IDs excluded from session capture for the active organization.`)
+	fmt.Fprintln(os.Stderr, `    set-session-capture-exclusions: Replace the set of users excluded from session capture for the active organization with the provided list of Gram user IDs.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s features COMMAND --help\n", os.Args[0])
@@ -7361,6 +7384,44 @@ func featuresSetProductFeatureUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-product-feature --body '{\n      \"enabled\": false,\n      \"feature_name\": \"aaa\"\n   }' --session-token \"abc123\"")
+}
+
+func featuresListSessionCaptureExclusionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] features list-session-capture-exclusions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the Gram user IDs excluded from session capture for the active organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features list-session-capture-exclusions --session-token \"abc123\"")
+}
+
+func featuresSetSessionCaptureExclusionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] features set-session-capture-exclusions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace the set of users excluded from session capture for the active organization with the provided list of Gram user IDs.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-session-capture-exclusions --body '{\n      \"user_ids\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
 }
 
 // projectsUsage displays the usage of the projects command and its subcommands.

@@ -25,6 +25,14 @@ type Client struct {
 	// setProductFeature endpoint.
 	SetProductFeatureDoer goahttp.Doer
 
+	// ListSessionCaptureExclusions Doer is the HTTP client used to make requests
+	// to the listSessionCaptureExclusions endpoint.
+	ListSessionCaptureExclusionsDoer goahttp.Doer
+
+	// SetSessionCaptureExclusions Doer is the HTTP client used to make requests to
+	// the setSessionCaptureExclusions endpoint.
+	SetSessionCaptureExclusionsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -45,13 +53,15 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetProductFeaturesDoer: doer,
-		SetProductFeatureDoer:  doer,
-		RestoreResponseBody:    restoreBody,
-		scheme:                 scheme,
-		host:                   host,
-		decoder:                dec,
-		encoder:                enc,
+		GetProductFeaturesDoer:           doer,
+		SetProductFeatureDoer:            doer,
+		ListSessionCaptureExclusionsDoer: doer,
+		SetSessionCaptureExclusionsDoer:  doer,
+		RestoreResponseBody:              restoreBody,
+		scheme:                           scheme,
+		host:                             host,
+		decoder:                          dec,
+		encoder:                          enc,
 	}
 }
 
@@ -98,6 +108,54 @@ func (c *Client) SetProductFeature() goa.Endpoint {
 		resp, err := c.SetProductFeatureDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("features", "setProductFeature", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListSessionCaptureExclusions returns an endpoint that makes HTTP requests to
+// the features service listSessionCaptureExclusions server.
+func (c *Client) ListSessionCaptureExclusions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSessionCaptureExclusionsRequest(c.encoder)
+		decodeResponse = DecodeListSessionCaptureExclusionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSessionCaptureExclusionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSessionCaptureExclusionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("features", "listSessionCaptureExclusions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetSessionCaptureExclusions returns an endpoint that makes HTTP requests to
+// the features service setSessionCaptureExclusions server.
+func (c *Client) SetSessionCaptureExclusions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetSessionCaptureExclusionsRequest(c.encoder)
+		decodeResponse = DecodeSetSessionCaptureExclusionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetSessionCaptureExclusionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetSessionCaptureExclusionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("features", "setSessionCaptureExclusions", err)
 		}
 		return decodeResponse(resp)
 	}

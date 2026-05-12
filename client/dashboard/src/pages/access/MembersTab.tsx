@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
@@ -95,7 +96,7 @@ export function MembersTab() {
     {
       key: "member",
       header: "Member",
-      width: "200px",
+      width: "240px",
       render: (member) => (
         <div className="flex items-center gap-3 overflow-hidden">
           <Avatar className="h-8 w-8 shrink-0">
@@ -109,6 +110,15 @@ export function MembersTab() {
           <Type variant="body" className="truncate font-medium">
             {member.name}
           </Type>
+          {member.loggingExcluded && (
+            <Badge
+              variant="secondary"
+              size="sm"
+              tooltip="Agent sessions for this member are excluded from session capture."
+            >
+              Logging exclusion
+            </Badge>
+          )}
         </div>
       ),
     },

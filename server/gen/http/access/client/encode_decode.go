@@ -3694,12 +3694,13 @@ func unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(v *ScopeDefinit
 // *access.AccessMember from a value of type *AccessMemberResponseBody.
 func unmarshalAccessMemberResponseBodyToAccessAccessMember(v *AccessMemberResponseBody) *access.AccessMember {
 	res := &access.AccessMember{
-		ID:       *v.ID,
-		Name:     *v.Name,
-		Email:    *v.Email,
-		PhotoURL: v.PhotoURL,
-		RoleID:   *v.RoleID,
-		JoinedAt: *v.JoinedAt,
+		ID:              *v.ID,
+		Name:            *v.Name,
+		Email:           *v.Email,
+		PhotoURL:        v.PhotoURL,
+		RoleID:          *v.RoleID,
+		JoinedAt:        *v.JoinedAt,
+		LoggingExcluded: *v.LoggingExcluded,
 	}
 
 	return res

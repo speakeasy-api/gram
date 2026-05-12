@@ -21,6 +21,12 @@ type Service interface {
 	GetProductFeatures(context.Context, *GetProductFeaturesPayload) (res *GramProductFeatures, err error)
 	// Enable or disable an organization feature flag.
 	SetProductFeature(context.Context, *SetProductFeaturePayload) (err error)
+	// List the Gram user IDs excluded from session capture for the active
+	// organization.
+	ListSessionCaptureExclusions(context.Context, *ListSessionCaptureExclusionsPayload) (res *SessionCaptureExclusionsResult, err error)
+	// Replace the set of users excluded from session capture for the active
+	// organization with the provided list of Gram user IDs.
+	SetSessionCaptureExclusions(context.Context, *SetSessionCaptureExclusionsPayload) (res *SessionCaptureExclusionsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -43,7 +49,7 @@ const ServiceName = "features"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"getProductFeatures", "setProductFeature"}
+var MethodNames = [4]string{"getProductFeatures", "setProductFeature", "listSessionCaptureExclusions", "setSessionCaptureExclusions"}
 
 // GetProductFeaturesPayload is the payload type of the features service
 // getProductFeatures method.
@@ -66,6 +72,20 @@ type GramProductFeatures struct {
 	AssistantMemoryEnabled bool
 }
 
+// ListSessionCaptureExclusionsPayload is the payload type of the features
+// service listSessionCaptureExclusions method.
+type ListSessionCaptureExclusionsPayload struct {
+	SessionToken *string
+}
+
+// SessionCaptureExclusionsResult is the result type of the features service
+// listSessionCaptureExclusions method.
+type SessionCaptureExclusionsResult struct {
+	// Gram user IDs (matching access.listMembers IDs) excluded from session
+	// capture.
+	UserIds []string
+}
+
 // SetProductFeaturePayload is the payload type of the features service
 // setProductFeature method.
 type SetProductFeaturePayload struct {
@@ -73,6 +93,15 @@ type SetProductFeaturePayload struct {
 	FeatureName string
 	// Whether the feature should be enabled
 	Enabled      bool
+	SessionToken *string
+}
+
+// SetSessionCaptureExclusionsPayload is the payload type of the features
+// service setSessionCaptureExclusions method.
+type SetSessionCaptureExclusionsPayload struct {
+	// Gram user IDs to exclude. The provided list replaces any existing exclusions
+	// for the organization.
+	UserIds      []string
 	SessionToken *string
 }
 
