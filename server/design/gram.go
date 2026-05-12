@@ -29,6 +29,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/mcpmetadata"
 	_ "github.com/speakeasy-api/gram/server/design/mcpservers"
 	_ "github.com/speakeasy-api/gram/server/design/organizations"
+	_ "github.com/speakeasy-api/gram/server/design/otelforwarding"
 	_ "github.com/speakeasy-api/gram/server/design/packages"
 	_ "github.com/speakeasy-api/gram/server/design/plugins"
 	_ "github.com/speakeasy-api/gram/server/design/productfeatures"

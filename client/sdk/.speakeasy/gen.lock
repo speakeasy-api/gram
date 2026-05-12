@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: f1b60d9d10dd1bfe78527a38c522718c
+  docChecksum: b4c3f9361ad5f0a568a7574cfdf251eb
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -560,6 +560,12 @@ trackedFiles:
     last_write_checksum: sha1:cae5e6f364e5e3dc3aa0b6a49ca6d0075df7ec13
   docs/models/components/otelattributevalue.md:
     last_write_checksum: sha1:bf35edda60c3c1ed7b5f7894d7b91b8b2b5ebc9e
+  docs/models/components/otelforwardingconfig.md:
+    last_write_checksum: sha1:cba93a05e86f8744db7d404d5a020c4ebc30a0cd
+  docs/models/components/otelforwardingheader.md:
+    last_write_checksum: sha1:19105b65bdf912b9a851f90a855bc88abfdb4c47
+  docs/models/components/otelforwardingheaderinput.md:
+    last_write_checksum: sha1:9b4b549f28bc3c49d5c51aa4c323133ae2d21cf5
   docs/models/components/otellogbody.md:
     last_write_checksum: sha1:eedd08e6ed59982d620c3cd20a0717f662727c1e
   docs/models/components/otellogrecord.md:
@@ -920,6 +926,8 @@ trackedFiles:
     last_write_checksum: sha1:f90dd1a00e604044fb2311bceb1be655e29efcda
   docs/models/components/upsertallowedoriginresult.md:
     last_write_checksum: sha1:13b8ea35470e5018a12d1a922ae28f08c7b5d0b0
+  docs/models/components/upsertconfigrequestbody.md:
+    last_write_checksum: sha1:1946346b1e71cdf998ff6c3b2b0db1bca36ff575
   docs/models/components/upsertglobaltoolvariationform.md:
     last_write_checksum: sha1:dbc2f90b2e889c10e3377a2cdb711d68db82683d
   docs/models/components/upsertglobaltoolvariationresult.md:
@@ -1220,6 +1228,10 @@ trackedFiles:
     last_write_checksum: sha1:fc7984ab035a8c6e449030b226cf909b7d29683d
   docs/models/operations/deletemcpserversecurityoption2.md:
     last_write_checksum: sha1:798126ef69994026167803766180d7aac5041e1f
+  docs/models/operations/deleteotelforwardingconfigrequest.md:
+    last_write_checksum: sha1:3b713bc643cc4e733b5029616319622ba2584f2b
+  docs/models/operations/deleteotelforwardingconfigsecurity.md:
+    last_write_checksum: sha1:88178fe77c5137a9a19f89fa9175868b7826084f
   docs/models/operations/deletepluginrequest.md:
     last_write_checksum: sha1:9686569bc38231d7f18050f5651bec93f068eb2a
   docs/models/operations/deletepluginsecurity.md:
@@ -1458,6 +1470,10 @@ trackedFiles:
     last_write_checksum: sha1:1c64442513f93e2ef813aa655a89aa19cb9e6fa3
   docs/models/operations/getobservabilityoverviewsecurityoption2.md:
     last_write_checksum: sha1:33d537179550735c0c9b19db485d2e5626412ea2
+  docs/models/operations/getotelforwardingconfigrequest.md:
+    last_write_checksum: sha1:2681ba6cfcc75065fb29b7c02c37fa6b91d9a001
+  docs/models/operations/getotelforwardingconfigsecurity.md:
+    last_write_checksum: sha1:2900584e1742e6196500ac7dd4cf8306e2063e2a
   docs/models/operations/getperiodusagerequest.md:
     last_write_checksum: sha1:25d9b5f15506e38cf2ff072d825b29269b68d1d0
   docs/models/operations/getperiodusagesecurity.md:
@@ -2356,6 +2372,10 @@ trackedFiles:
     last_write_checksum: sha1:dd0f1a14322f4421b7f387c5048897443ccd93e8
   docs/models/operations/upsertglobalvariationsecurityoption2.md:
     last_write_checksum: sha1:804fdcf23b07e58cfc27080a650e5ef375e74276
+  docs/models/operations/upsertotelforwardingconfigrequest.md:
+    last_write_checksum: sha1:ad247111ae67464a68a1c396cdf0506d70538cbe
+  docs/models/operations/upsertotelforwardingconfigsecurity.md:
+    last_write_checksum: sha1:a2bfe1e877ac020db2255b7d2f97db3bbfba5efd
   docs/models/operations/upsertservernameoverriderequest.md:
     last_write_checksum: sha1:d71fbac3db6e5c112275268033bbd7eae8c48bf5
   docs/models/operations/upsertservernameoverridesecurity.md:
@@ -2424,6 +2444,8 @@ trackedFiles:
     last_write_checksum: sha1:6bc047a1c9d65f74458c6470ad024de4cf743307
   docs/sdks/organizations/README.md:
     last_write_checksum: sha1:ff31d04fb18732503d8eedb6230d9d300af1a07a
+  docs/sdks/otelforwarding/README.md:
+    last_write_checksum: sha1:9599fbb87a1e733dbaf6180a1602c3ed20e46953
   docs/sdks/packages/README.md:
     last_write_checksum: sha1:630727b17ae78739629705da27f894236bba7ad0
   docs/sdks/plugins/README.md:
@@ -2846,6 +2868,12 @@ trackedFiles:
     last_write_checksum: sha1:4fea492b55ea1f99efd2e2ee15fdbb7089ba055c
   src/funcs/organizationsSendInvite.ts:
     last_write_checksum: sha1:54b2bfcf5c4f4387b03b5aacc863ee8ba3307596
+  src/funcs/otelForwardingDeleteConfig.ts:
+    last_write_checksum: sha1:2694f8121bbaa811cb7e589a9bbe99bc8a38ce81
+  src/funcs/otelForwardingGetConfig.ts:
+    last_write_checksum: sha1:bf3940fc41218fe94872cbc619ccaeafbc809935
+  src/funcs/otelForwardingUpsertConfig.ts:
+    last_write_checksum: sha1:6b3343da024de56e004c7d8ad9d390115d9cec6d
   src/funcs/packagesCreate.ts:
     id: b7d4f4a09722
     last_write_checksum: sha1:e5c93edada4390f85a419c6edcefdecdead1e808
@@ -3602,7 +3630,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:49603a9c7be63a9c09c104d126e46abde6b5dced
+    last_write_checksum: sha1:4b2f10915d118069ab9fccfb233701fe70381072
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -3838,6 +3866,12 @@ trackedFiles:
     last_write_checksum: sha1:c12d9f7385d4a54ac7113e78c497ae708ff8eccc
   src/models/components/otelattributevalue.ts:
     last_write_checksum: sha1:fb9095c36ee956b1a8e27df307112cd5836e781d
+  src/models/components/otelforwardingconfig.ts:
+    last_write_checksum: sha1:9a65cf9ea5a19f670aa2e7e783d682b9e3a960ca
+  src/models/components/otelforwardingheader.ts:
+    last_write_checksum: sha1:9fa473ed4f3e956b06b2c70e82ace3532e917c11
+  src/models/components/otelforwardingheaderinput.ts:
+    last_write_checksum: sha1:f77d5f7b0ff55bb792c37617873e6c203fe37212
   src/models/components/otellogbody.ts:
     last_write_checksum: sha1:cb8d00884573f1ce6609987aeac27d8434edabb0
   src/models/components/otellogrecord.ts:
@@ -4214,6 +4248,8 @@ trackedFiles:
     id: bb3efae3ba31
     last_write_checksum: sha1:c48aff42abab09c988e5e74d728e289e892ea611
     pristine_git_object: d55d8dabb1ae77cf59092a48037dbdf0bc10efff
+  src/models/components/upsertconfigrequestbody.ts:
+    last_write_checksum: sha1:0a8d3232de3a3e8b69293591b4b0fdeb6459463c
   src/models/components/upsertglobaltoolvariationform.ts:
     id: 9199a7e2105e
     last_write_checksum: sha1:732b0af909bd1838e4024b93b7bf4ccf5a78f08c
@@ -4416,6 +4452,8 @@ trackedFiles:
     last_write_checksum: sha1:f574961d09e3407bc1b0d736da720fb6747674cd
   src/models/operations/deletemcpserver.ts:
     last_write_checksum: sha1:04e1af5300eb95c16b6c8fd5af5303a04fb5f993
+  src/models/operations/deleteotelforwardingconfig.ts:
+    last_write_checksum: sha1:a0e7d4ae6dba50d5d48751f2601c4ee59301f15a
   src/models/operations/deleteplugin.ts:
     last_write_checksum: sha1:890dd15fa96cfd4eff407d97f8ca2628fb73a7f6
   src/models/operations/deleteproject.ts:
@@ -4520,6 +4558,8 @@ trackedFiles:
     last_write_checksum: sha1:d2f8088de6c1a6daf9e160425975a26af60d0505
   src/models/operations/getobservabilityoverview.ts:
     last_write_checksum: sha1:e1baabbb69c8ed056f1e1a4135bd41916b20543c
+  src/models/operations/getotelforwardingconfig.ts:
+    last_write_checksum: sha1:7a66d7a4c5328c26b6e6d833d5536b2afa06f7e5
   src/models/operations/getperiodusage.ts:
     id: ccdd5b11ed06
     last_write_checksum: sha1:46510bbd27108ee1607f58ab7583d7dbd36494cb
@@ -4584,7 +4624,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:6873ba5b5bf8827eb29a2846fa4b7ae68af4c966
+    last_write_checksum: sha1:bc342d2498cf2cceed5f34c2ae284318c09de14c
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -4928,6 +4968,8 @@ trackedFiles:
     id: 71b688a8a189
     last_write_checksum: sha1:e314995a441474665de807eba706ee2d29fe942f
     pristine_git_object: 005a793681df8849f9d50d6fa0d1ef3d1204c519
+  src/models/operations/upsertotelforwardingconfig.ts:
+    last_write_checksum: sha1:771e4ec2a465461259acdf1e78240fde23fbb1d2
   src/models/operations/upsertservernameoverride.ts:
     last_write_checksum: sha1:ebbd1b550a1d979debb64fa14b7ed06b868b0102
   src/models/operations/validateapikey.ts:
@@ -5114,6 +5156,8 @@ trackedFiles:
     last_write_checksum: sha1:2ac5de0535a5467ca0a5f554cec3f15b7173484b
   src/react-query/deleteMcpServer.ts:
     last_write_checksum: sha1:171a9cb63887e970d67af629153d569ab4db8cb6
+  src/react-query/deleteOtelForwardingConfig.ts:
+    last_write_checksum: sha1:509831bfe5b8e22c3e537e36bea2fef46bf7bf19
   src/react-query/deletePlugin.ts:
     last_write_checksum: sha1:ca4bfa977eadb7e522e9c5078867a1d560cd6cca
   src/react-query/deleteProject.ts:
@@ -5314,7 +5358,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:3c54c57c2fe0ccc7f419537696ea8053239ba7b8
+    last_write_checksum: sha1:84b318ab4dbc9c4105554f4a4d0bc6bbe7a0eafe
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -5534,6 +5578,10 @@ trackedFiles:
     last_write_checksum: sha1:61911a4acd50a4d7c6f1cda61717090e083d64f2
   src/react-query/members.ts:
     last_write_checksum: sha1:c12a6dc5ce5c89856d0ff50ecdd4a1ff0200eb9f
+  src/react-query/otelForwardingConfig.core.ts:
+    last_write_checksum: sha1:ade4bb07745a81859fd8d40b7193a9a98319efc5
+  src/react-query/otelForwardingConfig.ts:
+    last_write_checksum: sha1:ecb5038725f317a4f5bbb59fc5463722d302214d
   src/react-query/pauseTrigger.ts:
     last_write_checksum: sha1:8d80c86e1e454440be0ba898cefbd1255273c1e0
   src/react-query/plugin.core.ts:
@@ -5854,6 +5902,8 @@ trackedFiles:
     id: 09c15a20276e
     last_write_checksum: sha1:873ce2d2c26042ee63d7d009b3b59ea172310480
     pristine_git_object: 00360cead688c1c26edb6b02b73ee54c07d09037
+  src/react-query/upsertOtelForwardingConfig.ts:
+    last_write_checksum: sha1:81d8065849d2d707727d3d6c641c847439728127
   src/react-query/userSessionClient.core.ts:
     last_write_checksum: sha1:50caa4131c5c763060fd6806feaf4ff8edbb211f
   src/react-query/userSessionClient.ts:
@@ -5966,6 +6016,8 @@ trackedFiles:
     last_write_checksum: sha1:b5e43f23c4b80274012c8394b507ba6f187ecb81
   src/sdk/organizations.ts:
     last_write_checksum: sha1:8dd85eb155db8331d8ab2f56f82fd40f426cafe5
+  src/sdk/otelforwarding.ts:
+    last_write_checksum: sha1:bdff0a0685140d557a23b72fe543fdc8dbd95996
   src/sdk/packages.ts:
     id: d71e5e0d5096
     last_write_checksum: sha1:cd45c1746ab2a619fb53b913e0398d80731df1dc
@@ -5990,7 +6042,7 @@ trackedFiles:
     last_write_checksum: sha1:e1b91fc64c677eafbee06b77439792f97b962960
   src/sdk/sdk.ts:
     id: 784571af2f69
-    last_write_checksum: sha1:098a5406ba7754d7c08c9bda7132b5eb98381bf4
+    last_write_checksum: sha1:16fa020e5dddea2db2f50baf85b80d2ed6d6152e
     pristine_git_object: 02357477f876788c1d5316789aca538a95c1070a
   src/sdk/slack.ts:
     id: bbd98c55f3c0
@@ -8901,6 +8953,33 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  deleteOtelForwardingConfig:
+    speakeasy-default-delete-otel-forwarding-config:
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getOtelForwardingConfig:
+    speakeasy-default-get-otel-forwarding-config:
+      responses:
+        "200":
+          application/json: {"created_at": "2024-09-24T23:49:09.707Z", "enabled": true, "endpoint_url": "https://legal-newsprint.org", "headers": [{"has_value": true, "name": "<value>"}], "id": "<id>", "organization_id": "<id>", "updated_at": "2025-10-21T01:03:39.776Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  upsertOtelForwardingConfig:
+    speakeasy-default-upsert-otel-forwarding-config:
+      requestBody:
+        application/json: {"enabled": true, "endpoint_url": "https://damp-armchair.name/"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-02-26T06:40:47.371Z", "enabled": false, "endpoint_url": "https://vain-antelope.net", "headers": [{"has_value": true, "name": "<value>"}], "id": "<id>", "organization_id": "<id>", "updated_at": "2026-10-06T18:06:04.824Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:
