@@ -27,15 +27,15 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * revokeUserSessionConsent userSessionConsents
+ * revokeRemoteSession remoteSessions
  *
  * @remarks
- * Withdraw consent. Subsequent authorization requests for matching (subject, user_session_client) pairs re-prompt.
+ * Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.
  */
-export function userSessionConsentsRevoke(
+export function remoteSessionsRevoke(
   client: GramCore,
-  request: operations.RevokeUserSessionConsentRequest,
-  security?: operations.RevokeUserSessionConsentSecurity | undefined,
+  request: operations.RevokeRemoteSessionRequest,
+  security?: operations.RevokeRemoteSessionSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -61,8 +61,8 @@ export function userSessionConsentsRevoke(
 
 async function $do(
   client: GramCore,
-  request: operations.RevokeUserSessionConsentRequest,
-  security?: operations.RevokeUserSessionConsentSecurity | undefined,
+  request: operations.RevokeRemoteSessionRequest,
+  security?: operations.RevokeRemoteSessionSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -84,7 +84,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(operations.RevokeUserSessionConsentRequest$outboundSchema, value),
+      z.parse(operations.RevokeRemoteSessionRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -95,7 +95,7 @@ async function $do(
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/userSessionConsents.revoke")();
+  const path = pathToFunc("/rpc/remoteSessions.revoke")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -144,7 +144,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "revokeUserSessionConsent",
+    operationID: "revokeRemoteSession",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
