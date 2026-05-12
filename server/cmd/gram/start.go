@@ -408,12 +408,6 @@ func newStartCommand() *cli.Command {
 			Usage:   "Base URL of the gram-pi-classifier sidecar (e.g. http://gram-pi-classifier:8000). Empty disables L1 ML prompt-injection detection; L0 heuristics still run when a policy enables the prompt_injection source.",
 			EnvVars: []string{"PI_CLASSIFIER_URL"},
 		},
-		&cli.Float64Flag{
-			Name:    "pi-classifier-threshold",
-			Usage:   "Minimum INJECTION-class probability to emit an L1 finding. Tunable in prod without redeploying the sidecar.",
-			EnvVars: []string{"PI_CLASSIFIER_THRESHOLD"},
-			Value:   0.9,
-		},
 	}
 
 	flags = append(flags, redisFlags...)
@@ -895,7 +889,7 @@ func newStartCommand() *cli.Command {
 			if piURL := c.String("pi-classifier-url"); piURL != "" {
 				hookPromptInjectionClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
 			}
-			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, hookPromptInjectionClassifier, c.Float64("pi-classifier-threshold"))
+			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, hookPromptInjectionClassifier)
 
 			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, meterProvider)
 			if err != nil {
@@ -1028,7 +1022,7 @@ func newStartCommand() *cli.Command {
 					if piURL := c.String("pi-classifier-url"); piURL != "" {
 						promptInjectionClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
 					}
-					piScanner := risk_analysis.NewPromptInjectionScanner(logger, promptInjectionClassifier, c.Float64("pi-classifier-threshold"))
+					piScanner := risk_analysis.NewPromptInjectionScanner(logger, promptInjectionClassifier)
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:      guardianPolicy,

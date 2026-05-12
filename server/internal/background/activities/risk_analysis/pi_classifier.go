@@ -28,9 +28,8 @@ type PromptInjectionClassifier interface {
 	Classify(ctx context.Context, texts []string) ([]ClassifierResult, error)
 }
 
-// ClassifierResult is one prediction returned by the L1 service. Score is the
-// INJECTION-class probability (always — even when label == "SAFE"). Callers
-// apply their own threshold before turning a result into a Finding.
+// ClassifierResult is one prediction returned by the L1 service. Label decides
+// whether to emit an L1 finding; score is retained as confidence metadata.
 type ClassifierResult struct {
 	Label string  `json:"label"`
 	Score float64 `json:"score"`

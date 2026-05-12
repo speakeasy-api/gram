@@ -20,7 +20,6 @@ import (
 const (
 	defaultCorpusDir = "server/internal/background/activities/risk_analysis/testdata/prompt_injection"
 	defaultOutFile   = "server/risk_accuracy_metrics.json"
-	defaultThreshold = 0.9
 	httpBatchSize    = 50
 )
 
@@ -115,7 +114,6 @@ type options struct {
 	corpusDir     string
 	outFile       string
 	classifierURL string
-	threshold     float64
 	checkFloors   bool
 }
 
@@ -132,13 +130,11 @@ func parseFlags() options {
 		corpusDir:     "",
 		outFile:       "",
 		classifierURL: "",
-		threshold:     0,
 		checkFloors:   false,
 	}
 	flag.StringVar(&opts.corpusDir, "corpus-dir", defaultCorpusDir, "directory containing prompt-injection JSONL corpus files")
 	flag.StringVar(&opts.outFile, "out", defaultOutFile, "path to write metrics JSON")
 	flag.StringVar(&opts.classifierURL, "classifier-url", strings.TrimSpace(os.Getenv("PI_CLASSIFIER_URL")), "base URL for the L1 classifier sidecar")
-	flag.Float64Var(&opts.threshold, "threshold", envFloat("PI_CLASSIFIER_THRESHOLD", defaultThreshold), "minimum INJECTION probability for L1 findings")
 	flag.BoolVar(&opts.checkFloors, "check-floors", true, "fail if L0 metrics violate floors.json")
 	flag.Parse()
 	opts.classifierURL = strings.TrimRight(strings.TrimSpace(opts.classifierURL), "/")
@@ -171,7 +167,7 @@ func run(ctx context.Context, opts options) error {
 			skippedMode("l1_opt_in", err.Error()),
 		)
 	} else {
-		l1OptInFindings, err := scanL1OptIn(ctx, corpus, l0Findings, opts.classifierURL, opts.threshold)
+		l1OptInFindings, err := scanL1OptIn(ctx, corpus, l0Findings, opts.classifierURL)
 		if err != nil {
 			return err
 		}
@@ -292,7 +288,7 @@ func scanL0(ctx context.Context, corpus []labeledCase) ([][]risk_analysis.Findin
 	return out, nil
 }
 
-func scanL1OptIn(ctx context.Context, corpus []labeledCase, l0Findings [][]risk_analysis.Finding, baseURL string, threshold float64) ([][]risk_analysis.Finding, error) {
+func scanL1OptIn(ctx context.Context, corpus []labeledCase, l0Findings [][]risk_analysis.Finding, baseURL string) ([][]risk_analysis.Finding, error) {
 	texts := make([]string, len(corpus))
 	for i, c := range corpus {
 		texts[i] = c.Text
@@ -308,7 +304,7 @@ func scanL1OptIn(ctx context.Context, corpus []labeledCase, l0Findings [][]risk_
 
 	out := cloneFindings(l0Findings)
 	for i, r := range results {
-		if r.Label != risk_analysis.LabelInjection || r.Score < threshold {
+		if r.Label != risk_analysis.LabelInjection {
 			continue
 		}
 		out[i] = append(out[i], risk_analysis.Finding{
@@ -573,16 +569,4 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
-}
-
-func envFloat(key string, fallback float64) float64 {
-	raw := strings.TrimSpace(os.Getenv(key))
-	if raw == "" {
-		return fallback
-	}
-	var out float64
-	if _, err := fmt.Sscanf(raw, "%f", &out); err != nil {
-		return fallback
-	}
-	return out
 }

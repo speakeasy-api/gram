@@ -644,7 +644,7 @@ func newWorkerCommand() *cli.Command {
 				promptInjectionClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
 				logger.InfoContext(ctx, "pi_classifier L1 prompt-injection scanner enabled", attr.SlogURL(piURL))
 			}
-			piScanner := risk_analysis.NewPromptInjectionScanner(logger, promptInjectionClassifier, c.Float64("pi-classifier-threshold"))
+			piScanner := risk_analysis.NewPromptInjectionScanner(logger, promptInjectionClassifier)
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:      guardianPolicy,

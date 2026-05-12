@@ -47,7 +47,7 @@ func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, m
 		piiScanner = &StubPIIScanner{}
 	}
 	if piScanner == nil {
-		piScanner = NewPromptInjectionScanner(logger, StubClassifier{}, 0.9)
+		piScanner = NewPromptInjectionScanner(logger, StubClassifier{})
 	}
 	return &AnalyzeBatch{
 		logger:          logger,

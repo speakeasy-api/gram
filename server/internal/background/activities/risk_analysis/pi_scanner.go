@@ -32,19 +32,17 @@ const promptInjectionClassifierFindingDescription = "ML classifier flagged promp
 // --pi-classifier-url is empty), so callers don't branch on availability.
 type PromptInjectionScanner struct {
 	classifier PromptInjectionClassifier
-	threshold  float64
 	logger     *slog.Logger
 }
 
 // NewPromptInjectionScanner returns a scanner that calls the given classifier
-// for L1 detection. threshold is the minimum INJECTION-class probability
-// required to emit an L1 finding (typical: 0.9 — high precision; the model
-// argmaxes at 0.5 so anything below that is a SAFE prediction).
+// for L1 detection. The classifier's binary label decides whether to emit an
+// L1 finding; the score is carried as confidence metadata.
 //
 // logger must be non-nil; pass an explicit *slog.Logger so log lines carry the
 // caller's component attrs (forbidigo blocks slog.Default in this codebase).
-func NewPromptInjectionScanner(logger *slog.Logger, classifier PromptInjectionClassifier, threshold float64) *PromptInjectionScanner {
-	return &PromptInjectionScanner{classifier: classifier, threshold: threshold, logger: logger}
+func NewPromptInjectionScanner(logger *slog.Logger, classifier PromptInjectionClassifier) *PromptInjectionScanner {
+	return &PromptInjectionScanner{classifier: classifier, logger: logger}
 }
 
 // Scan runs the heuristic rules unconditionally; runs the L1 classifier when
@@ -120,7 +118,7 @@ func (s *PromptInjectionScanner) ScanBatch(ctx context.Context, texts []string, 
 }
 
 func (s *PromptInjectionScanner) findingFromResult(text string, r ClassifierResult) *Finding {
-	if r.Label != LabelInjection || r.Score < s.threshold {
+	if r.Label != LabelInjection {
 		return nil
 	}
 	return &Finding{
