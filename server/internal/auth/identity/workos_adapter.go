@@ -32,7 +32,8 @@ func (a *WorkOSAdapter) AuthenticateWithCode(ctx context.Context, clientID, code
 	}
 
 	return &AuthenticateResult{
-		AccessToken: resp.AccessToken,
+		AccessToken:    resp.AccessToken,
+		OrganizationID: resp.OrganizationID,
 		User: AuthenticatedUser{
 			ID:                resp.User.ID,
 			FirstName:         resp.User.FirstName,

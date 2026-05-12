@@ -508,6 +508,59 @@ func TestE2E_Callback_MultipleOrgs(t *testing.T) {
 	assert.Equal(t, "Beta LLC", org2.Name)
 }
 
+// TestE2E_Callback_IDPOrgSelection verifies that when the IDP auth response
+// includes an organization_id (the org the user selected in AuthKit), Callback
+// uses that org as the active org instead of defaulting to the first one.
+func TestE2E_Callback_IDPOrgSelection(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01IDP_ORG_SELECT"
+		workosOrgA   = "org_01SELECT_A"
+		workosOrgB   = "org_01SELECT_B"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_SA", UserID: workosUserID, OrganizationID: workosOrgA, Organization: "Org A", RoleSlug: "member"},
+				{ID: "om_SB", UserID: workosUserID, OrganizationID: workosOrgB, Organization: "Org B", RoleSlug: "member"},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgA: {ID: workosOrgA, Name: "Org A"},
+			workosOrgB: {ID: workosOrgB, Name: "Org B"},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:         workosUserID,
+		Email:          "org-select@example.com",
+		OrganizationID: workosOrgB, // user selected Org B in AuthKit
+		Organizations:  []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+	require.NotEmpty(t, result.SessionToken)
+
+	// Authenticate and check which org is active.
+	ctx, err = inst.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+
+	infoResult, err := inst.service.Info(ctx, &gen.InfoPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, infoResult)
+
+	// Active org should be Org B (the one selected in AuthKit), not Org A.
+	expectedOrgB := orgid.FromWorkOSID(workosOrgB)
+	assert.Equal(t, expectedOrgB, infoResult.ActiveOrganizationID,
+		"active org should be the one selected in the IDP auth flow, not the first org")
+}
+
 // TestE2E_Callback_ThenInfo exercises the full login→info flow.
 // After callback creates the session, calling Info should return the user's
 // orgs (populated via the WorkOS fallback) with a default project.

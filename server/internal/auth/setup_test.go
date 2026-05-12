@@ -71,11 +71,12 @@ type testInstance struct {
 
 // MockUserInfo represents the user info used by the mock OIDC server
 type MockUserInfo struct {
-	UserID        string
-	Email         string
-	ExternalID    string // WorkOS external_id — simulates a backfilled user
-	Admin         bool
-	Organizations []MockOrganizationEntry
+	UserID         string
+	Email          string
+	ExternalID     string // WorkOS external_id — simulates a backfilled user
+	OrganizationID string // WorkOS org ID returned by AuthenticateWithCode
+	Admin          bool
+	Organizations  []MockOrganizationEntry
 }
 
 type MockOrganizationEntry struct {
@@ -95,8 +96,9 @@ func createMockWorkOSServer(userInfo *MockUserInfo) *httptest.Server {
 	mux.HandleFunc("POST /user_management/authenticate", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		resp := map[string]any{
-			"access_token":  fmt.Sprintf("mock_access_token_%p", userInfo),
-			"refresh_token": "",
+			"access_token":    fmt.Sprintf("mock_access_token_%p", userInfo),
+			"refresh_token":   "",
+			"organization_id": userInfo.OrganizationID,
 			"user": map[string]string{
 				"id":                  userInfo.UserID,
 				"first_name":          userInfo.Email,

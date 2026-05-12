@@ -197,18 +197,32 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	activeOrg := userInfo.Organizations[0]
-	selectedActiveOrgFromState := false
+	activeOrgSelected := false
+
+	// Priority 1: org slug from the state param (explicit destination URL).
 	if org, ok := activeOrganizationFromState(payload, userInfo.Organizations); ok {
 		activeOrg = org
-		selectedActiveOrgFromState = true
+		activeOrgSelected = true
 	}
 
-	// For admins we allow you to override the active organization returned by header if present.
-	if !selectedActiveOrgFromState && userInfo.Admin {
+	// Priority 2: org the user selected in the IDP auth flow (WorkOS AuthKit).
+	if !activeOrgSelected && idpUser.OrganizationID != "" {
+		for _, org := range userInfo.Organizations {
+			if org.WorkosID != nil && *org.WorkosID == idpUser.OrganizationID {
+				activeOrg = org
+				activeOrgSelected = true
+				break
+			}
+		}
+	}
+
+	// Priority 3: admin override header.
+	if !activeOrgSelected && userInfo.Admin {
 		if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
 			for _, org := range userInfo.Organizations {
 				if org.Slug == adminOverride {
 					activeOrg = org
+					activeOrgSelected = true
 					break
 				}
 			}

@@ -37,8 +37,9 @@ type IDPClient interface {
 
 // AuthenticateResult holds the fields Gram uses from the IDP code exchange.
 type AuthenticateResult struct {
-	AccessToken string
-	User        AuthenticatedUser
+	AccessToken    string
+	OrganizationID string // WorkOS org ID the user selected during auth (may be empty)
+	User           AuthenticatedUser
 }
 
 // AuthenticatedUser holds the user fields Gram reads after IDP authentication.
@@ -70,6 +71,7 @@ type IDPUserInfo struct {
 	Picture         *string `json:"picture,omitempty"`
 	ExternalID      string  `json:"-"`
 	WorkOSSessionID string  `json:"-"`
+	OrganizationID  string  `json:"-"` // WorkOS org ID selected during auth
 }
 
 // Resolver handles identity concerns: IDP code exchange, user upsert, org
@@ -146,6 +148,7 @@ func (r *Resolver) ExchangeCodeForTokens(ctx context.Context, code string) (_ *I
 		Picture:         picture,
 		ExternalID:      resp.User.ExternalID,
 		WorkOSSessionID: extractSessionIDFromJWT(resp.AccessToken),
+		OrganizationID:  resp.OrganizationID,
 	}, nil
 }
 
