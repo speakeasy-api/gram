@@ -7,9 +7,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
-import { ExternalLink, Plus, Sparkles } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import { HookSourceIcon } from "./HookSourceIcon";
 
 function ClaudeInstallContent() {
@@ -395,7 +397,8 @@ const providers: {
 // already connected a published GitHub repo: a one-click "install the base
 // plugin" flow that bakes credentials in, so they can skip the manual
 // SessionStart hook below.
-function PublishedRepoPanel({ repoUrl }: { repoUrl: string }) {
+function PublishedRepoPanel() {
+  const routes = useRoutes();
   return (
     <div className="border-primary/30 bg-primary/5 mb-6 rounded-lg border p-4">
       <div className="mb-2 flex items-center gap-2">
@@ -411,15 +414,7 @@ function PublishedRepoPanel({ repoUrl }: { repoUrl: string }) {
         credential paste.
       </p>
       <Button variant="outline" size="sm" asChild>
-        <a
-          href={repoUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2"
-        >
-          <ExternalLink className="size-4" />
-          Open published repo
-        </a>
+        <Link to={routes.plugins.href()}>Go to Plugins</Link>
       </Button>
     </div>
   );
@@ -447,14 +442,12 @@ export function HooksSetupDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="flex max-h-[90vh] max-w-7xl sm:max-w-7xl flex-col">
+      <Dialog.Content className="flex max-h-[90vh] max-w-7xl flex-col sm:max-w-7xl">
         <Dialog.Header>
           <Dialog.Title>Setup Hooks</Dialog.Title>
         </Dialog.Header>
 
-        {showPublishedPanel && publishStatus?.repoUrl && (
-          <PublishedRepoPanel repoUrl={publishStatus.repoUrl} />
-        )}
+        {showPublishedPanel && publishStatus?.repoUrl && <PublishedRepoPanel />}
 
         <div className="flex flex-wrap gap-3">
           {providers.map((p) => {
