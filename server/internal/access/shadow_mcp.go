@@ -1065,8 +1065,8 @@ func formatPGTimestampValue(ts pgtype.Timestamptz) string {
 }
 
 func shadowMCPLimit(limit int) (int32, error) {
-	if limit < 0 {
-		return 0, oops.E(oops.CodeBadRequest, nil, "limit must be greater than or equal to 0")
+	if limit < 1 {
+		return 0, oops.E(oops.CodeBadRequest, nil, "limit must be greater than or equal to 1")
 	}
 	return conv.SafeInt32(limit), nil
 }

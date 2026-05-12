@@ -281,6 +281,15 @@ func TestService_ListShadowMCPApprovalRequests_CursorPagination(t *testing.T) {
 	require.Nil(t, secondPage.NextCursor)
 }
 
+func TestShadowMCPLimit_RequiresPositiveLimit(t *testing.T) {
+	t.Parallel()
+
+	_, err := shadowMCPLimit(0)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
 func TestService_ShadowMCPAccessRule_ManualLifecycle(t *testing.T) {
 	t.Parallel()
 
