@@ -41,6 +41,12 @@ type SessionClaims struct {
 	jwt.RegisteredClaims
 }
 
+// JWTSigningKeyFlag is the CLI flag (and env var via GRAM_JWT_SIGNING_KEY)
+// that supplies the HMAC secret to NewSigner at server boot. Defining the
+// flag name here keeps the start/worker command wiring and the signer's
+// expectations in sync.
+const JWTSigningKeyFlag = "jwt-signing-key"
+
 // Signer mints HS256-signed user-session JWTs. Constructed once at server
 // boot from the GRAM_JWT_SIGNING_KEY env var; safe to share across goroutines.
 type Signer struct {
@@ -85,7 +91,15 @@ func (s *Signer) Mint(subject urn.SessionSubject, audience, issuer string, lifet
 // shared `chat_session_revoked:{jti}` cache) is the caller's responsibility —
 // this signer doesn't reach into Redis.
 func (s *Signer) Validate(token, expectedAudience string) (*SessionClaims, error) {
-	claims := SessionClaims{RegisteredClaims: jwt.RegisteredClaims{}} //nolint:exhaustruct // ParseWithClaims populates the fields.
+	claims := SessionClaims{RegisteredClaims: jwt.RegisteredClaims{
+		Issuer:    "",
+		Subject:   "",
+		Audience:  nil,
+		ExpiresAt: nil,
+		NotBefore: nil,
+		IssuedAt:  nil,
+		ID:        "",
+	}}
 	parsed, err := jwt.ParseWithClaims(token, &claims, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
@@ -133,7 +147,15 @@ func (s *Signer) ValidateBearer(ctx context.Context, token, expectedAudience str
 // revoke handler, not by signature verification (RFC 7009 doesn't require it).
 func (s *Signer) ParseUnverifiedJTI(token string) (string, error) {
 	parser := jwt.NewParser(jwt.WithoutClaimsValidation())
-	claims := SessionClaims{RegisteredClaims: jwt.RegisteredClaims{}} //nolint:exhaustruct // ParseUnverified populates the fields.
+	claims := SessionClaims{RegisteredClaims: jwt.RegisteredClaims{
+		Issuer:    "",
+		Subject:   "",
+		Audience:  nil,
+		ExpiresAt: nil,
+		NotBefore: nil,
+		IssuedAt:  nil,
+		ID:        "",
+	}}
 	if _, _, err := parser.ParseUnverified(token, &claims); err != nil {
 		return "", fmt.Errorf("parse unverified token: %w", err)
 	}

@@ -204,7 +204,7 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_ENCRYPTION_KEY"},
 		},
 		&cli.StringFlag{
-			Name:     "jwt-signing-key",
+			Name:     usersessions.JWTSigningKeyFlag,
 			Usage:    "Key for JWT signing",
 			Required: true,
 			EnvVars:  []string{"GRAM_JWT_SIGNING_KEY"},
@@ -764,7 +764,7 @@ func newStartCommand() *cli.Command {
 				memoryTools,
 				platformFeatureChecker,
 				speakeasyIDPClient,
-				usersessions.NewSigner(c.String("jwt-signing-key")),
+				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
 			)
 
 			chatClient := chat.NewAgenticChatClient(
