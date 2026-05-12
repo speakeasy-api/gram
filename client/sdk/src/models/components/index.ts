@@ -259,6 +259,7 @@ export * from "./publishstatusresult.js";
 export * from "./rbacstatus.js";
 export * from "./redeployrequestbody.js";
 export * from "./redeployresult.js";
+export * from "./registerremotesessionissuerform.js";
 export * from "./registerrequestbody.js";
 export * from "./remotemcpserver.js";
 export * from "./remotemcpserverheader.js";

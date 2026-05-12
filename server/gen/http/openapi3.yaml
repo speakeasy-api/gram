@@ -17030,6 +17030,110 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: RemoteSessionIssuers
+    /rpc/remoteSessionIssuers.register:
+        post:
+            description: Perform an RFC 7591 Dynamic Client Registration call against an existing issuer's registration_endpoint and persist the issued credentials as a new remote_session_client. The issuer must already have a registration_endpoint configured.
+            operationId: registerRemoteSessionIssuer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RegisterRemoteSessionIssuerForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteSessionClient'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: registerRemoteSessionIssuer remoteSessionIssuers
+            tags:
+                - remoteSessionIssuers
+            x-speakeasy-name-override: register
+            x-speakeasy-react-hook:
+                name: RegisterRemoteSessionIssuer
     /rpc/remoteSessionIssuers.update:
         post:
             description: Update fields on an existing remote_session_issuer.
@@ -32655,6 +32759,29 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        RegisterRemoteSessionIssuerForm:
+            type: object
+            properties:
+                client_name:
+                    type: string
+                    description: Optional client_name to send in the RFC 7591 registration request.
+                redirect_uris:
+                    type: array
+                    items:
+                        type: string
+                    description: Optional redirect_uris to send in the RFC 7591 registration request.
+                remote_session_issuer_id:
+                    type: string
+                    description: The remote_session_issuer to register against. Must have a registration_endpoint configured.
+                    format: uuid
+                user_session_issuer_id:
+                    type: string
+                    description: The user_session_issuer the issued client is paired with.
+                    format: uuid
+            description: Form for registering a new remote_session_client against an existing remote_session_issuer via RFC 7591 Dynamic Client Registration.
+            required:
+                - remote_session_issuer_id
+                - user_session_issuer_id
         RegisterRequestBody:
             type: object
             properties:
