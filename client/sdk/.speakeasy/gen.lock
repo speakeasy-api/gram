@@ -9374,6 +9374,30 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+<<<<<<< HEAD
+||||||| parent of 18ec6a3d3 (chore: regenerate SDK for register endpoint)
+=======
+  hooks#codex:
+    speakeasy-default-hooks#codex:
+      requestBody:
+        application/json: {"hook_event_name": "PreToolUse"}
+      responses:
+        "200":
+          application/json: {}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  downloadCodexInstallScript:
+    speakeasy-default-download-codex-install-script:
+      responses:
+        "200":
+          text/x-shellscript: "x-file: example.file"
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+>>>>>>> 18ec6a3d3 (chore: regenerate SDK for register endpoint)
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:
