@@ -1313,9 +1313,10 @@ func (s *Service) handleTokenRefreshTokenGrant(
 	mcpSlug string,
 	logger *slog.Logger,
 ) error {
-	raw := r.PostForm.Get("refresh_token")
-	if raw == "" {
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "refresh_token is required")
+	req := usersessions.RefreshTokenRequestFromForm(r.PostForm)
+	req.SetDefaults()
+	if err := req.Validate(); err != nil {
+		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
 	// Soft-delete by hash claims the single-use slot atomically. If the row
@@ -1323,7 +1324,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 	// here as invalid_grant.
 	oldSession, err := usersessions_repo.New(s.db).RevokeUserSessionByRefreshTokenHash(ctx, usersessions_repo.RevokeUserSessionByRefreshTokenHashParams{
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		RefreshTokenHash:    sha256Hex(raw),
+		RefreshTokenHash:    sha256Hex(req.RefreshToken),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

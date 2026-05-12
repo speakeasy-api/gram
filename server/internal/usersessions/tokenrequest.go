@@ -52,3 +52,33 @@ func (r *AuthCodeTokenRequest) Validate() error {
 	}
 	return nil
 }
+
+// RefreshTokenRequest is the RFC 6749 §6 token request issued by a client
+// rotating its refresh token. The scope parameter is intentionally absent
+// — see usersessions.RegistrationRequest's comment on un-persisted scope
+// state; the /token response likewise doesn't echo scope.
+type RefreshTokenRequest struct {
+	RefreshToken string
+}
+
+// RefreshTokenRequestFromForm decodes from url.Values (typically
+// r.PostForm).
+func RefreshTokenRequestFromForm(form url.Values) *RefreshTokenRequest {
+	return &RefreshTokenRequest{
+		RefreshToken: form.Get("refresh_token"),
+	}
+}
+
+// SetDefaults is a no-op — refresh_token is required. Kept for symmetry
+// with the other request types.
+func (r *RefreshTokenRequest) SetDefaults() {}
+
+// Validate checks the presence of refresh_token. Returns an *OAuthError
+// on rejection. Hash lookup + client-binding verification + expiry check
+// live in the handler since they require database state.
+func (r *RefreshTokenRequest) Validate() error {
+	if r.RefreshToken == "" {
+		return &OAuthError{Code: "invalid_request", Description: "refresh_token is required"}
+	}
+	return nil
+}

@@ -57,3 +57,27 @@ func TestAuthCodeTokenRequest_Validate(t *testing.T) {
 		assertOAuthError(t, req.Validate(), "invalid_request", "code_verifier")
 	})
 }
+
+func TestRefreshTokenRequestFromForm(t *testing.T) {
+	t.Parallel()
+	form := url.Values{}
+	form.Set("refresh_token", "refresh_xyz")
+	req := RefreshTokenRequestFromForm(form)
+	require.Equal(t, "refresh_xyz", req.RefreshToken)
+}
+
+func TestRefreshTokenRequest_Validate(t *testing.T) {
+	t.Parallel()
+
+	t.Run("accepts a populated refresh_token", func(t *testing.T) {
+		t.Parallel()
+		req := &RefreshTokenRequest{RefreshToken: "refresh_xyz"}
+		require.NoError(t, req.Validate())
+	})
+
+	t.Run("rejects missing refresh_token", func(t *testing.T) {
+		t.Parallel()
+		req := &RefreshTokenRequest{}
+		assertOAuthError(t, req.Validate(), "invalid_request", "refresh_token")
+	})
+}
