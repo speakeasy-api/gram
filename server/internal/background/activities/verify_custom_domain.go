@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.temporal.io/sdk/temporal"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -21,6 +23,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+// ErrTypeDNSNotFound tags the non-retryable Temporal application error emitted
+// when DNS records required for custom domain verification do not exist
+// (NXDOMAIN). The workflow terminates immediately instead of burning retries
+// on a customer-side configuration gap; the user re-triggers verification via
+// the dashboard's "Reverify" button once DNS is configured.
+const ErrTypeDNSNotFound = "CustomDomainDNSNotFound"
+
+func newDNSNotFoundError(cause error, missingHost string) error {
+	return temporal.NewNonRetryableApplicationError(
+		fmt.Sprintf("DNS record not found for %s", missingHost),
+		ErrTypeDNSNotFound,
+		cause,
+	)
+}
 
 type VerifyCustomDomain struct {
 	db                  *pgxpool.Pool
@@ -121,6 +138,11 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 		if aErr == nil && len(ips) > 0 {
 			d.logger.InfoContext(ctx, fmt.Sprintf("CNAME not found. Found A record(s): %s", strings.Join(ips, ", ")))
 		} else {
+			var dnsErr *net.DNSError
+			if errors.As(err, &dnsErr) && dnsErr.IsNotFound {
+				d.logger.InfoContext(ctx, "custom domain DNS not found, terminating non-retryable", attr.SlogURLDomain(domain.Domain), attr.SlogError(err))
+				return newDNSNotFoundError(err, domain.Domain)
+			}
 			return oops.E(oops.CodeUnexpected, err, "failed to find custom domain mapping for %s", domain.Domain).Log(ctx, d.logger)
 		}
 	} else {
@@ -134,6 +156,11 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 	txtName := "_gram." + domain.Domain
 	txts, err := d.resolver.LookupTXT(ctx, txtName)
 	if err != nil {
+		var dnsErr *net.DNSError
+		if errors.As(err, &dnsErr) && dnsErr.IsNotFound {
+			d.logger.InfoContext(ctx, "custom domain verification TXT record not found, terminating non-retryable", attr.SlogURLDomain(domain.Domain), attr.SlogError(err))
+			return newDNSNotFoundError(err, txtName)
+		}
 		return oops.E(oops.CodeUnexpected, err, "failed to find TXT record for %s", txtName).Log(ctx, d.logger)
 	}
 	expectedTXT := fmt.Sprintf("gram-domain-verify=%s,%s", domain.Domain, args.OrgID)
