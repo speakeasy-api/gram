@@ -8,27 +8,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// CreateRemoteSessionClient is stubbed; ticket #10 implements it.
 func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.CreateRemoteSessionClientPayload) (*types.RemoteSessionClient, error) {
 	return nil, oops.E(oops.CodeNotImplemented, nil, "not implemented").Log(ctx, s.logger)
 }
 
-// UpdateRemoteSessionClient is stubbed; ticket #10 implements it.
 func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.UpdateRemoteSessionClientPayload) (*types.RemoteSessionClient, error) {
 	return nil, oops.E(oops.CodeNotImplemented, nil, "not implemented").Log(ctx, s.logger)
 }
 
-// ListRemoteSessionClients is stubbed; ticket #10 implements it.
 func (s *Service) ListRemoteSessionClients(ctx context.Context, payload *gen.ListRemoteSessionClientsPayload) (*gen.ListRemoteSessionClientsResult, error) {
 	return nil, oops.E(oops.CodeNotImplemented, nil, "not implemented").Log(ctx, s.logger)
 }
 
-// GetRemoteSessionClient is stubbed; ticket #10 implements it.
 func (s *Service) GetRemoteSessionClient(ctx context.Context, payload *gen.GetRemoteSessionClientPayload) (*types.RemoteSessionClient, error) {
 	return nil, oops.E(oops.CodeNotImplemented, nil, "not implemented").Log(ctx, s.logger)
 }
 
-// DeleteRemoteSessionClient is stubbed; ticket #10 implements it.
 func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.DeleteRemoteSessionClientPayload) error {
 	return oops.E(oops.CodeNotImplemented, nil, "not implemented").Log(ctx, s.logger)
 }

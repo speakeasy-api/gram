@@ -2,7 +2,6 @@ package audit
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
 
@@ -27,7 +26,7 @@ type LogRemoteSessionDeleteEvent struct {
 	PrincipalURN     urn.SessionSubject
 }
 
-func LogRemoteSessionDelete(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionDeleteEvent) error {
+func (l *Logger) LogRemoteSessionDelete(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionDeleteEvent) error {
 	action := ActionRemoteSessionDelete
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -50,9 +49,5 @@ func LogRemoteSessionDelete(ctx context.Context, dbtx repo.DBTX, event LogRemote
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

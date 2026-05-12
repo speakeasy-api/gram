@@ -48,7 +48,8 @@ WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
 SELECT *
 FROM remote_session_issuers
 WHERE project_id = @project_id AND deleted IS FALSE
-ORDER BY created_at DESC;
+ORDER BY created_at DESC
+LIMIT 100;
 
 -- name: UpdateRemoteSessionIssuer :one
 UPDATE remote_session_issuers

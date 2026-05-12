@@ -22,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -78,11 +77,11 @@ func (s *Service) DiscoverRemoteSessionIssuer(ctx context.Context, payload *gen.
 	}
 
 	draft := &types.RemoteSessionIssuerDraft{
-		Issuer:                            firstNonEmpty(doc.Issuer, issuerURL),
-		AuthorizationEndpoint:             nilIfEmpty(doc.AuthorizationEndpoint),
-		TokenEndpoint:                     nilIfEmpty(doc.TokenEndpoint),
-		RegistrationEndpoint:              nilIfEmpty(doc.RegistrationEndpoint),
-		JwksURI:                           nilIfEmpty(doc.JwksURI),
+		Issuer:                            conv.Default(doc.Issuer, issuerURL),
+		AuthorizationEndpoint:             conv.PtrEmpty(doc.AuthorizationEndpoint),
+		TokenEndpoint:                     conv.PtrEmpty(doc.TokenEndpoint),
+		RegistrationEndpoint:              conv.PtrEmpty(doc.RegistrationEndpoint),
+		JwksURI:                           conv.PtrEmpty(doc.JwksURI),
 		ScopesSupported:                   doc.ScopesSupported,
 		GrantTypesSupported:               doc.GrantTypesSupported,
 		ResponseTypesSupported:            doc.ResponseTypesSupported,
@@ -132,10 +131,10 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
 		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
-		ScopesSupported:                   nullableStringSlice(payload.ScopesSupported),
-		GrantTypesSupported:               nullableStringSlice(payload.GrantTypesSupported),
-		ResponseTypesSupported:            nullableStringSlice(payload.ResponseTypesSupported),
-		TokenEndpointAuthMethodsSupported: nullableStringSlice(payload.TokenEndpointAuthMethodsSupported),
+		ScopesSupported:                   payload.ScopesSupported,
+		GrantTypesSupported:               payload.GrantTypesSupported,
+		ResponseTypesSupported:            payload.ResponseTypesSupported,
+		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
 	})
@@ -143,15 +142,15 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session issuer").Log(ctx, logger)
 	}
 
-	if err := audit.LogRemoteSessionIssuerCreate(ctx, dbtx, audit.LogRemoteSessionIssuerCreateEvent{
-		OrganizationID:          authCtx.ActiveOrganizationID,
-		ProjectID:               *authCtx.ProjectID,
-		Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:        authCtx.Email,
-		ActorSlug:               nil,
-		RemoteSessionIssuerID:   issuer.ID,
-		RemoteSessionIssuerSlug: issuer.Slug,
-		IssuerURL:               issuer.Issuer,
+	if err := s.auditLogger.LogRemoteSessionIssuerCreate(ctx, dbtx, audit.LogRemoteSessionIssuerCreateEvent{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:       authCtx.Email,
+		ActorSlug:              nil,
+		RemoteSessionIssuerURN: urn.NewRemoteSessionIssuer(issuer.ID),
+		Slug:                   issuer.Slug,
+		IssuerURL:              issuer.Issuer,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log remote session issuer creation").Log(ctx, logger)
 	}
@@ -160,7 +159,7 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
 	}
 
-	return mv.BuildRemoteSessionIssuerView(issuer), nil
+	return remoteSessionIssuerView(issuer), nil
 }
 
 // UpdateRemoteSessionIssuer applies an optional patch to an existing
@@ -178,7 +177,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").Log(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: issuerID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -201,7 +200,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote session issuer").Log(ctx, logger)
 	}
 
-	beforeView := mv.BuildRemoteSessionIssuerView(existing)
+	beforeView := remoteSessionIssuerView(existing)
 
 	updated, err := txRepo.UpdateRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionIssuerParams{
 		Slug:                              conv.PtrToPGText(payload.Slug),
@@ -210,10 +209,10 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
 		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
-		ScopesSupported:                   nullableStringSlice(payload.ScopesSupported),
-		GrantTypesSupported:               nullableStringSlice(payload.GrantTypesSupported),
-		ResponseTypesSupported:            nullableStringSlice(payload.ResponseTypesSupported),
-		TokenEndpointAuthMethodsSupported: nullableStringSlice(payload.TokenEndpointAuthMethodsSupported),
+		ScopesSupported:                   payload.ScopesSupported,
+		GrantTypesSupported:               payload.GrantTypesSupported,
+		ResponseTypesSupported:            payload.ResponseTypesSupported,
+		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
 		Oidc:                              conv.PtrToPGBool(payload.Oidc),
 		Passthrough:                       conv.PtrToPGBool(payload.Passthrough),
 		ID:                                issuerID,
@@ -226,19 +225,19 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeUnexpected, err, "update remote session issuer").Log(ctx, logger)
 	}
 
-	afterView := mv.BuildRemoteSessionIssuerView(updated)
+	afterView := remoteSessionIssuerView(updated)
 
-	if err := audit.LogRemoteSessionIssuerUpdate(ctx, dbtx, audit.LogRemoteSessionIssuerUpdateEvent{
-		OrganizationID:          authCtx.ActiveOrganizationID,
-		ProjectID:               *authCtx.ProjectID,
-		Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:        authCtx.Email,
-		ActorSlug:               nil,
-		RemoteSessionIssuerID:   updated.ID,
-		RemoteSessionIssuerSlug: updated.Slug,
-		IssuerURL:               updated.Issuer,
-		SnapshotBefore:          beforeView,
-		SnapshotAfter:           afterView,
+	if err := s.auditLogger.LogRemoteSessionIssuerUpdate(ctx, dbtx, audit.LogRemoteSessionIssuerUpdateEvent{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:       authCtx.Email,
+		ActorSlug:              nil,
+		RemoteSessionIssuerURN: urn.NewRemoteSessionIssuer(updated.ID),
+		Slug:                   updated.Slug,
+		IssuerURL:              updated.Issuer,
+		SnapshotBefore:         beforeView,
+		SnapshotAfter:          afterView,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log remote session issuer update").Log(ctx, logger)
 	}
@@ -250,9 +249,6 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 	return afterView, nil
 }
 
-// ListRemoteSessionIssuers returns the active remote_session_issuers in the
-// caller's project. Pagination params are accepted by the design but ignored
-// in milestone #1; the result currently returns the full set.
 func (s *Service) ListRemoteSessionIssuers(ctx context.Context, _ *gen.ListRemoteSessionIssuersPayload) (*gen.ListRemoteSessionIssuersResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -270,7 +266,7 @@ func (s *Service) ListRemoteSessionIssuers(ctx context.Context, _ *gen.ListRemot
 
 	items := make([]*types.RemoteSessionIssuer, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, mv.BuildRemoteSessionIssuerView(row))
+		items = append(items, remoteSessionIssuerView(row))
 	}
 
 	return &gen.ListRemoteSessionIssuersResult{
@@ -302,7 +298,7 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").Log(ctx, logger)
 		}
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: issuerID.String(), Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 			return nil, err
 		}
 		issuer, err = repo.New(s.db).GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
@@ -316,8 +312,6 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 			return nil, oops.E(oops.CodeUnexpected, err, "get remote session issuer").Log(ctx, logger)
 		}
 	default: // hasSlug
-		// Slug-based lookup is project-scoped, so the project-level scope is
-		// the right gate; per-resource gating happens after the row resolves.
 		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 			return nil, err
 		}
@@ -334,7 +328,7 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 		}
 	}
 
-	return mv.BuildRemoteSessionIssuerView(issuer), nil
+	return remoteSessionIssuerView(issuer), nil
 }
 
 // DeleteRemoteSessionIssuer soft-deletes an issuer. Blocked when any
@@ -352,7 +346,7 @@ func (s *Service) DeleteRemoteSessionIssuer(ctx context.Context, payload *gen.De
 		return oops.E(oops.CodeBadRequest, err, "invalid issuer id").Log(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: issuerID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return err
 	}
 
@@ -383,15 +377,15 @@ func (s *Service) DeleteRemoteSessionIssuer(ctx context.Context, payload *gen.De
 		return oops.E(oops.CodeUnexpected, err, "delete remote session issuer").Log(ctx, logger)
 	}
 
-	if err := audit.LogRemoteSessionIssuerDelete(ctx, dbtx, audit.LogRemoteSessionIssuerDeleteEvent{
-		OrganizationID:          authCtx.ActiveOrganizationID,
-		ProjectID:               *authCtx.ProjectID,
-		Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:        authCtx.Email,
-		ActorSlug:               nil,
-		RemoteSessionIssuerID:   deleted.ID,
-		RemoteSessionIssuerSlug: deleted.Slug,
-		IssuerURL:               deleted.Issuer,
+	if err := s.auditLogger.LogRemoteSessionIssuerDelete(ctx, dbtx, audit.LogRemoteSessionIssuerDeleteEvent{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:       authCtx.Email,
+		ActorSlug:              nil,
+		RemoteSessionIssuerURN: urn.NewRemoteSessionIssuer(deleted.ID),
+		Slug:                   deleted.Slug,
+		IssuerURL:              deleted.Issuer,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log remote session issuer deletion").Log(ctx, logger)
 	}
@@ -422,9 +416,7 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	}
 	req.Header.Set("Accept", "application/json")
 
-	client := policy.Client()
-	client.Timeout = discoveryHTTPTimeout
-	resp, err := client.Do(req)
+	resp, err := policy.Client().Do(req)
 	if err != nil {
 		return rfc8414Document{}, nil, fmt.Errorf("fetch discovery document: %w", err)
 	}
@@ -496,29 +488,23 @@ func issuerURLsEqual(a, b string) bool {
 	return strings.TrimRight(a, "/") == strings.TrimRight(b, "/")
 }
 
-// firstNonEmpty returns the first argument that is non-empty.
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
+func remoteSessionIssuerView(row repo.RemoteSessionIssuer) *types.RemoteSessionIssuer {
+	return &types.RemoteSessionIssuer{
+		ID:                                row.ID.String(),
+		ProjectID:                         row.ProjectID.String(),
+		Slug:                              row.Slug,
+		Issuer:                            row.Issuer,
+		AuthorizationEndpoint:             conv.FromPGText[string](row.AuthorizationEndpoint),
+		TokenEndpoint:                     conv.FromPGText[string](row.TokenEndpoint),
+		RegistrationEndpoint:              conv.FromPGText[string](row.RegistrationEndpoint),
+		JwksURI:                           conv.FromPGText[string](row.JwksUri),
+		ScopesSupported:                   row.ScopesSupported,
+		GrantTypesSupported:               row.GrantTypesSupported,
+		ResponseTypesSupported:            row.ResponseTypesSupported,
+		TokenEndpointAuthMethodsSupported: row.TokenEndpointAuthMethodsSupported,
+		Oidc:                              row.Oidc,
+		Passthrough:                       row.Passthrough,
+		CreatedAt:                         row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                         row.UpdatedAt.Time.Format(time.RFC3339),
 	}
-	return ""
-}
-
-// nilIfEmpty returns nil for an empty string, otherwise a pointer to it.
-func nilIfEmpty(v string) *string {
-	if v == "" {
-		return nil
-	}
-	return &v
-}
-
-// nullableStringSlice is the sqlc COALESCE pattern: pass nil to keep the
-// existing column value, pass a (possibly empty) slice to overwrite it.
-func nullableStringSlice(s []string) []string {
-	if s == nil {
-		return nil
-	}
-	return s
 }
