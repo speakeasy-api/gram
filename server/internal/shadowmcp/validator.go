@@ -191,7 +191,7 @@ func (c *Client) ValidateRemoteMCPServerCall(
 
 	projectUUID, err := uuid.Parse(projectID)
 	if err != nil {
-		return fail("invalid project id")
+		return fail(fmt.Sprintf("invalid project id %q", projectID))
 	}
 
 	if _, err := remotemcprepo.New(c.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{

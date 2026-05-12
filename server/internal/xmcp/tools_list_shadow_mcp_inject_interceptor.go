@@ -82,6 +82,7 @@ func (i *ToolsListShadowMCPInjectInterceptor) InterceptToolsListResponse(ctx con
 	}
 
 	tools := list.Result.Tools
+	mutated := false
 	for _, t := range tools {
 		// The SDK types InputSchema as `any` since upstream MCP servers
 		// can produce any JSON-marshalable shape; marshal it back to
@@ -107,8 +108,15 @@ func (i *ToolsListShadowMCPInjectInterceptor) InterceptToolsListResponse(ctx con
 		// Assign the mutated bytes back so downstream marshal of the
 		// response emits the injected schema verbatim.
 		t.InputSchema = injected
+		mutated = true
 	}
 
+	// Skip the setter (and the dirty-flag flip + chain-end re-marshal
+	// it triggers) when no tool was successfully mutated — every
+	// schema either failed to encode or was relayed unchanged.
+	if !mutated {
+		return nil
+	}
 	if err := list.SetTools(tools); err != nil {
 		return fmt.Errorf("commit injected tools/list result: %w", err)
 	}

@@ -318,10 +318,15 @@ func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMc
 	// an unauthenticated public caller would be unable to invoke any
 	// tool, and the tools/list filter would have no grants to consult.
 	//
-	// The shadow-MCP interceptors are attached unconditionally and
-	// self-gate via shadowmcp.Client.IsEnabledForProject at intercept
-	// time. The gate is Redis-cached (15-minute TTL) so the hot-path
-	// cost when the policy is disabled is a single cache GET.
+	// The shadow-MCP interceptors are attached unconditionally — public
+	// AND private — because they enforce a project-scoped risk policy,
+	// not an identity-scoped grant. A project that enables tool-identity
+	// capture wants the property injected and validated on every call
+	// the proxy serves, regardless of whether the underlying transport
+	// authenticated the caller. The pair self-gates via
+	// shadowmcp.Client.IsEnabledForProject at intercept time; the lookup
+	// is Redis-cached (15-minute TTL) so the hot-path cost when the
+	// policy is disabled is a single cache GET.
 	toolsCallReqInterceptors := []proxy.ToolsCallRequestInterceptor{
 		NewToolsCallOTELCounterInterceptor(s.xmcpMetrics, serverID, logger),
 		s.toolsCallUsageLimitsInterceptor,

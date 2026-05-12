@@ -43,11 +43,13 @@ type ToolsCallShadowMCPValidateAndStripInterceptor struct {
 var _ proxy.ToolsCallRequestInterceptor = (*ToolsCallShadowMCPValidateAndStripInterceptor)(nil)
 
 // NewToolsCallShadowMCPValidateAndStripInterceptor constructs an
-// interceptor scoped to a single Remote MCP Server. serverID is unused
-// for validation today (the echoed UUID is resolved against the project
-// directly) but is captured for parity with the paired inject
-// interceptor and to support a future cross-check between the echoed
-// scope and the routed server.
+// interceptor scoped to a single Remote MCP Server. serverID is the
+// routed server's UUID and is cross-checked against the caller's
+// echoed scope after the validator confirms the echoed UUID resolves
+// in the project — guarding against sibling-server echoes within the
+// same project, where a caller could otherwise satisfy validation by
+// echoing any project-scoped server's UUID rather than the one the
+// route actually targets.
 func NewToolsCallShadowMCPValidateAndStripInterceptor(shadowmcpClient *shadowmcp.Client, serverID, projectID string, logger *slog.Logger) *ToolsCallShadowMCPValidateAndStripInterceptor {
 	return &ToolsCallShadowMCPValidateAndStripInterceptor{
 		shadowmcpClient: shadowmcpClient,
@@ -83,14 +85,23 @@ func (i *ToolsCallShadowMCPValidateAndStripInterceptor) InterceptToolsCallReques
 		return nil
 	}
 
-	// Decode the arguments as a JSON object so the validator can read
-	// the echoed scope property. A non-object body fails validation via
-	// the same path as a missing property — the validator returns a
-	// stable "missing required property" detail string.
+	// Decode the arguments as a JSON object. Non-object payloads
+	// (arrays, scalars, malformed JSON) get a distinct rejection
+	// message rather than being passed through to the validator as nil
+	// and surfacing the misleading "missing required property" detail
+	// — the caller's real problem is a malformed body, not just an
+	// absent field.
 	var argsMap map[string]any
 	if len(call.Params.Arguments) > 0 {
 		if err := json.Unmarshal(call.Params.Arguments, &argsMap); err != nil {
-			argsMap = nil
+			i.logger.DebugContext(ctx, "tools/call arguments are not a JSON object; shadow-MCP rejecting",
+				attr.SlogError(err),
+				attr.SlogComponent("xmcp"))
+			return &proxy.RejectError{
+				Code:    proxy.RejectCodeServerError,
+				Message: "shadow-mcp: tools/call arguments must be a JSON object",
+				Data:    nil,
+			}
 		}
 	}
 
@@ -99,6 +110,22 @@ func (i *ToolsCallShadowMCPValidateAndStripInterceptor) InterceptToolsCallReques
 		return &proxy.RejectError{
 			Code:    proxy.RejectCodeServerError,
 			Message: fmt.Sprintf("shadow-mcp: %s", detail),
+			Data:    nil,
+		}
+	}
+
+	// Defense in depth: after the validator confirms the echoed UUID
+	// resolves to a real remote_mcp_server in the project, ensure the
+	// caller didn't echo a sibling server's UUID within the same
+	// project. The route's serverID is the source of truth for which
+	// server the call targets, so an echo that matches the project
+	// scope but not the route shape is a forged/replayed provenance
+	// signal and must not satisfy validation.
+	echoedRaw, _ := argsMap[shadowmcp.XGramToolsetIDField].(string)
+	if echoedRaw != i.serverID {
+		return &proxy.RejectError{
+			Code:    proxy.RejectCodeServerError,
+			Message: fmt.Sprintf("shadow-mcp: echoed %s does not match the routed server", shadowmcp.XGramToolsetIDField),
 			Data:    nil,
 		}
 	}

@@ -16,7 +16,10 @@ import (
 // unmarshals the schema into [map[string]any], adds the property to
 // "properties", appends it to "required" if not already present, and
 // re-marshals. Existing fields are preserved; "type" is defaulted to
-// "object" when absent. Returns the original schema bytes unchanged on
+// "object" when absent. An existing entry with the same property name
+// is replaced — this defends against upstream schemas that declare a
+// colliding [XGramToolsetIDField] property whose value the caller could
+// otherwise control. Returns the original schema bytes unchanged on
 // any marshaling failure.
 func InjectToolsetIDConstant(schema json.RawMessage, scopeID string) (json.RawMessage, error) {
 	schemaMap := map[string]any{}

@@ -79,13 +79,14 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *xmcp.Service
-	mcpService     *mcp.Service
-	conn           *pgxpool.Pool
-	sessionManager *sessions.Manager
-	logger         *slog.Logger
-	enc            *encryption.Client
-	authzEngine    *authz.Engine
+	service         *xmcp.Service
+	mcpService      *mcp.Service
+	conn            *pgxpool.Pool
+	sessionManager  *sessions.Manager
+	logger          *slog.Logger
+	enc             *encryption.Client
+	authzEngine     *authz.Engine
+	shadowMCPClient *shadowmcp.Client
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -144,13 +145,14 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	svc := xmcp.NewService(logger, tracerProvider, meterProvider, conn, enc, authzEngine, shadowMCPClient, guardianPolicy, posthogClient, billingClient, billingClient, mcpService, serverURL)
 
 	return ctx, &testInstance{
-		service:        svc,
-		mcpService:     mcpService,
-		conn:           conn,
-		sessionManager: sessionManager,
-		logger:         logger,
-		enc:            enc,
-		authzEngine:    authzEngine,
+		service:         svc,
+		mcpService:      mcpService,
+		conn:            conn,
+		sessionManager:  sessionManager,
+		logger:          logger,
+		enc:             enc,
+		authzEngine:     authzEngine,
+		shadowMCPClient: shadowMCPClient,
 	}
 }
 
