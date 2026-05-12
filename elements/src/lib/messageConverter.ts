@@ -167,11 +167,20 @@ function buildAssistantContentParts(
   }
 
   for (const tc of toolCalls) {
+    const toolCallId = tc.id ?? tc.toolCallId;
+    if (!toolCallId) {
+      // assistant-ui keys tool-call state by toolCallId; if two parts in the
+      // same restored thread share an empty fallback id, the second one's
+      // argsText regresses from the first's and the runtime throws
+      // "Tool call argsText can only be appended, not updated".
+      console.warn("Dropping persisted tool call with no id:", tc);
+      continue;
+    }
     const args = tc.function?.arguments ?? tc.args ?? {};
     const argsText = typeof args === "string" ? args : JSON.stringify(args);
     parts.push({
       type: "tool-call",
-      toolCallId: tc.id ?? tc.toolCallId ?? "",
+      toolCallId,
       toolName: tc.function?.name ?? tc.toolName ?? "",
       args: typeof args === "string" ? JSON.parse(args) : args,
       argsText,
