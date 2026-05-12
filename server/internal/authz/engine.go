@@ -288,7 +288,7 @@ func (e *Engine) RequirePrincipal(ctx context.Context, organizationID string, us
 		return e.mapError(ctx, ErrNoChecks)
 	}
 
-	if grants, ok := GrantsFromContext(ctx); ok {
+	if grants, ok := GrantsFromContext(ctx); ok && authContextMatchesPrincipal(ctx, organizationID, userID) {
 		return e.requireWithGrants(ctx, grants, checks...)
 	}
 
@@ -333,6 +333,11 @@ func (e *Engine) RequirePrincipal(ctx context.Context, organizationID string, us
 	}
 
 	return e.requireWithGrants(GrantsToContext(ctx, grants), grants, checks...)
+}
+
+func authContextMatchesPrincipal(ctx context.Context, organizationID string, userID string) bool {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	return ok && authCtx != nil && authCtx.ActiveOrganizationID == organizationID && authCtx.UserID == userID
 }
 
 func (e *Engine) requireWithGrants(ctx context.Context, grants []Grant, checks ...Check) error {

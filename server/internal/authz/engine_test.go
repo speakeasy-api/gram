@@ -151,6 +151,46 @@ func TestEngineRequirePrincipal_loadsGrantsForAPIKeyUser(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
+func TestEngineRequirePrincipal_ignoresContextGrantsForDifferentUser(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t)
+	organizationID := "org_require_principal_mismatch"
+	targetUserID := "user_require_principal_target"
+	ruleID := "rule_require_principal_mismatch"
+
+	seedOrganization(t, ctx, conn, organizationID)
+	seedConnectedUser(t, ctx, conn, organizationID, targetUserID, "target@example.com", "Target User", "workos-user-require-principal-target", "membership-require-principal-target")
+
+	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+		ActiveOrganizationID:  organizationID,
+		UserID:                "different_user",
+		ExternalUserID:        "",
+		APIKeyID:              "key_require_principal_mismatch",
+		SessionID:             nil,
+		ProjectID:             nil,
+		OrganizationSlug:      "",
+		Email:                 nil,
+		AccountType:           "enterprise",
+		HasActiveSubscription: false,
+		Whitelisted:           false,
+		ProjectSlug:           nil,
+		APIKeyScopes:          nil,
+		IsAdmin:               false,
+	})
+	ctx = GrantsToContext(ctx, []Grant{NewGrant(ScopeShadowMCPConnect, ruleID)})
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, staticRBAC(true), staticChallengeLogging(true), staticMembershipFetcher{roleSlug: "target_role_without_grant"}, cache.NoopCache)
+
+	err = engine.RequirePrincipal(ctx, organizationID, targetUserID, ShadowMCPConnectCheck(ruleID, "project_123"))
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
 func TestResolveRoleSlug_cachesEmptyMembershipResult(t *testing.T) {
 	t.Parallel()
 
