@@ -291,6 +291,83 @@ func (q *Queries) GetUserSessionByID(ctx context.Context, arg GetUserSessionByID
 	return i, err
 }
 
+const getUserSessionByJTI = `-- name: GetUserSessionByJTI :one
+SELECT id, project_id, user_session_issuer_id, user_session_client_id, subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, created_at, updated_at, deleted_at, deleted
+FROM user_sessions
+WHERE user_session_issuer_id = $1
+  AND jti = $2
+  AND deleted IS FALSE
+`
+
+type GetUserSessionByJTIParams struct {
+	UserSessionIssuerID uuid.UUID
+	Jti                 string
+}
+
+// Looks up the session row by jti, scoped to the issuer. Used by the OAuth
+// /revoke endpoint to verify a presented access token belongs to the
+// authenticated client (RFC 7009 §2.1) before pushing the jti into the
+// revocation cache.
+func (q *Queries) GetUserSessionByJTI(ctx context.Context, arg GetUserSessionByJTIParams) (UserSession, error) {
+	row := q.db.QueryRow(ctx, getUserSessionByJTI, arg.UserSessionIssuerID, arg.Jti)
+	var i UserSession
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.UserSessionIssuerID,
+		&i.UserSessionClientID,
+		&i.SubjectUrn,
+		&i.Jti,
+		&i.RefreshTokenHash,
+		&i.RefreshExpiresAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getUserSessionByRefreshTokenHash = `-- name: GetUserSessionByRefreshTokenHash :one
+SELECT id, project_id, user_session_issuer_id, user_session_client_id, subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, created_at, updated_at, deleted_at, deleted
+FROM user_sessions
+WHERE user_session_issuer_id = $1
+  AND refresh_token_hash = $2
+  AND deleted IS FALSE
+`
+
+type GetUserSessionByRefreshTokenHashParams struct {
+	UserSessionIssuerID uuid.UUID
+	RefreshTokenHash    string
+}
+
+// Looks up the session row by refresh-token hash, scoped to the issuer.
+// Used by the OAuth /revoke endpoint to verify a presented refresh token
+// belongs to the authenticated client (RFC 7009 §2.1) BEFORE soft-deleting
+// the row — otherwise a malicious client could invalidate another client's
+// refresh token by presenting it to /revoke.
+func (q *Queries) GetUserSessionByRefreshTokenHash(ctx context.Context, arg GetUserSessionByRefreshTokenHashParams) (UserSession, error) {
+	row := q.db.QueryRow(ctx, getUserSessionByRefreshTokenHash, arg.UserSessionIssuerID, arg.RefreshTokenHash)
+	var i UserSession
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.UserSessionIssuerID,
+		&i.UserSessionClientID,
+		&i.SubjectUrn,
+		&i.Jti,
+		&i.RefreshTokenHash,
+		&i.RefreshExpiresAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getUserSessionClientByClientID = `-- name: GetUserSessionClientByClientID :one
 SELECT cli.id, cli.project_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
 FROM user_session_clients AS cli

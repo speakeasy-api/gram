@@ -123,7 +123,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, to
 	if token == "" {
 		return ctx, false
 	}
-	subject, _, err := s.userSessionSigner.ValidateBearer(ctx, token, toolset.Slug, s.chatSessionsManager)
+	subject, _, err := s.userSessionSigner.ValidateBearer(ctx, token, urn.NewToolset(toolset.ID).String(), s.chatSessionsManager)
 	if err != nil {
 		return ctx, false
 	}

@@ -60,9 +60,8 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 
 	q := r.URL.Query()
 	stateID := q.Get("state")
-	code := q.Get("code")
-	if stateID == "" || code == "" {
-		return oops.E(oops.CodeBadRequest, nil, "state and code are required").Log(ctx, logger)
+	if stateID == "" {
+		return oops.E(oops.CodeBadRequest, nil, "state is required").Log(ctx, logger)
 	}
 
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
@@ -73,6 +72,24 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// State-confusion guard: the state must belong to this toolset.
 	if challengeState.ToolsetID != toolset.ID {
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this MCP server").Log(ctx, logger)
+	}
+
+	// If the IDP returned an error (user cancelled at the IDP, IDP refused
+	// to authenticate, etc.) per OAuth 2.0, forward it back to the MCP
+	// client with the same error code so the client can render an
+	// appropriate message instead of seeing a generic "state and code are
+	// required" 400.
+	if idpErr := q.Get("error"); idpErr != "" {
+		_ = s.authnChallengeCache.Delete(ctx, challengeState)
+		errDescription := q.Get("error_description")
+		clientRedirect := buildClientRedirect(challengeState.RedirectURI, "", challengeState.State, idpErr, errDescription)
+		http.Redirect(w, r, clientRedirect, http.StatusFound)
+		return nil
+	}
+
+	code := q.Get("code")
+	if code == "" {
+		return oops.E(oops.CodeBadRequest, nil, "code is required").Log(ctx, logger)
 	}
 
 	idToken, err := s.idpClient.ExchangeCode(ctx, code)

@@ -131,7 +131,17 @@ func (s *Signer) ValidateBearer(ctx context.Context, token, expectedAudience str
 	if claims == nil {
 		return urn.SessionSubject{}, "", errors.New("validate token: nil claims")
 	}
-	if revoked, _ := revocation.IsTokenRevoked(ctx, claims.ID); revoked {
+	// Fail closed on revocation-cache errors: if we can't tell whether a
+	// token is revoked (Redis outage, network blip), refuse the token
+	// rather than admit a possibly-revoked one. The alternative — silently
+	// allowing access when the revocation backend is degraded — turns the
+	// /revoke endpoint into a sometimes-effective primitive, which is the
+	// worst possible failure mode for a security control.
+	revoked, err := revocation.IsTokenRevoked(ctx, claims.ID)
+	if err != nil {
+		return urn.SessionSubject{}, "", fmt.Errorf("check revocation: %w", err)
+	}
+	if revoked {
 		return urn.SessionSubject{}, "", errors.New("token is revoked")
 	}
 	subject, err := urn.ParseSessionSubject(claims.Subject)

@@ -99,25 +99,30 @@ func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) error {
 	}
 	hint := r.PostForm.Get("token_type_hint")
 
-	// Try the hinted type first; on miss, fall through to the other.
+	// Try the hinted type first; on miss, fall through to the other. Per
+	// RFC 7009 §2.1 each path verifies the token belongs to the
+	// authenticated client before revoking; ownership mismatches look like
+	// the "unknown token" success path to the caller (§2.2 — don't leak
+	// ownership).
+	issuerID := toolset.UserSessionIssuerID.UUID
+	clientUUID := clientRow.ID
 	switch hint {
 	case "refresh_token":
-		if s.tryRevokeRefreshToken(ctx, logger, toolset.UserSessionIssuerID.UUID, token) {
+		if s.tryRevokeRefreshToken(ctx, logger, issuerID, clientUUID, token) {
 			break
 		}
-		// hint was wrong, try as access token
-		s.tryRevokeAccessToken(ctx, logger, token)
+		s.tryRevokeAccessToken(ctx, logger, issuerID, clientUUID, token)
 	case "access_token":
-		if s.tryRevokeAccessToken(ctx, logger, token) {
+		if s.tryRevokeAccessToken(ctx, logger, issuerID, clientUUID, token) {
 			break
 		}
-		s.tryRevokeRefreshToken(ctx, logger, toolset.UserSessionIssuerID.UUID, token)
+		s.tryRevokeRefreshToken(ctx, logger, issuerID, clientUUID, token)
 	default:
 		// No hint: try access_token first (JWT shape is recognisable), then
 		// refresh_token. Either may match; per RFC 7009 we don't tell the
 		// client which.
-		if !s.tryRevokeAccessToken(ctx, logger, token) {
-			s.tryRevokeRefreshToken(ctx, logger, toolset.UserSessionIssuerID.UUID, token)
+		if !s.tryRevokeAccessToken(ctx, logger, issuerID, clientUUID, token) {
+			s.tryRevokeRefreshToken(ctx, logger, issuerID, clientUUID, token)
 		}
 	}
 
@@ -129,14 +134,33 @@ func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// tryRevokeAccessToken attempts to parse the token as a JWT, extract the jti,
-// and push it into the revocation cache. Returns true if the parse succeeded
-// (whether or not the cache write succeeded; cache-write failures are logged).
-// Signature verification is intentionally skipped — the client_secret check
-// in HandleRevoke establishes authenticity per RFC 7009 §2.1.
-func (s *Service) tryRevokeAccessToken(ctx context.Context, logger *slog.Logger, token string) bool {
+// tryRevokeAccessToken parses the token as a JWT, looks up the
+// user_sessions row by jti, and — when the row belongs to the
+// authenticated client — pushes the jti into the revocation cache.
+// Signature verification on the JWT is intentionally skipped; the
+// client_secret check in HandleRevoke establishes authenticity per RFC
+// 7009 §2.1. Returns true only when the row was found AND owned by the
+// caller; ownership mismatches return false so the dispatch falls through
+// to the refresh-token attempt (and ultimately surfaces as the success
+// silent-no-op per §2.2).
+func (s *Service) tryRevokeAccessToken(ctx context.Context, logger *slog.Logger, issuerID, clientID uuid.UUID, token string) bool {
 	jti, err := s.userSessionSigner.ParseUnverifiedJTI(token)
 	if err != nil || jti == "" {
+		return false
+	}
+	row, err := usersessions_repo.New(s.db).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{
+		UserSessionIssuerID: issuerID,
+		Jti:                 jti,
+	})
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			logger.ErrorContext(ctx, "failed to look up user session by jti", attr.SlogError(err))
+		}
+		return false
+	}
+	if !row.UserSessionClientID.Valid || row.UserSessionClientID.UUID != clientID {
+		// Token exists but isn't this client's — RFC 7009 §2.1 forbids
+		// honouring the revoke; §2.2 says we MUST NOT leak that mismatch.
 		return false
 	}
 	if err := s.chatSessionsManager.RevokeToken(ctx, jti); err != nil {
@@ -145,24 +169,39 @@ func (s *Service) tryRevokeAccessToken(ctx context.Context, logger *slog.Logger,
 	return true
 }
 
-// tryRevokeRefreshToken hashes the token, soft-deletes the matching
-// user_sessions row (scoped to issuer), and pushes the row's jti into the
-// revocation cache. Returns true if a row matched.
-func (s *Service) tryRevokeRefreshToken(ctx context.Context, logger *slog.Logger, issuerID uuid.UUID, token string) bool {
+// tryRevokeRefreshToken hashes the token, looks up the user_sessions row,
+// and — when the row belongs to the authenticated client — soft-deletes it
+// and pushes the jti into the revocation cache. Ownership mismatches return
+// false so the dispatch keeps the row intact and falls through. (Critical:
+// the peek-then-delete pattern is required here because a soft-delete-
+// regardless approach would let a malicious client wipe another client's
+// refresh token by presenting it to /revoke.)
+func (s *Service) tryRevokeRefreshToken(ctx context.Context, logger *slog.Logger, issuerID, clientID uuid.UUID, token string) bool {
 	hash := sha256Hex(token)
-	row, err := usersessions_repo.New(s.db).RevokeUserSessionByRefreshTokenHash(ctx, usersessions_repo.RevokeUserSessionByRefreshTokenHashParams{
+	row, err := usersessions_repo.New(s.db).GetUserSessionByRefreshTokenHash(ctx, usersessions_repo.GetUserSessionByRefreshTokenHashParams{
 		UserSessionIssuerID: issuerID,
 		RefreshTokenHash:    hash,
 	})
 	if err != nil {
-		// pgx.ErrNoRows is the expected miss path; anything else is logged
-		// but doesn't change the externally observable result.
+		if !errors.Is(err, pgx.ErrNoRows) {
+			logger.ErrorContext(ctx, "failed to look up user session by refresh token", attr.SlogError(err))
+		}
+		return false
+	}
+	if !row.UserSessionClientID.Valid || row.UserSessionClientID.UUID != clientID {
+		return false
+	}
+	deleted, err := usersessions_repo.New(s.db).RevokeUserSessionByRefreshTokenHash(ctx, usersessions_repo.RevokeUserSessionByRefreshTokenHashParams{
+		UserSessionIssuerID: issuerID,
+		RefreshTokenHash:    hash,
+	})
+	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			logger.ErrorContext(ctx, "failed to soft-delete user session by refresh token", attr.SlogError(err))
 		}
 		return false
 	}
-	if err := s.chatSessionsManager.RevokeToken(ctx, row.Jti); err != nil {
+	if err := s.chatSessionsManager.RevokeToken(ctx, deleted.Jti); err != nil {
 		logger.ErrorContext(ctx, "failed to push jti into revocation cache", attr.SlogError(err))
 	}
 	return true

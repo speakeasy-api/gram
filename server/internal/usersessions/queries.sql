@@ -203,6 +203,29 @@ WHERE user_session_issuer_id = @user_session_issuer_id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: GetUserSessionByJTI :one
+-- Looks up the session row by jti, scoped to the issuer. Used by the OAuth
+-- /revoke endpoint to verify a presented access token belongs to the
+-- authenticated client (RFC 7009 §2.1) before pushing the jti into the
+-- revocation cache.
+SELECT *
+FROM user_sessions
+WHERE user_session_issuer_id = @user_session_issuer_id
+  AND jti = @jti
+  AND deleted IS FALSE;
+
+-- name: GetUserSessionByRefreshTokenHash :one
+-- Looks up the session row by refresh-token hash, scoped to the issuer.
+-- Used by the OAuth /revoke endpoint to verify a presented refresh token
+-- belongs to the authenticated client (RFC 7009 §2.1) BEFORE soft-deleting
+-- the row — otherwise a malicious client could invalidate another client's
+-- refresh token by presenting it to /revoke.
+SELECT *
+FROM user_sessions
+WHERE user_session_issuer_id = @user_session_issuer_id
+  AND refresh_token_hash = @refresh_token_hash
+  AND deleted IS FALSE;
+
 -- The Create* queries below are exercised by tests and by the OAuth surface
 -- that lands in milestone #2 (DCR registration, /token exchange, /authorize
 -- consent). They have no exposure on the management API.

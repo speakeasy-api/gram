@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -62,7 +63,7 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 		return writeTokenError(ctx, w, s.logger, http.StatusBadRequest, "invalid_request", "failed to parse form")
 	}
 
-	toolset, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
@@ -71,6 +72,9 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 	}
 	if !toolset.UserSessionIssuerID.Valid {
 		return oops.E(oops.CodeNotFound, nil, "not found")
+	}
+	if err := s.requireUserSessionIssuer(ctx, toolset); err != nil {
+		return err
 	}
 
 	logger := s.logger.With(
@@ -101,11 +105,18 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	// Base URL the AS metadata advertises — equals the JWT `iss` claim so
+	// the two sides of the contract stay aligned across custom domains.
+	baseURL := s.serverURL.String()
+	if customDomainCtx != nil {
+		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
+	}
+
 	switch r.PostForm.Get("grant_type") {
 	case "authorization_code":
-		return s.handleTokenAuthorizationCodeGrant(ctx, w, r, toolset, &clientRow, mcpSlug, logger)
+		return s.handleTokenAuthorizationCodeGrant(ctx, w, r, toolset, &clientRow, mcpSlug, baseURL, logger)
 	case "refresh_token":
-		return s.handleTokenRefreshTokenGrant(ctx, w, r, toolset, &clientRow, mcpSlug, logger)
+		return s.handleTokenRefreshTokenGrant(ctx, w, r, toolset, &clientRow, mcpSlug, baseURL, logger)
 	default:
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "unsupported_grant_type", "unsupported grant_type")
 	}
@@ -125,7 +136,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	r *http.Request,
 	toolset *toolsets_repo.Toolset,
 	clientRow *usersessions_repo.UserSessionClient,
-	mcpSlug string,
+	mcpSlug, baseURL string,
 	logger *slog.Logger,
 ) error {
 	req := usersessions.AuthCodeTokenRequestFromForm(r.PostForm)
@@ -134,14 +145,13 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
+	// Atomic GETDEL: single-use authorization code. If two clients race to
+	// redeem the same code, exactly one wins the GETDEL; the other gets
+	// ErrCacheMiss and is rejected as invalid_grant (RFC 6749 §4.1.2 / §10.5).
 	grantKey := "userSessionGrant:" + toolset.UserSessionIssuerID.UUID.String() + ":" + req.Code
-	grant, err := s.userSessionGrantCache.Get(ctx, grantKey)
+	grant, err := s.userSessionGrantCache.GetAndDelete(ctx, grantKey)
 	if err != nil {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
-	}
-	if err := s.userSessionGrantCache.Delete(ctx, grant); err != nil {
-		// Failed to delete -- another process may redeem. Refuse to continue.
-		return oops.E(oops.CodeUnexpected, err, "consume user session grant").Log(ctx, logger)
 	}
 
 	if grant.ClientID != clientRow.ClientID {
@@ -154,7 +164,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code_verifier does not match code_challenge")
 	}
 
-	return s.mintSessionAndRespond(ctx, w, toolset, clientRow, grant.Subject, mcpSlug, logger)
+	return s.mintSessionAndRespond(ctx, w, toolset, clientRow, grant.Subject, mcpSlug, baseURL, logger)
 }
 
 // handleTokenRefreshTokenGrant implements RFC 6749 §6 (and OAuth 2.1's
@@ -173,7 +183,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 	r *http.Request,
 	toolset *toolsets_repo.Toolset,
 	clientRow *usersessions_repo.UserSessionClient,
-	mcpSlug string,
+	mcpSlug, baseURL string,
 	logger *slog.Logger,
 ) error {
 	req := usersessions.RefreshTokenRequestFromForm(r.PostForm)
@@ -215,28 +225,44 @@ func (s *Service) handleTokenRefreshTokenGrant(
 		logger.WarnContext(ctx, "failed to revoke old access token jti on refresh", attr.SlogError(err))
 	}
 
-	return s.mintSessionAndRespond(ctx, w, toolset, clientRow, oldSession.SubjectUrn, mcpSlug, logger)
+	return s.mintSessionAndRespond(ctx, w, toolset, clientRow, oldSession.SubjectUrn, mcpSlug, baseURL, logger)
 }
 
-// mintSessionAndRespond resolves the issuer's session_duration, mints a new
-// SessionClaims JWT (HS256, audience = toolset slug) and an opaque refresh
-// token, persists a fresh user_sessions row, and writes the RFC 6749 §5.1
-// response. Shared by the authorization_code and refresh_token grant
-// handlers since both produce identical token responses.
+// accessTokenLifetime is the wall-clock validity of a minted access-token
+// JWT. Hardcoded because OAuth 2.1 best practice is short access tokens
+// regardless of session policy; the per-issuer SessionDuration controls
+// how long the refresh token (i.e. the whole session) is valid.
+const accessTokenLifetime = 1 * time.Hour
+
+// mintSessionAndRespond mints a new access-token JWT (HS256) and an opaque
+// refresh token, persists a fresh user_sessions row, and writes the RFC
+// 6749 §5.1 response. Shared by the authorization_code and refresh_token
+// grant handlers since both produce identical token responses.
+//
+// Lifetimes:
+//   - access token: accessTokenLifetime (hardcoded, ~hour-scale).
+//   - refresh token: issuer.SessionDuration — the total session window
+//     before the user is forced back through /authorize.
+//
+// `iss` / audience: the JWT issuer claim is built from baseURL (which the
+// caller computes from custom-domain context so it matches what the AS
+// metadata document advertises). The audience is the toolset URN
+// `toolset:<UUID>`, globally unique even when slugs collide across
+// projects — prevents cross-project replay.
 func (s *Service) mintSessionAndRespond(
 	ctx context.Context,
 	w http.ResponseWriter,
 	toolset *toolsets_repo.Toolset,
 	clientRow *usersessions_repo.UserSessionClient,
 	subject urn.SessionSubject,
-	mcpSlug string,
+	mcpSlug, baseURL string,
 	logger *slog.Logger,
 ) error {
-	// Resolve the issuer's session_duration. Microseconds-only: the issuer
-	// create handler stores via conv.PtrToPGInterval which never sets
-	// Months/Days; if we ever see those here, raw SQL bypassed the writer
-	// and the conversion is calendar-dependent — fail with 500 rather than
-	// silently approximate.
+	// Resolve the issuer's session_duration — the refresh-token (i.e. total
+	// session) lifetime. Microseconds-only: the issuer create handler stores
+	// via conv.PtrToPGInterval which never sets Months/Days; if we ever see
+	// those here, raw SQL bypassed the writer and the conversion is
+	// calendar-dependent — fail with 500 rather than silently approximate.
 	issuer, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
 		ID:        toolset.UserSessionIssuerID.UUID,
 		ProjectID: toolset.ProjectID,
@@ -253,13 +279,13 @@ func (s *Service) mintSessionAndRespond(
 	if issuer.SessionDuration.Months != 0 || issuer.SessionDuration.Days != 0 {
 		return oops.E(oops.CodeUnexpected, nil, "issuer session_duration carries Months/Days; only Microseconds intervals are supported").Log(ctx, logger)
 	}
-	lifetime := time.Duration(issuer.SessionDuration.Microseconds) * time.Microsecond
-	if lifetime <= 0 {
+	refreshLifetime := time.Duration(issuer.SessionDuration.Microseconds) * time.Microsecond
+	if refreshLifetime <= 0 {
 		return oops.E(oops.CodeUnexpected, nil, "issuer session_duration is non-positive").Log(ctx, logger)
 	}
 
-	issuerURL := s.serverURL.String() + "/mcp/" + mcpSlug
-	access, jti, err := s.userSessionSigner.Mint(subject, toolset.Slug, issuerURL, lifetime)
+	issuerURL := baseURL + "/mcp/" + mcpSlug
+	access, jti, err := s.userSessionSigner.Mint(subject, urn.NewToolset(toolset.ID).String(), issuerURL, accessTokenLifetime)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "mint session jwt").Log(ctx, logger)
 	}
@@ -269,15 +295,15 @@ func (s *Service) mintSessionAndRespond(
 		return oops.E(oops.CodeUnexpected, err, "generate refresh token").Log(ctx, logger)
 	}
 
-	expiresAt := time.Now().Add(lifetime)
+	now := time.Now()
 	if _, err := usersessions_repo.New(s.db).CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		UserSessionClientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true},
 		SubjectUrn:          subject,
 		Jti:                 jti,
 		RefreshTokenHash:    sha256Hex(refreshTokenRaw),
-		RefreshExpiresAt:    pgtype.Timestamptz{Time: expiresAt, InfinityModifier: 0, Valid: true},
-		ExpiresAt:           pgtype.Timestamptz{Time: expiresAt, InfinityModifier: 0, Valid: true},
+		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(accessTokenLifetime), InfinityModifier: 0, Valid: true},
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: 0, Valid: true},
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "persist user session").Log(ctx, logger)
 	}
@@ -285,7 +311,7 @@ func (s *Service) mintSessionAndRespond(
 	body, err := json.Marshal(tokenResponse{
 		AccessToken:  access,
 		TokenType:    "Bearer",
-		ExpiresIn:    int64(lifetime.Seconds()),
+		ExpiresIn:    int64(accessTokenLifetime.Seconds()),
 		RefreshToken: refreshTokenRaw,
 	})
 	if err != nil {

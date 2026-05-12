@@ -12,12 +12,12 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -185,7 +185,11 @@ func (s *Service) handleConsentPost(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeBadRequest, nil, "state is required").Log(ctx, logger)
 	}
 
-	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+	// Atomic GETDEL: a consent POST consumes the authn-challenge state
+	// single-use. Parallel POSTs (e.g. user double-submits) lose the race
+	// and get "not found or expired", so only one grant is ever minted per
+	// authorization request.
+	challengeState, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").Log(ctx, logger)
 	}
@@ -193,22 +197,38 @@ func (s *Service) handleConsentPost(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this MCP server").Log(ctx, logger)
 	}
 
-	// Cancel: 302 the MCP client back to its redirect_uri with
-	// access_denied per RFC 6749 §4.1.2.1, preserving the original state.
-	if r.PostForm.Get("action") == "deny" {
+	// Explicit action required: fail closed on missing / unknown values so
+	// a malformed form post can't trigger the approval path.
+	action := r.PostForm.Get("action")
+	switch action {
+	case "approve":
+		// fall through
+	case "deny":
+		// Cancel: 303 (POST → GET) the MCP client back to its redirect_uri
+		// with access_denied per RFC 6749 §4.1.2.1, preserving the
+		// original state.
 		denyURL := buildClientRedirect(challengeState.RedirectURI, "", challengeState.State, "access_denied", "user denied consent")
-		_ = s.authnChallengeCache.Delete(ctx, challengeState)
-		http.Redirect(w, r, denyURL, http.StatusFound)
+		http.Redirect(w, r, denyURL, http.StatusSeeOther)
 		return nil
+	default:
+		return oops.E(oops.CodeBadRequest, nil, `action must be "approve" or "deny"`).Log(ctx, logger)
 	}
 
-	// Late-bind the anonymous URN here on the public-toolset path. Private
-	// toolsets had Subject stamped at /idp_callback time.
+	// Subject binding by toolset privacy:
+	//   - Public toolset: late-bind a fresh anonymous URN. The user came
+	//     straight to /connect bypassing the IDP, so there's no upstream
+	//     identity to attach.
+	//   - Private toolset: Subject MUST have been stamped by
+	//     HandleIDPCallback. If it isn't, the user reached /connect
+	//     without authenticating — refuse rather than mint an anonymous
+	//     session that bypasses the IDP login requirement.
 	var subject urn.SessionSubject
 	if challengeState.Subject != nil && !challengeState.Subject.IsZero() {
 		subject = *challengeState.Subject
-	} else {
+	} else if toolset.McpIsPublic {
 		subject = urn.NewAnonymousSubject(uuid.NewString())
+	} else {
+		return oops.E(oops.CodeUnauthorized, nil, "private toolset requires IDP authentication before consent").Log(ctx, logger)
 	}
 
 	// Resolve the user_session_clients row id for the consent FK.
@@ -255,12 +275,10 @@ func (s *Service) handleConsentPost(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeUnexpected, err, "store user session grant").Log(ctx, logger)
 	}
 
-	// Authn challenge state has served its purpose; drop it so a replay
-	// can't re-issue a code from the same flow.
-	_ = s.authnChallengeCache.Delete(ctx, challengeState)
-
 	clientRedirect := buildClientRedirect(challengeState.RedirectURI, code, challengeState.State, "", "")
-	http.Redirect(w, r, clientRedirect, http.StatusFound)
+	// 303 See Other (POST → GET): the consent submit is a POST; we want
+	// the user agent to GET the redirect target with NO body re-submission.
+	http.Redirect(w, r, clientRedirect, http.StatusSeeOther)
 	return nil
 }
 
@@ -294,9 +312,6 @@ func buildClientRedirect(redirectURI, code, originalState, errCode, errDescripti
 // isUniqueViolation reports whether err is a Postgres unique-constraint
 // violation. Used to detect duplicate consent inserts (idempotent re-consent).
 func isUniqueViolation(err error) bool {
-	if err == nil {
-		return false
-	}
-	// pgx wraps PG errors as *pgconn.PgError with Code "23505".
-	return strings.Contains(err.Error(), "23505")
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
