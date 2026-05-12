@@ -6,8 +6,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useFetcher } from "@/contexts/Fetcher";
 import { cn } from "@/lib/utils";
-import { BookOpen, ExternalLink } from "lucide-react";
+import { BookOpen, Download, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { HookSourceIcon } from "../hooks/HookSourceIcon";
 
@@ -54,7 +55,7 @@ const providers: {
     available: true,
   },
   { id: "cursor", label: "Cursor", source: "cursor", available: true },
-  { id: "codex", label: "Codex", source: "codex", available: false },
+  { id: "codex", label: "Codex", source: "codex", available: true },
   { id: "copilot", label: "Copilot", source: "copilot", available: false },
   { id: "gemini", label: "Gemini", source: "gemini", available: false },
   { id: "glean", label: "Glean", source: "glean", available: false },
@@ -442,6 +443,177 @@ function CursorInstallContent({
   );
 }
 
+/**
+ * Codex install. Offers a one-command install script as the primary path, with
+ * manual 3-step instructions as a fallback.
+ */
+function CodexInstallContent({
+  repoOwner,
+  repoName,
+}: Pick<ContentProps, "repoOwner" | "repoName">) {
+  const { fetch: authFetch } = useFetcher();
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const repoUrl = `https://github.com/${repoOwner}/${repoName}`;
+  const addCommand = `codex plugin marketplace add ${repoUrl}`;
+
+  // repoName = "<org-slug>-gram"; derive plugin name by replacing the suffix.
+  const pluginName = repoName.replace(/-gram$/, "-observability-codex");
+  const featureFlags = `features.hooks = true\nfeatures.plugin_hooks = true`;
+  const pluginEntry = `[plugins."${pluginName}@${repoName}"]\nenabled = true`;
+  const configBlock = `${featureFlags}\n\n${pluginEntry}`;
+
+  const handleDownloadInstallScript = async () => {
+    setIsDownloading(true);
+    try {
+      const resp = await authFetch(
+        "/rpc/plugins.downloadCodexInstallScript",
+        {},
+      );
+      if (!resp.ok) return;
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        resp.headers
+          .get("Content-Disposition")
+          ?.match(/filename="(.+)"/)?.[1] ?? "gram-codex-install.sh";
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  return (
+    <div className="min-w-0 space-y-6">
+      {/* ── Quick install ─────────────────────────────────────────────────── */}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Download a one-command install script that registers the marketplace,
+          enables hooks in{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            ~/.codex/config.toml
+          </code>
+          , and pre-approves all hook events — no manual Settings → Hooks step
+          required. Suitable for MDM deployment.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isDownloading}
+          onClick={handleDownloadInstallScript}
+          className="inline-flex items-center gap-2"
+        >
+          <Download className="size-4" />
+          {isDownloading ? "Downloading…" : "Download Install Script"}
+        </Button>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Then run:{" "}
+          <code className="bg-muted rounded px-1 py-0.5">
+            bash ~/Downloads/gram-codex-install.sh
+          </code>
+        </p>
+      </div>
+
+      <div className="border-t" />
+
+      {/* ── Manual setup ──────────────────────────────────────────────────── */}
+      <div className="space-y-4">
+        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+          Manual setup
+        </p>
+
+        <div>
+          <h4 className="mb-2 text-sm font-semibold">
+            1. Register the marketplace
+          </h4>
+          <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <code className="break-all">{addCommand}</code>
+              <CopyButton
+                size="inline"
+                text={addCommand}
+                tooltip="Copy marketplace add command"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h4 className="mb-2 text-sm font-semibold">
+            2. Enable hooks and the plugin in{" "}
+            <code className="text-sm">~/.codex/config.toml</code>
+          </h4>
+          <p className="text-muted-foreground mb-3 text-sm">
+            Hooks are behind a feature flag and the plugin must be explicitly
+            enabled. Add all of the following to{" "}
+            <code className="bg-muted rounded px-1 py-0.5 text-xs">
+              ~/.codex/config.toml
+            </code>
+            :
+          </p>
+          <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+            <div className="flex items-start justify-between gap-2">
+              <pre className="whitespace-pre-wrap">{configBlock}</pre>
+              <CopyButton
+                size="inline"
+                text={configBlock}
+                tooltip="Copy config entries"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h4 className="mb-2 text-sm font-semibold">
+            3. Approve hooks in Codex
+          </h4>
+          <p className="text-muted-foreground text-sm">
+            After restarting Codex, open{" "}
+            <code className="bg-muted rounded px-1 py-0.5 text-xs">
+              Settings → Hooks
+            </code>{" "}
+            and enable each hook listed under the{" "}
+            <code className="bg-muted rounded px-1 py-0.5 text-xs">
+              {pluginName}
+            </code>{" "}
+            plugin. Codex requires manual approval for each hook event before it
+            will fire.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" asChild>
+            <a
+              href="https://developers.openai.com/codex/hooks"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2"
+            >
+              <ExternalLink className="size-4" />
+              Hooks Docs
+            </a>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <a
+              href="https://developers.openai.com/codex/plugins/build"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2"
+            >
+              <ExternalLink className="size-4" />
+              Plugin Docs
+            </a>
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type DialogProps = ContentProps & {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -456,12 +628,12 @@ export function InstallInstructionsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="max-w-3xl">
+      <Dialog.Content className="flex max-h-[90vh] max-w-4xl flex-col">
         <Dialog.Header>
           <Dialog.Title>Distribute your marketplace</Dialog.Title>
         </Dialog.Header>
 
-        <div className="mb-6 flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3">
           {providers.map((p) => {
             const button = (
               <button
@@ -502,24 +674,32 @@ export function InstallInstructionsDialog({
           })}
         </div>
 
-        {selected === "claude-code" && (
-          <ClaudeCodeInstallContent
-            repoName={content.repoName}
-            marketplaceUrl={content.marketplaceUrl}
-          />
-        )}
-        {selected === "claude-cowork" && (
-          <ClaudeCoworkInstallContent
-            repoOwner={content.repoOwner}
-            repoName={content.repoName}
-          />
-        )}
-        {selected === "cursor" && (
-          <CursorInstallContent
-            repoOwner={content.repoOwner}
-            repoName={content.repoName}
-          />
-        )}
+        <div className="min-h-0 overflow-y-auto">
+          {selected === "claude-code" && (
+            <ClaudeCodeInstallContent
+              repoName={content.repoName}
+              marketplaceUrl={content.marketplaceUrl}
+            />
+          )}
+          {selected === "claude-cowork" && (
+            <ClaudeCoworkInstallContent
+              repoOwner={content.repoOwner}
+              repoName={content.repoName}
+            />
+          )}
+          {selected === "cursor" && (
+            <CursorInstallContent
+              repoOwner={content.repoOwner}
+              repoName={content.repoName}
+            />
+          )}
+          {selected === "codex" && (
+            <CodexInstallContent
+              repoOwner={content.repoOwner}
+              repoName={content.repoName}
+            />
+          )}
+        </div>
       </Dialog.Content>
     </Dialog>
   );

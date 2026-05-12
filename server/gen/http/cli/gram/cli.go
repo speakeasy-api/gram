@@ -85,7 +85,7 @@ func UsageCommands() []string {
 		"collections (create|list|update|delete|attach-server|detach-server|list-servers)",
 		"functions get-signed-asset-url",
 		"hooks-server-names (list|upsert|delete)",
-		"hooks (claude|cursor|logs|metrics)",
+		"hooks (claude|cursor|codex|logs|metrics)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
@@ -94,7 +94,7 @@ func UsageCommands() []string {
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|update-mcp-server|delete-mcp-server)",
 		"organizations (send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
-		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|get-publish-status|publish-plugins)",
+		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|verify-url|delete-server)",
@@ -677,6 +677,11 @@ func ParseEndpoint(
 		hooksCursorApikeyTokenFlag      = hooksCursorFlags.String("apikey-token", "", "")
 		hooksCursorProjectSlugInputFlag = hooksCursorFlags.String("project-slug-input", "", "")
 
+		hooksCodexFlags                = flag.NewFlagSet("codex", flag.ExitOnError)
+		hooksCodexBodyFlag             = hooksCodexFlags.String("body", "REQUIRED", "")
+		hooksCodexApikeyTokenFlag      = hooksCodexFlags.String("apikey-token", "", "")
+		hooksCodexProjectSlugInputFlag = hooksCodexFlags.String("project-slug-input", "", "")
+
 		hooksLogsFlags                = flag.NewFlagSet("logs", flag.ExitOnError)
 		hooksLogsBodyFlag             = hooksLogsFlags.String("body", "REQUIRED", "")
 		hooksLogsApikeyTokenFlag      = hooksLogsFlags.String("apikey-token", "", "")
@@ -923,6 +928,10 @@ func ParseEndpoint(
 		pluginsDownloadObservabilityPluginPlatformFlag         = pluginsDownloadObservabilityPluginFlags.String("platform", "REQUIRED", "")
 		pluginsDownloadObservabilityPluginSessionTokenFlag     = pluginsDownloadObservabilityPluginFlags.String("session-token", "", "")
 		pluginsDownloadObservabilityPluginProjectSlugInputFlag = pluginsDownloadObservabilityPluginFlags.String("project-slug-input", "", "")
+
+		pluginsDownloadCodexInstallScriptFlags                = flag.NewFlagSet("download-codex-install-script", flag.ExitOnError)
+		pluginsDownloadCodexInstallScriptSessionTokenFlag     = pluginsDownloadCodexInstallScriptFlags.String("session-token", "", "")
+		pluginsDownloadCodexInstallScriptProjectSlugInputFlag = pluginsDownloadCodexInstallScriptFlags.String("project-slug-input", "", "")
 
 		pluginsGetPublishStatusFlags                = flag.NewFlagSet("get-publish-status", flag.ExitOnError)
 		pluginsGetPublishStatusSessionTokenFlag     = pluginsGetPublishStatusFlags.String("session-token", "", "")
@@ -1631,6 +1640,7 @@ func ParseEndpoint(
 	hooksFlags.Usage = hooksUsage
 	hooksClaudeFlags.Usage = hooksClaudeUsage
 	hooksCursorFlags.Usage = hooksCursorUsage
+	hooksCodexFlags.Usage = hooksCodexUsage
 	hooksLogsFlags.Usage = hooksLogsUsage
 	hooksMetricsFlags.Usage = hooksMetricsUsage
 
@@ -1693,6 +1703,7 @@ func ParseEndpoint(
 	pluginsSetPluginAssignmentsFlags.Usage = pluginsSetPluginAssignmentsUsage
 	pluginsDownloadPluginPackageFlags.Usage = pluginsDownloadPluginPackageUsage
 	pluginsDownloadObservabilityPluginFlags.Usage = pluginsDownloadObservabilityPluginUsage
+	pluginsDownloadCodexInstallScriptFlags.Usage = pluginsDownloadCodexInstallScriptUsage
 	pluginsGetPublishStatusFlags.Usage = pluginsGetPublishStatusUsage
 	pluginsPublishPluginsFlags.Usage = pluginsPublishPluginsUsage
 
@@ -2299,6 +2310,9 @@ func ParseEndpoint(
 			case "cursor":
 				epf = hooksCursorFlags
 
+			case "codex":
+				epf = hooksCodexFlags
+
 			case "logs":
 				epf = hooksLogsFlags
 
@@ -2466,6 +2480,9 @@ func ParseEndpoint(
 
 			case "download-observability-plugin":
 				epf = pluginsDownloadObservabilityPluginFlags
+
+			case "download-codex-install-script":
+				epf = pluginsDownloadCodexInstallScriptFlags
 
 			case "get-publish-status":
 				epf = pluginsGetPublishStatusFlags
@@ -3212,6 +3229,9 @@ func ParseEndpoint(
 			case "cursor":
 				endpoint = c.Cursor()
 				data, err = hooksc.BuildCursorPayload(*hooksCursorBodyFlag, *hooksCursorApikeyTokenFlag, *hooksCursorProjectSlugInputFlag)
+			case "codex":
+				endpoint = c.Codex()
+				data, err = hooksc.BuildCodexPayload(*hooksCodexBodyFlag, *hooksCodexApikeyTokenFlag, *hooksCodexProjectSlugInputFlag)
 			case "logs":
 				endpoint = c.Logs()
 				data, err = hooksc.BuildLogsPayload(*hooksLogsBodyFlag, *hooksLogsApikeyTokenFlag, *hooksLogsProjectSlugInputFlag)
@@ -3380,6 +3400,9 @@ func ParseEndpoint(
 			case "download-observability-plugin":
 				endpoint = c.DownloadObservabilityPlugin()
 				data, err = pluginsc.BuildDownloadObservabilityPluginPayload(*pluginsDownloadObservabilityPluginPlatformFlag, *pluginsDownloadObservabilityPluginSessionTokenFlag, *pluginsDownloadObservabilityPluginProjectSlugInputFlag)
+			case "download-codex-install-script":
+				endpoint = c.DownloadCodexInstallScript()
+				data, err = pluginsc.BuildDownloadCodexInstallScriptPayload(*pluginsDownloadCodexInstallScriptSessionTokenFlag, *pluginsDownloadCodexInstallScriptProjectSlugInputFlag)
 			case "get-publish-status":
 				endpoint = c.GetPublishStatus()
 				data, err = pluginsc.BuildGetPublishStatusPayload(*pluginsGetPublishStatusSessionTokenFlag, *pluginsGetPublishStatusProjectSlugInputFlag)
@@ -6105,6 +6128,7 @@ func hooksUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    claude: Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.`)
 	fmt.Fprintln(os.Stderr, `    cursor: Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure, beforeMCPExecution, and afterMCPExecution.`)
+	fmt.Fprintln(os.Stderr, `    codex: Endpoint for Codex hook events. Handles SessionStart, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, and Stop.`)
 	fmt.Fprintln(os.Stderr, `    logs: Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.`)
 	fmt.Fprintln(os.Stderr, `    metrics: Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.`)
 	fmt.Fprintln(os.Stderr)
@@ -6153,6 +6177,28 @@ func hooksCursorUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks cursor --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cache_read_tokens\": 1,\n      \"cache_write_tokens\": 1,\n      \"command\": \"abc123\",\n      \"composer_mode\": \"abc123\",\n      \"conversation_id\": \"abc123\",\n      \"cursor_version\": \"abc123\",\n      \"duration\": 1,\n      \"duration_ms\": 1,\n      \"error\": \"abc123\",\n      \"generation_id\": \"abc123\",\n      \"hook_event_name\": \"abc123\",\n      \"input_tokens\": 1,\n      \"is_interrupt\": false,\n      \"loop_count\": 1,\n      \"model\": \"abc123\",\n      \"output_tokens\": 1,\n      \"prompt\": \"abc123\",\n      \"result_json\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"status\": \"abc123\",\n      \"text\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"url\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func hooksCodexUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hooks codex", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Endpoint for Codex hook events. Handles SessionStart, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, and Stop.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks codex --body '{\n      \"cwd\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"model\": \"abc123\",\n      \"permission_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_output\": \"abc123\",\n      \"transcript_path\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func hooksLogsUsage() {
@@ -7022,6 +7068,7 @@ func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `    set-plugin-assignments: Replace all assignments for a plugin with the given list of principal URNs.`)
 	fmt.Fprintln(os.Stderr, `    download-plugin-package: Download a ZIP of a single plugin package for direct installation.`)
 	fmt.Fprintln(os.Stderr, `    download-observability-plugin: Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.`)
+	fmt.Fprintln(os.Stderr, `    download-codex-install-script: Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.`)
 	fmt.Fprintln(os.Stderr, `    get-publish-status: Check whether GitHub publishing is configured and connected for this project.`)
 	fmt.Fprintln(os.Stderr, `    publish-plugins: Generate and publish all plugin packages to a GitHub repository.`)
 	fmt.Fprintln(os.Stderr)
@@ -7270,6 +7317,26 @@ func pluginsDownloadObservabilityPluginUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins download-observability-plugin --platform \"cursor\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func pluginsDownloadCodexInstallScriptUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins download-codex-install-script", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins download-codex-install-script --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func pluginsGetPublishStatusUsage() {

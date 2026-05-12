@@ -424,8 +424,8 @@ func BuildDownloadObservabilityPluginPayload(pluginsDownloadObservabilityPluginP
 	var platform string
 	{
 		platform = pluginsDownloadObservabilityPluginPlatform
-		if !(platform == "claude" || platform == "cursor") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor"}))
+		if !(platform == "claude" || platform == "cursor" || platform == "codex") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex"}))
 		}
 		if err != nil {
 			return nil, err
@@ -445,6 +445,28 @@ func BuildDownloadObservabilityPluginPayload(pluginsDownloadObservabilityPluginP
 	}
 	v := &plugins.DownloadObservabilityPluginPayload{}
 	v.Platform = platform
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDownloadCodexInstallScriptPayload builds the payload for the plugins
+// downloadCodexInstallScript endpoint from CLI flags.
+func BuildDownloadCodexInstallScriptPayload(pluginsDownloadCodexInstallScriptSessionToken string, pluginsDownloadCodexInstallScriptProjectSlugInput string) (*plugins.DownloadCodexInstallScriptPayload, error) {
+	var sessionToken *string
+	{
+		if pluginsDownloadCodexInstallScriptSessionToken != "" {
+			sessionToken = &pluginsDownloadCodexInstallScriptSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsDownloadCodexInstallScriptProjectSlugInput != "" {
+			projectSlugInput = &pluginsDownloadCodexInstallScriptProjectSlugInput
+		}
+	}
+	v := &plugins.DownloadCodexInstallScriptPayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

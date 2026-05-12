@@ -54,9 +54,9 @@ function ProviderCard({
 
 export function HooksEmptyState() {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
-  const [setupProvider, setSetupProvider] = useState<"claude" | "cursor">(
-    "claude",
-  );
+  const [setupProvider, setSetupProvider] = useState<
+    "claude" | "cursor" | "codex"
+  >("claude");
   const [showFeatureRequestModal, setShowFeatureRequestModal] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<string>("");
 
@@ -67,7 +67,7 @@ export function HooksEmptyState() {
       return;
     }
 
-    setSetupProvider(provider as "claude" | "cursor");
+    setSetupProvider(provider as "claude" | "cursor" | "codex");
     setShowSetupDialog(true);
   };
 
@@ -110,8 +110,8 @@ export function HooksEmptyState() {
               <ProviderCard
                 name="Codex"
                 icon={CodexIcon}
-                status="coming-soon"
-                onInstall={() => handleProviderClick("codex", "coming-soon")}
+                status="available"
+                onInstall={() => handleProviderClick("codex", "available")}
               />
               <ProviderCard
                 name="Copilot"

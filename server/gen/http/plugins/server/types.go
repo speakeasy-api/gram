@@ -2244,6 +2244,196 @@ type DownloadObservabilityPluginGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DownloadCodexInstallScriptUnauthorizedResponseBody is the type of the
+// "plugins" service "downloadCodexInstallScript" endpoint HTTP response body
+// for the "unauthorized" error.
+type DownloadCodexInstallScriptUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadCodexInstallScriptForbiddenResponseBody is the type of the "plugins"
+// service "downloadCodexInstallScript" endpoint HTTP response body for the
+// "forbidden" error.
+type DownloadCodexInstallScriptForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadCodexInstallScriptBadRequestResponseBody is the type of the
+// "plugins" service "downloadCodexInstallScript" endpoint HTTP response body
+// for the "bad_request" error.
+type DownloadCodexInstallScriptBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadCodexInstallScriptNotFoundResponseBody is the type of the "plugins"
+// service "downloadCodexInstallScript" endpoint HTTP response body for the
+// "not_found" error.
+type DownloadCodexInstallScriptNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadCodexInstallScriptConflictResponseBody is the type of the "plugins"
+// service "downloadCodexInstallScript" endpoint HTTP response body for the
+// "conflict" error.
+type DownloadCodexInstallScriptConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadCodexInstallScriptUnsupportedMediaResponseBody is the type of the
+// "plugins" service "downloadCodexInstallScript" endpoint HTTP response body
+// for the "unsupported_media" error.
+type DownloadCodexInstallScriptUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadCodexInstallScriptInvalidResponseBody is the type of the "plugins"
+// service "downloadCodexInstallScript" endpoint HTTP response body for the
+// "invalid" error.
+type DownloadCodexInstallScriptInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadCodexInstallScriptInvariantViolationResponseBody is the type of the
+// "plugins" service "downloadCodexInstallScript" endpoint HTTP response body
+// for the "invariant_violation" error.
+type DownloadCodexInstallScriptInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadCodexInstallScriptUnexpectedResponseBody is the type of the
+// "plugins" service "downloadCodexInstallScript" endpoint HTTP response body
+// for the "unexpected" error.
+type DownloadCodexInstallScriptUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadCodexInstallScriptGatewayErrorResponseBody is the type of the
+// "plugins" service "downloadCodexInstallScript" endpoint HTTP response body
+// for the "gateway_error" error.
+type DownloadCodexInstallScriptGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetPublishStatusUnauthorizedResponseBody is the type of the "plugins"
 // service "getPublishStatus" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -4438,6 +4628,156 @@ func NewDownloadObservabilityPluginGatewayErrorResponseBody(res *goa.ServiceErro
 	return body
 }
 
+// NewDownloadCodexInstallScriptUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "downloadCodexInstallScript" endpoint
+// of the "plugins" service.
+func NewDownloadCodexInstallScriptUnauthorizedResponseBody(res *goa.ServiceError) *DownloadCodexInstallScriptUnauthorizedResponseBody {
+	body := &DownloadCodexInstallScriptUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadCodexInstallScriptForbiddenResponseBody builds the HTTP response
+// body from the result of the "downloadCodexInstallScript" endpoint of the
+// "plugins" service.
+func NewDownloadCodexInstallScriptForbiddenResponseBody(res *goa.ServiceError) *DownloadCodexInstallScriptForbiddenResponseBody {
+	body := &DownloadCodexInstallScriptForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadCodexInstallScriptBadRequestResponseBody builds the HTTP response
+// body from the result of the "downloadCodexInstallScript" endpoint of the
+// "plugins" service.
+func NewDownloadCodexInstallScriptBadRequestResponseBody(res *goa.ServiceError) *DownloadCodexInstallScriptBadRequestResponseBody {
+	body := &DownloadCodexInstallScriptBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadCodexInstallScriptNotFoundResponseBody builds the HTTP response
+// body from the result of the "downloadCodexInstallScript" endpoint of the
+// "plugins" service.
+func NewDownloadCodexInstallScriptNotFoundResponseBody(res *goa.ServiceError) *DownloadCodexInstallScriptNotFoundResponseBody {
+	body := &DownloadCodexInstallScriptNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadCodexInstallScriptConflictResponseBody builds the HTTP response
+// body from the result of the "downloadCodexInstallScript" endpoint of the
+// "plugins" service.
+func NewDownloadCodexInstallScriptConflictResponseBody(res *goa.ServiceError) *DownloadCodexInstallScriptConflictResponseBody {
+	body := &DownloadCodexInstallScriptConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadCodexInstallScriptUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "downloadCodexInstallScript" endpoint
+// of the "plugins" service.
+func NewDownloadCodexInstallScriptUnsupportedMediaResponseBody(res *goa.ServiceError) *DownloadCodexInstallScriptUnsupportedMediaResponseBody {
+	body := &DownloadCodexInstallScriptUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadCodexInstallScriptInvalidResponseBody builds the HTTP response
+// body from the result of the "downloadCodexInstallScript" endpoint of the
+// "plugins" service.
+func NewDownloadCodexInstallScriptInvalidResponseBody(res *goa.ServiceError) *DownloadCodexInstallScriptInvalidResponseBody {
+	body := &DownloadCodexInstallScriptInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadCodexInstallScriptInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "downloadCodexInstallScript" endpoint
+// of the "plugins" service.
+func NewDownloadCodexInstallScriptInvariantViolationResponseBody(res *goa.ServiceError) *DownloadCodexInstallScriptInvariantViolationResponseBody {
+	body := &DownloadCodexInstallScriptInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadCodexInstallScriptUnexpectedResponseBody builds the HTTP response
+// body from the result of the "downloadCodexInstallScript" endpoint of the
+// "plugins" service.
+func NewDownloadCodexInstallScriptUnexpectedResponseBody(res *goa.ServiceError) *DownloadCodexInstallScriptUnexpectedResponseBody {
+	body := &DownloadCodexInstallScriptUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadCodexInstallScriptGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "downloadCodexInstallScript" endpoint
+// of the "plugins" service.
+func NewDownloadCodexInstallScriptGatewayErrorResponseBody(res *goa.ServiceError) *DownloadCodexInstallScriptGatewayErrorResponseBody {
+	body := &DownloadCodexInstallScriptGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetPublishStatusUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "getPublishStatus" endpoint of the "plugins" service.
 func NewGetPublishStatusUnauthorizedResponseBody(res *goa.ServiceError) *GetPublishStatusUnauthorizedResponseBody {
@@ -4877,6 +5217,16 @@ func NewDownloadPluginPackagePayload(pluginID string, platform string, sessionTo
 func NewDownloadObservabilityPluginPayload(platform string, sessionToken *string, projectSlugInput *string) *plugins.DownloadObservabilityPluginPayload {
 	v := &plugins.DownloadObservabilityPluginPayload{}
 	v.Platform = platform
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewDownloadCodexInstallScriptPayload builds a plugins service
+// downloadCodexInstallScript endpoint payload.
+func NewDownloadCodexInstallScriptPayload(sessionToken *string, projectSlugInput *string) *plugins.DownloadCodexInstallScriptPayload {
+	v := &plugins.DownloadCodexInstallScriptPayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

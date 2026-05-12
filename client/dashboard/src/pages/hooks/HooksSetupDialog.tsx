@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import {
   Tooltip,
@@ -202,6 +203,155 @@ function CursorInstallContent() {
   );
 }
 
+function CodexInstallContent({
+  marketplaceUrl,
+  repoName,
+}: {
+  marketplaceUrl?: string;
+  repoName?: string;
+}) {
+  const addCommand = marketplaceUrl
+    ? `codex plugin marketplace add ${marketplaceUrl}`
+    : null;
+
+  const marketplaceKey = repoName ?? null;
+  const pluginName = repoName
+    ? repoName.replace(/-gram$/, "-observability-codex")
+    : null;
+  const pluginEntry =
+    pluginName && marketplaceKey
+      ? `[plugins."${pluginName}@${marketplaceKey}"]\nenabled = true`
+      : null;
+
+  const featureFlags = `features.hooks = true\nfeatures.plugin_hooks = true`;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">
+          1. Register the marketplace
+        </h3>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Register your org's published marketplace with Codex:
+        </p>
+        {addCommand ? (
+          <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <code className="break-all">{addCommand}</code>
+              <CopyButton
+                size="inline"
+                text={addCommand}
+                tooltip="Copy command"
+              />
+            </div>
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-sm italic">
+            Publish your plugins to GitHub first to get a marketplace URL.
+          </p>
+        )}
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">
+          2. Enable hooks and the plugin in{" "}
+          <code className="text-sm">~/.codex/config.toml</code>
+        </h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Hooks are behind a feature flag and the plugin must be explicitly
+          enabled. Add all of the following to{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            ~/.codex/config.toml
+          </code>
+          :
+        </p>
+        <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+          <div className="flex items-start justify-between gap-2">
+            <pre className="whitespace-pre-wrap">
+              {[
+                featureFlags,
+                pluginEntry ??
+                  `[plugins."${pluginName ?? "<plugin-name>"}@${marketplaceKey ?? "<marketplace>"}"]` +
+                    `\nenabled = true`,
+              ].join("\n\n")}
+            </pre>
+            <CopyButton
+              size="inline"
+              text={[featureFlags, pluginEntry ?? ""].join("\n\n").trim()}
+              tooltip="Copy config entries"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">
+          3. Approve hooks in Codex
+        </h3>
+        <p className="text-muted-foreground text-sm">
+          After restarting Codex, open{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            Settings → Hooks
+          </code>{" "}
+          and enable each hook listed under the{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            {pluginName ?? "observability"}
+          </code>{" "}
+          plugin. Codex requires manual approval for each hook event before it
+          will fire.
+        </p>
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Or install from a ZIP</h3>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Download a self-contained Codex plugin ZIP from the{" "}
+          <strong>Plugins</strong> page (
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            Download Observability Plugin → Codex
+          </code>
+          ). The ZIP includes an{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            install.sh
+          </code>{" "}
+          that handles all three steps automatically:
+        </p>
+        <div className="bg-muted/50 space-y-1 rounded-lg p-4 font-mono text-sm">
+          <code>unzip observability-codex.zip -d ~/gram-observability</code>
+          <div className="mt-1">
+            <code>bash ~/gram-observability/install.sh</code>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Button variant="outline" size="sm" asChild>
+          <a
+            href="https://developers.openai.com/codex/hooks"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2"
+          >
+            <ExternalLink className="size-4" />
+            Hooks Docs
+          </a>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <a
+            href="https://developers.openai.com/codex/plugins/build"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2"
+          >
+            <ExternalLink className="size-4" />
+            Plugin Docs
+          </a>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 type Provider =
   | "claude"
   | "cursor"
@@ -224,7 +374,7 @@ const providers: {
     available: true,
   },
   { id: "cursor", label: "Cursor", source: "cursor", available: true },
-  { id: "codex", label: "Codex", source: "codex", available: false },
+  { id: "codex", label: "Codex", source: "codex", available: true },
   {
     id: "copilot",
     label: "Copilot",
@@ -297,7 +447,7 @@ export function HooksSetupDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="max-w-4xl">
+      <Dialog.Content className="flex max-h-[90vh] max-w-4xl flex-col">
         <Dialog.Header>
           <Dialog.Title>Setup Hooks</Dialog.Title>
         </Dialog.Header>
@@ -306,7 +456,7 @@ export function HooksSetupDialog({
           <PublishedRepoPanel repoUrl={publishStatus.repoUrl} />
         )}
 
-        <div className="mb-6 flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3">
           {providers.map((p) => {
             const button = (
               <button
@@ -347,8 +497,16 @@ export function HooksSetupDialog({
           })}
         </div>
 
-        {selected === "claude" && <ClaudeInstallContent />}
-        {selected === "cursor" && <CursorInstallContent />}
+        <div className="min-h-0 overflow-y-auto">
+          {selected === "claude" && <ClaudeInstallContent />}
+          {selected === "cursor" && <CursorInstallContent />}
+          {selected === "codex" && (
+            <CodexInstallContent
+              marketplaceUrl={publishStatus?.marketplaceUrl}
+              repoName={publishStatus?.repoName ?? undefined}
+            />
+          )}
+        </div>
       </Dialog.Content>
     </Dialog>
   );
