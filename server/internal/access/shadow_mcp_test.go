@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -291,6 +293,39 @@ func TestService_CreateShadowMCPAccessRule_NormalizesMatchValue(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+}
+
+func TestService_CreateShadowMCPAccessRule_AuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionShadowMCPAccessRuleCreate)
+	require.NoError(t, err)
+
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{}, nil).Once()
+	rule, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
+		Disposition:  shadowMCPRuleDenied,
+		MatchBreadth: "url_host",
+		MatchValue:   "audit.example.com",
+		DisplayName:  "Audit Shadow MCP",
+		Reason:       conv.PtrEmpty("Audit coverage"),
+	})
+	require.NoError(t, err)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionShadowMCPAccessRuleCreate)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionShadowMCPAccessRuleCreate), record.Action)
+	require.Equal(t, "shadow_mcp_access_rule", record.SubjectType)
+	require.Equal(t, "Audit Shadow MCP", record.SubjectDisplay)
+	require.Equal(t, rule.MatchValue, record.SubjectSlug)
+	require.Nil(t, record.BeforeSnapshot)
+	require.NotNil(t, record.AfterSnapshot)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionShadowMCPAccessRuleCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
 }
 
 func TestService_CreateShadowMCPAccessRule_ForbiddenWithoutOrgAdminGrant(t *testing.T) {

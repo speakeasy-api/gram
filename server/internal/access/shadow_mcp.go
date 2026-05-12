@@ -17,6 +17,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -115,7 +116,14 @@ func (s *Service) CreateShadowMCPApprovalRequest(ctx context.Context, payload *g
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid risk result id").Log(ctx, s.logger)
 	}
 
-	row, err := repo.New(s.db).UpsertShadowMCPApprovalRequest(ctx, repo.UpsertShadowMCPApprovalRequestParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin shadow mcp approval request transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	queries := repo.New(dbtx)
+	row, err := queries.UpsertShadowMCPApprovalRequest(ctx, repo.UpsertShadowMCPApprovalRequestParams{
 		OrganizationID:         ac.ActiveOrganizationID,
 		ProjectID:              projectID,
 		RequesterUserID:        conv.ToPGTextEmpty(ac.UserID),
@@ -135,8 +143,26 @@ func (s *Service) CreateShadowMCPApprovalRequest(ctx context.Context, payload *g
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "upsert shadow mcp approval request").Log(ctx, s.logger)
 	}
+	requestView := buildShadowMCPApprovalRequest(row)
+	if err := s.audit.LogShadowMCPApprovalRequestCreate(ctx, dbtx, audit.LogShadowMCPApprovalRequestEvent{
+		OrganizationID:                ac.ActiveOrganizationID,
+		ProjectID:                     projectID,
+		Actor:                         urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName:              ac.Email,
+		ActorSlug:                     nil,
+		ApprovalRequestURN:            urn.NewShadowMCPApprovalRequest(row.ID),
+		DisplayName:                   shadowMCPApprovalRequestDisplayName(row),
+		ApprovalRequestSnapshotBefore: nil,
+		ApprovalRequestSnapshotAfter:  requestView,
+		Metadata:                      nil,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log shadow mcp approval request create").Log(ctx, s.logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit shadow mcp approval request transaction").Log(ctx, s.logger)
+	}
 
-	return buildShadowMCPApprovalRequest(row), nil
+	return requestView, nil
 }
 
 func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *gen.ApproveShadowMCPApprovalRequestPayload) (*gen.ShadowMCPApprovalDecisionResult, error) {
@@ -176,7 +202,8 @@ func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *
 		return nil, oops.E(oops.CodeBadRequest, nil, "shadow mcp approval request has already been decided").Log(ctx, s.logger)
 	}
 
-	rule, err := s.getOrCreateShadowMCPAccessRule(ctx, queries, ac, shadowMCPAccessRuleInput{
+	requestBefore := buildShadowMCPApprovalRequest(request)
+	rule, createdRule, err := s.getOrCreateShadowMCPAccessRule(ctx, queries, ac, shadowMCPAccessRuleInput{
 		Disposition:            shadowMCPRuleAllowed,
 		MatchBreadth:           payload.MatchBreadth,
 		MatchValue:             matchValue,
@@ -190,6 +217,7 @@ func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *
 	if err != nil {
 		return nil, err
 	}
+	ruleBefore := buildShadowMCPAccessRule(rule, nil)
 	existingRoleSlugs, err := shadowMCPRoleSlugsForRule(ctx, queries, ac.ActiveOrganizationID, rule.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list existing shadow mcp access rule role grants").Log(ctx, s.logger)
@@ -209,13 +237,61 @@ func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "approve shadow mcp approval request").Log(ctx, s.logger)
 	}
+	requestAfter := buildShadowMCPApprovalRequest(request)
+	ruleAfter := buildShadowMCPAccessRule(rule, roleIDsForSlugs(mergedRoleSlugs, roleIDBySlug))
+	if createdRule {
+		if err := s.audit.LogShadowMCPAccessRuleCreate(ctx, dbtx, audit.LogShadowMCPAccessRuleEvent{
+			OrganizationID:           ac.ActiveOrganizationID,
+			Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+			ActorDisplayName:         ac.Email,
+			ActorSlug:                nil,
+			AccessRuleURN:            urn.NewShadowMCPAccessRule(rule.ID),
+			DisplayName:              rule.DisplayName,
+			MatchValue:               rule.MatchValue,
+			AccessRuleSnapshotBefore: nil,
+			AccessRuleSnapshotAfter:  ruleAfter,
+			Metadata:                 &audit.ShadowMCPAuditMetadata{RoleSlugs: mergedRoleSlugs, Reason: payload.Reason},
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "log shadow mcp access rule create").Log(ctx, s.logger)
+		}
+	} else {
+		ruleBefore.RoleIds = roleIDsForSlugs(existingRoleSlugs, roleIDBySlug)
+		if err := s.audit.LogShadowMCPAccessRuleUpdate(ctx, dbtx, audit.LogShadowMCPAccessRuleEvent{
+			OrganizationID:           ac.ActiveOrganizationID,
+			Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+			ActorDisplayName:         ac.Email,
+			ActorSlug:                nil,
+			AccessRuleURN:            urn.NewShadowMCPAccessRule(rule.ID),
+			DisplayName:              rule.DisplayName,
+			MatchValue:               rule.MatchValue,
+			AccessRuleSnapshotBefore: ruleBefore,
+			AccessRuleSnapshotAfter:  ruleAfter,
+			Metadata:                 &audit.ShadowMCPAuditMetadata{RoleSlugs: mergedRoleSlugs, Reason: payload.Reason},
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "log shadow mcp access rule update").Log(ctx, s.logger)
+		}
+	}
+	if err := s.audit.LogShadowMCPApprovalRequestApprove(ctx, dbtx, audit.LogShadowMCPApprovalRequestEvent{
+		OrganizationID:                ac.ActiveOrganizationID,
+		ProjectID:                     request.ProjectID,
+		Actor:                         urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName:              ac.Email,
+		ActorSlug:                     nil,
+		ApprovalRequestURN:            urn.NewShadowMCPApprovalRequest(request.ID),
+		DisplayName:                   shadowMCPApprovalRequestDisplayName(request),
+		ApprovalRequestSnapshotBefore: requestBefore,
+		ApprovalRequestSnapshotAfter:  requestAfter,
+		Metadata:                      &audit.ShadowMCPAuditMetadata{RoleSlugs: mergedRoleSlugs, Reason: payload.Reason},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log shadow mcp approval request approve").Log(ctx, s.logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit shadow mcp approval transaction").Log(ctx, s.logger)
 	}
 
 	return &gen.ShadowMCPApprovalDecisionResult{
-		Request: buildShadowMCPApprovalRequest(request),
-		Rule:    buildShadowMCPAccessRule(rule, roleIDsForSlugs(mergedRoleSlugs, roleIDBySlug)),
+		Request: requestAfter,
+		Rule:    ruleAfter,
 	}, nil
 }
 
@@ -256,12 +332,13 @@ func (s *Service) DenyShadowMCPApprovalRequest(ctx context.Context, payload *gen
 	}
 
 	var rule *repo.ShadowMcpAccessRule
+	ruleCreated := false
 	if payload.CreateDenyRule {
 		matchValue, err := normalizeShadowMCPMatchValue(*payload.MatchBreadth, *payload.MatchValue)
 		if err != nil {
 			return nil, err
 		}
-		created, err := s.getOrCreateShadowMCPAccessRule(ctx, queries, ac, shadowMCPAccessRuleInput{
+		created, createdRule, err := s.getOrCreateShadowMCPAccessRule(ctx, queries, ac, shadowMCPAccessRuleInput{
 			Disposition:            shadowMCPRuleDenied,
 			MatchBreadth:           *payload.MatchBreadth,
 			MatchValue:             matchValue,
@@ -279,8 +356,10 @@ func (s *Service) DenyShadowMCPApprovalRequest(ctx context.Context, payload *gen
 			return nil, oops.E(oops.CodeUnexpected, err, "clear deny rule role grants").Log(ctx, s.logger)
 		}
 		rule = &created
+		ruleCreated = createdRule
 	}
 
+	requestBefore := buildShadowMCPApprovalRequest(request)
 	request, err = queries.DecideShadowMCPApprovalRequest(ctx, repo.DecideShadowMCPApprovalRequestParams{
 		Status:         shadowMCPRequestStatusDenied,
 		DecidedBy:      conv.ToPGTextEmpty(ac.UserID),
@@ -291,6 +370,38 @@ func (s *Service) DenyShadowMCPApprovalRequest(ctx context.Context, payload *gen
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "deny shadow mcp approval request").Log(ctx, s.logger)
 	}
+	requestAfter := buildShadowMCPApprovalRequest(request)
+	if rule != nil && ruleCreated {
+		ruleAfter := buildShadowMCPAccessRule(*rule, nil)
+		if err := s.audit.LogShadowMCPAccessRuleCreate(ctx, dbtx, audit.LogShadowMCPAccessRuleEvent{
+			OrganizationID:           ac.ActiveOrganizationID,
+			Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+			ActorDisplayName:         ac.Email,
+			ActorSlug:                nil,
+			AccessRuleURN:            urn.NewShadowMCPAccessRule(rule.ID),
+			DisplayName:              rule.DisplayName,
+			MatchValue:               rule.MatchValue,
+			AccessRuleSnapshotBefore: nil,
+			AccessRuleSnapshotAfter:  ruleAfter,
+			Metadata:                 &audit.ShadowMCPAuditMetadata{Reason: payload.Reason},
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "log shadow mcp access rule create").Log(ctx, s.logger)
+		}
+	}
+	if err := s.audit.LogShadowMCPApprovalRequestDeny(ctx, dbtx, audit.LogShadowMCPApprovalRequestEvent{
+		OrganizationID:                ac.ActiveOrganizationID,
+		ProjectID:                     request.ProjectID,
+		Actor:                         urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName:              ac.Email,
+		ActorSlug:                     nil,
+		ApprovalRequestURN:            urn.NewShadowMCPApprovalRequest(request.ID),
+		DisplayName:                   shadowMCPApprovalRequestDisplayName(request),
+		ApprovalRequestSnapshotBefore: requestBefore,
+		ApprovalRequestSnapshotAfter:  requestAfter,
+		Metadata:                      &audit.ShadowMCPAuditMetadata{Reason: payload.Reason},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log shadow mcp approval request deny").Log(ctx, s.logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit shadow mcp denial transaction").Log(ctx, s.logger)
 	}
@@ -300,7 +411,7 @@ func (s *Service) DenyShadowMCPApprovalRequest(ctx context.Context, payload *gen
 		ruleView = buildShadowMCPAccessRule(*rule, nil)
 	}
 	return &gen.ShadowMCPApprovalDecisionResult{
-		Request: buildShadowMCPApprovalRequest(request),
+		Request: requestAfter,
 		Rule:    ruleView,
 	}, nil
 }
@@ -393,11 +504,27 @@ func (s *Service) CreateShadowMCPAccessRule(ctx context.Context, payload *gen.Cr
 	if err := syncShadowMCPAccessRuleRoleGrants(ctx, queries, ac.ActiveOrganizationID, rule.ID, roleSlugsForDisposition(payload.Disposition, roleSlugs)); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "sync shadow mcp access rule role grants").Log(ctx, s.logger)
 	}
+	syncedSlugs := roleSlugsForDisposition(payload.Disposition, roleSlugs)
+	ruleView := buildShadowMCPAccessRule(rule, roleIDsForSlugs(syncedSlugs, roleIDBySlug))
+	if err := s.audit.LogShadowMCPAccessRuleCreate(ctx, dbtx, audit.LogShadowMCPAccessRuleEvent{
+		OrganizationID:           ac.ActiveOrganizationID,
+		Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName:         ac.Email,
+		ActorSlug:                nil,
+		AccessRuleURN:            urn.NewShadowMCPAccessRule(rule.ID),
+		DisplayName:              rule.DisplayName,
+		MatchValue:               rule.MatchValue,
+		AccessRuleSnapshotBefore: nil,
+		AccessRuleSnapshotAfter:  ruleView,
+		Metadata:                 &audit.ShadowMCPAuditMetadata{RoleSlugs: syncedSlugs, Reason: payload.Reason},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log shadow mcp access rule create").Log(ctx, s.logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit shadow mcp access rule transaction").Log(ctx, s.logger)
 	}
 
-	return buildShadowMCPAccessRule(rule, roleIDsForSlugs(roleSlugsForDisposition(payload.Disposition, roleSlugs), roleIDBySlug)), nil
+	return ruleView, nil
 }
 
 func (s *Service) UpdateShadowMCPAccessRule(ctx context.Context, payload *gen.UpdateShadowMCPAccessRulePayload) (*gen.ShadowMCPAccessRule, error) {
@@ -428,6 +555,17 @@ func (s *Service) UpdateShadowMCPAccessRule(ctx context.Context, payload *gen.Up
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
+	existingRule, err := queries.GetShadowMCPAccessRule(ctx, repo.GetShadowMCPAccessRuleParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		ID:             ruleID,
+	})
+	if err != nil {
+		return nil, shadowMCPRepoErr(ctx, s, err, "get shadow mcp access rule")
+	}
+	existingRoleSlugs, err := shadowMCPRoleSlugsForRule(ctx, queries, ac.ActiveOrganizationID, ruleID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list existing shadow mcp access rule role grants").Log(ctx, s.logger)
+	}
 	rule, err := queries.UpdateShadowMCPAccessRule(ctx, repo.UpdateShadowMCPAccessRuleParams{
 		Disposition:            payload.Disposition,
 		MatchBreadth:           payload.MatchBreadth,
@@ -448,11 +586,27 @@ func (s *Service) UpdateShadowMCPAccessRule(ctx context.Context, payload *gen.Up
 	if err := syncShadowMCPAccessRuleRoleGrants(ctx, queries, ac.ActiveOrganizationID, rule.ID, syncedSlugs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "sync shadow mcp access rule role grants").Log(ctx, s.logger)
 	}
+	ruleBefore := buildShadowMCPAccessRule(existingRule, roleIDsForSlugs(existingRoleSlugs, roleIDBySlug))
+	ruleAfter := buildShadowMCPAccessRule(rule, roleIDsForSlugs(syncedSlugs, roleIDBySlug))
+	if err := s.audit.LogShadowMCPAccessRuleUpdate(ctx, dbtx, audit.LogShadowMCPAccessRuleEvent{
+		OrganizationID:           ac.ActiveOrganizationID,
+		Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName:         ac.Email,
+		ActorSlug:                nil,
+		AccessRuleURN:            urn.NewShadowMCPAccessRule(rule.ID),
+		DisplayName:              rule.DisplayName,
+		MatchValue:               rule.MatchValue,
+		AccessRuleSnapshotBefore: ruleBefore,
+		AccessRuleSnapshotAfter:  ruleAfter,
+		Metadata:                 &audit.ShadowMCPAuditMetadata{RoleSlugs: syncedSlugs, Reason: payload.Reason},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log shadow mcp access rule update").Log(ctx, s.logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit shadow mcp access rule update transaction").Log(ctx, s.logger)
 	}
 
-	return buildShadowMCPAccessRule(rule, roleIDsForSlugs(syncedSlugs, roleIDBySlug)), nil
+	return ruleAfter, nil
 }
 
 func (s *Service) DeleteShadowMCPAccessRule(ctx context.Context, payload *gen.DeleteShadowMCPAccessRulePayload) error {
@@ -472,15 +626,30 @@ func (s *Service) DeleteShadowMCPAccessRule(ctx context.Context, payload *gen.De
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
-	if _, err := queries.DeleteShadowMCPAccessRule(ctx, repo.DeleteShadowMCPAccessRuleParams{
+	rule, err := queries.DeleteShadowMCPAccessRule(ctx, repo.DeleteShadowMCPAccessRuleParams{
 		UpdatedBy:      conv.ToPGTextEmpty(ac.UserID),
 		OrganizationID: ac.ActiveOrganizationID,
 		ID:             ruleID,
-	}); err != nil {
+	})
+	if err != nil {
 		return shadowMCPRepoErr(ctx, s, err, "delete shadow mcp access rule")
 	}
 	if err := syncShadowMCPAccessRuleRoleGrants(ctx, queries, ac.ActiveOrganizationID, ruleID, nil); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete shadow mcp access rule role grants").Log(ctx, s.logger)
+	}
+	if err := s.audit.LogShadowMCPAccessRuleDelete(ctx, dbtx, audit.LogShadowMCPAccessRuleEvent{
+		OrganizationID:           ac.ActiveOrganizationID,
+		Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName:         ac.Email,
+		ActorSlug:                nil,
+		AccessRuleURN:            urn.NewShadowMCPAccessRule(rule.ID),
+		DisplayName:              rule.DisplayName,
+		MatchValue:               rule.MatchValue,
+		AccessRuleSnapshotBefore: buildShadowMCPAccessRule(rule, nil),
+		AccessRuleSnapshotAfter:  nil,
+		Metadata:                 nil,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log shadow mcp access rule delete").Log(ctx, s.logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit shadow mcp access rule delete transaction").Log(ctx, s.logger)
@@ -501,7 +670,7 @@ type shadowMCPAccessRuleInput struct {
 	Reason                 *string
 }
 
-func (s *Service) getOrCreateShadowMCPAccessRule(ctx context.Context, queries *repo.Queries, ac *contextvalues.AuthContext, input shadowMCPAccessRuleInput) (repo.ShadowMcpAccessRule, error) {
+func (s *Service) getOrCreateShadowMCPAccessRule(ctx context.Context, queries *repo.Queries, ac *contextvalues.AuthContext, input shadowMCPAccessRuleInput) (repo.ShadowMcpAccessRule, bool, error) {
 	existing, err := queries.GetShadowMCPAccessRuleByMatch(ctx, repo.GetShadowMCPAccessRuleByMatchParams{
 		OrganizationID: ac.ActiveOrganizationID,
 		MatchBreadth:   input.MatchBreadth,
@@ -510,12 +679,12 @@ func (s *Service) getOrCreateShadowMCPAccessRule(ctx context.Context, queries *r
 	switch {
 	case err == nil:
 		if existing.Disposition != input.Disposition {
-			return repo.ShadowMcpAccessRule{}, oops.E(oops.CodeConflict, nil, "shadow mcp access rule already exists with a different disposition").Log(ctx, s.logger)
+			return repo.ShadowMcpAccessRule{}, false, oops.E(oops.CodeConflict, nil, "shadow mcp access rule already exists with a different disposition").Log(ctx, s.logger)
 		}
-		return existing, nil
+		return existing, false, nil
 	case errors.Is(err, pgx.ErrNoRows):
 	case err != nil:
-		return repo.ShadowMcpAccessRule{}, oops.E(oops.CodeUnexpected, err, "get shadow mcp access rule by match").Log(ctx, s.logger)
+		return repo.ShadowMcpAccessRule{}, false, oops.E(oops.CodeUnexpected, err, "get shadow mcp access rule by match").Log(ctx, s.logger)
 	}
 
 	rule, err := queries.CreateShadowMCPAccessRule(ctx, repo.CreateShadowMCPAccessRuleParams{
@@ -533,9 +702,9 @@ func (s *Service) getOrCreateShadowMCPAccessRule(ctx context.Context, queries *r
 		Reason:                 conv.PtrToPGTextEmpty(input.Reason),
 	})
 	if err != nil {
-		return repo.ShadowMcpAccessRule{}, shadowMCPCreateRuleErr(ctx, s, err)
+		return repo.ShadowMcpAccessRule{}, false, shadowMCPCreateRuleErr(ctx, s, err)
 	}
-	return rule, nil
+	return rule, true, nil
 }
 
 func (s *Service) requireOrgRead(ctx context.Context) (*contextvalues.AuthContext, error) {
@@ -738,6 +907,22 @@ func buildShadowMCPApprovalRequest(row repo.ShadowMcpApprovalRequest) *gen.Shado
 		CreatedAt:              formatPGTimestampValue(row.CreatedAt),
 		UpdatedAt:              formatPGTimestampValue(row.UpdatedAt),
 	}
+}
+
+func shadowMCPApprovalRequestDisplayName(row repo.ShadowMcpApprovalRequest) string {
+	if value := conv.FromPGText[string](row.ObservedName); value != nil {
+		return *value
+	}
+	if value := conv.FromPGText[string](row.ObservedFullUrl); value != nil {
+		return *value
+	}
+	if value := conv.FromPGText[string](row.ObservedUrlHost); value != nil {
+		return *value
+	}
+	if value := conv.FromPGText[string](row.ObservedServerIdentity); value != nil {
+		return *value
+	}
+	return row.ID.String()
 }
 
 func buildShadowMCPAccessRule(row repo.ShadowMcpAccessRule, roleIDs []string) *gen.ShadowMCPAccessRule {
