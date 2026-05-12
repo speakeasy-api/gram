@@ -34,7 +34,7 @@ export type RevokeUserSessionConsentRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  triggerRiskAnalysisRequestBody: components.TriggerRiskAnalysisRequestBody;
+  revokeRemoteSessionRequestBody: components.RevokeRemoteSessionRequestBody;
 };
 
 /** @internal */
@@ -149,8 +149,8 @@ export type RevokeUserSessionConsentRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  TriggerRiskAnalysisRequestBody:
-    components.TriggerRiskAnalysisRequestBody$Outbound;
+  RevokeRemoteSessionRequestBody:
+    components.RevokeRemoteSessionRequestBody$Outbound;
 };
 
 /** @internal */
@@ -162,15 +162,15 @@ export const RevokeUserSessionConsentRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    triggerRiskAnalysisRequestBody:
-      components.TriggerRiskAnalysisRequestBody$outboundSchema,
+    revokeRemoteSessionRequestBody:
+      components.RevokeRemoteSessionRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",
-      triggerRiskAnalysisRequestBody: "TriggerRiskAnalysisRequestBody",
+      revokeRemoteSessionRequestBody: "RevokeRemoteSessionRequestBody",
     });
   }),
 );

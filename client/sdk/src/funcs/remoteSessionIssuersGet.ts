@@ -4,13 +4,14 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -27,19 +28,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * revokeUserSessionConsent userSessionConsents
+ * getRemoteSessionIssuer remoteSessionIssuers
  *
  * @remarks
- * Withdraw consent. Subsequent authorization requests for matching (subject, user_session_client) pairs re-prompt.
+ * Get a remote_session_issuer by id or by slug. Provide exactly one.
  */
-export function userSessionConsentsRevoke(
+export function remoteSessionIssuersGet(
   client: GramCore,
-  request: operations.RevokeUserSessionConsentRequest,
-  security?: operations.RevokeUserSessionConsentSecurity | undefined,
+  request?: operations.GetRemoteSessionIssuerRequest | undefined,
+  security?: operations.GetRemoteSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    void,
+    components.RemoteSessionIssuer,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -61,13 +62,13 @@ export function userSessionConsentsRevoke(
 
 async function $do(
   client: GramCore,
-  request: operations.RevokeUserSessionConsentRequest,
-  security?: operations.RevokeUserSessionConsentSecurity | undefined,
+  request?: operations.GetRemoteSessionIssuerRequest | undefined,
+  security?: operations.GetRemoteSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      void,
+      components.RemoteSessionIssuer,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -84,31 +85,36 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(operations.RevokeUserSessionConsentRequest$outboundSchema, value),
+      z.parse(
+        z.optional(operations.GetRemoteSessionIssuerRequest$outboundSchema),
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.RevokeRemoteSessionRequestBody, {
-    explode: true,
+  const body = null;
+
+  const path = pathToFunc("/rpc/remoteSessionIssuers.get")();
+
+  const query = encodeFormQuery({
+    "id": payload?.id,
+    "slug": payload?.slug,
   });
 
-  const path = pathToFunc("/rpc/userSessionConsents.revoke")();
-
   const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -144,7 +150,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "revokeUserSessionConsent",
+    operationID: "getRemoteSessionIssuer",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -158,10 +164,11 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "POST",
+    method: "GET",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -199,7 +206,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    void,
+    components.RemoteSessionIssuer,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -210,7 +217,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.nil(200, z.void()),
+    M.json(200, components.RemoteSessionIssuer$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

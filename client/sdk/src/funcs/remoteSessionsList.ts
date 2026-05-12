@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { dlv } from "../lib/dlv.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -25,30 +26,39 @@ import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
+import {
+  createPageIterator,
+  haltIterator,
+  PageIterator,
+  Paginator,
+} from "../types/operations.js";
 
 /**
- * revokeUserSessionConsent userSessionConsents
+ * listRemoteSessions remoteSessions
  *
  * @remarks
- * Withdraw consent. Subsequent authorization requests for matching (subject, user_session_client) pairs re-prompt.
+ * List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
  */
-export function userSessionConsentsRevoke(
+export function remoteSessionsList(
   client: GramCore,
-  request: operations.RevokeUserSessionConsentRequest,
-  security?: operations.RevokeUserSessionConsentSecurity | undefined,
+  request?: operations.ListRemoteSessionsRequest | undefined,
+  security?: operations.ListRemoteSessionsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
-  Result<
-    void,
-    | errors.ServiceError
-    | GramError
-    | ResponseValidationError
-    | ConnectionError
-    | RequestAbortedError
-    | RequestTimeoutError
-    | InvalidRequestError
-    | UnexpectedClientError
-    | SDKValidationError
+  PageIterator<
+    Result<
+      operations.ListRemoteSessionsResponse,
+      | errors.ServiceError
+      | GramError
+      | ResponseValidationError
+      | ConnectionError
+      | RequestAbortedError
+      | RequestTimeoutError
+      | InvalidRequestError
+      | UnexpectedClientError
+      | SDKValidationError
+    >,
+    { cursor: string }
   >
 > {
   return new APIPromise($do(
@@ -61,22 +71,25 @@ export function userSessionConsentsRevoke(
 
 async function $do(
   client: GramCore,
-  request: operations.RevokeUserSessionConsentRequest,
-  security?: operations.RevokeUserSessionConsentSecurity | undefined,
+  request?: operations.ListRemoteSessionsRequest | undefined,
+  security?: operations.ListRemoteSessionsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
-    Result<
-      void,
-      | errors.ServiceError
-      | GramError
-      | ResponseValidationError
-      | ConnectionError
-      | RequestAbortedError
-      | RequestTimeoutError
-      | InvalidRequestError
-      | UnexpectedClientError
-      | SDKValidationError
+    PageIterator<
+      Result<
+        operations.ListRemoteSessionsResponse,
+        | errors.ServiceError
+        | GramError
+        | ResponseValidationError
+        | ConnectionError
+        | RequestAbortedError
+        | RequestTimeoutError
+        | InvalidRequestError
+        | UnexpectedClientError
+        | SDKValidationError
+      >,
+      { cursor: string }
     >,
     APICall,
   ]
@@ -84,31 +97,38 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(operations.RevokeUserSessionConsentRequest$outboundSchema, value),
+      z.parse(
+        z.optional(operations.ListRemoteSessionsRequest$outboundSchema),
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
-    return [parsed, { status: "invalid" }];
+    return [haltIterator(parsed), { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.RevokeRemoteSessionRequestBody, {
-    explode: true,
+  const body = null;
+
+  const path = pathToFunc("/rpc/remoteSessions.list")();
+
+  const query = encodeFormQuery({
+    "cursor": payload?.cursor,
+    "limit": payload?.limit,
+    "principal_urn": payload?.principal_urn,
+    "remote_session_client_id": payload?.remote_session_client_id,
   });
 
-  const path = pathToFunc("/rpc/userSessionConsents.revoke")();
-
   const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -144,7 +164,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "revokeUserSessionConsent",
+    operationID: "listRemoteSessions",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -158,16 +178,17 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "POST",
+    method: "GET",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
   }, options);
   if (!requestRes.ok) {
-    return [requestRes, { status: "invalid" }];
+    return [haltIterator(requestRes), { status: "invalid" }];
   }
   const req = requestRes.value;
 
@@ -190,7 +211,7 @@ async function $do(
     retryCodes: context.retryCodes,
   });
   if (!doResult.ok) {
-    return [doResult, { status: "request-error", request: req }];
+    return [haltIterator(doResult), { status: "request-error", request: req }];
   }
   const response = doResult.value;
 
@@ -198,8 +219,8 @@ async function $do(
     HttpMeta: { Response: response, Request: req },
   };
 
-  const [result] = await M.match<
-    void,
+  const [result, raw] = await M.match<
+    operations.ListRemoteSessionsResponse,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -210,7 +231,9 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.nil(200, z.void()),
+    M.json(200, operations.ListRemoteSessionsResponse$inboundSchema, {
+      key: "Result",
+    }),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,
@@ -220,8 +243,58 @@ async function $do(
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });
   if (!result.ok) {
-    return [result, { status: "complete", request: req, response }];
+    return [haltIterator(result), {
+      status: "complete",
+      request: req,
+      response,
+    }];
   }
 
-  return [result, { status: "complete", request: req, response }];
+  const nextFunc = (
+    responseData: unknown,
+  ): {
+    next: Paginator<
+      Result<
+        operations.ListRemoteSessionsResponse,
+        | errors.ServiceError
+        | GramError
+        | ResponseValidationError
+        | ConnectionError
+        | RequestAbortedError
+        | RequestTimeoutError
+        | InvalidRequestError
+        | UnexpectedClientError
+        | SDKValidationError
+      >
+    >;
+    "~next"?: { cursor: string };
+  } => {
+    const nextCursor = dlv(responseData, "next_cursor");
+    if (typeof nextCursor !== "string") {
+      return { next: () => null };
+    }
+    if (nextCursor.trim() === "") {
+      return { next: () => null };
+    }
+
+    const nextVal = () =>
+      remoteSessionsList(
+        client,
+        {
+          ...request!,
+          cursor: nextCursor,
+        },
+        security,
+        options,
+      );
+
+    return { next: nextVal, "~next": { cursor: nextCursor } };
+  };
+
+  const page = { ...result, ...nextFunc(raw) };
+  return [{ ...page, ...createPageIterator(page, (v) => !v.ok) }, {
+    status: "complete",
+    request: req,
+    response,
+  }];
 }

@@ -6,22 +6,22 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
-export type RevokeUserSessionSecurityOption1 = {
+export type RevokeRemoteSessionSecurityOption1 = {
   projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
 
-export type RevokeUserSessionSecurityOption2 = {
+export type RevokeRemoteSessionSecurityOption2 = {
   apikeyHeaderGramKey: string;
   projectSlugHeaderGramProject: string;
 };
 
-export type RevokeUserSessionSecurity = {
-  option1?: RevokeUserSessionSecurityOption1 | undefined;
-  option2?: RevokeUserSessionSecurityOption2 | undefined;
+export type RevokeRemoteSessionSecurity = {
+  option1?: RevokeRemoteSessionSecurityOption1 | undefined;
+  option2?: RevokeRemoteSessionSecurityOption2 | undefined;
 };
 
-export type RevokeUserSessionRequest = {
+export type RevokeRemoteSessionRequest = {
   /**
    * Session header
    */
@@ -38,15 +38,15 @@ export type RevokeUserSessionRequest = {
 };
 
 /** @internal */
-export type RevokeUserSessionSecurityOption1$Outbound = {
+export type RevokeRemoteSessionSecurityOption1$Outbound = {
   "project_slug_header_Gram-Project": string;
   "session_header_Gram-Session": string;
 };
 
 /** @internal */
-export const RevokeUserSessionSecurityOption1$outboundSchema: z.ZodMiniType<
-  RevokeUserSessionSecurityOption1$Outbound,
-  RevokeUserSessionSecurityOption1
+export const RevokeRemoteSessionSecurityOption1$outboundSchema: z.ZodMiniType<
+  RevokeRemoteSessionSecurityOption1$Outbound,
+  RevokeRemoteSessionSecurityOption1
 > = z.pipe(
   z.object({
     projectSlugHeaderGramProject: z.string(),
@@ -60,26 +60,26 @@ export const RevokeUserSessionSecurityOption1$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function revokeUserSessionSecurityOption1ToJSON(
-  revokeUserSessionSecurityOption1: RevokeUserSessionSecurityOption1,
+export function revokeRemoteSessionSecurityOption1ToJSON(
+  revokeRemoteSessionSecurityOption1: RevokeRemoteSessionSecurityOption1,
 ): string {
   return JSON.stringify(
-    RevokeUserSessionSecurityOption1$outboundSchema.parse(
-      revokeUserSessionSecurityOption1,
+    RevokeRemoteSessionSecurityOption1$outboundSchema.parse(
+      revokeRemoteSessionSecurityOption1,
     ),
   );
 }
 
 /** @internal */
-export type RevokeUserSessionSecurityOption2$Outbound = {
+export type RevokeRemoteSessionSecurityOption2$Outbound = {
   "apikey_header_Gram-Key": string;
   "project_slug_header_Gram-Project": string;
 };
 
 /** @internal */
-export const RevokeUserSessionSecurityOption2$outboundSchema: z.ZodMiniType<
-  RevokeUserSessionSecurityOption2$Outbound,
-  RevokeUserSessionSecurityOption2
+export const RevokeRemoteSessionSecurityOption2$outboundSchema: z.ZodMiniType<
+  RevokeRemoteSessionSecurityOption2$Outbound,
+  RevokeRemoteSessionSecurityOption2
 > = z.pipe(
   z.object({
     apikeyHeaderGramKey: z.string(),
@@ -93,33 +93,33 @@ export const RevokeUserSessionSecurityOption2$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function revokeUserSessionSecurityOption2ToJSON(
-  revokeUserSessionSecurityOption2: RevokeUserSessionSecurityOption2,
+export function revokeRemoteSessionSecurityOption2ToJSON(
+  revokeRemoteSessionSecurityOption2: RevokeRemoteSessionSecurityOption2,
 ): string {
   return JSON.stringify(
-    RevokeUserSessionSecurityOption2$outboundSchema.parse(
-      revokeUserSessionSecurityOption2,
+    RevokeRemoteSessionSecurityOption2$outboundSchema.parse(
+      revokeRemoteSessionSecurityOption2,
     ),
   );
 }
 
 /** @internal */
-export type RevokeUserSessionSecurity$Outbound = {
-  Option1?: RevokeUserSessionSecurityOption1$Outbound | undefined;
-  Option2?: RevokeUserSessionSecurityOption2$Outbound | undefined;
+export type RevokeRemoteSessionSecurity$Outbound = {
+  Option1?: RevokeRemoteSessionSecurityOption1$Outbound | undefined;
+  Option2?: RevokeRemoteSessionSecurityOption2$Outbound | undefined;
 };
 
 /** @internal */
-export const RevokeUserSessionSecurity$outboundSchema: z.ZodMiniType<
-  RevokeUserSessionSecurity$Outbound,
-  RevokeUserSessionSecurity
+export const RevokeRemoteSessionSecurity$outboundSchema: z.ZodMiniType<
+  RevokeRemoteSessionSecurity$Outbound,
+  RevokeRemoteSessionSecurity
 > = z.pipe(
   z.object({
     option1: z.optional(
-      z.lazy(() => RevokeUserSessionSecurityOption1$outboundSchema),
+      z.lazy(() => RevokeRemoteSessionSecurityOption1$outboundSchema),
     ),
     option2: z.optional(
-      z.lazy(() => RevokeUserSessionSecurityOption2$outboundSchema),
+      z.lazy(() => RevokeRemoteSessionSecurityOption2$outboundSchema),
     ),
   }),
   z.transform((v) => {
@@ -130,16 +130,18 @@ export const RevokeUserSessionSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function revokeUserSessionSecurityToJSON(
-  revokeUserSessionSecurity: RevokeUserSessionSecurity,
+export function revokeRemoteSessionSecurityToJSON(
+  revokeRemoteSessionSecurity: RevokeRemoteSessionSecurity,
 ): string {
   return JSON.stringify(
-    RevokeUserSessionSecurity$outboundSchema.parse(revokeUserSessionSecurity),
+    RevokeRemoteSessionSecurity$outboundSchema.parse(
+      revokeRemoteSessionSecurity,
+    ),
   );
 }
 
 /** @internal */
-export type RevokeUserSessionRequest$Outbound = {
+export type RevokeRemoteSessionRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -148,9 +150,9 @@ export type RevokeUserSessionRequest$Outbound = {
 };
 
 /** @internal */
-export const RevokeUserSessionRequest$outboundSchema: z.ZodMiniType<
-  RevokeUserSessionRequest$Outbound,
-  RevokeUserSessionRequest
+export const RevokeRemoteSessionRequest$outboundSchema: z.ZodMiniType<
+  RevokeRemoteSessionRequest$Outbound,
+  RevokeRemoteSessionRequest
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
@@ -169,10 +171,10 @@ export const RevokeUserSessionRequest$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function revokeUserSessionRequestToJSON(
-  revokeUserSessionRequest: RevokeUserSessionRequest,
+export function revokeRemoteSessionRequestToJSON(
+  revokeRemoteSessionRequest: RevokeRemoteSessionRequest,
 ): string {
   return JSON.stringify(
-    RevokeUserSessionRequest$outboundSchema.parse(revokeUserSessionRequest),
+    RevokeRemoteSessionRequest$outboundSchema.parse(revokeRemoteSessionRequest),
   );
 }

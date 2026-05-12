@@ -11,6 +11,7 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -27,19 +28,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * revokeUserSessionConsent userSessionConsents
+ * updateRemoteSessionIssuer remoteSessionIssuers
  *
  * @remarks
- * Withdraw consent. Subsequent authorization requests for matching (subject, user_session_client) pairs re-prompt.
+ * Update fields on an existing remote_session_issuer.
  */
-export function userSessionConsentsRevoke(
+export function remoteSessionIssuersUpdate(
   client: GramCore,
-  request: operations.RevokeUserSessionConsentRequest,
-  security?: operations.RevokeUserSessionConsentSecurity | undefined,
+  request: operations.UpdateRemoteSessionIssuerRequest,
+  security?: operations.UpdateRemoteSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    void,
+    components.RemoteSessionIssuer,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -61,13 +62,13 @@ export function userSessionConsentsRevoke(
 
 async function $do(
   client: GramCore,
-  request: operations.RevokeUserSessionConsentRequest,
-  security?: operations.RevokeUserSessionConsentSecurity | undefined,
+  request: operations.UpdateRemoteSessionIssuerRequest,
+  security?: operations.UpdateRemoteSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      void,
+      components.RemoteSessionIssuer,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -84,18 +85,21 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(operations.RevokeUserSessionConsentRequest$outboundSchema, value),
+      z.parse(
+        operations.UpdateRemoteSessionIssuerRequest$outboundSchema,
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.RevokeRemoteSessionRequestBody, {
+  const body = encodeJSON("body", payload.UpdateRemoteSessionIssuerForm, {
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/userSessionConsents.revoke")();
+  const path = pathToFunc("/rpc/remoteSessionIssuers.update")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -144,7 +148,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "revokeUserSessionConsent",
+    operationID: "updateRemoteSessionIssuer",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -199,7 +203,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    void,
+    components.RemoteSessionIssuer,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -210,7 +214,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.nil(200, z.void()),
+    M.json(200, components.RemoteSessionIssuer$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,
