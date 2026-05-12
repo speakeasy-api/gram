@@ -55,6 +55,8 @@ export type {
   ErrorTrackingConfigOption,
   GetSessionFn,
   HistoryConfig,
+  MCPConfig,
+  MCPServerEntry,
   ModalConfig,
   ModalTriggerPosition,
   Model,

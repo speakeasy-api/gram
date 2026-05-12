@@ -25,6 +25,32 @@ export type GetSessionFn = (init: { projectSlug: string }) => Promise<string>;
 
 type ServerUrl = string;
 
+/**
+ * Configuration for a single MCP server. Use the object form when connecting
+ * to multiple servers so that tool names can be disambiguated and per-server
+ * environment overrides can be supplied.
+ */
+export interface MCPServerEntry {
+  /** The MCP server URL. */
+  url: ServerUrl;
+  /**
+   * Optional namespace prefix prepended to tools from this server with `__`
+   * as the separator (e.g. `name__tool`). When omitted for an entry inside a
+   * multi-server array, a prefix is derived from the URL.
+   */
+  name?: string;
+  /**
+   * Override the `Gram-Environment` header for this server only. Falls back
+   * to the top-level `gramEnvironment` when omitted.
+   */
+  gramEnvironment?: string;
+}
+
+export type MCPConfig =
+  | ServerUrl
+  | MCPServerEntry
+  | Array<ServerUrl | MCPServerEntry>;
+
 export const VARIANTS = ["widget", "sidecar", "standalone"] as const;
 export type Variant = (typeof VARIANTS)[number];
 
@@ -91,17 +117,32 @@ export interface ElementsConfig {
   projectSlug: string;
 
   /**
-   * The Gram Server URL to use for the Elements library.
-   * Can be retrieved from https://app.getgram.ai/{team}/{project}/mcp/{mcp_slug}
+   * The Gram MCP server(s) to connect to. Accepts either:
    *
-   * Note: This config option will likely change in the future
+   * - a single URL string,
+   * - a single {@link MCPServerEntry} object, or
+   * - an array of either form, in which case tools from each server are
+   *   namespaced by a prefix (`<name>__<tool>`) to avoid collisions.
+   *
+   * Each entry may carry its own `gramEnvironment` to override the
+   * top-level setting for that server only.
    *
    * @example
+   * // Single server
    * const config: ElementsConfig = {
    *   mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
    * }
+   *
+   * @example
+   * // Multiple servers
+   * const config: ElementsConfig = {
+   *   mcp: [
+   *     { url: 'https://app.getgram.ai/mcp/billing', name: 'billing' },
+   *     { url: 'https://app.getgram.ai/mcp/support', name: 'support' },
+   *   ],
+   * }
    */
-  mcp?: ServerUrl;
+  mcp?: MCPConfig;
 
   /**
    * Custom environment variable overrides for the Elements library.

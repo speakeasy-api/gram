@@ -1,4 +1,5 @@
 import { assert } from "@/lib/utils";
+import type { MCPConfig, MCPServerEntry } from "@/types";
 import { ToolsFilter } from "@/types";
 import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
@@ -9,6 +10,12 @@ type MCPToolsResult = Awaited<
   ReturnType<Awaited<ReturnType<typeof createMCPClient>>["tools"]>
 >;
 
+interface NormalizedServer {
+  url: string;
+  name: string;
+  gramEnvironment: string | undefined;
+}
+
 export function useMCPTools({
   auth,
   mcp,
@@ -17,59 +24,98 @@ export function useMCPTools({
   gramEnvironment,
 }: {
   auth: Auth;
-  mcp: string | undefined;
+  mcp: MCPConfig | undefined;
   environment: Record<string, unknown>;
   toolsToInclude?: ToolsFilter;
   gramEnvironment?: string;
 }): UseQueryResult<MCPToolsResult, Error> & {
   mcpHeaders: Record<string, string>;
 } {
+  const servers = useMemo(
+    () => normalizeServers(mcp, gramEnvironment),
+    [mcp, gramEnvironment],
+  );
+
   const envQueryKey = Object.entries(environment ?? {}).map(
     ([k, v]) => `${k}:${v}`,
   );
   const authQueryKey = Object.entries(auth.headers ?? {}).map(
     ([k, v]) => `${k}:${v}`,
   );
+  const serversQueryKey = servers.map(
+    (s) => `${s.url}|${s.name}|${s.gramEnvironment ?? ""}`,
+  );
 
-  // Mutable headers object shared with the MCP transport. The transport stores
-  // a direct reference (`this.headers = headers`) and spreads it on every
-  // send() call, so mutating properties on this object (e.g. setting
-  // Gram-Chat-ID later) will be picked up by subsequent tool call requests.
-  const mcpHeaders = useRef<Record<string, string>>({}).current;
+  // Each MCP transport stores a direct reference to its headers object and
+  // spreads it on every send, so writes propagate to subsequent tool-call
+  // requests. `mcpHeaders` is a write-only proxy that fans cross-cutting
+  // header writes (e.g. Gram-Chat-ID) out to every per-server record.
+  const perServerHeadersRef = useRef<Record<string, string>[]>([]);
+  const headersProxyRef = useRef<Record<string, string> | null>(null);
+  if (!headersProxyRef.current) {
+    headersProxyRef.current = new Proxy<Record<string, string>>(
+      {},
+      {
+        set(_, key, value) {
+          for (const h of perServerHeadersRef.current) {
+            h[key as string] = value as string;
+          }
+          return true;
+        },
+        deleteProperty(_, key) {
+          for (const h of perServerHeadersRef.current) {
+            delete h[key as string];
+          }
+          return true;
+        },
+      },
+    );
+  }
+  const mcpHeaders = headersProxyRef.current;
 
   const queryResult = useQuery({
-    queryKey: [
-      "mcpTools",
-      mcp,
-      gramEnvironment,
-      ...envQueryKey,
-      ...authQueryKey,
-    ],
+    queryKey: ["mcpTools", ...serversQueryKey, ...envQueryKey, ...authQueryKey],
     queryFn: async () => {
       assert(!auth.isLoading, "No auth found");
-      assert(mcp, "No MCP URL found");
+      assert(servers.length > 0, "No MCP server configured");
 
-      // Populate the shared headers object (mutate in place so the same
-      // reference is used by the transport).
-      Object.keys(mcpHeaders).forEach((k) => delete mcpHeaders[k]);
-      Object.assign(mcpHeaders, {
-        ...transformEnvironmentToHeaders(environment ?? {}),
-        ...auth.headers,
-        ...(gramEnvironment && { "Gram-Environment": gramEnvironment }),
-      });
+      const envHeaders = transformEnvironmentToHeaders(environment ?? {});
+      const authHeaders = auth.headers ?? {};
 
-      const mcpClient = await createMCPClient({
-        name: "gram-elements-mcp-client",
-        transport: {
-          type: "http",
-          url: mcp,
-          headers: mcpHeaders,
-        },
-      });
+      const serverEntries = servers.map((server) => ({
+        server,
+        headers: {
+          ...envHeaders,
+          ...authHeaders,
+          ...(server.gramEnvironment && {
+            "Gram-Environment": server.gramEnvironment,
+          }),
+        } satisfies Record<string, string>,
+      }));
+      perServerHeadersRef.current = serverEntries.map((s) => s.headers);
 
-      return mcpClient.tools();
+      const perServerTools = await Promise.all(
+        serverEntries.map(async ({ server, headers }) => {
+          const client = await createMCPClient({
+            name: "gram-elements-mcp-client",
+            transport: { type: "http", url: server.url, headers },
+          });
+          return { server, tools: await client.tools() };
+        }),
+      );
+
+      const merged: MCPToolsResult = {};
+      const namespaced = servers.length > 1;
+      for (const { server, tools } of perServerTools) {
+        for (const [toolName, tool] of Object.entries(tools)) {
+          const key = namespaced ? `${server.name}__${toolName}` : toolName;
+          merged[key] = tool;
+        }
+      }
+
+      return merged;
     },
-    enabled: !auth.isLoading && !!mcp,
+    enabled: !auth.isLoading && servers.length > 0,
     staleTime: Infinity,
     gcTime: Infinity,
   });
@@ -97,6 +143,45 @@ export function useMCPTools({
   } as UseQueryResult<MCPToolsResult, Error> & {
     mcpHeaders: Record<string, string>;
   };
+}
+
+function normalizeServers(
+  mcp: MCPConfig | undefined,
+  fallbackEnv: string | undefined,
+): NormalizedServer[] {
+  if (!mcp) return [];
+  const entries: Array<string | MCPServerEntry> = Array.isArray(mcp)
+    ? mcp
+    : [mcp];
+
+  return entries.map((entry) => {
+    if (typeof entry === "string") {
+      return {
+        url: entry,
+        name: deriveNameFromUrl(entry),
+        gramEnvironment: fallbackEnv,
+      };
+    }
+    return {
+      url: entry.url,
+      name: entry.name ?? deriveNameFromUrl(entry.url),
+      gramEnvironment: entry.gramEnvironment ?? fallbackEnv,
+    };
+  });
+}
+
+function deriveNameFromUrl(url: string): string {
+  let path: string;
+  try {
+    path = new URL(url).pathname;
+  } catch {
+    path = url;
+  }
+  const after = path.split("/mcp/")[1] ?? path;
+  const sanitized = after
+    .replace(/^\/+|\/+$/g, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "_");
+  return sanitized || "mcp";
 }
 
 const HEADER_PREFIX = "MCP-";
