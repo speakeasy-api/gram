@@ -844,6 +844,7 @@ type OrganizationUserRelationship struct {
 	ID                 int64
 	OrganizationID     string
 	UserID             string
+	WorkosUserID       pgtype.Text
 	WorkosMembershipID pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz
 	WorkosLastEventID  pgtype.Text
@@ -1275,6 +1276,7 @@ type User struct {
 	Admin       bool
 	LastLogin   pgtype.Timestamptz
 	WorkosID    pgtype.Text
+	DeletedAt   pgtype.Timestamptz
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 }

@@ -16,6 +16,7 @@ type User struct {
 	Admin       bool
 	LastLogin   pgtype.Timestamptz
 	WorkosID    pgtype.Text
+	DeletedAt   pgtype.Timestamptz
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 }
