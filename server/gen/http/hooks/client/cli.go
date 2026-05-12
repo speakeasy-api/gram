@@ -146,6 +146,53 @@ func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, h
 	return v, nil
 }
 
+// BuildCodexPayload builds the payload for the hooks codex endpoint from CLI
+// flags.
+func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hooksCodexProjectSlugInput string) (*hooks.CodexPayload, error) {
+	var err error
+	var body CodexRequestBody
+	{
+		err = json.Unmarshal([]byte(hooksCodexBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cwd\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"model\": \"abc123\",\n      \"permission_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_output\": \"abc123\",\n      \"transcript_path\": \"abc123\"\n   }'")
+		}
+		if !(body.HookEventName == "SessionStart" || body.HookEventName == "PreToolUse" || body.HookEventName == "PermissionRequest" || body.HookEventName == "PostToolUse" || body.HookEventName == "UserPromptSubmit" || body.HookEventName == "Stop") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", body.HookEventName, []any{"SessionStart", "PreToolUse", "PermissionRequest", "PostToolUse", "UserPromptSubmit", "Stop"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if hooksCodexApikeyToken != "" {
+			apikeyToken = &hooksCodexApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if hooksCodexProjectSlugInput != "" {
+			projectSlugInput = &hooksCodexProjectSlugInput
+		}
+	}
+	v := &hooks.CodexPayload{
+		HookEventName:  body.HookEventName,
+		SessionID:      body.SessionID,
+		TranscriptPath: body.TranscriptPath,
+		Cwd:            body.Cwd,
+		Model:          body.Model,
+		ToolName:       body.ToolName,
+		ToolInput:      body.ToolInput,
+		ToolOutput:     body.ToolOutput,
+		PermissionType: body.PermissionType,
+		Prompt:         body.Prompt,
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildLogsPayload builds the payload for the hooks logs endpoint from CLI
 // flags.
 func BuildLogsPayload(hooksLogsBody string, hooksLogsApikeyToken string, hooksLogsProjectSlugInput string) (*hooks.LogsPayload, error) {

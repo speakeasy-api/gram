@@ -283,7 +283,7 @@ var _ = Service("plugins", func() {
 		Payload(func() {
 			Attribute("platform", String, func() {
 				Description("Target platform.")
-				Enum("claude", "cursor")
+				Enum("claude", "cursor", "codex")
 			})
 			Required("platform")
 			security.SessionPayload()
@@ -311,6 +311,36 @@ var _ = Service("plugins", func() {
 
 		Meta("openapi:operationId", "downloadObservabilityPlugin")
 		Meta("openapi:extension:x-speakeasy-name-override", "downloadObservabilityPlugin")
+	})
+
+	Method("downloadCodexInstallScript", func() {
+		Description("Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(func() {
+			Attribute("content_type", String)
+			Attribute("content_disposition", String)
+			Required("content_type", "content_disposition")
+		})
+
+		HTTP(func() {
+			GET("/rpc/plugins.downloadCodexInstallScript")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK, func() {
+				ContentType("text/x-shellscript")
+				Header("content_type:Content-Type")
+				Header("content_disposition:Content-Disposition")
+			})
+			SkipResponseBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "downloadCodexInstallScript")
+		Meta("openapi:extension:x-speakeasy-name-override", "downloadCodexInstallScript")
 	})
 
 	Method("getPublishStatus", func() {

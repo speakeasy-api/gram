@@ -908,13 +908,54 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 	}
 
 	filename := "observability"
-	if payload.Platform == "cursor" {
+	switch payload.Platform {
+	case "cursor":
 		filename = "observability-cursor"
+	case "codex":
+		filename = "observability-codex"
 	}
 	return &gen.DownloadObservabilityPluginResult{
 		ContentType:        "application/zip",
 		ContentDisposition: fmt.Sprintf(`attachment; filename="%s.zip"`, filename),
 	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+}
+
+func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.DownloadCodexInstallScriptPayload) (*gen.DownloadCodexInstallScriptResult, io.ReadCloser, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, nil, err
+	}
+
+	if s.github == nil {
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "GitHub publishing is not configured; publish plugins first to get a marketplace URL")
+	}
+
+	conn, err := s.repo.GetGitHubConnection(ctx, *ac.ProjectID)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "no published marketplace found; publish plugins first")
+	}
+
+	if !conn.MarketplaceToken.Valid || s.serverURL == "" {
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "marketplace URL not available; publish plugins first")
+	}
+
+	marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
+
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, conv.PtrValOr(ac.ProjectSlug, ""))
+
+	script, err := GenerateCodexInstallScript(marketplaceURL, cfg)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "generate codex install script").Log(ctx, s.logger)
+	}
+
+	return &gen.DownloadCodexInstallScriptResult{
+		ContentType:        "text/x-shellscript",
+		ContentDisposition: `attachment; filename="gram-codex-install.sh"`,
+	}, io.NopCloser(bytes.NewReader(script)), nil
 }
 
 // writePluginZip serializes the file map as a deterministic ZIP, marking
