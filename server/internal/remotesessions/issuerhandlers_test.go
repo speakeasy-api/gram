@@ -28,9 +28,6 @@ func newIssuerPayload(slug string) *gen.CreateRemoteSessionIssuerPayload {
 	oidc := false
 	passthrough := false
 	return &gen.CreateRemoteSessionIssuerPayload{
-		SessionToken:                      nil,
-		ApikeyToken:                       nil,
-		ProjectSlugInput:                  nil,
 		Slug:                              slug,
 		Issuer:                            "https://idp.example.com",
 		AuthorizationEndpoint:             &authEP,
