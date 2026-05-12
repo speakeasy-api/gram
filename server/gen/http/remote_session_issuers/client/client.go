@@ -25,6 +25,10 @@ type Client struct {
 	// the createRemoteSessionIssuer endpoint.
 	CreateRemoteSessionIssuerDoer goahttp.Doer
 
+	// RegisterRemoteSessionIssuer Doer is the HTTP client used to make requests to
+	// the registerRemoteSessionIssuer endpoint.
+	RegisterRemoteSessionIssuerDoer goahttp.Doer
+
 	// UpdateRemoteSessionIssuer Doer is the HTTP client used to make requests to
 	// the updateRemoteSessionIssuer endpoint.
 	UpdateRemoteSessionIssuerDoer goahttp.Doer
@@ -64,6 +68,7 @@ func NewClient(
 	return &Client{
 		DiscoverRemoteSessionIssuerDoer: doer,
 		CreateRemoteSessionIssuerDoer:   doer,
+		RegisterRemoteSessionIssuerDoer: doer,
 		UpdateRemoteSessionIssuerDoer:   doer,
 		ListRemoteSessionIssuersDoer:    doer,
 		GetRemoteSessionIssuerDoer:      doer,
@@ -119,6 +124,30 @@ func (c *Client) CreateRemoteSessionIssuer() goa.Endpoint {
 		resp, err := c.CreateRemoteSessionIssuerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("remoteSessionIssuers", "createRemoteSessionIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RegisterRemoteSessionIssuer returns an endpoint that makes HTTP requests to
+// the remoteSessionIssuers service registerRemoteSessionIssuer server.
+func (c *Client) RegisterRemoteSessionIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRegisterRemoteSessionIssuerRequest(c.encoder)
+		decodeResponse = DecodeRegisterRemoteSessionIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRegisterRemoteSessionIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RegisterRemoteSessionIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessionIssuers", "registerRemoteSessionIssuer", err)
 		}
 		return decodeResponse(resp)
 	}
