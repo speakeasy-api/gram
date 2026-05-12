@@ -30,6 +30,7 @@ import { RBACDevToolbar } from "./components/dev-toolbar";
 import { usePageTitle } from "./hooks/use-page-title";
 import CliCallback from "./pages/cli/CliCallback";
 import SlackRegister from "./pages/slackapp/SlackRegister";
+import ShadowMCPRequestAccess from "./pages/shadow-mcp/RequestAccess";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
 export default function App() {
@@ -244,6 +245,9 @@ const RouteProvider = () => {
         {routesWithSubroutes(unauthenticatedRoutes)}
         <Route path="/slack/register" element={<LoginCheck />}>
           <Route index element={<SlackRegister />} />
+        </Route>
+        <Route path="/shadow-mcp/request" element={<LoginCheck />}>
+          <Route index element={<ShadowMCPRequestAccess />} />
         </Route>
         <Route path="/" element={<LoginCheck />}>
           <Route path=":orgSlug/projects/:projectSlug">
