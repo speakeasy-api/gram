@@ -13,6 +13,7 @@ import (
 	"net/url"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -64,7 +65,12 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeBadRequest, nil, "state is required").Log(ctx, logger)
 	}
 
-	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+	// Atomic GETDEL: the IDP-returned state URL is single-use. The fresh
+	// state ID we mint below rotates the cache key, so an attacker who
+	// has somehow obtained the original stateID (referrer leakage, browser
+	// history sync, proxy logs) can't replay it through this handler to
+	// substitute their own Subject on the victim's in-flight challenge.
+	challengeState, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").Log(ctx, logger)
 	}
@@ -80,7 +86,6 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// appropriate message instead of seeing a generic "state and code are
 	// required" 400.
 	if idpErr := q.Get("error"); idpErr != "" {
-		_ = s.authnChallengeCache.Delete(ctx, challengeState)
 		errDescription := q.Get("error_description")
 		clientRedirect := buildClientRedirect(challengeState.RedirectURI, "", challengeState.State, idpErr, errDescription)
 		http.Redirect(w, r, clientRedirect, http.StatusFound)
@@ -128,7 +133,11 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeUnexpected, err, "failed to bootstrap user").Log(ctx, logger)
 	}
 
+	// Mint a fresh state ID so the /connect URL we redirect to is NOT the
+	// same value that just bounced through the IDP. The IDP-returned state
+	// is consumed; the new ID is what /connect's GetAndDelete will burn.
 	subject := urn.NewUserSubject(user.ID)
+	challengeState.ID = uuid.NewString()
 	challengeState.Subject = &subject
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to update authn challenge state").Log(ctx, logger)

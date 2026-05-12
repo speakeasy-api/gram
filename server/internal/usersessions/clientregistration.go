@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strings"
 )
 
 // SupportedGrantTypes / SupportedResponseTypes / SupportedAuthMethods /
@@ -75,9 +76,8 @@ func (r *RegistrationRequest) Validate() error {
 		return &OAuthError{Code: "invalid_redirect_uri", Description: "redirect_uris is required"}
 	}
 	for _, u := range r.RedirectURIs {
-		parsed, parseErr := url.Parse(u)
-		if parseErr != nil || parsed.Scheme == "" || parsed.Host == "" {
-			return &OAuthError{Code: "invalid_redirect_uri", Description: "redirect_uri must be an absolute URL"}
+		if err := validateRedirectURI(u); err != nil {
+			return err
 		}
 	}
 	for _, gt := range r.GrantTypes {
@@ -111,4 +111,56 @@ func (r *RegistrationRequest) Validate() error {
 		return &OAuthError{Code: "invalid_client_metadata", Description: `grant_type "refresh_token" requires grant_type "authorization_code"`}
 	}
 	return nil
+}
+
+// validateRedirectURI enforces the OAuth 2.1 / RFC 8252 redirect-URI scheme
+// rules:
+//
+//   - https://... for web + confidential clients.
+//   - http://... only when the host is a loopback literal (127.0.0.1, ::1,
+//     localhost) per RFC 8252 §7.3.
+//   - custom-scheme://... for native apps, restricted per RFC 8252 §7.1:
+//     scheme must contain a "." (reverse-DNS form) to make collisions
+//     between independent apps unlikely.
+//
+// Dangerous schemes (javascript:, data:, vbscript:, file:, blob:, etc.)
+// are rejected unconditionally — they would let a registered redirect_uri
+// turn the AS's 302 Location into an XSS or local-file fetch vector.
+func validateRedirectURI(raw string) error {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme == "" {
+		return &OAuthError{Code: "invalid_redirect_uri", Description: "redirect_uri must be an absolute URL"}
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	switch scheme {
+	case "https":
+		if parsed.Host == "" {
+			return &OAuthError{Code: "invalid_redirect_uri", Description: "redirect_uri must include a host"}
+		}
+		return nil
+	case "http":
+		// RFC 8252 §7.3 loopback hosts only. parsed.Hostname() strips any
+		// :port suffix.
+		host := strings.ToLower(parsed.Hostname())
+		switch host {
+		case "127.0.0.1", "::1", "localhost":
+			return nil
+		default:
+			return &OAuthError{Code: "invalid_redirect_uri", Description: "http redirect_uri is only allowed for loopback hosts (127.0.0.1, ::1, localhost)"}
+		}
+	default:
+		// Native-app custom scheme. RFC 8252 §7.1 recommends reverse-DNS
+		// form (e.g. com.example.app); require a "." in the scheme to make
+		// inter-app collisions unlikely. Reject the well-known dangerous
+		// schemes explicitly even if a future spec extension would allow
+		// them through the dot rule.
+		switch scheme {
+		case "javascript", "data", "vbscript", "file", "blob", "view-source":
+			return &OAuthError{Code: "invalid_redirect_uri", Description: fmt.Sprintf("redirect_uri scheme %q is not permitted", scheme)}
+		}
+		if !strings.Contains(scheme, ".") {
+			return &OAuthError{Code: "invalid_redirect_uri", Description: fmt.Sprintf("redirect_uri custom scheme %q must be in reverse-DNS form (RFC 8252 §7.1)", scheme)}
+		}
+		return nil
+	}
 }

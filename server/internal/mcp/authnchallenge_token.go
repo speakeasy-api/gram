@@ -231,7 +231,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 // accessTokenLifetime is the wall-clock validity of a minted access-token
 // JWT. Hardcoded because OAuth 2.1 best practice is short access tokens
 // regardless of session policy; the per-issuer SessionDuration controls
-// how long the refresh token (i.e. the whole session) is valid.
+// the refresh-token lifetime instead.
 const accessTokenLifetime = 1 * time.Hour
 
 // mintSessionAndRespond mints a new access-token JWT (HS256) and an opaque
@@ -241,8 +241,12 @@ const accessTokenLifetime = 1 * time.Hour
 //
 // Lifetimes:
 //   - access token: accessTokenLifetime (hardcoded, ~hour-scale).
-//   - refresh token: issuer.SessionDuration — the total session window
-//     before the user is forced back through /authorize.
+//   - refresh token: now + issuer.SessionDuration. This is sliding (per-
+//     rotation) rather than absolute: every successful refresh resets the
+//     refresh-token clock. Matches OAuth 2.1 / Auth0 / Okta convention.
+//     A leaked refresh token still expires after SessionDuration of
+//     inactivity; an active client keeps the session alive indefinitely
+//     by refreshing inside the window.
 //
 // `iss` / audience: the JWT issuer claim is built from baseURL (which the
 // caller computes from custom-domain context so it matches what the AS

@@ -82,7 +82,79 @@ func TestRegistrationRequest_Validate(t *testing.T) {
 			ClientName:   "named",
 			RedirectURIs: []string{"https:///callback"},
 		}
-		assertOAuthError(t, validateAfterDefaults(req), "invalid_redirect_uri", "absolute URL")
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_redirect_uri", "must include a host")
+	})
+
+	t.Run("rejects javascript: redirect URI", func(t *testing.T) {
+		t.Parallel()
+		req := &RegistrationRequest{
+			ClientName:   "named",
+			RedirectURIs: []string{"javascript://example.com/%0Aalert(document.domain)//"},
+		}
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_redirect_uri", `scheme "javascript" is not permitted`)
+	})
+
+	t.Run("rejects data: redirect URI", func(t *testing.T) {
+		t.Parallel()
+		req := &RegistrationRequest{
+			ClientName:   "named",
+			RedirectURIs: []string{"data://example.com/text/html,<script>alert(1)</script>"},
+		}
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_redirect_uri", `scheme "data" is not permitted`)
+	})
+
+	t.Run("rejects file: redirect URI", func(t *testing.T) {
+		t.Parallel()
+		req := &RegistrationRequest{
+			ClientName:   "named",
+			RedirectURIs: []string{"file://example.com/etc/passwd"},
+		}
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_redirect_uri", `scheme "file" is not permitted`)
+	})
+
+	t.Run("rejects http on non-loopback host", func(t *testing.T) {
+		t.Parallel()
+		req := &RegistrationRequest{
+			ClientName:   "named",
+			RedirectURIs: []string{"http://app.acme.test/callback"},
+		}
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_redirect_uri", "loopback")
+	})
+
+	t.Run("accepts http://127.0.0.1 loopback", func(t *testing.T) {
+		t.Parallel()
+		req := &RegistrationRequest{
+			ClientName:   "named",
+			RedirectURIs: []string{"http://127.0.0.1:8765/callback"},
+		}
+		require.NoError(t, validateAfterDefaults(req))
+	})
+
+	t.Run("accepts http://localhost loopback", func(t *testing.T) {
+		t.Parallel()
+		req := &RegistrationRequest{
+			ClientName:   "named",
+			RedirectURIs: []string{"http://localhost:8765/callback"},
+		}
+		require.NoError(t, validateAfterDefaults(req))
+	})
+
+	t.Run("accepts reverse-DNS native-app custom scheme", func(t *testing.T) {
+		t.Parallel()
+		req := &RegistrationRequest{
+			ClientName:   "named",
+			RedirectURIs: []string{"com.acme.app:/oauth/callback"},
+		}
+		require.NoError(t, validateAfterDefaults(req))
+	})
+
+	t.Run("rejects single-token custom scheme", func(t *testing.T) {
+		t.Parallel()
+		req := &RegistrationRequest{
+			ClientName:   "named",
+			RedirectURIs: []string{"myapp:/callback"},
+		}
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_redirect_uri", "reverse-DNS")
 	})
 
 	t.Run("rejects unsupported grant_type", func(t *testing.T) {
