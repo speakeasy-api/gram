@@ -26780,6 +26780,9 @@ components:
                 api_key_id:
                     type: string
                     description: Optional API key ID filter
+                event_source:
+                    type: string
+                    description: Optional event source filter (e.g. 'hook')
                 external_user_id:
                     type: string
                     description: Optional external user ID filter
@@ -26788,6 +26791,9 @@ components:
                     description: Start time in ISO 8601 format
                     example: "2025-12-19T10:00:00Z"
                     format: date-time
+                hook_source:
+                    type: string
+                    description: Optional hook source filter (e.g. 'cursor', 'claude-code')
                 include_time_series:
                     type: boolean
                     description: 'Whether to include time series data (default: true)'
@@ -26800,6 +26806,9 @@ components:
                 toolset_slug:
                     type: string
                     description: Optional toolset/MCP server slug filter
+                user_id:
+                    type: string
+                    description: Optional internal user ID filter
             description: Payload for getting observability overview metrics
             required:
                 - from
@@ -26933,6 +26942,9 @@ components:
         GetUserMetricsSummaryPayload:
             type: object
             properties:
+                event_source:
+                    type: string
+                    description: Optional event source filter (e.g. 'hook')
                 external_user_id:
                     type: string
                     description: External user ID to get metrics for (mutually exclusive with user_id)
@@ -26941,6 +26953,9 @@ components:
                     description: Start time in ISO 8601 format
                     example: "2025-12-19T10:00:00Z"
                     format: date-time
+                hook_source:
+                    type: string
+                    description: Optional hook source filter (e.g. 'cursor', 'claude-code')
                 to:
                     type: string
                     description: End time in ISO 8601 format
@@ -27729,12 +27744,17 @@ components:
         ListFilterOptionsPayload:
             type: object
             properties:
+                event_source:
+                    type: string
+                    description: Optional event source filter for the option list
                 filter_type:
                     type: string
                     description: Type of filter to list options for
                     enum:
                         - api_key
                         - user
+                        - internal_user
+                        - agent
                 from:
                     type: string
                     description: Start time in ISO 8601 format
@@ -30819,6 +30839,9 @@ components:
                     description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
                     example: "2025-12-19T10:00:00Z"
                     format: date-time
+                hook_source:
+                    type: string
+                    description: Optional hook source filter (e.g. 'cursor', 'claude-code').
                 to:
                     type: string
                     description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')

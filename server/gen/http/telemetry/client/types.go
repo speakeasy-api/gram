@@ -106,6 +106,10 @@ type GetUserMetricsSummaryRequestBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// External user ID to get metrics for (mutually exclusive with user_id)
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+	// Optional event source filter (e.g. 'hook')
+	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
+	// Optional hook source filter (e.g. 'cursor', 'claude-code')
+	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
 }
 
 // GetObservabilityOverviewRequestBody is the type of the "telemetry" service
@@ -115,12 +119,18 @@ type GetObservabilityOverviewRequestBody struct {
 	From string `form:"from" json:"from" xml:"from"`
 	// End time in ISO 8601 format
 	To string `form:"to" json:"to" xml:"to"`
+	// Optional internal user ID filter
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// Optional external user ID filter
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// Optional API key ID filter
 	APIKeyID *string `form:"api_key_id,omitempty" json:"api_key_id,omitempty" xml:"api_key_id,omitempty"`
 	// Optional toolset/MCP server slug filter
 	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
+	// Optional event source filter (e.g. 'hook')
+	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
+	// Optional hook source filter (e.g. 'cursor', 'claude-code')
+	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries bool `form:"include_time_series" json:"include_time_series" xml:"include_time_series"`
 }
@@ -143,6 +153,8 @@ type ListFilterOptionsRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Type of filter to list options for
 	FilterType string `form:"filter_type" json:"filter_type" xml:"filter_type"`
+	// Optional event source filter for the option list
+	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
 }
 
 // ListAttributeKeysRequestBody is the type of the "telemetry" service
@@ -2911,6 +2923,8 @@ type SearchUsersFilterRequestBody struct {
 	// Optional event source filter (e.g. 'hook'). When set, only rows with a
 	// matching event_source are included.
 	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
+	// Optional hook source filter (e.g. 'cursor', 'claude-code').
+	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
 }
 
 // UserSummaryResponseBody is used to define fields on response body types.
@@ -3463,6 +3477,8 @@ func NewGetUserMetricsSummaryRequestBody(p *telemetry.GetUserMetricsSummaryPaylo
 		To:             p.To,
 		UserID:         p.UserID,
 		ExternalUserID: p.ExternalUserID,
+		EventSource:    p.EventSource,
+		HookSource:     p.HookSource,
 	}
 	return body
 }
@@ -3474,9 +3490,12 @@ func NewGetObservabilityOverviewRequestBody(p *telemetry.GetObservabilityOvervie
 	body := &GetObservabilityOverviewRequestBody{
 		From:              p.From,
 		To:                p.To,
+		UserID:            p.UserID,
 		ExternalUserID:    p.ExternalUserID,
 		APIKeyID:          p.APIKeyID,
 		ToolsetSlug:       p.ToolsetSlug,
+		EventSource:       p.EventSource,
+		HookSource:        p.HookSource,
 		IncludeTimeSeries: p.IncludeTimeSeries,
 	}
 	{
@@ -3502,9 +3521,10 @@ func NewGetProjectOverviewRequestBody(p *telemetry.GetProjectOverviewPayload) *G
 // payload of the "listFilterOptions" endpoint of the "telemetry" service.
 func NewListFilterOptionsRequestBody(p *telemetry.ListFilterOptionsPayload) *ListFilterOptionsRequestBody {
 	body := &ListFilterOptionsRequestBody{
-		From:       p.From,
-		To:         p.To,
-		FilterType: p.FilterType,
+		From:        p.From,
+		To:          p.To,
+		FilterType:  p.FilterType,
+		EventSource: p.EventSource,
 	}
 	return body
 }
