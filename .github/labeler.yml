@@ -1,4 +1,0 @@
-preview:
-  - changed-files:
-      - any-glob-to-any-file:
-          - "client/dashboard/**"

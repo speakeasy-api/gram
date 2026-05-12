@@ -844,6 +844,7 @@ type OrganizationUserRelationship struct {
 	ID                 int64
 	OrganizationID     string
 	UserID             string
+	WorkosUserID       pgtype.Text
 	WorkosMembershipID pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz
 	WorkosLastEventID  pgtype.Text
@@ -853,8 +854,22 @@ type OrganizationUserRelationship struct {
 	Deleted            bool
 }
 
+type OtelForwardingConfig struct {
+	CreatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	EndpointUrl      string
+	HeadersEncrypted pgtype.Text
+	OrganizationID   string
+	ProjectID        uuid.NullUUID
+	Enabled          bool
+	ID               uuid.UUID
+	Deleted          bool
+}
+
 type Outbox struct {
 	ID             int64
+	PublicID       uuid.UUID
 	OrganizationID string
 	EventType      string
 	Payload        []byte
@@ -1051,21 +1066,22 @@ type RemoteMcpServerHeader struct {
 }
 
 type RiskPolicy struct {
-	ID               uuid.UUID
-	ProjectID        uuid.UUID
-	OrganizationID   string
-	Enabled          bool
-	Name             string
-	Sources          []string
-	PresidioEntities []string
-	Action           string
-	AutoName         bool
-	UserMessage      pgtype.Text
-	Version          int64
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	DeletedAt        pgtype.Timestamptz
-	Deleted          bool
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	OrganizationID       string
+	Enabled              bool
+	Name                 string
+	Sources              []string
+	PresidioEntities     []string
+	PromptInjectionRules []string
+	Action               string
+	AutoName             bool
+	UserMessage          pgtype.Text
+	Version              int64
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
 }
 
 type RiskResult struct {
@@ -1267,15 +1283,19 @@ type TriggerInstance struct {
 }
 
 type User struct {
-	ID          string
-	Email       string
-	DisplayName string
-	PhotoUrl    pgtype.Text
-	Admin       bool
-	LastLogin   pgtype.Timestamptz
-	WorkosID    pgtype.Text
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
+	ID              string
+	Email           string
+	DisplayName     string
+	PhotoUrl        pgtype.Text
+	Admin           bool
+	LastLogin       pgtype.Timestamptz
+	WorkosID        pgtype.Text
+	WorkosCreatedAt pgtype.Timestamptz
+	WorkosUpdatedAt pgtype.Timestamptz
+	WorkosDeletedAt pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
 }
 
 type UserOauthToken struct {
@@ -1364,8 +1384,9 @@ type WorkosOrganizationSync struct {
 }
 
 type WorkosUserSync struct {
-	ID          int64
-	LastEventID string
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
+	ID           int64
+	WorkosUserID pgtype.Text
+	LastEventID  string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
 }

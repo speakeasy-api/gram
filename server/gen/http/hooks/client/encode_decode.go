@@ -486,6 +486,240 @@ func DecodeCursorResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 	}
 }
 
+// BuildCodexRequest instantiates a HTTP request object with method and path
+// set to call the "hooks" service "codex" endpoint
+func (c *Client) BuildCodexRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CodexHooksPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("hooks", "codex", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCodexRequest returns an encoder for requests sent to the hooks codex
+// server.
+func EncodeCodexRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*hooks.CodexPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("hooks", "codex", "*hooks.CodexPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewCodexRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("hooks", "codex", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCodexResponse returns a decoder for responses returned by the hooks
+// codex endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeCodexResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCodexResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CodexResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "codex", err)
+			}
+			res := NewCodexHookResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CodexUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "codex", err)
+			}
+			err = ValidateCodexUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "codex", err)
+			}
+			return nil, NewCodexUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CodexForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "codex", err)
+			}
+			err = ValidateCodexForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "codex", err)
+			}
+			return nil, NewCodexForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CodexBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "codex", err)
+			}
+			err = ValidateCodexBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "codex", err)
+			}
+			return nil, NewCodexBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CodexNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "codex", err)
+			}
+			err = ValidateCodexNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "codex", err)
+			}
+			return nil, NewCodexNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CodexConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "codex", err)
+			}
+			err = ValidateCodexConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "codex", err)
+			}
+			return nil, NewCodexConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CodexUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "codex", err)
+			}
+			err = ValidateCodexUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "codex", err)
+			}
+			return nil, NewCodexUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CodexInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "codex", err)
+			}
+			err = ValidateCodexInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "codex", err)
+			}
+			return nil, NewCodexInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CodexInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "codex", err)
+				}
+				err = ValidateCodexInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "codex", err)
+				}
+				return nil, NewCodexInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CodexUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "codex", err)
+				}
+				err = ValidateCodexUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "codex", err)
+				}
+				return nil, NewCodexUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("hooks", "codex", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CodexGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "codex", err)
+			}
+			err = ValidateCodexGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "codex", err)
+			}
+			return nil, NewCodexGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("hooks", "codex", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildLogsRequest instantiates a HTTP request object with method and path set
 // to call the "hooks" service "logs" endpoint
 func (c *Client) BuildLogsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -939,6 +1173,9 @@ func DecodeMetricsResponse(decoder func(*http.Response) goahttp.Decoder, restore
 // marshalHooksOTELResourceLogToOTELResourceLogRequestBody builds a value of
 // type *OTELResourceLogRequestBody from a value of type *hooks.OTELResourceLog.
 func marshalHooksOTELResourceLogToOTELResourceLogRequestBody(v *hooks.OTELResourceLog) *OTELResourceLogRequestBody {
+	if v == nil {
+		return nil
+	}
 	res := &OTELResourceLogRequestBody{}
 	if v.Resource != nil {
 		res.Resource = marshalHooksOTELResourceToOTELResourceRequestBody(v.Resource)
@@ -952,8 +1189,6 @@ func marshalHooksOTELResourceLogToOTELResourceLogRequestBody(v *hooks.OTELResour
 			}
 			res.ScopeLogs[i] = marshalHooksOTELScopeLogToOTELScopeLogRequestBody(val)
 		}
-	} else {
-		res.ScopeLogs = []*OTELScopeLogRequestBody{}
 	}
 
 	return res
@@ -1003,9 +1238,17 @@ func marshalHooksOTELResourceAttributeToOTELResourceAttributeRequestBody(v *hook
 // of type *OTELAttributeValueRequestBody from a value of type
 // *hooks.OTELAttributeValue.
 func marshalHooksOTELAttributeValueToOTELAttributeValueRequestBody(v *hooks.OTELAttributeValue) *OTELAttributeValueRequestBody {
+	if v == nil {
+		return nil
+	}
 	res := &OTELAttributeValueRequestBody{
 		StringValue: v.StringValue,
 		IntValue:    v.IntValue,
+		BoolValue:   v.BoolValue,
+		DoubleValue: v.DoubleValue,
+		ArrayValue:  v.ArrayValue,
+		KvlistValue: v.KvlistValue,
+		BytesValue:  v.BytesValue,
 	}
 
 	return res
@@ -1014,6 +1257,9 @@ func marshalHooksOTELAttributeValueToOTELAttributeValueRequestBody(v *hooks.OTEL
 // marshalHooksOTELScopeLogToOTELScopeLogRequestBody builds a value of type
 // *OTELScopeLogRequestBody from a value of type *hooks.OTELScopeLog.
 func marshalHooksOTELScopeLogToOTELScopeLogRequestBody(v *hooks.OTELScopeLog) *OTELScopeLogRequestBody {
+	if v == nil {
+		return nil
+	}
 	res := &OTELScopeLogRequestBody{}
 	if v.Scope != nil {
 		res.Scope = marshalHooksOTELScopeToOTELScopeRequestBody(v.Scope)
@@ -1027,8 +1273,6 @@ func marshalHooksOTELScopeLogToOTELScopeLogRequestBody(v *hooks.OTELScopeLog) *O
 			}
 			res.LogRecords[i] = marshalHooksOTELLogRecordToOTELLogRecordRequestBody(val)
 		}
-	} else {
-		res.LogRecords = []*OTELLogRecordRequestBody{}
 	}
 
 	return res
@@ -1051,6 +1295,9 @@ func marshalHooksOTELScopeToOTELScopeRequestBody(v *hooks.OTELScope) *OTELScopeR
 // marshalHooksOTELLogRecordToOTELLogRecordRequestBody builds a value of type
 // *OTELLogRecordRequestBody from a value of type *hooks.OTELLogRecord.
 func marshalHooksOTELLogRecordToOTELLogRecordRequestBody(v *hooks.OTELLogRecord) *OTELLogRecordRequestBody {
+	if v == nil {
+		return nil
+	}
 	res := &OTELLogRecordRequestBody{
 		TimeUnixNano:           v.TimeUnixNano,
 		ObservedTimeUnixNano:   v.ObservedTimeUnixNano,
@@ -1068,8 +1315,6 @@ func marshalHooksOTELLogRecordToOTELLogRecordRequestBody(v *hooks.OTELLogRecord)
 			}
 			res.Attributes[i] = marshalHooksOTELAttributeToOTELAttributeRequestBody(val)
 		}
-	} else {
-		res.Attributes = []*OTELAttributeRequestBody{}
 	}
 
 	return res
@@ -1078,6 +1323,9 @@ func marshalHooksOTELLogRecordToOTELLogRecordRequestBody(v *hooks.OTELLogRecord)
 // marshalHooksOTELLogBodyToOTELLogBodyRequestBody builds a value of type
 // *OTELLogBodyRequestBody from a value of type *hooks.OTELLogBody.
 func marshalHooksOTELLogBodyToOTELLogBodyRequestBody(v *hooks.OTELLogBody) *OTELLogBodyRequestBody {
+	if v == nil {
+		return nil
+	}
 	res := &OTELLogBodyRequestBody{
 		StringValue: v.StringValue,
 	}
@@ -1088,6 +1336,9 @@ func marshalHooksOTELLogBodyToOTELLogBodyRequestBody(v *hooks.OTELLogBody) *OTEL
 // marshalHooksOTELAttributeToOTELAttributeRequestBody builds a value of type
 // *OTELAttributeRequestBody from a value of type *hooks.OTELAttribute.
 func marshalHooksOTELAttributeToOTELAttributeRequestBody(v *hooks.OTELAttribute) *OTELAttributeRequestBody {
+	if v == nil {
+		return nil
+	}
 	res := &OTELAttributeRequestBody{
 		Key: v.Key,
 	}
@@ -1101,6 +1352,9 @@ func marshalHooksOTELAttributeToOTELAttributeRequestBody(v *hooks.OTELAttribute)
 // marshalOTELResourceLogRequestBodyToHooksOTELResourceLog builds a value of
 // type *hooks.OTELResourceLog from a value of type *OTELResourceLogRequestBody.
 func marshalOTELResourceLogRequestBodyToHooksOTELResourceLog(v *OTELResourceLogRequestBody) *hooks.OTELResourceLog {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELResourceLog{}
 	if v.Resource != nil {
 		res.Resource = marshalOTELResourceRequestBodyToHooksOTELResource(v.Resource)
@@ -1114,8 +1368,6 @@ func marshalOTELResourceLogRequestBodyToHooksOTELResourceLog(v *OTELResourceLogR
 			}
 			res.ScopeLogs[i] = marshalOTELScopeLogRequestBodyToHooksOTELScopeLog(val)
 		}
-	} else {
-		res.ScopeLogs = []*hooks.OTELScopeLog{}
 	}
 
 	return res
@@ -1165,9 +1417,17 @@ func marshalOTELResourceAttributeRequestBodyToHooksOTELResourceAttribute(v *OTEL
 // of type *hooks.OTELAttributeValue from a value of type
 // *OTELAttributeValueRequestBody.
 func marshalOTELAttributeValueRequestBodyToHooksOTELAttributeValue(v *OTELAttributeValueRequestBody) *hooks.OTELAttributeValue {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELAttributeValue{
 		StringValue: v.StringValue,
 		IntValue:    v.IntValue,
+		BoolValue:   v.BoolValue,
+		DoubleValue: v.DoubleValue,
+		ArrayValue:  v.ArrayValue,
+		KvlistValue: v.KvlistValue,
+		BytesValue:  v.BytesValue,
 	}
 
 	return res
@@ -1176,6 +1436,9 @@ func marshalOTELAttributeValueRequestBodyToHooksOTELAttributeValue(v *OTELAttrib
 // marshalOTELScopeLogRequestBodyToHooksOTELScopeLog builds a value of type
 // *hooks.OTELScopeLog from a value of type *OTELScopeLogRequestBody.
 func marshalOTELScopeLogRequestBodyToHooksOTELScopeLog(v *OTELScopeLogRequestBody) *hooks.OTELScopeLog {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELScopeLog{}
 	if v.Scope != nil {
 		res.Scope = marshalOTELScopeRequestBodyToHooksOTELScope(v.Scope)
@@ -1189,8 +1452,6 @@ func marshalOTELScopeLogRequestBodyToHooksOTELScopeLog(v *OTELScopeLogRequestBod
 			}
 			res.LogRecords[i] = marshalOTELLogRecordRequestBodyToHooksOTELLogRecord(val)
 		}
-	} else {
-		res.LogRecords = []*hooks.OTELLogRecord{}
 	}
 
 	return res
@@ -1213,6 +1474,9 @@ func marshalOTELScopeRequestBodyToHooksOTELScope(v *OTELScopeRequestBody) *hooks
 // marshalOTELLogRecordRequestBodyToHooksOTELLogRecord builds a value of type
 // *hooks.OTELLogRecord from a value of type *OTELLogRecordRequestBody.
 func marshalOTELLogRecordRequestBodyToHooksOTELLogRecord(v *OTELLogRecordRequestBody) *hooks.OTELLogRecord {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELLogRecord{
 		TimeUnixNano:           v.TimeUnixNano,
 		ObservedTimeUnixNano:   v.ObservedTimeUnixNano,
@@ -1230,8 +1494,6 @@ func marshalOTELLogRecordRequestBodyToHooksOTELLogRecord(v *OTELLogRecordRequest
 			}
 			res.Attributes[i] = marshalOTELAttributeRequestBodyToHooksOTELAttribute(val)
 		}
-	} else {
-		res.Attributes = []*hooks.OTELAttribute{}
 	}
 
 	return res
@@ -1240,6 +1502,9 @@ func marshalOTELLogRecordRequestBodyToHooksOTELLogRecord(v *OTELLogRecordRequest
 // marshalOTELLogBodyRequestBodyToHooksOTELLogBody builds a value of type
 // *hooks.OTELLogBody from a value of type *OTELLogBodyRequestBody.
 func marshalOTELLogBodyRequestBodyToHooksOTELLogBody(v *OTELLogBodyRequestBody) *hooks.OTELLogBody {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELLogBody{
 		StringValue: v.StringValue,
 	}
@@ -1250,6 +1515,9 @@ func marshalOTELLogBodyRequestBodyToHooksOTELLogBody(v *OTELLogBodyRequestBody) 
 // marshalOTELAttributeRequestBodyToHooksOTELAttribute builds a value of type
 // *hooks.OTELAttribute from a value of type *OTELAttributeRequestBody.
 func marshalOTELAttributeRequestBodyToHooksOTELAttribute(v *OTELAttributeRequestBody) *hooks.OTELAttribute {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELAttribute{
 		Key: v.Key,
 	}
@@ -1264,6 +1532,9 @@ func marshalOTELAttributeRequestBodyToHooksOTELAttribute(v *OTELAttributeRequest
 // value of type *OTELResourceMetricsRequestBody from a value of type
 // *hooks.OTELResourceMetrics.
 func marshalHooksOTELResourceMetricsToOTELResourceMetricsRequestBody(v *hooks.OTELResourceMetrics) *OTELResourceMetricsRequestBody {
+	if v == nil {
+		return nil
+	}
 	res := &OTELResourceMetricsRequestBody{}
 	if v.Resource != nil {
 		res.Resource = marshalHooksOTELResourceToOTELResourceRequestBody(v.Resource)
@@ -1314,9 +1585,13 @@ func marshalHooksOTELMetricToOTELMetricRequestBody(v *hooks.OTELMetric) *OTELMet
 		return nil
 	}
 	res := &OTELMetricRequestBody{
-		Name:        v.Name,
-		Description: v.Description,
-		Unit:        v.Unit,
+		Name:                 v.Name,
+		Description:          v.Description,
+		Unit:                 v.Unit,
+		Gauge:                v.Gauge,
+		Histogram:            v.Histogram,
+		ExponentialHistogram: v.ExponentialHistogram,
+		Summary:              v.Summary,
 	}
 	if v.Sum != nil {
 		res.Sum = marshalHooksOTELSumToOTELSumRequestBody(v.Sum)
@@ -1380,6 +1655,9 @@ func marshalHooksOTELNumberDataPointToOTELNumberDataPointRequestBody(v *hooks.OT
 // value of type *hooks.OTELResourceMetrics from a value of type
 // *OTELResourceMetricsRequestBody.
 func marshalOTELResourceMetricsRequestBodyToHooksOTELResourceMetrics(v *OTELResourceMetricsRequestBody) *hooks.OTELResourceMetrics {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELResourceMetrics{}
 	if v.Resource != nil {
 		res.Resource = marshalOTELResourceRequestBodyToHooksOTELResource(v.Resource)
@@ -1430,9 +1708,13 @@ func marshalOTELMetricRequestBodyToHooksOTELMetric(v *OTELMetricRequestBody) *ho
 		return nil
 	}
 	res := &hooks.OTELMetric{
-		Name:        v.Name,
-		Description: v.Description,
-		Unit:        v.Unit,
+		Name:                 v.Name,
+		Description:          v.Description,
+		Unit:                 v.Unit,
+		Gauge:                v.Gauge,
+		Histogram:            v.Histogram,
+		ExponentialHistogram: v.ExponentialHistogram,
+		Summary:              v.Summary,
 	}
 	if v.Sum != nil {
 		res.Sum = marshalOTELSumRequestBodyToHooksOTELSum(v.Sum)

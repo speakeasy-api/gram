@@ -1,5 +1,12 @@
 # server
 
+## 0.51.2
+
+### Patch Changes
+
+- fcf3fd6: Auto-enable MCP on toolsets when they are attached to an assistant, so the runtime can build a startup config without manual toggling.
+- a6f005f: Tag users who sign up with `disposition=assistants` with a PostHog person property so the assistants feature flag can target them.
+
 ## 0.51.1
 
 ### Patch Changes

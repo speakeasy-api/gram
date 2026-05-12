@@ -28,6 +28,7 @@ type Endpoints struct {
 	SetPluginAssignments        goa.Endpoint
 	DownloadPluginPackage       goa.Endpoint
 	DownloadObservabilityPlugin goa.Endpoint
+	DownloadCodexInstallScript  goa.Endpoint
 	GetPublishStatus            goa.Endpoint
 	PublishPlugins              goa.Endpoint
 }
@@ -50,6 +51,15 @@ type DownloadObservabilityPluginResponseData struct {
 	Body io.ReadCloser
 }
 
+// DownloadCodexInstallScriptResponseData holds both the result and the HTTP
+// response body reader of the "downloadCodexInstallScript" method.
+type DownloadCodexInstallScriptResponseData struct {
+	// Result is the method result.
+	Result *DownloadCodexInstallScriptResult
+	// Body streams the HTTP response body.
+	Body io.ReadCloser
+}
+
 // NewEndpoints wraps the methods of the "plugins" service with endpoints.
 func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
@@ -66,6 +76,7 @@ func NewEndpoints(s Service) *Endpoints {
 		SetPluginAssignments:        NewSetPluginAssignmentsEndpoint(s, a.APIKeyAuth),
 		DownloadPluginPackage:       NewDownloadPluginPackageEndpoint(s, a.APIKeyAuth),
 		DownloadObservabilityPlugin: NewDownloadObservabilityPluginEndpoint(s, a.APIKeyAuth),
+		DownloadCodexInstallScript:  NewDownloadCodexInstallScriptEndpoint(s, a.APIKeyAuth),
 		GetPublishStatus:            NewGetPublishStatusEndpoint(s, a.APIKeyAuth),
 		PublishPlugins:              NewPublishPluginsEndpoint(s, a.APIKeyAuth),
 	}
@@ -84,6 +95,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SetPluginAssignments = m(e.SetPluginAssignments)
 	e.DownloadPluginPackage = m(e.DownloadPluginPackage)
 	e.DownloadObservabilityPlugin = m(e.DownloadObservabilityPlugin)
+	e.DownloadCodexInstallScript = m(e.DownloadCodexInstallScript)
 	e.GetPublishStatus = m(e.GetPublishStatus)
 	e.PublishPlugins = m(e.PublishPlugins)
 }
@@ -478,6 +490,45 @@ func NewDownloadObservabilityPluginEndpoint(s Service, authAPIKeyFn security.Aut
 			return nil, err
 		}
 		return &DownloadObservabilityPluginResponseData{Result: res, Body: body}, nil
+	}
+}
+
+// NewDownloadCodexInstallScriptEndpoint returns an endpoint function that
+// calls the method "downloadCodexInstallScript" of service "plugins".
+func NewDownloadCodexInstallScriptEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DownloadCodexInstallScriptPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		res, body, err := s.DownloadCodexInstallScript(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		return &DownloadCodexInstallScriptResponseData{Result: res, Body: body}, nil
 	}
 }
 

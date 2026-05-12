@@ -1,8 +1,8 @@
-[**@gram-ai/elements v1.31.0**](README.md)
+[**@gram-ai/elements v1.32.0**](README.md)
 
 ***
 
-# @gram-ai/elements v1.31.0
+# @gram-ai/elements v1.32.0
 
 ## Interfaces
 
@@ -16,6 +16,7 @@
 - [Cassette](interfaces/Cassette.md)
 - [ReplayOptions](interfaces/ReplayOptions.md)
 - [ErrorContext](interfaces/ErrorContext.md)
+- [MCPServerEntry](interfaces/MCPServerEntry.md)
 - [ElementsConfig](interfaces/ElementsConfig.md)
 - [ErrorTrackingConfigOption](interfaces/ErrorTrackingConfigOption.md)
 - [ModelConfig](interfaces/ModelConfig.md)

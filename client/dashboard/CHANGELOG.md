@@ -1,5 +1,26 @@
 # dashboard
 
+## 0.52.0
+
+### Minor Changes
+
+- 35b4b51: The assistant onboarding chat now connects to every MCP server attached to the assistant, not just the first one, so the agent can call tools across all configured toolsets.
+- c6944af: Repurpose the Agents insights tab into an employee token observability dashboard. The new view shows per-employee token consumption, estimated cost, tool usage breakdown, and platform/model distribution. Clicking an employee row opens a detail dialog with model-level usage, time-series charts, and tool breakdown. Results can be scoped to specific coding tools like Cursor or Claude Code, and the outdated Elements setup modal no longer appears on this page.
+
+### Patch Changes
+
+- b2012be: Fix expanding panel animation on the assistant page.
+- Updated dependencies [35b4b51]
+- Updated dependencies [35b4b51]
+  - @gram-ai/elements@1.32.0
+
+## 0.51.0
+
+### Minor Changes
+
+- 1f34b03: Unified the Observe filter bar for Insights Tools and Logs Tools views; server, email, and type filters are now multi-select dropdowns with OR semantics.
+- 5d80d8c: Rebuild the assistant-onboarding Slack install step as two separate cards: an install card (workspace pick, install, Event Subscriptions Retry) followed by a tokens card. Copy rewritten for non-technical users, with the Event Subscriptions Retry step called out as the most common silent failure.
+
 ## 0.50.0
 
 ### Minor Changes

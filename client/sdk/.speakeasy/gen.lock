@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 1c520ecc4e14be9c660f4b81a6170645
+  docChecksum: 5a74c9c6665e3991d92878182989ff74
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -158,6 +158,12 @@ trackedFiles:
     last_write_checksum: sha1:e29f7febd8b2bebbe3c91639ce9b538e22f23356
   docs/models/components/cloneenvironmentrequestbody.md:
     last_write_checksum: sha1:b8f70e603600ad77b21e37d50cdcde0ee184a2c9
+  docs/models/components/codexhookpayload.md:
+    last_write_checksum: sha1:6534b8857dcc7d10bf0f64a3eb19bca3e00749a6
+  docs/models/components/codexhookpayloadhookeventname.md:
+    last_write_checksum: sha1:ed0c0ecf80563e919dac680664a82bfa925761ed
+  docs/models/components/codexhookresult.md:
+    last_write_checksum: sha1:bb931185a9ed66eccb8cbfda492baea1cfe3e65a
   docs/models/components/configureslackapprequestbody.md:
     last_write_checksum: sha1:028d8866b4e7924ecf4569eba1335fa533fb7f9c
   docs/models/components/confirm.md:
@@ -297,7 +303,7 @@ trackedFiles:
   docs/models/components/filteroption.md:
     last_write_checksum: sha1:8f1fbdfe06b2023c1b7eca3d5115041a361dd432
   docs/models/components/filtertype.md:
-    last_write_checksum: sha1:b8ccf6311ccf6489c7b1dd4fe77c3ff7796ffb2c
+    last_write_checksum: sha1:2a33b1479bdef00f2959f0027784f9e19bb31dc9
   docs/models/components/functionenvironmentvariable.md:
     last_write_checksum: sha1:d750799e5de2a9209b23025cc1961ecbc92874ae
   docs/models/components/functionresourcedefinition.md:
@@ -327,7 +333,7 @@ trackedFiles:
   docs/models/components/getmetricssummaryresult.md:
     last_write_checksum: sha1:24f8b6ad1e5b6cbd5a7157d8f6ac0c5ad8c59c4a
   docs/models/components/getobservabilityoverviewpayload.md:
-    last_write_checksum: sha1:27be40158c7006f2af34510a31d9e19dc2c290a1
+    last_write_checksum: sha1:83e4335af8c343bcd00a7b69c1c8ff9f77cd0763
   docs/models/components/getobservabilityoverviewresult.md:
     last_write_checksum: sha1:0a0b5e2c3e4fb403705fe952952431992e172785
   docs/models/components/getprojectmetricssummarypayload.md:
@@ -341,7 +347,7 @@ trackedFiles:
   docs/models/components/getsignedasseturlform.md:
     last_write_checksum: sha1:aaced59b02774ef5e3b4df7970303a7f568c6781
   docs/models/components/getusermetricssummarypayload.md:
-    last_write_checksum: sha1:366cd9772a0ab886fc4aeb9e8750c0cf4cac1532
+    last_write_checksum: sha1:b34170a37ea86e5b08296226724d1a5e053cac2d
   docs/models/components/getusermetricssummaryresult.md:
     last_write_checksum: sha1:7b76f799d62fe0f3eefe3dc7727880167ca5dd71
   docs/models/components/gramproductfeatures.md:
@@ -411,7 +417,7 @@ trackedFiles:
   docs/models/components/listenvironmentsresult.md:
     last_write_checksum: sha1:407469156fe816e6d51ea58346d03afc56129391
   docs/models/components/listfilteroptionspayload.md:
-    last_write_checksum: sha1:81e0dba6133977aca5e2da03b27392c6943eed3b
+    last_write_checksum: sha1:37bedf6b5340d625c49f10f62175ef018c836f3c
   docs/models/components/listfilteroptionsresult.md:
     last_write_checksum: sha1:0a7293c0f5068a8f829b94023ecce6c5449ff4c3
   docs/models/components/listhookstracespayload.md:
@@ -557,37 +563,37 @@ trackedFiles:
   docs/models/components/organizationuser.md:
     last_write_checksum: sha1:982e7f6d036e03381dc82ff336ab5c6bf6a3f20e
   docs/models/components/otelattribute.md:
-    last_write_checksum: sha1:a893f2d5835427f5e9750589b9d8703c2a9d30c1
+    last_write_checksum: sha1:cae5e6f364e5e3dc3aa0b6a49ca6d0075df7ec13
   docs/models/components/otelattributevalue.md:
-    last_write_checksum: sha1:476055b181686ddf4749ba6124d53ad9e2000fc5
+    last_write_checksum: sha1:bf35edda60c3c1ed7b5f7894d7b91b8b2b5ebc9e
   docs/models/components/otellogbody.md:
     last_write_checksum: sha1:eedd08e6ed59982d620c3cd20a0717f662727c1e
   docs/models/components/otellogrecord.md:
-    last_write_checksum: sha1:f646e5cf80b819166314b6e1baff0a531a918707
+    last_write_checksum: sha1:c69f8f1e1adeeb818f630d6d9797adafc524d800
   docs/models/components/otellogspayload.md:
-    last_write_checksum: sha1:2eef6e693a53b230c466f01b523d9f2d576bc75d
+    last_write_checksum: sha1:b11f01a37b76cbf22952e5ad2226ea0a6ec9f4fa
   docs/models/components/otelmetric.md:
-    last_write_checksum: sha1:dab0aed2bec055b6c5fe668f13eb65c50bebdecd
+    last_write_checksum: sha1:5d3c654cc802f118c65d694b670e3cfd6174c850
   docs/models/components/otelmetricspayload.md:
-    last_write_checksum: sha1:3c78f1a5e1ce3b5e692aedd5dc8fb108f7d285eb
+    last_write_checksum: sha1:7afdf8fdefce238de66821630c6e590b9af12bee
   docs/models/components/otelnumberdatapoint.md:
-    last_write_checksum: sha1:0505bee3e363b85cbe8ddc6f787d341256050e6e
+    last_write_checksum: sha1:14b53ade63430604618a2e0f58046198d692af65
   docs/models/components/otelresource.md:
     last_write_checksum: sha1:0dbb9731748efe970627e896732f84d9a34de6c2
   docs/models/components/otelresourceattribute.md:
-    last_write_checksum: sha1:3ead622223358531bfbcebb638b1f8322cbaa7a0
+    last_write_checksum: sha1:c538e0e24711963a6b21dbbe79f445bdd47084f6
   docs/models/components/otelresourcelog.md:
-    last_write_checksum: sha1:fea4ef016bbaa7093d5a90d2c9d491a66ad5bc24
+    last_write_checksum: sha1:6b3fa8da188422c9e60baf4770d26484ce33c0a4
   docs/models/components/otelresourcemetrics.md:
     last_write_checksum: sha1:62aa16baf7155e12f65124132f464b0613224b26
   docs/models/components/otelscope.md:
     last_write_checksum: sha1:907cfaa07475440bc7b56fe0ccb5a74c47d97386
   docs/models/components/otelscopelog.md:
-    last_write_checksum: sha1:8d8f556c9893d274b97efed2ce8a96335df96b6e
+    last_write_checksum: sha1:b2305db90df3bf7e527c59aa943b0ed151e25d09
   docs/models/components/otelscopemetrics.md:
     last_write_checksum: sha1:c207bd491ae32eeab5beef5add5bd7f2fe3ef577
   docs/models/components/otelsum.md:
-    last_write_checksum: sha1:7cd3bea07db940d3039e32ad1f989c5f5d001d7b
+    last_write_checksum: sha1:109a2ee5f76b3423119eaf708c576fb11aeba2c1
   docs/models/components/outcome.md:
     last_write_checksum: sha1:bc2ff34ae2b99ce314fb2059e5f3ab926f8bb990
   docs/models/components/package.md:
@@ -633,7 +639,7 @@ trackedFiles:
   docs/models/components/publishpackageresult.md:
     last_write_checksum: sha1:b06c211b183e9238064e6093bba7a2a5aadaf47b
   docs/models/components/publishpluginsrequestbody.md:
-    last_write_checksum: sha1:604fb8d2479841ad2ba03507353d25f3bc7f900e
+    last_write_checksum: sha1:208d24eef623a47d472e9104232f822cd9e5a8b5
   docs/models/components/publishpluginsresult.md:
     last_write_checksum: sha1:e7d96379e1856c7f1f3b504e849ce68f7a297c60
   docs/models/components/publishstatusresult.md:
@@ -723,7 +729,7 @@ trackedFiles:
   docs/models/components/searchtoolcallsresult.md:
     last_write_checksum: sha1:d095df548440690a2d7b5bbbf3aa2ceca2a0cdf9
   docs/models/components/searchusersfilter.md:
-    last_write_checksum: sha1:d31cf8e337e41eb600effa0bd3ac66e0f0a1338d
+    last_write_checksum: sha1:05fb82fdf396a31fd71436ac394fe474279ddd17
   docs/models/components/searchuserspayload.md:
     last_write_checksum: sha1:6d6278085ddf1725cf08fc861fa9a37f1dd466e4
   docs/models/components/searchuserspayloadsort.md:
@@ -1304,8 +1310,14 @@ trackedFiles:
     last_write_checksum: sha1:79cca57aa0f56e268aeb59f192d42c67136fa35f
   docs/models/operations/disablerbacsecurity.md:
     last_write_checksum: sha1:008299956482613d350579e2cf1b4077227720d4
+  docs/models/operations/downloadcodexinstallscriptrequest.md:
+    last_write_checksum: sha1:b8370cbf674c1f25a8fd8f0cf5dea42c129ba4b1
+  docs/models/operations/downloadcodexinstallscriptresponse.md:
+    last_write_checksum: sha1:eb3d064e17cf9a30a25019a721670f6319d622ae
+  docs/models/operations/downloadcodexinstallscriptsecurity.md:
+    last_write_checksum: sha1:c010618fe668821343c92151f04e257483ecd554
   docs/models/operations/downloadobservabilitypluginrequest.md:
-    last_write_checksum: sha1:35ff38b278f7587bd96cbd65cf1de037406dc39c
+    last_write_checksum: sha1:c1a6e2202054256753e0f9d1ddba9fd43cc74221
   docs/models/operations/downloadobservabilitypluginresponse.md:
     last_write_checksum: sha1:9a26c8308b46bad1d617b339af9ff062aba15c12
   docs/models/operations/downloadobservabilitypluginsecurity.md:
@@ -1586,16 +1598,20 @@ trackedFiles:
     last_write_checksum: sha1:f68bfcd76ebe89e7aeefe17e93a68feec8bbef70
   docs/models/operations/hooksnumberclauderequest.md:
     last_write_checksum: sha1:94e1eb49f5dd5c57ec490d1cf4d9f076e8c0f33b
+  docs/models/operations/hooksnumbercodexrequest.md:
+    last_write_checksum: sha1:cbaa9f9a67b0dd8a91464bcdd87583b02fd7d65c
+  docs/models/operations/hooksnumbercodexsecurity.md:
+    last_write_checksum: sha1:d1ca0fa9e36948e80ced7dc6fefed2d87a1848fd
   docs/models/operations/hooksnumbercursorrequest.md:
     last_write_checksum: sha1:2566d56a8fe47f8c625cbbec942123d26181b866
   docs/models/operations/hooksnumbercursorsecurity.md:
     last_write_checksum: sha1:a111411fdeb6fd7d0224a332c1853bd55ccf2c45
   docs/models/operations/hooksnumberlogsrequest.md:
-    last_write_checksum: sha1:5f3ffbef78d03e1b5fa564832dd104b4a1888798
+    last_write_checksum: sha1:6334f3a6268671b3f6fefd05581d3ca6cd705011
   docs/models/operations/hooksnumberlogssecurity.md:
     last_write_checksum: sha1:1e492c0a57623b6ab3b5a78dec2c0119119a21ba
   docs/models/operations/hooksnumbermetricsrequest.md:
-    last_write_checksum: sha1:60e5b8e3afe86ca8e6e07e904acad2fce9094dd7
+    last_write_checksum: sha1:e9eeb3c16146b9051aa825693655a36b410a2ec6
   docs/models/operations/hooksnumbermetricssecurity.md:
     last_write_checksum: sha1:50652b124270545eed6f48814003a8ec8bc057c7
   docs/models/operations/integrationsnumbergetrequest.md:
@@ -1695,7 +1711,7 @@ trackedFiles:
   docs/models/operations/listenvironmentssecurity.md:
     last_write_checksum: sha1:707aac744a72294a262f1f1ee36ae1d35c496f28
   docs/models/operations/listfilteroptionsrequest.md:
-    last_write_checksum: sha1:f160aa69b564ac671d1f55b32ff876ec37354905
+    last_write_checksum: sha1:e00471b3bd97951fbefd09ae186fa21742f85237
   docs/models/operations/listfilteroptionssecurity.md:
     last_write_checksum: sha1:6949d2270fad525a670ef96c8e1bf34371e9d743
   docs/models/operations/listfilteroptionssecurityoption1.md:
@@ -1943,7 +1959,7 @@ trackedFiles:
   docs/models/operations/pausetriggerinstancesecurity.md:
     last_write_checksum: sha1:b303abbc876cefd140c36cc1fb7f614a8cfcc343
   docs/models/operations/platform.md:
-    last_write_checksum: sha1:e8895a6ad97e2e8bdc1601b40f9a47d92ebd0f2b
+    last_write_checksum: sha1:f6deaa876c8bc6c5cdc8fcba9dd937eaad5432f7
   docs/models/operations/publishpluginsrequest.md:
     last_write_checksum: sha1:9349d4a871784c310cdc46eedc2b2f52ec0f03b4
   docs/models/operations/publishpluginssecurity.md:
@@ -2405,7 +2421,7 @@ trackedFiles:
   docs/sdks/features/README.md:
     last_write_checksum: sha1:79ab0259791f46a8d2ecd959a4ee69dd4551bea5
   docs/sdks/hooks/README.md:
-    last_write_checksum: sha1:27ec130a5ea9ad7798a7adee2aad91bc2d699a00
+    last_write_checksum: sha1:69682f08e1d3a9d0800b0848a592ce6cdc4eeccc
   docs/sdks/hooksservernames/README.md:
     last_write_checksum: sha1:45d591f573a20bd161851708bab634f303d27fda
   docs/sdks/instances/README.md:
@@ -2427,7 +2443,7 @@ trackedFiles:
   docs/sdks/packages/README.md:
     last_write_checksum: sha1:630727b17ae78739629705da27f894236bba7ad0
   docs/sdks/plugins/README.md:
-    last_write_checksum: sha1:67f4f336e805b9c02a5bf38449200e4aba1ce8aa
+    last_write_checksum: sha1:1db1ff15e99af9efc38c654bdff23180d91827d8
   docs/sdks/policies/README.md:
     last_write_checksum: sha1:d611fbfbc8f551d796c65b23ce4fecd2cce69aa1
   docs/sdks/projects/README.md:
@@ -2457,7 +2473,7 @@ trackedFiles:
   docs/sdks/usersessionconsents/README.md:
     last_write_checksum: sha1:4144900562aa2b66f29c91127d65ed467f73b4f1
   docs/sdks/usersessionissuers/README.md:
-    last_write_checksum: sha1:415dc3bce3245319c634dd1b69723039174bcacf
+    last_write_checksum: sha1:4ca2034c1acb2aa7c33a24577879001ddec510e3
   docs/sdks/usersessions/README.md:
     last_write_checksum: sha1:b3b214708bb706388c86220ae79df1f642ed6897
   docs/sdks/variations/README.md:
@@ -2754,6 +2770,8 @@ trackedFiles:
     pristine_git_object: 680533ea7917230ef71927dfe370d54d02598082
   src/funcs/hooksHooksNumberClaude.ts:
     last_write_checksum: sha1:45b55fb10a84657bd02bd1ec7a42dbb497174e04
+  src/funcs/hooksHooksNumberCodex.ts:
+    last_write_checksum: sha1:3f34951f29eeefc0dc2a8e08602080225d652d59
   src/funcs/hooksHooksNumberCursor.ts:
     last_write_checksum: sha1:e305824851d260e26f74611d4f0bb62849d8dfd3
   src/funcs/hooksHooksNumberLogs.ts:
@@ -2872,6 +2890,8 @@ trackedFiles:
     last_write_checksum: sha1:d2f679d50b01fa675534c4d5abb9c208ede77820
   src/funcs/pluginsDeletePlugin.ts:
     last_write_checksum: sha1:0fae47acd6c4ad0caba1d676be5e8fea03ea3386
+  src/funcs/pluginsDownloadCodexInstallScript.ts:
+    last_write_checksum: sha1:db0c6c512c47dc9e3dc2ca7fbd1684d1e3629d2e
   src/funcs/pluginsDownloadObservabilityPlugin.ts:
     last_write_checksum: sha1:a7c037029deec0a733d31633a335b9b77371da73
   src/funcs/pluginsDownloadPluginPackage.ts:
@@ -3320,6 +3340,10 @@ trackedFiles:
     last_write_checksum: sha1:d72da8680ef447c6322a6f1162d87dfeca8bf1ca
   src/models/components/cloneenvironmentrequestbody.ts:
     last_write_checksum: sha1:b1706b25cf4df77a03adf7a51df0566edb5b9147
+  src/models/components/codexhookpayload.ts:
+    last_write_checksum: sha1:1f1d51eb26b436c1e0d7a1c7820ece4bb54c8a20
+  src/models/components/codexhookresult.ts:
+    last_write_checksum: sha1:c2fc11be25bf3ec299077675ebe25642409b2aa4
   src/models/components/configureslackapprequestbody.ts:
     last_write_checksum: sha1:62c8dae3e65243772f909cb6862a7c4e768fe912
   src/models/components/createassistantform.ts:
@@ -3557,7 +3581,7 @@ trackedFiles:
   src/models/components/getmetricssummaryresult.ts:
     last_write_checksum: sha1:5a47b03d97c320d6c11cd80f0401d5c42da3f011
   src/models/components/getobservabilityoverviewpayload.ts:
-    last_write_checksum: sha1:fb6979490228e39c57d6c995a53cb2bdf6d8aac4
+    last_write_checksum: sha1:00b704e91817742f21bd515a9d4ed72f40ce35cb
   src/models/components/getobservabilityoverviewresult.ts:
     last_write_checksum: sha1:0dbfa9a9afa50661ca0f7406e2ddc5e59aab954e
   src/models/components/getprojectmetricssummarypayload.ts:
@@ -3577,7 +3601,7 @@ trackedFiles:
     last_write_checksum: sha1:5c29a63e63563b3c5ea9fc4189660a5257d54d0e
     pristine_git_object: 4bc4013691f3a6cfe518f1cb05f25e013ca763c6
   src/models/components/getusermetricssummarypayload.ts:
-    last_write_checksum: sha1:3d2735207d9678a4e21e385405f9203948d7ecbd
+    last_write_checksum: sha1:92b2a883d3650a866ca100ec1dbadde118209736
   src/models/components/getusermetricssummaryresult.ts:
     last_write_checksum: sha1:c45ae48235990ba664b1fa62cc0a9df2406ea25d
   src/models/components/gramproductfeatures.ts:
@@ -3602,7 +3626,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:49603a9c7be63a9c09c104d126e46abde6b5dced
+    last_write_checksum: sha1:c4f93b1c336bde61bed168684b1438c44eba795a
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -3669,7 +3693,7 @@ trackedFiles:
     last_write_checksum: sha1:9679d7e3ea2ac309cebd6bb9749ce3ab48b7b301
     pristine_git_object: 77067ebfe426d89f0f759dab95916d34773ae121
   src/models/components/listfilteroptionspayload.ts:
-    last_write_checksum: sha1:35e2073c8c426ed48e6a413191af3bed1ef5c25f
+    last_write_checksum: sha1:dcd746ba0652f5eda3aec25bd5ee56c7ff2da51c
   src/models/components/listfilteroptionsresult.ts:
     last_write_checksum: sha1:9f85492fd003b62241e3b882703bca3bf7f5fafe
   src/models/components/listhookstracespayload.ts:
@@ -3835,37 +3859,37 @@ trackedFiles:
   src/models/components/organizationuser.ts:
     last_write_checksum: sha1:5fbeb489e54a940b59403d1576dcfe43266a72ea
   src/models/components/otelattribute.ts:
-    last_write_checksum: sha1:73d5182c8e167121b1b0993f33c638df9d5a1f46
+    last_write_checksum: sha1:c12d9f7385d4a54ac7113e78c497ae708ff8eccc
   src/models/components/otelattributevalue.ts:
-    last_write_checksum: sha1:10fa28ee024a641e496533ea9af8036b2b2d1ccb
+    last_write_checksum: sha1:fb9095c36ee956b1a8e27df307112cd5836e781d
   src/models/components/otellogbody.ts:
     last_write_checksum: sha1:cb8d00884573f1ce6609987aeac27d8434edabb0
   src/models/components/otellogrecord.ts:
-    last_write_checksum: sha1:ddb831573cb89abdc9a1c27e2e24d5d816aa08f2
+    last_write_checksum: sha1:94653a8154df1dbcf3371c04645c2fc549045f1c
   src/models/components/otellogspayload.ts:
-    last_write_checksum: sha1:0c4f279e6fb83cf353d5c6703dc264182b000314
+    last_write_checksum: sha1:9025684da8d3e409cc9bc9524a7a58bdd51c6312
   src/models/components/otelmetric.ts:
-    last_write_checksum: sha1:6615aa963f926b8bb75860925bd693ac41bfa152
+    last_write_checksum: sha1:92122c45310ee393154dec189b24912fb9cd1f06
   src/models/components/otelmetricspayload.ts:
-    last_write_checksum: sha1:2a78925f315e021035db1729222cd8767b752a3e
+    last_write_checksum: sha1:a0d59754426baeb2639c31ec48b56c621726a8d2
   src/models/components/otelnumberdatapoint.ts:
-    last_write_checksum: sha1:70c36ea8884ef2484c9949cb138d9cf6717c54af
+    last_write_checksum: sha1:ee303e39a775137b22689e807490bd207a209798
   src/models/components/otelresource.ts:
     last_write_checksum: sha1:e0f4f713f4aa854c5784f7580b0bba0757a42c6a
   src/models/components/otelresourceattribute.ts:
-    last_write_checksum: sha1:5c700171a4de0c7615662d63006b8cf92f118169
+    last_write_checksum: sha1:c6041bc7039e0c9a23eee20bef38e2049314dcdf
   src/models/components/otelresourcelog.ts:
-    last_write_checksum: sha1:225755f3586883ab2c387b1fc7834aeb195b0d00
+    last_write_checksum: sha1:0a120c8f5249e00ee5b4c090e80441e6610c0c25
   src/models/components/otelresourcemetrics.ts:
     last_write_checksum: sha1:4db5f73ece47073eab230c424b9146cb23616ea3
   src/models/components/otelscope.ts:
     last_write_checksum: sha1:fcfc339629977baab982e39bb8133722a7b81059
   src/models/components/otelscopelog.ts:
-    last_write_checksum: sha1:0c7448ee5ea2df2c33ea691a4a75c0a4be9ff3fc
+    last_write_checksum: sha1:056190264524f9c9771550f1dcf0cc8d2fcf4407
   src/models/components/otelscopemetrics.ts:
     last_write_checksum: sha1:f68cd5f1e73be09a4a6458ac16eac5bf2a8d903a
   src/models/components/otelsum.ts:
-    last_write_checksum: sha1:e626e232a96bb3e2291802f41a6803291ffeff24
+    last_write_checksum: sha1:07ce49432700ca9ed62c358c4585fd16a1e8eeb5
   src/models/components/package.ts:
     id: "625237810132"
     last_write_checksum: sha1:df14d9743fa782e8c08a284516886dc3e0c80965
@@ -3915,7 +3939,7 @@ trackedFiles:
     last_write_checksum: sha1:29ee63335536c762cbfea53df8e14d897e1fd05f
     pristine_git_object: 5925d0851ae96e98d6ba713ec38281447c64f5f4
   src/models/components/publishpluginsrequestbody.ts:
-    last_write_checksum: sha1:af17c71b1ecfe7899348d91f1aa4a99495756438
+    last_write_checksum: sha1:4e5822b97bc3be501eb95b56d5103e1d2e806b62
   src/models/components/publishpluginsresult.ts:
     last_write_checksum: sha1:c5a315b9000dc53a5068f7b7ffd57eec889fa732
   src/models/components/publishstatusresult.ts:
@@ -4011,7 +4035,7 @@ trackedFiles:
     last_write_checksum: sha1:3033b5130d45ec3a5d044dbc012675b9d83069f0
     pristine_git_object: a711d8412fa0852849357c4504ef676de99e6ade
   src/models/components/searchusersfilter.ts:
-    last_write_checksum: sha1:f9ea4d350d4a60ccbddab3b24492d290e47c1836
+    last_write_checksum: sha1:74bd1837172173f9c563f0a8e456fe5a02a0a9a2
   src/models/components/searchuserspayload.ts:
     last_write_checksum: sha1:2ce5989b9ab31b607295bcc3251c491faed35145
   src/models/components/searchusersresult.ts:
@@ -4456,8 +4480,10 @@ trackedFiles:
     last_write_checksum: sha1:29e7c1687257271fa46352024364eeeb5216bdbb
   src/models/operations/disablerbac.ts:
     last_write_checksum: sha1:0d557ade2a9e135cf1c14c6f97b1e55a7d0347e5
+  src/models/operations/downloadcodexinstallscript.ts:
+    last_write_checksum: sha1:de32b01199abe1ad1bc3f8f0df772bcd7cea71e5
   src/models/operations/downloadobservabilityplugin.ts:
-    last_write_checksum: sha1:12b3f77fced862e45b4aec85a6899b74a383c2a9
+    last_write_checksum: sha1:28b70c038913beff1950af00e9445f3e41026f7c
   src/models/operations/downloadpluginpackage.ts:
     last_write_checksum: sha1:4e8285cd1ca0b6077f0dbb27ed37f2c9405c3045
   src/models/operations/enablerbac.ts:
@@ -4576,6 +4602,8 @@ trackedFiles:
     last_write_checksum: sha1:48d1b30f84969345f3c30a8540b7355954106781
   src/models/operations/hooksnumberclaude.ts:
     last_write_checksum: sha1:b7b533ef69575b0818e86bf54f6bf7df948c26f6
+  src/models/operations/hooksnumbercodex.ts:
+    last_write_checksum: sha1:2d8c07fa8a7b59728a84fa1e0a7552fe0cb0af59
   src/models/operations/hooksnumbercursor.ts:
     last_write_checksum: sha1:16bd35acfd65f1e23d0bf088ecab54fd8758a057
   src/models/operations/hooksnumberlogs.ts:
@@ -4584,7 +4612,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:6873ba5b5bf8827eb29a2846fa4b7ae68af4c966
+    last_write_checksum: sha1:d533ebcde642421e819207788718eb108c04cba4
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -5298,6 +5326,8 @@ trackedFiles:
     last_write_checksum: sha1:54554f52c76c61d0a419c65e3532b08283ec009b
   src/react-query/hooksHooksNumberClaude.ts:
     last_write_checksum: sha1:681f433a2aad9e76d6b4f11cee811377b2e36c6c
+  src/react-query/hooksHooksNumberCodex.ts:
+    last_write_checksum: sha1:22585c0e6fd086bafa7e0766cfd2b3846ab71be5
   src/react-query/hooksHooksNumberCursor.ts:
     last_write_checksum: sha1:458ee03a59cea99af357fedc9aa9153775ce2604
   src/react-query/hooksHooksNumberLogs.ts:
@@ -5314,7 +5344,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:3c54c57c2fe0ccc7f419537696ea8053239ba7b8
+    last_write_checksum: sha1:1def5647ee2d09d996d1cd98042eddb1031a0597
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -5544,6 +5574,10 @@ trackedFiles:
     last_write_checksum: sha1:c9faae26b39dc1cbdaacdc130c2f63d42cfd953a
   src/react-query/plugins.ts:
     last_write_checksum: sha1:cd1f955c7779887ad892c037f871e6a4b3e5f4f0
+  src/react-query/pluginsDownloadCodexInstallScript.core.ts:
+    last_write_checksum: sha1:4e2f57c25e42e2a0c2e6d15126f229d1a507eb5d
+  src/react-query/pluginsDownloadCodexInstallScript.ts:
+    last_write_checksum: sha1:35b8efbbe95ca6a08e1be83aac74fe46d5cf7b1f
   src/react-query/pluginsDownloadObservabilityPlugin.core.ts:
     last_write_checksum: sha1:649ff0db77f684b23443ddd05a7fade88436ddc8
   src/react-query/pluginsDownloadObservabilityPlugin.ts:
@@ -5933,7 +5967,7 @@ trackedFiles:
     last_write_checksum: sha1:f9453df020a022530a0fb97a2e7099343c930b13
     pristine_git_object: 3b4e49a565f809818b5f48673f81835a7d83f884
   src/sdk/hooks.ts:
-    last_write_checksum: sha1:771b4b5089126a0acc240f095b283002628235a7
+    last_write_checksum: sha1:252d201a6d5cbdc9e255084999186bce98eb52bc
   src/sdk/hooksservernames.ts:
     last_write_checksum: sha1:46e1603a1bda6de118b0cfbf7ce1590e01a38c42
   src/sdk/index.ts:
@@ -5971,7 +6005,7 @@ trackedFiles:
     last_write_checksum: sha1:cd45c1746ab2a619fb53b913e0398d80731df1dc
     pristine_git_object: 4f4b87d5502ff940f4b04c82bd1907cf070e0f1c
   src/sdk/plugins.ts:
-    last_write_checksum: sha1:2a3b382f5f108ca0f19a03d8edd0c726f5f3a2ec
+    last_write_checksum: sha1:7028ca7dfba43671e325dd5f14920e007e88e378
   src/sdk/policies.ts:
     last_write_checksum: sha1:bf3c4e4a212f66d947d76cf149b309aa94397d00
   src/sdk/projects.ts:
@@ -7571,7 +7605,7 @@ examples:
   hooks#logs:
     speakeasy-default-hooks#logs:
       requestBody:
-        application/json: {"resourceLogs": [{"scopeLogs": [{"logRecords": []}]}]}
+        application/json: {}
       responses:
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
@@ -8217,7 +8251,7 @@ examples:
   hooks#metrics:
     speakeasy-default-hooks#metrics:
       requestBody:
-        application/json: {"resourceMetrics": []}
+        application/json: {}
       responses:
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
@@ -8677,6 +8711,114 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listChallengeBuckets:
+    speakeasy-default-list-challenge-buckets:
+      parameters:
+        query:
+          limit: 50
+          offset: 0
+      responses:
+        "200":
+          application/json: {"buckets": [], "total": 676209}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listChallenges:
+    speakeasy-default-list-challenges:
+      parameters:
+        query:
+          limit: 50
+          offset: 0
+      responses:
+        "200":
+          application/json: {"challenges": [], "total": 916893}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  resolveChallenge:
+    speakeasy-default-resolve-challenge:
+      requestBody:
+        application/json: {"challenge_ids": ["<value 1>"], "principal_urn": "<value>", "resolution_type": "role_assigned", "scope": "<value>"}
+      responses:
+        "201":
+          application/json: {"resolutions": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  deleteAssistantMemory:
+    speakeasy-default-delete-assistant-memory:
+      parameters:
+        query:
+          id: "beb39ec7-32f7-4d96-955e-bdc94a92a67a"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getAssistantMemory:
+    speakeasy-default-get-assistant-memory:
+      parameters:
+        query:
+          id: "d55875b5-a05d-421d-b77d-3b55c98f9193"
+      responses:
+        "200":
+          application/json: {"assistant_id": "8e7a32d4-20e7-4630-88da-9abcb4fe6c49", "content": "<value>", "created_at": "2026-06-19T12:39:40.541Z", "id": "7097ac5a-6b76-4bfc-a55e-a561c25b796a", "last_access": "2026-05-20T02:25:53.359Z", "tags": [], "updated_at": "2026-12-11T15:08:53.922Z", "valid_at": "2024-05-04T05:23:32.003Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listAssistantMemories:
+    speakeasy-default-list-assistant-memories:
+      parameters:
+        query:
+          assistant_id: "56bcc863-cc81-4d15-92ee-28eb89e8930f"
+          include_deleted: false
+          limit: 50
+      responses:
+        "200":
+          application/json: {"memories": [{"assistant_id": "179cf92d-c664-401f-bf81-60a9b0fa1070", "content": "<value>", "created_at": "2024-05-04T16:02:06.921Z", "id": "4b9b2c66-e854-4026-bc43-bfdd6c7d7b7a", "last_access": "2025-08-21T16:30:32.756Z", "tags": ["<value 1>", "<value 2>"], "updated_at": "2026-03-30T06:00:30.258Z", "valid_at": "2025-09-03T06:37:39.859Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  cloneEnvironment:
+    speakeasy-default-clone-environment:
+      parameters:
+        query:
+          slug: "<value>"
+      requestBody:
+        application/json: {"new_name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-10-20T20:04:05.659Z", "entries": [{"created_at": "2025-01-06T15:50:05.639Z", "name": "<value>", "updated_at": "2026-06-15T19:26:29.483Z", "value": "<value>", "value_hash": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2026-12-23T01:37:04.789Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  receiveWorkOSWebhook: {}
+  verifyRemoteMcpURL:
+    speakeasy-default-verify-remote-mcp-URL:
+      requestBody:
+        application/json: {"transport_type": "<value>", "url": "https://carefree-governance.com/"}
+      responses:
+        "200":
+          application/json: {"message": "<value>", "verified": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  createTopUpCheckout:
+    speakeasy-default-create-top-up-checkout:
+      responses:
+        "200":
+          application/json: "<value>"
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getUserSessionClient:
     speakeasy-default-get-user-session-client:
       parameters:
@@ -8728,10 +8870,10 @@ examples:
   createUserSessionIssuer:
     speakeasy-default-create-user-session-issuer:
       requestBody:
-        application/json: {"authn_challenge_mode": "chain", "session_duration_hours": 258583, "slug": "<value>"}
+        application/json: {"authn_challenge_mode": "chain", "session_duration_hours": 781659, "slug": "<value>"}
       responses:
         "200":
-          application/json: {"authn_challenge_mode": "<value>", "created_at": "2026-05-06T16:44:45.182Z", "id": "797212a9-f79f-4e5b-a48c-819febc81785", "project_id": "66111c8e-2ed9-4cca-b7b3-430333d4acfa", "session_duration_hours": 781659, "slug": "<value>", "updated_at": "2024-05-08T22:40:59.273Z"}
+          application/json: {"authn_challenge_mode": "<value>", "created_at": "2025-05-29T23:01:32.237Z", "id": "97212a9f-79fe-45b4-98c8-19febc817858", "project_id": "6111c8e2-ed9c-4ca7-8b34-30333d4acfad", "session_duration_hours": 80015, "slug": "<value>", "updated_at": "2024-11-04T03:29:29.080Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8750,7 +8892,7 @@ examples:
     speakeasy-default-get-user-session-issuer:
       responses:
         "200":
-          application/json: {"authn_challenge_mode": "<value>", "created_at": "2024-12-02T02:00:23.894Z", "id": "1eed0621-72c9-4036-8a06-daa8a040be48", "project_id": "57ff9343-9875-4960-9ee5-7e4aa2e06a70", "session_duration_hours": 306645, "slug": "<value>", "updated_at": "2024-09-04T07:39:59.919Z"}
+          application/json: {"authn_challenge_mode": "<value>", "created_at": "2024-12-02T02:00:23.894Z", "id": "1eed0621-72c9-4036-8a06-daa8a040be48", "project_id": "57ff9343-9875-4960-9ee5-7e4aa2e06a70", "session_duration_hours": 225656, "slug": "<value>", "updated_at": "2024-05-16T13:18:14.737Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8770,7 +8912,7 @@ examples:
         application/json: {"id": "dad21314-e682-4be0-b8cf-097f268dafb1"}
       responses:
         "200":
-          application/json: {"authn_challenge_mode": "<value>", "created_at": "2024-11-25T09:16:20.983Z", "id": "ae2557ad-d034-4496-9cc1-323f5e93e0d3", "project_id": "c159fbc4-0e4f-4bee-a37b-46aba130899e", "session_duration_hours": 862271, "slug": "<value>", "updated_at": "2025-12-18T09:38:54.035Z"}
+          application/json: {"authn_challenge_mode": "<value>", "created_at": "2024-11-25T09:16:20.983Z", "id": "ae2557ad-d034-4496-9cc1-323f5e93e0d3", "project_id": "c159fbc4-0e4f-4bee-a37b-46aba130899e", "session_duration_hours": 654564, "slug": "<value>", "updated_at": "2025-06-11T18:23:27.676Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8793,114 +8935,26 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  listChallenges:
-    speakeasy-default-list-challenges:
-      parameters:
-        query:
-          limit: 50
-          offset: 0
-      responses:
-        "200":
-          application/json: {"challenges": [], "total": 916893}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  resolveChallenge:
-    speakeasy-default-resolve-challenge:
+  hooks#codex:
+    speakeasy-default-hooks#codex:
       requestBody:
-        application/json: {"challenge_ids": ["<value 1>"], "principal_urn": "<value>", "resolution_type": "role_assigned", "scope": "<value>"}
-      responses:
-        "201":
-          application/json: {"resolutions": []}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  createTopUpCheckout:
-    speakeasy-default-create-top-up-checkout:
+        application/json: {"hook_event_name": "PreToolUse"}
       responses:
         "200":
-          application/json: "<value>"
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  cloneEnvironment:
-    speakeasy-default-clone-environment:
-      parameters:
-        query:
-          slug: "<value>"
-      requestBody:
-        application/json: {"new_name": "<value>"}
-      responses:
-        "200":
-          application/json: {"created_at": "2025-10-20T20:04:05.659Z", "entries": [{"created_at": "2025-01-06T15:50:05.639Z", "name": "<value>", "updated_at": "2026-06-15T19:26:29.483Z", "value": "<value>", "value_hash": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2026-12-23T01:37:04.789Z"}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  verifyRemoteMcpURL:
-    speakeasy-default-verify-remote-mcp-URL:
-      requestBody:
-        application/json: {"transport_type": "<value>", "url": "https://carefree-governance.com/"}
-      responses:
-        "200":
-          application/json: {"message": "<value>", "verified": true}
+          application/json: {}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  receiveWorkOSWebhook: {}
-  deleteAssistantMemory:
-    speakeasy-default-delete-assistant-memory:
-      parameters:
-        query:
-          id: "beb39ec7-32f7-4d96-955e-bdc94a92a67a"
-      responses:
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  getAssistantMemory:
-    speakeasy-default-get-assistant-memory:
-      parameters:
-        query:
-          id: "d55875b5-a05d-421d-b77d-3b55c98f9193"
+  downloadCodexInstallScript:
+    speakeasy-default-download-codex-install-script:
       responses:
         "200":
-          application/json: {"assistant_id": "8e7a32d4-20e7-4630-88da-9abcb4fe6c49", "content": "<value>", "created_at": "2026-06-19T12:39:40.541Z", "id": "7097ac5a-6b76-4bfc-a55e-a561c25b796a", "last_access": "2026-05-20T02:25:53.359Z", "tags": [], "updated_at": "2026-12-11T15:08:53.922Z", "valid_at": "2024-05-04T05:23:32.003Z"}
+          text/x-shellscript: "x-file: example.file"
         "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  listAssistantMemories:
-    speakeasy-default-list-assistant-memories:
-      parameters:
-        query:
-          assistant_id: "56bcc863-cc81-4d15-92ee-28eb89e8930f"
-          include_deleted: false
-          limit: 50
-      responses:
-        "200":
-          application/json: {"memories": [{"assistant_id": "179cf92d-c664-401f-bf81-60a9b0fa1070", "content": "<value>", "created_at": "2024-05-04T16:02:06.921Z", "id": "4b9b2c66-e854-4026-bc43-bfdd6c7d7b7a", "last_access": "2025-08-21T16:30:32.756Z", "tags": ["<value 1>", "<value 2>"], "updated_at": "2026-03-30T06:00:30.258Z", "valid_at": "2025-09-03T06:37:39.859Z"}]}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  listChallengeBuckets:
-    speakeasy-default-list-challenge-buckets:
-      parameters:
-        query:
-          limit: 50
-          offset: 0
-      responses:
-        "200":
-          application/json: {"buckets": [], "total": 676209}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:
