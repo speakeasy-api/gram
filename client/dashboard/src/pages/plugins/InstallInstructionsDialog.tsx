@@ -628,7 +628,7 @@ export function InstallInstructionsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="flex max-h-[90vh] max-w-4xl flex-col">
+      <Dialog.Content className="flex max-h-[90vh] max-w-7xl sm:max-w-7xl flex-col">
         <Dialog.Header>
           <Dialog.Title>Distribute your marketplace</Dialog.Title>
         </Dialog.Header>

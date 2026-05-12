@@ -447,7 +447,7 @@ export function HooksSetupDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="flex max-h-[90vh] max-w-4xl flex-col">
+      <Dialog.Content className="flex max-h-[90vh] max-w-7xl sm:max-w-7xl flex-col">
         <Dialog.Header>
           <Dialog.Title>Setup Hooks</Dialog.Title>
         </Dialog.Header>
