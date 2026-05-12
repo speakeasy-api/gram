@@ -26,12 +26,12 @@ type LogRemoteSessionIssuerCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RemoteSessionIssuerID   uuid.UUID //nolint:glint // TODO: introduce urn.RemoteSessionIssuer and migrate to RemoteSessionIssuerURN
-	RemoteSessionIssuerSlug string
-	IssuerURL               string
+	RemoteSessionIssuerURN urn.RemoteSessionIssuer
+	Slug                   string
+	IssuerURL              string
 }
 
-func LogRemoteSessionIssuerCreate(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionIssuerCreateEvent) error {
+func (l *Logger) LogRemoteSessionIssuerCreate(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionIssuerCreateEvent) error {
 	action := ActionRemoteSessionIssuerCreate
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -44,21 +44,17 @@ func LogRemoteSessionIssuerCreate(ctx context.Context, dbtx repo.DBTX, event Log
 
 		Action: string(action),
 
-		SubjectID:          event.RemoteSessionIssuerID.String(),
+		SubjectID:          event.RemoteSessionIssuerURN.ID.String(),
 		SubjectType:        string(subjectTypeRemoteSessionIssuer),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.IssuerURL),
-		SubjectSlug:        conv.ToPGTextEmpty(event.RemoteSessionIssuerSlug),
+		SubjectSlug:        conv.ToPGTextEmpty(event.Slug),
 
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogRemoteSessionIssuerUpdateEvent struct {
@@ -69,15 +65,15 @@ type LogRemoteSessionIssuerUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RemoteSessionIssuerID   uuid.UUID //nolint:glint // TODO: introduce urn.RemoteSessionIssuer and migrate to RemoteSessionIssuerURN
-	RemoteSessionIssuerSlug string
-	IssuerURL               string
+	RemoteSessionIssuerURN urn.RemoteSessionIssuer
+	Slug                   string
+	IssuerURL              string
 
 	SnapshotBefore *types.RemoteSessionIssuer
 	SnapshotAfter  *types.RemoteSessionIssuer
 }
 
-func LogRemoteSessionIssuerUpdate(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionIssuerUpdateEvent) error {
+func (l *Logger) LogRemoteSessionIssuerUpdate(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionIssuerUpdateEvent) error {
 	action := ActionRemoteSessionIssuerUpdate
 
 	beforeSnapshot, err := marshalAuditPayload(event.SnapshotBefore)
@@ -101,21 +97,17 @@ func LogRemoteSessionIssuerUpdate(ctx context.Context, dbtx repo.DBTX, event Log
 
 		Action: string(action),
 
-		SubjectID:          event.RemoteSessionIssuerID.String(),
+		SubjectID:          event.RemoteSessionIssuerURN.ID.String(),
 		SubjectType:        string(subjectTypeRemoteSessionIssuer),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.IssuerURL),
-		SubjectSlug:        conv.ToPGTextEmpty(event.RemoteSessionIssuerSlug),
+		SubjectSlug:        conv.ToPGTextEmpty(event.Slug),
 
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogRemoteSessionIssuerDeleteEvent struct {
@@ -126,12 +118,12 @@ type LogRemoteSessionIssuerDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RemoteSessionIssuerID   uuid.UUID //nolint:glint // TODO: introduce urn.RemoteSessionIssuer and migrate to RemoteSessionIssuerURN
-	RemoteSessionIssuerSlug string
-	IssuerURL               string
+	RemoteSessionIssuerURN urn.RemoteSessionIssuer
+	Slug                   string
+	IssuerURL              string
 }
 
-func LogRemoteSessionIssuerDelete(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionIssuerDeleteEvent) error {
+func (l *Logger) LogRemoteSessionIssuerDelete(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionIssuerDeleteEvent) error {
 	action := ActionRemoteSessionIssuerDelete
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -144,19 +136,15 @@ func LogRemoteSessionIssuerDelete(ctx context.Context, dbtx repo.DBTX, event Log
 
 		Action: string(action),
 
-		SubjectID:          event.RemoteSessionIssuerID.String(),
+		SubjectID:          event.RemoteSessionIssuerURN.ID.String(),
 		SubjectType:        string(subjectTypeRemoteSessionIssuer),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.IssuerURL),
-		SubjectSlug:        conv.ToPGTextEmpty(event.RemoteSessionIssuerSlug),
+		SubjectSlug:        conv.ToPGTextEmpty(event.Slug),
 
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
