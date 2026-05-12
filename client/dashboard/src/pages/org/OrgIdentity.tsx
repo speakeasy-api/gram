@@ -8,15 +8,19 @@ import {
 } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
+import { useSessionData } from "@/contexts/Auth";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { Button } from "@speakeasy-api/moonshine";
 import { FolderSync, Lock } from "lucide-react";
 import { useRef, useState } from "react";
 
 const CONTACT_SALES_URL = "https://www.speakeasy.com/book-demo";
-const UPSELL_COPY =
-  "SAML SSO is only available on Enterprise plans. Upgrade to get started.";
+const UPSELL_COPY = "Contact our team to setup SSO and Directory Sync";
+
+type IdentitySectionId = "sso" | "directory_sync";
 
 type IdentityCardProps = {
+  sectionId: IdentitySectionId;
   heading: string;
   description: string;
   providerIcon: React.ReactNode;
@@ -27,9 +31,26 @@ type IdentityCardProps = {
   children?: React.ReactNode;
 };
 
-function ConfigureButton() {
+function useIdentityInterestCapture(sectionId: IdentitySectionId) {
+  const telemetry = useTelemetry();
+  const { session } = useSessionData();
+
+  return (action: "configure_clicked" | "contact_sales_clicked") => {
+    telemetry.capture("identity_provider_interest", {
+      section: sectionId,
+      action,
+      email: session?.user.email ?? "",
+      organization_id: session?.organization?.id ?? "",
+      organization_name: session?.organization?.name ?? "",
+      organization_slug: session?.organization?.slug ?? "",
+    });
+  };
+}
+
+function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
   const [open, setOpen] = useState(false);
   const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const captureInterest = useIdentityInterestCapture(sectionId);
 
   const show = () => {
     if (hideTimeout.current) clearTimeout(hideTimeout.current);
@@ -53,7 +74,10 @@ function ConfigureButton() {
           onMouseLeave={scheduleHide}
           onFocus={show}
           onBlur={scheduleHide}
-          onClick={(e) => e.preventDefault()}
+          onClick={(e) => {
+            e.preventDefault();
+            captureInterest("configure_clicked");
+          }}
         >
           Configure
         </Button>
@@ -74,6 +98,7 @@ function ConfigureButton() {
               href={CONTACT_SALES_URL}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => captureInterest("contact_sales_clicked")}
             >
               Contact sales
             </a>
@@ -85,6 +110,7 @@ function ConfigureButton() {
 }
 
 function IdentitySection({
+  sectionId,
   heading,
   description,
   providerIcon,
@@ -116,7 +142,7 @@ function IdentitySection({
                 {providerSubtitle}
               </Type>
             </div>
-            <ConfigureButton />
+            <ConfigureButton sectionId={sectionId} />
           </div>
           {children}
         </div>
@@ -168,21 +194,23 @@ export default function OrgIdentity() {
 function OrgIdentityInner() {
   return (
     <div className="flex flex-col gap-6">
-      <Heading variant="h4">Security</Heading>
+      <Heading variant="h4">Identity</Heading>
       <div className="flex flex-col gap-6">
         <IdentitySection
-          heading="SAML Single Sign-On"
-          description="Set up SAML Single Sign-On (SSO) to allow your team to sign in to Speakeasy with your identity provider."
+          sectionId="sso"
+          heading="Single Sign-On"
+          description="Set up Single Sign-On (SSO) to allow your team to sign in to Speakeasy with your identity provider."
           providerIcon={<Lock className="text-muted-foreground h-5 w-5" />}
-          providerTitle="SAML"
+          providerTitle="SSO"
           providerSubtitle="Choose an identity provider to get started."
-          learnMoreText="Learn more about SAML SSO"
+          learnMoreText="Learn more about SSO"
           learnMoreHref="https://www.speakeasy.com/docs"
         >
           <RequireSsoRow />
         </IdentitySection>
 
         <IdentitySection
+          sectionId="directory_sync"
           heading="Directory Sync"
           description="Automatically provision and deprovision users from your identity provider."
           providerIcon={
