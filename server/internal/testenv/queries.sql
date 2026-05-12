@@ -42,3 +42,28 @@ FROM risk_results
 WHERE project_id = @project_id
   AND risk_policy_id = @risk_policy_id
 ORDER BY id;
+
+-- name: GetOutboxEntry :one
+-- Returns the ID of an outbox row; errors with pgx.ErrNoRows if deleted.
+SELECT id FROM outbox WHERE id = @id;
+
+-- name: GetOutboxRelayState :one
+-- Reads the relay tracking state for a single outbox row.
+SELECT
+    outbox_id,
+    processed_at,
+    noop,
+    dead_lettered,
+    svix_message_id,
+    attempts,
+    last_error
+FROM outbox_relays
+WHERE outbox_id = @outbox_id;
+
+-- name: SetOrgWebhookConfig :exec
+-- Sets the Svix app ID and webhooks_enabled flag on an organization.
+UPDATE organization_metadata
+SET svix_app_id = @svix_app_id,
+    webhooks_enabled = @webhooks_enabled,
+    updated_at = clock_timestamp()
+WHERE id = @organization_id;

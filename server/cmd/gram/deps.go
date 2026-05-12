@@ -26,6 +26,7 @@ import (
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 	"github.com/superfly/fly-go/tokens"
+	svix "github.com/svix/svix-webhooks/go"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"github.com/workos/workos-go/v6/pkg/webhooks"
@@ -59,6 +60,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	sv "github.com/speakeasy-api/gram/server/internal/thirdparty/svix"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -745,4 +747,40 @@ func newTriggersApp(
 
 func newAuditLogger() *audit.Logger {
 	return audit.NewLogger()
+}
+
+func newSvixClient(c *cli.Context, logger *slog.Logger, guardianPolicy *guardian.Policy) (*svix.Svix, func(context.Context) error, error) {
+	var svixAPIURL *url.URL
+	shutdownFunc := func(context.Context) error { return nil }
+	hasAPIKey := c.String("svix-api-key") != "" && c.String("svix-api-key") != "unset"
+	if c.String("environment") == "local" && !hasAPIKey {
+		logger.InfoContext(c.Context, "no svix api key provided in local environment, using stub svix server")
+		svixServer := sv.NewStubServer(logger)
+		u, err := url.Parse(svixServer.URL)
+		if err != nil {
+			return nil, nil, fmt.Errorf("parse svix stub server url: %w", err)
+		}
+
+		svixAPIURL = u
+		shutdownFunc = func(ctx context.Context) error {
+			svixServer.Close()
+			return nil
+		}
+	}
+
+	svixClient, err := svix.New(
+		c.String("svix-api-key"),
+		&svix.SvixOptions{
+			HTTPClient:       guardianPolicy.PooledClient(),
+			Debug:            false,
+			ServerUrl:        svixAPIURL,
+			TransportWrapper: nil,
+			RetrySchedule:    nil,
+		},
+	)
+	if err != nil {
+		return nil, shutdownFunc, fmt.Errorf("create svix client: %w", err)
+	}
+
+	return svixClient, shutdownFunc, nil
 }

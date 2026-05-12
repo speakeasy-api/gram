@@ -310,6 +310,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, functionsFlags...)
 	flags = append(flags, pulseMCPFlags...)
 	flags = append(flags, assistantRuntimeFlags...)
+	flags = append(flags, svixFlags...)
 
 	return &cli.Command{
 		Name:  "worker",
@@ -449,6 +450,14 @@ func newWorkerCommand() *cli.Command {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
 				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker)
+			}
+
+			svixClient, shutdown, err := newSvixClient(c, logger, guardianPolicy)
+			if shutdown != nil {
+				shutdownFuncs = append(shutdownFuncs, shutdown)
+			}
+			if err != nil {
+				return fmt.Errorf("failed to create svix webhook sender: %w", err)
 			}
 
 			tigrisStore, shutdown, err := newTigrisStore(ctx, c, logger)
@@ -667,6 +676,8 @@ func newWorkerCommand() *cli.Command {
 				ShadowMCPClient:     shadowMCPClient,
 				AuditLogger:         auditLogger,
 				WorkOSClient:        backgroundWorkOSClient,
+				SvixClient:          svixClient,
+				ProductFeatures:     productFeatures,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())
