@@ -30393,9 +30393,11 @@ components:
     PublishPluginsRequestBody:
       type: object
       properties:
-        github_username:
-          type: string
-          description: GitHub username to add as a collaborator on the repo.
+        github_usernames:
+          type: array
+          items:
+            type: string
+          description: GitHub usernames to add as collaborators on the repo.
     PublishPluginsResult:
       type: object
       properties:

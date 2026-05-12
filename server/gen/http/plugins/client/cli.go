@@ -503,7 +503,7 @@ func BuildPublishPluginsPayload(pluginsPublishPluginsBody string, pluginsPublish
 	{
 		err = json.Unmarshal([]byte(pluginsPublishPluginsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"github_username\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"github_usernames\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -518,8 +518,12 @@ func BuildPublishPluginsPayload(pluginsPublishPluginsBody string, pluginsPublish
 			projectSlugInput = &pluginsPublishPluginsProjectSlugInput
 		}
 	}
-	v := &plugins.PublishPluginsPayload{
-		GithubUsername: body.GithubUsername,
+	v := &plugins.PublishPluginsPayload{}
+	if body.GithubUsernames != nil {
+		v.GithubUsernames = make([]string, len(body.GithubUsernames))
+		for i, val := range body.GithubUsernames {
+			v.GithubUsernames[i] = val
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

@@ -166,11 +166,11 @@ export default function Plugins() {
   // effective and satisfies react-hooks/exhaustive-deps.
   const { mutate: publishMutate } = publishMutation;
   const handlePublish = useCallback(
-    (githubUsername?: string) => {
+    (githubUsernames: string[]) => {
       publishMutate({
         security: { sessionHeaderGramSession: "" },
         request: {
-          publishPluginsRequestBody: { githubUsername },
+          publishPluginsRequestBody: { githubUsernames },
         },
       });
     },

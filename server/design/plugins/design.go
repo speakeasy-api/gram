@@ -369,7 +369,7 @@ var _ = Service("plugins", func() {
 		Description("Generate and publish all plugin packages to a GitHub repository.")
 
 		Payload(func() {
-			Attribute("github_username", String, "GitHub username to add as a collaborator on the repo.")
+			Attribute("github_usernames", ArrayOf(String), "GitHub usernames to add as collaborators on the repo.")
 			security.SessionPayload()
 			security.ProjectPayload()
 		})

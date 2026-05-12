@@ -7,14 +7,14 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type PublishPluginsRequestBody = {
   /**
-   * GitHub username to add as a collaborator on the repo.
+   * GitHub usernames to add as collaborators on the repo.
    */
-  githubUsername?: string | undefined;
+  githubUsernames?: Array<string> | undefined;
 };
 
 /** @internal */
 export type PublishPluginsRequestBody$Outbound = {
-  github_username?: string | undefined;
+  github_usernames?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -23,11 +23,11 @@ export const PublishPluginsRequestBody$outboundSchema: z.ZodMiniType<
   PublishPluginsRequestBody
 > = z.pipe(
   z.object({
-    githubUsername: z.optional(z.string()),
+    githubUsernames: z.optional(z.array(z.string())),
   }),
   z.transform((v) => {
     return remap$(v, {
-      githubUsername: "github_username",
+      githubUsernames: "github_usernames",
     });
   }),
 );

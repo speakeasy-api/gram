@@ -68,8 +68,8 @@ type SetPluginAssignmentsRequestBody struct {
 // PublishPluginsRequestBody is the type of the "plugins" service
 // "publishPlugins" endpoint HTTP request body.
 type PublishPluginsRequestBody struct {
-	// GitHub username to add as a collaborator on the repo.
-	GithubUsername *string `form:"github_username,omitempty" json:"github_username,omitempty" xml:"github_username,omitempty"`
+	// GitHub usernames to add as collaborators on the repo.
+	GithubUsernames []string `form:"github_usernames,omitempty" json:"github_usernames,omitempty" xml:"github_usernames,omitempty"`
 }
 
 // ListPluginsResponseBody is the type of the "plugins" service "listPlugins"
@@ -2939,8 +2939,12 @@ func NewSetPluginAssignmentsRequestBody(p *plugins.SetPluginAssignmentsPayload) 
 // NewPublishPluginsRequestBody builds the HTTP request body from the payload
 // of the "publishPlugins" endpoint of the "plugins" service.
 func NewPublishPluginsRequestBody(p *plugins.PublishPluginsPayload) *PublishPluginsRequestBody {
-	body := &PublishPluginsRequestBody{
-		GithubUsername: p.GithubUsername,
+	body := &PublishPluginsRequestBody{}
+	if p.GithubUsernames != nil {
+		body.GithubUsernames = make([]string, len(p.GithubUsernames))
+		for i, val := range p.GithubUsernames {
+			body.GithubUsernames[i] = val
+		}
 	}
 	return body
 }

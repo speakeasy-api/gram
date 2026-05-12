@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: e869f8f4531f74268e4d093c609c5022
+  docChecksum: 5a74c9c6665e3991d92878182989ff74
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -639,7 +639,7 @@ trackedFiles:
   docs/models/components/publishpackageresult.md:
     last_write_checksum: sha1:b06c211b183e9238064e6093bba7a2a5aadaf47b
   docs/models/components/publishpluginsrequestbody.md:
-    last_write_checksum: sha1:604fb8d2479841ad2ba03507353d25f3bc7f900e
+    last_write_checksum: sha1:208d24eef623a47d472e9104232f822cd9e5a8b5
   docs/models/components/publishpluginsresult.md:
     last_write_checksum: sha1:e7d96379e1856c7f1f3b504e849ce68f7a297c60
   docs/models/components/publishstatusresult.md:
@@ -2473,7 +2473,7 @@ trackedFiles:
   docs/sdks/usersessionconsents/README.md:
     last_write_checksum: sha1:4144900562aa2b66f29c91127d65ed467f73b4f1
   docs/sdks/usersessionissuers/README.md:
-    last_write_checksum: sha1:415dc3bce3245319c634dd1b69723039174bcacf
+    last_write_checksum: sha1:4ca2034c1acb2aa7c33a24577879001ddec510e3
   docs/sdks/usersessions/README.md:
     last_write_checksum: sha1:b3b214708bb706388c86220ae79df1f642ed6897
   docs/sdks/variations/README.md:
@@ -3939,7 +3939,7 @@ trackedFiles:
     last_write_checksum: sha1:29ee63335536c762cbfea53df8e14d897e1fd05f
     pristine_git_object: 5925d0851ae96e98d6ba713ec38281447c64f5f4
   src/models/components/publishpluginsrequestbody.ts:
-    last_write_checksum: sha1:af17c71b1ecfe7899348d91f1aa4a99495756438
+    last_write_checksum: sha1:4e5822b97bc3be501eb95b56d5103e1d2e806b62
   src/models/components/publishpluginsresult.ts:
     last_write_checksum: sha1:c5a315b9000dc53a5068f7b7ffd57eec889fa732
   src/models/components/publishstatusresult.ts:
@@ -8711,6 +8711,114 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listChallengeBuckets:
+    speakeasy-default-list-challenge-buckets:
+      parameters:
+        query:
+          limit: 50
+          offset: 0
+      responses:
+        "200":
+          application/json: {"buckets": [], "total": 676209}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listChallenges:
+    speakeasy-default-list-challenges:
+      parameters:
+        query:
+          limit: 50
+          offset: 0
+      responses:
+        "200":
+          application/json: {"challenges": [], "total": 916893}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  resolveChallenge:
+    speakeasy-default-resolve-challenge:
+      requestBody:
+        application/json: {"challenge_ids": ["<value 1>"], "principal_urn": "<value>", "resolution_type": "role_assigned", "scope": "<value>"}
+      responses:
+        "201":
+          application/json: {"resolutions": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  deleteAssistantMemory:
+    speakeasy-default-delete-assistant-memory:
+      parameters:
+        query:
+          id: "beb39ec7-32f7-4d96-955e-bdc94a92a67a"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getAssistantMemory:
+    speakeasy-default-get-assistant-memory:
+      parameters:
+        query:
+          id: "d55875b5-a05d-421d-b77d-3b55c98f9193"
+      responses:
+        "200":
+          application/json: {"assistant_id": "8e7a32d4-20e7-4630-88da-9abcb4fe6c49", "content": "<value>", "created_at": "2026-06-19T12:39:40.541Z", "id": "7097ac5a-6b76-4bfc-a55e-a561c25b796a", "last_access": "2026-05-20T02:25:53.359Z", "tags": [], "updated_at": "2026-12-11T15:08:53.922Z", "valid_at": "2024-05-04T05:23:32.003Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listAssistantMemories:
+    speakeasy-default-list-assistant-memories:
+      parameters:
+        query:
+          assistant_id: "56bcc863-cc81-4d15-92ee-28eb89e8930f"
+          include_deleted: false
+          limit: 50
+      responses:
+        "200":
+          application/json: {"memories": [{"assistant_id": "179cf92d-c664-401f-bf81-60a9b0fa1070", "content": "<value>", "created_at": "2024-05-04T16:02:06.921Z", "id": "4b9b2c66-e854-4026-bc43-bfdd6c7d7b7a", "last_access": "2025-08-21T16:30:32.756Z", "tags": ["<value 1>", "<value 2>"], "updated_at": "2026-03-30T06:00:30.258Z", "valid_at": "2025-09-03T06:37:39.859Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  cloneEnvironment:
+    speakeasy-default-clone-environment:
+      parameters:
+        query:
+          slug: "<value>"
+      requestBody:
+        application/json: {"new_name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-10-20T20:04:05.659Z", "entries": [{"created_at": "2025-01-06T15:50:05.639Z", "name": "<value>", "updated_at": "2026-06-15T19:26:29.483Z", "value": "<value>", "value_hash": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2026-12-23T01:37:04.789Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  receiveWorkOSWebhook: {}
+  verifyRemoteMcpURL:
+    speakeasy-default-verify-remote-mcp-URL:
+      requestBody:
+        application/json: {"transport_type": "<value>", "url": "https://carefree-governance.com/"}
+      responses:
+        "200":
+          application/json: {"message": "<value>", "verified": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  createTopUpCheckout:
+    speakeasy-default-create-top-up-checkout:
+      responses:
+        "200":
+          application/json: "<value>"
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getUserSessionClient:
     speakeasy-default-get-user-session-client:
       parameters:
@@ -8762,10 +8870,10 @@ examples:
   createUserSessionIssuer:
     speakeasy-default-create-user-session-issuer:
       requestBody:
-        application/json: {"authn_challenge_mode": "chain", "session_duration_hours": 258583, "slug": "<value>"}
+        application/json: {"authn_challenge_mode": "chain", "session_duration_hours": 781659, "slug": "<value>"}
       responses:
         "200":
-          application/json: {"authn_challenge_mode": "<value>", "created_at": "2026-05-06T16:44:45.182Z", "id": "797212a9-f79f-4e5b-a48c-819febc81785", "project_id": "66111c8e-2ed9-4cca-b7b3-430333d4acfa", "session_duration_hours": 781659, "slug": "<value>", "updated_at": "2024-05-08T22:40:59.273Z"}
+          application/json: {"authn_challenge_mode": "<value>", "created_at": "2025-05-29T23:01:32.237Z", "id": "97212a9f-79fe-45b4-98c8-19febc817858", "project_id": "6111c8e2-ed9c-4ca7-8b34-30333d4acfad", "session_duration_hours": 80015, "slug": "<value>", "updated_at": "2024-11-04T03:29:29.080Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8784,7 +8892,7 @@ examples:
     speakeasy-default-get-user-session-issuer:
       responses:
         "200":
-          application/json: {"authn_challenge_mode": "<value>", "created_at": "2024-12-02T02:00:23.894Z", "id": "1eed0621-72c9-4036-8a06-daa8a040be48", "project_id": "57ff9343-9875-4960-9ee5-7e4aa2e06a70", "session_duration_hours": 306645, "slug": "<value>", "updated_at": "2024-09-04T07:39:59.919Z"}
+          application/json: {"authn_challenge_mode": "<value>", "created_at": "2024-12-02T02:00:23.894Z", "id": "1eed0621-72c9-4036-8a06-daa8a040be48", "project_id": "57ff9343-9875-4960-9ee5-7e4aa2e06a70", "session_duration_hours": 225656, "slug": "<value>", "updated_at": "2024-05-16T13:18:14.737Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8804,7 +8912,7 @@ examples:
         application/json: {"id": "dad21314-e682-4be0-b8cf-097f268dafb1"}
       responses:
         "200":
-          application/json: {"authn_challenge_mode": "<value>", "created_at": "2024-11-25T09:16:20.983Z", "id": "ae2557ad-d034-4496-9cc1-323f5e93e0d3", "project_id": "c159fbc4-0e4f-4bee-a37b-46aba130899e", "session_duration_hours": 862271, "slug": "<value>", "updated_at": "2025-12-18T09:38:54.035Z"}
+          application/json: {"authn_challenge_mode": "<value>", "created_at": "2024-11-25T09:16:20.983Z", "id": "ae2557ad-d034-4496-9cc1-323f5e93e0d3", "project_id": "c159fbc4-0e4f-4bee-a37b-46aba130899e", "session_duration_hours": 654564, "slug": "<value>", "updated_at": "2025-06-11T18:23:27.676Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8827,114 +8935,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  listChallenges:
-    speakeasy-default-list-challenges:
-      parameters:
-        query:
-          limit: 50
-          offset: 0
-      responses:
-        "200":
-          application/json: {"challenges": [], "total": 916893}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  resolveChallenge:
-    speakeasy-default-resolve-challenge:
-      requestBody:
-        application/json: {"challenge_ids": ["<value 1>"], "principal_urn": "<value>", "resolution_type": "role_assigned", "scope": "<value>"}
-      responses:
-        "201":
-          application/json: {"resolutions": []}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  createTopUpCheckout:
-    speakeasy-default-create-top-up-checkout:
-      responses:
-        "200":
-          application/json: "<value>"
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  cloneEnvironment:
-    speakeasy-default-clone-environment:
-      parameters:
-        query:
-          slug: "<value>"
-      requestBody:
-        application/json: {"new_name": "<value>"}
-      responses:
-        "200":
-          application/json: {"created_at": "2025-10-20T20:04:05.659Z", "entries": [{"created_at": "2025-01-06T15:50:05.639Z", "name": "<value>", "updated_at": "2026-06-15T19:26:29.483Z", "value": "<value>", "value_hash": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2026-12-23T01:37:04.789Z"}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  verifyRemoteMcpURL:
-    speakeasy-default-verify-remote-mcp-URL:
-      requestBody:
-        application/json: {"transport_type": "<value>", "url": "https://carefree-governance.com/"}
-      responses:
-        "200":
-          application/json: {"message": "<value>", "verified": true}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  receiveWorkOSWebhook: {}
-  deleteAssistantMemory:
-    speakeasy-default-delete-assistant-memory:
-      parameters:
-        query:
-          id: "beb39ec7-32f7-4d96-955e-bdc94a92a67a"
-      responses:
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  getAssistantMemory:
-    speakeasy-default-get-assistant-memory:
-      parameters:
-        query:
-          id: "d55875b5-a05d-421d-b77d-3b55c98f9193"
-      responses:
-        "200":
-          application/json: {"assistant_id": "8e7a32d4-20e7-4630-88da-9abcb4fe6c49", "content": "<value>", "created_at": "2026-06-19T12:39:40.541Z", "id": "7097ac5a-6b76-4bfc-a55e-a561c25b796a", "last_access": "2026-05-20T02:25:53.359Z", "tags": [], "updated_at": "2026-12-11T15:08:53.922Z", "valid_at": "2024-05-04T05:23:32.003Z"}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  listAssistantMemories:
-    speakeasy-default-list-assistant-memories:
-      parameters:
-        query:
-          assistant_id: "56bcc863-cc81-4d15-92ee-28eb89e8930f"
-          include_deleted: false
-          limit: 50
-      responses:
-        "200":
-          application/json: {"memories": [{"assistant_id": "179cf92d-c664-401f-bf81-60a9b0fa1070", "content": "<value>", "created_at": "2024-05-04T16:02:06.921Z", "id": "4b9b2c66-e854-4026-bc43-bfdd6c7d7b7a", "last_access": "2025-08-21T16:30:32.756Z", "tags": ["<value 1>", "<value 2>"], "updated_at": "2026-03-30T06:00:30.258Z", "valid_at": "2025-09-03T06:37:39.859Z"}]}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  listChallengeBuckets:
-    speakeasy-default-list-challenge-buckets:
-      parameters:
-        query:
-          limit: 50
-          offset: 0
-      responses:
-        "200":
-          application/json: {"buckets": [], "total": 676209}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   hooks#codex:
     speakeasy-default-hooks#codex:
       requestBody:
