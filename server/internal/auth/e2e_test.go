@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/users"
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -43,6 +44,10 @@ func (m *mockWorkOSFetcher) GetOrganization(_ context.Context, orgID string) (*w
 		return org, nil
 	}
 	return nil, &workos.APIError{StatusCode: 404, Body: "not found"}
+}
+
+func (m *mockWorkOSFetcher) EnsureUserExternalID(_ context.Context, _, _ string) error {
+	return nil
 }
 
 // --- test setup that wires a WorkOSMembershipFetcher into the session manager ---
@@ -78,7 +83,7 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	var wf sessions.WorkOSMembershipFetcher
+	var wf sessions.WorkOSClient
 	if fetcher != nil {
 		wf = fetcher
 	}
@@ -509,7 +514,7 @@ func TestE2E_Callback_ThenInfo(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, infoResult)
 
-	assert.Equal(t, workosUserID, infoResult.UserID)
+	assert.Equal(t, users.UserIDFromWorkOSID(workosUserID), infoResult.UserID)
 	assert.Equal(t, "info@infocorp.com", infoResult.UserEmail)
 	assert.Equal(t, workosOrgID, infoResult.ActiveOrganizationID)
 	require.Len(t, infoResult.Organizations, 1)
@@ -725,7 +730,7 @@ func TestE2E_Register_ZeroOrgUserCreatesOrg(t *testing.T) {
 	infoResult, err := inst.service.Info(ctx, &gen.InfoPayload{})
 	require.NoError(t, err)
 	require.NotNil(t, infoResult)
-	assert.Equal(t, workosUserID, infoResult.UserID)
+	assert.Equal(t, users.UserIDFromWorkOSID(workosUserID), infoResult.UserID)
 	require.Len(t, infoResult.Organizations, 1)
 	assert.Equal(t, "My New Org", infoResult.Organizations[0].Name)
 	assert.Equal(t, "my-new-org", infoResult.Organizations[0].Slug)

@@ -141,6 +141,7 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 			"profile_picture_url": pgTextOrEmpty(user.PhotoUrl),
 			"created_at":          user.CreatedAt.UTC().Format(time.RFC3339),
 			"updated_at":          user.UpdatedAt.UTC().Format(time.RFC3339),
+			"external_id":         "",
 		},
 		"access_token":  mockJWT(sessionID),
 		"refresh_token": randomToken(),

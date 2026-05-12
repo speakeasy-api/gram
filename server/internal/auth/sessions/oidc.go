@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/users"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"go.opentelemetry.io/otel/codes"
 )
@@ -26,6 +27,7 @@ type IDPUserInfo struct {
 	Email           string  `json:"email"`
 	Name            string  `json:"name"`
 	Picture         *string `json:"picture,omitempty"`
+	ExternalID      string  `json:"-"`
 	WorkOSSessionID string  `json:"-"`
 }
 
@@ -64,6 +66,7 @@ func (s *Manager) ExchangeCodeForTokens(ctx context.Context, code string) (_ *ID
 		Email:           resp.User.Email,
 		Name:            name,
 		Picture:         picture,
+		ExternalID:      resp.User.ExternalID,
 		WorkOSSessionID: extractSessionIDFromJWT(resp.AccessToken),
 	}, nil
 }
@@ -92,22 +95,19 @@ func extractSessionIDFromJWT(token string) string {
 // UpsertUserFromIDP upserts a user record from OIDC identity claims and
 // returns the user ID. Captures a PostHog event for first-time signups.
 //
-// The IDP (WorkOS) returns its own user ID (e.g. "user_01ABC..."), but Gram's
-// users table may already contain a row for the same email with a UUID-format
-// primary key (from the legacy Speakeasy IDP). To avoid a unique-constraint
-// violation on the email column, we look up by email first and reuse the
-// existing Gram user ID when one exists.
+// User ID resolution follows a three-step priority:
+//  1. If WorkOS already has an external_id for this user (set by Registry or a
+//     previous login), use that — it's the canonical cross-system ID.
+//  2. If a Gram user with this email already exists, reuse their existing ID
+//     so we don't create duplicates.
+//  3. Otherwise derive a deterministic UUIDv5 from the WorkOS user ID using
+//     the same namespace as the Speakeasy Registry so both systems arrive at
+//     the same ID independently.
+//
+// After resolving the ID, we sync bidirectionally: Gram stores the WorkOS user
+// ID, and WorkOS stores the Gram user ID as external_id.
 func (s *Manager) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) (string, error) {
-	// Determine the Gram user ID to use for the upsert. If a user with this
-	// email already exists, reuse their existing ID so the ON CONFLICT (id)
-	// clause matches and we UPDATE rather than trying a fresh INSERT that
-	// would violate the email unique constraint.
-	gramUserID := idpUser.Sub
-	admin := false
-	if existing, err := s.userRepo.GetUserByEmail(ctx, idpUser.Email); err == nil {
-		gramUserID = existing.ID
-		admin = existing.Admin
-	}
+	gramUserID, admin := s.resolveGramUserID(ctx, idpUser)
 
 	user, err := s.userRepo.UpsertUser(ctx, userRepo.UpsertUserParams{
 		ID:          gramUserID,
@@ -130,6 +130,18 @@ func (s *Manager) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) (
 		s.logger.ErrorContext(ctx, "failed to set workos_id on user", attr.SlogError(err))
 	}
 
+	// Write the Gram user ID back to WorkOS as external_id so it becomes the
+	// stable cross-system identifier. Non-fatal on failure.
+	if s.workosClient != nil {
+		if err := s.workosClient.EnsureUserExternalID(ctx, idpUser.Sub, gramUserID); err != nil {
+			s.logger.ErrorContext(ctx, "failed to sync external_id to workos",
+				attr.SlogError(err),
+				"workos_user_id", idpUser.Sub,
+				"gram_user_id", gramUserID,
+			)
+		}
+	}
+
 	if user.WasCreated {
 		if err := s.posthog.CaptureEvent(ctx, "is_first_time_user_signup", user.Email, map[string]any{
 			"email":        user.Email,
@@ -140,6 +152,28 @@ func (s *Manager) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) (
 	}
 
 	return user.ID, nil
+}
+
+// resolveGramUserID determines the Gram user ID to use for an IDP login.
+func (s *Manager) resolveGramUserID(ctx context.Context, idpUser *IDPUserInfo) (string, bool) {
+	// Priority 1: Existing Gram user by email — always reuse their ID.
+	// User IDs are immutable once created; this preserves legacy Speakeasy
+	// IDP UUIDs and any other previously-assigned IDs.
+	if existing, err := s.userRepo.GetUserByEmail(ctx, idpUser.Email); err == nil {
+		return existing.ID, existing.Admin
+	}
+
+	// Priority 2: WorkOS already has an external_id (set by Registry backfill
+	// or a previous login in another system). Use it for the new Gram user so
+	// the cross-system ID stays consistent.
+	if idpUser.ExternalID != "" {
+		return idpUser.ExternalID, false
+	}
+
+	// Priority 3: Brand-new user with no external_id — derive a deterministic
+	// UUIDv5 from the WorkOS user ID. Uses the same namespace as the Speakeasy
+	// Registry so both systems arrive at the same ID independently.
+	return users.UserIDFromWorkOSID(idpUser.Sub), false
 }
 
 // BuildUserInfoFromDB constructs a CachedUserInfo by querying user data and

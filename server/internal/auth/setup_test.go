@@ -71,6 +71,7 @@ type testInstance struct {
 type MockUserInfo struct {
 	UserID        string
 	Email         string
+	ExternalID    string // WorkOS external_id — simulates a backfilled user
 	Admin         bool
 	Organizations []MockOrganizationEntry
 }
@@ -100,6 +101,7 @@ func createMockWorkOSServer(userInfo *MockUserInfo) *httptest.Server {
 				"last_name":           "",
 				"email":               userInfo.Email,
 				"profile_picture_url": "",
+				"external_id":         userInfo.ExternalID,
 			},
 		}
 		_ = json.NewEncoder(w).Encode(resp)

@@ -165,7 +165,34 @@ func convertUser(u usermanagement.User) User {
 		LastName:          u.LastName,
 		Email:             u.Email,
 		ProfilePictureURL: u.ProfilePictureURL,
+		ExternalID:        u.ExternalID,
 	}
+}
+
+// EnsureUserExternalID sets the WorkOS user's external_id to gramUserID if it
+// is not already set. Returns an error if the existing external_id doesn't
+// match gramUserID (indicates a data inconsistency that needs investigation).
+func (wc *Client) EnsureUserExternalID(ctx context.Context, workosUserID, gramUserID string) error {
+	u, err := wc.um.GetUser(ctx, usermanagement.GetUserOpts{User: workosUserID})
+	if err != nil {
+		return fmt.Errorf("get workos user: %w", err)
+	}
+
+	if u.ExternalID == gramUserID {
+		return nil // already correct
+	}
+	if u.ExternalID != "" {
+		return fmt.Errorf("workos user %s external_id mismatch: got %q, want %q", workosUserID, u.ExternalID, gramUserID)
+	}
+
+	if _, err := wc.um.UpdateUser(ctx, usermanagement.UpdateUserOpts{
+		User:       workosUserID,
+		ExternalID: gramUserID,
+	}); err != nil {
+		return fmt.Errorf("set workos user external_id: %w", err)
+	}
+
+	return nil
 }
 
 func convertMember(m usermanagement.OrganizationMembership) Member {

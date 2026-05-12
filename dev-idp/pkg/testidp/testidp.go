@@ -96,6 +96,7 @@ type authenticateUser struct {
 	FirstName         string `json:"first_name"`
 	LastName          string `json:"last_name"`
 	ProfilePictureURL string `json:"profile_picture_url"`
+	ExternalID        string `json:"external_id"`
 }
 
 // handleAuthenticate implements the WorkOS /user_management/authenticate

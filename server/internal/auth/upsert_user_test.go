@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/users"
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -58,7 +59,7 @@ func TestUpsertUserFromIDP_ReusesExistingIDOnEmailMatch(t *testing.T) {
 	require.Equal(t, workosUserID, dbUser.WorkosID.String)
 }
 
-func TestUpsertUserFromIDP_NewUserGetsWorkOSID(t *testing.T) {
+func TestUpsertUserFromIDP_NewUserGetsDeterministicUUIDv5(t *testing.T) {
 	t.Parallel()
 
 	workosUserID := "user_01BRAND_NEW_USER"
@@ -77,13 +78,14 @@ func TestUpsertUserFromIDP_NewUserGetsWorkOSID(t *testing.T) {
 	returnedID, err := instance.sessionManager.UpsertUserFromIDP(ctx, idpUser)
 	require.NoError(t, err)
 
-	// New users should get the WorkOS ID as their primary key.
-	require.Equal(t, workosUserID, returnedID)
+	// New users get a deterministic UUIDv5 derived from the WorkOS user ID.
+	expectedID := users.UserIDFromWorkOSID(workosUserID)
+	require.Equal(t, expectedID, returnedID)
 
 	usersQueries := usersRepo.New(instance.conn)
-	dbUser, err := usersQueries.GetUser(ctx, workosUserID)
+	dbUser, err := usersQueries.GetUser(ctx, expectedID)
 	require.NoError(t, err)
-	require.Equal(t, workosUserID, dbUser.ID)
+	require.Equal(t, expectedID, dbUser.ID)
 	require.Equal(t, userInfo.Email, dbUser.Email)
 }
 

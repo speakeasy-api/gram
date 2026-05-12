@@ -23,11 +23,12 @@ import (
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-// WorkOSMembershipFetcher is the subset of workos.Client needed by the session
-// manager to resolve org memberships from WorkOS when the local DB has none.
-type WorkOSMembershipFetcher interface {
+// WorkOSClient is the subset of workos.Client needed by the session manager
+// for org membership resolution and cross-system user ID synchronization.
+type WorkOSClient interface {
 	ListUserMemberships(ctx context.Context, userID string) ([]workos.Member, error)
 	GetOrganization(ctx context.Context, orgID string) (*workos.Organization, error)
+	EnsureUserExternalID(ctx context.Context, workosUserID, gramUserID string) error
 }
 
 type Manager struct {
@@ -38,7 +39,7 @@ type Manager struct {
 	idpBaseURL    string
 	idpClientID   string
 	umClient      *usermanagement.Client
-	workosClient  WorkOSMembershipFetcher
+	workosClient  WorkOSClient
 	orgRepo       *orgRepo.Queries
 	userRepo      *userRepo.Queries
 	pylon         *pylon.Pylon
@@ -55,7 +56,7 @@ func NewManager(
 	idpBaseURL string,
 	idpClientID string,
 	umClient *usermanagement.Client,
-	workosClient WorkOSMembershipFetcher,
+	workosClient WorkOSClient,
 	pylon *pylon.Pylon,
 	posthog *posthog.Posthog,
 	billingRepo billing.Repository,
