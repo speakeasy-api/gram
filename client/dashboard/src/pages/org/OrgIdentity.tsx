@@ -1,31 +1,22 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Button } from "@speakeasy-api/moonshine";
 import { FolderSync, Lock } from "lucide-react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
-const CONTACT_SALES_URL = "https://www.speakeasy.com/book-demo";
 const UPSELL_COPY = "Contact our team to setup SSO and Directory Sync";
 
 type IdentitySectionId = "sso" | "directory_sync";
 
 type IdentityCardProps = {
   sectionId: IdentitySectionId;
-  openSectionId: IdentitySectionId | null;
-  setOpenSectionId: React.Dispatch<
-    React.SetStateAction<IdentitySectionId | null>
-  >;
   heading: string;
   description: string;
   providerIcon: React.ReactNode;
@@ -40,10 +31,10 @@ function useIdentityInterestCapture(sectionId: IdentitySectionId) {
   const telemetry = useTelemetry();
   const { session } = useSessionData();
 
-  return (action: "configure_clicked" | "contact_sales_clicked") => {
+  return () => {
     telemetry.capture("identity_provider_interest", {
       section: sectionId,
-      action,
+      action: "configure_clicked",
       email: session?.user.email ?? "",
       organization_id: session?.organization?.id ?? "",
       organization_name: session?.organization?.name ?? "",
@@ -52,92 +43,29 @@ function useIdentityInterestCapture(sectionId: IdentitySectionId) {
   };
 }
 
-function ConfigureButton({
-  sectionId,
-  openSectionId,
-  setOpenSectionId,
-}: {
-  sectionId: IdentitySectionId;
-  openSectionId: IdentitySectionId | null;
-  setOpenSectionId: React.Dispatch<
-    React.SetStateAction<IdentitySectionId | null>
-  >;
-}) {
-  const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
   const captureInterest = useIdentityInterestCapture(sectionId);
-  const open = openSectionId === sectionId;
-
-  const show = () => {
-    if (hideTimeout.current) clearTimeout(hideTimeout.current);
-    setOpenSectionId(sectionId);
-  };
-
-  const scheduleHide = () => {
-    if (hideTimeout.current) clearTimeout(hideTimeout.current);
-    hideTimeout.current = setTimeout(() => {
-      setOpenSectionId((prev) => (prev === sectionId ? null : prev));
-    }, 150);
-  };
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        if (!next && openSectionId === sectionId) setOpenSectionId(null);
-      }}
-    >
-      <PopoverTrigger asChild>
-        <Button
-          variant="secondary"
-          size="sm"
-          aria-disabled="true"
-          className="cursor-not-allowed opacity-60"
-          onMouseEnter={show}
-          onMouseLeave={scheduleHide}
-          onFocus={show}
-          onBlur={scheduleHide}
-          onClick={(e) => {
-            e.preventDefault();
-            captureInterest("configure_clicked");
-            toast.success(
-              "Our team has been contacted to enable SSO and Directory Sync",
-            );
-          }}
-        >
-          Configure
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        side="top"
-        align="end"
-        sideOffset={8}
-        className="w-72"
-        onMouseEnter={show}
-        onMouseLeave={scheduleHide}
-        onOpenAutoFocus={(e) => e.preventDefault()}
+    <SimpleTooltip tooltip={UPSELL_COPY}>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => {
+          captureInterest();
+          toast.success(
+            "Our team has been contacted to enable SSO and Directory Sync",
+          );
+        }}
       >
-        <div className="flex flex-col items-center gap-3 text-center">
-          <Type small>{UPSELL_COPY}</Type>
-          <Button variant="brand" size="sm" asChild>
-            <a
-              href={CONTACT_SALES_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => captureInterest("contact_sales_clicked")}
-            >
-              Talk To Us
-            </a>
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
+        Configure
+      </Button>
+    </SimpleTooltip>
   );
 }
 
 function IdentitySection({
   sectionId,
-  openSectionId,
-  setOpenSectionId,
   heading,
   description,
   providerIcon,
@@ -169,11 +97,7 @@ function IdentitySection({
                 {providerSubtitle}
               </Type>
             </div>
-            <ConfigureButton
-              sectionId={sectionId}
-              openSectionId={openSectionId}
-              setOpenSectionId={setOpenSectionId}
-            />
+            <ConfigureButton sectionId={sectionId} />
           </div>
           {children}
         </div>
@@ -223,18 +147,12 @@ export default function OrgIdentity() {
 }
 
 function OrgIdentityInner() {
-  const [openSectionId, setOpenSectionId] = useState<IdentitySectionId | null>(
-    null,
-  );
-
   return (
     <div className="flex flex-col gap-6">
       <Heading variant="h4">Identity</Heading>
       <div className="flex flex-col gap-6">
         <IdentitySection
           sectionId="sso"
-          openSectionId={openSectionId}
-          setOpenSectionId={setOpenSectionId}
           heading="Single Sign-On"
           description="Set up Single Sign-On (SSO) to allow your team to sign in to Speakeasy with your identity provider."
           providerIcon={<Lock className="text-muted-foreground h-5 w-5" />}
@@ -248,8 +166,6 @@ function OrgIdentityInner() {
 
         <IdentitySection
           sectionId="directory_sync"
-          openSectionId={openSectionId}
-          setOpenSectionId={setOpenSectionId}
           heading="Directory Sync"
           description="Automatically provision and deprovision users from your identity provider."
           providerIcon={
