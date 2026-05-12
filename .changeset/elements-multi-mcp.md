@@ -2,4 +2,4 @@
 "@gram-ai/elements": minor
 ---
 
-`mcp` config now accepts an array of MCP servers in addition to a single URL. Tools from multiple servers are merged and namespaced as `<name>__<tool>` so identical tool names from different servers don't collide. Each entry can carry its own `gramEnvironment` to override the top-level value.
+Add an `mcps` config option that connects a single chat to multiple MCP servers. Tools across servers are merged and namespaced as `<name>__<tool>` so identical names don't collide; each entry can pin its own `environment` slug. When set, `mcps` takes precedence over the existing single-server `mcp` option, which continues to work unchanged.

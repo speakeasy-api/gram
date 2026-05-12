@@ -1,5 +1,5 @@
 import { assert } from "@/lib/utils";
-import type { MCPConfig, MCPServerEntry } from "@/types";
+import type { MCPServerEntry } from "@/types";
 import { ToolsFilter } from "@/types";
 import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
@@ -13,18 +13,20 @@ type MCPToolsResult = Awaited<
 interface NormalizedServer {
   url: string;
   name: string;
-  gramEnvironment: string | undefined;
+  environment: string | undefined;
 }
 
 export function useMCPTools({
   auth,
   mcp,
+  mcps,
   environment,
   toolsToInclude,
   gramEnvironment,
 }: {
   auth: Auth;
-  mcp: MCPConfig | undefined;
+  mcp: string | undefined;
+  mcps: MCPServerEntry[] | undefined;
   environment: Record<string, unknown>;
   toolsToInclude?: ToolsFilter;
   gramEnvironment?: string;
@@ -32,8 +34,8 @@ export function useMCPTools({
   mcpHeaders: Record<string, string>;
 } {
   const servers = useMemo(
-    () => normalizeServers(mcp, gramEnvironment),
-    [mcp, gramEnvironment],
+    () => normalizeServers(mcp, mcps, gramEnvironment),
+    [mcp, mcps, gramEnvironment],
   );
 
   const envQueryKey = Object.entries(environment ?? {}).map(
@@ -43,7 +45,7 @@ export function useMCPTools({
     ([k, v]) => `${k}:${v}`,
   );
   const serversQueryKey = servers.map(
-    (s) => `${s.url}|${s.name}|${s.gramEnvironment ?? ""}`,
+    (s) => `${s.url}|${s.name}|${s.environment ?? ""}`,
   );
 
   // Each MCP transport stores a direct reference to its headers object and
@@ -87,8 +89,8 @@ export function useMCPTools({
         headers: {
           ...envHeaders,
           ...authHeaders,
-          ...(server.gramEnvironment && {
-            "Gram-Environment": server.gramEnvironment,
+          ...(server.environment && {
+            "Gram-Environment": server.environment,
           }),
         } satisfies Record<string, string>,
       }));
@@ -146,28 +148,21 @@ export function useMCPTools({
 }
 
 function normalizeServers(
-  mcp: MCPConfig | undefined,
+  mcp: string | undefined,
+  mcps: MCPServerEntry[] | undefined,
   fallbackEnv: string | undefined,
 ): NormalizedServer[] {
-  if (!mcp) return [];
-  const entries: Array<string | MCPServerEntry> = Array.isArray(mcp)
-    ? mcp
-    : [mcp];
-
-  return entries.map((entry) => {
-    if (typeof entry === "string") {
-      return {
-        url: entry,
-        name: deriveNameFromUrl(entry),
-        gramEnvironment: fallbackEnv,
-      };
-    }
-    return {
+  if (mcps && mcps.length > 0) {
+    return mcps.map((entry) => ({
       url: entry.url,
       name: entry.name ?? deriveNameFromUrl(entry.url),
-      gramEnvironment: entry.gramEnvironment ?? fallbackEnv,
-    };
-  });
+      environment: entry.environment,
+    }));
+  }
+  if (mcp) {
+    return [{ url: mcp, name: "Unknown", environment: fallbackEnv }];
+  }
+  return [];
 }
 
 function deriveNameFromUrl(url: string): string {

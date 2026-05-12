@@ -108,7 +108,7 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
   const onboarding = useOnboardingTools();
 
   const { data: toolsetsData } = useListToolsets();
-  const mcpServers = useMemo<MCPServerEntry[] | undefined>(() => {
+  const mcps = useMemo<MCPServerEntry[] | undefined>(() => {
     const refs = draft.assistant?.toolsets;
     if (!refs?.length) return undefined;
     const fallbackEnv = draft.assistantEnv?.slug;
@@ -122,7 +122,7 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
       entries.push({
         url: internalMcpUrl({ slug: project.slug }, toolset),
         name: toolset.slug,
-        gramEnvironment: ref.environmentSlug ?? fallbackEnv,
+        environment: ref.environmentSlug ?? fallbackEnv,
       });
     }
     return entries.length ? entries : undefined;
@@ -226,7 +226,7 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
           },
           variant: "standalone",
           systemPrompt,
-          mcp: mcpServers,
+          mcps,
           model: {
             defaultModel: "anthropic/claude-sonnet-4.6" as Model,
             showModelPicker: false,

@@ -26,30 +26,25 @@ export type GetSessionFn = (init: { projectSlug: string }) => Promise<string>;
 type ServerUrl = string;
 
 /**
- * Configuration for a single MCP server. Use the object form when connecting
- * to multiple servers so that tool names can be disambiguated and per-server
- * environment overrides can be supplied.
+ * Configuration for a single MCP server. Used by the {@link ElementsConfig.mcps}
+ * array form when connecting to more than one server.
  */
 export interface MCPServerEntry {
   /** The MCP server URL. */
   url: ServerUrl;
   /**
-   * Optional namespace prefix prepended to tools from this server with `__`
-   * as the separator (e.g. `name__tool`). When omitted for an entry inside a
-   * multi-server array, a prefix is derived from the URL.
+   * Namespace prefix prepended to tools from this server with `__` as the
+   * separator (e.g. `name__tool`) so that tools with identical names from
+   * different servers do not collide. When omitted, a prefix is derived from
+   * the URL.
    */
   name?: string;
   /**
-   * Override the `Gram-Environment` header for this server only. Falls back
-   * to the top-level `gramEnvironment` when omitted.
+   * Environment slug to bind this server's tools to. Sent as the
+   * `Gram-Environment` header on requests to this MCP server only.
    */
-  gramEnvironment?: string;
+  environment?: string;
 }
-
-export type MCPConfig =
-  | ServerUrl
-  | MCPServerEntry
-  | Array<ServerUrl | MCPServerEntry>;
 
 export const VARIANTS = ["widget", "sidecar", "standalone"] as const;
 export type Variant = (typeof VARIANTS)[number];
@@ -117,32 +112,34 @@ export interface ElementsConfig {
   projectSlug: string;
 
   /**
-   * The Gram MCP server(s) to connect to. Accepts either:
+   * The Gram Server URL to use for the Elements library.
+   * Can be retrieved from https://app.getgram.ai/{team}/{project}/mcp/{mcp_slug}
    *
-   * - a single URL string,
-   * - a single {@link MCPServerEntry} object, or
-   * - an array of either form, in which case tools from each server are
-   *   namespaced by a prefix (`<name>__<tool>`) to avoid collisions.
-   *
-   * Each entry may carry its own `gramEnvironment` to override the
-   * top-level setting for that server only.
+   * For multiple MCP servers in a single chat, use {@link mcps} instead;
+   * `mcps` takes precedence when both are provided.
    *
    * @example
-   * // Single server
    * const config: ElementsConfig = {
    *   mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
    * }
+   */
+  mcp?: ServerUrl;
+
+  /**
+   * One or more Gram MCP servers to connect to in a single chat. Tools from
+   * each server are merged and namespaced as `<name>__<tool>` to avoid
+   * collisions when names overlap. Takes precedence over {@link mcp} when
+   * both are provided.
    *
    * @example
-   * // Multiple servers
    * const config: ElementsConfig = {
-   *   mcp: [
+   *   mcps: [
    *     { url: 'https://app.getgram.ai/mcp/billing', name: 'billing' },
    *     { url: 'https://app.getgram.ai/mcp/support', name: 'support' },
    *   ],
    * }
    */
-  mcp?: MCPConfig;
+  mcps?: MCPServerEntry[];
 
   /**
    * Custom environment variable overrides for the Elements library.
