@@ -86,6 +86,7 @@ type PresidioClient struct {
 	retryBackoff       time.Duration
 	requestTimeout     time.Duration
 	requestDuration    metric.Float64Histogram
+	requestSize        metric.Int64Histogram
 	requestFailures    metric.Int64Counter
 }
 
@@ -98,6 +99,16 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 		metric.WithDescription("Duration of individual Presidio /analyze HTTP requests in seconds"),
 		metric.WithUnit("s"),
 		metric.WithExplicitBucketBoundaries(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
+	)
+
+	// Bucket boundaries span 1 KiB to 4 MiB on powers of 4 to cover both
+	// typical chat-message batches and tail payloads dominated by
+	// oversized tool-call JSON.
+	requestSize, _ := meter.Int64Histogram(
+		"risk.presidio.request_size",
+		metric.WithDescription("Size of Presidio /analyze HTTP request bodies in bytes"),
+		metric.WithUnit("By"),
+		metric.WithExplicitBucketBoundaries(1024, 4096, 16384, 65536, 262144, 1048576, 4194304),
 	)
 
 	requestFailures, _ := meter.Int64Counter(
@@ -119,6 +130,7 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 		retryBackoff:       presidioRetryBackoff,
 		requestTimeout:     analyzeRequestTimeout,
 		requestDuration:    requestDuration,
+		requestSize:        requestSize,
 		requestFailures:    requestFailures,
 	}
 }
@@ -387,6 +399,10 @@ func (p *PresidioClient) analyze(ctx context.Context, texts []string, entities [
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal presidio request: %w", err)
+	}
+
+	if p.requestSize != nil {
+		p.requestSize.Record(ctx, int64(len(body)))
 	}
 
 	reqCtx, cancel := context.WithTimeout(ctx, p.requestTimeout)
