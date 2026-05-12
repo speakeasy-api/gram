@@ -254,9 +254,9 @@ var _ = Service("access", func() {
 	})
 
 	Method("listShadowMCPApprovalRequests", func() {
-		Description("List Shadow MCP approval requests for the current organization.")
+		Description("List Shadow MCP approval requests for the current organization. Requires organization admin access because requests include requester and block details.")
 		Security(security.ByKey, func() {
-			Scope("consumer")
+			Scope("producer")
 		})
 		Security(security.Session)
 

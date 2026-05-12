@@ -1631,7 +1631,7 @@ paths:
                 type: mutation
     /rpc/access.shadowMcp.requests.list:
         get:
-            description: List Shadow MCP approval requests for the current organization.
+            description: List Shadow MCP approval requests for the current organization. Requires organization admin access because requests include requester and block details.
             operationId: listShadowMCPApprovalRequests
             parameters:
                 - allowEmptyValue: true

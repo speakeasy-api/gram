@@ -34,7 +34,9 @@ type Service interface {
 	ListGrants(context.Context, *ListGrantsPayload) (res *ListUserGrantsResult, err error)
 	// Change a team member's role assignment.
 	UpdateMemberRole(context.Context, *UpdateMemberRolePayload) (res *AccessMember, err error)
-	// List Shadow MCP approval requests for the current organization.
+	// List Shadow MCP approval requests for the current organization. Requires
+	// organization admin access because requests include requester and block
+	// details.
 	ListShadowMCPApprovalRequests(context.Context, *ListShadowMCPApprovalRequestsPayload) (res *ListShadowMCPApprovalRequestsResult, err error)
 	// Create or return an active Shadow MCP approval request.
 	CreateShadowMCPApprovalRequest(context.Context, *CreateShadowMCPApprovalRequestPayload) (res *ShadowMCPApprovalRequest, err error)

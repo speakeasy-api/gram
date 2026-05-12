@@ -423,7 +423,7 @@ func NewListShadowMCPApprovalRequestsEndpoint(s Service, authAPIKeyFn security.A
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
 			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
-			RequiredScopes: []string{"consumer"},
+			RequiredScopes: []string{"producer"},
 		}
 		var key string
 		if p.ApikeyToken != nil {

@@ -198,6 +198,19 @@ func TestService_DenyShadowMCPApprovalRequest_CanSkipDenyRule(t *testing.T) {
 	require.Equal(t, "Not enough context", *result.Request.DecisionNote)
 }
 
+func TestService_ListShadowMCPApprovalRequests_RequiresOrgAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)})
+
+	_, err := ti.service.ListShadowMCPApprovalRequests(ctx, &gen.ListShadowMCPApprovalRequestsPayload{Limit: 10})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
 func TestService_ShadowMCPAccessRule_ManualLifecycle(t *testing.T) {
 	t.Parallel()
 

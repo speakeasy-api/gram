@@ -56,7 +56,7 @@ export type ShadowMCPApprovalRequestsQueryError =
  * listShadowMCPApprovalRequests access
  *
  * @remarks
- * List Shadow MCP approval requests for the current organization.
+ * List Shadow MCP approval requests for the current organization. Requires organization admin access because requests include requester and block details.
  */
 export function useShadowMCPApprovalRequests(
   request?: operations.ListShadowMCPApprovalRequestsRequest | undefined,
@@ -85,7 +85,7 @@ export function useShadowMCPApprovalRequests(
  * listShadowMCPApprovalRequests access
  *
  * @remarks
- * List Shadow MCP approval requests for the current organization.
+ * List Shadow MCP approval requests for the current organization. Requires organization admin access because requests include requester and block details.
  */
 export function useShadowMCPApprovalRequestsSuspense(
   request?: operations.ListShadowMCPApprovalRequestsRequest | undefined,

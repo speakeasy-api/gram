@@ -4276,7 +4276,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
 	fmt.Fprintln(os.Stderr, `    list-grants: List the current user's effective grants, including inherited role grants.`)
 	fmt.Fprintln(os.Stderr, `    update-member-role: Change a team member's role assignment.`)
-	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-approval-requests: List Shadow MCP approval requests for the current organization.`)
+	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-approval-requests: List Shadow MCP approval requests for the current organization. Requires organization admin access because requests include requester and block details.`)
 	fmt.Fprintln(os.Stderr, `    create-shadow-mcp-approval-request: Create or return an active Shadow MCP approval request.`)
 	fmt.Fprintln(os.Stderr, `    approve-shadow-mcp-approval-request: Approve a Shadow MCP request, creating an allow rule and role grants.`)
 	fmt.Fprintln(os.Stderr, `    deny-shadow-mcp-approval-request: Deny a Shadow MCP request and optionally create a deny rule.`)
@@ -4497,7 +4497,7 @@ func accessListShadowMCPApprovalRequestsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List Shadow MCP approval requests for the current organization.`)
+	fmt.Fprintln(os.Stderr, `List Shadow MCP approval requests for the current organization. Requires organization admin access because requests include requester and block details.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -status STRING: `)

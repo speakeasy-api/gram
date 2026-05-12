@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 5162d9b347449f994f980f2fbf23cf8e
+  docChecksum: ae84e968da11253b2d9f91cb36dd2c4f
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -2663,7 +2663,7 @@ trackedFiles:
   docs/models/operations/verifyremotemcpurlsecurityoption2.md:
     last_write_checksum: sha1:d7327bb7bc7d90ea3fb3593531e041e6c9fc4f9e
   docs/sdks/access/README.md:
-    last_write_checksum: sha1:1e6a6a00138b7e4bbce17e72f3d6bcb5127ce9a4
+    last_write_checksum: sha1:9b3c456b9f14f2d461b79c95842c756f3939579c
   docs/sdks/assets/README.md:
     last_write_checksum: sha1:e1884c390454dd09faad4702a812833f9fdf068a
   docs/sdks/assistantmemories/README.md:
@@ -2825,7 +2825,7 @@ trackedFiles:
   src/funcs/accessListShadowMCPAccessRules.ts:
     last_write_checksum: sha1:87fd1d49d83f0b55a2d8daed6acd0cff716ddb3a
   src/funcs/accessListShadowMCPApprovalRequests.ts:
-    last_write_checksum: sha1:8bd3474bb7e6a409d5c2f89120df323db528485c
+    last_write_checksum: sha1:dce818357abbcca9f25381d4056cb838aa1fadda
   src/funcs/accessResolveChallenge.ts:
     last_write_checksum: sha1:f371bbe148c7c16e2735b2726bf5a75488623249
   src/funcs/accessUpdateMemberRole.ts:
@@ -6313,7 +6313,7 @@ trackedFiles:
   src/react-query/shadowMCPApprovalRequests.core.ts:
     last_write_checksum: sha1:37625c8373f381254b8103e0143d8a5861b0d0d5
   src/react-query/shadowMCPApprovalRequests.ts:
-    last_write_checksum: sha1:5fd5c3010a99989539a9b42ec7ad237ca7dcf86e
+    last_write_checksum: sha1:ca3e503d8c403ab6807ccf92da3346e21392417c
   src/react-query/switchScopes.ts:
     id: 89899b6a30ab
     last_write_checksum: sha1:dbf86dcacdd6cf6443e195320fd1e00bfb0e2284
@@ -6463,7 +6463,7 @@ trackedFiles:
   src/react-query/verifyRemoteMcpURL.ts:
     last_write_checksum: sha1:7a8b3ee3d721701d3b98ec26f6b6f3b1b1a27bd9
   src/sdk/access.ts:
-    last_write_checksum: sha1:1c236d9c8dfc0a3453835c3ea4d7611a307f8e97
+    last_write_checksum: sha1:babd1e7152df2032f060c21a14fdbb04e892480f
   src/sdk/assets.ts:
     id: 43fd5a73edb9
     last_write_checksum: sha1:60ccd4abcd9e1b51f7f5542c97336b5a5847b570

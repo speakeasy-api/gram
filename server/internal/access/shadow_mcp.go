@@ -34,7 +34,7 @@ const (
 )
 
 func (s *Service) ListShadowMCPApprovalRequests(ctx context.Context, payload *gen.ListShadowMCPApprovalRequestsPayload) (*gen.ListShadowMCPApprovalRequestsResult, error) {
-	ac, err := s.requireOrgRead(ctx)
+	ac, err := s.requireOrgAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
