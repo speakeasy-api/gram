@@ -1014,46 +1014,24 @@ func writePluginZip(w io.Writer, files map[string][]byte) error {
 	return nil
 }
 
-// persistDownloadAPIKey writes a single hooks-scoped key + its audit log
-// in one transaction. Distinct from persistPluginAPIKeys because it does
-// not touch the GitHub connection record.
+// persistDownloadAPIKey writes a single hooks-scoped key for a plugin download.
+// Distinct from persistPluginAPIKeys because it does not touch the GitHub
+// connection record. API key creation is intentionally excluded from the audit
+// log here — plugin asset downloads are automated and would otherwise flood the
+// log with api_key:create events.
 func (s *Service) persistDownloadAPIKey(ctx context.Context, ac *contextvalues.AuthContext, candidate pluginAPIKeyCandidate) error {
 	projectID := uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-
-	scopes := []string{candidate.scope.String()}
-	createdKey, err := keysrepo.New(tx).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+	_, err := keysrepo.New(s.db).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
 		OrganizationID:  ac.ActiveOrganizationID,
 		Name:            candidate.keyName,
 		KeyHash:         candidate.keyHash,
 		KeyPrefix:       candidate.keyPrefix,
-		Scopes:          scopes,
+		Scopes:          []string{candidate.scope.String()},
 		CreatedByUserID: ac.UserID,
 		ProjectID:       projectID,
 	})
 	if err != nil {
 		return fmt.Errorf("create api key: %w", err)
-	}
-
-	if err := s.audit.LogKeyCreate(ctx, tx, audit.LogKeyCreateEvent{
-		OrganizationID:   ac.ActiveOrganizationID,
-		ProjectID:        projectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName: ac.Email,
-		ActorSlug:        nil,
-		KeyURN:           urn.NewAPIKey(createdKey.ID),
-		KeyName:          candidate.keyName,
-		Scopes:           scopes,
-	}); err != nil {
-		return fmt.Errorf("audit log key creation: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
 	}
 	return nil
 }
