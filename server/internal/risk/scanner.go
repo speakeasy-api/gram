@@ -125,7 +125,7 @@ func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner,
 	}
 
 	if piScanner == nil {
-		piScanner = ra.NewPromptInjectionScanner(logger, ra.StubClassifier{}, 0.9)
+		piScanner = ra.NewPromptInjectionScanner(logger, ra.StubClassifier{})
 	}
 
 	return &Scanner{
