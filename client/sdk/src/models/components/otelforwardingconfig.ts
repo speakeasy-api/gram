@@ -13,19 +13,19 @@ import {
 } from "./otelforwardingheader.js";
 
 /**
- * Per-organization config that controls forwarding of OTEL payloads received on the hooks endpoints to a customer-owned URL.
+ * Per-organization config that controls forwarding of OTEL payloads received on the hooks endpoints to a customer-owned URL. When no config is set, id/created_at/updated_at are omitted and enabled defaults to false.
  */
 export type OtelForwardingConfig = {
   /**
-   * ISO 8601 timestamp when the config was created.
+   * ISO 8601 timestamp when the config was created. Omitted when no config is set.
    */
-  createdAt: Date;
+  createdAt?: Date | undefined;
   /**
    * Whether forwarding is currently active.
    */
   enabled: boolean;
   /**
-   * URL each OTEL payload is POSTed to.
+   * URL each OTEL payload is POSTed to. Empty string when no config is set.
    */
   endpointUrl: string;
   /**
@@ -33,17 +33,17 @@ export type OtelForwardingConfig = {
    */
   headers: Array<OtelForwardingHeader>;
   /**
-   * Config ID.
+   * Config ID. Omitted when no config is set for the organization.
    */
-  id: string;
+  id?: string | undefined;
   /**
    * Organization the config belongs to.
    */
   organizationId: string;
   /**
-   * ISO 8601 timestamp of the most recent change.
+   * ISO 8601 timestamp of the most recent change. Omitted when no config is set.
    */
-  updatedAt: Date;
+  updatedAt?: Date | undefined;
 };
 
 /** @internal */
@@ -52,18 +52,16 @@ export const OtelForwardingConfig$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    created_at: z.pipe(
-      z.iso.datetime({ offset: true }),
-      z.transform(v => new Date(v)),
+    created_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     enabled: z.boolean(),
     endpoint_url: z.string(),
     headers: z.array(OtelForwardingHeader$inboundSchema),
-    id: z.string(),
+    id: z.optional(z.string()),
     organization_id: z.string(),
-    updated_at: z.pipe(
-      z.iso.datetime({ offset: true }),
-      z.transform(v => new Date(v)),
+    updated_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
   }),
   z.transform((v) => {

@@ -26,39 +26,41 @@ type UpsertConfigRequestBody struct {
 // GetConfigResponseBody is the type of the "otelForwarding" service
 // "getConfig" endpoint HTTP response body.
 type GetConfigResponseBody struct {
-	// Config ID.
-	ID string `form:"id" json:"id" xml:"id"`
+	// Config ID. Omitted when no config is set for the organization.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Organization the config belongs to.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// URL each OTEL payload is POSTed to.
+	// URL each OTEL payload is POSTed to. Empty string when no config is set.
 	EndpointURL string `form:"endpoint_url" json:"endpoint_url" xml:"endpoint_url"`
 	// Whether forwarding is currently active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Headers configured for this endpoint. Values are never returned.
 	Headers []*OtelForwardingHeaderResponseBody `form:"headers" json:"headers" xml:"headers"`
-	// ISO 8601 timestamp when the config was created.
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// ISO 8601 timestamp of the most recent change.
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// ISO 8601 timestamp when the config was created. Omitted when no config is
+	// set.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// ISO 8601 timestamp of the most recent change. Omitted when no config is set.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpsertConfigResponseBody is the type of the "otelForwarding" service
 // "upsertConfig" endpoint HTTP response body.
 type UpsertConfigResponseBody struct {
-	// Config ID.
-	ID string `form:"id" json:"id" xml:"id"`
+	// Config ID. Omitted when no config is set for the organization.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Organization the config belongs to.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// URL each OTEL payload is POSTed to.
+	// URL each OTEL payload is POSTed to. Empty string when no config is set.
 	EndpointURL string `form:"endpoint_url" json:"endpoint_url" xml:"endpoint_url"`
 	// Whether forwarding is currently active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Headers configured for this endpoint. Values are never returned.
 	Headers []*OtelForwardingHeaderResponseBody `form:"headers" json:"headers" xml:"headers"`
-	// ISO 8601 timestamp when the config was created.
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// ISO 8601 timestamp of the most recent change.
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// ISO 8601 timestamp when the config was created. Omitted when no config is
+	// set.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// ISO 8601 timestamp of the most recent change. Omitted when no config is set.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // GetConfigUnauthorizedResponseBody is the type of the "otelForwarding"

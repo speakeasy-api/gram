@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: b4c3f9361ad5f0a568a7574cfdf251eb
+  docChecksum: e7ee730ea6b4d537fc8582e35908bb2d
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -561,7 +561,7 @@ trackedFiles:
   docs/models/components/otelattributevalue.md:
     last_write_checksum: sha1:bf35edda60c3c1ed7b5f7894d7b91b8b2b5ebc9e
   docs/models/components/otelforwardingconfig.md:
-    last_write_checksum: sha1:cba93a05e86f8744db7d404d5a020c4ebc30a0cd
+    last_write_checksum: sha1:9ec5b59c0aa0a2480a0b7ffa92b9941e8b176fe4
   docs/models/components/otelforwardingheader.md:
     last_write_checksum: sha1:19105b65bdf912b9a851f90a855bc88abfdb4c47
   docs/models/components/otelforwardingheaderinput.md:
@@ -3867,7 +3867,7 @@ trackedFiles:
   src/models/components/otelattributevalue.ts:
     last_write_checksum: sha1:fb9095c36ee956b1a8e27df307112cd5836e781d
   src/models/components/otelforwardingconfig.ts:
-    last_write_checksum: sha1:9a65cf9ea5a19f670aa2e7e783d682b9e3a960ca
+    last_write_checksum: sha1:8ca1e9fadfb5118099f0b7a443b3717b63e37340
   src/models/components/otelforwardingheader.ts:
     last_write_checksum: sha1:9fa473ed4f3e956b06b2c70e82ace3532e917c11
   src/models/components/otelforwardingheaderinput.ts:
@@ -8964,7 +8964,7 @@ examples:
     speakeasy-default-get-otel-forwarding-config:
       responses:
         "200":
-          application/json: {"created_at": "2024-09-24T23:49:09.707Z", "enabled": true, "endpoint_url": "https://legal-newsprint.org", "headers": [{"has_value": true, "name": "<value>"}], "id": "<id>", "organization_id": "<id>", "updated_at": "2025-10-21T01:03:39.776Z"}
+          application/json: {"enabled": true, "endpoint_url": "https://legal-newsprint.org", "headers": [{"has_value": true, "name": "<value>"}], "organization_id": "<id>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8975,7 +8975,7 @@ examples:
         application/json: {"enabled": true, "endpoint_url": "https://damp-armchair.name/"}
       responses:
         "200":
-          application/json: {"created_at": "2025-02-26T06:40:47.371Z", "enabled": false, "endpoint_url": "https://vain-antelope.net", "headers": [{"has_value": true, "name": "<value>"}], "id": "<id>", "organization_id": "<id>", "updated_at": "2026-10-06T18:06:04.824Z"}
+          application/json: {"enabled": false, "endpoint_url": "https://vain-antelope.net", "headers": [{"has_value": true, "name": "<value>"}], "organization_id": "<id>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

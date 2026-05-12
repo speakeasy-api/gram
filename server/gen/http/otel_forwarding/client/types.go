@@ -26,38 +26,40 @@ type UpsertConfigRequestBody struct {
 // GetConfigResponseBody is the type of the "otelForwarding" service
 // "getConfig" endpoint HTTP response body.
 type GetConfigResponseBody struct {
-	// Config ID.
+	// Config ID. Omitted when no config is set for the organization.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Organization the config belongs to.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// URL each OTEL payload is POSTed to.
+	// URL each OTEL payload is POSTed to. Empty string when no config is set.
 	EndpointURL *string `form:"endpoint_url,omitempty" json:"endpoint_url,omitempty" xml:"endpoint_url,omitempty"`
 	// Whether forwarding is currently active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Headers configured for this endpoint. Values are never returned.
 	Headers []*OtelForwardingHeaderResponseBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
-	// ISO 8601 timestamp when the config was created.
+	// ISO 8601 timestamp when the config was created. Omitted when no config is
+	// set.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// ISO 8601 timestamp of the most recent change.
+	// ISO 8601 timestamp of the most recent change. Omitted when no config is set.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpsertConfigResponseBody is the type of the "otelForwarding" service
 // "upsertConfig" endpoint HTTP response body.
 type UpsertConfigResponseBody struct {
-	// Config ID.
+	// Config ID. Omitted when no config is set for the organization.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Organization the config belongs to.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// URL each OTEL payload is POSTed to.
+	// URL each OTEL payload is POSTed to. Empty string when no config is set.
 	EndpointURL *string `form:"endpoint_url,omitempty" json:"endpoint_url,omitempty" xml:"endpoint_url,omitempty"`
 	// Whether forwarding is currently active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Headers configured for this endpoint. Values are never returned.
 	Headers []*OtelForwardingHeaderResponseBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
-	// ISO 8601 timestamp when the config was created.
+	// ISO 8601 timestamp when the config was created. Omitted when no config is
+	// set.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// ISO 8601 timestamp of the most recent change.
+	// ISO 8601 timestamp of the most recent change. Omitted when no config is set.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
@@ -659,12 +661,12 @@ func NewUpsertConfigRequestBody(p *otelforwarding.UpsertConfigPayload) *UpsertCo
 // "getConfig" endpoint result from a HTTP "OK" response.
 func NewGetConfigOtelForwardingConfigOK(body *GetConfigResponseBody) *otelforwarding.OtelForwardingConfig {
 	v := &otelforwarding.OtelForwardingConfig{
-		ID:             *body.ID,
+		ID:             body.ID,
 		OrganizationID: *body.OrganizationID,
 		EndpointURL:    *body.EndpointURL,
 		Enabled:        *body.Enabled,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
+		CreatedAt:      body.CreatedAt,
+		UpdatedAt:      body.UpdatedAt,
 	}
 	v.Headers = make([]*otelforwarding.OtelForwardingHeader, len(body.Headers))
 	for i, val := range body.Headers {
@@ -832,12 +834,12 @@ func NewGetConfigGatewayError(body *GetConfigGatewayErrorResponseBody) *goa.Serv
 // "upsertConfig" endpoint result from a HTTP "OK" response.
 func NewUpsertConfigOtelForwardingConfigOK(body *UpsertConfigResponseBody) *otelforwarding.OtelForwardingConfig {
 	v := &otelforwarding.OtelForwardingConfig{
-		ID:             *body.ID,
+		ID:             body.ID,
 		OrganizationID: *body.OrganizationID,
 		EndpointURL:    *body.EndpointURL,
 		Enabled:        *body.Enabled,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
+		CreatedAt:      body.CreatedAt,
+		UpdatedAt:      body.UpdatedAt,
 	}
 	v.Headers = make([]*otelforwarding.OtelForwardingHeader, len(body.Headers))
 	for i, val := range body.Headers {
@@ -1154,9 +1156,6 @@ func NewDeleteConfigGatewayError(body *DeleteConfigGatewayErrorResponseBody) *go
 // ValidateGetConfigResponseBody runs the validations defined on
 // GetConfigResponseBody
 func ValidateGetConfigResponseBody(body *GetConfigResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
 	if body.OrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}
@@ -1168,12 +1167,6 @@ func ValidateGetConfigResponseBody(body *GetConfigResponseBody) (err error) {
 	}
 	if body.Headers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
 	for _, e := range body.Headers {
 		if e != nil {
@@ -1194,9 +1187,6 @@ func ValidateGetConfigResponseBody(body *GetConfigResponseBody) (err error) {
 // ValidateUpsertConfigResponseBody runs the validations defined on
 // UpsertConfigResponseBody
 func ValidateUpsertConfigResponseBody(body *UpsertConfigResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
 	if body.OrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}
@@ -1208,12 +1198,6 @@ func ValidateUpsertConfigResponseBody(body *UpsertConfigResponseBody) (err error
 	}
 	if body.Headers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
 	for _, e := range body.Headers {
 		if e != nil {

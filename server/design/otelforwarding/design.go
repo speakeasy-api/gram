@@ -26,17 +26,17 @@ var HeaderInput = Type("OtelForwardingHeaderInput", func() {
 })
 
 var Config = Type("OtelForwardingConfig", func() {
-	Description("Per-organization config that controls forwarding of OTEL payloads received on the hooks endpoints to a customer-owned URL.")
-	Required("id", "organization_id", "endpoint_url", "enabled", "headers", "created_at", "updated_at")
-	Attribute("id", String, "Config ID.")
+	Description("Per-organization config that controls forwarding of OTEL payloads received on the hooks endpoints to a customer-owned URL. When no config is set, id/created_at/updated_at are omitted and enabled defaults to false.")
+	Required("organization_id", "endpoint_url", "enabled", "headers")
+	Attribute("id", String, "Config ID. Omitted when no config is set for the organization.")
 	Attribute("organization_id", String, "Organization the config belongs to.")
-	Attribute("endpoint_url", String, "URL each OTEL payload is POSTed to.")
+	Attribute("endpoint_url", String, "URL each OTEL payload is POSTed to. Empty string when no config is set.")
 	Attribute("enabled", Boolean, "Whether forwarding is currently active.")
 	Attribute("headers", ArrayOf(HeaderModel), "Headers configured for this endpoint. Values are never returned.")
-	Attribute("created_at", String, "ISO 8601 timestamp when the config was created.", func() {
+	Attribute("created_at", String, "ISO 8601 timestamp when the config was created. Omitted when no config is set.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("updated_at", String, "ISO 8601 timestamp of the most recent change.", func() {
+	Attribute("updated_at", String, "ISO 8601 timestamp of the most recent change. Omitted when no config is set.", func() {
 		Format(FormatDateTime)
 	})
 })

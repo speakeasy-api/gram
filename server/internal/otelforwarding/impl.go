@@ -268,13 +268,13 @@ func snapshotFromConfig(cfg CachedConfig) audit.OtelForwardingSnapshot {
 
 func emptyView(orgID string) *gen.OtelForwardingConfig {
 	return &gen.OtelForwardingConfig{
-		ID:             "",
+		ID:             nil,
 		OrganizationID: orgID,
 		EndpointURL:    "",
 		Enabled:        false,
 		Headers:        []*gen.OtelForwardingHeader{},
-		CreatedAt:      "",
-		UpdatedAt:      "",
+		CreatedAt:      nil,
+		UpdatedAt:      nil,
 	}
 }
 
@@ -291,13 +291,16 @@ func buildView(cfg CachedConfig, row repo.OtelForwardingConfig) *gen.OtelForward
 			HasValue: cfg.Headers[n] != "",
 		})
 	}
+	id := row.ID.String()
+	createdAt := row.CreatedAt.Time.Format(time.RFC3339)
+	updatedAt := row.UpdatedAt.Time.Format(time.RFC3339)
 	return &gen.OtelForwardingConfig{
-		ID:             row.ID.String(),
+		ID:             &id,
 		OrganizationID: cfg.OrganizationID,
 		EndpointURL:    cfg.URL,
 		Enabled:        cfg.Enabled,
 		Headers:        headers,
-		CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      row.UpdatedAt.Time.Format(time.RFC3339),
+		CreatedAt:      &createdAt,
+		UpdatedAt:      &updatedAt,
 	}
 }

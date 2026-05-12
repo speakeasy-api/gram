@@ -66,20 +66,21 @@ type GetConfigPayload struct {
 // OtelForwardingConfig is the result type of the otelForwarding service
 // getConfig method.
 type OtelForwardingConfig struct {
-	// Config ID.
-	ID string
+	// Config ID. Omitted when no config is set for the organization.
+	ID *string
 	// Organization the config belongs to.
 	OrganizationID string
-	// URL each OTEL payload is POSTed to.
+	// URL each OTEL payload is POSTed to. Empty string when no config is set.
 	EndpointURL string
 	// Whether forwarding is currently active.
 	Enabled bool
 	// Headers configured for this endpoint. Values are never returned.
 	Headers []*OtelForwardingHeader
-	// ISO 8601 timestamp when the config was created.
-	CreatedAt string
-	// ISO 8601 timestamp of the most recent change.
-	UpdatedAt string
+	// ISO 8601 timestamp when the config was created. Omitted when no config is
+	// set.
+	CreatedAt *string
+	// ISO 8601 timestamp of the most recent change. Omitted when no config is set.
+	UpdatedAt *string
 }
 
 // HTTP header forwarded with each OTEL payload.
