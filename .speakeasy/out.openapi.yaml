@@ -28728,31 +28728,11 @@ components:
     CreateShadowMCPApprovalRequestForm:
       type: object
       properties:
-        block_reason:
+        request_token:
           type: string
-        observed_full_url:
-          type: string
-        observed_name:
-          type: string
-        observed_server_identity:
-          type: string
-        observed_url_host:
-          type: string
-        project_id:
-          type: string
-          format: uuid
-        risk_policy_id:
-          type: string
-          format: uuid
-        risk_result_id:
-          type: string
-          format: uuid
-        tool_call:
-          type: string
-        tool_name:
-          type: string
+          description: Signed token from the Shadow MCP block response.
       required:
-        - project_id
+        - request_token
     CreateSignedChatAttachmentURLForm:
       type: object
       properties:

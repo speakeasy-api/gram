@@ -273,17 +273,9 @@ type CreateShadowMCPAccessRulePayload struct {
 // CreateShadowMCPApprovalRequestPayload is the payload type of the access
 // service createShadowMCPApprovalRequest method.
 type CreateShadowMCPApprovalRequestPayload struct {
-	SessionToken           *string
-	ProjectID              string
-	ObservedName           *string
-	ObservedFullURL        *string
-	ObservedURLHost        *string
-	ObservedServerIdentity *string
-	ToolName               *string
-	ToolCall               *string
-	BlockReason            *string
-	RiskPolicyID           *string
-	RiskResultID           *string
+	SessionToken *string
+	// Signed token from the Shadow MCP block response.
+	RequestToken string
 }
 
 // DeleteRolePayload is the payload type of the access service deleteRole

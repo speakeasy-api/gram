@@ -943,24 +943,9 @@ var ShadowMCPApprovalDecisionResult = Type("ShadowMCPApprovalDecisionResult", fu
 })
 
 var CreateShadowMCPApprovalRequestForm = Type("CreateShadowMCPApprovalRequestForm", func() {
-	Required("project_id")
+	Required("request_token")
 
-	Attribute("project_id", String, func() {
-		Format(FormatUUID)
-	})
-	Attribute("observed_name", String)
-	Attribute("observed_full_url", String)
-	Attribute("observed_url_host", String)
-	Attribute("observed_server_identity", String)
-	Attribute("tool_name", String)
-	Attribute("tool_call", String)
-	Attribute("block_reason", String)
-	Attribute("risk_policy_id", String, func() {
-		Format(FormatUUID)
-	})
-	Attribute("risk_result_id", String, func() {
-		Format(FormatUUID)
-	})
+	Attribute("request_token", String, "Signed token from the Shadow MCP block response.")
 })
 
 var ApproveShadowMCPApprovalRequestForm = Type("ApproveShadowMCPApprovalRequestForm", func() {

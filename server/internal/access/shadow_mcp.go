@@ -83,11 +83,20 @@ func (s *Service) CreateShadowMCPApprovalRequest(ctx context.Context, payload *g
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
 	}
-	if err := validateShadowMCPEvidence(payload.ObservedFullURL, payload.ObservedURLHost, payload.ObservedServerIdentity); err != nil {
-		return nil, err
+	if ac.UserID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "missing requester user").Log(ctx, s.logger)
 	}
-
-	projectID, err := uuid.Parse(payload.ProjectID)
+	claims, err := parseShadowMCPApprovalRequestToken(s.jwtSecret, payload.RequestToken)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid shadow mcp approval request token").Log(ctx, s.logger)
+	}
+	if claims.OrganizationID != ac.ActiveOrganizationID {
+		return nil, oops.E(oops.CodeForbidden, nil, "shadow mcp approval request token is for a different organization").Log(ctx, s.logger)
+	}
+	if claims.RequesterUserID != "" && claims.RequesterUserID != ac.UserID {
+		return nil, oops.E(oops.CodeForbidden, nil, "shadow mcp approval request token is for a different requester").Log(ctx, s.logger)
+	}
+	projectID, err := uuid.Parse(claims.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").Log(ctx, s.logger)
 	}
@@ -95,33 +104,16 @@ func (s *Service) CreateShadowMCPApprovalRequest(ctx context.Context, payload *g
 		return nil, err
 	}
 
-	riskPolicyID, err := conv.PtrToNullUUID(payload.RiskPolicyID)
+	riskPolicyID, err := conv.PtrToNullUUID(claims.RiskPolicyID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid risk policy id").Log(ctx, s.logger)
 	}
-	riskResultID, err := conv.PtrToNullUUID(payload.RiskResultID)
+	riskResultID, err := conv.PtrToNullUUID(claims.RiskResultID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid risk result id").Log(ctx, s.logger)
 	}
 
-	queries := repo.New(s.db)
-	existing, err := queries.GetActiveShadowMCPApprovalRequestByFingerprint(ctx, repo.GetActiveShadowMCPApprovalRequestByFingerprintParams{
-		OrganizationID:         ac.ActiveOrganizationID,
-		ProjectID:              projectID,
-		RequesterUserID:        conv.ToPGTextEmpty(ac.UserID),
-		ObservedFullUrl:        conv.PtrValOr(payload.ObservedFullURL, ""),
-		ObservedUrlHost:        conv.PtrValOr(payload.ObservedURLHost, ""),
-		ObservedServerIdentity: conv.PtrValOr(payload.ObservedServerIdentity, ""),
-	})
-	switch {
-	case err == nil:
-		return buildShadowMCPApprovalRequest(existing), nil
-	case errors.Is(err, pgx.ErrNoRows):
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "get active shadow mcp approval request").Log(ctx, s.logger)
-	}
-
-	row, err := queries.CreateShadowMCPApprovalRequest(ctx, repo.CreateShadowMCPApprovalRequestParams{
+	row, err := repo.New(s.db).UpsertShadowMCPApprovalRequest(ctx, repo.UpsertShadowMCPApprovalRequestParams{
 		OrganizationID:         ac.ActiveOrganizationID,
 		ProjectID:              projectID,
 		RequesterUserID:        conv.ToPGTextEmpty(ac.UserID),
@@ -129,16 +121,17 @@ func (s *Service) CreateShadowMCPApprovalRequest(ctx context.Context, payload *g
 		RequesterDisplayName:   conv.PtrToPGText(ac.Email),
 		RiskPolicyID:           riskPolicyID,
 		RiskResultID:           riskResultID,
-		ObservedName:           conv.PtrToPGTextEmpty(payload.ObservedName),
-		ObservedFullUrl:        conv.PtrToPGTextEmpty(payload.ObservedFullURL),
-		ObservedUrlHost:        conv.PtrToPGTextEmpty(payload.ObservedURLHost),
-		ObservedServerIdentity: conv.PtrToPGTextEmpty(payload.ObservedServerIdentity),
-		ToolName:               conv.PtrToPGTextEmpty(payload.ToolName),
-		ToolCall:               conv.PtrToPGTextEmpty(payload.ToolCall),
-		BlockReason:            conv.PtrToPGTextEmpty(payload.BlockReason),
+		ObservedName:           conv.PtrToPGTextEmpty(claims.ObservedName),
+		ObservedFullUrl:        conv.PtrToPGTextEmpty(claims.ObservedFullURL),
+		ObservedUrlHost:        conv.PtrToPGTextEmpty(claims.ObservedURLHost),
+		ObservedServerIdentity: conv.PtrToPGTextEmpty(claims.ObservedServerIdentity),
+		RequestFingerprint:     conv.ToPGTextEmpty(shadowMCPApprovalRequestFingerprint(claims)),
+		ToolName:               conv.PtrToPGTextEmpty(claims.ToolName),
+		ToolCall:               conv.PtrToPGTextEmpty(claims.ToolCall),
+		BlockReason:            conv.PtrToPGTextEmpty(claims.BlockReason),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create shadow mcp approval request").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "upsert shadow mcp approval request").Log(ctx, s.logger)
 	}
 
 	return buildShadowMCPApprovalRequest(row), nil
@@ -194,7 +187,12 @@ func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *
 	if err != nil {
 		return nil, err
 	}
-	if err := syncShadowMCPAccessRuleRoleGrants(ctx, queries, ac.ActiveOrganizationID, rule.ID, roleSlugs); err != nil {
+	existingRoleSlugs, err := shadowMCPRoleSlugsForRule(ctx, queries, ac.ActiveOrganizationID, rule.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list existing shadow mcp access rule role grants").Log(ctx, s.logger)
+	}
+	mergedRoleSlugs := mergeRoleSlugs(existingRoleSlugs, roleSlugs)
+	if err := syncShadowMCPAccessRuleRoleGrants(ctx, queries, ac.ActiveOrganizationID, rule.ID, mergedRoleSlugs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "sync shadow mcp access rule role grants").Log(ctx, s.logger)
 	}
 
@@ -214,7 +212,7 @@ func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *
 
 	return &gen.ShadowMCPApprovalDecisionResult{
 		Request: buildShadowMCPApprovalRequest(request),
-		Rule:    buildShadowMCPAccessRule(rule, roleIDsForSlugs(roleSlugs, roleIDBySlug)),
+		Rule:    buildShadowMCPAccessRule(rule, roleIDsForSlugs(mergedRoleSlugs, roleIDBySlug)),
 	}, nil
 }
 
@@ -659,6 +657,24 @@ func (s *Service) shadowMCPRoleIDsByRule(ctx context.Context, queries *repo.Quer
 	return out, nil
 }
 
+func shadowMCPRoleSlugsForRule(ctx context.Context, queries *repo.Queries, organizationID string, ruleID uuid.UUID) ([]string, error) {
+	rows, err := queries.ListShadowMCPAccessRuleRoleGrants(ctx, repo.ListShadowMCPAccessRuleRoleGrantsParams{
+		OrganizationID: organizationID,
+		RuleIds:        []string{ruleID.String()},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list shadow mcp access rule role grants: %w", err)
+	}
+	roleSlugs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if row.PrincipalUrn.Type != urn.PrincipalTypeRole {
+			continue
+		}
+		roleSlugs = append(roleSlugs, row.PrincipalUrn.ID)
+	}
+	return roleSlugs, nil
+}
+
 func syncShadowMCPAccessRuleRoleGrants(ctx context.Context, queries *repo.Queries, organizationID string, ruleID uuid.UUID, roleSlugs []string) error {
 	if _, err := queries.DeleteShadowMCPAccessRuleRoleGrants(ctx, repo.DeleteShadowMCPAccessRuleRoleGrantsParams{
 		OrganizationID: organizationID,
@@ -826,4 +842,24 @@ func roleIDsForSlugs(roleSlugs []string, roleIDBySlug map[string]string) []strin
 		}
 	}
 	return roleIDs
+}
+
+func mergeRoleSlugs(existingRoleSlugs []string, newRoleSlugs []string) []string {
+	merged := make([]string, 0, len(existingRoleSlugs)+len(newRoleSlugs))
+	seen := make(map[string]struct{}, len(existingRoleSlugs)+len(newRoleSlugs))
+	for _, roleSlug := range existingRoleSlugs {
+		if _, ok := seen[roleSlug]; ok {
+			continue
+		}
+		seen[roleSlug] = struct{}{}
+		merged = append(merged, roleSlug)
+	}
+	for _, roleSlug := range newRoleSlugs {
+		if _, ok := seen[roleSlug]; ok {
+			continue
+		}
+		seen[roleSlug] = struct{}{}
+		merged = append(merged, roleSlug)
+	}
+	return merged
 }

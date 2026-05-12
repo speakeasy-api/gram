@@ -53,16 +53,8 @@ type UpdateMemberRoleRequestBody struct {
 // CreateShadowMCPApprovalRequestRequestBody is the type of the "access"
 // service "createShadowMCPApprovalRequest" endpoint HTTP request body.
 type CreateShadowMCPApprovalRequestRequestBody struct {
-	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	ObservedName           *string `form:"observed_name,omitempty" json:"observed_name,omitempty" xml:"observed_name,omitempty"`
-	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
-	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
-	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
-	ToolName               *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
-	ToolCall               *string `form:"tool_call,omitempty" json:"tool_call,omitempty" xml:"tool_call,omitempty"`
-	BlockReason            *string `form:"block_reason,omitempty" json:"block_reason,omitempty" xml:"block_reason,omitempty"`
-	RiskPolicyID           *string `form:"risk_policy_id,omitempty" json:"risk_policy_id,omitempty" xml:"risk_policy_id,omitempty"`
-	RiskResultID           *string `form:"risk_result_id,omitempty" json:"risk_result_id,omitempty" xml:"risk_result_id,omitempty"`
+	// Signed token from the Shadow MCP block response.
+	RequestToken *string `form:"request_token,omitempty" json:"request_token,omitempty" xml:"request_token,omitempty"`
 }
 
 // ApproveShadowMCPApprovalRequestRequestBody is the type of the "access"
@@ -8748,16 +8740,7 @@ func NewListShadowMCPApprovalRequestsPayload(status *string, projectID *string, 
 // createShadowMCPApprovalRequest endpoint payload.
 func NewCreateShadowMCPApprovalRequestPayload(body *CreateShadowMCPApprovalRequestRequestBody, sessionToken *string) *access.CreateShadowMCPApprovalRequestPayload {
 	v := &access.CreateShadowMCPApprovalRequestPayload{
-		ProjectID:              *body.ProjectID,
-		ObservedName:           body.ObservedName,
-		ObservedFullURL:        body.ObservedFullURL,
-		ObservedURLHost:        body.ObservedURLHost,
-		ObservedServerIdentity: body.ObservedServerIdentity,
-		ToolName:               body.ToolName,
-		ToolCall:               body.ToolCall,
-		BlockReason:            body.BlockReason,
-		RiskPolicyID:           body.RiskPolicyID,
-		RiskResultID:           body.RiskResultID,
+		RequestToken: *body.RequestToken,
 	}
 	v.SessionToken = sessionToken
 
@@ -9016,17 +8999,8 @@ func ValidateUpdateMemberRoleRequestBody(body *UpdateMemberRoleRequestBody) (err
 // ValidateCreateShadowMCPApprovalRequestRequestBody runs the validations
 // defined on CreateShadowMCPApprovalRequestRequestBody
 func ValidateCreateShadowMCPApprovalRequestRequestBody(body *CreateShadowMCPApprovalRequestRequestBody) (err error) {
-	if body.ProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
-	}
-	if body.RiskPolicyID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.risk_policy_id", *body.RiskPolicyID, goa.FormatUUID))
-	}
-	if body.RiskResultID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.risk_result_id", *body.RiskResultID, goa.FormatUUID))
+	if body.RequestToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("request_token", "body"))
 	}
 	return
 }

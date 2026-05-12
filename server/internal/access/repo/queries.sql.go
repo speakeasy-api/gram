@@ -141,115 +141,6 @@ func (q *Queries) CreateShadowMCPAccessRule(ctx context.Context, arg CreateShado
 	return i, err
 }
 
-const createShadowMCPApprovalRequest = `-- name: CreateShadowMCPApprovalRequest :one
-INSERT INTO shadow_mcp_approval_requests (
-  organization_id,
-  project_id,
-  requester_user_id,
-  requester_email,
-  requester_display_name,
-  status,
-  risk_policy_id,
-  risk_result_id,
-  observed_name,
-  observed_full_url,
-  observed_url_host,
-  observed_server_identity,
-  tool_name,
-  tool_call,
-  block_reason,
-  first_blocked_at,
-  last_blocked_at
-) VALUES (
-  $1,
-  $2,
-  $3,
-  $4,
-  $5,
-  'requested',
-  $6,
-  $7,
-  $8,
-  $9,
-  $10,
-  $11,
-  $12,
-  $13,
-  $14,
-  clock_timestamp(),
-  clock_timestamp()
-)
-RETURNING id, organization_id, project_id, requester_user_id, requester_email, requester_display_name, status, risk_policy_id, risk_result_id, observed_name, observed_full_url, observed_url_host, observed_server_identity, request_fingerprint, tool_name, tool_call, block_reason, blocked_count, first_blocked_at, last_blocked_at, requested_at, decided_at, decided_by, decision_note, created_at, updated_at, deleted_at, deleted
-`
-
-type CreateShadowMCPApprovalRequestParams struct {
-	OrganizationID         string
-	ProjectID              uuid.UUID
-	RequesterUserID        pgtype.Text
-	RequesterEmail         pgtype.Text
-	RequesterDisplayName   pgtype.Text
-	RiskPolicyID           uuid.NullUUID
-	RiskResultID           uuid.NullUUID
-	ObservedName           pgtype.Text
-	ObservedFullUrl        pgtype.Text
-	ObservedUrlHost        pgtype.Text
-	ObservedServerIdentity pgtype.Text
-	ToolName               pgtype.Text
-	ToolCall               pgtype.Text
-	BlockReason            pgtype.Text
-}
-
-func (q *Queries) CreateShadowMCPApprovalRequest(ctx context.Context, arg CreateShadowMCPApprovalRequestParams) (ShadowMcpApprovalRequest, error) {
-	row := q.db.QueryRow(ctx, createShadowMCPApprovalRequest,
-		arg.OrganizationID,
-		arg.ProjectID,
-		arg.RequesterUserID,
-		arg.RequesterEmail,
-		arg.RequesterDisplayName,
-		arg.RiskPolicyID,
-		arg.RiskResultID,
-		arg.ObservedName,
-		arg.ObservedFullUrl,
-		arg.ObservedUrlHost,
-		arg.ObservedServerIdentity,
-		arg.ToolName,
-		arg.ToolCall,
-		arg.BlockReason,
-	)
-	var i ShadowMcpApprovalRequest
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.RequesterUserID,
-		&i.RequesterEmail,
-		&i.RequesterDisplayName,
-		&i.Status,
-		&i.RiskPolicyID,
-		&i.RiskResultID,
-		&i.ObservedName,
-		&i.ObservedFullUrl,
-		&i.ObservedUrlHost,
-		&i.ObservedServerIdentity,
-		&i.RequestFingerprint,
-		&i.ToolName,
-		&i.ToolCall,
-		&i.BlockReason,
-		&i.BlockedCount,
-		&i.FirstBlockedAt,
-		&i.LastBlockedAt,
-		&i.RequestedAt,
-		&i.DecidedAt,
-		&i.DecidedBy,
-		&i.DecisionNote,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
 const decideShadowMCPApprovalRequest = `-- name: DecideShadowMCPApprovalRequest :one
 UPDATE shadow_mcp_approval_requests
 SET status = $1,
@@ -418,75 +309,6 @@ func (q *Queries) DeleteShadowMCPAccessRuleRoleGrants(ctx context.Context, arg D
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const getActiveShadowMCPApprovalRequestByFingerprint = `-- name: GetActiveShadowMCPApprovalRequestByFingerprint :one
-SELECT id, organization_id, project_id, requester_user_id, requester_email, requester_display_name, status, risk_policy_id, risk_result_id, observed_name, observed_full_url, observed_url_host, observed_server_identity, request_fingerprint, tool_name, tool_call, block_reason, blocked_count, first_blocked_at, last_blocked_at, requested_at, decided_at, decided_by, decision_note, created_at, updated_at, deleted_at, deleted
-FROM shadow_mcp_approval_requests
-WHERE organization_id = $1
-  AND project_id = $2
-  AND requester_user_id = $3
-  AND status = 'requested'
-  AND deleted IS FALSE
-  AND (
-    ($4::text <> '' AND observed_full_url = $4)
-    OR ($5::text <> '' AND observed_url_host = $5)
-    OR ($6::text <> '' AND observed_server_identity = $6)
-  )
-ORDER BY requested_at DESC
-LIMIT 1
-`
-
-type GetActiveShadowMCPApprovalRequestByFingerprintParams struct {
-	OrganizationID         string
-	ProjectID              uuid.UUID
-	RequesterUserID        pgtype.Text
-	ObservedFullUrl        string
-	ObservedUrlHost        string
-	ObservedServerIdentity string
-}
-
-func (q *Queries) GetActiveShadowMCPApprovalRequestByFingerprint(ctx context.Context, arg GetActiveShadowMCPApprovalRequestByFingerprintParams) (ShadowMcpApprovalRequest, error) {
-	row := q.db.QueryRow(ctx, getActiveShadowMCPApprovalRequestByFingerprint,
-		arg.OrganizationID,
-		arg.ProjectID,
-		arg.RequesterUserID,
-		arg.ObservedFullUrl,
-		arg.ObservedUrlHost,
-		arg.ObservedServerIdentity,
-	)
-	var i ShadowMcpApprovalRequest
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.RequesterUserID,
-		&i.RequesterEmail,
-		&i.RequesterDisplayName,
-		&i.Status,
-		&i.RiskPolicyID,
-		&i.RiskResultID,
-		&i.ObservedName,
-		&i.ObservedFullUrl,
-		&i.ObservedUrlHost,
-		&i.ObservedServerIdentity,
-		&i.RequestFingerprint,
-		&i.ToolName,
-		&i.ToolCall,
-		&i.BlockReason,
-		&i.BlockedCount,
-		&i.FirstBlockedAt,
-		&i.LastBlockedAt,
-		&i.RequestedAt,
-		&i.DecidedAt,
-		&i.DecidedBy,
-		&i.DecisionNote,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
 }
 
 const getGlobalRoleBySlug = `-- name: GetGlobalRoleBySlug :one
@@ -1432,6 +1254,136 @@ func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalG
 		&i.Selectors,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertShadowMCPApprovalRequest = `-- name: UpsertShadowMCPApprovalRequest :one
+INSERT INTO shadow_mcp_approval_requests (
+  organization_id,
+  project_id,
+  requester_user_id,
+  requester_email,
+  requester_display_name,
+  status,
+  risk_policy_id,
+  risk_result_id,
+  observed_name,
+  observed_full_url,
+  observed_url_host,
+  observed_server_identity,
+  request_fingerprint,
+  tool_name,
+  tool_call,
+  block_reason,
+  first_blocked_at,
+  last_blocked_at
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  'requested',
+  $6,
+  $7,
+  $8,
+  $9,
+  $10,
+  $11,
+  $12,
+  $13,
+  $14,
+  $15,
+  clock_timestamp(),
+  clock_timestamp()
+)
+ON CONFLICT (organization_id, project_id, requester_user_id, request_fingerprint)
+WHERE deleted IS FALSE AND status = 'requested' AND requester_user_id IS NOT NULL AND request_fingerprint IS NOT NULL
+DO UPDATE SET
+  requester_email = EXCLUDED.requester_email,
+  requester_display_name = EXCLUDED.requester_display_name,
+  risk_policy_id = COALESCE(EXCLUDED.risk_policy_id, shadow_mcp_approval_requests.risk_policy_id),
+  risk_result_id = COALESCE(EXCLUDED.risk_result_id, shadow_mcp_approval_requests.risk_result_id),
+  observed_name = COALESCE(EXCLUDED.observed_name, shadow_mcp_approval_requests.observed_name),
+  observed_full_url = COALESCE(EXCLUDED.observed_full_url, shadow_mcp_approval_requests.observed_full_url),
+  observed_url_host = COALESCE(EXCLUDED.observed_url_host, shadow_mcp_approval_requests.observed_url_host),
+  observed_server_identity = COALESCE(EXCLUDED.observed_server_identity, shadow_mcp_approval_requests.observed_server_identity),
+  tool_name = COALESCE(EXCLUDED.tool_name, shadow_mcp_approval_requests.tool_name),
+  tool_call = COALESCE(EXCLUDED.tool_call, shadow_mcp_approval_requests.tool_call),
+  block_reason = COALESCE(EXCLUDED.block_reason, shadow_mcp_approval_requests.block_reason),
+  blocked_count = shadow_mcp_approval_requests.blocked_count + 1,
+  last_blocked_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+RETURNING id, organization_id, project_id, requester_user_id, requester_email, requester_display_name, status, risk_policy_id, risk_result_id, observed_name, observed_full_url, observed_url_host, observed_server_identity, request_fingerprint, tool_name, tool_call, block_reason, blocked_count, first_blocked_at, last_blocked_at, requested_at, decided_at, decided_by, decision_note, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertShadowMCPApprovalRequestParams struct {
+	OrganizationID         string
+	ProjectID              uuid.UUID
+	RequesterUserID        pgtype.Text
+	RequesterEmail         pgtype.Text
+	RequesterDisplayName   pgtype.Text
+	RiskPolicyID           uuid.NullUUID
+	RiskResultID           uuid.NullUUID
+	ObservedName           pgtype.Text
+	ObservedFullUrl        pgtype.Text
+	ObservedUrlHost        pgtype.Text
+	ObservedServerIdentity pgtype.Text
+	RequestFingerprint     pgtype.Text
+	ToolName               pgtype.Text
+	ToolCall               pgtype.Text
+	BlockReason            pgtype.Text
+}
+
+func (q *Queries) UpsertShadowMCPApprovalRequest(ctx context.Context, arg UpsertShadowMCPApprovalRequestParams) (ShadowMcpApprovalRequest, error) {
+	row := q.db.QueryRow(ctx, upsertShadowMCPApprovalRequest,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.RequesterUserID,
+		arg.RequesterEmail,
+		arg.RequesterDisplayName,
+		arg.RiskPolicyID,
+		arg.RiskResultID,
+		arg.ObservedName,
+		arg.ObservedFullUrl,
+		arg.ObservedUrlHost,
+		arg.ObservedServerIdentity,
+		arg.RequestFingerprint,
+		arg.ToolName,
+		arg.ToolCall,
+		arg.BlockReason,
+	)
+	var i ShadowMcpApprovalRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RequesterUserID,
+		&i.RequesterEmail,
+		&i.RequesterDisplayName,
+		&i.Status,
+		&i.RiskPolicyID,
+		&i.RiskResultID,
+		&i.ObservedName,
+		&i.ObservedFullUrl,
+		&i.ObservedUrlHost,
+		&i.ObservedServerIdentity,
+		&i.RequestFingerprint,
+		&i.ToolName,
+		&i.ToolCall,
+		&i.BlockReason,
+		&i.BlockedCount,
+		&i.FirstBlockedAt,
+		&i.LastBlockedAt,
+		&i.RequestedAt,
+		&i.DecidedAt,
+		&i.DecidedBy,
+		&i.DecisionNote,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }

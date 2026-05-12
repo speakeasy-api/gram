@@ -6,30 +6,15 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 export type CreateShadowMCPApprovalRequestForm = {
-  blockReason?: string | undefined;
-  observedFullUrl?: string | undefined;
-  observedName?: string | undefined;
-  observedServerIdentity?: string | undefined;
-  observedUrlHost?: string | undefined;
-  projectId: string;
-  riskPolicyId?: string | undefined;
-  riskResultId?: string | undefined;
-  toolCall?: string | undefined;
-  toolName?: string | undefined;
+  /**
+   * Signed token from the Shadow MCP block response.
+   */
+  requestToken: string;
 };
 
 /** @internal */
 export type CreateShadowMCPApprovalRequestForm$Outbound = {
-  block_reason?: string | undefined;
-  observed_full_url?: string | undefined;
-  observed_name?: string | undefined;
-  observed_server_identity?: string | undefined;
-  observed_url_host?: string | undefined;
-  project_id: string;
-  risk_policy_id?: string | undefined;
-  risk_result_id?: string | undefined;
-  tool_call?: string | undefined;
-  tool_name?: string | undefined;
+  request_token: string;
 };
 
 /** @internal */
@@ -38,29 +23,11 @@ export const CreateShadowMCPApprovalRequestForm$outboundSchema: z.ZodMiniType<
   CreateShadowMCPApprovalRequestForm
 > = z.pipe(
   z.object({
-    blockReason: z.optional(z.string()),
-    observedFullUrl: z.optional(z.string()),
-    observedName: z.optional(z.string()),
-    observedServerIdentity: z.optional(z.string()),
-    observedUrlHost: z.optional(z.string()),
-    projectId: z.string(),
-    riskPolicyId: z.optional(z.string()),
-    riskResultId: z.optional(z.string()),
-    toolCall: z.optional(z.string()),
-    toolName: z.optional(z.string()),
+    requestToken: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      blockReason: "block_reason",
-      observedFullUrl: "observed_full_url",
-      observedName: "observed_name",
-      observedServerIdentity: "observed_server_identity",
-      observedUrlHost: "observed_url_host",
-      projectId: "project_id",
-      riskPolicyId: "risk_policy_id",
-      riskResultId: "risk_result_id",
-      toolCall: "tool_call",
-      toolName: "tool_name",
+      requestToken: "request_token",
     });
   }),
 );

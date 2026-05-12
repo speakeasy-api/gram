@@ -409,17 +409,7 @@ func BuildCreateShadowMCPApprovalRequestPayload(accessCreateShadowMCPApprovalReq
 	{
 		err = json.Unmarshal([]byte(accessCreateShadowMCPApprovalRequestBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"block_reason\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_name\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"risk_policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"risk_result_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_call\": \"abc123\",\n      \"tool_name\": \"abc123\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
-		if body.RiskPolicyID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.risk_policy_id", *body.RiskPolicyID, goa.FormatUUID))
-		}
-		if body.RiskResultID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.risk_result_id", *body.RiskResultID, goa.FormatUUID))
-		}
-		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"request_token\": \"abc123\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -429,16 +419,7 @@ func BuildCreateShadowMCPApprovalRequestPayload(accessCreateShadowMCPApprovalReq
 		}
 	}
 	v := &access.CreateShadowMCPApprovalRequestPayload{
-		ProjectID:              body.ProjectID,
-		ObservedName:           body.ObservedName,
-		ObservedFullURL:        body.ObservedFullURL,
-		ObservedURLHost:        body.ObservedURLHost,
-		ObservedServerIdentity: body.ObservedServerIdentity,
-		ToolName:               body.ToolName,
-		ToolCall:               body.ToolCall,
-		BlockReason:            body.BlockReason,
-		RiskPolicyID:           body.RiskPolicyID,
-		RiskResultID:           body.RiskResultID,
+		RequestToken: body.RequestToken,
 	}
 	v.SessionToken = sessionToken
 

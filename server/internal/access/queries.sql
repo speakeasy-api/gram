@@ -190,23 +190,7 @@ WHERE organization_id = @organization_id
   AND id = @id
   AND deleted IS FALSE;
 
--- name: GetActiveShadowMCPApprovalRequestByFingerprint :one
-SELECT *
-FROM shadow_mcp_approval_requests
-WHERE organization_id = @organization_id
-  AND project_id = @project_id
-  AND requester_user_id = @requester_user_id
-  AND status = 'requested'
-  AND deleted IS FALSE
-  AND (
-    (@observed_full_url::text <> '' AND observed_full_url = @observed_full_url)
-    OR (@observed_url_host::text <> '' AND observed_url_host = @observed_url_host)
-    OR (@observed_server_identity::text <> '' AND observed_server_identity = @observed_server_identity)
-  )
-ORDER BY requested_at DESC
-LIMIT 1;
-
--- name: CreateShadowMCPApprovalRequest :one
+-- name: UpsertShadowMCPApprovalRequest :one
 INSERT INTO shadow_mcp_approval_requests (
   organization_id,
   project_id,
@@ -220,6 +204,7 @@ INSERT INTO shadow_mcp_approval_requests (
   observed_full_url,
   observed_url_host,
   observed_server_identity,
+  request_fingerprint,
   tool_name,
   tool_call,
   block_reason,
@@ -238,12 +223,30 @@ INSERT INTO shadow_mcp_approval_requests (
   @observed_full_url,
   @observed_url_host,
   @observed_server_identity,
+  @request_fingerprint,
   @tool_name,
   @tool_call,
   @block_reason,
   clock_timestamp(),
   clock_timestamp()
 )
+ON CONFLICT (organization_id, project_id, requester_user_id, request_fingerprint)
+WHERE deleted IS FALSE AND status = 'requested' AND requester_user_id IS NOT NULL AND request_fingerprint IS NOT NULL
+DO UPDATE SET
+  requester_email = EXCLUDED.requester_email,
+  requester_display_name = EXCLUDED.requester_display_name,
+  risk_policy_id = COALESCE(EXCLUDED.risk_policy_id, shadow_mcp_approval_requests.risk_policy_id),
+  risk_result_id = COALESCE(EXCLUDED.risk_result_id, shadow_mcp_approval_requests.risk_result_id),
+  observed_name = COALESCE(EXCLUDED.observed_name, shadow_mcp_approval_requests.observed_name),
+  observed_full_url = COALESCE(EXCLUDED.observed_full_url, shadow_mcp_approval_requests.observed_full_url),
+  observed_url_host = COALESCE(EXCLUDED.observed_url_host, shadow_mcp_approval_requests.observed_url_host),
+  observed_server_identity = COALESCE(EXCLUDED.observed_server_identity, shadow_mcp_approval_requests.observed_server_identity),
+  tool_name = COALESCE(EXCLUDED.tool_name, shadow_mcp_approval_requests.tool_name),
+  tool_call = COALESCE(EXCLUDED.tool_call, shadow_mcp_approval_requests.tool_call),
+  block_reason = COALESCE(EXCLUDED.block_reason, shadow_mcp_approval_requests.block_reason),
+  blocked_count = shadow_mcp_approval_requests.blocked_count + 1,
+  last_blocked_at = clock_timestamp(),
+  updated_at = clock_timestamp()
 RETURNING *;
 
 -- name: DecideShadowMCPApprovalRequest :one

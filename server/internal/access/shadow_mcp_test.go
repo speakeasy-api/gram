@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
@@ -30,22 +31,24 @@ func TestService_CreateShadowMCPApprovalRequest_Idempotent(t *testing.T) {
 	toolName := "create_issue"
 
 	first, err := ti.service.CreateShadowMCPApprovalRequest(ctx, &gen.CreateShadowMCPApprovalRequestPayload{
-		ProjectID:              project.ID.String(),
-		ObservedName:           conv.PtrEmpty("Linear"),
-		ObservedFullURL:        &fullURL,
-		ObservedURLHost:        &host,
-		ObservedServerIdentity: &serverIdentity,
-		ToolName:               &toolName,
+		RequestToken: shadowMCPRequestToken(t, authCtx.ActiveOrganizationID, authCtx.UserID, project.ID.String(), ShadowMCPApprovalRequestTokenInput{
+			ObservedName:           conv.PtrEmpty("Linear"),
+			ObservedFullURL:        &fullURL,
+			ObservedURLHost:        &host,
+			ObservedServerIdentity: &serverIdentity,
+			ToolName:               &toolName,
+		}),
 	})
 	require.NoError(t, err)
 
 	second, err := ti.service.CreateShadowMCPApprovalRequest(ctx, &gen.CreateShadowMCPApprovalRequestPayload{
-		ProjectID:              project.ID.String(),
-		ObservedName:           conv.PtrEmpty("Linear"),
-		ObservedFullURL:        &fullURL,
-		ObservedURLHost:        &host,
-		ObservedServerIdentity: &serverIdentity,
-		ToolName:               &toolName,
+		RequestToken: shadowMCPRequestToken(t, authCtx.ActiveOrganizationID, authCtx.UserID, project.ID.String(), ShadowMCPApprovalRequestTokenInput{
+			ObservedName:           conv.PtrEmpty("Linear"),
+			ObservedFullURL:        &fullURL,
+			ObservedURLHost:        &host,
+			ObservedServerIdentity: &serverIdentity,
+			ToolName:               &toolName,
+		}),
 	})
 	require.NoError(t, err)
 
@@ -53,6 +56,20 @@ func TestService_CreateShadowMCPApprovalRequest_Idempotent(t *testing.T) {
 	require.Equal(t, shadowMCPRequestStatusRequested, first.Status)
 	require.Equal(t, project.ID.String(), first.ProjectID)
 	require.Equal(t, fullURL, *first.ObservedFullURL)
+	require.Equal(t, 2, second.BlockedCount)
+}
+
+func TestService_CreateShadowMCPApprovalRequest_RejectsInvalidToken(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+
+	_, err := ti.service.CreateShadowMCPApprovalRequest(ctx, &gen.CreateShadowMCPApprovalRequestPayload{
+		RequestToken: "not-a-shadow-mcp-token",
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
 func TestService_ApproveShadowMCPApprovalRequest_CreatesAllowRuleAndRoleGrant(t *testing.T) {
@@ -65,10 +82,11 @@ func TestService_ApproveShadowMCPApprovalRequest_CreatesAllowRuleAndRoleGrant(t 
 	host := "github.example.com"
 
 	request, err := ti.service.CreateShadowMCPApprovalRequest(ctx, &gen.CreateShadowMCPApprovalRequestPayload{
-		ProjectID:       project.ID.String(),
-		ObservedName:    conv.PtrEmpty("GitHub"),
-		ObservedFullURL: &fullURL,
-		ObservedURLHost: &host,
+		RequestToken: shadowMCPRequestToken(t, authCtx.ActiveOrganizationID, authCtx.UserID, project.ID.String(), ShadowMCPApprovalRequestTokenInput{
+			ObservedName:    conv.PtrEmpty("GitHub"),
+			ObservedFullURL: &fullURL,
+			ObservedURLHost: &host,
+		}),
 	})
 	require.NoError(t, err)
 
@@ -104,6 +122,53 @@ func TestService_ApproveShadowMCPApprovalRequest_CreatesAllowRuleAndRoleGrant(t 
 	require.Equal(t, result.Rule.ID, selector.ResourceID())
 }
 
+func TestService_ApproveShadowMCPApprovalRequest_MergesExistingRuleRoleGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	project := createShadowMCPProject(t, ctx, ti, authCtx.ActiveOrganizationID)
+	fullURL := "https://github.example.com/org/repo/mcp"
+	roles := []thirdpartyworkos.Role{
+		mockRole("role_ops", "Operations", "operations", ""),
+		mockRole("role_ai", "AI Platform", "ai-platform", ""),
+	}
+
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return(roles, nil).Once()
+	existingRule, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
+		Disposition:  shadowMCPRuleAllowed,
+		MatchBreadth: "full_url",
+		MatchValue:   fullURL,
+		DisplayName:  "GitHub Shadow MCP",
+		RoleIds:      []string{"role_ops"},
+	})
+	require.NoError(t, err)
+
+	request, err := ti.service.CreateShadowMCPApprovalRequest(ctx, &gen.CreateShadowMCPApprovalRequestPayload{
+		RequestToken: shadowMCPRequestToken(t, authCtx.ActiveOrganizationID, authCtx.UserID, project.ID.String(), ShadowMCPApprovalRequestTokenInput{
+			ObservedName:    conv.PtrEmpty("GitHub"),
+			ObservedFullURL: &fullURL,
+		}),
+	})
+	require.NoError(t, err)
+
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return(roles, nil).Once()
+	result, err := ti.service.ApproveShadowMCPApprovalRequest(ctx, &gen.ApproveShadowMCPApprovalRequestPayload{
+		ID:           request.ID,
+		MatchBreadth: "full_url",
+		MatchValue:   fullURL,
+		DisplayName:  "GitHub Shadow MCP",
+		RoleIds:      []string{"role_ai"},
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, existingRule.ID, result.Rule.ID)
+	require.ElementsMatch(t, []string{"role_ops", "role_ai"}, result.Rule.RoleIds)
+	require.Len(t, listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "operations")), 1)
+	require.Len(t, listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "ai-platform")), 1)
+}
+
 func TestService_DenyShadowMCPApprovalRequest_CanSkipDenyRule(t *testing.T) {
 	t.Parallel()
 
@@ -113,9 +178,10 @@ func TestService_DenyShadowMCPApprovalRequest_CanSkipDenyRule(t *testing.T) {
 	host := "unknown.example.com"
 
 	request, err := ti.service.CreateShadowMCPApprovalRequest(ctx, &gen.CreateShadowMCPApprovalRequestPayload{
-		ProjectID:       project.ID.String(),
-		ObservedName:    conv.PtrEmpty("Unknown MCP"),
-		ObservedURLHost: &host,
+		RequestToken: shadowMCPRequestToken(t, authCtx.ActiveOrganizationID, authCtx.UserID, project.ID.String(), ShadowMCPApprovalRequestTokenInput{
+			ObservedName:    conv.PtrEmpty("Unknown MCP"),
+			ObservedURLHost: &host,
+		}),
 	})
 	require.NoError(t, err)
 
@@ -214,4 +280,15 @@ func createShadowMCPProject(t *testing.T, ctx context.Context, ti *testInstance,
 	require.NoError(t, err)
 
 	return project
+}
+
+func shadowMCPRequestToken(t *testing.T, organizationID string, requesterUserID string, projectID string, input ShadowMCPApprovalRequestTokenInput) string {
+	t.Helper()
+
+	input.OrganizationID = organizationID
+	input.ProjectID = projectID
+	input.RequesterUserID = requesterUserID
+	token, _, err := GenerateShadowMCPApprovalRequestToken("test-jwt-secret", input, 5*time.Minute)
+	require.NoError(t, err)
+	return token
 }

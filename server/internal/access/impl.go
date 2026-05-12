@@ -75,6 +75,7 @@ type Service struct {
 	roles        RoleProvider
 	featureCache FeatureCacheWriter
 	audit        *audit.Logger
+	jwtSecret    string
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -90,6 +91,7 @@ func NewService(
 	authz *authz.Engine,
 	featureCache FeatureCacheWriter,
 	auditLogger *audit.Logger,
+	jwtSecret string,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
@@ -103,6 +105,7 @@ func NewService(
 		roles:        roles,
 		featureCache: featureCache,
 		audit:        auditLogger,
+		jwtSecret:    jwtSecret,
 	}
 }
 

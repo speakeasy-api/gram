@@ -4529,7 +4529,7 @@ func accessCreateShadowMCPApprovalRequestUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-shadow-mcp-approval-request --body '{\n      \"block_reason\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_name\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"risk_policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"risk_result_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_call\": \"abc123\",\n      \"tool_name\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-shadow-mcp-approval-request --body '{\n      \"request_token\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func accessApproveShadowMCPApprovalRequestUsage() {

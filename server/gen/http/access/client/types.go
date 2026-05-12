@@ -53,16 +53,8 @@ type UpdateMemberRoleRequestBody struct {
 // CreateShadowMCPApprovalRequestRequestBody is the type of the "access"
 // service "createShadowMCPApprovalRequest" endpoint HTTP request body.
 type CreateShadowMCPApprovalRequestRequestBody struct {
-	ProjectID              string  `form:"project_id" json:"project_id" xml:"project_id"`
-	ObservedName           *string `form:"observed_name,omitempty" json:"observed_name,omitempty" xml:"observed_name,omitempty"`
-	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
-	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
-	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
-	ToolName               *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
-	ToolCall               *string `form:"tool_call,omitempty" json:"tool_call,omitempty" xml:"tool_call,omitempty"`
-	BlockReason            *string `form:"block_reason,omitempty" json:"block_reason,omitempty" xml:"block_reason,omitempty"`
-	RiskPolicyID           *string `form:"risk_policy_id,omitempty" json:"risk_policy_id,omitempty" xml:"risk_policy_id,omitempty"`
-	RiskResultID           *string `form:"risk_result_id,omitempty" json:"risk_result_id,omitempty" xml:"risk_result_id,omitempty"`
+	// Signed token from the Shadow MCP block response.
+	RequestToken string `form:"request_token" json:"request_token" xml:"request_token"`
 }
 
 // ApproveShadowMCPApprovalRequestRequestBody is the type of the "access"
@@ -4950,16 +4942,7 @@ func NewUpdateMemberRoleRequestBody(p *access.UpdateMemberRolePayload) *UpdateMe
 // "access" service.
 func NewCreateShadowMCPApprovalRequestRequestBody(p *access.CreateShadowMCPApprovalRequestPayload) *CreateShadowMCPApprovalRequestRequestBody {
 	body := &CreateShadowMCPApprovalRequestRequestBody{
-		ProjectID:              p.ProjectID,
-		ObservedName:           p.ObservedName,
-		ObservedFullURL:        p.ObservedFullURL,
-		ObservedURLHost:        p.ObservedURLHost,
-		ObservedServerIdentity: p.ObservedServerIdentity,
-		ToolName:               p.ToolName,
-		ToolCall:               p.ToolCall,
-		BlockReason:            p.BlockReason,
-		RiskPolicyID:           p.RiskPolicyID,
-		RiskResultID:           p.RiskResultID,
+		RequestToken: p.RequestToken,
 	}
 	return body
 }
