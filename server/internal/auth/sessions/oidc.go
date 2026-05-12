@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/url"
 	"regexp"
 	"strings"
@@ -107,8 +106,21 @@ func extractSessionIDFromJWT(token string) string {
 //
 // After resolving the ID, we sync bidirectionally: Gram stores the WorkOS user
 // ID, and WorkOS stores the Gram user ID as external_id.
-func (s *Manager) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) (string, error) {
+func (s *Manager) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) (_ string, err error) {
+	ctx, span := s.tracer.Start(ctx, "sessions.upsertUserFromIDP")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
 	gramUserID, admin := s.resolveGramUserID(ctx, idpUser)
+	span.SetAttributes(
+		attr.AuthUserID(gramUserID),
+		attr.WorkOSUserID(idpUser.Sub),
+		attr.ExternalUserID(idpUser.ExternalID),
+	)
 
 	user, err := s.userRepo.UpsertUser(ctx, userRepo.UpsertUserParams{
 		ID:          gramUserID,
@@ -137,8 +149,8 @@ func (s *Manager) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) (
 		if err := s.workosClient.EnsureUserExternalID(ctx, idpUser.Sub, gramUserID); err != nil {
 			s.logger.ErrorContext(ctx, "failed to sync external_id to workos",
 				attr.SlogError(err),
-				slog.String("workos_user_id", idpUser.Sub),
-				slog.String("gram_user_id", gramUserID),
+				attr.SlogWorkOSUserID(idpUser.Sub),
+				attr.SlogAuthUserID(gramUserID),
 			)
 		}
 	}
