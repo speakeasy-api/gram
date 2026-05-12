@@ -1,4 +1,4 @@
-h1:fSjauz2YONmWdtStM447kPQ745ncmCdwhjeqmXQmXec=
+h1:qb2WBUgWrvZKHmbFf6it4xxtLi1YnyHYhsrwm+xul9g=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -167,3 +167,4 @@ h1:fSjauz2YONmWdtStM447kPQ745ncmCdwhjeqmXQmXec=
 20260512092949_add-user-deleted-at-column.sql h1:tjmvmwD0ChThSFMDHnahV0W5dTZpVS/H49x0yh+py88=
 20260512093032_add-org-user-relationship-workos-id-column.sql h1:bfMGYN8vrqG3h3pncuHYh+Efh7Ud4FNhSiH0nswQm0Y=
 20260512103400_add-prompt-injection-rules.sql h1:X5zqk2CoHY9IrOJemHa+UvmRsmrHNcBO01wFfo2+H2U=
+20260512155737_add_workos_user_sync_metadata.sql h1:4VI2g6/r9x2TJyj3A9KRooa6pUi6zMUhrYNyaiKs/IQ=
