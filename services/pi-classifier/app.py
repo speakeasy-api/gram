@@ -22,6 +22,8 @@ from pydantic import BaseModel, Field, field_validator
 from transformers import AutoTokenizer
 
 MODEL_REPO = os.environ.get("MODEL_REPO", "protectai/deberta-v3-base-prompt-injection-v2")
+MODEL_REVISION = os.environ.get("MODEL_REVISION", "e6535ca4ce3ba852083e75ec585d7c8aeb4be4c5")
+HF_LOCAL_FILES_ONLY = os.environ.get("HF_LOCAL_FILES_ONLY", "").lower() in {"1", "true", "yes"}
 MAX_LENGTH = int(os.environ.get("MAX_LENGTH", "512"))
 MAX_BATCH = int(os.environ.get("MAX_BATCH", "64"))
 MAX_BODY_BYTES = int(os.environ.get("MAX_BODY_BYTES", str(2 * 1024 * 1024)))
@@ -43,9 +45,18 @@ class _State:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     t0 = time.perf_counter()
-    log.info(f"loading model repo={MODEL_REPO}")
-    _State.tokenizer = AutoTokenizer.from_pretrained(MODEL_REPO)
-    _State.model = ORTModelForSequenceClassification.from_pretrained(MODEL_REPO, subfolder="onnx")
+    log.info(f"loading model repo={MODEL_REPO} revision={MODEL_REVISION}")
+    _State.tokenizer = AutoTokenizer.from_pretrained(
+        MODEL_REPO,
+        revision=MODEL_REVISION,
+        local_files_only=HF_LOCAL_FILES_ONLY,
+    )
+    _State.model = ORTModelForSequenceClassification.from_pretrained(
+        MODEL_REPO,
+        subfolder="onnx",
+        revision=MODEL_REVISION,
+        local_files_only=HF_LOCAL_FILES_ONLY,
+    )
     # Resolve the index of the INJECTION class once. id2label is on the config; default
     # for this model is {0: "SAFE", 1: "INJECTION"} but we don't want to hardcode it.
     id2label = {int(k): v for k, v in _State.model.config.id2label.items()}
@@ -63,6 +74,15 @@ async def _enforce_body_limit(request: Request, call_next):
     cl = request.headers.get("content-length")
     if cl is not None and cl.isdigit() and int(cl) > MAX_BODY_BYTES:
         return JSONResponse({"detail": f"body too large (limit {MAX_BODY_BYTES} bytes)"}, status_code=413)
+    if request.method == "POST" and cl is None:
+        body = await request.body()
+        if len(body) > MAX_BODY_BYTES:
+            return JSONResponse({"detail": f"body too large (limit {MAX_BODY_BYTES} bytes)"}, status_code=413)
+
+        async def receive():
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        request = Request(request.scope, receive)
     return await call_next(request)
 
 

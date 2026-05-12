@@ -130,6 +130,14 @@ services:
     restart: unless-stopped
     ports:
       - "${PI_CLASSIFIER_PORT}:8000"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    tmpfs:
+      - /tmp:size=64m,mode=1777
     healthcheck:
       test:
         [
