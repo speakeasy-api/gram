@@ -7,7 +7,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
-	"github.com/workos/workos-go/v6/pkg/usermanagement"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -18,6 +17,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
+
+// SessionRevoker invalidates an IDP session. Implemented by the WorkOS
+// adapter so sessions.Manager doesn't depend on the WorkOS SDK directly.
+type SessionRevoker interface {
+	RevokeSession(ctx context.Context, sessionID string) error
+}
 
 // UserResolver provides identity-layer operations that Authenticate needs.
 // Implemented by the identity.Resolver to avoid a circular import.
@@ -32,7 +37,7 @@ type Manager struct {
 	logger       *slog.Logger
 	tracer       trace.Tracer
 	sessionCache cache.TypedCacheObject[Session]
-	umClient     *usermanagement.Client // for RevokeSession only
+	idpClient    SessionRevoker
 	orgRepo      *orgRepo.Queries
 	billingRepo  billing.Repository
 	identity     UserResolver
@@ -44,7 +49,7 @@ func NewManager(
 	db *pgxpool.Pool,
 	redisClient *redis.Client,
 	suffix cache.Suffix,
-	umClient *usermanagement.Client,
+	idpClient SessionRevoker,
 	billingRepo billing.Repository,
 	identity UserResolver,
 ) *Manager {
@@ -54,7 +59,7 @@ func NewManager(
 		logger:       logger,
 		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/sessions"),
 		sessionCache: cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
-		umClient:     umClient,
+		idpClient:    idpClient,
 		orgRepo:      orgRepo.New(db),
 		billingRepo:  billingRepo,
 		identity:     identity,
@@ -158,10 +163,8 @@ func (s *Manager) ClearSession(ctx context.Context, session Session) error {
 
 	// Revoke the WorkOS AuthKit session so the user is prompted to sign in
 	// again on next login rather than being auto-authenticated.
-	if session.WorkOSSessionID != "" && s.umClient != nil {
-		if err := s.umClient.RevokeSession(ctx, usermanagement.RevokeSessionOpts{
-			SessionID: session.WorkOSSessionID,
-		}); err != nil {
+	if session.WorkOSSessionID != "" && s.idpClient != nil {
+		if err := s.idpClient.RevokeSession(ctx, session.WorkOSSessionID); err != nil {
 			// Non-fatal: the Gram session is still cleared, and the WorkOS
 			// session will expire naturally.
 			s.logger.ErrorContext(ctx, "failed to revoke WorkOS session", attr.SlogError(err))

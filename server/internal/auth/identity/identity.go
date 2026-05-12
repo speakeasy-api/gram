@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/workos/workos-go/v6/pkg/usermanagement"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
@@ -28,6 +27,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/users"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
+
+// IDPClient is the slim interface for IDP code exchange. Wraps the WorkOS
+// user-management SDK so Gram doesn't leak SDK types with irrelevant
+// browser-flow fields (CodeVerifier, IPAddress, UserAgent).
+type IDPClient interface {
+	AuthenticateWithCode(ctx context.Context, clientID, code string) (*AuthenticateResult, error)
+}
+
+// AuthenticateResult holds the fields Gram uses from the IDP code exchange.
+type AuthenticateResult struct {
+	AccessToken string
+	User        AuthenticatedUser
+}
+
+// AuthenticatedUser holds the user fields Gram reads after IDP authentication.
+type AuthenticatedUser struct {
+	ID                string
+	FirstName         string
+	LastName          string
+	Email             string
+	ProfilePictureURL string
+	ExternalID        string
+}
 
 // WorkOSClient is the subset of workos.Client needed for identity resolution:
 // org membership sync, cross-system ID synchronization, and org provisioning.
@@ -58,7 +80,7 @@ type Resolver struct {
 	userInfoCache cache.TypedCacheObject[sessions.CachedUserInfo]
 	idpBaseURL    string
 	idpClientID   string
-	umClient      *usermanagement.Client
+	idpClient     IDPClient
 	workosClient  WorkOSClient
 	orgRepo       *orgRepo.Queries
 	userRepo      *userRepo.Queries
@@ -72,7 +94,7 @@ func NewResolver(
 	redisClient cache.Cache,
 	idpBaseURL string,
 	idpClientID string,
-	umClient *usermanagement.Client,
+	idpClient IDPClient,
 	workosClient WorkOSClient,
 	orgRepo *orgRepo.Queries,
 	userRepo *userRepo.Queries,
@@ -86,7 +108,7 @@ func NewResolver(
 		userInfoCache: cache.NewTypedObjectCache[sessions.CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), redisClient, cache.SuffixNone),
 		idpBaseURL:    idpBaseURL,
 		idpClientID:   idpClientID,
-		umClient:      umClient,
+		idpClient:     idpClient,
 		workosClient:  workosClient,
 		orgRepo:       orgRepo,
 		userRepo:      userRepo,
@@ -106,13 +128,7 @@ func (r *Resolver) ExchangeCodeForTokens(ctx context.Context, code string) (_ *I
 		span.End()
 	}()
 
-	resp, err := r.umClient.AuthenticateWithCode(ctx, usermanagement.AuthenticateWithCodeOpts{
-		ClientID:     r.idpClientID,
-		Code:         code,
-		CodeVerifier: "",
-		IPAddress:    "",
-		UserAgent:    "",
-	})
+	resp, err := r.idpClient.AuthenticateWithCode(ctx, r.idpClientID, code)
 	if err != nil {
 		return nil, fmt.Errorf("workos authenticate with code: %w", err)
 	}

@@ -39,10 +39,11 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 	srv := httptest.NewServer(mockidp.Handler(cfg))
 	t.Cleanup(srv.Close)
 
-	// Point a real WorkOS SDK client at the mock server.
+	// Point a real WorkOS SDK client at the mock server, wrapped in the slim adapter.
 	umClient := usermanagement.NewClient("test-api-key")
 	umClient.Endpoint = srv.URL
 	umClient.HTTPClient = srv.Client()
+	idpClient := identity.NewWorkOSAdapter(umClient)
 
 	fakePylon, err := pylon.NewPylon(logger, "")
 	require.NoError(t, err)
@@ -55,7 +56,7 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 		cache.NewRedisCacheAdapter(redisClient),
 		srv.URL,
 		"test-client-id",
-		umClient,
+		idpClient,
 		nil, // no WorkOS client in tests — fallback won't fire
 		orgRepo.New(db),
 		userRepo.New(db),
@@ -69,7 +70,7 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 		db,
 		redisClient,
 		suffix,
-		umClient,
+		idpClient,
 		billingRepo,
 		resolver,
 	)

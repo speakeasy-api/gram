@@ -104,6 +104,7 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 	umClient := usermanagement.NewClient("test-api-key")
 	umClient.Endpoint = mockServer.URL
 	umClient.HTTPClient = mockServer.Client()
+	idpClient := identity.NewWorkOSAdapter(umClient)
 
 	pylonClient, err := pylon.NewPylon(logger, "")
 	require.NoError(t, err)
@@ -116,10 +117,10 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 		wf = fetcher
 	}
 
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", umClient, wf, orgRepo.New(conn), usersRepo.New(conn), pylonClient, posthogClient)
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, wf, orgRepo.New(conn), usersRepo.New(conn), pylonClient, posthogClient)
 	sessionManager := sessions.NewManager(
 		logger, tracerProvider, conn, redisClient, cache.Suffix("gram-e2e"),
-		umClient, billingClient, resolver,
+		idpClient, billingClient, resolver,
 	)
 
 	authConfigs := auth.AuthConfigurations{

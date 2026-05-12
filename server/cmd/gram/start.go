@@ -532,13 +532,15 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create IDP user management client: idp-client-secret (or workos-api-key) is required")
 			}
 
+			idpClient := identity.NewWorkOSAdapter(umClient)
+
 			identityResolver := identity.NewResolver(
 				logger,
 				tracerProvider,
 				cache.NewRedisCacheAdapter(redisClient),
 				c.String("idp-base-url"),
 				c.String("idp-client-id"),
-				umClient,
+				idpClient,
 				workosClient,
 				orgRepo.New(db),
 				userRepo.New(db),
@@ -552,7 +554,7 @@ func newStartCommand() *cli.Command {
 				db,
 				redisClient,
 				cache.SuffixNone,
-				umClient,
+				idpClient,
 				billingRepo,
 				identityResolver,
 			)
