@@ -30,6 +30,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 )
 
@@ -42,6 +44,8 @@ type Service struct {
 	db     *pgxpool.Pool
 	auth   *auth.Auth
 	authz  *authz.Engine
+	enc    *encryption.Client
+	policy *guardian.Policy
 }
 
 var (
@@ -54,8 +58,12 @@ var (
 )
 
 // NewService constructs a Service ready to be Attached against each of the
-// three remote_session* Goa services.
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine) *Service {
+// three remote_session* Goa services. The encryption client is used to
+// encrypt remote_session_client.client_secret_encrypted (ticket #10) and
+// remote_session.{access,refresh}_token_encrypted (ticket #11). The guardian
+// policy validates outbound HTTP destinations during issuer discovery and
+// dynamic client registration.
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, policy *guardian.Policy) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 
 	return &Service{
@@ -64,6 +72,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		db:     db,
 		auth:   auth.New(logger, db, sessionManager, authzEngine),
 		authz:  authzEngine,
+		enc:    enc,
+		policy: policy,
 	}
 }
 
