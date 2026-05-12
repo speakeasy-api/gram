@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -58,4 +59,50 @@ func toolsCallRequestFromUserRequest(req *UserRequest) (*ToolsCallRequest, bool)
 	}
 
 	return &ToolsCallRequest{UserRequest: req, Params: params}, true
+}
+
+// SetArguments replaces the arguments payload on a tools/call request,
+// marking the underlying user request dirty so the proxy forwards the
+// mutated body upstream. Use this for inject and scrub patterns: stripping
+// proxy-only properties before forwarding to the tool, normalizing
+// argument shapes, or rewriting wholesale.
+//
+// arguments must be a JSON object payload that the upstream tool can
+// unmarshal against its declared input schema. The replacement is
+// observed by every subsequent interceptor in the same chain through the
+// shared *Params pointer — no re-read of wire bytes is required. The
+// outer jsonrpc.Message is re-encoded once after the chain completes (see
+// [UserRequest.refreshBody]); this method does the inner payload swap up
+// front so the dirty signal alone is sufficient to trigger that
+// re-encode. Marshal happens before any typed-view or underlying-message
+// state is touched so a marshal failure leaves everything at its
+// pre-call values — the typed view and the wire remain in sync
+// regardless of the failure mode.
+//
+// Returns a [*MutationError] when the underlying jsonrpc.Message is not
+// a *jsonrpc.Request or when marshaling the mutated CallToolParamsRaw
+// fails. The proxy detects [*MutationError] at the interceptor return
+// path and surfaces it as an HTTP 5xx via [oops.E] with
+// [oops.CodeUnexpected] rather than as a user-facing JSON-RPC rejection.
+func (r *ToolsCallRequest) SetArguments(arguments json.RawMessage) error {
+	rpcReq, ok := r.UserRequest.JSONRPCMessages[0].(*jsonrpc.Request)
+	if !ok {
+		return &MutationError{Op: "set arguments", Cause: fmt.Errorf("underlying message is %T, want *jsonrpc.Request", r.UserRequest.JSONRPCMessages[0])}
+	}
+
+	// Stage the mutation against a temporary copy of Params so a marshal
+	// failure can't leave the typed view's Arguments desynced from the
+	// underlying wire bytes. Only commit (assign to Params.Arguments,
+	// rpcReq.Params, dirty) once marshaling has succeeded.
+	staged := *r.Params
+	staged.Arguments = arguments
+	payload, err := json.Marshal(&staged)
+	if err != nil {
+		return &MutationError{Op: "set arguments", Cause: fmt.Errorf("marshal mutated CallToolParamsRaw: %w", err)}
+	}
+
+	r.Params.Arguments = arguments
+	rpcReq.Params = payload
+	r.UserRequest.dirty = true
+	return nil
 }
