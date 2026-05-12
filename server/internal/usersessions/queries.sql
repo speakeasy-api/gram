@@ -229,9 +229,13 @@ VALUES (
 RETURNING *;
 
 -- name: CreateUserSession :one
+-- user_session_client_id binds the session to the DCR client that minted it.
+-- The /token refresh path requires the same client to refresh; see
+-- HandleToken's refresh_token grant.
 INSERT INTO user_sessions (
     project_id,
     user_session_issuer_id,
+    user_session_client_id,
     subject_urn,
     jti,
     refresh_token_hash,
@@ -241,6 +245,7 @@ INSERT INTO user_sessions (
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
     @user_session_issuer_id,
+    @user_session_client_id,
     @subject_urn,
     @jti,
     @refresh_token_hash,

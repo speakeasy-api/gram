@@ -144,11 +144,11 @@ var (
 	supportedCodeChallengeMethods = []string{"S256"}
 )
 
-
 // dcrMaxBodyBytes caps the RFC 7591 §3.1 client metadata document size on
 // HandleRegister. The spec doesn't mandate a limit; 64 KiB is well past any
 // real document and defends against memory-exhaustion (gosec G120).
 const dcrMaxBodyBytes int64 = 64 * 1024
+
 // dcrRegistrationResponse is the RFC 7591 §3.2.1 successful registration
 // response. `client_secret` is included exactly once, on this response. Both
 // `client_secret` and `client_secret_expires_at` are omitted entirely for
@@ -1179,24 +1179,12 @@ type tokenResponse struct {
 	RefreshToken string `json:"refresh_token,omitempty"`
 }
 
-// HandleToken implements the OAuth 2.1 token endpoint (RFC 6749 §4.1.3) for
-// the authorization_code grant. Mounted at `POST /mcp/{mcpSlug}/token`.
-//
-// Flow:
-//   - parse + cap form
-//   - authenticate the client (Basic or POST credential), bcrypt-verify
-//     against user_session_clients.client_secret_hash
-//   - atomically read+delete the UserSessionGrant (Redis) so a code can't
-//     be redeemed twice
-//   - verify redirect_uri matches the grant + S256 PKCE verifier matches
-//     code_challenge
-//   - mint a SessionClaims JWT (HS256 with GRAM_JWT_SIGNING_KEY) audienced
-//     to the toolset slug, sub = grant.Subject
-//   - persist a user_sessions row keyed on sha256(refresh_token)
-//   - return RFC 6749 §5.1 token JSON with no-store headers
-//
-// Refresh-token grant is intentionally out of scope; lands in milestone #2
-// alongside rotation policy and the chat-session retirement work.
+// HandleToken implements the OAuth 2.1 token endpoint (RFC 6749 §4.1.3 /
+// §6). Mounted at `POST /mcp/{mcpSlug}/token`. Performs the common upfront
+// work — parse form, load toolset, authenticate the client — then
+// dispatches on grant_type to handleTokenAuthorizationCodeGrant or
+// handleTokenRefreshTokenGrant. Both grant handlers funnel through
+// mintSessionAndRespond which writes the RFC 6749 §5.1 response.
 func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
@@ -1225,22 +1213,10 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 		attr.SlogProjectID(toolset.ProjectID.String()),
 	)
 
-	grantType := r.PostForm.Get("grant_type")
-	switch grantType {
-	case "authorization_code":
-		// fall through
-	case "refresh_token":
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "unsupported_grant_type", "refresh_token grant lands in milestone #2")
-		// > booooooo - inaccurate. Just fucking implement it bruv
-	default:
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "unsupported_grant_type", "unsupported grant_type")
-	}
-
 	clientID, clientSecret, _ := extractClientCredentials(r)
 	if clientID == "" {
 		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
 	}
-
 	clientRow, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		ClientID:            clientID,
@@ -1252,20 +1228,46 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").Log(ctx, logger)
 	}
 	// Public clients (token_endpoint_auth_method=none) have a NULL hash:
-	// PKCE is the integrity proof, no secret check. Confidential clients
-	// MUST present a matching secret.
+	// PKCE / refresh-token possession is the integrity proof, no secret check.
+	// Confidential clients MUST present a matching secret.
 	if clientRow.ClientSecretHash.Valid {
 		if err := bcrypt.CompareHashAndPassword([]byte(clientRow.ClientSecretHash.String), []byte(clientSecret)); err != nil {
 			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client secret mismatch")
 		}
 	}
 
+	switch r.PostForm.Get("grant_type") {
+	case "authorization_code":
+		return s.handleTokenAuthorizationCodeGrant(ctx, w, r, toolset, &clientRow, mcpSlug, logger)
+	case "refresh_token":
+		return s.handleTokenRefreshTokenGrant(ctx, w, r, toolset, &clientRow, mcpSlug, logger)
+	default:
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "unsupported_grant_type", "unsupported grant_type")
+	}
+}
+
+// handleTokenAuthorizationCodeGrant implements RFC 6749 §4.1.3. Reads the
+// authorization code from the form, atomically consumes the
+// UserSessionGrant from Redis (single-use), validates redirect_uri + the
+// S256 PKCE verifier, then mints a new session via mintSessionAndRespond.
+//
+// No re-check of user_session_consents: possession of a valid grant IS
+// proof of consent. The grant was minted by HandleConsent's POST after
+// writing the consent row, and we atomically consumed it here.
+func (s *Service) handleTokenAuthorizationCodeGrant(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	toolset *toolsets_repo.Toolset,
+	clientRow *usersessions_repo.UserSessionClient,
+	mcpSlug string,
+	logger *slog.Logger,
+) error {
 	code := r.PostForm.Get("code")
 	if code == "" {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "code is required")
 	}
 
-	// Atomically read+delete the grant so a code can't be redeemed twice.
 	grantKey := "userSessionGrant:" + toolset.UserSessionIssuerID.UUID.String() + ":" + code
 	grant, err := s.userSessionGrantCache.Get(ctx, grantKey)
 	if err != nil {
@@ -1276,7 +1278,7 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeUnexpected, err, "consume user session grant").Log(ctx, logger)
 	}
 
-	if grant.ClientID != clientID {
+	if grant.ClientID != clientRow.ClientID {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code was issued to a different client")
 	}
 	if grant.RedirectURI != r.PostForm.Get("redirect_uri") {
@@ -1291,12 +1293,83 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code_verifier does not match code_challenge")
 	}
 
-	// No re-check of user_session_consents here: possession of a valid
-	// UserSessionGrant IS proof of consent. The grant was minted by the
-	// HandleConsent POST after writing the consent record, and we just
-	// atomically consumed it (single-use). Re-querying the consent table
-	// would be redundant.
+	return s.mintSessionAndRespond(ctx, w, toolset, clientRow, grant.Subject, mcpSlug, logger)
+}
 
+// handleTokenRefreshTokenGrant implements RFC 6749 §6 (and OAuth 2.1's
+// refresh-token rotation guidance). Hashes the supplied refresh token,
+// atomically soft-deletes the matching user_sessions row (single-use:
+// concurrent refreshes race for the slot), pushes the old access token's
+// JTI into the revocation cache, then mints a new session via
+// mintSessionAndRespond.
+//
+// Client binding: the soft-deleted row's user_session_client_id MUST match
+// the authenticated client. This blocks Client B from refreshing tokens
+// issued to Client A even if B somehow obtains the opaque refresh token.
+func (s *Service) handleTokenRefreshTokenGrant(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	toolset *toolsets_repo.Toolset,
+	clientRow *usersessions_repo.UserSessionClient,
+	mcpSlug string,
+	logger *slog.Logger,
+) error {
+	raw := r.PostForm.Get("refresh_token")
+	if raw == "" {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "refresh_token is required")
+	}
+
+	// Soft-delete by hash claims the single-use slot atomically. If the row
+	// is already gone (unknown / replayed / revoked), pgx.ErrNoRows surfaces
+	// here as invalid_grant.
+	oldSession, err := usersessions_repo.New(s.db).RevokeUserSessionByRefreshTokenHash(ctx, usersessions_repo.RevokeUserSessionByRefreshTokenHashParams{
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		RefreshTokenHash:    sha256Hex(raw),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token is unknown or already used")
+		}
+		return oops.E(oops.CodeUnexpected, err, "revoke old refresh token").Log(ctx, logger)
+	}
+
+	// Client binding: refuse if the original session was minted for a
+	// different client. We've already soft-deleted the row -- that's
+	// intentional, the alternative would let a leaking client poke at others'
+	// refresh tokens without invalidating them.
+	if !oldSession.UserSessionClientID.Valid || oldSession.UserSessionClientID.UUID != clientRow.ID {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token was issued to a different client")
+	}
+
+	if oldSession.RefreshExpiresAt.Valid && time.Now().After(oldSession.RefreshExpiresAt.Time) {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token has expired")
+	}
+
+	// Best-effort: invalidate any access token still floating around from
+	// the prior session row. If Redis is down, the access token will expire
+	// naturally on its own clock; we'd rather mint than fail the refresh.
+	if err := s.chatSessionsManager.RevokeToken(ctx, oldSession.Jti); err != nil {
+		logger.WarnContext(ctx, "failed to revoke old access token jti on refresh", attr.SlogError(err))
+	}
+
+	return s.mintSessionAndRespond(ctx, w, toolset, clientRow, oldSession.SubjectUrn, mcpSlug, logger)
+}
+
+// mintSessionAndRespond resolves the issuer's session_duration, mints a new
+// SessionClaims JWT (HS256, audience = toolset slug) and an opaque refresh
+// token, persists a fresh user_sessions row, and writes the RFC 6749 §5.1
+// response. Shared by the authorization_code and refresh_token grant
+// handlers since both produce identical token responses.
+func (s *Service) mintSessionAndRespond(
+	ctx context.Context,
+	w http.ResponseWriter,
+	toolset *toolsets_repo.Toolset,
+	clientRow *usersessions_repo.UserSessionClient,
+	subject urn.SessionSubject,
+	mcpSlug string,
+	logger *slog.Logger,
+) error {
 	// Resolve the issuer's session_duration. Microseconds-only: the issuer
 	// create handler stores via conv.PtrToPGInterval which never sets
 	// Months/Days; if we ever see those here, raw SQL bypassed the writer
@@ -1324,7 +1397,7 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	issuerURL := s.serverURL.String() + "/mcp/" + mcpSlug
-	access, jti, err := s.userSessionSigner.Mint(grant.Subject, toolset.Slug, issuerURL, lifetime)
+	access, jti, err := s.userSessionSigner.Mint(subject, toolset.Slug, issuerURL, lifetime)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "mint session jwt").Log(ctx, logger)
 	}
@@ -1333,15 +1406,14 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "generate refresh token").Log(ctx, logger)
 	}
-	refreshHash := sha256Hex(refreshTokenRaw)
 
-	now := time.Now()
-	expiresAt := now.Add(lifetime)
+	expiresAt := time.Now().Add(lifetime)
 	if _, err := usersessions_repo.New(s.db).CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		SubjectUrn:          grant.Subject,
+		UserSessionClientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true},
+		SubjectUrn:          subject,
 		Jti:                 jti,
-		RefreshTokenHash:    refreshHash,
+		RefreshTokenHash:    sha256Hex(refreshTokenRaw),
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: expiresAt, InfinityModifier: 0, Valid: true},
 		ExpiresAt:           pgtype.Timestamptz{Time: expiresAt, InfinityModifier: 0, Valid: true},
 	}); err != nil {

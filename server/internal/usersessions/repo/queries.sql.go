@@ -17,6 +17,7 @@ const createUserSession = `-- name: CreateUserSession :one
 INSERT INTO user_sessions (
     project_id,
     user_session_issuer_id,
+    user_session_client_id,
     subject_urn,
     jti,
     refresh_token_hash,
@@ -30,13 +31,15 @@ VALUES (
     $3,
     $4,
     $5,
-    $6
+    $6,
+    $7
 )
 RETURNING id, project_id, user_session_issuer_id, user_session_client_id, subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateUserSessionParams struct {
 	UserSessionIssuerID uuid.UUID
+	UserSessionClientID uuid.NullUUID
 	SubjectUrn          urn.SessionSubject
 	Jti                 string
 	RefreshTokenHash    string
@@ -44,9 +47,13 @@ type CreateUserSessionParams struct {
 	ExpiresAt           pgtype.Timestamptz
 }
 
+// user_session_client_id binds the session to the DCR client that minted it.
+// The /token refresh path requires the same client to refresh; see
+// HandleToken's refresh_token grant.
 func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionParams) (UserSession, error) {
 	row := q.db.QueryRow(ctx, createUserSession,
 		arg.UserSessionIssuerID,
+		arg.UserSessionClientID,
 		arg.SubjectUrn,
 		arg.Jti,
 		arg.RefreshTokenHash,
