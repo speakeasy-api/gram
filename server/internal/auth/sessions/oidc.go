@@ -134,10 +134,11 @@ func (s *Manager) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) (
 		return "", fmt.Errorf("upsert user: %w", err)
 	}
 
-	// Store the WorkOS user ID so downstream code (e.g. webhook sync) can
-	// correlate Gram users with WorkOS identities. SetUserWorkosID is a no-op
-	// when the column is already populated, so this is safe to call every login.
-	if err := s.userRepo.SetUserWorkosID(ctx, userRepo.SetUserWorkosIDParams{
+	// Always update the WorkOS user ID so downstream code (e.g. webhook sync)
+	// can correlate Gram users with WorkOS identities. We use Overwrite (not
+	// Set) because the WorkOS user may have been deleted and recreated with
+	// the same email, giving it a new ID that must replace the stale one.
+	if err := s.userRepo.OverwriteUserWorkosID(ctx, userRepo.OverwriteUserWorkosIDParams{
 		ID:       gramUserID,
 		WorkosID: pgtype.Text{String: idpUser.Sub, Valid: true},
 	}); err != nil {
