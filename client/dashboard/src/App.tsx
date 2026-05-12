@@ -246,9 +246,10 @@ const RouteProvider = () => {
         <Route path="/slack/register" element={<LoginCheck />}>
           <Route index element={<SlackRegister />} />
         </Route>
-        <Route path="/shadow-mcp/request" element={<LoginCheck />}>
-          <Route index element={<ShadowMCPRequestAccess />} />
-        </Route>
+        <Route
+          path="/shadow-mcp/request"
+          element={<ShadowMCPRequestAccess />}
+        />
         <Route path="/" element={<LoginCheck />}>
           <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}

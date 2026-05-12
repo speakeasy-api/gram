@@ -76,7 +76,7 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 	requestURL := s.siteURL.JoinPath("shadow-mcp", "request")
 	query := url.Values{}
 	query.Set("request_token", token)
-	requestURL.RawQuery = query.Encode()
+	requestURL.Fragment = query.Encode()
 	return requestURL.String(), true
 }
 

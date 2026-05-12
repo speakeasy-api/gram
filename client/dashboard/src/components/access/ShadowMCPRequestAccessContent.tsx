@@ -1,16 +1,25 @@
 import { GramLogo } from "@/components/gram-logo";
 import { Type } from "@/components/ui/type";
+import { useSession } from "@/contexts/Auth";
+import { buildLoginRedirectURL } from "@/lib/utils";
 import { useCreateShadowMCPApprovalRequestMutation } from "@gram/client/react-query";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router";
 
-type RequestAccessState = "missing-token" | "submitting" | "complete" | "error";
+const REQUEST_TOKEN_STORAGE_KEY = "shadowMcpApprovalRequestToken";
+
+type RequestAccessState =
+  | "missing-token"
+  | "authenticating"
+  | "submitting"
+  | "complete"
+  | "error";
 
 export function ShadowMCPRequestAccessContent() {
   const [searchParams] = useSearchParams();
-  const requestToken =
-    searchParams.get("request_token") ?? searchParams.get("token");
+  const session = useSession();
+  const requestToken = getRequestToken(searchParams);
   const hasSubmitted = useRef(false);
   const {
     mutate: createApprovalRequest,
@@ -30,25 +39,50 @@ export function ShadowMCPRequestAccessContent() {
   }, []);
 
   useEffect(() => {
-    if (!requestToken || hasSubmitted.current) return;
+    if (requestToken) {
+      sessionStorage.setItem(REQUEST_TOKEN_STORAGE_KEY, requestToken);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, [requestToken]);
+
+  const storedRequestToken =
+    requestToken ?? sessionStorage.getItem(REQUEST_TOKEN_STORAGE_KEY);
+
+  useEffect(() => {
+    if (!storedRequestToken || session.session) return;
+
+    window.location.href = buildLoginRedirectURL("/shadow-mcp/request");
+  }, [session.session, storedRequestToken]);
+
+  useEffect(() => {
+    if (!storedRequestToken || !session.session || hasSubmitted.current) return;
 
     hasSubmitted.current = true;
-    createApprovalRequest({
-      request: {
-        createShadowMCPApprovalRequestForm: {
-          requestToken,
+    createApprovalRequest(
+      {
+        request: {
+          createShadowMCPApprovalRequestForm: {
+            requestToken: storedRequestToken,
+          },
         },
       },
-    });
-  }, [createApprovalRequest, requestToken]);
+      {
+        onSuccess: () => {
+          sessionStorage.removeItem(REQUEST_TOKEN_STORAGE_KEY);
+        },
+      },
+    );
+  }, [createApprovalRequest, session.session, storedRequestToken]);
 
-  const state: RequestAccessState = !requestToken
+  const state: RequestAccessState = !storedRequestToken
     ? "missing-token"
-    : isSuccess
-      ? "complete"
-      : isError
-        ? "error"
-        : "submitting";
+    : !session.session
+      ? "authenticating"
+      : isSuccess
+        ? "complete"
+        : isError
+          ? "error"
+          : "submitting";
 
   return (
     <div className="bg-background flex min-h-screen w-full flex-col items-center justify-center p-8">
@@ -58,6 +92,17 @@ export function ShadowMCPRequestAccessContent() {
       </Stack>
     </div>
   );
+}
+
+function getRequestToken(searchParams: URLSearchParams): string | null {
+  const queryToken =
+    searchParams.get("request_token") ?? searchParams.get("token");
+  if (queryToken) return queryToken;
+
+  const hashParams = new URLSearchParams(
+    window.location.hash.replace(/^#/, ""),
+  );
+  return hashParams.get("request_token") ?? hashParams.get("token");
 }
 
 function RequestAccessMessage({
@@ -81,6 +126,20 @@ function RequestAccessMessage({
             Your admin has been notified. You can close this page.
           </Type>
         </Stack>
+      </Stack>
+    );
+  }
+
+  if (state === "authenticating") {
+    return (
+      <Stack gap={3} align="center">
+        <Icon
+          name="loader-circle"
+          className="text-muted-foreground h-6 w-6 animate-spin"
+        />
+        <Type muted small className="text-center">
+          Redirecting to sign in...
+        </Type>
       </Stack>
     );
   }
