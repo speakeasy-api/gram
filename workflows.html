@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Gram — Workflow Map</title>
+<title>Gram — Customer Journey Map</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root {
@@ -105,13 +105,12 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
-  .node.tier-client        rect { stroke: var(--client); }
-  .node.tier-api           rect { stroke: var(--api); }
-  .node.tier-orchestration rect { stroke: var(--orchestration); }
-  .node.tier-runtime       rect { stroke: var(--runtime); }
-  .node.tier-storage       rect { stroke: var(--storage); }
-  .node.tier-external      rect { stroke: var(--external); }
-  .node.tier-sdk           rect { stroke: var(--sdk); }
+  .node.tier-entry   rect { stroke: var(--external); }
+  .node.tier-auth    rect { stroke: var(--client); }
+  .node.tier-nav     rect { stroke: var(--api); }
+  .node.tier-setup   rect { stroke: var(--orchestration); }
+  .node.tier-surface rect { stroke: var(--runtime); }
+  .node.tier-obs     rect { stroke: var(--storage); }
   .node { transition: opacity .15s; }
   .node.dim { opacity: .25; }
   .node.active rect {
@@ -223,8 +222,8 @@
 </head>
 <body>
 <header>
-  <h1>Gram <span class="sub">— Workflow Map</span></h1>
-  <p class="hint">Pick a workflow on the left to highlight its path. Hover a step on the right to focus that hop.</p>
+  <h1>Gram <span class="sub">— Customer Journey Map</span></h1>
+  <p class="hint">Pick a journey on the left to walk through it. Each step shows the page the customer lands on and what they see or click.</p>
 </header>
 <main>
   <aside class="left">
@@ -243,11 +242,11 @@
       <g id="nodes-layer"></g>
     </svg>
     <div class="legend" id="legend"></div>
-    <div class="footer">Edit the JSON inside <code>&lt;script id="workflow-data"&gt;</code> in this file to add or change flows.</div>
+    <div class="footer">Edit the JSON inside <code>&lt;script id="workflow-data"&gt;</code> in this file to add or change journeys.</div>
   </section>
   <aside class="right">
-    <h2 id="flow-title">Select a workflow</h2>
-    <p id="flow-summary" class="empty">The flow's steps and payloads will appear here.</p>
+    <h2 id="flow-title">Select a journey</h2>
+    <p id="flow-summary" class="empty">The journey's steps — pages, clicks, and what the customer sees — will appear here.</p>
     <ol id="steps-list"></ol>
   </aside>
 </main>
@@ -255,191 +254,147 @@
 <script id="workflow-data" type="application/json">
 {
   "nodes": [
-    { "id": "cli",              "x":  30, "y":  30, "tier": "client",        "label": "CLI" },
-    { "id": "dashboard",        "x": 230, "y":  30, "tier": "client",        "label": "Dashboard" },
-    { "id": "elements",         "x": 430, "y":  30, "tier": "client",        "label": "Elements" },
-    { "id": "mcp-client",       "x": 630, "y":  30, "tier": "client",        "label": "External MCP Client" },
-    { "id": "ts-framework",     "x": 830, "y":  30, "tier": "sdk",           "label": "ts-framework" },
+    { "id": "email-inbox",        "x":  30, "y":  30, "tier": "entry",   "label": "Email inbox" },
+    { "id": "login",              "x": 230, "y":  30, "tier": "auth",    "label": "/login" },
+    { "id": "workos",             "x": 430, "y":  30, "tier": "auth",    "label": "WorkOS / IdP" },
+    { "id": "invite-accept",      "x": 630, "y":  30, "tier": "auth",    "label": "/invite (accept)" },
+    { "id": "cli",                "x": 830, "y":  30, "tier": "entry",   "label": "gram CLI" },
 
-    { "id": "workos",           "x":  30, "y": 140, "tier": "external",      "label": "WorkOS / mock-idp" },
-    { "id": "server-rpc",       "x": 280, "y": 140, "tier": "api",           "label": "Server: RPC API" },
-    { "id": "server-mcp",       "x": 480, "y": 140, "tier": "api",           "label": "Server: MCP Gateway" },
-    { "id": "redis",            "x": 830, "y": 140, "tier": "storage",       "label": "Redis" },
+    { "id": "onboarding",         "x": 230, "y": 140, "tier": "nav",     "label": "/onboarding" },
+    { "id": "workspace-home",     "x": 430, "y": 140, "tier": "nav",     "label": "Workspace home" },
+    { "id": "settings",           "x": 630, "y": 140, "tier": "nav",     "label": "/settings (Members)" },
+    { "id": "claude-cursor",      "x": 830, "y": 140, "tier": "entry",   "label": "Claude / Cursor" },
 
-    { "id": "audit",            "x": 130, "y": 250, "tier": "api",           "label": "Audit Subsystem" },
-    { "id": "temporal",         "x": 480, "y": 250, "tier": "orchestration", "label": "Temporal" },
-    { "id": "openrouter",       "x": 680, "y": 250, "tier": "external",      "label": "LLM APIs" },
+    { "id": "sources",            "x":  30, "y": 250, "tier": "setup",   "label": "/sources" },
+    { "id": "upload-openapi",     "x": 230, "y": 250, "tier": "setup",   "label": "/sources/add-openapi" },
+    { "id": "deployments",        "x": 430, "y": 250, "tier": "setup",   "label": "/deployments" },
+    { "id": "mcp-toolset",        "x": 630, "y": 250, "tier": "surface", "label": "/mcp/<toolset>" },
+    { "id": "environments",       "x": 830, "y": 250, "tier": "setup",   "label": "/environments" },
 
-    { "id": "worker",           "x": 280, "y": 360, "tier": "orchestration", "label": "Temporal Worker" },
-    { "id": "functions-runner", "x": 480, "y": 360, "tier": "runtime",       "label": "Functions Runner" },
-    { "id": "upstream-api",     "x": 680, "y": 360, "tier": "external",      "label": "Upstream HTTP API" },
-    { "id": "slack",            "x": 830, "y": 360, "tier": "external",      "label": "Slack" },
+    { "id": "playground",         "x": 230, "y": 360, "tier": "surface", "label": "/playground" },
+    { "id": "assistants",         "x": 430, "y": 360, "tier": "surface", "label": "/assistants/:id" },
+    { "id": "elements-page",      "x": 630, "y": 360, "tier": "surface", "label": "/elements" },
+    { "id": "triggers",           "x": 830, "y": 360, "tier": "surface", "label": "/triggers" },
 
-    { "id": "postgres",         "x": 280, "y": 470, "tier": "storage",       "label": "PostgreSQL" },
-    { "id": "clickhouse",       "x": 480, "y": 470, "tier": "storage",       "label": "ClickHouse" },
-    { "id": "posthog",          "x": 830, "y": 470, "tier": "external",      "label": "PostHog" }
+    { "id": "slack-apps",         "x":  30, "y": 470, "tier": "surface", "label": "/slack/:appId" },
+    { "id": "slack-oauth",        "x": 230, "y": 470, "tier": "entry",   "label": "Slack OAuth" },
+    { "id": "embedded-elements",  "x": 430, "y": 470, "tier": "entry",   "label": "Customer's site (embed)" },
+    { "id": "logs",               "x": 830, "y": 470, "tier": "obs",     "label": "/logs (Tools/MCP/Agents)" }
   ],
   "flows": [
     {
-      "id": "invite-user",
-      "title": "Invite new user",
-      "summary": "Workspace admin invites a teammate",
+      "id": "signup-onboard",
+      "title": "Sign up & create workspace",
+      "summary": "First-time user lands and gets to an empty workspace",
       "steps": [
-        { "from": "dashboard",   "to": "server-rpc", "protocol": "POST /rpc/access.inviteUser",         "payload": "{ email, role, organization_id }", "note": "Goa handler under server/internal/access" },
-        { "from": "server-rpc",  "to": "postgres",   "protocol": "INSERT invites",                       "payload": "(id, email, role, org_id, invited_by, expires_at)" },
-        { "from": "server-rpc",  "to": "audit",      "protocol": "audit.Record",                         "payload": "actor=user/<admin>  action=invite.create  subject=email/<email>" },
-        { "from": "audit",       "to": "postgres",   "protocol": "INSERT audit_logs",                    "payload": "(actor, action, subject, organization_id, before, after)" },
-        { "from": "server-rpc",  "to": "workos",     "protocol": "POST /user_management/invitations",    "payload": "{ email, organization_id }", "note": "Skipped in dev when running against mock-idp" },
-        { "from": "server-rpc",  "to": "dashboard",  "protocol": "200 OK",                               "payload": "{ invite: { id, email, status: 'pending' } }" }
+        { "from": "email-inbox",   "to": "login",          "protocol": "Visit app.getgram.ai or click 'Sign in' from the marketing site",   "note": "Entry can be direct or via marketing nav" },
+        { "from": "login",         "to": "workos",         "protocol": "Click 'Sign up with email'",                                         "payload": "Redirect → https://api.workos.com/.../authorize", "note": "Same screen handles sign-in for returning users" },
+        { "from": "workos",        "to": "login",          "protocol": "Approve → /auth/callback?code=…",                                    "note": "OAuth code exchanged server-side; cookie set" },
+        { "from": "login",         "to": "onboarding",     "protocol": "Auto-route to /onboarding",                                          "note": "Triggered when the signed-in user has no org yet" },
+        { "from": "onboarding",    "to": "workspace-home", "protocol": "Submit wizard: org name + first project",                            "payload": "form: { org_name, project_slug }", "note": "Lands on the workspace home with empty-state guidance" }
       ]
     },
     {
-      "id": "login",
-      "title": "Login (WorkOS / mock-idp)",
-      "summary": "User signs in and a session cookie is issued",
+      "id": "accept-invite",
+      "title": "Accept a teammate invite",
+      "summary": "Existing or new user joins someone else's workspace",
       "steps": [
-        { "from": "dashboard",  "to": "server-rpc", "protocol": "GET /rpc/users.session",     "note": "Initial request — no cookie yet" },
-        { "from": "server-rpc", "to": "redis",      "protocol": "GET session:<sid>",          "note": "Cache miss" },
-        { "from": "server-rpc", "to": "dashboard",  "protocol": "401 Unauthorized → redirect","payload": "Location: <workos-authorize-url>" },
-        { "from": "dashboard",  "to": "workos",     "protocol": "GET /oauth2/authorize",      "note": "Browser redirect to identity provider" },
-        { "from": "workos",     "to": "dashboard",  "protocol": "GET /auth/callback?code=…",  "note": "OAuth redirect back" },
-        { "from": "dashboard",  "to": "server-rpc", "protocol": "POST /rpc/auth.callback",    "payload": "{ code }" },
-        { "from": "server-rpc", "to": "workos",     "protocol": "POST /sso/token",            "payload": "{ code, client_id, client_secret }", "note": "Exchange code for profile + tokens" },
-        { "from": "server-rpc", "to": "postgres",   "protocol": "UPSERT users",               "payload": "ON CONFLICT (id) — beware the users.email UNIQUE collision (see auto-memory)" },
-        { "from": "server-rpc", "to": "redis",      "protocol": "SETEX session:<sid>",        "payload": "{ user_id, org_id, expires_at }" },
-        { "from": "server-rpc", "to": "dashboard",  "protocol": "200 OK + Set-Cookie",        "payload": "gram_session=<sid>" }
+        { "from": "email-inbox",   "to": "invite-accept",  "protocol": "Click invitation link in email",                                     "payload": "URL: /invite?token=…", "note": "Email was sent by the inviting admin's submit" },
+        { "from": "invite-accept", "to": "workos",         "protocol": "Page redirects to the IdP",                                           "note": "Existing users sign in; new users register" },
+        { "from": "workos",        "to": "invite-accept",  "protocol": "Return with code → /invite/callback",                                "note": "Server validates the invite token and adds the user to the org" },
+        { "from": "invite-accept", "to": "workspace-home", "protocol": "Land on the workspace home",                                          "note": "User is now a member of the org" }
       ]
     },
     {
-      "id": "openapi-deployment",
-      "title": "OpenAPI deployment (dashboard)",
-      "summary": "Upload an OpenAPI spec; the worker fans tools out and indexes embeddings",
+      "id": "invite-teammate",
+      "title": "Invite a teammate",
+      "summary": "Admin sends an invitation to a coworker",
       "steps": [
-        { "from": "dashboard",  "to": "server-rpc", "protocol": "POST /rpc/deployments.create",           "payload": "multipart: openapi.yaml + { project_id, name }" },
-        { "from": "server-rpc", "to": "postgres",   "protocol": "INSERT deployments",                      "payload": "(id, status='pending', project_id, spec_asset_id)" },
-        { "from": "server-rpc", "to": "temporal",   "protocol": "SignalWithStartWorkflow",                 "payload": "ProcessDeploymentWorkflow{ deployment_id }" },
-        { "from": "temporal",   "to": "worker",     "protocol": "WorkflowTaskQueue",                       "payload": "activity: process_deployment (server/internal/background/activities)" },
-        { "from": "worker",     "to": "postgres",   "protocol": "BEGIN; INSERT tools …",                   "payload": "one tool per OpenAPI operation (parsed via server/internal/openapi)" },
-        { "from": "worker",     "to": "temporal",   "protocol": "ExecuteChildWorkflow",                    "payload": "GenerateToolsetEmbeddings{ toolset_id }" },
-        { "from": "worker",     "to": "openrouter", "protocol": "POST /embeddings",                        "payload": "{ model: 'text-embedding-3-small', input: <tool descriptions> }", "note": "Embeddings power toolset search" },
-        { "from": "worker",     "to": "postgres",   "protocol": "UPDATE deployments SET status='complete'","payload": "+ INSERT toolset_embeddings (pgvector)" },
-        { "from": "dashboard",  "to": "server-rpc", "protocol": "GET /rpc/deployments.get (poll)",         "payload": "{ deployment_id }" },
-        { "from": "server-rpc", "to": "dashboard",  "protocol": "200 OK",                                   "payload": "{ deployment: { status: 'complete', tool_count } }" }
+        { "from": "workspace-home","to": "settings",       "protocol": "User menu → Settings → Members tab",                                  "note": "Workspace-level — org-wide invites live in org settings" },
+        { "from": "settings",      "to": "email-inbox",    "protocol": "'Invite' modal → Submit",                                             "payload": "form: { email, role }", "note": "Invitee gets an email; new row appears in Members as 'Pending'" }
       ]
     },
     {
-      "id": "mcp-http-tool-call",
-      "title": "MCP tool call (HTTP tool)",
-      "summary": "An external MCP client invokes a Gram HTTP-backed tool",
+      "id": "toolset-from-openapi",
+      "title": "Create a toolset from OpenAPI",
+      "summary": "Upload a spec and get a deployed MCP toolset",
       "steps": [
-        { "from": "mcp-client",  "to": "server-mcp", "protocol": "POST /mcp/<toolset-slug>",        "payload": "JSON-RPC tools/call { name, arguments }" },
-        { "from": "server-mcp",  "to": "postgres",   "protocol": "SELECT tool + environment",        "payload": "Joins tools + variation overrides + environment entries (decrypted ENC-4)" },
-        { "from": "server-mcp",  "to": "upstream-api","protocol": "<METHOD> <upstream URL>",         "payload": "Headers + body templated from tool definition & env vars" },
-        { "from": "upstream-api","to": "server-mcp", "protocol": "HTTP response",                    "payload": "status + body" },
-        { "from": "server-mcp",  "to": "clickhouse", "protocol": "INSERT tool_calls",                "payload": "(toolset_id, tool_id, latency_ms, status, req_size, resp_size)" },
-        { "from": "server-mcp",  "to": "audit",      "protocol": "audit.Record",                     "payload": "actor=mcp-key/<id>  action=tool.invoke  subject=tool/<slug>" },
-        { "from": "audit",       "to": "postgres",   "protocol": "INSERT audit_logs" },
-        { "from": "server-mcp",  "to": "mcp-client", "protocol": "JSON-RPC result",                  "payload": "{ content: [{ type: 'text', text: <upstream body> }] }" }
+        { "from": "workspace-home","to": "sources",        "protocol": "Sidebar → Sources",                                                   "note": "Empty state prompts you to add one" },
+        { "from": "sources",       "to": "upload-openapi", "protocol": "Click 'Add OpenAPI source'",                                          "note": "Route: /sources/add-openapi" },
+        { "from": "upload-openapi","to": "deployments",    "protocol": "Drag in spec.yaml, name it → Deploy",                                 "payload": "multipart: openapi.yaml + { name }", "note": "Redirects to /deployments/:id with a status pill" },
+        { "from": "deployments",   "to": "mcp-toolset",    "protocol": "Wait for status: 'complete' → 'View toolset'",                       "payload": "Tools count visible (e.g. '34 tools generated')", "note": "Toolset is now MCP-ready" }
       ]
     },
     {
-      "id": "mcp-function-tool-call",
-      "title": "MCP tool call (function tool)",
-      "summary": "MCP client invokes a Gram Function — bundled TypeScript running in a sandbox",
+      "id": "toolset-from-function",
+      "title": "Create a toolset from a function",
+      "summary": "Author a TypeScript function locally and publish it",
       "steps": [
-        { "from": "mcp-client",       "to": "server-mcp",       "protocol": "POST /mcp/<toolset-slug>",          "payload": "JSON-RPC tools/call { name, arguments }" },
-        { "from": "server-mcp",       "to": "postgres",         "protocol": "SELECT function + environment",      "payload": "Bundle ref + env vars (decrypted)" },
-        { "from": "server-mcp",       "to": "functions-runner", "protocol": "POST /invoke/<function_id>",         "payload": "{ tool_name, arguments, env, request_id }", "note": "See server/internal/functions" },
-        { "from": "functions-runner", "to": "upstream-api",     "protocol": "fetch(...)",                          "payload": "Any outbound calls the function makes" },
-        { "from": "functions-runner", "to": "server-mcp",       "protocol": "200 OK",                              "payload": "{ result, logs[], usage }" },
-        { "from": "server-mcp",       "to": "clickhouse",       "protocol": "INSERT tool_calls + function_invocations", "payload": "(latency, runtime_ms, cold_start, status)" },
-        { "from": "server-mcp",       "to": "mcp-client",       "protocol": "JSON-RPC result" }
+        { "from": "workspace-home","to": "sources",        "protocol": "Sidebar → Sources" },
+        { "from": "sources",       "to": "cli",            "protocol": "Click 'Add function source' → instructions panel",                    "payload": "Copy: gram functions init && gram functions publish", "note": "Function authoring is local, via the ts-framework SDK + CLI" },
+        { "from": "cli",           "to": "deployments",    "protocol": "Run `gram functions publish` locally",                                "payload": "Bundle uploaded; a new row appears in /deployments", "note": "Refresh the dashboard to see it" },
+        { "from": "deployments",   "to": "mcp-toolset",    "protocol": "Open the function-backed toolset",                                    "note": "Same toolset surface as OpenAPI-derived ones" }
       ]
     },
     {
-      "id": "function-deploy",
-      "title": "Function deploy (CLI publish)",
-      "summary": "Developer authors a function in TS, publishes it, and the runner picks it up",
+      "id": "test-in-playground",
+      "title": "Test a tool in the playground",
+      "summary": "Invoke a tool from the dashboard and verify the response",
       "steps": [
-        { "from": "ts-framework",     "to": "cli",              "protocol": "build → bundle.tgz + manifest.json", "payload": "Gram.tool({ name, inputSchema, handler }) compiled by ts-framework/functions", "note": "Dev-time, on the author's machine" },
-        { "from": "cli",              "to": "server-rpc",       "protocol": "POST /rpc/functions.publish",        "payload": "multipart: bundle.tgz + { project_id, manifest }" },
-        { "from": "server-rpc",       "to": "postgres",         "protocol": "INSERT functions + tools",            "payload": "function row + one tool per Gram.tool() in the manifest" },
-        { "from": "server-rpc",       "to": "temporal",         "protocol": "StartWorkflow",                       "payload": "DeployFunctionRunners{ function_id }" },
-        { "from": "temporal",         "to": "worker",           "protocol": "Activity",                            "payload": "provision_functions_access" },
-        { "from": "worker",           "to": "functions-runner", "protocol": "k8s apply / rollout",                 "payload": "New revision pulls bundle.tgz from object storage", "note": "See server/internal/k8s" },
-        { "from": "worker",           "to": "postgres",         "protocol": "UPDATE functions SET status='live'" },
-        { "from": "server-rpc",       "to": "cli",              "protocol": "200 OK",                              "payload": "{ function_id, deploy_url }" }
+        { "from": "workspace-home","to": "mcp-toolset",    "protocol": "Sidebar → MCP → pick a toolset" },
+        { "from": "mcp-toolset",   "to": "playground",     "protocol": "'Try a tool' → Playground opens",                                     "payload": "?toolsetSlug=…&tool=…", "note": "Playground pre-fills the chosen tool" },
+        { "from": "playground",    "to": "logs",           "protocol": "Run → observe the call in Logs",                                      "payload": "Status, latency, request/response panes", "note": "Same data customers see for production tool calls" }
       ]
     },
     {
-      "id": "chat-assistant",
-      "title": "Chat with an assistant (Elements)",
-      "summary": "Elements UI streams a chat completion that may call tools mid-stream",
+      "id": "install-mcp-in-claude",
+      "title": "Install Gram in Claude / Cursor",
+      "summary": "Hand the toolset to the customer's MCP host",
       "steps": [
-        { "from": "elements",    "to": "server-rpc",  "protocol": "POST /rpc/chat.send (SSE)",          "payload": "{ assistant_id, chat_session_id, message, tools[] }" },
-        { "from": "server-rpc",  "to": "postgres",    "protocol": "INSERT chat_messages (user)",        "payload": "+ SELECT chat_session, assistant_memories" },
-        { "from": "server-rpc",  "to": "openrouter",  "protocol": "POST /chat/completions (stream)",    "payload": "{ model, messages, tools }" },
-        { "from": "openrouter",  "to": "server-rpc",  "protocol": "SSE delta with tool_use",            "payload": "{ tool_calls: [{ name, arguments }] }" },
-        { "from": "server-rpc",  "to": "server-mcp",  "protocol": "in-process gateway.InvokeTool",      "payload": "{ tool_id, arguments }", "note": "Same binary, internal call" },
-        { "from": "server-mcp",  "to": "upstream-api","protocol": "HTTP per tool definition" },
-        { "from": "upstream-api","to": "server-mcp",  "protocol": "HTTP response" },
-        { "from": "server-rpc",  "to": "openrouter",  "protocol": "POST /chat/completions (follow-up)", "payload": "messages + tool_result" },
-        { "from": "openrouter",  "to": "server-rpc",  "protocol": "SSE delta (final answer)" },
-        { "from": "server-rpc",  "to": "elements",    "protocol": "SSE chunks → onMessage",             "payload": "text + tool_calls rendered by elements/src/components" },
-        { "from": "server-rpc",  "to": "clickhouse",  "protocol": "INSERT chat_events",                 "payload": "(tokens_in, tokens_out, tool_calls, latency, cost)" }
+        { "from": "workspace-home","to": "mcp-toolset",    "protocol": "Sidebar → MCP → pick a toolset" },
+        { "from": "mcp-toolset",   "to": "claude-cursor",  "protocol": "Copy install snippet → paste into mcp.json",                          "payload": "{ 'gram': { 'url': 'https://.../mcp/<slug>', 'headers': { 'Authorization': 'Bearer <key>' } } }", "note": "Same snippet works in Cursor, Claude Desktop, VS Code" },
+        { "from": "claude-cursor", "to": "logs",           "protocol": "First tool call from Claude shows up in Logs → MCP",                  "payload": "Caller, tool name, latency", "note": "Confirms the wiring is live" }
       ]
     },
     {
-      "id": "audit-log-listing",
-      "title": "Audit log listing",
-      "summary": "Dashboard renders the audit feed for a workspace",
+      "id": "build-assistant-embed",
+      "title": "Build an assistant + embed Elements",
+      "summary": "Ship a chat experience into the customer's own product",
       "steps": [
-        { "from": "dashboard",  "to": "server-rpc", "protocol": "GET /rpc/auditlogs.list",              "payload": "{ organization_id, cursor, filters: { action, actor, range } }" },
-        { "from": "server-rpc", "to": "audit",      "protocol": "audit.List",                            "note": "See the gram-audit-logging skill" },
-        { "from": "audit",      "to": "postgres",   "protocol": "SELECT audit_logs WHERE …",             "payload": "Indexed scan by (organization_id, created_at DESC), keyset pagination" },
-        { "from": "server-rpc", "to": "dashboard",  "protocol": "200 OK",                                 "payload": "{ entries: [{ id, actor, action, subject, before, after, created_at }], next_cursor }" }
+        { "from": "workspace-home", "to": "assistants",        "protocol": "Sidebar → Assistants → 'New assistant'",                          "payload": "form: { name, instructions, toolsets[] }" },
+        { "from": "assistants",     "to": "elements-page",     "protocol": "Assistant detail → 'Embed' tab",                                  "payload": "Generated snippet: <script src='.../elements.js' …><\/script>", "note": "Snippet ties the embed to this assistant_id" },
+        { "from": "elements-page",  "to": "embedded-elements", "protocol": "Paste snippet into your product",                                 "payload": "<gram-chat assistant-id='…' /> renders in your site" },
+        { "from": "embedded-elements","to": "logs",            "protocol": "End-user chats appear in Logs → Agents",                          "payload": "Per-session: tool calls + model responses" }
       ]
     },
     {
-      "id": "scheduled-trigger",
-      "title": "Scheduled trigger fires",
-      "summary": "A cron-scheduled trigger runs a tool and posts the result to Slack",
+      "id": "connect-slack",
+      "title": "Connect Slack",
+      "summary": "Install the Gram Slack app for assistants and triggers",
       "steps": [
-        { "from": "temporal",    "to": "worker",     "protocol": "Schedule fires",              "payload": "activity: process_scheduled_trigger" },
-        { "from": "worker",      "to": "postgres",   "protocol": "SELECT trigger",              "payload": "Trigger definition + bound toolset + slack channel" },
-        { "from": "worker",      "to": "server-mcp", "protocol": "InvokeTool (internal)",       "payload": "{ tool_id, arguments: <trigger payload> }" },
-        { "from": "server-mcp",  "to": "upstream-api","protocol": "HTTP per tool" },
-        { "from": "upstream-api","to": "server-mcp", "protocol": "Response" },
-        { "from": "worker",      "to": "postgres",   "protocol": "INSERT trigger_runs",         "payload": "(trigger_id, started_at, finished_at, status, output)" },
-        { "from": "worker",      "to": "slack",      "protocol": "POST chat.postMessage",       "payload": "{ channel, blocks: <formatted output> }" },
-        { "from": "worker",      "to": "clickhouse", "protocol": "INSERT trigger_events" }
+        { "from": "workspace-home","to": "slack-apps",     "protocol": "Sidebar → Slack → 'Add Slack app'" },
+        { "from": "slack-apps",    "to": "slack-oauth",    "protocol": "Click 'Install in Slack'",                                            "payload": "Redirect → slack.com/oauth/v2/authorize?…", "note": "Slack consent screen shows the requested scopes" },
+        { "from": "slack-oauth",   "to": "slack-apps",     "protocol": "Approve → callback",                                                  "payload": "GET /integrations/slack/callback?code=…", "note": "Lands on the Slack app detail page; bot is now in your workspace" }
       ]
     },
     {
-      "id": "slack-install",
-      "title": "Slack install",
-      "summary": "Connect a workspace to a Slack team for assistants/triggers",
+      "id": "schedule-trigger",
+      "title": "Schedule a trigger",
+      "summary": "Run a tool on a cron and deliver the result to Slack",
       "steps": [
-        { "from": "dashboard",  "to": "server-rpc", "protocol": "GET /rpc/integrations.slackInstallUrl" },
-        { "from": "server-rpc", "to": "dashboard",  "protocol": "200 OK",                          "payload": "{ install_url: <slack-oauth-url> }" },
-        { "from": "dashboard",  "to": "slack",      "protocol": "GET <install_url>",               "note": "Browser redirect — user grants scopes" },
-        { "from": "slack",      "to": "dashboard",  "protocol": "GET /integrations/slack/callback?code=…" },
-        { "from": "dashboard",  "to": "server-rpc", "protocol": "POST /rpc/integrations.slackCallback","payload": "{ code, state }" },
-        { "from": "server-rpc", "to": "slack",      "protocol": "POST oauth.v2.access",            "payload": "{ code, client_id, client_secret }" },
-        { "from": "server-rpc", "to": "postgres",   "protocol": "INSERT slack_installs",            "payload": "+ encrypt bot_token, store team_id, scopes" },
-        { "from": "server-rpc", "to": "audit",      "protocol": "audit.Record",                    "payload": "action=integration.connect  subject=slack/<team_id>" },
-        { "from": "audit",      "to": "postgres",   "protocol": "INSERT audit_logs" },
-        { "from": "server-rpc", "to": "dashboard",  "protocol": "200 OK",                          "payload": "{ install: { team_id, team_name, connected_by } }" }
+        { "from": "workspace-home","to": "triggers",       "protocol": "Sidebar → Triggers → 'New trigger'",                                  "payload": "form: { name, tool, cron, destination }" },
+        { "from": "triggers",      "to": "slack-apps",     "protocol": "Pick a Slack app as the destination",                                 "payload": "Channel picker uses the bot's joined channels", "note": "Webhooks are also a valid destination" },
+        { "from": "triggers",      "to": "logs",           "protocol": "When the trigger fires: see runs in Logs → Tools",                    "payload": "trigger_run rows: success/failure, output preview" }
       ]
     },
     {
-      "id": "telemetry-export",
-      "title": "Product telemetry → PostHog",
-      "summary": "Server-side and client-side events fan out to PostHog for analytics",
+      "id": "investigate-tool-call",
+      "title": "Investigate a tool call",
+      "summary": "Triage a flaky tool from the logs view",
       "steps": [
-        { "from": "server-rpc",  "to": "posthog", "protocol": "POST /capture",          "payload": "{ distinct_id: <org_id>, event: 'tool.invoked', properties: {…} }", "note": "Fire-and-forget, batched" },
-        { "from": "server-mcp",  "to": "posthog", "protocol": "POST /capture",          "payload": "event='mcp.tool.invoked' (per JSON-RPC call)" },
-        { "from": "elements",    "to": "posthog", "protocol": "POST /capture (browser)","payload": "event='chat.send' — client-side instrumentation" }
+        { "from": "workspace-home","to": "logs",           "protocol": "Sidebar → Logs → Tools",                                              "payload": "Filters: toolset, date range, status" },
+        { "from": "logs",          "to": "mcp-toolset",    "protocol": "Click a call → 'Open toolset'",                                       "note": "Jump to toolset details to inspect the tool definition" },
+        { "from": "mcp-toolset",   "to": "environments",  "protocol": "Cross-check environment variables",                                   "payload": "Variation overrides per environment", "note": "Auth headers, base URLs etc. live here" }
       ]
     }
   ]
@@ -455,13 +410,12 @@
   const nodesById = Object.fromEntries(data.nodes.map(n => [n.id, n]));
 
   const tierColors = {
-    client: 'var(--client)',
-    api: 'var(--api)',
-    orchestration: 'var(--orchestration)',
-    runtime: 'var(--runtime)',
-    storage: 'var(--storage)',
-    external: 'var(--external)',
-    sdk: 'var(--sdk)',
+    entry:   'var(--external)',
+    auth:    'var(--client)',
+    nav:     'var(--api)',
+    setup:   'var(--orchestration)',
+    surface: 'var(--runtime)',
+    obs:     'var(--storage)',
   };
 
   /* ---------- geometry helpers ---------- */
