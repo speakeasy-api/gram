@@ -2,16 +2,8 @@ speakeasyVersion: 1.761.5
 sources:
     Gram-Internal:
         sourceNamespace: gram-api-description
-<<<<<<< HEAD
-        sourceRevisionDigest: sha256:4f5d0ec1263cc5417617a7cee7786490592d78f7f02371310ef59fe4a224f01f
-        sourceBlobDigest: sha256:16a89de83ab7c177db0d5f4bf86f6f3fbcad0a7b69c026c8bb9dc71377230dd2
-||||||| parent of ffa1647a5 (feat(remotesessions): tables + Goa designs + skeleton)
-        sourceRevisionDigest: sha256:177b9662dd9a49e86f21d3c78df2b2d083f73db42a01004739cf38a05ad41cf1
-        sourceBlobDigest: sha256:2dca487f1adb65dd22390a72d4ee22bfd2095b33dc6ac34ef641b187750d1bf2
-=======
-        sourceRevisionDigest: sha256:6a59d31b8054a930dabd351f992cb28f59fabee9bf8f2d9ac7887f93e09b7910
-        sourceBlobDigest: sha256:5c5aa4c9b8bbc2631eab9d8434c507785ceb9c3768ad065603ea91d3653f4f10
->>>>>>> ffa1647a5 (feat(remotesessions): tables + Goa designs + skeleton)
+        sourceRevisionDigest: sha256:e4a0b11eab1724f2feac01722af7c40192e24cd61776c6b261ad3d56ee9ab891
+        sourceBlobDigest: sha256:1bd7dcf5c12280853bf8f9013f518d5884e7c8d12951139d98f7898dae30b5b4
         tags:
             - latest
             - 0.0.1
@@ -19,24 +11,10 @@ targets:
     gram-internal:
         source: Gram-Internal
         sourceNamespace: gram-api-description
-<<<<<<< HEAD
-        sourceRevisionDigest: sha256:4f5d0ec1263cc5417617a7cee7786490592d78f7f02371310ef59fe4a224f01f
-        sourceBlobDigest: sha256:16a89de83ab7c177db0d5f4bf86f6f3fbcad0a7b69c026c8bb9dc71377230dd2
-||||||| parent of ffa1647a5 (feat(remotesessions): tables + Goa designs + skeleton)
-        sourceRevisionDigest: sha256:177b9662dd9a49e86f21d3c78df2b2d083f73db42a01004739cf38a05ad41cf1
-        sourceBlobDigest: sha256:2dca487f1adb65dd22390a72d4ee22bfd2095b33dc6ac34ef641b187750d1bf2
-=======
-        sourceRevisionDigest: sha256:6a59d31b8054a930dabd351f992cb28f59fabee9bf8f2d9ac7887f93e09b7910
-        sourceBlobDigest: sha256:5c5aa4c9b8bbc2631eab9d8434c507785ceb9c3768ad065603ea91d3653f4f10
->>>>>>> ffa1647a5 (feat(remotesessions): tables + Goa designs + skeleton)
+        sourceRevisionDigest: sha256:e4a0b11eab1724f2feac01722af7c40192e24cd61776c6b261ad3d56ee9ab891
+        sourceBlobDigest: sha256:1bd7dcf5c12280853bf8f9013f518d5884e7c8d12951139d98f7898dae30b5b4
         codeSamplesNamespace: gram-api-description-typescript-code-samples
-<<<<<<< HEAD
-        codeSamplesRevisionDigest: sha256:3747cd18ce1e232221db54566d7825e04bf975f558d02bb9e3d0728b8de47ed2
-||||||| parent of ffa1647a5 (feat(remotesessions): tables + Goa designs + skeleton)
-        codeSamplesRevisionDigest: sha256:66716aa2e712a3fbf3c3c1b58ce5fb8eb227e01566cd17429cc4c8ba3ec08215
-=======
-        codeSamplesRevisionDigest: sha256:5419000a305120d2a701863f7312685ad37106bfd971b8d6899ef4525be1a364
->>>>>>> ffa1647a5 (feat(remotesessions): tables + Goa designs + skeleton)
+        codeSamplesRevisionDigest: sha256:3728525852651ca02b90453ce59bf92cba75dfa3b85c533dfb3c4d79a3049fca
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: pinned
