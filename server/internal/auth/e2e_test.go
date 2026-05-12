@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -47,6 +48,10 @@ func (m *mockWorkOSFetcher) GetOrganization(_ context.Context, orgID string) (*w
 }
 
 func (m *mockWorkOSFetcher) EnsureUserExternalID(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (m *mockWorkOSFetcher) EnsureOrgExternalID(_ context.Context, _, _ string) error {
 	return nil
 }
 
@@ -166,15 +171,18 @@ func TestE2E_Callback_NewUserWithWorkOSOrgMemberships(t *testing.T) {
 	require.NotContains(t, result.Location, "signin_error=", "callback should succeed without error")
 	require.NotEmpty(t, result.SessionToken)
 
+	// The org ID is now derived via UUIDv5 (no pre-seeded org, no external_id).
+	expectedOrgID := orgid.FromWorkOSID(workosOrgID)
+
 	// Verify the session is functional and points at the correct org.
 	ctx, err = inst.sessionManager.Authenticate(ctx, result.SessionToken)
 	require.NoError(t, err)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	assert.Equal(t, workosOrgID, authCtx.ActiveOrganizationID)
+	assert.Equal(t, expectedOrgID, authCtx.ActiveOrganizationID)
 
-	// Verify the org was persisted in DB.
-	orgMeta, err := orgRepo.New(inst.conn).GetOrganizationMetadata(ctx, workosOrgID)
+	// Verify the org was persisted in DB with the derived ID.
+	orgMeta, err := orgRepo.New(inst.conn).GetOrganizationMetadata(ctx, expectedOrgID)
 	require.NoError(t, err)
 	assert.Equal(t, orgName, orgMeta.Name)
 	assert.Equal(t, workosOrgID, orgMeta.WorkosID.String)
@@ -397,15 +405,18 @@ func TestE2E_Callback_RejoinedOrg(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, result.Location, "signin_error=")
 
+	// The Gram user ID is a UUIDv5 derived from the WorkOS user ID.
+	gramUserID := users.UserIDFromWorkOSID(workosUserID)
+
 	// Soft-delete the relationship via the SQLc method.
 	err = orgRepo.New(inst.conn).DeleteOrganizationUserRelationship(ctx, orgRepo.DeleteOrganizationUserRelationshipParams{
 		OrganizationID: workosOrgID,
-		UserID:         workosUserID,
+		UserID:         gramUserID,
 	})
 	require.NoError(t, err)
 
 	// Invalidate cache so the next login re-reads from DB.
-	require.NoError(t, inst.sessionManager.InvalidateUserInfoCache(ctx, workosUserID))
+	require.NoError(t, inst.sessionManager.InvalidateUserInfoCache(ctx, gramUserID))
 
 	// Second login: relationship is soft-deleted, so ListOrganizationsForUser
 	// returns 0 rows. The fallback should fire and clear deleted_at.
@@ -458,13 +469,17 @@ func TestE2E_Callback_MultipleOrgs(t *testing.T) {
 	require.NotContains(t, result.Location, "signin_error=")
 	require.NotEmpty(t, result.SessionToken)
 
-	// Verify both orgs exist in DB.
+	// Org IDs are derived via UUIDv5 (no pre-seeded orgs, no external_id).
+	expectedOrgID1 := orgid.FromWorkOSID(orgID1)
+	expectedOrgID2 := orgid.FromWorkOSID(orgID2)
+
+	// Verify both orgs exist in DB with derived IDs.
 	orgQueries := orgRepo.New(inst.conn)
-	org1, err := orgQueries.GetOrganizationMetadata(ctx, orgID1)
+	org1, err := orgQueries.GetOrganizationMetadata(ctx, expectedOrgID1)
 	require.NoError(t, err)
 	assert.Equal(t, "Alpha Inc", org1.Name)
 
-	org2, err := orgQueries.GetOrganizationMetadata(ctx, orgID2)
+	org2, err := orgQueries.GetOrganizationMetadata(ctx, expectedOrgID2)
 	require.NoError(t, err)
 	assert.Equal(t, "Beta LLC", org2.Name)
 }
@@ -516,7 +531,7 @@ func TestE2E_Callback_ThenInfo(t *testing.T) {
 
 	assert.Equal(t, users.UserIDFromWorkOSID(workosUserID), infoResult.UserID)
 	assert.Equal(t, "info@infocorp.com", infoResult.UserEmail)
-	assert.Equal(t, workosOrgID, infoResult.ActiveOrganizationID)
+	assert.Equal(t, orgid.FromWorkOSID(workosOrgID), infoResult.ActiveOrganizationID)
 	require.Len(t, infoResult.Organizations, 1)
 	assert.Equal(t, orgName, infoResult.Organizations[0].Name)
 	assert.NotEmpty(t, infoResult.Organizations[0].Projects, "default project should be auto-created")
@@ -559,15 +574,18 @@ func TestE2E_Callback_ThenSwitchScopes(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, callbackResult.Location, "signin_error=")
 
+	// Org IDs are derived via UUIDv5 (no pre-seeded orgs).
+	gramOrgID1 := orgid.FromWorkOSID(orgID1)
+	gramOrgID2 := orgid.FromWorkOSID(orgID2)
+
 	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
 	require.NoError(t, err)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	assert.Equal(t, orgID1, authCtx.ActiveOrganizationID)
+	assert.Equal(t, gramOrgID1, authCtx.ActiveOrganizationID)
 
 	// Step 2: SwitchScopes to orgID2
-	switchOrgID := orgID2
-	switchResult, err := inst.service.SwitchScopes(ctx, &gen.SwitchScopesPayload{OrganizationID: &switchOrgID})
+	switchResult, err := inst.service.SwitchScopes(ctx, &gen.SwitchScopesPayload{OrganizationID: &gramOrgID2})
 	require.NoError(t, err)
 	require.NotNil(t, switchResult)
 
@@ -575,7 +593,7 @@ func TestE2E_Callback_ThenSwitchScopes(t *testing.T) {
 	require.NoError(t, err)
 	authCtx, ok = contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	assert.Equal(t, orgID2, authCtx.ActiveOrganizationID, "should have switched to second org")
+	assert.Equal(t, gramOrgID2, authCtx.ActiveOrganizationID, "should have switched to second org")
 }
 
 // TestE2E_Callback_NoWorkOSClient verifies that when no WorkOS client is

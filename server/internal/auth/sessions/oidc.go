@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/users"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -272,6 +273,14 @@ func slugify(name string) string {
 // syncMembershipsFromWorkOS fetches the user's org memberships from WorkOS,
 // upserts the organizations and relationships into the local DB, then returns
 // the freshly-created org rows so BuildUserInfoFromDB can use them immediately.
+//
+// Organization ID resolution follows the same three-step priority as user IDs:
+//  1. If a Gram org with this WorkOS ID already exists in the DB, keep its ID.
+//  2. If WorkOS has an external_id for this org (set by Registry or a previous
+//     login), use that as the Gram org ID.
+//  3. Otherwise derive a deterministic UUIDv5 from the WorkOS org ID.
+//
+// After resolving the ID, we write it back to WorkOS as external_id.
 func (s *Manager) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, workosUserID string) ([]orgRepo.ListOrganizationsForUserRow, error) {
 	members, err := s.workosClient.ListUserMemberships(ctx, workosUserID)
 	if err != nil {
@@ -288,13 +297,15 @@ func (s *Manager) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, wor
 			continue
 		}
 
+		gramOrgID := s.resolveGramOrgID(ctx, m.OrganizationID, org.ExternalID)
+
 		slug := slugify(org.Name)
 		if slug == "" {
 			slug = m.OrganizationID
 		}
 
 		if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-			ID:          m.OrganizationID,
+			ID:          gramOrgID,
 			Name:        org.Name,
 			Slug:        slug,
 			WorkosID:    pgtype.Text{String: m.OrganizationID, Valid: true},
@@ -304,8 +315,17 @@ func (s *Manager) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, wor
 			continue
 		}
 
+		// Write Gram org ID back to WorkOS as external_id. Non-fatal on failure.
+		if err := s.workosClient.EnsureOrgExternalID(ctx, m.OrganizationID, gramOrgID); err != nil {
+			s.logger.ErrorContext(ctx, "failed to sync org external_id to workos",
+				attr.SlogError(err),
+				attr.SlogWorkOSOrganizationID(m.OrganizationID),
+				attr.SlogOrganizationID(gramOrgID),
+			)
+		}
+
 		if err := s.orgRepo.UpsertOrganizationUserRelationshipFromWorkOS(ctx, orgRepo.UpsertOrganizationUserRelationshipFromWorkOSParams{
-			OrganizationID:     m.OrganizationID,
+			OrganizationID:     gramOrgID,
 			UserID:             gramUserID,
 			WorkosMembershipID: pgtype.Text{String: m.ID, Valid: m.ID != ""},
 			WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
@@ -321,6 +341,23 @@ func (s *Manager) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, wor
 		return nil, fmt.Errorf("re-read organizations after workos sync: %w", err)
 	}
 	return rows, nil
+}
+
+// resolveGramOrgID determines the Gram organization ID for a WorkOS org.
+func (s *Manager) resolveGramOrgID(ctx context.Context, workosOrgID, externalID string) string {
+	// Priority 1: Existing Gram org by WorkOS ID — always reuse its ID.
+	if existing, err := s.orgRepo.GetOrganizationByWorkosID(ctx, pgtype.Text{String: workosOrgID, Valid: true}); err == nil {
+		return existing.ID
+	}
+
+	// Priority 2: WorkOS already has an external_id (set by Registry or a
+	// previous sync). Use it for the new Gram org.
+	if externalID != "" {
+		return externalID
+	}
+
+	// Priority 3: Derive a deterministic UUIDv5 from the WorkOS org ID.
+	return orgid.FromWorkOSID(workosOrgID)
 }
 
 // GetUserInfo returns cached user info, falling back to a DB lookup on cache

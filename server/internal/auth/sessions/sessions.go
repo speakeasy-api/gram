@@ -29,6 +29,7 @@ type WorkOSClient interface {
 	ListUserMemberships(ctx context.Context, userID string) ([]workos.Member, error)
 	GetOrganization(ctx context.Context, orgID string) (*workos.Organization, error)
 	EnsureUserExternalID(ctx context.Context, workosUserID, gramUserID string) error
+	EnsureOrgExternalID(ctx context.Context, workosOrgID, gramOrgID string) error
 }
 
 type Manager struct {
