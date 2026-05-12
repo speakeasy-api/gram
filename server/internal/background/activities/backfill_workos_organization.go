@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/workos/workos-go/v6/pkg/events"
 
@@ -258,11 +259,11 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 		return fmt.Errorf("get user by workos id %q: %w", member.UserID, err)
 	}
 
-	baseline, err := freshestLocalWorkOSMembershipBaseline(ctx, orgQueries, organizationID, gramUserID, member.UserID)
+	cursor, err := latestMembershipCursor(ctx, orgQueries, organizationID, gramUserID, member.UserID)
 	if err != nil {
 		return err
 	}
-	if !ShouldProcessEvent(baseline.lastEventID, baseline.updatedAt, "", parsed.updatedAt) {
+	if !ShouldProcessEvent(cursor.lastEventID, cursor.updatedAt, "", parsed.updatedAt) {
 		return nil
 	}
 
@@ -297,58 +298,51 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 	return nil
 }
 
-type workOSMembershipBaseline struct {
+type membershipCursor struct {
 	lastEventID *string
 	updatedAt   *time.Time
 }
 
-func freshestLocalWorkOSMembershipBaseline(ctx context.Context, repo *orgrepo.Queries, organizationID, gramUserID, workosUserID string) (workOSMembershipBaseline, error) {
-	var baseline workOSMembershipBaseline
-
-	if gramUserID != "" {
-		existing, err := repo.GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
-			OrganizationID: organizationID,
-			UserID:         gramUserID,
-		})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-		case err != nil:
-			return workOSMembershipBaseline{}, fmt.Errorf("get organization membership for user %q: %w", gramUserID, err)
-		default:
-			if existing.WorkosLastEventID.Valid {
-				if baseline.lastEventID == nil || existing.WorkosLastEventID.String > *baseline.lastEventID {
-					baseline.lastEventID = &existing.WorkosLastEventID.String
-				}
-			}
-			if existing.WorkosUpdatedAt.Valid {
-				if baseline.updatedAt == nil || existing.WorkosUpdatedAt.Time.After(*baseline.updatedAt) {
-					baseline.updatedAt = &existing.WorkosUpdatedAt.Time
-				}
-			}
-		}
-	}
+// latestMembershipCursor returns the newest local WorkOS state
+// for a membership before applying a snapshot. Membership backfill writes two
+// local shapes: organization_user_relationships when the WorkOS user is linked
+// to a Gram user, and organization_role_assignments even when the user is still
+// unknown locally. Both can be updated by event processing, so the snapshot must
+// compare against the freshest cursor/timestamp from both tables before it
+// overwrites either table.
+func latestMembershipCursor(ctx context.Context, repo *orgrepo.Queries, organizationID, gramUserID, workosUserID string) (membershipCursor, error) {
+	var cursor membershipCursor
 
 	assignments, err := repo.ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
 		OrganizationID: organizationID,
 		WorkosUserID:   workosUserID,
 	})
 	if err != nil {
-		return workOSMembershipBaseline{}, fmt.Errorf("list organization role assignments for WorkOS user %q: %w", workosUserID, err)
+		return membershipCursor{}, fmt.Errorf("list organization role assignments for WorkOS user %q: %w", workosUserID, err)
 	}
 	for _, assignment := range assignments {
-		if assignment.WorkosLastEventID.Valid {
-			if baseline.lastEventID == nil || assignment.WorkosLastEventID.String > *baseline.lastEventID {
-				baseline.lastEventID = &assignment.WorkosLastEventID.String
-			}
-		}
-		if assignment.WorkosUpdatedAt.Valid {
-			if baseline.updatedAt == nil || assignment.WorkosUpdatedAt.Time.After(*baseline.updatedAt) {
-				baseline.updatedAt = &assignment.WorkosUpdatedAt.Time
-			}
-		}
+		moveMembershipCursor(&cursor, assignment.WorkosLastEventID, assignment.WorkosUpdatedAt)
 	}
 
-	return baseline, nil
+	// we don't have a relationship for a user with no gram user ID, so return the membership cursor
+	if gramUserID == "" {
+		return cursor, nil
+	}
+
+	existing, err := repo.GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
+		OrganizationID: organizationID,
+		UserID:         gramUserID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return cursor, nil
+	case err != nil:
+		return membershipCursor{}, fmt.Errorf("get organization membership for user %q: %w", gramUserID, err)
+	}
+
+	moveMembershipCursor(&cursor, existing.WorkosLastEventID, existing.WorkosUpdatedAt)
+
+	return cursor, nil
 }
 
 func parseWorkOSTime(raw string) (time.Time, error) {
@@ -364,4 +358,18 @@ func isWorkOSOrganizationRole(role workos.Role) bool {
 		return role.Type == "OrganizationRole"
 	}
 	return strings.HasPrefix(role.Slug, "org-")
+}
+
+func moveMembershipCursor(cursor *membershipCursor, eventID pgtype.Text, updatedAt pgtype.Timestamptz) {
+	if eventID.Valid {
+		if cursor.lastEventID == nil || eventID.String > *cursor.lastEventID {
+			cursor.lastEventID = &eventID.String
+		}
+	}
+
+	if updatedAt.Valid {
+		if cursor.updatedAt == nil || updatedAt.Time.After(*cursor.updatedAt) {
+			cursor.updatedAt = &updatedAt.Time
+		}
+	}
 }

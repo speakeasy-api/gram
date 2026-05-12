@@ -14,19 +14,29 @@ import (
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
-func ExecuteBackfillWorkOSWorkflow(ctx context.Context, env *tenv.Environment) (client.WorkflowRun, error) {
+type BackfillWorkOSParams struct {
+	WorkOSOrganizationID string `json:"workos_organization_id,omitempty"`
+}
+
+func ExecuteBackfillWorkOSWorkflow(ctx context.Context, env *tenv.Environment, params BackfillWorkOSParams) (client.WorkflowRun, error) {
+	workflowID := fmt.Sprintf("v1:backfill-workos:%d", time.Now().Unix())
+	if params.WorkOSOrganizationID != "" {
+		workflowID = fmt.Sprintf("v1:backfill-workos:%s:%d", params.WorkOSOrganizationID, time.Now().Unix())
+	}
+
 	return env.Client().ExecuteWorkflow(ctx,
 		client.StartWorkflowOptions{
-			ID:                       fmt.Sprintf("v1:backfill-workos:%d", time.Now().Unix()),
+			ID:                       workflowID,
 			TaskQueue:                string(env.Queue()),
 			WorkflowExecutionTimeout: 2 * time.Hour,
 			WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		},
 		BackfillWorkOSWorkflow,
+		params,
 	)
 }
 
-func BackfillWorkOSWorkflow(ctx workflow.Context) error {
+func BackfillWorkOSWorkflow(ctx workflow.Context, params BackfillWorkOSParams) error {
 	var a *Activities
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 10 * time.Minute,
@@ -38,13 +48,23 @@ func BackfillWorkOSWorkflow(ctx workflow.Context) error {
 		},
 	})
 
+	if err := workflow.ExecuteActivity(ctx, a.BackfillWorkOSGlobalRoles).Get(ctx, nil); err != nil {
+		workflow.GetLogger(ctx).Warn("global role backfill failed", "error", err)
+	}
+
+	if params.WorkOSOrganizationID != "" {
+		if err := workflow.ExecuteActivity(ctx, a.BackfillWorkOSOrganization, activities.BackfillWorkOSOrganizationParams{
+			WorkOSOrganizationID: params.WorkOSOrganizationID,
+		}).Get(ctx, nil); err != nil {
+			return fmt.Errorf("backfill WorkOS organization %q: %w", params.WorkOSOrganizationID, err)
+		}
+
+		return nil
+	}
+
 	var orgIDs []string
 	if err := workflow.ExecuteActivity(ctx, a.ListWorkOSOrganizations).Get(ctx, &orgIDs); err != nil {
 		return fmt.Errorf("list WorkOS organizations: %w", err)
-	}
-
-	if err := workflow.ExecuteActivity(ctx, a.BackfillWorkOSGlobalRoles).Get(ctx, nil); err != nil {
-		workflow.GetLogger(ctx).Warn("global role backfill failed", "error", err)
 	}
 
 	for _, orgID := range orgIDs {
