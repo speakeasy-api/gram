@@ -20,7 +20,10 @@ export type Disposition = ClosedEnum<typeof Disposition>;
 export type ListShadowMCPAccessRulesRequest = {
   disposition?: Disposition | undefined;
   limit?: number | undefined;
-  offset?: number | undefined;
+  /**
+   * Cursor for the next page of results.
+   */
+  cursor?: string | undefined;
   /**
    * API Key header
    */
@@ -72,7 +75,7 @@ export const Disposition$outboundSchema: z.ZodMiniEnum<typeof Disposition> = z
 export type ListShadowMCPAccessRulesRequest$Outbound = {
   disposition?: string | undefined;
   limit: number;
-  offset: number;
+  cursor?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
@@ -85,7 +88,7 @@ export const ListShadowMCPAccessRulesRequest$outboundSchema: z.ZodMiniType<
   z.object({
     disposition: z.optional(Disposition$outboundSchema),
     limit: z._default(z.int(), 50),
-    offset: z._default(z.int(), 0),
+    cursor: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),

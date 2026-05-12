@@ -272,10 +272,7 @@ var _ = Service("access", func() {
 				Minimum(1)
 				Maximum(200)
 			})
-			Attribute("offset", Int, func() {
-				Default(0)
-				Minimum(0)
-			})
+			Attribute("cursor", String, "Cursor for the next page of results.")
 			security.ByKeyPayload()
 			security.SessionPayload()
 		})
@@ -287,7 +284,7 @@ var _ = Service("access", func() {
 			Param("status")
 			Param("project_id")
 			Param("limit")
-			Param("offset")
+			Param("cursor")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
@@ -390,10 +387,7 @@ var _ = Service("access", func() {
 				Minimum(1)
 				Maximum(200)
 			})
-			Attribute("offset", Int, func() {
-				Default(0)
-				Minimum(0)
-			})
+			Attribute("cursor", String, "Cursor for the next page of results.")
 			security.ByKeyPayload()
 			security.SessionPayload()
 		})
@@ -404,7 +398,7 @@ var _ = Service("access", func() {
 			GET("/rpc/access.shadowMcp.rules.list")
 			Param("disposition")
 			Param("limit")
-			Param("offset")
+			Param("cursor")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
@@ -892,9 +886,9 @@ var ShadowMCPApprovalRequestModel = Type("ShadowMCPApprovalRequest", func() {
 })
 
 var ListShadowMCPApprovalRequestsResult = Type("ListShadowMCPApprovalRequestsResult", func() {
-	Required("requests", "total")
+	Required("requests")
 	Attribute("requests", ArrayOf(ShadowMCPApprovalRequestModel))
-	Attribute("total", Int)
+	Attribute("next_cursor", String, "Cursor for the next page of results.")
 })
 
 var ShadowMCPAccessRuleModel = Type("ShadowMCPAccessRule", func() {
@@ -931,9 +925,9 @@ var ShadowMCPAccessRuleModel = Type("ShadowMCPAccessRule", func() {
 })
 
 var ListShadowMCPAccessRulesResult = Type("ListShadowMCPAccessRulesResult", func() {
-	Required("rules", "total")
+	Required("rules")
 	Attribute("rules", ArrayOf(ShadowMCPAccessRuleModel))
-	Attribute("total", Int)
+	Attribute("next_cursor", String, "Cursor for the next page of results.")
 })
 
 var ShadowMCPApprovalDecisionResult = Type("ShadowMCPApprovalDecisionResult", func() {

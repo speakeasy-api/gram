@@ -2170,7 +2170,9 @@ func EncodeListShadowMCPApprovalRequestsRequest(encoder func(*http.Request) goah
 			values.Add("project_id", *p.ProjectID)
 		}
 		values.Add("limit", fmt.Sprintf("%v", p.Limit))
-		values.Add("offset", fmt.Sprintf("%v", p.Offset))
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -3127,7 +3129,9 @@ func EncodeListShadowMCPAccessRulesRequest(encoder func(*http.Request) goahttp.E
 			values.Add("disposition", *p.Disposition)
 		}
 		values.Add("limit", fmt.Sprintf("%v", p.Limit))
-		values.Add("offset", fmt.Sprintf("%v", p.Offset))
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

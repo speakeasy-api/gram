@@ -49,7 +49,7 @@ export function buildShadowMCPAccessRulesQuery(
     queryKey: queryKeyShadowMCPAccessRules({
       disposition: request?.disposition,
       limit: request?.limit,
-      offset: request?.offset,
+      cursor: request?.cursor,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
     }),
@@ -81,7 +81,7 @@ export function queryKeyShadowMCPAccessRules(
   parameters: {
     disposition?: operations.Disposition | undefined;
     limit?: number | undefined;
-    offset?: number | undefined;
+    cursor?: string | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
   },

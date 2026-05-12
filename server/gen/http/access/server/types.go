@@ -239,7 +239,8 @@ type UpdateMemberRoleResponseBody struct {
 // service "listShadowMCPApprovalRequests" endpoint HTTP response body.
 type ListShadowMCPApprovalRequestsResponseBody struct {
 	Requests []*ShadowMCPApprovalRequestResponseBody `form:"requests" json:"requests" xml:"requests"`
-	Total    int                                     `form:"total" json:"total" xml:"total"`
+	// Cursor for the next page of results.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // CreateShadowMCPApprovalRequestResponseBody is the type of the "access"
@@ -290,7 +291,8 @@ type DenyShadowMCPApprovalRequestResponseBody struct {
 // "listShadowMCPAccessRules" endpoint HTTP response body.
 type ListShadowMCPAccessRulesResponseBody struct {
 	Rules []*ShadowMCPAccessRuleResponseBody `form:"rules" json:"rules" xml:"rules"`
-	Total int                                `form:"total" json:"total" xml:"total"`
+	// Cursor for the next page of results.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // CreateShadowMCPAccessRuleResponseBody is the type of the "access" service
@@ -5048,7 +5050,7 @@ func NewUpdateMemberRoleResponseBody(res *access.AccessMember) *UpdateMemberRole
 // "access" service.
 func NewListShadowMCPApprovalRequestsResponseBody(res *access.ListShadowMCPApprovalRequestsResult) *ListShadowMCPApprovalRequestsResponseBody {
 	body := &ListShadowMCPApprovalRequestsResponseBody{
-		Total: res.Total,
+		NextCursor: res.NextCursor,
 	}
 	if res.Requests != nil {
 		body.Requests = make([]*ShadowMCPApprovalRequestResponseBody, len(res.Requests))
@@ -5132,7 +5134,7 @@ func NewDenyShadowMCPApprovalRequestResponseBody(res *access.ShadowMCPApprovalDe
 // service.
 func NewListShadowMCPAccessRulesResponseBody(res *access.ListShadowMCPAccessRulesResult) *ListShadowMCPAccessRulesResponseBody {
 	body := &ListShadowMCPAccessRulesResponseBody{
-		Total: res.Total,
+		NextCursor: res.NextCursor,
 	}
 	if res.Rules != nil {
 		body.Rules = make([]*ShadowMCPAccessRuleResponseBody, len(res.Rules))
@@ -8724,12 +8726,12 @@ func NewUpdateMemberRolePayload(body *UpdateMemberRoleRequestBody, apikeyToken *
 
 // NewListShadowMCPApprovalRequestsPayload builds a access service
 // listShadowMCPApprovalRequests endpoint payload.
-func NewListShadowMCPApprovalRequestsPayload(status *string, projectID *string, limit int, offset int, apikeyToken *string, sessionToken *string) *access.ListShadowMCPApprovalRequestsPayload {
+func NewListShadowMCPApprovalRequestsPayload(status *string, projectID *string, limit int, cursor *string, apikeyToken *string, sessionToken *string) *access.ListShadowMCPApprovalRequestsPayload {
 	v := &access.ListShadowMCPApprovalRequestsPayload{}
 	v.Status = status
 	v.ProjectID = projectID
 	v.Limit = limit
-	v.Offset = offset
+	v.Cursor = cursor
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
@@ -8792,11 +8794,11 @@ func NewDenyShadowMCPApprovalRequestPayload(body *DenyShadowMCPApprovalRequestRe
 
 // NewListShadowMCPAccessRulesPayload builds a access service
 // listShadowMCPAccessRules endpoint payload.
-func NewListShadowMCPAccessRulesPayload(disposition *string, limit int, offset int, apikeyToken *string, sessionToken *string) *access.ListShadowMCPAccessRulesPayload {
+func NewListShadowMCPAccessRulesPayload(disposition *string, limit int, cursor *string, apikeyToken *string, sessionToken *string) *access.ListShadowMCPAccessRulesPayload {
 	v := &access.ListShadowMCPAccessRulesPayload{}
 	v.Disposition = disposition
 	v.Limit = limit
-	v.Offset = offset
+	v.Cursor = cursor
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 

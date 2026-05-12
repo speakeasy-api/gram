@@ -460,9 +460,10 @@ type ListScopesResult struct {
 // ListShadowMCPAccessRulesPayload is the payload type of the access service
 // listShadowMCPAccessRules method.
 type ListShadowMCPAccessRulesPayload struct {
-	Disposition  *string
-	Limit        int
-	Offset       int
+	Disposition *string
+	Limit       int
+	// Cursor for the next page of results.
+	Cursor       *string
 	ApikeyToken  *string
 	SessionToken *string
 }
@@ -471,16 +472,18 @@ type ListShadowMCPAccessRulesPayload struct {
 // listShadowMCPAccessRules method.
 type ListShadowMCPAccessRulesResult struct {
 	Rules []*ShadowMCPAccessRule
-	Total int
+	// Cursor for the next page of results.
+	NextCursor *string
 }
 
 // ListShadowMCPApprovalRequestsPayload is the payload type of the access
 // service listShadowMCPApprovalRequests method.
 type ListShadowMCPApprovalRequestsPayload struct {
-	Status       *string
-	ProjectID    *string
-	Limit        int
-	Offset       int
+	Status    *string
+	ProjectID *string
+	Limit     int
+	// Cursor for the next page of results.
+	Cursor       *string
 	ApikeyToken  *string
 	SessionToken *string
 }
@@ -489,7 +492,8 @@ type ListShadowMCPApprovalRequestsPayload struct {
 // listShadowMCPApprovalRequests method.
 type ListShadowMCPApprovalRequestsResult struct {
 	Requests []*ShadowMCPApprovalRequest
-	Total    int
+	// Cursor for the next page of results.
+	NextCursor *string
 }
 
 // ListUserGrantsResult is the result type of the access service listGrants

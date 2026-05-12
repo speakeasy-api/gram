@@ -1961,7 +1961,7 @@ func DecodeListShadowMCPApprovalRequestsRequest(mux goahttp.Muxer, decoder func(
 			status       *string
 			projectID    *string
 			limit        int
-			offset       int
+			cursor       *string
 			apikeyToken  *string
 			sessionToken *string
 			err          error
@@ -2001,18 +2001,9 @@ func DecodeListShadowMCPApprovalRequestsRequest(mux goahttp.Muxer, decoder func(
 		if limit > 200 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
 		}
-		{
-			offsetRaw := qp.Get("offset")
-			if offsetRaw != "" {
-				v, err2 := strconv.ParseInt(offsetRaw, 10, strconv.IntSize)
-				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("offset", offsetRaw, "integer"))
-				}
-				offset = int(v)
-			}
-		}
-		if offset < 0 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("offset", offset, 0, true))
+		cursorRaw := qp.Get("cursor")
+		if cursorRaw != "" {
+			cursor = &cursorRaw
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -2025,7 +2016,7 @@ func DecodeListShadowMCPApprovalRequestsRequest(mux goahttp.Muxer, decoder func(
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListShadowMCPApprovalRequestsPayload(status, projectID, limit, offset, apikeyToken, sessionToken)
+		payload = NewListShadowMCPApprovalRequestsPayload(status, projectID, limit, cursor, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2884,7 +2875,7 @@ func DecodeListShadowMCPAccessRulesRequest(mux goahttp.Muxer, decoder func(*http
 		var (
 			disposition  *string
 			limit        int
-			offset       int
+			cursor       *string
 			apikeyToken  *string
 			sessionToken *string
 			err          error
@@ -2917,18 +2908,9 @@ func DecodeListShadowMCPAccessRulesRequest(mux goahttp.Muxer, decoder func(*http
 		if limit > 200 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
 		}
-		{
-			offsetRaw := qp.Get("offset")
-			if offsetRaw != "" {
-				v, err2 := strconv.ParseInt(offsetRaw, 10, strconv.IntSize)
-				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("offset", offsetRaw, "integer"))
-				}
-				offset = int(v)
-			}
-		}
-		if offset < 0 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("offset", offset, 0, true))
+		cursorRaw := qp.Get("cursor")
+		if cursorRaw != "" {
+			cursor = &cursorRaw
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -2941,7 +2923,7 @@ func DecodeListShadowMCPAccessRulesRequest(mux goahttp.Muxer, decoder func(*http
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListShadowMCPAccessRulesPayload(disposition, limit, offset, apikeyToken, sessionToken)
+		payload = NewListShadowMCPAccessRulesPayload(disposition, limit, cursor, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

@@ -242,6 +242,45 @@ func TestService_ListShadowMCPApprovalRequests_RequiresOrgAdmin(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
+func TestService_ListShadowMCPApprovalRequests_CursorPagination(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	project := createShadowMCPProject(t, ctx, ti, authCtx.ActiveOrganizationID)
+
+	for _, server := range []struct {
+		name string
+		host string
+	}{
+		{name: "First", host: "first.example.com"},
+		{name: "Second", host: "second.example.com"},
+		{name: "Third", host: "third.example.com"},
+	} {
+		_, err := ti.service.CreateShadowMCPApprovalRequest(ctx, &gen.CreateShadowMCPApprovalRequestPayload{
+			RequestToken: shadowMCPRequestToken(t, authCtx.ActiveOrganizationID, authCtx.UserID, project.ID.String(), ShadowMCPApprovalRequestTokenInput{
+				ObservedName:    conv.PtrEmpty(server.name),
+				ObservedURLHost: &server.host,
+			}),
+		})
+		require.NoError(t, err)
+	}
+
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	firstPage, err := ti.service.ListShadowMCPApprovalRequests(ctx, &gen.ListShadowMCPApprovalRequestsPayload{Limit: 2})
+	require.NoError(t, err)
+	require.Len(t, firstPage.Requests, 2)
+	require.NotNil(t, firstPage.NextCursor)
+
+	secondPage, err := ti.service.ListShadowMCPApprovalRequests(ctx, &gen.ListShadowMCPApprovalRequestsPayload{
+		Limit:  2,
+		Cursor: firstPage.NextCursor,
+	})
+	require.NoError(t, err)
+	require.Len(t, secondPage.Requests, 1)
+	require.Nil(t, secondPage.NextCursor)
+}
+
 func TestService_ShadowMCPAccessRule_ManualLifecycle(t *testing.T) {
 	t.Parallel()
 
@@ -291,8 +330,43 @@ func TestService_ShadowMCPAccessRule_ManualLifecycle(t *testing.T) {
 
 	result, err := ti.service.ListShadowMCPAccessRules(ctx, &gen.ListShadowMCPAccessRulesPayload{Limit: 10})
 	require.NoError(t, err)
-	require.Zero(t, result.Total)
 	require.Empty(t, result.Rules)
+	require.Nil(t, result.NextCursor)
+}
+
+func TestService_ListShadowMCPAccessRules_CursorPagination(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+		authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)},
+	)
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{}, nil).Times(5)
+
+	for _, host := range []string{"one.example.com", "two.example.com", "three.example.com"} {
+		_, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
+			Disposition:  shadowMCPRuleDenied,
+			MatchBreadth: "url_host",
+			MatchValue:   host,
+			DisplayName:  host,
+		})
+		require.NoError(t, err)
+	}
+
+	firstPage, err := ti.service.ListShadowMCPAccessRules(ctx, &gen.ListShadowMCPAccessRulesPayload{Limit: 2})
+	require.NoError(t, err)
+	require.Len(t, firstPage.Rules, 2)
+	require.NotNil(t, firstPage.NextCursor)
+
+	secondPage, err := ti.service.ListShadowMCPAccessRules(ctx, &gen.ListShadowMCPAccessRulesPayload{
+		Limit:  2,
+		Cursor: firstPage.NextCursor,
+	})
+	require.NoError(t, err)
+	require.Len(t, secondPage.Rules, 1)
+	require.Nil(t, secondPage.NextCursor)
 }
 
 func TestService_CreateShadowMCPAccessRule_NormalizesMatchValue(t *testing.T) {

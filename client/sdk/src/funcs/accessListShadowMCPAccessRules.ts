@@ -100,9 +100,9 @@ async function $do(
   const path = pathToFunc("/rpc/access.shadowMcp.rules.list")();
 
   const query = encodeFormQuery({
+    "cursor": payload?.cursor,
     "disposition": payload?.disposition,
     "limit": payload?.limit,
-    "offset": payload?.offset,
   });
 
   const headers = new Headers(compactMap({

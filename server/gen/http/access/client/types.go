@@ -239,7 +239,8 @@ type UpdateMemberRoleResponseBody struct {
 // service "listShadowMCPApprovalRequests" endpoint HTTP response body.
 type ListShadowMCPApprovalRequestsResponseBody struct {
 	Requests []*ShadowMCPApprovalRequestResponseBody `form:"requests,omitempty" json:"requests,omitempty" xml:"requests,omitempty"`
-	Total    *int                                    `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
+	// Cursor for the next page of results.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // CreateShadowMCPApprovalRequestResponseBody is the type of the "access"
@@ -290,7 +291,8 @@ type DenyShadowMCPApprovalRequestResponseBody struct {
 // "listShadowMCPAccessRules" endpoint HTTP response body.
 type ListShadowMCPAccessRulesResponseBody struct {
 	Rules []*ShadowMCPAccessRuleResponseBody `form:"rules,omitempty" json:"rules,omitempty" xml:"rules,omitempty"`
-	Total *int                               `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
+	// Cursor for the next page of results.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // CreateShadowMCPAccessRuleResponseBody is the type of the "access" service
@@ -6559,7 +6561,7 @@ func NewUpdateMemberRoleGatewayError(body *UpdateMemberRoleGatewayErrorResponseB
 // "listShadowMCPApprovalRequests" endpoint result from a HTTP "OK" response.
 func NewListShadowMCPApprovalRequestsResultOK(body *ListShadowMCPApprovalRequestsResponseBody) *access.ListShadowMCPApprovalRequestsResult {
 	v := &access.ListShadowMCPApprovalRequestsResult{
-		Total: *body.Total,
+		NextCursor: body.NextCursor,
 	}
 	v.Requests = make([]*access.ShadowMCPApprovalRequest, len(body.Requests))
 	for i, val := range body.Requests {
@@ -7238,7 +7240,7 @@ func NewDenyShadowMCPApprovalRequestGatewayError(body *DenyShadowMCPApprovalRequ
 // "listShadowMCPAccessRules" endpoint result from a HTTP "OK" response.
 func NewListShadowMCPAccessRulesResultOK(body *ListShadowMCPAccessRulesResponseBody) *access.ListShadowMCPAccessRulesResult {
 	v := &access.ListShadowMCPAccessRulesResult{
-		Total: *body.Total,
+		NextCursor: body.NextCursor,
 	}
 	v.Rules = make([]*access.ShadowMCPAccessRule, len(body.Rules))
 	for i, val := range body.Rules {
@@ -9094,9 +9096,6 @@ func ValidateListShadowMCPApprovalRequestsResponseBody(body *ListShadowMCPApprov
 	if body.Requests == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("requests", "body"))
 	}
-	if body.Total == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
-	}
 	for _, e := range body.Requests {
 		if e != nil {
 			if err2 := ValidateShadowMCPApprovalRequestResponseBody(e); err2 != nil {
@@ -9215,9 +9214,6 @@ func ValidateDenyShadowMCPApprovalRequestResponseBody(body *DenyShadowMCPApprova
 func ValidateListShadowMCPAccessRulesResponseBody(body *ListShadowMCPAccessRulesResponseBody) (err error) {
 	if body.Rules == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("rules", "body"))
-	}
-	if body.Total == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
 	}
 	for _, e := range body.Rules {
 		if e != nil {

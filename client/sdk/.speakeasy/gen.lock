@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: ae84e968da11253b2d9f91cb36dd2c4f
+  docChecksum: 4d3c6ec1ed41cd6cd2bcd6bea51d9f98
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -495,9 +495,9 @@ trackedFiles:
   docs/models/components/listserversresult.md:
     last_write_checksum: sha1:758c5f6b75d59ac510a99dcbbfc6aab3c5b51c8c
   docs/models/components/listshadowmcpaccessrulesresult.md:
-    last_write_checksum: sha1:e92d048d571668e1363097744d685adbac08bdac
+    last_write_checksum: sha1:f011ccb9580c0eb7a6b11002d66aeee5a87f92f8
   docs/models/components/listshadowmcpapprovalrequestsresult.md:
-    last_write_checksum: sha1:c14b660fe31ad4292bef6d4fbca0c427fe0f1f0f
+    last_write_checksum: sha1:e4a284b559b473e86f7035e9552163817388e6ee
   docs/models/components/listslackappsresult.md:
     last_write_checksum: sha1:4c7dbb20f77e5133f881ecdece1da810fd9c7bbc
   docs/models/components/listtoolsetsresult.md:
@@ -2073,11 +2073,11 @@ trackedFiles:
   docs/models/operations/listservernameoverridessecurityoption2.md:
     last_write_checksum: sha1:8d9ecac3bc39f2ddb04e60c77550e8fa0af01e6d
   docs/models/operations/listshadowmcpaccessrulesrequest.md:
-    last_write_checksum: sha1:3103e347f82aea3b861bbc518324af3d4c4d57bb
+    last_write_checksum: sha1:17d22de72ffde226c9bd37f2be2b9a0731e80fe4
   docs/models/operations/listshadowmcpaccessrulessecurity.md:
     last_write_checksum: sha1:48da9d709576f5f0b81c94bafb3b07f59e915555
   docs/models/operations/listshadowmcpapprovalrequestsrequest.md:
-    last_write_checksum: sha1:7f72553008bd6aeea2186b60bc6e7d4430124d97
+    last_write_checksum: sha1:eb49bc4b27e3f69b90cedd57ba7a3da7e0984e44
   docs/models/operations/listshadowmcpapprovalrequestssecurity.md:
     last_write_checksum: sha1:907e0ba2cc7f798e7c7e7d01ae21ba32f0aaf74f
   docs/models/operations/listslackappsrequest.md:
@@ -2823,9 +2823,9 @@ trackedFiles:
   src/funcs/accessListScopes.ts:
     last_write_checksum: sha1:1ad64e3abc6903cae51f27d132504002ba9c94e9
   src/funcs/accessListShadowMCPAccessRules.ts:
-    last_write_checksum: sha1:87fd1d49d83f0b55a2d8daed6acd0cff716ddb3a
+    last_write_checksum: sha1:3d12516c8fc2031371bdc4aa981af4fb46173975
   src/funcs/accessListShadowMCPApprovalRequests.ts:
-    last_write_checksum: sha1:dce818357abbcca9f25381d4056cb838aa1fadda
+    last_write_checksum: sha1:f0aa966200f7501d9f23f79e44c009fb82c850d9
   src/funcs/accessResolveChallenge.ts:
     last_write_checksum: sha1:f371bbe148c7c16e2735b2726bf5a75488623249
   src/funcs/accessUpdateMemberRole.ts:
@@ -4115,9 +4115,9 @@ trackedFiles:
   src/models/components/listserversresult.ts:
     last_write_checksum: sha1:e976567cbb0d062de15ed04f3d14dd77737c54ba
   src/models/components/listshadowmcpaccessrulesresult.ts:
-    last_write_checksum: sha1:c138f73312685336e44a52b46bb141078f68b946
+    last_write_checksum: sha1:9e09bf302f24f70b3c9e1d5ebab32e4964a14e3e
   src/models/components/listshadowmcpapprovalrequestsresult.ts:
-    last_write_checksum: sha1:9bd8e4ab9102dc0b407484a21a33170384f4f3ba
+    last_write_checksum: sha1:69b264d88214305a8344effc6981434be9b713d6
   src/models/components/listslackappsresult.ts:
     last_write_checksum: sha1:2068c9ccfec61f239632b4a9e20be1fe226b5a8f
   src/models/components/listtoolsetsresult.ts:
@@ -5165,9 +5165,9 @@ trackedFiles:
   src/models/operations/listservernameoverrides.ts:
     last_write_checksum: sha1:944a7a8abb10a2922165d89c2d046cbe8be3a9fb
   src/models/operations/listshadowmcpaccessrules.ts:
-    last_write_checksum: sha1:e4eb7db0ba41f453441779fbbb7249e531500eb0
+    last_write_checksum: sha1:8499b8e5ec91e953e4d214b0cc8feb46c1d60a5f
   src/models/operations/listshadowmcpapprovalrequests.ts:
-    last_write_checksum: sha1:22b8e45abdc6715db3e84e3583085532d636defe
+    last_write_checksum: sha1:ce9eae7471972309247bb796df3d4b9093208a33
   src/models/operations/listslackapps.ts:
     last_write_checksum: sha1:b7677375119ac6cf5e631fd8a701b2b6ad93d1ea
   src/models/operations/listtemplates.ts:
@@ -6307,13 +6307,13 @@ trackedFiles:
     last_write_checksum: sha1:67149aa3981bf96df946e29cecd8a23ec10a7ab4
     pristine_git_object: f81377b2b53c8cd0c4f191e23b41567ee7c7b65e
   src/react-query/shadowMCPAccessRules.core.ts:
-    last_write_checksum: sha1:827d9b981a647fc884f53ad8e516bf92e938f5c6
+    last_write_checksum: sha1:0775c77af55287eea88b1450731f830943c1b079
   src/react-query/shadowMCPAccessRules.ts:
-    last_write_checksum: sha1:f7887723e9435e3eb6c43bfbee478c3e6b54c8e9
+    last_write_checksum: sha1:80e2edc0ae04440c3f072267d27df4362a7b7fb2
   src/react-query/shadowMCPApprovalRequests.core.ts:
-    last_write_checksum: sha1:37625c8373f381254b8103e0143d8a5861b0d0d5
+    last_write_checksum: sha1:91e1a4777d7bb05af2ba460fdaf9f5b820e31db8
   src/react-query/shadowMCPApprovalRequests.ts:
-    last_write_checksum: sha1:ca3e503d8c403ab6807ccf92da3346e21392417c
+    last_write_checksum: sha1:45447c0d6ee97b3acedb3c69d91a1354594be215
   src/react-query/switchScopes.ts:
     id: 89899b6a30ab
     last_write_checksum: sha1:dbf86dcacdd6cf6443e195320fd1e00bfb0e2284
@@ -9767,7 +9767,7 @@ examples:
           offset: 0
       responses:
         "200":
-          application/json: {"requests": [{"blocked_count": 313365, "created_at": "2024-10-01T16:26:19.462Z", "id": "ad376aad-3f61-4fbd-9934-1517ea94af9d", "organization_id": "<id>", "project_id": "8b2912f8-2396-4e08-ab06-db8c539f1d8e", "requested_at": "2024-09-04T12:31:04.746Z", "status": "requested", "updated_at": "2024-08-07T11:27:04.392Z"}], "total": 135490}
+          application/json: {"requests": [{"blocked_count": 313365, "created_at": "2024-10-01T16:26:19.462Z", "id": "ad376aad-3f61-4fbd-9934-1517ea94af9d", "organization_id": "<id>", "project_id": "8b2912f8-2396-4e08-ab06-db8c539f1d8e", "requested_at": "2024-09-04T12:31:04.746Z", "status": "requested", "updated_at": "2024-08-07T11:27:04.392Z"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -9801,7 +9801,7 @@ examples:
           offset: 0
       responses:
         "200":
-          application/json: {"rules": [], "total": 682143}
+          application/json: {"rules": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

@@ -317,7 +317,7 @@ func BuildUpdateMemberRolePayload(accessUpdateMemberRoleBody string, accessUpdat
 
 // BuildListShadowMCPApprovalRequestsPayload builds the payload for the access
 // listShadowMCPApprovalRequests endpoint from CLI flags.
-func BuildListShadowMCPApprovalRequestsPayload(accessListShadowMCPApprovalRequestsStatus string, accessListShadowMCPApprovalRequestsProjectID string, accessListShadowMCPApprovalRequestsLimit string, accessListShadowMCPApprovalRequestsOffset string, accessListShadowMCPApprovalRequestsApikeyToken string, accessListShadowMCPApprovalRequestsSessionToken string) (*access.ListShadowMCPApprovalRequestsPayload, error) {
+func BuildListShadowMCPApprovalRequestsPayload(accessListShadowMCPApprovalRequestsStatus string, accessListShadowMCPApprovalRequestsProjectID string, accessListShadowMCPApprovalRequestsLimit string, accessListShadowMCPApprovalRequestsCursor string, accessListShadowMCPApprovalRequestsApikeyToken string, accessListShadowMCPApprovalRequestsSessionToken string) (*access.ListShadowMCPApprovalRequestsPayload, error) {
 	var err error
 	var status *string
 	{
@@ -361,21 +361,10 @@ func BuildListShadowMCPApprovalRequestsPayload(accessListShadowMCPApprovalReques
 			}
 		}
 	}
-	var offset int
+	var cursor *string
 	{
-		if accessListShadowMCPApprovalRequestsOffset != "" {
-			var v int64
-			v, err = strconv.ParseInt(accessListShadowMCPApprovalRequestsOffset, 10, strconv.IntSize)
-			offset = int(v)
-			if err != nil {
-				return nil, fmt.Errorf("invalid value for offset, must be INT")
-			}
-			if offset < 0 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("offset", offset, 0, true))
-			}
-			if err != nil {
-				return nil, err
-			}
+		if accessListShadowMCPApprovalRequestsCursor != "" {
+			cursor = &accessListShadowMCPApprovalRequestsCursor
 		}
 	}
 	var apikeyToken *string
@@ -394,7 +383,7 @@ func BuildListShadowMCPApprovalRequestsPayload(accessListShadowMCPApprovalReques
 	v.Status = status
 	v.ProjectID = projectID
 	v.Limit = limit
-	v.Offset = offset
+	v.Cursor = cursor
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
@@ -534,7 +523,7 @@ func BuildDenyShadowMCPApprovalRequestPayload(accessDenyShadowMCPApprovalRequest
 
 // BuildListShadowMCPAccessRulesPayload builds the payload for the access
 // listShadowMCPAccessRules endpoint from CLI flags.
-func BuildListShadowMCPAccessRulesPayload(accessListShadowMCPAccessRulesDisposition string, accessListShadowMCPAccessRulesLimit string, accessListShadowMCPAccessRulesOffset string, accessListShadowMCPAccessRulesApikeyToken string, accessListShadowMCPAccessRulesSessionToken string) (*access.ListShadowMCPAccessRulesPayload, error) {
+func BuildListShadowMCPAccessRulesPayload(accessListShadowMCPAccessRulesDisposition string, accessListShadowMCPAccessRulesLimit string, accessListShadowMCPAccessRulesCursor string, accessListShadowMCPAccessRulesApikeyToken string, accessListShadowMCPAccessRulesSessionToken string) (*access.ListShadowMCPAccessRulesPayload, error) {
 	var err error
 	var disposition *string
 	{
@@ -568,21 +557,10 @@ func BuildListShadowMCPAccessRulesPayload(accessListShadowMCPAccessRulesDisposit
 			}
 		}
 	}
-	var offset int
+	var cursor *string
 	{
-		if accessListShadowMCPAccessRulesOffset != "" {
-			var v int64
-			v, err = strconv.ParseInt(accessListShadowMCPAccessRulesOffset, 10, strconv.IntSize)
-			offset = int(v)
-			if err != nil {
-				return nil, fmt.Errorf("invalid value for offset, must be INT")
-			}
-			if offset < 0 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("offset", offset, 0, true))
-			}
-			if err != nil {
-				return nil, err
-			}
+		if accessListShadowMCPAccessRulesCursor != "" {
+			cursor = &accessListShadowMCPAccessRulesCursor
 		}
 	}
 	var apikeyToken *string
@@ -600,7 +578,7 @@ func BuildListShadowMCPAccessRulesPayload(accessListShadowMCPAccessRulesDisposit
 	v := &access.ListShadowMCPAccessRulesPayload{}
 	v.Disposition = disposition
 	v.Limit = limit
-	v.Offset = offset
+	v.Cursor = cursor
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 

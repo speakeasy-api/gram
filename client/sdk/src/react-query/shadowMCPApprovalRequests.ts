@@ -117,7 +117,7 @@ export function setShadowMCPApprovalRequestsData(
       status?: operations.Status | undefined;
       projectId?: string | undefined;
       limit?: number | undefined;
-      offset?: number | undefined;
+      cursor?: string | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     },
@@ -136,7 +136,7 @@ export function invalidateShadowMCPApprovalRequests(
       status?: operations.Status | undefined;
       projectId?: string | undefined;
       limit?: number | undefined;
-      offset?: number | undefined;
+      cursor?: string | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     }]

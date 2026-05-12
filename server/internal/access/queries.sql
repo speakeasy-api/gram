@@ -171,17 +171,12 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
   AND (@status::text = '' OR status = @status)
   AND (@project_id::text = '' OR project_id::text = @project_id)
+  AND (
+    sqlc.narg(cursor_requested_at)::timestamptz IS NULL
+    OR (requested_at, id) < (sqlc.narg(cursor_requested_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
+  )
 ORDER BY requested_at DESC, id DESC
-LIMIT @limit_count
-OFFSET @offset_count;
-
--- name: CountShadowMCPApprovalRequests :one
-SELECT COUNT(*)
-FROM shadow_mcp_approval_requests
-WHERE organization_id = @organization_id
-  AND deleted IS FALSE
-  AND (@status::text = '' OR status = @status)
-  AND (@project_id::text = '' OR project_id::text = @project_id);
+LIMIT @limit_count;
 
 -- name: GetShadowMCPApprovalRequest :one
 SELECT *
@@ -267,16 +262,12 @@ FROM shadow_mcp_access_rules
 WHERE organization_id = @organization_id
   AND deleted IS FALSE
   AND (@disposition::text = '' OR disposition = @disposition)
+  AND (
+    sqlc.narg(cursor_created_at)::timestamptz IS NULL
+    OR (created_at, id) < (sqlc.narg(cursor_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
+  )
 ORDER BY created_at DESC, id DESC
-LIMIT @limit_count
-OFFSET @offset_count;
-
--- name: CountShadowMCPAccessRules :one
-SELECT COUNT(*)
-FROM shadow_mcp_access_rules
-WHERE organization_id = @organization_id
-  AND deleted IS FALSE
-  AND (@disposition::text = '' OR disposition = @disposition);
+LIMIT @limit_count;
 
 -- name: GetShadowMCPAccessRule :one
 SELECT *

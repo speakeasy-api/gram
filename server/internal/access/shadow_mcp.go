@@ -2,10 +2,12 @@ package access
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,30 +46,34 @@ func (s *Service) ListShadowMCPApprovalRequests(ctx context.Context, payload *ge
 
 	status := conv.PtrValOr(payload.Status, "")
 	projectID := conv.PtrValOr(payload.ProjectID, "")
-	limit, offset, err := shadowMCPPagination(payload.Limit, payload.Offset)
+	limit, err := shadowMCPLimit(payload.Limit)
 	if err != nil {
 		return nil, err
+	}
+	cursorRequestedAt, cursorID, err := decodeShadowMCPCursorParam(payload.Cursor)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
 	}
 	queries := repo.New(s.db)
 
 	rows, err := queries.ListShadowMCPApprovalRequests(ctx, repo.ListShadowMCPApprovalRequestsParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		Status:         status,
-		ProjectID:      projectID,
-		OffsetCount:    offset,
-		LimitCount:     limit,
+		OrganizationID:    ac.ActiveOrganizationID,
+		Status:            status,
+		ProjectID:         projectID,
+		CursorRequestedAt: cursorRequestedAt,
+		CursorID:          cursorID,
+		LimitCount:        limit + 1,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp approval requests").Log(ctx, s.logger)
 	}
 
-	total, err := queries.CountShadowMCPApprovalRequests(ctx, repo.CountShadowMCPApprovalRequestsParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		Status:         status,
-		ProjectID:      projectID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count shadow mcp approval requests").Log(ctx, s.logger)
+	var nextCursor *string
+	pageSize := int(limit)
+	if len(rows) > pageSize {
+		cursor := encodeShadowMCPCursor(rows[pageSize-1].RequestedAt, rows[pageSize-1].ID)
+		nextCursor = &cursor
+		rows = rows[:pageSize]
 	}
 
 	requests := make([]*gen.ShadowMCPApprovalRequest, 0, len(rows))
@@ -76,8 +82,8 @@ func (s *Service) ListShadowMCPApprovalRequests(ctx context.Context, payload *ge
 	}
 
 	return &gen.ListShadowMCPApprovalRequestsResult{
-		Requests: requests,
-		Total:    int(total),
+		Requests:   requests,
+		NextCursor: nextCursor,
 	}, nil
 }
 
@@ -426,26 +432,32 @@ func (s *Service) ListShadowMCPAccessRules(ctx context.Context, payload *gen.Lis
 	}
 
 	disposition := conv.PtrValOr(payload.Disposition, "")
-	limit, offset, err := shadowMCPPagination(payload.Limit, payload.Offset)
+	limit, err := shadowMCPLimit(payload.Limit)
 	if err != nil {
 		return nil, err
 	}
+	cursorCreatedAt, cursorID, err := decodeShadowMCPCursorParam(payload.Cursor)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+	}
 	queries := repo.New(s.db)
 	rows, err := queries.ListShadowMCPAccessRules(ctx, repo.ListShadowMCPAccessRulesParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		Disposition:    disposition,
-		OffsetCount:    offset,
-		LimitCount:     limit,
+		OrganizationID:  ac.ActiveOrganizationID,
+		Disposition:     disposition,
+		CursorCreatedAt: cursorCreatedAt,
+		CursorID:        cursorID,
+		LimitCount:      limit + 1,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp access rules").Log(ctx, s.logger)
 	}
-	total, err := queries.CountShadowMCPAccessRules(ctx, repo.CountShadowMCPAccessRulesParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		Disposition:    disposition,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count shadow mcp access rules").Log(ctx, s.logger)
+
+	var nextCursor *string
+	pageSize := int(limit)
+	if len(rows) > pageSize {
+		cursor := encodeShadowMCPCursor(rows[pageSize-1].CreatedAt, rows[pageSize-1].ID)
+		nextCursor = &cursor
+		rows = rows[:pageSize]
 	}
 
 	roleIDsByRule, err := s.shadowMCPRoleIDsByRule(ctx, queries, ac.ActiveOrganizationID, workosOrgID, rows)
@@ -458,8 +470,8 @@ func (s *Service) ListShadowMCPAccessRules(ctx context.Context, payload *gen.Lis
 	}
 
 	return &gen.ListShadowMCPAccessRulesResult{
-		Rules: rules,
-		Total: int(total),
+		Rules:      rules,
+		NextCursor: nextCursor,
 	}, nil
 }
 
@@ -1063,14 +1075,41 @@ func formatPGTimestampValue(ts pgtype.Timestamptz) string {
 	return ts.Time.UTC().Format(time.RFC3339)
 }
 
-func shadowMCPPagination(limit, offset int) (int32, int32, error) {
+func shadowMCPLimit(limit int) (int32, error) {
 	if limit < 0 {
-		return 0, 0, oops.E(oops.CodeBadRequest, nil, "limit must be greater than or equal to 0")
+		return 0, oops.E(oops.CodeBadRequest, nil, "limit must be greater than or equal to 0")
 	}
-	if offset < 0 {
-		return 0, 0, oops.E(oops.CodeBadRequest, nil, "offset must be greater than or equal to 0")
+	return conv.SafeInt32(limit), nil
+}
+
+func encodeShadowMCPCursor(ts pgtype.Timestamptz, id uuid.UUID) string {
+	payload := fmt.Sprintf("%d:%s", ts.Time.UTC().UnixNano(), id.String())
+	return base64.RawURLEncoding.EncodeToString([]byte(payload))
+}
+
+func decodeShadowMCPCursorParam(cursor *string) (pgtype.Timestamptz, uuid.NullUUID, error) {
+	if cursor == nil || *cursor == "" {
+		return pgtype.Timestamptz{Time: time.Time{}, Valid: false}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
 	}
-	return conv.SafeInt32(limit), conv.SafeInt32(offset), nil
+
+	decoded, err := base64.RawURLEncoding.DecodeString(*cursor)
+	if err != nil {
+		return pgtype.Timestamptz{}, uuid.NullUUID{}, fmt.Errorf("decode cursor: %w", err)
+	}
+	parts := strings.SplitN(string(decoded), ":", 2)
+	if len(parts) != 2 {
+		return pgtype.Timestamptz{}, uuid.NullUUID{}, fmt.Errorf("invalid cursor format")
+	}
+	nanos, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return pgtype.Timestamptz{}, uuid.NullUUID{}, fmt.Errorf("parse cursor timestamp: %w", err)
+	}
+	id, err := uuid.Parse(parts[1])
+	if err != nil {
+		return pgtype.Timestamptz{}, uuid.NullUUID{}, fmt.Errorf("parse cursor id: %w", err)
+	}
+
+	return pgtype.Timestamptz{Time: time.Unix(0, nanos).UTC(), Valid: true}, uuid.NullUUID{UUID: id, Valid: true}, nil
 }
 
 func coalesceString(primary *string, fallback *string) *string {

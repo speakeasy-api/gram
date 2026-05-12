@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -12,18 +13,28 @@ import {
 } from "./shadowmcpaccessrule.js";
 
 export type ListShadowMCPAccessRulesResult = {
+  /**
+   * Cursor for the next page of results.
+   */
+  nextCursor?: string | undefined;
   rules: Array<ShadowMCPAccessRule>;
-  total: number;
 };
 
 /** @internal */
 export const ListShadowMCPAccessRulesResult$inboundSchema: z.ZodMiniType<
   ListShadowMCPAccessRulesResult,
   unknown
-> = z.object({
-  rules: z.array(ShadowMCPAccessRule$inboundSchema),
-  total: z.int(),
-});
+> = z.pipe(
+  z.object({
+    next_cursor: z.optional(z.string()),
+    rules: z.array(ShadowMCPAccessRule$inboundSchema),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "next_cursor": "nextCursor",
+    });
+  }),
+);
 
 export function listShadowMCPAccessRulesResultFromJSON(
   jsonString: string,

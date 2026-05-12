@@ -22,7 +22,10 @@ export type ListShadowMCPApprovalRequestsRequest = {
   status?: Status | undefined;
   projectId?: string | undefined;
   limit?: number | undefined;
-  offset?: number | undefined;
+  /**
+   * Cursor for the next page of results.
+   */
+  cursor?: string | undefined;
   /**
    * API Key header
    */
@@ -77,7 +80,7 @@ export type ListShadowMCPApprovalRequestsRequest$Outbound = {
   status?: string | undefined;
   project_id?: string | undefined;
   limit: number;
-  offset: number;
+  cursor?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
@@ -91,7 +94,7 @@ export const ListShadowMCPApprovalRequestsRequest$outboundSchema: z.ZodMiniType<
     status: z.optional(Status$outboundSchema),
     projectId: z.optional(z.string()),
     limit: z._default(z.int(), 50),
-    offset: z._default(z.int(), 0),
+    cursor: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),

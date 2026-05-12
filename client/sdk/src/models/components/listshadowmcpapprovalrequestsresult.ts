@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -12,18 +13,28 @@ import {
 } from "./shadowmcpapprovalrequest.js";
 
 export type ListShadowMCPApprovalRequestsResult = {
+  /**
+   * Cursor for the next page of results.
+   */
+  nextCursor?: string | undefined;
   requests: Array<ShadowMCPApprovalRequest>;
-  total: number;
 };
 
 /** @internal */
 export const ListShadowMCPApprovalRequestsResult$inboundSchema: z.ZodMiniType<
   ListShadowMCPApprovalRequestsResult,
   unknown
-> = z.object({
-  requests: z.array(ShadowMCPApprovalRequest$inboundSchema),
-  total: z.int(),
-});
+> = z.pipe(
+  z.object({
+    next_cursor: z.optional(z.string()),
+    requests: z.array(ShadowMCPApprovalRequest$inboundSchema),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "next_cursor": "nextCursor",
+    });
+  }),
+);
 
 export function listShadowMCPApprovalRequestsResultFromJSON(
   jsonString: string,

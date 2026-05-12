@@ -1659,13 +1659,12 @@ paths:
                     minimum: 1
                     type: integer
                 - allowEmptyValue: true
+                  description: Cursor for the next page of results.
                   in: query
-                  name: offset
+                  name: cursor
                   schema:
-                    default: 0
-                    format: int64
-                    minimum: 0
-                    type: integer
+                    description: Cursor for the next page of results.
+                    type: string
                 - allowEmptyValue: true
                   description: API Key header
                   in: header
@@ -1962,13 +1961,12 @@ paths:
                     minimum: 1
                     type: integer
                 - allowEmptyValue: true
+                  description: Cursor for the next page of results.
                   in: query
-                  name: offset
+                  name: cursor
                   schema:
-                    default: 0
-                    format: int64
-                    minimum: 0
-                    type: integer
+                    description: Cursor for the next page of results.
+                    type: string
                 - allowEmptyValue: true
                   description: API Key header
                   in: header
@@ -31630,29 +31628,27 @@ components:
         ListShadowMCPAccessRulesResult:
             type: object
             properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of results.
                 rules:
                     type: array
                     items:
                         $ref: '#/components/schemas/ShadowMCPAccessRule'
-                total:
-                    type: integer
-                    format: int64
             required:
                 - rules
-                - total
         ListShadowMCPApprovalRequestsResult:
             type: object
             properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of results.
                 requests:
                     type: array
                     items:
                         $ref: '#/components/schemas/ShadowMCPApprovalRequest'
-                total:
-                    type: integer
-                    format: int64
             required:
                 - requests
-                - total
         ListSlackAppsResult:
             type: object
             properties:

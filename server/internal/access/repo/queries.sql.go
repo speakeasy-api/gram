@@ -13,48 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const countShadowMCPAccessRules = `-- name: CountShadowMCPAccessRules :one
-SELECT COUNT(*)
-FROM shadow_mcp_access_rules
-WHERE organization_id = $1
-  AND deleted IS FALSE
-  AND ($2::text = '' OR disposition = $2)
-`
-
-type CountShadowMCPAccessRulesParams struct {
-	OrganizationID string
-	Disposition    string
-}
-
-func (q *Queries) CountShadowMCPAccessRules(ctx context.Context, arg CountShadowMCPAccessRulesParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countShadowMCPAccessRules, arg.OrganizationID, arg.Disposition)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countShadowMCPApprovalRequests = `-- name: CountShadowMCPApprovalRequests :one
-SELECT COUNT(*)
-FROM shadow_mcp_approval_requests
-WHERE organization_id = $1
-  AND deleted IS FALSE
-  AND ($2::text = '' OR status = $2)
-  AND ($3::text = '' OR project_id::text = $3)
-`
-
-type CountShadowMCPApprovalRequestsParams struct {
-	OrganizationID string
-	Status         string
-	ProjectID      string
-}
-
-func (q *Queries) CountShadowMCPApprovalRequests(ctx context.Context, arg CountShadowMCPApprovalRequestsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countShadowMCPApprovalRequests, arg.OrganizationID, arg.Status, arg.ProjectID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const createShadowMCPAccessRule = `-- name: CreateShadowMCPAccessRule :one
 INSERT INTO shadow_mcp_access_rules (
   organization_id,
@@ -845,23 +803,28 @@ FROM shadow_mcp_access_rules
 WHERE organization_id = $1
   AND deleted IS FALSE
   AND ($2::text = '' OR disposition = $2)
+  AND (
+    $3::timestamptz IS NULL
+    OR (created_at, id) < ($3::timestamptz, $4::uuid)
+  )
 ORDER BY created_at DESC, id DESC
-LIMIT $4
-OFFSET $3
+LIMIT $5
 `
 
 type ListShadowMCPAccessRulesParams struct {
-	OrganizationID string
-	Disposition    string
-	OffsetCount    int32
-	LimitCount     int32
+	OrganizationID  string
+	Disposition     string
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        uuid.NullUUID
+	LimitCount      int32
 }
 
 func (q *Queries) ListShadowMCPAccessRules(ctx context.Context, arg ListShadowMCPAccessRulesParams) ([]ShadowMcpAccessRule, error) {
 	rows, err := q.db.Query(ctx, listShadowMCPAccessRules,
 		arg.OrganizationID,
 		arg.Disposition,
-		arg.OffsetCount,
+		arg.CursorCreatedAt,
+		arg.CursorID,
 		arg.LimitCount,
 	)
 	if err != nil {
@@ -910,17 +873,21 @@ WHERE organization_id = $1
   AND deleted IS FALSE
   AND ($2::text = '' OR status = $2)
   AND ($3::text = '' OR project_id::text = $3)
+  AND (
+    $4::timestamptz IS NULL
+    OR (requested_at, id) < ($4::timestamptz, $5::uuid)
+  )
 ORDER BY requested_at DESC, id DESC
-LIMIT $5
-OFFSET $4
+LIMIT $6
 `
 
 type ListShadowMCPApprovalRequestsParams struct {
-	OrganizationID string
-	Status         string
-	ProjectID      string
-	OffsetCount    int32
-	LimitCount     int32
+	OrganizationID    string
+	Status            string
+	ProjectID         string
+	CursorRequestedAt pgtype.Timestamptz
+	CursorID          uuid.NullUUID
+	LimitCount        int32
 }
 
 // Queries for Shadow MCP approval requests and managed access rules.
@@ -929,7 +896,8 @@ func (q *Queries) ListShadowMCPApprovalRequests(ctx context.Context, arg ListSha
 		arg.OrganizationID,
 		arg.Status,
 		arg.ProjectID,
-		arg.OffsetCount,
+		arg.CursorRequestedAt,
+		arg.CursorID,
 		arg.LimitCount,
 	)
 	if err != nil {

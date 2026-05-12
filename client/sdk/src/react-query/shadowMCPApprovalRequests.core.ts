@@ -50,7 +50,7 @@ export function buildShadowMCPApprovalRequestsQuery(
       status: request?.status,
       projectId: request?.projectId,
       limit: request?.limit,
-      offset: request?.offset,
+      cursor: request?.cursor,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
     }),
@@ -83,7 +83,7 @@ export function queryKeyShadowMCPApprovalRequests(
     status?: operations.Status | undefined;
     projectId?: string | undefined;
     limit?: number | undefined;
-    offset?: number | undefined;
+    cursor?: string | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
   },

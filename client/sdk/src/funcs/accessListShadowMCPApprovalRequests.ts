@@ -102,8 +102,8 @@ async function $do(
   const path = pathToFunc("/rpc/access.shadowMcp.requests.list")();
 
   const query = encodeFormQuery({
+    "cursor": payload?.cursor,
     "limit": payload?.limit,
-    "offset": payload?.offset,
     "project_id": payload?.project_id,
     "status": payload?.status,
   });
