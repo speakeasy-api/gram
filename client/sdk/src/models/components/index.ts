@@ -36,6 +36,8 @@ export * from "./claudehookresult.js";
 export * from "./cloneenvironmentrequestbody.js";
 export * from "./codexhookpayload.js";
 export * from "./codexhookresult.js";
+export * from "./vscodecopilothookpayload.js";
+export * from "./vscodecopilothookresult.js";
 export * from "./configureslackapprequestbody.js";
 export * from "./createassistantform.js";
 export * from "./createdeploymentrequestbody.js";

@@ -1,17 +1,20 @@
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useFetcher } from "@/contexts/Fetcher";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { ExternalLink, Plus, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { toast } from "sonner";
 import { HookSourceIcon } from "./HookSourceIcon";
 
 function ClaudeInstallContent() {
@@ -354,6 +357,175 @@ function CodexInstallContent({
   );
 }
 
+function CopilotInstallContent() {
+  const { fetch: authFetch } = useFetcher();
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const resp = await authFetch(
+        `/rpc/plugins.downloadObservabilityPlugin?platform=vscode`,
+        {},
+      );
+      if (!resp.ok) {
+        toast.error("Failed to download VSCode Copilot plugin");
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        resp.headers
+          .get("Content-Disposition")
+          ?.match(/filename="(.+)"/)?.[1] ?? "observability-vscode.zip";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error("Failed to download VSCode Copilot plugin");
+      console.error("vscode observability plugin download failed", err);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="border-primary/30 bg-primary/5 rounded-lg border p-4">
+        <p className="text-muted-foreground text-sm">
+          VSCode Copilot's marketplace clones plugins via each user's local git
+          credentials, so Gram's published marketplace repo can't be used here.
+          Distribute the plugin ZIP directly — either per-user or fleet-wide via
+          MDM.
+        </p>
+      </div>
+
+      <Tabs defaultValue="local">
+        <TabsList>
+          <TabsTrigger value="local">Local install</TabsTrigger>
+          <TabsTrigger value="mdm">MDM rollout</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="local" className="space-y-4">
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">
+              1. Download the plugin
+            </h3>
+            <p className="text-muted-foreground mb-3 text-sm">
+              Each download mints a fresh hooks-scoped API key embedded in the
+              plugin's hook script. Audit and revoke from the API Keys page.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownload}
+              disabled={downloading}
+            >
+              {downloading ? "Downloading…" : "Download VSCode Copilot ZIP"}
+            </Button>
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">
+              2. Unzip to a stable path
+            </h3>
+            <p className="text-muted-foreground mb-2 text-sm">
+              Extract the archive somewhere persistent — e.g.{" "}
+              <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                ~/.gram/vscode-copilot
+              </code>
+              . VSCode reads the plugin from disk on every session.
+            </p>
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">
+              3. Register the path in VSCode settings
+            </h3>
+            <p className="text-muted-foreground mb-2 text-sm">
+              Add the unpacked directory to{" "}
+              <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                chat.pluginLocations
+              </code>{" "}
+              in your VSCode user settings:
+            </p>
+            <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+              <code>
+                {`{
+  "chat.pluginLocations": {
+    "~/.gram/vscode-copilot": true
+  }
+}`}
+              </code>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="mdm" className="space-y-4">
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">
+              1. Download the plugin once
+            </h3>
+            <p className="text-muted-foreground mb-3 text-sm">
+              Use the same ZIP as the local install path. Stage it in your
+              internal artifact registry or MDM payload.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownload}
+              disabled={downloading}
+            >
+              {downloading ? "Downloading…" : "Download VSCode Copilot ZIP"}
+            </Button>
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">
+              2. Push the plugin path to every machine
+            </h3>
+            <p className="text-muted-foreground mb-3 text-sm">
+              Have your MDM (Intune, Jamf, Workspace ONE) extract the plugin to
+              a standard path on every developer's machine and push the
+              corresponding{" "}
+              <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                chat.pluginLocations
+              </code>{" "}
+              entry to VSCode user settings.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" asChild>
+              <a
+                href="https://code.visualstudio.com/docs/setup/enterprise"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2"
+              >
+                <ExternalLink className="size-4" />
+                VSCode Enterprise Setup
+              </a>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <a
+                href="https://code.visualstudio.com/docs/copilot/customization/hooks"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2"
+              >
+                <ExternalLink className="size-4" />
+                Hooks Docs
+              </a>
+            </Button>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
 type Provider =
   | "claude"
   | "cursor"
@@ -379,9 +551,9 @@ const providers: {
   { id: "codex", label: "Codex", source: "codex", available: true },
   {
     id: "copilot",
-    label: "Copilot",
+    label: "VSCode Copilot",
     source: "copilot",
-    available: false,
+    available: true,
   },
   { id: "gemini", label: "Gemini", source: "gemini", available: false },
   { id: "glean", label: "Glean", source: "glean", available: false },
@@ -499,6 +671,7 @@ export function HooksSetupDialog({
               repoName={publishStatus?.repoName ?? undefined}
             />
           )}
+          {selected === "copilot" && <CopilotInstallContent />}
         </div>
       </Dialog.Content>
     </Dialog>
