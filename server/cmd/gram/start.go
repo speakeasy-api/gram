@@ -926,7 +926,7 @@ func newStartCommand() *cli.Command {
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger))
-			xmcp.Attach(mux, xmcp.NewService(logger, tracerProvider, meterProvider, db, encryptionClient, authzEngine, guardianPolicy, posthogClient, billingRepo, billingTracker, mcpService, serverURL), mcpMetadataService)
+			xmcp.Attach(mux, xmcp.NewService(logger, tracerProvider, meterProvider, db, encryptionClient, authzEngine, shadowMCPClient, guardianPolicy, posthogClient, billingRepo, billingTracker, mcpService, serverURL), mcpMetadataService)
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, memoryTools))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
