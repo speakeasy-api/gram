@@ -3633,7 +3633,7 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 // *types.ToolEntry from a value of type *ToolEntryResponseBody.
 func unmarshalToolEntryResponseBodyToTypesToolEntry(v *ToolEntryResponseBody) *types.ToolEntry {
 	res := &types.ToolEntry{
-		Type:       *v.Type,
+		Type:       types.ToolType(*v.Type),
 		ID:         *v.ID,
 		ToolUrn:    *v.ToolUrn,
 		Name:       *v.Name,

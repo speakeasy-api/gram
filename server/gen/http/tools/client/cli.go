@@ -8,15 +8,18 @@
 package client
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
 	tools "github.com/speakeasy-api/gram/server/gen/tools"
+	types "github.com/speakeasy-api/gram/server/gen/types"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildListToolsPayload builds the payload for the tools listTools endpoint
 // from CLI flags.
-func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsLimit string, toolsListToolsDeploymentID string, toolsListToolsUrnPrefix string, toolsListToolsSessionToken string, toolsListToolsProjectSlugInput string) (*tools.ListToolsPayload, error) {
+func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsLimit string, toolsListToolsDeploymentID string, toolsListToolsUrnPrefix string, toolsListToolsToolTypes string, toolsListToolsSessionToken string, toolsListToolsProjectSlugInput string) (*tools.ListToolsPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -48,6 +51,23 @@ func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsLimit stri
 			urnPrefix = &toolsListToolsUrnPrefix
 		}
 	}
+	var toolTypes []string
+	{
+		if toolsListToolsToolTypes != "" {
+			err = json.Unmarshal([]byte(toolsListToolsToolTypes), &toolTypes)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for toolTypes, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"prompt\"\n   ]'")
+			}
+			for _, e := range toolTypes {
+				if !(e == "http" || e == "prompt" || e == "function" || e == "platform" || e == "externalmcp") {
+					err = goa.MergeErrors(err, goa.InvalidEnumValueError("tool_types[*]", e, []any{"http", "prompt", "function", "platform", "externalmcp"}))
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if toolsListToolsSessionToken != "" {
@@ -65,6 +85,10 @@ func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsLimit stri
 	v.Limit = limit
 	v.DeploymentID = deploymentID
 	v.UrnPrefix = urnPrefix
+	v.ToolTypes = make([]types.ToolType, len(toolTypes))
+	for i, val := range toolTypes {
+		v.ToolTypes[i] = types.ToolType(val)
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
