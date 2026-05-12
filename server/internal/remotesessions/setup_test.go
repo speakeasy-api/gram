@@ -5,11 +5,14 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -21,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -133,4 +137,38 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, code, oopsErr.Code)
+}
+
+func createRemoteClient(t *testing.T, ctx context.Context, ti *testInstance, issuerID, userIssuerID, clientID string) string {
+	t.Helper()
+	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerID:   userIssuerID,
+		ClientID:              &clientID,
+		ClientSecret:          nil,
+		AutoRegister:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+	return created.ID
+}
+
+func insertRemoteSession(t *testing.T, ctx context.Context, conn *pgxpool.Pool, principal urn.SessionSubject, userIssuerID, clientID string) repo.RemoteSession {
+	t.Helper()
+	userIssuerUUID, err := uuid.Parse(userIssuerID)
+	require.NoError(t, err)
+	clientUUID, err := uuid.Parse(clientID)
+	require.NoError(t, err)
+
+	row, err := repo.New(conn).InsertRemoteSession(ctx, repo.InsertRemoteSessionParams{
+		PrincipalUrn:          principal,
+		UserSessionIssuerID:   userIssuerUUID,
+		RemoteSessionClientID: clientUUID,
+		AccessTokenEncrypted:  "ciphertext",
+		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	require.NoError(t, err)
+	return row
 }
