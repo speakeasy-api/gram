@@ -169,13 +169,17 @@ type dcrRegistrationResponse struct {
 }
 
 // validateUserSessionToken delegates the JWT verify + revocation check to
-// usersessions.Signer.ValidateBearer, then stamps a contextvalues.AuthContext
-// scoped to the toolset's org/project and the URN-parsed subject. Returns
-// ok=false on any of: missing token, bad signature, expired/notBefore,
-// audience mismatch, jti revoked, unparseable subject URN.
+// usersessions.Signer.ValidateBearer, then — for user / API-key subjects —
+// stamps a contextvalues.AuthContext scoped to the toolset's org/project.
+// Returns ok=false on any of: missing token, bad signature, expired/
+// notBefore, audience mismatch, jti revoked, unparseable subject URN.
 //
-// Anonymous principals leave UserID/APIKeyID empty; the request proceeds
-// with just an OrganizationID/ProjectID populated.
+// Anonymous subjects deliberately leave the context untouched (ok=true,
+// no AuthContext set). The request belongs to no known principal, so
+// stamping the toolset's org as ActiveOrganizationID would misrepresent
+// the caller as a member of that org. Downstream code on the public
+// path reads org/project off the toolset row directly, the same way it
+// does for unauthenticated public-toolset traffic.
 func (s *Service) validateUserSessionToken(ctx context.Context, token string, toolset *toolsets_repo.Toolset) (context.Context, bool) {
 	if token == "" {
 		return ctx, false
@@ -183,6 +187,10 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, to
 	subject, _, err := s.userSessionSigner.ValidateBearer(ctx, token, toolset.Slug, s.chatSessionsManager)
 	if err != nil {
 		return ctx, false
+	}
+
+	if subject.Kind == urn.SessionSubjectKindAnonymous {
+		return ctx, true
 	}
 
 	authCtx := &contextvalues.AuthContext{
@@ -206,9 +214,6 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, to
 		authCtx.UserID = subject.ID
 	case urn.SessionSubjectKindAPIKey:
 		authCtx.APIKeyID = subject.ID
-	case urn.SessionSubjectKindAnonymous:
-		// Anonymous sessions don't populate UserID/APIKeyID. The org/project
-		// scoping from the toolset is the only authoritative context.
 	}
 	return contextvalues.SetAuthContext(ctx, authCtx), true
 }
