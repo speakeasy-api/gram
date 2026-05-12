@@ -168,34 +168,19 @@ type dcrRegistrationResponse struct {
 	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
 }
 
-// validateUserSessionToken parses + verifies a Bearer user-session JWT
-// against the toolset's issuer, checks revocation, and returns a context
-// stamped with the auth state. Returns ok=false on any of: missing token,
-// bad signature, expired/notBefore, audience mismatch, jti revoked.
+// validateUserSessionToken delegates the JWT verify + revocation check to
+// usersessions.Signer.ValidateBearer, then stamps a contextvalues.AuthContext
+// scoped to the toolset's org/project and the URN-parsed subject. Returns
+// ok=false on any of: missing token, bad signature, expired/notBefore,
+// audience mismatch, jti revoked, unparseable subject URN.
 //
-// The auth context is built from the toolset (org / project) and the JWT
-// `sub`. Anonymous principals leave UserID/APIKeyID empty; the request
-// proceeds with just an OrganizationID/ProjectID populated.
-//
-// This is intentionally separate from chatsessions.Manager.ValidateToken:
-// chat-session tokens carry org/project/api_key_id as custom claims, while
-// user-session tokens are RFC-pure RegisteredClaims with the URN in `sub`
-// and org/project resolved from the toolset row. The two share a signing
-// key + revocation cache (see usersessions/jwt.go) but the claim shapes
-// don't fit the same validator.
+// Anonymous principals leave UserID/APIKeyID empty; the request proceeds
+// with just an OrganizationID/ProjectID populated.
 func (s *Service) validateUserSessionToken(ctx context.Context, token string, toolset *toolsets_repo.Toolset) (context.Context, bool) {
 	if token == "" {
 		return ctx, false
 	}
-	claims, err := s.userSessionSigner.Validate(token, toolset.Slug)
-	if err != nil || claims == nil {
-		return ctx, false
-	}
-	if revoked, _ := s.chatSessionsManager.IsTokenRevoked(ctx, claims.ID); revoked {
-		return ctx, false
-	}
-
-	subject, err := urn.ParseSessionSubject(claims.Subject)
+	subject, _, err := s.userSessionSigner.ValidateBearer(ctx, token, toolset.Slug, s.chatSessionsManager)
 	if err != nil {
 		return ctx, false
 	}

@@ -15,6 +15,7 @@
 package usersessions
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -24,6 +25,14 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+// RevocationChecker reports whether a JTI has been revoked. The user-session
+// flow and the chat-session flow share a revocation keyspace today
+// (`chat_session_revoked:{jti}`); this interface is the seam so the signer
+// itself doesn't need to know about Redis or the chat-session manager.
+type RevocationChecker interface {
+	IsTokenRevoked(ctx context.Context, jti string) (bool, error)
+}
 
 // SessionClaims is the unified JWT claim shape for Gram-issued user sessions
 // (and, as the chat-session path retires, all Gram session tokens). Carries
@@ -90,6 +99,32 @@ func (s *Signer) Validate(token, expectedAudience string) (*SessionClaims, error
 		return nil, errors.New("token is not valid")
 	}
 	return &claims, nil
+}
+
+// ValidateBearer bundles the full /mcp/{slug} Bearer validation path:
+// signature + expiry + audience match (via Validate), revocation cache
+// lookup (via the RevocationChecker), and URN parse of the `sub` claim.
+// Returns the parsed subject and JTI on success.
+//
+// Callers stay free of JWT primitives and revocation plumbing — they only
+// need a Signer + a RevocationChecker (typically *chatsessions.Manager
+// while the unified revocation keyspace is shared with chat sessions).
+func (s *Signer) ValidateBearer(ctx context.Context, token, expectedAudience string, revocation RevocationChecker) (urn.SessionSubject, string, error) {
+	claims, err := s.Validate(token, expectedAudience)
+	if err != nil {
+		return urn.SessionSubject{}, "", err
+	}
+	if claims == nil {
+		return urn.SessionSubject{}, "", errors.New("validate token: nil claims")
+	}
+	if revoked, _ := revocation.IsTokenRevoked(ctx, claims.ID); revoked {
+		return urn.SessionSubject{}, "", errors.New("token is revoked")
+	}
+	subject, err := urn.ParseSessionSubject(claims.Subject)
+	if err != nil {
+		return urn.SessionSubject{}, "", fmt.Errorf("parse session subject: %w", err)
+	}
+	return subject, claims.ID, nil
 }
 
 // ParseUnverifiedJTI extracts the `jti` claim from a token without verifying
