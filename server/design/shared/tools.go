@@ -205,7 +205,7 @@ var ToolEntry = Type("ToolEntry", func() {
 	Attribute("annotations", ToolAnnotations, "Tool annotations providing behavioral hints")
 	Attribute("http_method", String, "HTTP method for HTTP tools (GET, POST, PUT, PATCH, DELETE)")
 
-	Required("id", "name", "tool_urn")
+	Required("type", "id", "name", "tool_urn")
 
 	Meta("struct:pkg:path", "types")
 })
