@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gram — Workflow Map</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0f1115;
+    --bg-elev: #161922;
+    --bg-card: #1c2030;
+    --border: #2a2f42;
+    --border-strong: #3a4159;
+    --text: #e6e8ef;
+    --text-dim: #8990a8;
+    --text-dim2: #5e667f;
+    --accent: #ff7849;
+    --accent-soft: rgba(255, 120, 73, 0.12);
+    --client: #5fa8ff;
+    --api: #b58bff;
+    --orchestration: #ffb84d;
+    --runtime: #4dd6c2;
+    --storage: #909aaf;
+    --external: #7ed957;
+    --sdk: #ff7ed9;
+    --mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+  }
+  header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: baseline;
+    gap: 20px;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+  header h1 .sub { color: var(--text-dim); font-weight: 400; }
+  header .hint { color: var(--text-dim); font-size: 12px; margin: 0; }
+  main {
+    display: grid;
+    grid-template-columns: 280px 1fr 400px;
+    height: calc(100vh - 49px);
+  }
+  aside { overflow-y: auto; }
+  aside.left { border-right: 1px solid var(--border); padding: 16px; }
+  aside.right { border-left: 1px solid var(--border); padding: 16px 20px; }
+
+  #flow-search {
+    width: 100%;
+    padding: 8px 10px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    font: inherit;
+  }
+  #flow-search:focus { outline: none; border-color: var(--accent); }
+  #flows-list { list-style: none; padding: 0; margin: 14px 0 0 0; }
+  #flows-list li {
+    padding: 9px 11px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-bottom: 4px;
+    border: 1px solid transparent;
+    color: var(--text-dim);
+    transition: background .1s, color .1s, border-color .1s;
+  }
+  #flows-list li:hover { background: var(--bg-elev); color: var(--text); }
+  #flows-list li.active {
+    background: var(--accent-soft);
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  #flows-list .flow-title { font-weight: 500; display: block; }
+  #flows-list .flow-summary { font-size: 12px; color: var(--text-dim); margin-top: 2px; display: block; }
+
+  #graph-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  #graph { flex: 1; width: 100%; min-height: 0; }
+  .node rect {
+    fill: var(--bg-card);
+    stroke: var(--border-strong);
+    stroke-width: 1;
+  }
+  .node text {
+    fill: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+  }
+  .node .tier-label {
+    font-size: 9.5px;
+    font-weight: 400;
+    fill: var(--text-dim2);
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .node.tier-client        rect { stroke: var(--client); }
+  .node.tier-api           rect { stroke: var(--api); }
+  .node.tier-orchestration rect { stroke: var(--orchestration); }
+  .node.tier-runtime       rect { stroke: var(--runtime); }
+  .node.tier-storage       rect { stroke: var(--storage); }
+  .node.tier-external      rect { stroke: var(--external); }
+  .node.tier-sdk           rect { stroke: var(--sdk); }
+  .node { transition: opacity .15s; }
+  .node.dim { opacity: .25; }
+  .node.active rect {
+    stroke-width: 2;
+    fill: var(--bg-elev);
+    filter: drop-shadow(0 0 6px rgba(255,120,73,0.45));
+  }
+
+  #edges-layer path {
+    stroke: var(--border);
+    stroke-width: 1;
+    fill: none;
+    stroke-dasharray: 2 4;
+    opacity: .35;
+  }
+  .flow-edge { fill: none; stroke: var(--accent); stroke-width: 2; transition: opacity .15s, stroke-width .15s; }
+  .flow-edge.faded { opacity: .25; }
+  .flow-edge.focus { stroke-width: 3.5; filter: drop-shadow(0 0 5px rgba(255,120,73,0.8)); }
+  .flow-num circle { fill: var(--accent); stroke: var(--bg); stroke-width: 2; transition: opacity .15s; }
+  .flow-num text {
+    fill: white; font-size: 11px; font-weight: 700;
+    text-anchor: middle; dominant-baseline: middle;
+    font-family: var(--mono);
+  }
+  .flow-num.faded { opacity: .3; }
+  .flow-num.focus circle { fill: white; stroke: var(--accent); stroke-width: 3; }
+  .flow-num.focus text { fill: var(--accent); }
+
+  #flow-title { font-size: 15px; margin: 0 0 4px 0; font-weight: 600; }
+  #flow-summary { color: var(--text-dim); margin: 0 0 16px 0; font-size: 13px; }
+  #flow-summary.empty { font-style: italic; color: var(--text-dim2); }
+  #steps-list { list-style: none; padding: 0; margin: 0; }
+  #steps-list li {
+    display: grid;
+    grid-template-columns: 26px 1fr;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    margin-bottom: 4px;
+  }
+  #steps-list li:hover, #steps-list li.focus {
+    background: var(--bg-elev);
+    border-color: var(--border-strong);
+  }
+  #steps-list .num {
+    width: 22px; height: 22px;
+    background: var(--accent); color: white;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font: 700 11px var(--mono);
+  }
+  #steps-list li.focus .num { background: white; color: var(--accent); }
+  #steps-list .from-to {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 3px;
+  }
+  #steps-list .from-to b { color: var(--text); font-weight: 600; }
+  #steps-list .from-to .arrow { color: var(--accent); margin: 0 4px; }
+  #steps-list .protocol {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    margin-bottom: 3px;
+    word-break: break-word;
+  }
+  #steps-list .payload {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 3px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #steps-list .note {
+    color: var(--text-dim);
+    font-size: 12px;
+    font-style: italic;
+  }
+
+  .legend {
+    padding: 8px 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+  }
+  .legend .dot {
+    display: inline-block; width: 8px; height: 8px;
+    border-radius: 2px;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  .footer {
+    padding: 10px 20px;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim2);
+    font-size: 11px;
+    font-family: var(--mono);
+  }
+  .footer code { color: var(--text-dim); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Gram <span class="sub">— Workflow Map</span></h1>
+  <p class="hint">Pick a workflow on the left to highlight its path. Hover a step on the right to focus that hop.</p>
+</header>
+<main>
+  <aside class="left">
+    <input id="flow-search" placeholder="Search workflows…">
+    <ul id="flows-list"></ul>
+  </aside>
+  <section id="graph-panel">
+    <svg id="graph" viewBox="0 0 1010 560" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <marker id="arrow-active" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#ff7849"/>
+        </marker>
+      </defs>
+      <g id="edges-layer"></g>
+      <g id="path-layer"></g>
+      <g id="nodes-layer"></g>
+    </svg>
+    <div class="legend" id="legend"></div>
+    <div class="footer">Edit the JSON inside <code>&lt;script id="workflow-data"&gt;</code> in this file to add or change flows.</div>
+  </section>
+  <aside class="right">
+    <h2 id="flow-title">Select a workflow</h2>
+    <p id="flow-summary" class="empty">The flow's steps and payloads will appear here.</p>
+    <ol id="steps-list"></ol>
+  </aside>
+</main>
+
+<script id="workflow-data" type="application/json">
+{
+  "nodes": [
+    { "id": "cli",              "x":  30, "y":  30, "tier": "client",        "label": "CLI" },
+    { "id": "dashboard",        "x": 230, "y":  30, "tier": "client",        "label": "Dashboard" },
+    { "id": "elements",         "x": 430, "y":  30, "tier": "client",        "label": "Elements" },
+    { "id": "mcp-client",       "x": 630, "y":  30, "tier": "client",        "label": "External MCP Client" },
+    { "id": "ts-framework",     "x": 830, "y":  30, "tier": "sdk",           "label": "ts-framework" },
+
+    { "id": "workos",           "x":  30, "y": 140, "tier": "external",      "label": "WorkOS / mock-idp" },
+    { "id": "server-rpc",       "x": 280, "y": 140, "tier": "api",           "label": "Server: RPC API" },
+    { "id": "server-mcp",       "x": 480, "y": 140, "tier": "api",           "label": "Server: MCP Gateway" },
+    { "id": "redis",            "x": 830, "y": 140, "tier": "storage",       "label": "Redis" },
+
+    { "id": "audit",            "x": 130, "y": 250, "tier": "api",           "label": "Audit Subsystem" },
+    { "id": "temporal",         "x": 480, "y": 250, "tier": "orchestration", "label": "Temporal" },
+    { "id": "openrouter",       "x": 680, "y": 250, "tier": "external",      "label": "LLM APIs" },
+
+    { "id": "worker",           "x": 280, "y": 360, "tier": "orchestration", "label": "Temporal Worker" },
+    { "id": "functions-runner", "x": 480, "y": 360, "tier": "runtime",       "label": "Functions Runner" },
+    { "id": "upstream-api",     "x": 680, "y": 360, "tier": "external",      "label": "Upstream HTTP API" },
+    { "id": "slack",            "x": 830, "y": 360, "tier": "external",      "label": "Slack" },
+
+    { "id": "postgres",         "x": 280, "y": 470, "tier": "storage",       "label": "PostgreSQL" },
+    { "id": "clickhouse",       "x": 480, "y": 470, "tier": "storage",       "label": "ClickHouse" },
+    { "id": "posthog",          "x": 830, "y": 470, "tier": "external",      "label": "PostHog" }
+  ],
+  "flows": [
+    {
+      "id": "invite-user",
+      "title": "Invite new user",
+      "summary": "Workspace admin invites a teammate",
+      "steps": [
+        { "from": "dashboard",   "to": "server-rpc", "protocol": "POST /rpc/access.inviteUser",         "payload": "{ email, role, organization_id }", "note": "Goa handler under server/internal/access" },
+        { "from": "server-rpc",  "to": "postgres",   "protocol": "INSERT invites",                       "payload": "(id, email, role, org_id, invited_by, expires_at)" },
+        { "from": "server-rpc",  "to": "audit",      "protocol": "audit.Record",                         "payload": "actor=user/<admin>  action=invite.create  subject=email/<email>" },
+        { "from": "audit",       "to": "postgres",   "protocol": "INSERT audit_logs",                    "payload": "(actor, action, subject, organization_id, before, after)" },
+        { "from": "server-rpc",  "to": "workos",     "protocol": "POST /user_management/invitations",    "payload": "{ email, organization_id }", "note": "Skipped in dev when running against mock-idp" },
+        { "from": "server-rpc",  "to": "dashboard",  "protocol": "200 OK",                               "payload": "{ invite: { id, email, status: 'pending' } }" }
+      ]
+    },
+    {
+      "id": "login",
+      "title": "Login (WorkOS / mock-idp)",
+      "summary": "User signs in and a session cookie is issued",
+      "steps": [
+        { "from": "dashboard",  "to": "server-rpc", "protocol": "GET /rpc/users.session",     "note": "Initial request — no cookie yet" },
+        { "from": "server-rpc", "to": "redis",      "protocol": "GET session:<sid>",          "note": "Cache miss" },
+        { "from": "server-rpc", "to": "dashboard",  "protocol": "401 Unauthorized → redirect","payload": "Location: <workos-authorize-url>" },
+        { "from": "dashboard",  "to": "workos",     "protocol": "GET /oauth2/authorize",      "note": "Browser redirect to identity provider" },
+        { "from": "workos",     "to": "dashboard",  "protocol": "GET /auth/callback?code=…",  "note": "OAuth redirect back" },
+        { "from": "dashboard",  "to": "server-rpc", "protocol": "POST /rpc/auth.callback",    "payload": "{ code }" },
+        { "from": "server-rpc", "to": "workos",     "protocol": "POST /sso/token",            "payload": "{ code, client_id, client_secret }", "note": "Exchange code for profile + tokens" },
+        { "from": "server-rpc", "to": "postgres",   "protocol": "UPSERT users",               "payload": "ON CONFLICT (id) — beware the users.email UNIQUE collision (see auto-memory)" },
+        { "from": "server-rpc", "to": "redis",      "protocol": "SETEX session:<sid>",        "payload": "{ user_id, org_id, expires_at }" },
+        { "from": "server-rpc", "to": "dashboard",  "protocol": "200 OK + Set-Cookie",        "payload": "gram_session=<sid>" }
+      ]
+    },
+    {
+      "id": "openapi-deployment",
+      "title": "OpenAPI deployment (dashboard)",
+      "summary": "Upload an OpenAPI spec; the worker fans tools out and indexes embeddings",
+      "steps": [
+        { "from": "dashboard",  "to": "server-rpc", "protocol": "POST /rpc/deployments.create",           "payload": "multipart: openapi.yaml + { project_id, name }" },
+        { "from": "server-rpc", "to": "postgres",   "protocol": "INSERT deployments",                      "payload": "(id, status='pending', project_id, spec_asset_id)" },
+        { "from": "server-rpc", "to": "temporal",   "protocol": "SignalWithStartWorkflow",                 "payload": "ProcessDeploymentWorkflow{ deployment_id }" },
+        { "from": "temporal",   "to": "worker",     "protocol": "WorkflowTaskQueue",                       "payload": "activity: process_deployment (server/internal/background/activities)" },
+        { "from": "worker",     "to": "postgres",   "protocol": "BEGIN; INSERT tools …",                   "payload": "one tool per OpenAPI operation (parsed via server/internal/openapi)" },
+        { "from": "worker",     "to": "temporal",   "protocol": "ExecuteChildWorkflow",                    "payload": "GenerateToolsetEmbeddings{ toolset_id }" },
+        { "from": "worker",     "to": "openrouter", "protocol": "POST /embeddings",                        "payload": "{ model: 'text-embedding-3-small', input: <tool descriptions> }", "note": "Embeddings power toolset search" },
+        { "from": "worker",     "to": "postgres",   "protocol": "UPDATE deployments SET status='complete'","payload": "+ INSERT toolset_embeddings (pgvector)" },
+        { "from": "dashboard",  "to": "server-rpc", "protocol": "GET /rpc/deployments.get (poll)",         "payload": "{ deployment_id }" },
+        { "from": "server-rpc", "to": "dashboard",  "protocol": "200 OK",                                   "payload": "{ deployment: { status: 'complete', tool_count } }" }
+      ]
+    },
+    {
+      "id": "mcp-http-tool-call",
+      "title": "MCP tool call (HTTP tool)",
+      "summary": "An external MCP client invokes a Gram HTTP-backed tool",
+      "steps": [
+        { "from": "mcp-client",  "to": "server-mcp", "protocol": "POST /mcp/<toolset-slug>",        "payload": "JSON-RPC tools/call { name, arguments }" },
+        { "from": "server-mcp",  "to": "postgres",   "protocol": "SELECT tool + environment",        "payload": "Joins tools + variation overrides + environment entries (decrypted ENC-4)" },
+        { "from": "server-mcp",  "to": "upstream-api","protocol": "<METHOD> <upstream URL>",         "payload": "Headers + body templated from tool definition & env vars" },
+        { "from": "upstream-api","to": "server-mcp", "protocol": "HTTP response",                    "payload": "status + body" },
+        { "from": "server-mcp",  "to": "clickhouse", "protocol": "INSERT tool_calls",                "payload": "(toolset_id, tool_id, latency_ms, status, req_size, resp_size)" },
+        { "from": "server-mcp",  "to": "audit",      "protocol": "audit.Record",                     "payload": "actor=mcp-key/<id>  action=tool.invoke  subject=tool/<slug>" },
+        { "from": "audit",       "to": "postgres",   "protocol": "INSERT audit_logs" },
+        { "from": "server-mcp",  "to": "mcp-client", "protocol": "JSON-RPC result",                  "payload": "{ content: [{ type: 'text', text: <upstream body> }] }" }
+      ]
+    },
+    {
+      "id": "mcp-function-tool-call",
+      "title": "MCP tool call (function tool)",
+      "summary": "MCP client invokes a Gram Function — bundled TypeScript running in a sandbox",
+      "steps": [
+        { "from": "mcp-client",       "to": "server-mcp",       "protocol": "POST /mcp/<toolset-slug>",          "payload": "JSON-RPC tools/call { name, arguments }" },
+        { "from": "server-mcp",       "to": "postgres",         "protocol": "SELECT function + environment",      "payload": "Bundle ref + env vars (decrypted)" },
+        { "from": "server-mcp",       "to": "functions-runner", "protocol": "POST /invoke/<function_id>",         "payload": "{ tool_name, arguments, env, request_id }", "note": "See server/internal/functions" },
+        { "from": "functions-runner", "to": "upstream-api",     "protocol": "fetch(...)",                          "payload": "Any outbound calls the function makes" },
+        { "from": "functions-runner", "to": "server-mcp",       "protocol": "200 OK",                              "payload": "{ result, logs[], usage }" },
+        { "from": "server-mcp",       "to": "clickhouse",       "protocol": "INSERT tool_calls + function_invocations", "payload": "(latency, runtime_ms, cold_start, status)" },
+        { "from": "server-mcp",       "to": "mcp-client",       "protocol": "JSON-RPC result" }
+      ]
+    },
+    {
+      "id": "function-deploy",
+      "title": "Function deploy (CLI publish)",
+      "summary": "Developer authors a function in TS, publishes it, and the runner picks it up",
+      "steps": [
+        { "from": "ts-framework",     "to": "cli",              "protocol": "build → bundle.tgz + manifest.json", "payload": "Gram.tool({ name, inputSchema, handler }) compiled by ts-framework/functions", "note": "Dev-time, on the author's machine" },
+        { "from": "cli",              "to": "server-rpc",       "protocol": "POST /rpc/functions.publish",        "payload": "multipart: bundle.tgz + { project_id, manifest }" },
+        { "from": "server-rpc",       "to": "postgres",         "protocol": "INSERT functions + tools",            "payload": "function row + one tool per Gram.tool() in the manifest" },
+        { "from": "server-rpc",       "to": "temporal",         "protocol": "StartWorkflow",                       "payload": "DeployFunctionRunners{ function_id }" },
+        { "from": "temporal",         "to": "worker",           "protocol": "Activity",                            "payload": "provision_functions_access" },
+        { "from": "worker",           "to": "functions-runner", "protocol": "k8s apply / rollout",                 "payload": "New revision pulls bundle.tgz from object storage", "note": "See server/internal/k8s" },
+        { "from": "worker",           "to": "postgres",         "protocol": "UPDATE functions SET status='live'" },
+        { "from": "server-rpc",       "to": "cli",              "protocol": "200 OK",                              "payload": "{ function_id, deploy_url }" }
+      ]
+    },
+    {
+      "id": "chat-assistant",
+      "title": "Chat with an assistant (Elements)",
+      "summary": "Elements UI streams a chat completion that may call tools mid-stream",
+      "steps": [
+        { "from": "elements",    "to": "server-rpc",  "protocol": "POST /rpc/chat.send (SSE)",          "payload": "{ assistant_id, chat_session_id, message, tools[] }" },
+        { "from": "server-rpc",  "to": "postgres",    "protocol": "INSERT chat_messages (user)",        "payload": "+ SELECT chat_session, assistant_memories" },
+        { "from": "server-rpc",  "to": "openrouter",  "protocol": "POST /chat/completions (stream)",    "payload": "{ model, messages, tools }" },
+        { "from": "openrouter",  "to": "server-rpc",  "protocol": "SSE delta with tool_use",            "payload": "{ tool_calls: [{ name, arguments }] }" },
+        { "from": "server-rpc",  "to": "server-mcp",  "protocol": "in-process gateway.InvokeTool",      "payload": "{ tool_id, arguments }", "note": "Same binary, internal call" },
+        { "from": "server-mcp",  "to": "upstream-api","protocol": "HTTP per tool definition" },
+        { "from": "upstream-api","to": "server-mcp",  "protocol": "HTTP response" },
+        { "from": "server-rpc",  "to": "openrouter",  "protocol": "POST /chat/completions (follow-up)", "payload": "messages + tool_result" },
+        { "from": "openrouter",  "to": "server-rpc",  "protocol": "SSE delta (final answer)" },
+        { "from": "server-rpc",  "to": "elements",    "protocol": "SSE chunks → onMessage",             "payload": "text + tool_calls rendered by elements/src/components" },
+        { "from": "server-rpc",  "to": "clickhouse",  "protocol": "INSERT chat_events",                 "payload": "(tokens_in, tokens_out, tool_calls, latency, cost)" }
+      ]
+    },
+    {
+      "id": "audit-log-listing",
+      "title": "Audit log listing",
+      "summary": "Dashboard renders the audit feed for a workspace",
+      "steps": [
+        { "from": "dashboard",  "to": "server-rpc", "protocol": "GET /rpc/auditlogs.list",              "payload": "{ organization_id, cursor, filters: { action, actor, range } }" },
+        { "from": "server-rpc", "to": "audit",      "protocol": "audit.List",                            "note": "See the gram-audit-logging skill" },
+        { "from": "audit",      "to": "postgres",   "protocol": "SELECT audit_logs WHERE …",             "payload": "Indexed scan by (organization_id, created_at DESC), keyset pagination" },
+        { "from": "server-rpc", "to": "dashboard",  "protocol": "200 OK",                                 "payload": "{ entries: [{ id, actor, action, subject, before, after, created_at }], next_cursor }" }
+      ]
+    },
+    {
+      "id": "scheduled-trigger",
+      "title": "Scheduled trigger fires",
+      "summary": "A cron-scheduled trigger runs a tool and posts the result to Slack",
+      "steps": [
+        { "from": "temporal",    "to": "worker",     "protocol": "Schedule fires",              "payload": "activity: process_scheduled_trigger" },
+        { "from": "worker",      "to": "postgres",   "protocol": "SELECT trigger",              "payload": "Trigger definition + bound toolset + slack channel" },
+        { "from": "worker",      "to": "server-mcp", "protocol": "InvokeTool (internal)",       "payload": "{ tool_id, arguments: <trigger payload> }" },
+        { "from": "server-mcp",  "to": "upstream-api","protocol": "HTTP per tool" },
+        { "from": "upstream-api","to": "server-mcp", "protocol": "Response" },
+        { "from": "worker",      "to": "postgres",   "protocol": "INSERT trigger_runs",         "payload": "(trigger_id, started_at, finished_at, status, output)" },
+        { "from": "worker",      "to": "slack",      "protocol": "POST chat.postMessage",       "payload": "{ channel, blocks: <formatted output> }" },
+        { "from": "worker",      "to": "clickhouse", "protocol": "INSERT trigger_events" }
+      ]
+    },
+    {
+      "id": "slack-install",
+      "title": "Slack install",
+      "summary": "Connect a workspace to a Slack team for assistants/triggers",
+      "steps": [
+        { "from": "dashboard",  "to": "server-rpc", "protocol": "GET /rpc/integrations.slackInstallUrl" },
+        { "from": "server-rpc", "to": "dashboard",  "protocol": "200 OK",                          "payload": "{ install_url: <slack-oauth-url> }" },
+        { "from": "dashboard",  "to": "slack",      "protocol": "GET <install_url>",               "note": "Browser redirect — user grants scopes" },
+        { "from": "slack",      "to": "dashboard",  "protocol": "GET /integrations/slack/callback?code=…" },
+        { "from": "dashboard",  "to": "server-rpc", "protocol": "POST /rpc/integrations.slackCallback","payload": "{ code, state }" },
+        { "from": "server-rpc", "to": "slack",      "protocol": "POST oauth.v2.access",            "payload": "{ code, client_id, client_secret }" },
+        { "from": "server-rpc", "to": "postgres",   "protocol": "INSERT slack_installs",            "payload": "+ encrypt bot_token, store team_id, scopes" },
+        { "from": "server-rpc", "to": "audit",      "protocol": "audit.Record",                    "payload": "action=integration.connect  subject=slack/<team_id>" },
+        { "from": "audit",      "to": "postgres",   "protocol": "INSERT audit_logs" },
+        { "from": "server-rpc", "to": "dashboard",  "protocol": "200 OK",                          "payload": "{ install: { team_id, team_name, connected_by } }" }
+      ]
+    },
+    {
+      "id": "telemetry-export",
+      "title": "Product telemetry → PostHog",
+      "summary": "Server-side and client-side events fan out to PostHog for analytics",
+      "steps": [
+        { "from": "server-rpc",  "to": "posthog", "protocol": "POST /capture",          "payload": "{ distinct_id: <org_id>, event: 'tool.invoked', properties: {…} }", "note": "Fire-and-forget, batched" },
+        { "from": "server-mcp",  "to": "posthog", "protocol": "POST /capture",          "payload": "event='mcp.tool.invoked' (per JSON-RPC call)" },
+        { "from": "elements",    "to": "posthog", "protocol": "POST /capture (browser)","payload": "event='chat.send' — client-side instrumentation" }
+      ]
+    }
+  ]
+}
+</script>
+
+<script>
+(function () {
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const NODE_W = 160, NODE_H = 56;
+
+  const data = JSON.parse(document.getElementById('workflow-data').textContent);
+  const nodesById = Object.fromEntries(data.nodes.map(n => [n.id, n]));
+
+  const tierColors = {
+    client: 'var(--client)',
+    api: 'var(--api)',
+    orchestration: 'var(--orchestration)',
+    runtime: 'var(--runtime)',
+    storage: 'var(--storage)',
+    external: 'var(--external)',
+    sdk: 'var(--sdk)',
+  };
+
+  /* ---------- geometry helpers ---------- */
+  function nodeCenter(n) { return [n.x + NODE_W / 2, n.y + NODE_H / 2]; }
+
+  // Where does the segment (cx,cy) → (tx,ty) cross the rect's boundary?
+  function clipToRect(cx, cy, tx, ty, node) {
+    const left = node.x, right = node.x + NODE_W;
+    const top = node.y, bottom = node.y + NODE_H;
+    const dx = tx - cx, dy = ty - cy;
+    if (dx === 0 && dy === 0) return [cx, cy];
+    const ts = [];
+    if (dx !== 0) {
+      const tLeft = (left - cx) / dx;
+      if (tLeft > 0) {
+        const y = cy + tLeft * dy;
+        if (y >= top && y <= bottom) ts.push(tLeft);
+      }
+      const tRight = (right - cx) / dx;
+      if (tRight > 0) {
+        const y = cy + tRight * dy;
+        if (y >= top && y <= bottom) ts.push(tRight);
+      }
+    }
+    if (dy !== 0) {
+      const tTop = (top - cy) / dy;
+      if (tTop > 0) {
+        const x = cx + tTop * dx;
+        if (x >= left && x <= right) ts.push(tTop);
+      }
+      const tBottom = (bottom - cy) / dy;
+      if (tBottom > 0) {
+        const x = cx + tBottom * dx;
+        if (x >= left && x <= right) ts.push(tBottom);
+      }
+    }
+    if (!ts.length) return [cx, cy];
+    const t = Math.min(...ts);
+    return [cx + t * dx, cy + t * dy];
+  }
+
+  // `offset` bows the path perpendicular to the straight line.
+  function makePath(a, b, offset) {
+    const [ax, ay] = nodeCenter(a);
+    const [bx, by] = nodeCenter(b);
+    const [sx, sy] = clipToRect(ax, ay, bx, by, a);
+    const [ex, ey] = clipToRect(bx, by, ax, ay, b);
+    if (!offset) {
+      return { d: `M${sx},${sy} L${ex},${ey}`, mid: [(sx + ex) / 2, (sy + ey) / 2] };
+    }
+    const dx = ex - sx, dy = ey - sy;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    const mx = (sx + ex) / 2 + nx * offset;
+    const my = (sy + ey) / 2 + ny * offset;
+    // Midpoint of the quadratic Bezier at t=0.5
+    const qx = 0.25 * sx + 0.5 * mx + 0.25 * ex;
+    const qy = 0.25 * sy + 0.5 * my + 0.25 * ey;
+    return { d: `M${sx},${sy} Q${mx},${my} ${ex},${ey}`, mid: [qx, qy] };
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    })[c]);
+  }
+
+  /* ---------- render nodes + static topology edges ---------- */
+  const nodesLayer = document.getElementById('nodes-layer');
+  for (const n of data.nodes) {
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.setAttribute('class', `node tier-${n.tier}`);
+    g.setAttribute('data-id', n.id);
+    g.setAttribute('transform', `translate(${n.x},${n.y})`);
+    g.innerHTML = `
+      <rect width="${NODE_W}" height="${NODE_H}" rx="6"/>
+      <text x="${NODE_W / 2}" y="${NODE_H / 2 - 7}">${escapeHtml(n.label)}</text>
+      <text x="${NODE_W / 2}" y="${NODE_H / 2 + 13}" class="tier-label">${escapeHtml(n.tier)}</text>
+    `;
+    nodesLayer.appendChild(g);
+  }
+
+  // Background dotted edges = union of every step's (from, to) pair.
+  const edgeKey = (a, b) => `${a}->${b}`;
+  const staticSeen = new Set();
+  const edgesLayer = document.getElementById('edges-layer');
+  for (const flow of data.flows) {
+    for (const step of flow.steps) {
+      const k = edgeKey(step.from, step.to);
+      if (staticSeen.has(k)) continue;
+      staticSeen.add(k);
+      const a = nodesById[step.from], b = nodesById[step.to];
+      if (!a || !b) continue;
+      const { d } = makePath(a, b, 0);
+      const el = document.createElementNS(SVG_NS, 'path');
+      el.setAttribute('d', d);
+      edgesLayer.appendChild(el);
+    }
+  }
+
+  /* ---------- flow list ---------- */
+  const flowsList = document.getElementById('flows-list');
+  for (const f of data.flows) {
+    const li = document.createElement('li');
+    li.dataset.flowId = f.id;
+    li.innerHTML = `
+      <span class="flow-title">${escapeHtml(f.title)}</span>
+      <span class="flow-summary">${escapeHtml(f.summary || '')}</span>
+    `;
+    li.addEventListener('click', () => selectFlow(f.id));
+    flowsList.appendChild(li);
+  }
+
+  document.getElementById('flow-search').addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    flowsList.querySelectorAll('li').forEach(li => {
+      li.style.display = li.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+  });
+
+  /* ---------- legend ---------- */
+  const legendEl = document.getElementById('legend');
+  const tiers = [...new Set(data.nodes.map(n => n.tier))];
+  for (const t of tiers) {
+    const span = document.createElement('span');
+    span.innerHTML = `<span class="dot" style="background:${tierColors[t]}"></span>${escapeHtml(t)}`;
+    legendEl.appendChild(span);
+  }
+
+  /* ---------- select / render a flow ---------- */
+  let currentFlow = null;
+
+  function selectFlow(id) {
+    currentFlow = data.flows.find(f => f.id === id);
+    flowsList.querySelectorAll('li').forEach(li => {
+      li.classList.toggle('active', li.dataset.flowId === id);
+    });
+    renderFlow();
+  }
+
+  function renderFlow() {
+    const pathLayer = document.getElementById('path-layer');
+    pathLayer.innerHTML = '';
+    const stepsList = document.getElementById('steps-list');
+    stepsList.innerHTML = '';
+    if (!currentFlow) return;
+
+    document.getElementById('flow-title').textContent = currentFlow.title;
+    const summary = document.getElementById('flow-summary');
+    summary.textContent = currentFlow.summary || '';
+    summary.classList.remove('empty');
+
+    const involved = new Set();
+    for (const s of currentFlow.steps) { involved.add(s.from); involved.add(s.to); }
+    document.querySelectorAll('.node').forEach(n => {
+      const inFlow = involved.has(n.dataset.id);
+      n.classList.toggle('active', inFlow);
+      n.classList.toggle('dim', !inFlow);
+    });
+
+    // Bow repeats so back-and-forth hops between the same pair don't overlap.
+    const useCount = new Map();
+
+    currentFlow.steps.forEach((step, idx) => {
+      const a = nodesById[step.from], b = nodesById[step.to];
+      if (!a || !b) return;
+      const pairKey = [step.from, step.to].sort().join('|');
+      const reuse = useCount.get(pairKey) || 0;
+      useCount.set(pairKey, reuse + 1);
+      let offset = 0;
+      if (reuse > 0) {
+        const mag = 24 + 16 * Math.floor((reuse - 1) / 2);
+        offset = reuse % 2 === 1 ? mag : -mag;
+      }
+      const { d, mid } = makePath(a, b, offset);
+
+      const pathEl = document.createElementNS(SVG_NS, 'path');
+      pathEl.setAttribute('d', d);
+      pathEl.setAttribute('class', 'flow-edge');
+      pathEl.setAttribute('marker-end', 'url(#arrow-active)');
+      pathEl.dataset.stepIdx = idx;
+      pathLayer.appendChild(pathEl);
+
+      const numG = document.createElementNS(SVG_NS, 'g');
+      numG.setAttribute('class', 'flow-num');
+      numG.dataset.stepIdx = idx;
+      numG.innerHTML = `
+        <circle cx="${mid[0]}" cy="${mid[1]}" r="11"/>
+        <text x="${mid[0]}" y="${mid[1]}">${idx + 1}</text>
+      `;
+      numG.addEventListener('mouseenter', () => focusStep(idx));
+      numG.addEventListener('mouseleave', () => focusStep(null));
+      pathLayer.appendChild(numG);
+
+      const li = document.createElement('li');
+      li.dataset.stepIdx = idx;
+      li.innerHTML = `
+        <div class="num">${idx + 1}</div>
+        <div>
+          <div class="from-to">
+            <b>${escapeHtml(nodesById[step.from].label)}</b>
+            <span class="arrow">→</span>
+            <b>${escapeHtml(nodesById[step.to].label)}</b>
+          </div>
+          <div class="protocol">${escapeHtml(step.protocol || '')}</div>
+          ${step.payload ? `<div class="payload">${escapeHtml(step.payload)}</div>` : ''}
+          ${step.note ? `<div class="note">${escapeHtml(step.note)}</div>` : ''}
+        </div>
+      `;
+      li.addEventListener('mouseenter', () => focusStep(idx));
+      li.addEventListener('mouseleave', () => focusStep(null));
+      stepsList.appendChild(li);
+    });
+  }
+
+  function focusStep(idx) {
+    document.querySelectorAll('.flow-edge').forEach(p => {
+      const i = Number(p.dataset.stepIdx);
+      p.classList.toggle('focus', idx !== null && i === idx);
+      p.classList.toggle('faded', idx !== null && i !== idx);
+    });
+    document.querySelectorAll('.flow-num').forEach(p => {
+      const i = Number(p.dataset.stepIdx);
+      p.classList.toggle('focus', idx !== null && i === idx);
+      p.classList.toggle('faded', idx !== null && i !== idx);
+    });
+    document.querySelectorAll('#steps-list li').forEach(li => {
+      li.classList.toggle('focus', idx !== null && Number(li.dataset.stepIdx) === idx);
+    });
+  }
+
+  /* ---------- boot ---------- */
+  if (data.flows.length) selectFlow(data.flows[0].id);
+})();
+</script>
+</body>
+</html>
