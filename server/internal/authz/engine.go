@@ -278,6 +278,64 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, ErrMissingGrants)
 	}
 
+	return e.requireWithGrants(ctx, grants, checks...)
+}
+
+// RequirePrincipal evaluates checks against the grants for a specific Gram
+// user, even when the request context itself would not normally enforce RBAC.
+func (e *Engine) RequirePrincipal(ctx context.Context, organizationID string, userID string, checks ...Check) error {
+	if len(checks) == 0 {
+		return e.mapError(ctx, ErrNoChecks)
+	}
+
+	if grants, ok := GrantsFromContext(ctx); ok {
+		return e.requireWithGrants(ctx, grants, checks...)
+	}
+
+	if organizationID == "" || userID == "" {
+		return e.mapError(ctx, ErrMissingGrants)
+	}
+
+	enabled, err := e.isEnabled(ctx, organizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, e.logger)
+	}
+	if !enabled {
+		return e.mapError(ctx, Denied(checks[0].Scope, checks[0].selector()))
+	}
+
+	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, userID)}
+	roleSlug, err := e.resolveRoleSlug(ctx, userID, organizationID)
+	if err != nil {
+		e.logger.ErrorContext(
+			ctx,
+			"failed to resolve role for principal authz check",
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogUserID(userID),
+			attr.SlogError(err),
+		)
+		return oops.E(oops.CodeUnexpected, err, "resolve role slug").Log(ctx, e.logger)
+	}
+	if roleSlug != "" {
+		principals = append(principals, urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug))
+	}
+
+	grants, err := LoadGrants(ctx, e.db, organizationID, principals)
+	if err != nil {
+		e.logger.ErrorContext(
+			ctx,
+			"failed to load principal authz grants",
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogUserID(userID),
+			attr.SlogError(err),
+		)
+		return oops.E(oops.CodeUnexpected, err, "load authz grants").Log(ctx, e.logger)
+	}
+
+	return e.requireWithGrants(GrantsToContext(ctx, grants), grants, checks...)
+}
+
+func (e *Engine) requireWithGrants(ctx context.Context, grants []Grant, checks ...Check) error {
 	matches := make([]grantMatch, 0, len(checks))
 	for _, check := range checks {
 		if err := validateInput(check); err != nil {

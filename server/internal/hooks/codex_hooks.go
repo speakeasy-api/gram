@@ -58,7 +58,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 		policy := s.lookupShadowMCPBlockingPolicy(ctx, projectID)
 		if policy != nil {
 			toolName := conv.PtrValOr(payload.ToolName, "")
-			if detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, payload.ToolInput, toolName, orgID); denied {
+			if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, payload.ToolInput, toolName, codexShadowMCPEvidence(payload)); denied {
 				logger.InfoContext(ctx, "denying codex tool call: failed gram toolset validation",
 					attr.SlogEvent("codex_hook_denied"),
 					attr.SlogHookBlockReason(detail),

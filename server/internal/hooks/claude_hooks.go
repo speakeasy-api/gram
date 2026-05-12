@@ -603,7 +603,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		return result, nil
 	}
 
-	detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, payload.ToolInput, mcpToolName, metadata.GramOrgID)
+	detail, denied := s.enforceShadowMCPToolAccess(ctx, metadata.GramOrgID, metadata.ProjectID, payload.ToolInput, mcpToolName, claudeShadowMCPEvidence(rawToolName))
 	if denied {
 		s.logger.With(
 			attr.SlogHookSource("claude"),

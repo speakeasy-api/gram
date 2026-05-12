@@ -13,6 +13,12 @@ const (
 	MatchBreadthServerIdentity = "server_identity"
 )
 
+type AccessEvidence struct {
+	FullURL        string
+	URLHost        string
+	ServerIdentity string
+}
+
 func NormalizeMatchValue(matchBreadth string, matchValue string) (string, error) {
 	if strings.TrimSpace(matchValue) == "" {
 		return "", fmt.Errorf("match_value is required")
@@ -47,6 +53,39 @@ func NormalizeMatchValue(matchBreadth string, matchValue string) (string, error)
 	default:
 		return "", fmt.Errorf("invalid match_breadth")
 	}
+}
+
+func NormalizeAccessEvidence(evidence AccessEvidence) AccessEvidence {
+	var normalized AccessEvidence
+
+	if evidence.FullURL != "" {
+		if value, err := NormalizeMatchValue(MatchBreadthFullURL, evidence.FullURL); err == nil {
+			normalized.FullURL = value
+		}
+		if normalized.URLHost == "" {
+			if u, err := url.Parse(evidence.FullURL); err == nil && u.Host != "" {
+				normalized.URLHost = NormalizeHost(u.Host)
+			}
+		}
+	}
+
+	if evidence.URLHost != "" {
+		if value, err := NormalizeMatchValue(MatchBreadthURLHost, evidence.URLHost); err == nil {
+			normalized.URLHost = value
+		}
+	}
+
+	if evidence.ServerIdentity != "" {
+		if value, err := NormalizeMatchValue(MatchBreadthServerIdentity, evidence.ServerIdentity); err == nil {
+			normalized.ServerIdentity = value
+		}
+	}
+
+	return normalized
+}
+
+func (e AccessEvidence) Empty() bool {
+	return e.FullURL == "" && e.URLHost == "" && e.ServerIdentity == ""
 }
 
 func NormalizeHost(host string) string {
