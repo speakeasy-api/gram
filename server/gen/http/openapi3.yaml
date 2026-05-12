@@ -28987,18 +28987,29 @@ components:
             description: OTEL log attribute with key and typed value
             required:
                 - key
-                - value
         OTELAttributeValue:
             type: object
             properties:
+                arrayValue:
+                    description: Array value (passed through)
+                boolValue:
+                    type: boolean
+                    description: Boolean value
+                bytesValue:
+                    type: string
+                    description: Bytes value (base64-encoded per OTLP/JSON)
+                doubleValue:
+                    type: number
+                    description: Double value
+                    format: double
                 intValue:
-                    type: integer
-                    description: Integer value
-                    format: int64
+                    description: Integer value (string-encoded per OTLP/JSON, or raw number)
+                kvlistValue:
+                    description: Key-value list value (passed through)
                 stringValue:
                     type: string
                     description: String value
-            description: OTEL attribute value - supports stringValue or intValue
+            description: OTEL attribute value - any of the OTLP/JSON value kinds
         OTELLogBody:
             type: object
             properties:
@@ -29027,11 +29038,6 @@ components:
                     type: string
                     description: Timestamp in nanoseconds since Unix epoch
             description: Individual OTEL log record
-            required:
-                - timeUnixNano
-                - observedTimeUnixNano
-                - body
-                - attributes
         OTELLogsPayload:
             type: object
             properties:
@@ -29041,19 +29047,25 @@ components:
                         $ref: '#/components/schemas/OTELResourceLog'
                     description: Array of resource logs
             description: OTEL logs export payload
-            required:
-                - resourceLogs
         OTELMetric:
             type: object
             properties:
                 description:
                     type: string
                     description: Metric description
+                exponentialHistogram:
+                    description: ExponentialHistogram metric data (passed through)
+                gauge:
+                    description: Gauge metric data (passed through)
+                histogram:
+                    description: Histogram metric data (passed through)
                 name:
                     type: string
                     description: Metric name
                 sum:
                     $ref: '#/components/schemas/OTELSum'
+                summary:
+                    description: Summary metric data (passed through)
                 unit:
                     type: string
                     description: Metric unit
@@ -29067,8 +29079,6 @@ components:
                         $ref: '#/components/schemas/OTELResourceMetrics'
                     description: Array of resource metrics
             description: OTEL metrics export payload
-            required:
-                - resourceMetrics
         OTELNumberDataPoint:
             type: object
             properties:
@@ -29077,9 +29087,7 @@ components:
                     description: Value as double
                     format: double
                 asInt:
-                    type: integer
-                    description: Value as integer
-                    format: int64
+                    description: Value as integer (string-encoded per OTLP/JSON, or raw number)
                 attributes:
                     type: array
                     items:
@@ -29116,7 +29124,6 @@ components:
             description: OTEL resource attribute
             required:
                 - key
-                - value
         OTELResourceLog:
             type: object
             properties:
@@ -29128,8 +29135,6 @@ components:
                         $ref: '#/components/schemas/OTELScopeLog'
                     description: Array of scope logs
             description: OTEL resource logs container
-            required:
-                - scopeLogs
         OTELResourceMetrics:
             type: object
             properties:
@@ -29162,8 +29167,6 @@ components:
                 scope:
                     $ref: '#/components/schemas/OTELScope'
             description: OTEL scope logs container
-            required:
-                - logRecords
         OTELScopeMetrics:
             type: object
             properties:
@@ -29179,9 +29182,7 @@ components:
             type: object
             properties:
                 aggregationTemporality:
-                    type: integer
-                    description: Aggregation temporality
-                    format: int64
+                    description: Aggregation temporality (number or enum string)
                 dataPoints:
                     type: array
                     items:
