@@ -314,6 +314,8 @@ const (
 
 	StatsToolCallCountKey  = attribute.Key("gram.stats.tool_call_count")
 	StatsMCPServerCountKey = attribute.Key("gram.stats.mcp_server_count")
+
+	GitHubUsernameKey = attribute.Key("gram.github.username")
 )
 
 const (
@@ -1349,3 +1351,6 @@ func SlogChatToolCount(v int) slog.Attr      { return slog.Int(string(ChatToolCo
 
 func ChatToolNames(v any) attribute.KeyValue { return ChatToolNamesKey.String(fmt.Sprintf("%v", v)) }
 func SlogChatToolNames(v any) slog.Attr      { return slog.Any(string(ChatToolNamesKey), v) }
+
+func GitHubUsername(v string) attribute.KeyValue { return GitHubUsernameKey.String(v) }
+func SlogGitHubUsername(v string) slog.Attr      { return slog.String(string(GitHubUsernameKey), v) }

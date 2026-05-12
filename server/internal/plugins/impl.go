@@ -1140,7 +1140,7 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		if err := s.github.Client.AddCollaborator(ctx, s.github.InstallationID, repoOwner, repoName, username, "pull"); err != nil {
 			s.logger.WarnContext(ctx, "failed to add collaborator (non-fatal)",
 				attr.SlogOrganizationID(ac.ActiveOrganizationID),
-				slog.String("github_username", username),
+				attr.SlogGitHubUsername(username),
 				attr.SlogError(err),
 			)
 		}
