@@ -131,14 +131,14 @@ type CursorRequestBody struct {
 // request body.
 type LogsRequestBody struct {
 	// Array of resource logs
-	ResourceLogs []*OTELResourceLogRequestBody `form:"resourceLogs" json:"resourceLogs" xml:"resourceLogs"`
+	ResourceLogs []*OTELResourceLogRequestBody `form:"resourceLogs,omitempty" json:"resourceLogs,omitempty" xml:"resourceLogs,omitempty"`
 }
 
 // MetricsRequestBody is the type of the "hooks" service "metrics" endpoint
 // HTTP request body.
 type MetricsRequestBody struct {
 	// Array of resource metrics
-	ResourceMetrics []*OTELResourceMetricsRequestBody `form:"resourceMetrics" json:"resourceMetrics" xml:"resourceMetrics"`
+	ResourceMetrics []*OTELResourceMetricsRequestBody `form:"resourceMetrics,omitempty" json:"resourceMetrics,omitempty" xml:"resourceMetrics,omitempty"`
 }
 
 // ClaudeResponseBody is the type of the "hooks" service "claude" endpoint HTTP
@@ -894,7 +894,7 @@ type OTELResourceLogRequestBody struct {
 	// Resource information
 	Resource *OTELResourceRequestBody `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
 	// Array of scope logs
-	ScopeLogs []*OTELScopeLogRequestBody `form:"scopeLogs" json:"scopeLogs" xml:"scopeLogs"`
+	ScopeLogs []*OTELScopeLogRequestBody `form:"scopeLogs,omitempty" json:"scopeLogs,omitempty" xml:"scopeLogs,omitempty"`
 }
 
 // OTELResourceRequestBody is used to define fields on request body types.
@@ -911,15 +911,25 @@ type OTELResourceAttributeRequestBody struct {
 	// Resource attribute key
 	Key string `form:"key" json:"key" xml:"key"`
 	// Resource attribute value
-	Value *OTELAttributeValueRequestBody `form:"value" json:"value" xml:"value"`
+	Value *OTELAttributeValueRequestBody `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 }
 
 // OTELAttributeValueRequestBody is used to define fields on request body types.
 type OTELAttributeValueRequestBody struct {
 	// String value
 	StringValue *string `form:"stringValue,omitempty" json:"stringValue,omitempty" xml:"stringValue,omitempty"`
-	// Integer value
-	IntValue *int64 `form:"intValue,omitempty" json:"intValue,omitempty" xml:"intValue,omitempty"`
+	// Integer value (string-encoded per OTLP/JSON)
+	IntValue *string `form:"intValue,omitempty" json:"intValue,omitempty" xml:"intValue,omitempty"`
+	// Boolean value
+	BoolValue *bool `form:"boolValue,omitempty" json:"boolValue,omitempty" xml:"boolValue,omitempty"`
+	// Double value
+	DoubleValue *float64 `form:"doubleValue,omitempty" json:"doubleValue,omitempty" xml:"doubleValue,omitempty"`
+	// Array value (passed through)
+	ArrayValue any `form:"arrayValue,omitempty" json:"arrayValue,omitempty" xml:"arrayValue,omitempty"`
+	// Key-value list value (passed through)
+	KvlistValue any `form:"kvlistValue,omitempty" json:"kvlistValue,omitempty" xml:"kvlistValue,omitempty"`
+	// Bytes value (base64-encoded per OTLP/JSON)
+	BytesValue *string `form:"bytesValue,omitempty" json:"bytesValue,omitempty" xml:"bytesValue,omitempty"`
 }
 
 // OTELScopeLogRequestBody is used to define fields on request body types.
@@ -927,7 +937,7 @@ type OTELScopeLogRequestBody struct {
 	// Instrumentation scope information
 	Scope *OTELScopeRequestBody `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Array of log records
-	LogRecords []*OTELLogRecordRequestBody `form:"logRecords" json:"logRecords" xml:"logRecords"`
+	LogRecords []*OTELLogRecordRequestBody `form:"logRecords,omitempty" json:"logRecords,omitempty" xml:"logRecords,omitempty"`
 }
 
 // OTELScopeRequestBody is used to define fields on request body types.
@@ -941,13 +951,13 @@ type OTELScopeRequestBody struct {
 // OTELLogRecordRequestBody is used to define fields on request body types.
 type OTELLogRecordRequestBody struct {
 	// Timestamp in nanoseconds since Unix epoch
-	TimeUnixNano string `form:"timeUnixNano" json:"timeUnixNano" xml:"timeUnixNano"`
+	TimeUnixNano *string `form:"timeUnixNano,omitempty" json:"timeUnixNano,omitempty" xml:"timeUnixNano,omitempty"`
 	// Observed timestamp in nanoseconds
-	ObservedTimeUnixNano string `form:"observedTimeUnixNano" json:"observedTimeUnixNano" xml:"observedTimeUnixNano"`
+	ObservedTimeUnixNano *string `form:"observedTimeUnixNano,omitempty" json:"observedTimeUnixNano,omitempty" xml:"observedTimeUnixNano,omitempty"`
 	// Log body content
-	Body *OTELLogBodyRequestBody `form:"body" json:"body" xml:"body"`
+	Body *OTELLogBodyRequestBody `form:"body,omitempty" json:"body,omitempty" xml:"body,omitempty"`
 	// Log attributes
-	Attributes []*OTELAttributeRequestBody `form:"attributes" json:"attributes" xml:"attributes"`
+	Attributes []*OTELAttributeRequestBody `form:"attributes,omitempty" json:"attributes,omitempty" xml:"attributes,omitempty"`
 	// Number of dropped attributes
 	DroppedAttributesCount *int `form:"droppedAttributesCount,omitempty" json:"droppedAttributesCount,omitempty" xml:"droppedAttributesCount,omitempty"`
 }
@@ -963,7 +973,7 @@ type OTELAttributeRequestBody struct {
 	// Attribute key
 	Key string `form:"key" json:"key" xml:"key"`
 	// Attribute value
-	Value *OTELAttributeValueRequestBody `form:"value" json:"value" xml:"value"`
+	Value *OTELAttributeValueRequestBody `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 }
 
 // OTELResourceMetricsRequestBody is used to define fields on request body
@@ -993,12 +1003,20 @@ type OTELMetricRequestBody struct {
 	Unit *string `form:"unit,omitempty" json:"unit,omitempty" xml:"unit,omitempty"`
 	// Sum metric data
 	Sum *OTELSumRequestBody `form:"sum,omitempty" json:"sum,omitempty" xml:"sum,omitempty"`
+	// Gauge metric data (passed through)
+	Gauge any `form:"gauge,omitempty" json:"gauge,omitempty" xml:"gauge,omitempty"`
+	// Histogram metric data (passed through)
+	Histogram any `form:"histogram,omitempty" json:"histogram,omitempty" xml:"histogram,omitempty"`
+	// ExponentialHistogram metric data (passed through)
+	ExponentialHistogram any `form:"exponentialHistogram,omitempty" json:"exponentialHistogram,omitempty" xml:"exponentialHistogram,omitempty"`
+	// Summary metric data (passed through)
+	Summary any `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 }
 
 // OTELSumRequestBody is used to define fields on request body types.
 type OTELSumRequestBody struct {
-	// Aggregation temporality
-	AggregationTemporality *int `form:"aggregationTemporality,omitempty" json:"aggregationTemporality,omitempty" xml:"aggregationTemporality,omitempty"`
+	// Aggregation temporality (number or enum string)
+	AggregationTemporality any `form:"aggregationTemporality,omitempty" json:"aggregationTemporality,omitempty" xml:"aggregationTemporality,omitempty"`
 	// Whether the sum is monotonic
 	IsMonotonic *bool `form:"isMonotonic,omitempty" json:"isMonotonic,omitempty" xml:"isMonotonic,omitempty"`
 	// Data points
@@ -1016,8 +1034,8 @@ type OTELNumberDataPointRequestBody struct {
 	TimeUnixNano *string `form:"timeUnixNano,omitempty" json:"timeUnixNano,omitempty" xml:"timeUnixNano,omitempty"`
 	// Value as double
 	AsDouble *float64 `form:"asDouble,omitempty" json:"asDouble,omitempty" xml:"asDouble,omitempty"`
-	// Value as integer
-	AsInt *int64 `form:"asInt,omitempty" json:"asInt,omitempty" xml:"asInt,omitempty"`
+	// Value as integer (string-encoded per OTLP/JSON)
+	AsInt *string `form:"asInt,omitempty" json:"asInt,omitempty" xml:"asInt,omitempty"`
 }
 
 // NewClaudeRequestBody builds the HTTP request body from the payload of the
@@ -1112,8 +1130,6 @@ func NewLogsRequestBody(p *hooks.LogsPayload) *LogsRequestBody {
 			}
 			body.ResourceLogs[i] = marshalHooksOTELResourceLogToOTELResourceLogRequestBody(val)
 		}
-	} else {
-		body.ResourceLogs = []*OTELResourceLogRequestBody{}
 	}
 	return body
 }
@@ -1131,8 +1147,6 @@ func NewMetricsRequestBody(p *hooks.MetricsPayload) *MetricsRequestBody {
 			}
 			body.ResourceMetrics[i] = marshalHooksOTELResourceMetricsToOTELResourceMetricsRequestBody(val)
 		}
-	} else {
-		body.ResourceMetrics = []*OTELResourceMetricsRequestBody{}
 	}
 	return body
 }
@@ -2696,160 +2710,6 @@ func ValidateMetricsGatewayErrorResponseBody(body *MetricsGatewayErrorResponseBo
 	}
 	if body.Fault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateOTELResourceLogRequestBody runs the validations defined on
-// OTELResourceLogRequestBody
-func ValidateOTELResourceLogRequestBody(body *OTELResourceLogRequestBody) (err error) {
-	if body.ScopeLogs == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scopeLogs", "body"))
-	}
-	if body.Resource != nil {
-		if err2 := ValidateOTELResourceRequestBody(body.Resource); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	for _, e := range body.ScopeLogs {
-		if e != nil {
-			if err2 := ValidateOTELScopeLogRequestBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateOTELResourceRequestBody runs the validations defined on
-// OTELResourceRequestBody
-func ValidateOTELResourceRequestBody(body *OTELResourceRequestBody) (err error) {
-	for _, e := range body.Attributes {
-		if e != nil {
-			if err2 := ValidateOTELResourceAttributeRequestBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateOTELResourceAttributeRequestBody runs the validations defined on
-// OTELResourceAttributeRequestBody
-func ValidateOTELResourceAttributeRequestBody(body *OTELResourceAttributeRequestBody) (err error) {
-	if body.Value == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
-	}
-	return
-}
-
-// ValidateOTELScopeLogRequestBody runs the validations defined on
-// OTELScopeLogRequestBody
-func ValidateOTELScopeLogRequestBody(body *OTELScopeLogRequestBody) (err error) {
-	if body.LogRecords == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("logRecords", "body"))
-	}
-	for _, e := range body.LogRecords {
-		if e != nil {
-			if err2 := ValidateOTELLogRecordRequestBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateOTELLogRecordRequestBody runs the validations defined on
-// OTELLogRecordRequestBody
-func ValidateOTELLogRecordRequestBody(body *OTELLogRecordRequestBody) (err error) {
-	if body.Body == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("body", "body"))
-	}
-	if body.Attributes == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("attributes", "body"))
-	}
-	for _, e := range body.Attributes {
-		if e != nil {
-			if err2 := ValidateOTELAttributeRequestBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateOTELAttributeRequestBody runs the validations defined on
-// OTELAttributeRequestBody
-func ValidateOTELAttributeRequestBody(body *OTELAttributeRequestBody) (err error) {
-	if body.Value == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
-	}
-	return
-}
-
-// ValidateOTELResourceMetricsRequestBody runs the validations defined on
-// OTELResourceMetricsRequestBody
-func ValidateOTELResourceMetricsRequestBody(body *OTELResourceMetricsRequestBody) (err error) {
-	if body.Resource != nil {
-		if err2 := ValidateOTELResourceRequestBody(body.Resource); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	for _, e := range body.ScopeMetrics {
-		if e != nil {
-			if err2 := ValidateOTELScopeMetricsRequestBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateOTELScopeMetricsRequestBody runs the validations defined on
-// OTELScopeMetricsRequestBody
-func ValidateOTELScopeMetricsRequestBody(body *OTELScopeMetricsRequestBody) (err error) {
-	for _, e := range body.Metrics {
-		if e != nil {
-			if err2 := ValidateOTELMetricRequestBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateOTELMetricRequestBody runs the validations defined on
-// OTELMetricRequestBody
-func ValidateOTELMetricRequestBody(body *OTELMetricRequestBody) (err error) {
-	if body.Sum != nil {
-		if err2 := ValidateOTELSumRequestBody(body.Sum); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	return
-}
-
-// ValidateOTELSumRequestBody runs the validations defined on OTELSumRequestBody
-func ValidateOTELSumRequestBody(body *OTELSumRequestBody) (err error) {
-	for _, e := range body.DataPoints {
-		if e != nil {
-			if err2 := ValidateOTELNumberDataPointRequestBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateOTELNumberDataPointRequestBody runs the validations defined on
-// OTELNumberDataPointRequestBody
-func ValidateOTELNumberDataPointRequestBody(body *OTELNumberDataPointRequestBody) (err error) {
-	for _, e := range body.Attributes {
-		if e != nil {
-			if err2 := ValidateOTELAttributeRequestBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
 	}
 	return
 }

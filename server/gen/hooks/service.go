@@ -222,12 +222,22 @@ type OTELAttribute struct {
 	Value *OTELAttributeValue
 }
 
-// OTEL attribute value - supports stringValue or intValue
+// OTEL attribute value - any of the OTLP/JSON value kinds
 type OTELAttributeValue struct {
 	// String value
 	StringValue *string
-	// Integer value
-	IntValue *int64
+	// Integer value (string-encoded per OTLP/JSON)
+	IntValue *string
+	// Boolean value
+	BoolValue *bool
+	// Double value
+	DoubleValue *float64
+	// Array value (passed through)
+	ArrayValue any
+	// Key-value list value (passed through)
+	KvlistValue any
+	// Bytes value (base64-encoded per OTLP/JSON)
+	BytesValue *string
 }
 
 // OTEL log body
@@ -239,9 +249,9 @@ type OTELLogBody struct {
 // Individual OTEL log record
 type OTELLogRecord struct {
 	// Timestamp in nanoseconds since Unix epoch
-	TimeUnixNano string
+	TimeUnixNano *string
 	// Observed timestamp in nanoseconds
-	ObservedTimeUnixNano string
+	ObservedTimeUnixNano *string
 	// Log body content
 	Body *OTELLogBody
 	// Log attributes
@@ -260,6 +270,14 @@ type OTELMetric struct {
 	Unit *string
 	// Sum metric data
 	Sum *OTELSum
+	// Gauge metric data (passed through)
+	Gauge any
+	// Histogram metric data (passed through)
+	Histogram any
+	// ExponentialHistogram metric data (passed through)
+	ExponentialHistogram any
+	// Summary metric data (passed through)
+	Summary any
 }
 
 // OTEL number data point
@@ -272,8 +290,8 @@ type OTELNumberDataPoint struct {
 	TimeUnixNano *string
 	// Value as double
 	AsDouble *float64
-	// Value as integer
-	AsInt *int64
+	// Value as integer (string-encoded per OTLP/JSON)
+	AsInt *string
 }
 
 // OTEL resource information
@@ -334,8 +352,8 @@ type OTELScopeMetrics struct {
 
 // OTEL sum metric
 type OTELSum struct {
-	// Aggregation temporality
-	AggregationTemporality *int
+	// Aggregation temporality (number or enum string)
+	AggregationTemporality any
 	// Whether the sum is monotonic
 	IsMonotonic *bool
 	// Data points

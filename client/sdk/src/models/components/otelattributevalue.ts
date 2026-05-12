@@ -5,13 +5,33 @@
 import * as z from "zod/v4-mini";
 
 /**
- * OTEL attribute value - supports stringValue or intValue
+ * OTEL attribute value - any of the OTLP/JSON value kinds
  */
 export type OTELAttributeValue = {
   /**
-   * Integer value
+   * Array value (passed through)
    */
-  intValue?: number | undefined;
+  arrayValue?: any | undefined;
+  /**
+   * Boolean value
+   */
+  boolValue?: boolean | undefined;
+  /**
+   * Bytes value (base64-encoded per OTLP/JSON)
+   */
+  bytesValue?: string | undefined;
+  /**
+   * Double value
+   */
+  doubleValue?: number | undefined;
+  /**
+   * Integer value (string-encoded per OTLP/JSON)
+   */
+  intValue?: string | undefined;
+  /**
+   * Key-value list value (passed through)
+   */
+  kvlistValue?: any | undefined;
   /**
    * String value
    */
@@ -20,7 +40,12 @@ export type OTELAttributeValue = {
 
 /** @internal */
 export type OTELAttributeValue$Outbound = {
-  intValue?: number | undefined;
+  arrayValue?: any | undefined;
+  boolValue?: boolean | undefined;
+  bytesValue?: string | undefined;
+  doubleValue?: number | undefined;
+  intValue?: string | undefined;
+  kvlistValue?: any | undefined;
   stringValue?: string | undefined;
 };
 
@@ -29,7 +54,12 @@ export const OTELAttributeValue$outboundSchema: z.ZodMiniType<
   OTELAttributeValue$Outbound,
   OTELAttributeValue
 > = z.object({
-  intValue: z.optional(z.int()),
+  arrayValue: z.optional(z.any()),
+  boolValue: z.optional(z.boolean()),
+  bytesValue: z.optional(z.string()),
+  doubleValue: z.optional(z.number()),
+  intValue: z.optional(z.string()),
+  kvlistValue: z.optional(z.any()),
   stringValue: z.optional(z.string()),
 });
 

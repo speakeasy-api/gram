@@ -902,17 +902,22 @@ func EncodeMetricsError(encoder func(context.Context, http.ResponseWriter) goaht
 // unmarshalOTELResourceLogRequestBodyToHooksOTELResourceLog builds a value of
 // type *hooks.OTELResourceLog from a value of type *OTELResourceLogRequestBody.
 func unmarshalOTELResourceLogRequestBodyToHooksOTELResourceLog(v *OTELResourceLogRequestBody) *hooks.OTELResourceLog {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELResourceLog{}
 	if v.Resource != nil {
 		res.Resource = unmarshalOTELResourceRequestBodyToHooksOTELResource(v.Resource)
 	}
-	res.ScopeLogs = make([]*hooks.OTELScopeLog, len(v.ScopeLogs))
-	for i, val := range v.ScopeLogs {
-		if val == nil {
-			res.ScopeLogs[i] = nil
-			continue
+	if v.ScopeLogs != nil {
+		res.ScopeLogs = make([]*hooks.OTELScopeLog, len(v.ScopeLogs))
+		for i, val := range v.ScopeLogs {
+			if val == nil {
+				res.ScopeLogs[i] = nil
+				continue
+			}
+			res.ScopeLogs[i] = unmarshalOTELScopeLogRequestBodyToHooksOTELScopeLog(val)
 		}
-		res.ScopeLogs[i] = unmarshalOTELScopeLogRequestBodyToHooksOTELScopeLog(val)
 	}
 
 	return res
@@ -951,7 +956,9 @@ func unmarshalOTELResourceAttributeRequestBodyToHooksOTELResourceAttribute(v *OT
 	res := &hooks.OTELResourceAttribute{
 		Key: *v.Key,
 	}
-	res.Value = unmarshalOTELAttributeValueRequestBodyToHooksOTELAttributeValue(v.Value)
+	if v.Value != nil {
+		res.Value = unmarshalOTELAttributeValueRequestBodyToHooksOTELAttributeValue(v.Value)
+	}
 
 	return res
 }
@@ -960,9 +967,17 @@ func unmarshalOTELResourceAttributeRequestBodyToHooksOTELResourceAttribute(v *OT
 // value of type *hooks.OTELAttributeValue from a value of type
 // *OTELAttributeValueRequestBody.
 func unmarshalOTELAttributeValueRequestBodyToHooksOTELAttributeValue(v *OTELAttributeValueRequestBody) *hooks.OTELAttributeValue {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELAttributeValue{
 		StringValue: v.StringValue,
 		IntValue:    v.IntValue,
+		BoolValue:   v.BoolValue,
+		DoubleValue: v.DoubleValue,
+		ArrayValue:  v.ArrayValue,
+		KvlistValue: v.KvlistValue,
+		BytesValue:  v.BytesValue,
 	}
 
 	return res
@@ -971,17 +986,22 @@ func unmarshalOTELAttributeValueRequestBodyToHooksOTELAttributeValue(v *OTELAttr
 // unmarshalOTELScopeLogRequestBodyToHooksOTELScopeLog builds a value of type
 // *hooks.OTELScopeLog from a value of type *OTELScopeLogRequestBody.
 func unmarshalOTELScopeLogRequestBodyToHooksOTELScopeLog(v *OTELScopeLogRequestBody) *hooks.OTELScopeLog {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELScopeLog{}
 	if v.Scope != nil {
 		res.Scope = unmarshalOTELScopeRequestBodyToHooksOTELScope(v.Scope)
 	}
-	res.LogRecords = make([]*hooks.OTELLogRecord, len(v.LogRecords))
-	for i, val := range v.LogRecords {
-		if val == nil {
-			res.LogRecords[i] = nil
-			continue
+	if v.LogRecords != nil {
+		res.LogRecords = make([]*hooks.OTELLogRecord, len(v.LogRecords))
+		for i, val := range v.LogRecords {
+			if val == nil {
+				res.LogRecords[i] = nil
+				continue
+			}
+			res.LogRecords[i] = unmarshalOTELLogRecordRequestBodyToHooksOTELLogRecord(val)
 		}
-		res.LogRecords[i] = unmarshalOTELLogRecordRequestBodyToHooksOTELLogRecord(val)
 	}
 
 	return res
@@ -1004,19 +1024,26 @@ func unmarshalOTELScopeRequestBodyToHooksOTELScope(v *OTELScopeRequestBody) *hoo
 // unmarshalOTELLogRecordRequestBodyToHooksOTELLogRecord builds a value of type
 // *hooks.OTELLogRecord from a value of type *OTELLogRecordRequestBody.
 func unmarshalOTELLogRecordRequestBodyToHooksOTELLogRecord(v *OTELLogRecordRequestBody) *hooks.OTELLogRecord {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELLogRecord{
-		TimeUnixNano:           *v.TimeUnixNano,
-		ObservedTimeUnixNano:   *v.ObservedTimeUnixNano,
+		TimeUnixNano:           v.TimeUnixNano,
+		ObservedTimeUnixNano:   v.ObservedTimeUnixNano,
 		DroppedAttributesCount: v.DroppedAttributesCount,
 	}
-	res.Body = unmarshalOTELLogBodyRequestBodyToHooksOTELLogBody(v.Body)
-	res.Attributes = make([]*hooks.OTELAttribute, len(v.Attributes))
-	for i, val := range v.Attributes {
-		if val == nil {
-			res.Attributes[i] = nil
-			continue
+	if v.Body != nil {
+		res.Body = unmarshalOTELLogBodyRequestBodyToHooksOTELLogBody(v.Body)
+	}
+	if v.Attributes != nil {
+		res.Attributes = make([]*hooks.OTELAttribute, len(v.Attributes))
+		for i, val := range v.Attributes {
+			if val == nil {
+				res.Attributes[i] = nil
+				continue
+			}
+			res.Attributes[i] = unmarshalOTELAttributeRequestBodyToHooksOTELAttribute(val)
 		}
-		res.Attributes[i] = unmarshalOTELAttributeRequestBodyToHooksOTELAttribute(val)
 	}
 
 	return res
@@ -1025,6 +1052,9 @@ func unmarshalOTELLogRecordRequestBodyToHooksOTELLogRecord(v *OTELLogRecordReque
 // unmarshalOTELLogBodyRequestBodyToHooksOTELLogBody builds a value of type
 // *hooks.OTELLogBody from a value of type *OTELLogBodyRequestBody.
 func unmarshalOTELLogBodyRequestBodyToHooksOTELLogBody(v *OTELLogBodyRequestBody) *hooks.OTELLogBody {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELLogBody{
 		StringValue: v.StringValue,
 	}
@@ -1035,10 +1065,15 @@ func unmarshalOTELLogBodyRequestBodyToHooksOTELLogBody(v *OTELLogBodyRequestBody
 // unmarshalOTELAttributeRequestBodyToHooksOTELAttribute builds a value of type
 // *hooks.OTELAttribute from a value of type *OTELAttributeRequestBody.
 func unmarshalOTELAttributeRequestBodyToHooksOTELAttribute(v *OTELAttributeRequestBody) *hooks.OTELAttribute {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELAttribute{
 		Key: *v.Key,
 	}
-	res.Value = unmarshalOTELAttributeValueRequestBodyToHooksOTELAttributeValue(v.Value)
+	if v.Value != nil {
+		res.Value = unmarshalOTELAttributeValueRequestBodyToHooksOTELAttributeValue(v.Value)
+	}
 
 	return res
 }
@@ -1047,6 +1082,9 @@ func unmarshalOTELAttributeRequestBodyToHooksOTELAttribute(v *OTELAttributeReque
 // value of type *hooks.OTELResourceMetrics from a value of type
 // *OTELResourceMetricsRequestBody.
 func unmarshalOTELResourceMetricsRequestBodyToHooksOTELResourceMetrics(v *OTELResourceMetricsRequestBody) *hooks.OTELResourceMetrics {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELResourceMetrics{}
 	if v.Resource != nil {
 		res.Resource = unmarshalOTELResourceRequestBodyToHooksOTELResource(v.Resource)
@@ -1097,9 +1135,13 @@ func unmarshalOTELMetricRequestBodyToHooksOTELMetric(v *OTELMetricRequestBody) *
 		return nil
 	}
 	res := &hooks.OTELMetric{
-		Name:        v.Name,
-		Description: v.Description,
-		Unit:        v.Unit,
+		Name:                 v.Name,
+		Description:          v.Description,
+		Unit:                 v.Unit,
+		Gauge:                v.Gauge,
+		Histogram:            v.Histogram,
+		ExponentialHistogram: v.ExponentialHistogram,
+		Summary:              v.Summary,
 	}
 	if v.Sum != nil {
 		res.Sum = unmarshalOTELSumRequestBodyToHooksOTELSum(v.Sum)

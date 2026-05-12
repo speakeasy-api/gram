@@ -14,9 +14,9 @@ import {
  */
 export type OTELSum = {
   /**
-   * Aggregation temporality
+   * Aggregation temporality (number or enum string)
    */
-  aggregationTemporality?: number | undefined;
+  aggregationTemporality?: any | undefined;
   /**
    * Data points
    */
@@ -29,7 +29,7 @@ export type OTELSum = {
 
 /** @internal */
 export type OTELSum$Outbound = {
-  aggregationTemporality?: number | undefined;
+  aggregationTemporality?: any | undefined;
   dataPoints?: Array<OTELNumberDataPoint$Outbound> | undefined;
   isMonotonic?: boolean | undefined;
 };
@@ -37,7 +37,7 @@ export type OTELSum$Outbound = {
 /** @internal */
 export const OTELSum$outboundSchema: z.ZodMiniType<OTELSum$Outbound, OTELSum> =
   z.object({
-    aggregationTemporality: z.optional(z.int()),
+    aggregationTemporality: z.optional(z.any()),
     dataPoints: z.optional(z.array(OTELNumberDataPoint$outboundSchema)),
     isMonotonic: z.optional(z.boolean()),
   });

@@ -334,15 +334,11 @@ func extractMetricsForClickHouse(payload *gen.MetricsPayload) ([]MetricDataPoint
 					continue
 				}
 
-				// Validate aggregation temporality is DELTA (1)
-				// DELTA = 1 means each data point represents change since last export
-				// CUMULATIVE = 2 would require different handling to avoid double-counting
-				if metric.Sum.AggregationTemporality == nil || *metric.Sum.AggregationTemporality != 1 {
-					temporality := "nil"
-					if metric.Sum.AggregationTemporality != nil {
-						temporality = fmt.Sprintf("%d", *metric.Sum.AggregationTemporality)
-					}
-					return nil, fmt.Errorf("unsupported aggregation temporality %s for metric %s (expected 1 for DELTA)", temporality, *metric.Name)
+				// Validate aggregation temporality is DELTA. Per OTLP/JSON, this
+				// can arrive as a JSON number (1) or as the enum string form
+				// ("AGGREGATION_TEMPORALITY_DELTA").
+				if !isDeltaTemporality(metric.Sum.AggregationTemporality) {
+					return nil, fmt.Errorf("unsupported aggregation temporality %v for metric %s (expected DELTA)", metric.Sum.AggregationTemporality, *metric.Name)
 				}
 
 				metricName := *metric.Name
@@ -378,12 +374,15 @@ func extractMetricsForClickHouse(payload *gen.MetricsPayload) ([]MetricDataPoint
 
 					entry := aggregated[key]
 
-					// Get the value
+					// Get the value. OTLP/JSON encodes int64 (asInt) as a string;
+					// asDouble remains a JSON number.
 					value := float64(0)
 					if dataPoint.AsDouble != nil {
 						value = *dataPoint.AsDouble
 					} else if dataPoint.AsInt != nil {
-						value = float64(*dataPoint.AsInt)
+						if n, err := strconv.ParseInt(*dataPoint.AsInt, 10, 64); err == nil {
+							value = float64(n)
+						}
 					}
 
 					// Update timestamp to latest
@@ -421,6 +420,30 @@ func extractMetricsForClickHouse(payload *gen.MetricsPayload) ([]MetricDataPoint
 	}
 
 	return result, nil
+}
+
+// isDeltaTemporality returns true if the value represents OTLP DELTA
+// aggregation temporality. Accepts both the numeric form (1) and the protobuf
+// enum string form ("AGGREGATION_TEMPORALITY_DELTA") that some OTLP/JSON
+// emitters use.
+func isDeltaTemporality(v any) bool {
+	if v == nil {
+		return false
+	}
+	switch t := v.(type) {
+	case float64:
+		return t == 1
+	case int:
+		return t == 1
+	case int64:
+		return t == 1
+	case json.Number:
+		n, err := t.Int64()
+		return err == nil && n == 1
+	case string:
+		return t == "1" || t == "AGGREGATION_TEMPORALITY_DELTA"
+	}
+	return false
 }
 
 // flushPendingHooks retrieves all buffered hooks for a session and writes them to ClickHouse.

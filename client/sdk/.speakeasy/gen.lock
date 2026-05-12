@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 1c520ecc4e14be9c660f4b81a6170645
+  docChecksum: aa8770734fffbb98171861065bd368f6
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -557,37 +557,37 @@ trackedFiles:
   docs/models/components/organizationuser.md:
     last_write_checksum: sha1:982e7f6d036e03381dc82ff336ab5c6bf6a3f20e
   docs/models/components/otelattribute.md:
-    last_write_checksum: sha1:a893f2d5835427f5e9750589b9d8703c2a9d30c1
+    last_write_checksum: sha1:cae5e6f364e5e3dc3aa0b6a49ca6d0075df7ec13
   docs/models/components/otelattributevalue.md:
-    last_write_checksum: sha1:476055b181686ddf4749ba6124d53ad9e2000fc5
+    last_write_checksum: sha1:2772eda4f2e03679a1751e46fcf70eea8cd682a9
   docs/models/components/otellogbody.md:
     last_write_checksum: sha1:eedd08e6ed59982d620c3cd20a0717f662727c1e
   docs/models/components/otellogrecord.md:
-    last_write_checksum: sha1:f646e5cf80b819166314b6e1baff0a531a918707
+    last_write_checksum: sha1:c69f8f1e1adeeb818f630d6d9797adafc524d800
   docs/models/components/otellogspayload.md:
-    last_write_checksum: sha1:2eef6e693a53b230c466f01b523d9f2d576bc75d
+    last_write_checksum: sha1:b11f01a37b76cbf22952e5ad2226ea0a6ec9f4fa
   docs/models/components/otelmetric.md:
-    last_write_checksum: sha1:dab0aed2bec055b6c5fe668f13eb65c50bebdecd
+    last_write_checksum: sha1:5d3c654cc802f118c65d694b670e3cfd6174c850
   docs/models/components/otelmetricspayload.md:
-    last_write_checksum: sha1:3c78f1a5e1ce3b5e692aedd5dc8fb108f7d285eb
+    last_write_checksum: sha1:7afdf8fdefce238de66821630c6e590b9af12bee
   docs/models/components/otelnumberdatapoint.md:
-    last_write_checksum: sha1:0505bee3e363b85cbe8ddc6f787d341256050e6e
+    last_write_checksum: sha1:967018101c4308595fecfa600aeed9ccfd424cb9
   docs/models/components/otelresource.md:
     last_write_checksum: sha1:0dbb9731748efe970627e896732f84d9a34de6c2
   docs/models/components/otelresourceattribute.md:
-    last_write_checksum: sha1:3ead622223358531bfbcebb638b1f8322cbaa7a0
+    last_write_checksum: sha1:c538e0e24711963a6b21dbbe79f445bdd47084f6
   docs/models/components/otelresourcelog.md:
-    last_write_checksum: sha1:fea4ef016bbaa7093d5a90d2c9d491a66ad5bc24
+    last_write_checksum: sha1:6b3fa8da188422c9e60baf4770d26484ce33c0a4
   docs/models/components/otelresourcemetrics.md:
     last_write_checksum: sha1:62aa16baf7155e12f65124132f464b0613224b26
   docs/models/components/otelscope.md:
     last_write_checksum: sha1:907cfaa07475440bc7b56fe0ccb5a74c47d97386
   docs/models/components/otelscopelog.md:
-    last_write_checksum: sha1:8d8f556c9893d274b97efed2ce8a96335df96b6e
+    last_write_checksum: sha1:b2305db90df3bf7e527c59aa943b0ed151e25d09
   docs/models/components/otelscopemetrics.md:
     last_write_checksum: sha1:c207bd491ae32eeab5beef5add5bd7f2fe3ef577
   docs/models/components/otelsum.md:
-    last_write_checksum: sha1:7cd3bea07db940d3039e32ad1f989c5f5d001d7b
+    last_write_checksum: sha1:109a2ee5f76b3423119eaf708c576fb11aeba2c1
   docs/models/components/outcome.md:
     last_write_checksum: sha1:bc2ff34ae2b99ce314fb2059e5f3ab926f8bb990
   docs/models/components/package.md:
@@ -1591,11 +1591,11 @@ trackedFiles:
   docs/models/operations/hooksnumbercursorsecurity.md:
     last_write_checksum: sha1:a111411fdeb6fd7d0224a332c1853bd55ccf2c45
   docs/models/operations/hooksnumberlogsrequest.md:
-    last_write_checksum: sha1:5f3ffbef78d03e1b5fa564832dd104b4a1888798
+    last_write_checksum: sha1:6334f3a6268671b3f6fefd05581d3ca6cd705011
   docs/models/operations/hooksnumberlogssecurity.md:
     last_write_checksum: sha1:1e492c0a57623b6ab3b5a78dec2c0119119a21ba
   docs/models/operations/hooksnumbermetricsrequest.md:
-    last_write_checksum: sha1:60e5b8e3afe86ca8e6e07e904acad2fce9094dd7
+    last_write_checksum: sha1:e9eeb3c16146b9051aa825693655a36b410a2ec6
   docs/models/operations/hooksnumbermetricssecurity.md:
     last_write_checksum: sha1:50652b124270545eed6f48814003a8ec8bc057c7
   docs/models/operations/integrationsnumbergetrequest.md:
@@ -2405,7 +2405,7 @@ trackedFiles:
   docs/sdks/features/README.md:
     last_write_checksum: sha1:79ab0259791f46a8d2ecd959a4ee69dd4551bea5
   docs/sdks/hooks/README.md:
-    last_write_checksum: sha1:27ec130a5ea9ad7798a7adee2aad91bc2d699a00
+    last_write_checksum: sha1:35c166e6bad654f4f223a74368a0f10869476719
   docs/sdks/hooksservernames/README.md:
     last_write_checksum: sha1:45d591f573a20bd161851708bab634f303d27fda
   docs/sdks/instances/README.md:
@@ -3835,37 +3835,37 @@ trackedFiles:
   src/models/components/organizationuser.ts:
     last_write_checksum: sha1:5fbeb489e54a940b59403d1576dcfe43266a72ea
   src/models/components/otelattribute.ts:
-    last_write_checksum: sha1:73d5182c8e167121b1b0993f33c638df9d5a1f46
+    last_write_checksum: sha1:c12d9f7385d4a54ac7113e78c497ae708ff8eccc
   src/models/components/otelattributevalue.ts:
-    last_write_checksum: sha1:10fa28ee024a641e496533ea9af8036b2b2d1ccb
+    last_write_checksum: sha1:c129b5a026c12fd988c4f3c085f27bbc1950100c
   src/models/components/otellogbody.ts:
     last_write_checksum: sha1:cb8d00884573f1ce6609987aeac27d8434edabb0
   src/models/components/otellogrecord.ts:
-    last_write_checksum: sha1:ddb831573cb89abdc9a1c27e2e24d5d816aa08f2
+    last_write_checksum: sha1:94653a8154df1dbcf3371c04645c2fc549045f1c
   src/models/components/otellogspayload.ts:
-    last_write_checksum: sha1:0c4f279e6fb83cf353d5c6703dc264182b000314
+    last_write_checksum: sha1:9025684da8d3e409cc9bc9524a7a58bdd51c6312
   src/models/components/otelmetric.ts:
-    last_write_checksum: sha1:6615aa963f926b8bb75860925bd693ac41bfa152
+    last_write_checksum: sha1:92122c45310ee393154dec189b24912fb9cd1f06
   src/models/components/otelmetricspayload.ts:
-    last_write_checksum: sha1:2a78925f315e021035db1729222cd8767b752a3e
+    last_write_checksum: sha1:a0d59754426baeb2639c31ec48b56c621726a8d2
   src/models/components/otelnumberdatapoint.ts:
-    last_write_checksum: sha1:70c36ea8884ef2484c9949cb138d9cf6717c54af
+    last_write_checksum: sha1:a90ee819f63f2a77f38ef2cb16b1dcf4e3936088
   src/models/components/otelresource.ts:
     last_write_checksum: sha1:e0f4f713f4aa854c5784f7580b0bba0757a42c6a
   src/models/components/otelresourceattribute.ts:
-    last_write_checksum: sha1:5c700171a4de0c7615662d63006b8cf92f118169
+    last_write_checksum: sha1:c6041bc7039e0c9a23eee20bef38e2049314dcdf
   src/models/components/otelresourcelog.ts:
-    last_write_checksum: sha1:225755f3586883ab2c387b1fc7834aeb195b0d00
+    last_write_checksum: sha1:0a120c8f5249e00ee5b4c090e80441e6610c0c25
   src/models/components/otelresourcemetrics.ts:
     last_write_checksum: sha1:4db5f73ece47073eab230c424b9146cb23616ea3
   src/models/components/otelscope.ts:
     last_write_checksum: sha1:fcfc339629977baab982e39bb8133722a7b81059
   src/models/components/otelscopelog.ts:
-    last_write_checksum: sha1:0c7448ee5ea2df2c33ea691a4a75c0a4be9ff3fc
+    last_write_checksum: sha1:056190264524f9c9771550f1dcf0cc8d2fcf4407
   src/models/components/otelscopemetrics.ts:
     last_write_checksum: sha1:f68cd5f1e73be09a4a6458ac16eac5bf2a8d903a
   src/models/components/otelsum.ts:
-    last_write_checksum: sha1:e626e232a96bb3e2291802f41a6803291ffeff24
+    last_write_checksum: sha1:07ce49432700ca9ed62c358c4585fd16a1e8eeb5
   src/models/components/package.ts:
     id: "625237810132"
     last_write_checksum: sha1:df14d9743fa782e8c08a284516886dc3e0c80965
@@ -7571,7 +7571,7 @@ examples:
   hooks#logs:
     speakeasy-default-hooks#logs:
       requestBody:
-        application/json: {"resourceLogs": [{"scopeLogs": [{"logRecords": []}]}]}
+        application/json: {}
       responses:
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
@@ -8217,7 +8217,7 @@ examples:
   hooks#metrics:
     speakeasy-default-hooks#metrics:
       requestBody:
-        application/json: {"resourceMetrics": []}
+        application/json: {}
       responses:
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
