@@ -13,6 +13,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { Button } from "@speakeasy-api/moonshine";
 import { FolderSync, Lock } from "lucide-react";
 import { useRef, useState } from "react";
+import { toast } from "sonner";
 
 const CONTACT_SALES_URL = "https://www.speakeasy.com/book-demo";
 const UPSELL_COPY = "Contact our team to setup SSO and Directory Sync";
@@ -77,6 +78,9 @@ function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
           onClick={(e) => {
             e.preventDefault();
             captureInterest("configure_clicked");
+            toast.success(
+              "Our team has been contacted to enable SSO and Directory Sync",
+            );
           }}
         >
           Configure
