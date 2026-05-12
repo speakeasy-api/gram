@@ -111,6 +111,7 @@ export function InsightsAgentsContent() {
       userFilterType="internal"
       fixedEventSource="hook"
       mapFilterOptions={mapFilterOptions}
+      showSetupRequiredModal={false}
       title="Agent Session Usage Overview"
       subtitle="Monitor token consumption and tool usage across your team's agent sessions"
     >

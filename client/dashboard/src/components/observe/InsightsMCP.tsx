@@ -563,6 +563,7 @@ export function InsightsOverviewShell({
   userFilterType = "external",
   fixedEventSource,
   mapFilterOptions,
+  showSetupRequiredModal = true,
   title = "MCP Servers",
   subtitle = "Monitor agent sessions, tool performance, and system health",
 }: {
@@ -576,6 +577,7 @@ export function InsightsOverviewShell({
     options: FilterOption[],
     dimension: FilterDimension,
   ) => FilterOption[];
+  showSetupRequiredModal?: boolean;
   title?: string;
   subtitle?: string;
 }) {
@@ -917,6 +919,7 @@ export function InsightsOverviewShell({
           refetch={refetch}
           hasSeenSetupModal={hasSeenSetupModal}
           onSetupModalSeen={markSetupModalSeen}
+          showSetupRequiredModal={showSetupRequiredModal}
           noDataKind={noDataKind}
           filterDimension={filterDimension}
           selectedFilterValue={selectedFilterValue}
@@ -1073,6 +1076,7 @@ function InsightsOverviewContent({
   refetch,
   hasSeenSetupModal,
   onSetupModalSeen,
+  showSetupRequiredModal,
   noDataKind,
   filterDimension,
   selectedFilterValue,
@@ -1090,6 +1094,7 @@ function InsightsOverviewContent({
   refetch: () => void;
   hasSeenSetupModal: boolean;
   onSetupModalSeen: () => void;
+  showSetupRequiredModal: boolean;
   noDataKind: "tools" | "agent_sessions";
   filterDimension: FilterDimension;
   selectedFilterValue: string | null;
@@ -1152,10 +1157,16 @@ function InsightsOverviewContent({
   }, [data]);
 
   React.useEffect(() => {
-    if (!isPending && data && !hasAnyData && !hasSeenSetupModal) {
+    if (
+      showSetupRequiredModal &&
+      !isPending &&
+      data &&
+      !hasAnyData &&
+      !hasSeenSetupModal
+    ) {
       setShowSetupModal(true);
     }
-  }, [isPending, data, hasAnyData, hasSeenSetupModal]);
+  }, [showSetupRequiredModal, isPending, data, hasAnyData, hasSeenSetupModal]);
 
   if (isLogsDisabled) {
     return (
@@ -1223,21 +1234,22 @@ function InsightsOverviewContent({
         filterParams,
       })}
 
-      {/* Setup modal for total empty state */}
-      <SetupRequiredModal
-        open={showSetupModal}
-        onClose={() => {
-          setShowSetupModal(false);
-          onSetupModalSeen();
-          setIsExpanded(false);
-        }}
-        onNavigateToElements={() => {
-          setShowSetupModal(false);
-          onSetupModalSeen();
-          setIsExpanded(false);
-          routes.elements.goTo();
-        }}
-      />
+      {showSetupRequiredModal && (
+        <SetupRequiredModal
+          open={showSetupModal}
+          onClose={() => {
+            setShowSetupModal(false);
+            onSetupModalSeen();
+            setIsExpanded(false);
+          }}
+          onNavigateToElements={() => {
+            setShowSetupModal(false);
+            onSetupModalSeen();
+            setIsExpanded(false);
+            routes.elements.goTo();
+          }}
+        />
+      )}
     </div>
   );
 }
