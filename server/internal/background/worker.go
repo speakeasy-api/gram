@@ -275,6 +275,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.BackfillWorkOSGlobalRoles)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSGlobalRoleEvents)
+	temporalWorker.RegisterActivity(activities.ProcessWorkOSUserEvents)
 
 	temporalWorker.RegisterActivity(activities.CancelAssistantsSubscription)
 
@@ -307,6 +308,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflowDebounced)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSGlobalRoleEventsWorkflow)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSGlobalRoleEventsWorkflowDebounced)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSUserEventsWorkflow)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSUserEventsWorkflowDebounced)
 	temporalWorker.RegisterWorkflow(BackfillWorkOSWorkflow)
 	// Assistants signup followups
 	temporalWorker.RegisterWorkflow(CancelAssistantsSubscriptionWorkflow)
