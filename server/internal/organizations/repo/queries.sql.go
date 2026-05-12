@@ -128,6 +128,8 @@ const getOrganizationByWorkosID = `-- name: GetOrganizationByWorkosID :one
 SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE workos_id = $1
+ORDER BY id = $1, created_at ASC
+LIMIT 1
 `
 
 func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID pgtype.Text) (OrganizationMetadatum, error) {
