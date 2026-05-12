@@ -1269,16 +1269,21 @@ type TriggerInstance struct {
 }
 
 type User struct {
-	ID          string
-	Email       string
-	DisplayName string
-	PhotoUrl    pgtype.Text
-	Admin       bool
-	LastLogin   pgtype.Timestamptz
-	WorkosID    pgtype.Text
-	DeletedAt   pgtype.Timestamptz
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
+	ID                string
+	Email             string
+	DisplayName       string
+	PhotoUrl          pgtype.Text
+	Admin             bool
+	LastLogin         pgtype.Timestamptz
+	WorkosID          pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosDeleted     bool
+	WorkosLastEventID pgtype.Text
+	DeletedAt         pgtype.Timestamptz
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
 }
 
 type UserOauthToken struct {
@@ -1367,8 +1372,9 @@ type WorkosOrganizationSync struct {
 }
 
 type WorkosUserSync struct {
-	ID          int64
-	LastEventID string
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
+	ID           int64
+	WorkosUserID pgtype.Text
+	LastEventID  string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
 }

@@ -1,4 +1,4 @@
-h1:4y3nmCn6tX7xfg+dzoVk1Ndnatdavn41fvI8Vsa5cAc=
+h1:NooOprt4NUs03HfzmfG6JfrDRr9ezJ+Mg6jPOugMzzo=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -166,3 +166,4 @@ h1:4y3nmCn6tX7xfg+dzoVk1Ndnatdavn41fvI8Vsa5cAc=
 20260512061053_outbox-public-id.sql h1:+kCMWjjPiWwvaXi+chzNTXTYEtQBo3hbCNI4Lol/0tc=
 20260512092949_add-user-deleted-at-column.sql h1:tjmvmwD0ChThSFMDHnahV0W5dTZpVS/H49x0yh+py88=
 20260512093032_add-org-user-relationship-workos-id-column.sql h1:bfMGYN8vrqG3h3pncuHYh+Efh7Ud4FNhSiH0nswQm0Y=
+20260512143755_add_workos_user_sync_metadata.sql h1:msAwmXRHA6nllsJ//fZWF3bc8VWU4tk4IysR8HAFwmc=
