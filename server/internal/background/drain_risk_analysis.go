@@ -64,6 +64,16 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 	// workflow's own queue so each environment stays isolated.
 	analyzeBatchOpts := activityOpts
 	analyzeBatchOpts.TaskQueue = RiskAnalysisTaskQueue(tenv.TaskQueueName(workflow.GetInfo(ctx).TaskQueueName))
+	// HeartbeatTimeout overrides activityOpts (30s). AnalyzeBatch's
+	// presidio scanner runs perBatchRequestConcurrency workers in
+	// parallel; onProgress() (which emits the heartbeat) fires before
+	// each /analyze call, then the worker blocks for up to
+	// analyzeRequestTimeout per call. Worst case under a fully-degraded
+	// Presidio: every worker stalls in parallel for the full per-request
+	// timeout before the next onProgress() can fire. 60s gives a 2x
+	// buffer over the 30s per-request timeout so the heartbeat budget
+	// holds even in that worst case.
+	analyzeBatchOpts.HeartbeatTimeout = 60 * time.Second
 	analyzeBatchCtx := workflow.WithActivityOptions(ctx, analyzeBatchOpts)
 
 	var a *Activities
