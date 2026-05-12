@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -249,7 +250,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 	return afterView, nil
 }
 
-func (s *Service) ListRemoteSessionIssuers(ctx context.Context, _ *gen.ListRemoteSessionIssuersPayload) (*gen.ListRemoteSessionIssuersResult, error) {
+func (s *Service) ListRemoteSessionIssuers(ctx context.Context, payload *gen.ListRemoteSessionIssuersPayload) (*gen.ListRemoteSessionIssuersResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -259,7 +260,17 @@ func (s *Service) ListRemoteSessionIssuers(ctx context.Context, _ *gen.ListRemot
 		return nil, err
 	}
 
-	rows, err := repo.New(s.db).ListRemoteSessionIssuersByProjectID(ctx, *authCtx.ProjectID)
+	limit := pageLimit(payload.Limit)
+	cursor, err := parseCursor(payload.Cursor)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+	}
+
+	rows, err := repo.New(s.db).ListRemoteSessionIssuersByProjectID(ctx, repo.ListRemoteSessionIssuersByProjectIDParams{
+		ProjectID:  *authCtx.ProjectID,
+		Cursor:     cursor,
+		LimitValue: limit,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list remote session issuers").Log(ctx, s.logger)
 	}
@@ -269,9 +280,15 @@ func (s *Service) ListRemoteSessionIssuers(ctx context.Context, _ *gen.ListRemot
 		items = append(items, remoteSessionIssuerView(row))
 	}
 
+	var nextCursor *string
+	if len(rows) >= int(limit) {
+		c := rows[len(rows)-1].ID.String()
+		nextCursor = &c
+	}
+
 	return &gen.ListRemoteSessionIssuersResult{
 		Items:      items,
-		NextCursor: nil,
+		NextCursor: nextCursor,
 	}, nil
 }
 
@@ -486,6 +503,36 @@ func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []str
 // issuerURLsEqual compares two issuer URLs ignoring trailing slashes.
 func issuerURLsEqual(a, b string) bool {
 	return strings.TrimRight(a, "/") == strings.TrimRight(b, "/")
+}
+
+// pageLimit clamps the user-supplied limit into the documented range and
+// returns it as an int32 ready for sqlc parameters. The clamp guarantees the
+// value stays within int32 range.
+func pageLimit(in *int) int32 {
+	limit := constants.DefaultPageLimit
+	if in != nil {
+		limit = *in
+	}
+	if limit <= 0 {
+		limit = constants.DefaultPageLimit
+	}
+	if limit > constants.MaxPageLimit {
+		limit = constants.MaxPageLimit
+	}
+	return int32(limit)
+}
+
+// parseCursor decodes a list cursor. Cursors are the id of the last row
+// on the previous page; an empty/nil cursor means "start of list".
+func parseCursor(cursor *string) (uuid.NullUUID, error) {
+	if cursor == nil || *cursor == "" {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	}
+	id, err := uuid.Parse(*cursor)
+	if err != nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("parse cursor: %w", err)
+	}
+	return uuid.NullUUID{UUID: id, Valid: true}, nil
 }
 
 func remoteSessionIssuerView(row repo.RemoteSessionIssuer) *types.RemoteSessionIssuer {
