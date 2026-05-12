@@ -32,6 +32,7 @@ const (
 	subjectTypeUserSessionConsent  subjectType = "user_session_consent"
 	subjectTypeUserSessionIssuer   subjectType = "user_session_issuer"
 	subjectTypeRemoteSession       subjectType = "remote_session"
+	subjectTypeRemoteSessionClient subjectType = "remote_session_client"
 	subjectTypeRemoteSessionIssuer subjectType = "remote_session_issuer"
 )
 
