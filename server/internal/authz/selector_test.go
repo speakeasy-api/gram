@@ -130,6 +130,12 @@ func TestResourceKindForScope_remoteMCPScopes(t *testing.T) {
 	require.Equal(t, "mcp", ResourceKindForScope(Scope("remote-mcp:connect")))
 }
 
+func TestResourceKindForScope_shadowMCPScopes(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "shadow_mcp", ResourceKindForScope(ScopeShadowMCPConnect))
+}
+
 func TestResourceKindForScope_orgScopes(t *testing.T) {
 	t.Parallel()
 
@@ -163,6 +169,14 @@ func TestNewGrant_combinesScopeAndSelector(t *testing.T) {
 	g := NewGrant(ScopeMCPConnect, "tool_a")
 	require.Equal(t, ScopeMCPConnect, g.Scope)
 	require.Equal(t, Selector{"resource_kind": "mcp", "resource_id": "tool_a"}, g.Selector)
+}
+
+func TestNewGrant_shadowMCPConnectUsesShadowMCPResourceKind(t *testing.T) {
+	t.Parallel()
+
+	g := NewGrant(ScopeShadowMCPConnect, "rule_a")
+	require.Equal(t, ScopeShadowMCPConnect, g.Scope)
+	require.Equal(t, Selector{"resource_kind": "shadow_mcp", "resource_id": "rule_a"}, g.Selector)
 }
 
 func TestSelector_Matches_resourceKindMismatchFails(t *testing.T) {

@@ -96,10 +96,11 @@ func TestService_ApproveShadowMCPApprovalRequest_CreatesAllowRuleAndRoleGrant(t 
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "ai-platform"))
 	require.Len(t, grants, 1)
-	require.Equal(t, string(authz.ScopeMCPConnect), grants[0].Scope)
+	require.Equal(t, string(authz.ScopeShadowMCPConnect), grants[0].Scope)
 
 	selector, err := authz.SelectorFromRow(grants[0].Selectors)
 	require.NoError(t, err)
+	require.Equal(t, "shadow_mcp", selector["resource_kind"])
 	require.Equal(t, result.Rule.ID, selector.ResourceID())
 }
 

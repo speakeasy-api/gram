@@ -667,7 +667,7 @@ func syncShadowMCPAccessRuleRoleGrants(ctx context.Context, queries *repo.Querie
 		return fmt.Errorf("delete existing role grants: %w", err)
 	}
 
-	selectors, err := authz.NewSelector(authz.ScopeMCPConnect, ruleID.String()).MarshalJSON()
+	selectors, err := authz.NewSelector(authz.ScopeShadowMCPConnect, ruleID.String()).MarshalJSON()
 	if err != nil {
 		return fmt.Errorf("marshal selector: %w", err)
 	}
@@ -675,7 +675,7 @@ func syncShadowMCPAccessRuleRoleGrants(ctx context.Context, queries *repo.Querie
 		if _, err := queries.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
 			OrganizationID: organizationID,
 			PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug),
-			Scope:          string(authz.ScopeMCPConnect),
+			Scope:          string(authz.ScopeShadowMCPConnect),
 			Selectors:      selectors,
 		}); err != nil {
 			return fmt.Errorf("upsert role grant for %q: %w", roleSlug, err)

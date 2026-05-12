@@ -27,6 +27,7 @@ var expectedFullAccessScopes = []string{
 	string(authz.ScopeMCPRead),
 	string(authz.ScopeMCPWrite),
 	string(authz.ScopeMCPConnect),
+	string(authz.ScopeShadowMCPConnect),
 	string(authz.ScopeEnvironmentRead),
 	string(authz.ScopeEnvironmentWrite),
 }

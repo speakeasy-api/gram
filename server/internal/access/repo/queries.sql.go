@@ -402,8 +402,8 @@ const deleteShadowMCPAccessRuleRoleGrants = `-- name: DeleteShadowMCPAccessRuleR
 DELETE FROM principal_grants
 WHERE organization_id = $1
   AND principal_type = 'role'
-  AND scope = 'mcp:connect'
-  AND selectors->>'resource_kind' = 'mcp'
+  AND scope = 'shadow_mcp:connect'
+  AND selectors->>'resource_kind' = 'shadow_mcp'
   AND selectors->>'resource_id' = $2::text
 `
 
@@ -982,8 +982,8 @@ SELECT principal_urn, (selectors->>'resource_id')::text AS rule_id
 FROM principal_grants
 WHERE organization_id = $1
   AND principal_type = 'role'
-  AND scope = 'mcp:connect'
-  AND selectors->>'resource_kind' = 'mcp'
+  AND scope = 'shadow_mcp:connect'
+  AND selectors->>'resource_kind' = 'shadow_mcp'
   AND selectors->>'resource_id' = ANY($2::text[])
 `
 

@@ -31,6 +31,18 @@ func TestCheckExpand_mcpConnect(t *testing.T) {
 	require.NotContains(t, checks, Check{Scope: ScopeMCPConnect, ResourceID: WildcardResource})
 }
 
+func TestCheckExpand_shadowMCPConnect(t *testing.T) {
+	t.Parallel()
+
+	checks := Check{Scope: ScopeShadowMCPConnect, ResourceID: "rule_a"}.expand()
+
+	require.Contains(t, checks, Check{Scope: ScopeRoot, ResourceID: "rule_a"})
+	require.Contains(t, checks, Check{Scope: ScopeShadowMCPConnect, ResourceID: "rule_a"})
+	require.NotContains(t, checks, Check{Scope: ScopeMCPConnect, ResourceID: "rule_a"})
+	require.NotContains(t, checks, Check{Scope: ScopeMCPRead, ResourceID: "rule_a"})
+	require.NotContains(t, checks, Check{Scope: ScopeMCPWrite, ResourceID: "rule_a"})
+}
+
 func TestGrantsHasAccess_orgAdminSatisfiesOrgRead(t *testing.T) {
 	t.Parallel()
 
@@ -103,6 +115,22 @@ func TestGrantsHasAccess_mcpWriteSatisfiesMCPRead(t *testing.T) {
 	require.NotNil(t, grant)
 }
 
+func TestGrantsHasAccess_mcpWildcardDoesNotSatisfyShadowMCPConnect(t *testing.T) {
+	t.Parallel()
+
+	g := []Grant{NewGrant(ScopeMCPConnect, WildcardResource)}
+	grant, _ := findMatchingGrant(g, Check{Scope: ScopeShadowMCPConnect, ResourceID: "rule_a"}.expand())
+	require.Nil(t, grant)
+}
+
+func TestGrantsHasAccess_shadowMCPConnectDoesNotSatisfyMCPConnect(t *testing.T) {
+	t.Parallel()
+
+	g := []Grant{NewGrant(ScopeShadowMCPConnect, "rule_a")}
+	grant, _ := findMatchingGrant(g, Check{Scope: ScopeMCPConnect, ResourceID: "rule_a"}.expand())
+	require.Nil(t, grant)
+}
+
 func TestGrantsHasAccess_rootWildcardSatisfiesAnyScope(t *testing.T) {
 	t.Parallel()
 
@@ -115,6 +143,9 @@ func TestGrantsHasAccess_rootWildcardSatisfiesAnyScope(t *testing.T) {
 	require.NotNil(t, grant)
 
 	grant, _ = findMatchingGrant(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
+	require.NotNil(t, grant)
+
+	grant, _ = findMatchingGrant(g, Check{Scope: ScopeShadowMCPConnect, ResourceID: "rule_a"}.expand())
 	require.NotNil(t, grant)
 }
 
@@ -167,6 +198,7 @@ func TestCalculateSubScopes(t *testing.T) {
 		{scope: string(ScopeProjectRead), want: []string{}},
 		{scope: string(ScopeRoot), want: []string{}},
 		{scope: string(ScopeMCPConnect), want: []string{}},
+		{scope: string(ScopeShadowMCPConnect), want: []string{}},
 		{scope: string(ScopeEnvironmentRead), want: []string{}},
 		{scope: string(ScopeEnvironmentWrite), want: []string{string(ScopeEnvironmentRead)}},
 	}

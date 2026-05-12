@@ -17,6 +17,7 @@ const (
 	ScopeMCPRead          Scope = "mcp:read"
 	ScopeMCPWrite         Scope = "mcp:write"
 	ScopeMCPConnect       Scope = "mcp:connect"
+	ScopeShadowMCPConnect Scope = "shadow_mcp:connect"
 	ScopeEnvironmentRead  Scope = "environment:read"
 	ScopeEnvironmentWrite Scope = "environment:write"
 )
@@ -45,6 +46,7 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeMCPRead:          {ScopeMCPWrite},
 	ScopeMCPWrite:         nil,
 	ScopeMCPConnect:       {ScopeMCPRead, ScopeMCPWrite},
+	ScopeShadowMCPConnect: nil,
 	ScopeEnvironmentRead:  {ScopeEnvironmentWrite},
 	ScopeEnvironmentWrite: nil,
 }

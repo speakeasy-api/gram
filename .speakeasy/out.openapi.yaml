@@ -31790,6 +31790,7 @@ components:
             - mcp:read
             - mcp:write
             - mcp:connect
+            - shadow_mcp:connect
             - environment:read
             - environment:write
         selectors:
@@ -31809,6 +31810,7 @@ components:
               - mcp:read
               - mcp:write
               - mcp:connect
+              - shadow_mcp:connect
               - environment:read
               - environment:write
           description: The inherited scopes the primary scope grants.
@@ -34639,6 +34641,7 @@ components:
             - mcp:read
             - mcp:write
             - mcp:connect
+            - shadow_mcp:connect
             - environment:read
             - environment:write
         selectors:
@@ -34661,6 +34664,7 @@ components:
             - org
             - project
             - mcp
+            - shadow_mcp
             - environment
         slug:
           type: string
@@ -34673,6 +34677,7 @@ components:
             - mcp:read
             - mcp:write
             - mcp:connect
+            - shadow_mcp:connect
             - environment:read
             - environment:write
       required:
@@ -35081,6 +35086,7 @@ components:
           enum:
             - project
             - mcp
+            - shadow_mcp
             - org
             - environment
             - '*'
