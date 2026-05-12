@@ -1453,7 +1453,6 @@ CREATE TABLE IF NOT EXISTS users (
   workos_updated_at timestamptz,
   workos_deleted_at timestamptz,
   workos_deleted boolean NOT NULL GENERATED ALWAYS AS (workos_deleted_at IS NOT NULL) stored,
-  workos_last_event_id TEXT,
   deleted_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
