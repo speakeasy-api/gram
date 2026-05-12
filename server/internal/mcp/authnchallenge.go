@@ -1265,12 +1265,13 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	mcpSlug string,
 	logger *slog.Logger,
 ) error {
-	code := r.PostForm.Get("code")
-	if code == "" {
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "code is required")
+	req := usersessions.AuthCodeTokenRequestFromForm(r.PostForm)
+	req.SetDefaults()
+	if err := req.Validate(); err != nil {
+		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
-	grantKey := "userSessionGrant:" + toolset.UserSessionIssuerID.UUID.String() + ":" + code
+	grantKey := "userSessionGrant:" + toolset.UserSessionIssuerID.UUID.String() + ":" + req.Code
 	grant, err := s.userSessionGrantCache.Get(ctx, grantKey)
 	if err != nil {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
@@ -1283,15 +1284,10 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	if grant.ClientID != clientRow.ClientID {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code was issued to a different client")
 	}
-	if grant.RedirectURI != r.PostForm.Get("redirect_uri") {
+	if grant.RedirectURI != req.RedirectURI {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "redirect_uri does not match the original request")
 	}
-
-	verifier := r.PostForm.Get("code_verifier")
-	if verifier == "" {
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "code_verifier is required")
-	}
-	if !verifyPKCES256(verifier, grant.CodeChallenge) {
+	if !verifyPKCES256(req.CodeVerifier, grant.CodeChallenge) {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code_verifier does not match code_challenge")
 	}
 
@@ -1619,6 +1615,18 @@ func (s *Service) tryRevokeRefreshToken(ctx context.Context, logger *slog.Logger
 		logger.ErrorContext(ctx, "failed to push jti into revocation cache", attr.SlogError(err))
 	}
 	return true
+}
+
+// writeTokenOAuthError unwraps a *usersessions.OAuthError to its code +
+// description and forwards to writeTokenError. Falls back to a generic
+// invalid_request if err is something else (shouldn't happen — Validate
+// returns *OAuthError).
+func writeTokenOAuthError(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, status int, err error) error {
+	var oauthErr *usersessions.OAuthError
+	if errors.As(err, &oauthErr) {
+		return writeTokenError(ctx, w, logger, status, oauthErr.Code, oauthErr.Description)
+	}
+	return writeTokenError(ctx, w, logger, status, "invalid_request", err.Error())
 }
 
 // writeTokenError emits an RFC 6749 §5.2 token error response: 4xx with a
