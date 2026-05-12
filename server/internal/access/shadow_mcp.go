@@ -392,7 +392,7 @@ func (s *Service) DenyShadowMCPApprovalRequest(ctx context.Context, payload *gen
 			MatchValue:               rule.MatchValue,
 			AccessRuleSnapshotBefore: nil,
 			AccessRuleSnapshotAfter:  ruleAfter,
-			Metadata:                 &audit.ShadowMCPAuditMetadata{Reason: payload.Reason},
+			Metadata:                 &audit.ShadowMCPAuditMetadata{RoleSlugs: nil, Reason: payload.Reason},
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "log shadow mcp access rule create").Log(ctx, s.logger)
 		}
@@ -407,7 +407,7 @@ func (s *Service) DenyShadowMCPApprovalRequest(ctx context.Context, payload *gen
 		DisplayName:                   shadowMCPApprovalRequestDisplayName(request),
 		ApprovalRequestSnapshotBefore: requestBefore,
 		ApprovalRequestSnapshotAfter:  requestAfter,
-		Metadata:                      &audit.ShadowMCPAuditMetadata{Reason: payload.Reason},
+		Metadata:                      &audit.ShadowMCPAuditMetadata{RoleSlugs: nil, Reason: payload.Reason},
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log shadow mcp approval request deny").Log(ctx, s.logger)
 	}
@@ -726,17 +726,6 @@ func (s *Service) getOrCreateShadowMCPAccessRule(ctx context.Context, queries *r
 		return repo.ShadowMcpAccessRule{}, false, shadowMCPCreateRuleErr(ctx, s, err)
 	}
 	return rule, true, nil
-}
-
-func (s *Service) requireOrgRead(ctx context.Context) (*contextvalues.AuthContext, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-	return ac, nil
 }
 
 func (s *Service) requireOrgAdmin(ctx context.Context) (*contextvalues.AuthContext, error) {
@@ -1089,7 +1078,7 @@ func encodeShadowMCPCursor(ts pgtype.Timestamptz, id uuid.UUID) string {
 
 func decodeShadowMCPCursorParam(cursor *string) (pgtype.Timestamptz, uuid.NullUUID, error) {
 	if cursor == nil || *cursor == "" {
-		return pgtype.Timestamptz{Time: time.Time{}, Valid: false}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+		return pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
 	}
 
 	decoded, err := base64.RawURLEncoding.DecodeString(*cursor)
@@ -1109,7 +1098,7 @@ func decodeShadowMCPCursorParam(cursor *string) (pgtype.Timestamptz, uuid.NullUU
 		return pgtype.Timestamptz{}, uuid.NullUUID{}, fmt.Errorf("parse cursor id: %w", err)
 	}
 
-	return pgtype.Timestamptz{Time: time.Unix(0, nanos).UTC(), Valid: true}, uuid.NullUUID{UUID: id, Valid: true}, nil
+	return pgtype.Timestamptz{Time: time.Unix(0, nanos).UTC(), InfinityModifier: pgtype.Finite, Valid: true}, uuid.NullUUID{UUID: id, Valid: true}, nil
 }
 
 func coalesceString(primary *string, fallback *string) *string {

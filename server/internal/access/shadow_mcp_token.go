@@ -152,7 +152,9 @@ func encryptShadowMCPApprovalRequestToken(jwtSecret string, plaintext []byte) (s
 		return "", fmt.Errorf("read shadow mcp approval request token nonce: %w", err)
 	}
 	ciphertext := gcm.Seal(nil, nonce, plaintext, []byte(shadowMCPApprovalRequestTokenSubject))
-	raw := append(nonce, ciphertext...)
+	raw := make([]byte, len(nonce)+len(ciphertext))
+	copy(raw, nonce)
+	copy(raw[len(nonce):], ciphertext)
 	return shadowMCPApprovalRequestTokenPrefix + base64.RawURLEncoding.EncodeToString(raw), nil
 }
 
