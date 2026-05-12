@@ -17,10 +17,11 @@ import (
 	"slices"
 )
 
-// SupportedGrantTypes / SupportedResponseTypes / SupportedAuthMethods are
-// the OAuth values the user-session AS supports. Mirrored into the RFC 8414
-// metadata document by mcp.HandleGetAuthorizationServer; enforced on the
-// /register handler by RegistrationRequest.Validate.
+// SupportedGrantTypes / SupportedResponseTypes / SupportedAuthMethods /
+// SupportedCodeChallengeMethods are the OAuth values the user-session AS
+// supports. Mirrored into the RFC 8414 metadata document by
+// mcp.HandleGetAuthorizationServer; enforced on the /register and
+// /authorize handlers by the typed request Validate methods.
 var (
 	SupportedGrantTypes    = []string{"authorization_code", "refresh_token"}
 	SupportedResponseTypes = []string{"code"}
@@ -28,7 +29,8 @@ var (
 	// MCP clients in the wild use it. PKCE provides per-flow integrity; the
 	// only guard against cross-flow client-id confusion is the consent
 	// prompt itself, which we always render (HandleConsent never skips).
-	SupportedAuthMethods = []string{"client_secret_basic", "client_secret_post", "none"}
+	SupportedAuthMethods          = []string{"client_secret_basic", "client_secret_post", "none"}
+	SupportedCodeChallengeMethods = []string{"S256"}
 )
 
 // RegistrationRequest is the RFC 7591 §3.1 client metadata document. Only

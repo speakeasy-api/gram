@@ -136,13 +136,12 @@ func (g UserSessionGrant) AdditionalCacheKeys() []string { return []string{} }
 // enough to limit blast radius if the code leaks.
 func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 
-// supportedBearerMethods / supportedCodeChallengeMethods advertise what the
-// MCP resource-server / AS surfaces support to spec-compliant clients via
-// the well-known metadata documents.
-var (
-	supportedBearerMethods        = []string{"header"}
-	supportedCodeChallengeMethods = []string{"S256"}
-)
+// supportedBearerMethods advertises what the MCP resource-server surface
+// accepts in the WWW-Authenticate challenge (RFC 9728). The AS-level
+// supported sets (grant types, response types, auth methods, code-challenge
+// methods) live in the usersessions package — referenced from the AS
+// metadata document below.
+var supportedBearerMethods = []string{"header"}
 
 // dcrMaxBodyBytes caps the RFC 7591 §3.1 client metadata document size on
 // HandleRegister. The spec doesn't mandate a limit; 64 KiB is well past any
@@ -397,7 +396,7 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 			ResponseTypesSupported:            usersessions.SupportedResponseTypes,
 			GrantTypesSupported:               usersessions.SupportedGrantTypes,
 			TokenEndpointAuthMethodsSupported: usersessions.SupportedAuthMethods,
-			CodeChallengeMethodsSupported:     supportedCodeChallengeMethods,
+			CodeChallengeMethodsSupported:     usersessions.SupportedCodeChallengeMethods,
 		})
 	}
 
@@ -663,33 +662,20 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		attr.SlogProjectID(toolset.ProjectID.String()),
 	)
 
-	q := r.URL.Query()
-	clientID := q.Get("client_id")
-	redirectURI := q.Get("redirect_uri")
-	responseType := q.Get("response_type")
-	state := q.Get("state")
-	codeChallenge := q.Get("code_challenge")
-	codeChallengeMethod := q.Get("code_challenge_method")
+	req := usersessions.AuthorizationRequestFromQuery(r.URL.Query())
+	req.SetDefaults()
 
-	if clientID == "" {
-		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "client_id is required")
-	}
-	if redirectURI == "" {
-		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "redirect_uri is required")
-	}
-	if responseType != "code" {
-		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "unsupported_response_type", "response_type must be 'code'")
-	}
-	if codeChallenge == "" {
-		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "code_challenge is required (PKCE mandatory)")
-	}
-	if !slices.Contains(supportedCodeChallengeMethods, codeChallengeMethod) {
-		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "invalid_request", fmt.Sprintf("unsupported code_challenge_method %q", codeChallengeMethod))
+	// RFC 6749 §4.1.2.1 wants validation errors carried back to the client
+	// via redirect when we can trust the redirect_uri, and surfaced inline
+	// otherwise. That motivates the two-phase split: validate the fields
+	// we need to trust the URI first, then validate the rest once we have.
+	if err := req.ValidateRedirectableFields(); err != nil {
+		return writeAuthorizeOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
 	client, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		ClientID:            clientID,
+		ClientID:            req.ClientID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -697,8 +683,12 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		}
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").Log(ctx, logger)
 	}
-	if !slices.Contains(client.RedirectUris, redirectURI) {
+	if !slices.Contains(client.RedirectUris, req.RedirectURI) {
 		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "redirect_uri is not registered for this client")
+	}
+
+	if err := req.ValidatePostRedirect(); err != nil {
+		return writeAuthorizeOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
 	challengeID := uuid.NewString()
@@ -707,11 +697,11 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		ToolsetID:           toolset.ID,
-		ClientID:            clientID,
-		RedirectURI:         redirectURI,
-		State:               state,
-		CodeChallenge:       codeChallenge,
-		CodeChallengeMethod: codeChallengeMethod,
+		ClientID:            req.ClientID,
+		RedirectURI:         req.RedirectURI,
+		State:               req.State,
+		CodeChallenge:       req.CodeChallenge,
+		CodeChallengeMethod: req.CodeChallengeMethod,
 		// Subject is left nil — HandleIDPCallback (private path) and
 		// HandleConsent (public path) stamp it later in the flow.
 		Subject:   nil,
@@ -748,6 +738,18 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	consentURL := fmt.Sprintf("%s/mcp/%s/connect?state=%s", baseURL, mcpSlug, url.QueryEscape(challengeID))
 	http.Redirect(w, r, consentURL, http.StatusFound)
 	return nil
+}
+
+// writeAuthorizeOAuthError unwraps a *usersessions.OAuthError to its code +
+// description and forwards to writeAuthorizeError. Falls back to a generic
+// invalid_request if err is something else (shouldn't happen — Validate
+// returns *OAuthError).
+func writeAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, status int, err error) error {
+	var oauthErr *usersessions.OAuthError
+	if errors.As(err, &oauthErr) {
+		return writeAuthorizeError(ctx, w, logger, status, oauthErr.Code, oauthErr.Description)
+	}
+	return writeAuthorizeError(ctx, w, logger, status, "invalid_request", err.Error())
 }
 
 // writeAuthorizeError emits an OAuth 2.1 authorization error (RFC 6749
