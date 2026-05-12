@@ -1,7 +1,8 @@
 // Client registration logic for the user-session OAuth Authorization Server
-// surface. Defines the RFC 7591 §3.1 request shape, RFC 7591 §3.2.2 error
-// shape, and the validate / defaults rules that determine which clients
-// are accepted by /mcp/{slug}/register.
+// surface. Defines the RFC 7591 §3.1 request shape and the validate /
+// defaults rules that determine which clients are accepted by
+// /mcp/{slug}/register. Errors are reported as the shared *OAuthError
+// (oautherror.go).
 //
 // The mcp package's HandleRegister handler wraps this with HTTP plumbing
 // (Content-Type sniffing, body cap, response writing). The supported sets
@@ -45,17 +46,6 @@ type RegistrationRequest struct {
 	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method,omitempty"`
 }
 
-// RegistrationError is an RFC 7591 §3.2.2 client registration error in
-// structured form. Carries the wire-protocol error code and human-readable
-// description to the response writer without leaking either into the
-// function signatures of upstream validators.
-type RegistrationError struct {
-	Code        string
-	Description string
-}
-
-func (e *RegistrationError) Error() string { return e.Code + ": " + e.Description }
-
 // SetDefaults populates the RFC 7591 §2 defaults for fields the client
 // didn't supply. Must be called before Validate so the §2.1 grant/response
 // correlation check sees materialized values.
@@ -72,34 +62,34 @@ func (r *RegistrationRequest) SetDefaults() {
 }
 
 // Validate checks the (defaulted) fields of an RFC 7591 §3.1 client metadata
-// document. Returns a *RegistrationError on a spec-defined rejection.
-// Callers must invoke SetDefaults first so grant_types / response_types /
-// auth method are populated.
+// document. Returns an *OAuthError on a spec-defined rejection. Callers
+// must invoke SetDefaults first so grant_types / response_types / auth
+// method are populated.
 func (r *RegistrationRequest) Validate() error {
 	if r.ClientName == "" {
-		return &RegistrationError{Code: "invalid_client_metadata", Description: "client_name is required"}
+		return &OAuthError{Code: "invalid_client_metadata", Description: "client_name is required"}
 	}
 	if len(r.RedirectURIs) == 0 {
-		return &RegistrationError{Code: "invalid_redirect_uri", Description: "redirect_uris is required"}
+		return &OAuthError{Code: "invalid_redirect_uri", Description: "redirect_uris is required"}
 	}
 	for _, u := range r.RedirectURIs {
 		parsed, parseErr := url.Parse(u)
 		if parseErr != nil || parsed.Scheme == "" || parsed.Host == "" {
-			return &RegistrationError{Code: "invalid_redirect_uri", Description: "redirect_uri must be an absolute URL"}
+			return &OAuthError{Code: "invalid_redirect_uri", Description: "redirect_uri must be an absolute URL"}
 		}
 	}
 	for _, gt := range r.GrantTypes {
 		if !slices.Contains(SupportedGrantTypes, gt) {
-			return &RegistrationError{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported grant_type %q", gt)}
+			return &OAuthError{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported grant_type %q", gt)}
 		}
 	}
 	for _, rt := range r.ResponseTypes {
 		if !slices.Contains(SupportedResponseTypes, rt) {
-			return &RegistrationError{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported response_type %q", rt)}
+			return &OAuthError{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported response_type %q", rt)}
 		}
 	}
 	if !slices.Contains(SupportedAuthMethods, r.TokenEndpointAuthMethod) {
-		return &RegistrationError{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported token_endpoint_auth_method %q", r.TokenEndpointAuthMethod)}
+		return &OAuthError{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported token_endpoint_auth_method %q", r.TokenEndpointAuthMethod)}
 	}
 
 	// RFC 7591 §2.1 correlation: response_type "code" requires grant_type
@@ -107,16 +97,16 @@ func (r *RegistrationRequest) Validate() error {
 	hasCodeResponse := slices.Contains(r.ResponseTypes, "code")
 	hasAuthCodeGrant := slices.Contains(r.GrantTypes, "authorization_code")
 	if hasCodeResponse && !hasAuthCodeGrant {
-		return &RegistrationError{Code: "invalid_client_metadata", Description: `response_type "code" requires grant_type "authorization_code"`}
+		return &OAuthError{Code: "invalid_client_metadata", Description: `response_type "code" requires grant_type "authorization_code"`}
 	}
 	if hasAuthCodeGrant && !hasCodeResponse {
-		return &RegistrationError{Code: "invalid_client_metadata", Description: `grant_type "authorization_code" requires response_type "code"`}
+		return &OAuthError{Code: "invalid_client_metadata", Description: `grant_type "authorization_code" requires response_type "code"`}
 	}
 	// refresh_token can only follow an initial authorization_code in our
 	// supported set; a client registering refresh_token alone has no way
 	// to ever obtain one.
 	if slices.Contains(r.GrantTypes, "refresh_token") && !hasAuthCodeGrant {
-		return &RegistrationError{Code: "invalid_client_metadata", Description: `grant_type "refresh_token" requires grant_type "authorization_code"`}
+		return &OAuthError{Code: "invalid_client_metadata", Description: `grant_type "refresh_token" requires grant_type "authorization_code"`}
 	}
 	return nil
 }

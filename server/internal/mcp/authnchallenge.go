@@ -506,9 +506,9 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 
 	req.SetDefaults()
 	if err := req.Validate(); err != nil {
-		var regErr *usersessions.RegistrationError
-		if errors.As(err, &regErr) {
-			return writeDCRError(ctx, w, logger, regErr.Code, regErr.Description)
+		var oauthErr *usersessions.OAuthError
+		if errors.As(err, &oauthErr) {
+			return writeDCRError(ctx, w, logger, oauthErr.Code, oauthErr.Description)
 		}
 		return oops.E(oops.CodeUnexpected, err, "validate DCR request").Log(ctx, logger)
 	}
