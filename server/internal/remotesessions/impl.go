@@ -1,13 +1,8 @@
 // Package remotesessions implements the management API services that surface
 // remote_session_issuer / remote_session_client / remote_session resources —
 // Gram-as-OAuth-Client configuration and the upstream sessions Gram is
-// holding on a principal's behalf. Per the spike (§3.1, §6.2), three Goa
-// services are authored under server/design/remotesession{issuers,clients}/
-// and server/design/remotesessions/, but a single Go package owns their
-// shared implementation, dependencies, and lifecycle.
-//
-// All method bodies are stubbed to oops.CodeNotImplemented; real logic lands
-// in tickets #9-#11.
+// holding on a principal's behalf. A single Go package owns three Goa
+// services' shared implementation, dependencies, and lifecycle.
 package remotesessions
 
 import (
@@ -27,6 +22,7 @@ import (
 	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	sessionsgen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -35,17 +31,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 )
 
-// Service implements all three Goa services. The split into three design
-// packages keeps the management-API surface logically grouped while a single
-// Service struct lets handlers share dependencies.
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	authz  *authz.Engine
-	enc    *encryption.Client
-	policy *guardian.Policy
+	tracer      trace.Tracer
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	auth        *auth.Auth
+	authz       *authz.Engine
+	enc         *encryption.Client
+	policy      *guardian.Policy
+	auditLogger *audit.Logger
 }
 
 var (
@@ -57,28 +51,21 @@ var (
 	_ sessionsgen.Auther  = (*Service)(nil)
 )
 
-// NewService constructs a Service ready to be Attached against each of the
-// three remote_session* Goa services. The encryption client is used to
-// encrypt remote_session_client.client_secret_encrypted (ticket #10) and
-// remote_session.{access,refresh}_token_encrypted (ticket #11). The guardian
-// policy validates outbound HTTP destinations during issuer discovery and
-// dynamic client registration.
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, policy *guardian.Policy) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, policy *guardian.Policy, auditLogger *audit.Logger) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessionManager, authzEngine),
-		authz:  authzEngine,
-		enc:    enc,
-		policy: policy,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
+		logger:      logger,
+		db:          db,
+		auth:        auth.New(logger, db, sessionManager, authzEngine),
+		authz:       authzEngine,
+		enc:         enc,
+		policy:      policy,
+		auditLogger: auditLogger,
 	}
 }
 
-// Attach wires every Goa service this package backs onto the shared mux:
-// remoteSessionIssuers, remoteSessionClients, remoteSessions.
 func Attach(mux goahttp.Muxer, service *Service) {
 	mw := []func(goa.Endpoint) goa.Endpoint{
 		middleware.MapErrors(),
@@ -104,8 +91,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	sessionssrv.Mount(mux, sessionssrv.New(sessionEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
 }
 
-// APIKeyAuth implements goa Auther for every Goa service this package backs;
-// each generated package treats it as the same method.
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
 }

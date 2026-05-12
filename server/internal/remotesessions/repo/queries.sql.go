@@ -235,6 +235,7 @@ SELECT id, project_id, slug, issuer, authorization_endpoint, token_endpoint, reg
 FROM remote_session_issuers
 WHERE project_id = $1 AND deleted IS FALSE
 ORDER BY created_at DESC
+LIMIT 100
 `
 
 func (q *Queries) ListRemoteSessionIssuersByProjectID(ctx context.Context, projectID uuid.UUID) ([]RemoteSessionIssuer, error) {
