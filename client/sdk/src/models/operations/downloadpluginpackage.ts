@@ -21,6 +21,7 @@ export const QueryParamPlatform = {
   Claude: "claude",
   Cursor: "cursor",
   Codex: "codex",
+  Vscode: "vscode",
 } as const;
 /**
  * Target platform to download plugins for.

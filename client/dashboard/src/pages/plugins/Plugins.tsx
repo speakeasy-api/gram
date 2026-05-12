@@ -55,11 +55,11 @@ export default function Plugins() {
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
     useState(false);
   const [isDownloadingObservability, setIsDownloadingObservability] = useState<
-    "claude" | "cursor" | "codex" | null
+    "claude" | "cursor" | "codex" | "vscode" | null
   >(null);
 
   const handleObservabilityDownload = async (
-    platform: "claude" | "cursor" | "codex",
+    platform: "claude" | "cursor" | "codex" | "vscode",
   ) => {
     setIsObservabilityDownloadMenuOpen(false);
     setIsDownloadingObservability(platform);
@@ -330,6 +330,11 @@ export default function Plugins() {
                     onClick={() => handleObservabilityDownload("codex")}
                   >
                     Codex
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => handleObservabilityDownload("vscode")}
+                  >
+                    VSCode Copilot
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

@@ -26,6 +26,10 @@ type Client struct {
 	// Codex Doer is the HTTP client used to make requests to the codex endpoint.
 	CodexDoer goahttp.Doer
 
+	// VscodeCopilot Doer is the HTTP client used to make requests to the
+	// vscodeCopilot endpoint.
+	VscodeCopilotDoer goahttp.Doer
+
 	// Logs Doer is the HTTP client used to make requests to the logs endpoint.
 	LogsDoer goahttp.Doer
 
@@ -56,6 +60,7 @@ func NewClient(
 		ClaudeDoer:          doer,
 		CursorDoer:          doer,
 		CodexDoer:           doer,
+		VscodeCopilotDoer:   doer,
 		LogsDoer:            doer,
 		MetricsDoer:         doer,
 		RestoreResponseBody: restoreBody,
@@ -133,6 +138,30 @@ func (c *Client) Codex() goa.Endpoint {
 		resp, err := c.CodexDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("hooks", "codex", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// VscodeCopilot returns an endpoint that makes HTTP requests to the hooks
+// service vscodeCopilot server.
+func (c *Client) VscodeCopilot() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeVscodeCopilotRequest(c.encoder)
+		decodeResponse = DecodeVscodeCopilotResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildVscodeCopilotRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.VscodeCopilotDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("hooks", "vscodeCopilot", err)
 		}
 		return decodeResponse(resp)
 	}

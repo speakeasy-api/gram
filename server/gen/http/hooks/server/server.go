@@ -18,12 +18,13 @@ import (
 
 // Server lists the hooks service endpoint HTTP handlers.
 type Server struct {
-	Mounts  []*MountPoint
-	Claude  http.Handler
-	Cursor  http.Handler
-	Codex   http.Handler
-	Logs    http.Handler
-	Metrics http.Handler
+	Mounts        []*MountPoint
+	Claude        http.Handler
+	Cursor        http.Handler
+	Codex         http.Handler
+	VscodeCopilot http.Handler
+	Logs          http.Handler
+	Metrics       http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -56,14 +57,16 @@ func New(
 			{"Claude", "POST", "/rpc/hooks.claude"},
 			{"Cursor", "POST", "/rpc/hooks.cursor"},
 			{"Codex", "POST", "/rpc/hooks.codex"},
+			{"VscodeCopilot", "POST", "/rpc/hooks.vscode"},
 			{"Logs", "POST", "/rpc/hooks.otel/v1/logs"},
 			{"Metrics", "POST", "/rpc/hooks.otel/v1/metrics"},
 		},
-		Claude:  NewClaudeHandler(e.Claude, mux, decoder, encoder, errhandler, formatter),
-		Cursor:  NewCursorHandler(e.Cursor, mux, decoder, encoder, errhandler, formatter),
-		Codex:   NewCodexHandler(e.Codex, mux, decoder, encoder, errhandler, formatter),
-		Logs:    NewLogsHandler(e.Logs, mux, decoder, encoder, errhandler, formatter),
-		Metrics: NewMetricsHandler(e.Metrics, mux, decoder, encoder, errhandler, formatter),
+		Claude:        NewClaudeHandler(e.Claude, mux, decoder, encoder, errhandler, formatter),
+		Cursor:        NewCursorHandler(e.Cursor, mux, decoder, encoder, errhandler, formatter),
+		Codex:         NewCodexHandler(e.Codex, mux, decoder, encoder, errhandler, formatter),
+		VscodeCopilot: NewVscodeCopilotHandler(e.VscodeCopilot, mux, decoder, encoder, errhandler, formatter),
+		Logs:          NewLogsHandler(e.Logs, mux, decoder, encoder, errhandler, formatter),
+		Metrics:       NewMetricsHandler(e.Metrics, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -75,6 +78,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Claude = m(s.Claude)
 	s.Cursor = m(s.Cursor)
 	s.Codex = m(s.Codex)
+	s.VscodeCopilot = m(s.VscodeCopilot)
 	s.Logs = m(s.Logs)
 	s.Metrics = m(s.Metrics)
 }
@@ -87,6 +91,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountClaudeHandler(mux, h.Claude)
 	MountCursorHandler(mux, h.Cursor)
 	MountCodexHandler(mux, h.Codex)
+	MountVscodeCopilotHandler(mux, h.VscodeCopilot)
 	MountLogsHandler(mux, h.Logs)
 	MountMetricsHandler(mux, h.Metrics)
 }
@@ -232,6 +237,59 @@ func NewCodexHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "codex")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "hooks")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountVscodeCopilotHandler configures the mux to serve the "hooks" service
+// "vscodeCopilot" endpoint.
+func MountVscodeCopilotHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/hooks.vscode", f)
+}
+
+// NewVscodeCopilotHandler creates a HTTP handler which loads the HTTP request
+// and calls the "hooks" service "vscodeCopilot" endpoint.
+func NewVscodeCopilotHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeVscodeCopilotRequest(mux, decoder)
+		encodeResponse = EncodeVscodeCopilotResponse(encoder)
+		encodeError    = EncodeVscodeCopilotError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "vscodeCopilot")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "hooks")
 		payload, err := decodeRequest(r)
 		if err != nil {

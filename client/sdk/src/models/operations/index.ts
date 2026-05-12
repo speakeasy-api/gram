@@ -111,6 +111,7 @@ export * from "./hooksnumbercodex.js";
 export * from "./hooksnumbercursor.js";
 export * from "./hooksnumberlogs.js";
 export * from "./hooksnumbermetrics.js";
+export * from "./hooksnumbervscodecopilot.js";
 export * from "./integrationsnumberget.js";
 export * from "./listallowedorigins.js";
 export * from "./listapikeys.js";

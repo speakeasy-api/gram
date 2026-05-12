@@ -85,7 +85,7 @@ func UsageCommands() []string {
 		"collections (create|list|update|delete|attach-server|detach-server|list-servers)",
 		"functions get-signed-asset-url",
 		"hooks-server-names (list|upsert|delete)",
-		"hooks (claude|cursor|codex|logs|metrics)",
+		"hooks (claude|cursor|codex|vscode-copilot|logs|metrics)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
@@ -681,6 +681,11 @@ func ParseEndpoint(
 		hooksCodexBodyFlag             = hooksCodexFlags.String("body", "REQUIRED", "")
 		hooksCodexApikeyTokenFlag      = hooksCodexFlags.String("apikey-token", "", "")
 		hooksCodexProjectSlugInputFlag = hooksCodexFlags.String("project-slug-input", "", "")
+
+		hooksVscodeCopilotFlags                = flag.NewFlagSet("vscode-copilot", flag.ExitOnError)
+		hooksVscodeCopilotBodyFlag             = hooksVscodeCopilotFlags.String("body", "REQUIRED", "")
+		hooksVscodeCopilotApikeyTokenFlag      = hooksVscodeCopilotFlags.String("apikey-token", "", "")
+		hooksVscodeCopilotProjectSlugInputFlag = hooksVscodeCopilotFlags.String("project-slug-input", "", "")
 
 		hooksLogsFlags                = flag.NewFlagSet("logs", flag.ExitOnError)
 		hooksLogsBodyFlag             = hooksLogsFlags.String("body", "REQUIRED", "")
@@ -1641,6 +1646,7 @@ func ParseEndpoint(
 	hooksClaudeFlags.Usage = hooksClaudeUsage
 	hooksCursorFlags.Usage = hooksCursorUsage
 	hooksCodexFlags.Usage = hooksCodexUsage
+	hooksVscodeCopilotFlags.Usage = hooksVscodeCopilotUsage
 	hooksLogsFlags.Usage = hooksLogsUsage
 	hooksMetricsFlags.Usage = hooksMetricsUsage
 
@@ -2312,6 +2318,9 @@ func ParseEndpoint(
 
 			case "codex":
 				epf = hooksCodexFlags
+
+			case "vscode-copilot":
+				epf = hooksVscodeCopilotFlags
 
 			case "logs":
 				epf = hooksLogsFlags
@@ -3232,6 +3241,9 @@ func ParseEndpoint(
 			case "codex":
 				endpoint = c.Codex()
 				data, err = hooksc.BuildCodexPayload(*hooksCodexBodyFlag, *hooksCodexApikeyTokenFlag, *hooksCodexProjectSlugInputFlag)
+			case "vscode-copilot":
+				endpoint = c.VscodeCopilot()
+				data, err = hooksc.BuildVscodeCopilotPayload(*hooksVscodeCopilotBodyFlag, *hooksVscodeCopilotApikeyTokenFlag, *hooksVscodeCopilotProjectSlugInputFlag)
 			case "logs":
 				endpoint = c.Logs()
 				data, err = hooksc.BuildLogsPayload(*hooksLogsBodyFlag, *hooksLogsApikeyTokenFlag, *hooksLogsProjectSlugInputFlag)
@@ -6129,6 +6141,7 @@ func hooksUsage() {
 	fmt.Fprintln(os.Stderr, `    claude: Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.`)
 	fmt.Fprintln(os.Stderr, `    cursor: Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure, beforeMCPExecution, and afterMCPExecution.`)
 	fmt.Fprintln(os.Stderr, `    codex: Endpoint for Codex hook events. Handles SessionStart, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, and Stop.`)
+	fmt.Fprintln(os.Stderr, `    vscode-copilot: Endpoint for VSCode Copilot agent hook events. Handles SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PreCompact, SubagentStart, SubagentStop, and Stop.`)
 	fmt.Fprintln(os.Stderr, `    logs: Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.`)
 	fmt.Fprintln(os.Stderr, `    metrics: Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.`)
 	fmt.Fprintln(os.Stderr)
@@ -6199,6 +6212,28 @@ func hooksCodexUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks codex --body '{\n      \"cwd\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"model\": \"abc123\",\n      \"permission_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_output\": \"abc123\",\n      \"transcript_path\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func hooksVscodeCopilotUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hooks vscode-copilot", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Endpoint for VSCode Copilot agent hook events. Handles SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PreCompact, SubagentStart, SubagentStop, and Stop.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks vscode-copilot --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"agent_id\": \"abc123\",\n      \"agent_type\": \"abc123\",\n      \"cwd\": \"abc123\",\n      \"hook_event_name\": \"UserPromptSubmit\",\n      \"prompt\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"source\": \"abc123\",\n      \"stop_hook_active\": false,\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"trigger\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func hooksLogsUsage() {

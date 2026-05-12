@@ -103,6 +103,21 @@ var CursorObservabilityHookEvents = []string{
 	"afterMCPExecution",
 }
 
+// VSCodeObservabilityHookEvents are VSCode Copilot's hook event names (per
+// https://code.visualstudio.com/docs/copilot/customization/hooks). Subset
+// overlaps with Claude (PascalCase) but adds PreCompact, SubagentStart,
+// SubagentStop and omits PostToolUseFailure.
+var VSCodeObservabilityHookEvents = []string{
+	"SessionStart",
+	"UserPromptSubmit",
+	"PreToolUse",
+	"PostToolUse",
+	"PreCompact",
+	"SubagentStart",
+	"SubagentStop",
+	"Stop",
+}
+
 // GeneratePluginPackages produces the complete file map for a plugin distribution
 // repository containing Claude Code, Cursor, and Codex plugins. Used for GitHub push.
 func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
@@ -314,6 +329,10 @@ func GenerateSinglePluginPackage(plugin PluginInfo, cfg GenerateConfig, platform
 	case "codex":
 		if err := generateCodexPluginFlat(files, plugin, cfg); err != nil {
 			return nil, fmt.Errorf("generate codex plugin: %w", err)
+		}
+	case "vscode":
+		if err := generateVSCodePluginFlat(files, plugin, cfg); err != nil {
+			return nil, fmt.Errorf("generate vscode plugin: %w", err)
 		}
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
@@ -648,10 +667,108 @@ func GenerateObservabilityPluginPackage(cfg GenerateConfig, platform string) (ma
 		if err := generateCodexObservabilityPluginFlat(files, cfg); err != nil {
 			return nil, fmt.Errorf("generate codex observability plugin: %w", err)
 		}
+	case "vscode":
+		if err := generateVSCodeObservabilityPluginFlat(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate vscode observability plugin: %w", err)
+		}
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
 	return files, nil
+}
+
+// VSCodeObservabilitySlug derives the directory name and identifier of the
+// per-org VSCode Copilot observability plugin from the org slug, mirroring
+// the Claude/Cursor variants.
+func VSCodeObservabilitySlug(cfg GenerateConfig) string {
+	return conv.ToSlug(cfg.OrgName) + "-observability-vscode"
+}
+
+// generateVSCodeObservabilityPluginFlat emits VSCode Copilot observability
+// plugin files at the root of the file map, suitable for ZIP download. The
+// VSCode plugin format is shared with Claude Code (auto-detect order favors
+// .plugin/plugin.json), so the manifest, hooks.json, and .mcp.json shapes
+// match Claude — only the hook script differs (cascade-based attribution).
+func generateVSCodeObservabilityPluginFlat(files map[string][]byte, cfg GenerateConfig) error {
+	pluginJSON, err := marshalJSON(claudePluginMeta{
+		Name:        VSCodeObservabilitySlug(cfg),
+		Description: "Gram observability hooks for " + cfg.OrgName + ". Install this plugin to forward VSCode Copilot tool events to your team's Gram dashboard.",
+		Version:     "0.1.0",
+		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
+		Homepage:    "https://getgram.ai",
+		UserConfig:  nil,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal plugin.json: %w", err)
+	}
+	files[".plugin/plugin.json"] = pluginJSON
+
+	matchers := []claudeHookMatcher{
+		{Matcher: "*", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hook.sh"`}}},
+	}
+	hookEvents := make(map[string][]claudeHookMatcher, len(VSCodeObservabilityHookEvents))
+	for _, event := range VSCodeObservabilityHookEvents {
+		hookEvents[event] = matchers
+	}
+	hooksJSON, err := marshalJSON(claudeHooksConfig{Hooks: hookEvents})
+	if err != nil {
+		return fmt.Errorf("marshal hooks.json: %w", err)
+	}
+	files["hooks.json"] = hooksJSON
+
+	files["hook.sh"] = renderVSCodeHookScript(cfg)
+
+	return nil
+}
+
+// generateVSCodePluginFlat emits VSCode Copilot plugin files at the root
+// of the file map for ZIP download. Manifest + .mcp.json mirror the Claude
+// variant; the only platform-specific bits are the .plugin/ directory and
+// the omission of the userConfig prompt (VSCode doesn't surface those —
+// users edit settings.json directly).
+func generateVSCodePluginFlat(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
+	pluginJSON, err := marshalJSON(claudePluginMeta{
+		Name:        p.Slug,
+		Description: p.Description,
+		Version:     "0.1.0",
+		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
+		Homepage:    "https://getgram.ai",
+		UserConfig:  nil,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal plugin.json: %w", err)
+	}
+	files[".plugin/plugin.json"] = pluginJSON
+
+	mcpServers := make(map[string]claudeMCPServer)
+	for _, s := range p.Servers {
+		headers := make(map[string]string)
+
+		if s.IsPublic {
+			// Public servers expect the user to provide each variable in their
+			// shell env; VSCode interpolates ${env:VAR} references.
+			for _, ec := range s.EnvConfigs {
+				headers[ec.DisplayName] = "${env:" + ec.VariableName + "}"
+			}
+		} else if cfg.APIKey != "" {
+			headers["Authorization"] = "Bearer " + cfg.APIKey
+		} else {
+			headers["Authorization"] = "Bearer ${env:GRAM_API_KEY}"
+		}
+
+		mcpServers[s.DisplayName] = claudeMCPServer{
+			Type:    "http",
+			URL:     s.MCPURL,
+			Headers: headers,
+		}
+	}
+	mcpJSON, err := marshalJSON(claudeMCPConfig{MCPServers: mcpServers})
+	if err != nil {
+		return fmt.Errorf("marshal .mcp.json: %w", err)
+	}
+	files[".mcp.json"] = mcpJSON
+
+	return nil
 }
 
 // renderHookScript produces the bash wrapper that forwards hook event JSON
@@ -990,6 +1107,69 @@ echo "✓ Gram observability plugin installed. Restart Codex to activate."
 `)
 
 	return []byte(b.String())
+}
+
+// renderVSCodeHookScript renders the VSCode Copilot variant of the hook
+// script. Forwards stdin to /rpc/hooks.vscode with Gram-Key + Gram-Project
+// headers. Behaves like the claude/cursor platform in renderHookScript:
+// body forwarded on 2xx so VSCode can read hookSpecificOutput, exit 2 on
+// 4xx/5xx to surface a block.
+func renderVSCodeHookScript(cfg GenerateConfig) []byte {
+	keyPrefix := cfg.HooksAPIKey
+	if len(keyPrefix) > 12 {
+		keyPrefix = keyPrefix[:12]
+	}
+
+	authHeaders := fmt.Sprintf("  -H \"Gram-Key: %s\" \\\n", cfg.HooksAPIKey)
+	if cfg.ProjectSlug != "" {
+		authHeaders += fmt.Sprintf("  -H \"Gram-Project: %s\" \\\n", cfg.ProjectSlug)
+	}
+
+	return fmt.Appendf(nil, `#!/usr/bin/env bash
+# Generated by Gram. Do not edit — overwritten on every publish.
+# Key prefix: %s (correlate with the dashboard's API Keys page).
+
+# Send a hook event to Gram. The server is the sole authority on whether to block:
+#   HTTP 2xx -> allow (exit 0). Body forwarded to stdout; for PreToolUse,
+#               VSCode reads hookSpecificOutput.permissionDecision from it.
+#   HTTP 4xx/5xx -> block (exit 2). Server message relayed to stderr.
+# The script never makes the allow/deny decision — only the server does.
+
+set -u
+
+server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
+
+response=$(curl -s -w "\n%%{http_code}" -X POST \
+%s  -H "Content-Type: application/json" \
+  -d @- \
+  --max-time 10 \
+  "${server_url}/rpc/hooks.vscode")
+
+http_code=$(echo "$response" | tail -1)
+body=$(echo "$response" | sed '$d')
+
+echo "$body"
+
+# curl returns 000 on connection failure — treat as block so an unreachable
+# Gram server cannot silently bypass blocking policies.
+if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
+  exit 0
+fi
+
+reason=""
+if command -v python3 >/dev/null 2>&1; then
+  reason=$(printf '%%s' "$body" | python3 -c "
+import json, sys
+try:
+    print(json.loads(sys.stdin.read()).get('message', ''), end='')
+except Exception:
+    pass
+" 2>/dev/null) || true
+fi
+
+echo "${reason:-Gram hook returned HTTP ${http_code}}" >&2
+exit 2
+`, keyPrefix, cfg.ServerURL, authHeaders)
 }
 
 func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginInfo, cfg GenerateConfig) error {
