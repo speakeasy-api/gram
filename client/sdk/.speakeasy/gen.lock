@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 5a74c9c6665e3991d92878182989ff74
+  docChecksum: 90c7a6b7ebf6edb1016fa765f2e32694
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -811,9 +811,9 @@ trackedFiles:
   docs/models/components/toolcallsummary.md:
     last_write_checksum: sha1:cdf37acd4c46e9be93f4131a7f13a64ed4c50a32
   docs/models/components/toolentry.md:
-    last_write_checksum: sha1:244949176ee868bfc5ff546f0ca163103acbd04c
+    last_write_checksum: sha1:d8f4322ad2e91005f95f7d913d3bb29a88cd9adc
   docs/models/components/toolentrytype.md:
-    last_write_checksum: sha1:0c8b16c0060fb589e98937032b9b288afdb82440
+    last_write_checksum: sha1:edb5fedc4eeb8b40f12295eab27d20afd07c2694
   docs/models/components/toolmetric.md:
     last_write_checksum: sha1:bcb67ef196ad7c4ef453f5bb187dd420decb9d48
   docs/models/components/toolset.md:
@@ -1879,7 +1879,7 @@ trackedFiles:
   docs/models/operations/listtoolsetssecurityoption2.md:
     last_write_checksum: sha1:dc55d0d71acd977a1dde3cbf23a9ae862ac64aef
   docs/models/operations/listtoolsrequest.md:
-    last_write_checksum: sha1:e63bca064db9178d5df3d9d31d17c14e4dc29cc3
+    last_write_checksum: sha1:8acbb1677b65752527bcd2a1bcf5167ecf27ac71
   docs/models/operations/listtoolssecurity.md:
     last_write_checksum: sha1:fe699c3eb51ce60ae161334d3f16bdeddb656597
   docs/models/operations/listtriggerdefinitionsrequest.md:
@@ -2204,6 +2204,8 @@ trackedFiles:
     last_write_checksum: sha1:0971aabcf70af72d0f8da6f88e79a06936e4c792
   docs/models/operations/switchauthscopessecurity.md:
     last_write_checksum: sha1:f8629d857f0b1c717cd1b59edf4c63755c1d8698
+  docs/models/operations/tooltypes.md:
+    last_write_checksum: sha1:edba292f449a5068c06f65f27ce8a762c9dbaa7a
   docs/models/operations/triggerriskanalysisrequest.md:
     last_write_checksum: sha1:c9e8ba680b7791879606e7fe2241d6af3832a75f
   docs/models/operations/triggerriskanalysissecurity.md:
@@ -3050,7 +3052,7 @@ trackedFiles:
     pristine_git_object: 02aa1188e10f4f5f84c86784afeed8242573b6d3
   src/funcs/toolsList.ts:
     id: c18fc748ebd2
-    last_write_checksum: sha1:2ae71b11138d8df5e502ebcbf1f31a30fee676c6
+    last_write_checksum: sha1:06b52e6b86f0197ed0b71b9c3863f1e321969187
     pristine_git_object: 7ed78fc20e7eb3d198069a239818b8babafe3383
   src/funcs/toolsetsAddExternalOAuthServer.ts:
     id: df880a2c183f
@@ -4124,7 +4126,7 @@ trackedFiles:
     pristine_git_object: 228edbe83abf771d6a654e54a6212ddcce12c88b
   src/models/components/toolentry.ts:
     id: 82f49d8e8ee1
-    last_write_checksum: sha1:10a5647b5ca76b072c26288ba88dadbda5588bf1
+    last_write_checksum: sha1:12ab1ee05f2983bee4cb8ef282f32941cd473fa3
     pristine_git_object: dbe7be3a944b5e248c5807473d505c3476ba7e52
   src/models/components/toolmetric.ts:
     last_write_checksum: sha1:ca1d07131744d819aab5576b42801d6764c38528
@@ -4728,7 +4730,7 @@ trackedFiles:
     pristine_git_object: 807f68cc50a2d1fcb236cfc3a7c3509be7025a18
   src/models/operations/listtools.ts:
     id: 42a61de0bc0f
-    last_write_checksum: sha1:1848e1b31b22be2bc66324207dc3b75859144a31
+    last_write_checksum: sha1:ad996c63308c539c846e70b0e4d5457d6a2c8d12
     pristine_git_object: bad4534a0ba5924d3de100319ff98b162cc5a476
   src/models/operations/listtoolsets.ts:
     id: 8ae98143690b
@@ -5504,11 +5506,11 @@ trackedFiles:
     last_write_checksum: sha1:078c63dc6280e465f9b26d83f2bc76801a17ff31
   src/react-query/listTools.core.ts:
     id: 8a5317c58f41
-    last_write_checksum: sha1:04d59567c8d93f3ad8bcb067713745424f9b6f19
+    last_write_checksum: sha1:e788e0d8b52f7dbc06d26e831872011c9dc79b21
     pristine_git_object: ab8d16b4a78d3dcddfb023027f5016b6c4a84933
   src/react-query/listTools.ts:
     id: 6faf7a56fca1
-    last_write_checksum: sha1:a9edd7791cb42ed63a60140a45c9f62c42977e89
+    last_write_checksum: sha1:d82e165e013695387bdfd9d26885732171da2a71
     pristine_git_object: c6275084f9c088f4c3d44dedd17a7ce9850f6f80
   src/react-query/listToolsets.core.ts:
     id: f4bd7c6441a6
