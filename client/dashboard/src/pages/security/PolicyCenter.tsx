@@ -49,6 +49,7 @@ import {
   useRiskPoliciesUpdateMutation,
   useRiskPoliciesDeleteMutation,
   useRiskPoliciesTriggerMutation,
+  useRiskCapabilities,
   invalidateAllRiskListPolicies,
 } from "@gram/client/react-query/index.js";
 import {
@@ -164,7 +165,10 @@ export default function PolicyCenter() {
 function PolicyCenterContent() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useRiskListPolicies();
+  const { data: riskCapabilities, isLoading: isCapabilitiesLoading } =
+    useRiskCapabilities();
   const policies = data?.policies ?? [];
+  const piClassifierEnabled = riskCapabilities?.piClassifierEnabled === true;
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<RiskPolicy | null>(null);
@@ -300,7 +304,7 @@ function PolicyCenterContent() {
     });
   };
 
-  if (isLoading) {
+  if (isLoading || isCapabilitiesLoading) {
     return (
       <Page>
         <Page.Header>
@@ -509,6 +513,7 @@ function PolicyCenterContent() {
                 setFormUserMessage={setFormUserMessage}
                 formPromptInjectionRules={formPromptInjectionRules}
                 setFormPromptInjectionRules={setFormPromptInjectionRules}
+                piClassifierEnabled={piClassifierEnabled}
               />
             </div>
             <SheetFooter className="px-6 pb-6">
@@ -576,6 +581,7 @@ function PolicySheetBody({
   setFormUserMessage,
   formPromptInjectionRules,
   setFormPromptInjectionRules,
+  piClassifierEnabled,
 }: {
   formName: string;
   setFormName: (v: string) => void;
@@ -591,6 +597,7 @@ function PolicySheetBody({
   setFormUserMessage: (v: string) => void;
   formPromptInjectionRules: Set<string>;
   setFormPromptInjectionRules: (v: Set<string>) => void;
+  piClassifierEnabled: boolean;
 }) {
   const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
     null,
@@ -721,6 +728,10 @@ function PolicySheetBody({
                           ? selectedCategories.has(cat) &&
                             formPromptInjectionRules.has(rule.id)
                           : selectedCategories.has(cat);
+                        const isClassifierRule =
+                          rule.id === "deberta-v3-classifier";
+                        const isRuleAvailable =
+                          !isClassifierRule || piClassifierEnabled;
                         return (
                           <div
                             key={rule.id}
@@ -730,7 +741,9 @@ function PolicySheetBody({
                               id={rule.id}
                               checked={checked}
                               disabled={
-                                !interactive || !selectedCategories.has(cat)
+                                !interactive ||
+                                !selectedCategories.has(cat) ||
+                                !isRuleAvailable
                               }
                               onCheckedChange={
                                 interactive
@@ -750,10 +763,18 @@ function PolicySheetBody({
                             />
                             <label
                               htmlFor={rule.id}
-                              className="text-muted-foreground text-xs"
+                              className={cn(
+                                "text-muted-foreground text-xs",
+                                !isRuleAvailable && "cursor-not-allowed",
+                              )}
                             >
                               {rule.title}
                             </label>
+                            {!isRuleAvailable && (
+                              <Badge variant="outline" className="text-[10px]">
+                                Unavailable
+                              </Badge>
+                            )}
                           </div>
                         );
                       })}

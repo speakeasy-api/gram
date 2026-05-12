@@ -75,6 +75,31 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListPolicies"}`)
 	})
 
+	Method("getRiskCapabilities", func() {
+		Description("Get server-side risk analysis capabilities for the current project.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RiskCapabilitiesResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.capabilities.get")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskCapabilities")
+		Meta("openapi:extension:x-speakeasy-group", "risk.capabilities")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCapabilities"}`)
+	})
+
 	Method("getRiskPolicy", func() {
 		Description("Get a risk analysis policy by ID.")
 
@@ -300,6 +325,11 @@ var _ = Service("risk", func() {
 var ListRiskPoliciesResult = Type("ListRiskPoliciesResult", func() {
 	Attribute("policies", ArrayOf(shared.RiskPolicy), "The list of risk policies.")
 	Required("policies")
+})
+
+var RiskCapabilitiesResult = Type("RiskCapabilitiesResult", func() {
+	Attribute("pi_classifier_enabled", Boolean, "Whether the prompt-injection ML classifier is configured on this server.")
+	Required("pi_classifier_enabled")
 })
 
 var ListRiskResultsResult = Type("ListRiskResultsResult", func() {

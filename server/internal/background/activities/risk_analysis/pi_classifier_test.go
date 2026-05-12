@@ -97,7 +97,7 @@ func TestPromptInjectionClassifier_BatchesLargerThanCapAreSplit(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(detectResponse{Results: results})
 	})
 
-	// 120 inputs against a 50-item batch cap → 3 HTTP calls (50 + 50 + 20).
+	// 120 inputs against a 64-item batch cap -> 2 HTTP calls (64 + 56).
 	texts := make([]string, 120)
 	for i := range texts {
 		texts[i] = fmt.Sprintf("input-%d", i)
@@ -106,7 +106,7 @@ func TestPromptInjectionClassifier_BatchesLargerThanCapAreSplit(t *testing.T) {
 	results, err := c.Classify(t.Context(), texts)
 	require.NoError(t, err)
 	require.Len(t, results, 120)
-	assert.Equal(t, int32(3), totalCalls.Load(), "should fan out across the batch cap")
+	assert.Equal(t, int32(2), totalCalls.Load(), "should fan out across the batch cap")
 }
 
 func TestPromptInjectionClassifier_ServerErrorReturnsError(t *testing.T) {

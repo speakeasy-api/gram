@@ -27,6 +27,15 @@ HF_LOCAL_FILES_ONLY = os.environ.get("HF_LOCAL_FILES_ONLY", "").lower() in {"1",
 MAX_LENGTH = int(os.environ.get("MAX_LENGTH", "512"))
 MAX_BATCH = int(os.environ.get("MAX_BATCH", "64"))
 MAX_BODY_BYTES = int(os.environ.get("MAX_BODY_BYTES", str(2 * 1024 * 1024)))
+API_DESCRIPTION = f"""
+Prompt-injection classifier for Gram's `deberta-v3-classifier` risk rule.
+
+Limits:
+
+* `POST /detect` accepts 1 to {MAX_BATCH} texts per request.
+* Request bodies are limited to {MAX_BODY_BYTES} bytes.
+* Each text is tokenized and truncated to {MAX_LENGTH} model tokens before inference.
+"""
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,7 +75,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="gram-pi-classifier", version="1", lifespan=lifespan)
+app = FastAPI(title="gram-pi-classifier", version="1", description=API_DESCRIPTION, lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -87,7 +96,16 @@ async def _enforce_body_limit(request: Request, call_next):
 
 
 class DetectRequest(BaseModel):
-    texts: list[str] = Field(..., description="Inputs to classify; runs as a single batched forward pass.")
+    texts: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=MAX_BATCH,
+        description=(
+            "Inputs to classify; runs as a single batched forward pass. "
+            f"Accepts at most {MAX_BATCH} texts per request. Each text is "
+            f"truncated to {MAX_LENGTH} model tokens before inference."
+        ),
+    )
 
     @field_validator("texts")
     @classmethod

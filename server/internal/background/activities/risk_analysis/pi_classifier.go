@@ -37,10 +37,10 @@ type ClassifierResult struct {
 // LabelInjection is the positive class returned by the deberta-v3 model.
 const LabelInjection = "INJECTION"
 
-// promptInjectionClassifierHTTPBatchSize is the per-request item cap. Matches the Python
-// service's MAX_BATCH default. Keeps payload size and inference time per call
-// bounded.
-const promptInjectionClassifierHTTPBatchSize = 50
+// promptInjectionClassifierHTTPBatchSize is the per-request item cap. It
+// matches the Python service's MAX_BATCH default so the Go caller stays inside
+// the sidecar's documented /detect API limit.
+const promptInjectionClassifierHTTPBatchSize = 64
 
 // DebertaClassifierClient calls the gram-pi-classifier sidecar's POST /detect.
 // Like PresidioClient, this is a trusted cluster-internal service so the
