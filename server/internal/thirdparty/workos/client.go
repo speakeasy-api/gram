@@ -186,8 +186,16 @@ func (wc *Client) EnsureUserExternalID(ctx context.Context, workosUserID, gramUs
 	}
 
 	if _, err := wc.um.UpdateUser(ctx, usermanagement.UpdateUserOpts{
-		User:       workosUserID,
-		ExternalID: gramUserID,
+		User:             workosUserID,
+		Email:            "",
+		FirstName:        "",
+		LastName:         "",
+		EmailVerified:    false,
+		Password:         "",
+		PasswordHash:     "",
+		PasswordHashType: "",
+		ExternalID:       gramUserID,
+		Metadata:         nil,
 	}); err != nil {
 		return fmt.Errorf("set workos user external_id: %w", err)
 	}

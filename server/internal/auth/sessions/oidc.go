@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"regexp"
 	"strings"
@@ -136,8 +137,8 @@ func (s *Manager) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) (
 		if err := s.workosClient.EnsureUserExternalID(ctx, idpUser.Sub, gramUserID); err != nil {
 			s.logger.ErrorContext(ctx, "failed to sync external_id to workos",
 				attr.SlogError(err),
-				"workos_user_id", idpUser.Sub,
-				"gram_user_id", gramUserID,
+				slog.String("workos_user_id", idpUser.Sub),
+				slog.String("gram_user_id", gramUserID),
 			)
 		}
 	}
