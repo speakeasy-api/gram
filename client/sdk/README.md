@@ -261,6 +261,7 @@ run();
 ### [Hooks](docs/sdks/hooks/README.md)
 
 * [hooksNumberClaude](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
+* [hooksNumberCodex](docs/sdks/hooks/README.md#hooksnumbercodex) - codex hooks
 * [hooksNumberCursor](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks
 * [hooksNumberLogs](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
 * [hooksNumberMetrics](docs/sdks/hooks/README.md#hooksnumbermetrics) - metrics hooks
@@ -338,6 +339,7 @@ run();
 * [addPluginServer](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
 * [createPlugin](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
 * [deletePlugin](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
+* [downloadCodexInstallScript](docs/sdks/plugins/README.md#downloadcodexinstallscript) - downloadCodexInstallScript plugins
 * [downloadObservabilityPlugin](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 * [downloadPluginPackage](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 * [getPlugin](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
@@ -594,6 +596,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`featuresGet`](docs/sdks/features/README.md#get) - getProductFeatures features
 - [`featuresSet`](docs/sdks/features/README.md#set) - setProductFeature features
 - [`hooksHooksNumberClaude`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
+- [`hooksHooksNumberCodex`](docs/sdks/hooks/README.md#hooksnumbercodex) - codex hooks
 - [`hooksHooksNumberCursor`](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks
 - [`hooksHooksNumberLogs`](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
 - [`hooksHooksNumberMetrics`](docs/sdks/hooks/README.md#hooksnumbermetrics) - metrics hooks
@@ -638,6 +641,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`pluginsAddPluginServer`](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
 - [`pluginsCreatePlugin`](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
 - [`pluginsDeletePlugin`](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
+- [`pluginsDownloadCodexInstallScript`](docs/sdks/plugins/README.md#downloadcodexinstallscript) - downloadCodexInstallScript plugins
 - [`pluginsDownloadObservabilityPlugin`](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 - [`pluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 - [`pluginsGetPlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
@@ -859,6 +863,7 @@ To learn about this feature and how to get started, check
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
 - [`useGrants`](docs/sdks/access/README.md#listgrants) - listGrants access
 - [`useHooksHooksNumberClaudeMutation`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
+- [`useHooksHooksNumberCodexMutation`](docs/sdks/hooks/README.md#hooksnumbercodex) - codex hooks
 - [`useHooksHooksNumberCursorMutation`](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks
 - [`useHooksHooksNumberLogsMutation`](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
 - [`useHooksHooksNumberMetricsMutation`](docs/sdks/hooks/README.md#hooksnumbermetrics) - metrics hooks
@@ -905,6 +910,7 @@ To learn about this feature and how to get started, check
 - [`usePauseTriggerMutation`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 - [`usePlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
 - [`usePlugins`](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
+- [`usePluginsDownloadCodexInstallScript`](docs/sdks/plugins/README.md#downloadcodexinstallscript) - downloadCodexInstallScript plugins
 - [`usePluginsDownloadObservabilityPlugin`](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 - [`usePluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects

@@ -1142,13 +1142,18 @@ func TestPluginsService_PublishPlugins_CodexPackageHappyPath(t *testing.T) {
 		} `json:"plugins"`
 	}
 	require.NoError(t, json.Unmarshal(mp, &market))
-	require.Len(t, market.Plugins, 1)
-	require.Equal(t, "codex-test-codex", market.Plugins[0].Name)
+	// Observability plugin ships first, then the feature plugin.
+	require.Len(t, market.Plugins, 2)
+	require.Contains(t, market.Plugins[0].Name, "observability-codex", "observability plugin must be first")
 	require.Equal(t, "local", market.Plugins[0].Source.Source)
-	require.Equal(t, "./codex-test-codex", market.Plugins[0].Source.Path)
-	require.Equal(t, "AVAILABLE", market.Plugins[0].Policy.Installation)
-	// Private server + baked API key: nothing to prompt for, so install-silent.
+	require.Equal(t, "INSTALLED_BY_DEFAULT", market.Plugins[0].Policy.Installation)
 	require.Equal(t, "ON_USE", market.Plugins[0].Policy.Authentication)
+	require.Equal(t, "codex-test-codex", market.Plugins[1].Name)
+	require.Equal(t, "local", market.Plugins[1].Source.Source)
+	require.Equal(t, "./codex-test-codex", market.Plugins[1].Source.Path)
+	require.Equal(t, "AVAILABLE", market.Plugins[1].Policy.Installation)
+	// Private server + baked API key: nothing to prompt for, so install-silent.
+	require.Equal(t, "ON_USE", market.Plugins[1].Policy.Authentication)
 }
 
 // Public servers map user-provided env configs to Codex's env_http_headers,

@@ -171,6 +171,12 @@ const (
 	MimeTypeKey                    = attribute.Key("mime.type")
 	OAuthAuthorizationEndpointKey  = attribute.Key("gram.oauth.authorization_endpoint")
 	OAuthClientIDKey               = attribute.Key("gram.oauth.client_id")
+	OAuthClientNameKey             = attribute.Key("gram.oauth.client_name")
+	// OAuthErrorKey / OAuthErrorDescriptionKey carry the `error` /
+	// `error_description` parameters from RFC 6749 / RFC 7591 error responses
+	// — used across DCR registration, /authorize, /token, and /revoke.
+	OAuthErrorKey                  = attribute.Key("gram.oauth.error")
+	OAuthErrorDescriptionKey       = attribute.Key("gram.oauth.error_description")
 	OAuthGrantKey                  = attribute.Key("gram.oauth.grant")
 	OAuthIssuerKey                 = attribute.Key("gram.oauth.issuer")
 	OAuthProviderKey               = attribute.Key("gram.oauth.provider")
@@ -761,6 +767,19 @@ func SlogOAuthAuthorizationEndpoint(v string) slog.Attr {
 
 func OAuthClientID(v string) attribute.KeyValue { return OAuthClientIDKey.String(v) }
 func SlogOAuthClientID(v string) slog.Attr      { return slog.String(string(OAuthClientIDKey), v) }
+
+func OAuthClientName(v string) attribute.KeyValue { return OAuthClientNameKey.String(v) }
+func SlogOAuthClientName(v string) slog.Attr      { return slog.String(string(OAuthClientNameKey), v) }
+
+func OAuthError(v string) attribute.KeyValue { return OAuthErrorKey.String(v) }
+func SlogOAuthError(v string) slog.Attr      { return slog.String(string(OAuthErrorKey), v) }
+
+func OAuthErrorDescription(v string) attribute.KeyValue {
+	return OAuthErrorDescriptionKey.String(v)
+}
+func SlogOAuthErrorDescription(v string) slog.Attr {
+	return slog.String(string(OAuthErrorDescriptionKey), v)
+}
 
 func OAuthGrant(v string) attribute.KeyValue { return OAuthGrantKey.String(v) }
 func SlogOAuthGrant(v string) slog.Attr      { return slog.String(string(OAuthGrantKey), v) }

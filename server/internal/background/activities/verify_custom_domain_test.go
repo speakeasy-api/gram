@@ -3,12 +3,14 @@ package activities_test
 import (
 	"context"
 	"fmt"
+	"net"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/temporal"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
@@ -344,6 +346,64 @@ func TestVerifyCustomDomain_TXTLookupError(t *testing.T) {
 	got, dbErr := ti.repo.GetCustomDomainByDomain(ctx, domain)
 	require.NoError(t, dbErr)
 	require.Equal(t, orgID, got.OrganizationID)
+}
+
+func TestVerifyCustomDomain_NXDOMAINOnCNAMEAndA(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-nxdomain-cname"
+	const domain = "nxdomain-cname.example.com"
+	ctx, ti := newTestInstance(t, orgID, domain)
+
+	nxdomain := &net.DNSError{Err: "no such host", Name: domain, IsNotFound: true}
+	cfg := newPassingDNSResolverConfig(testTargetCNAME, domain, orgID)
+	cfg.LookupCNAMEFunc = func(context.Context, string) (string, error) { return "", nxdomain }
+	cfg.LookupHostFunc = func(context.Context, string) ([]string, error) { return nil, nxdomain }
+	ti.resolver = dns.NewMockResolver(cfg)
+
+	activity := newActivity(t, ti)
+
+	err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:     orgID,
+		Domain:    domain,
+		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+	})
+	require.Error(t, err)
+
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, activities.ErrTypeDNSNotFound, appErr.Type())
+	require.True(t, appErr.NonRetryable(), "DNS-not-found should be non-retryable")
+	require.Contains(t, err.Error(), domain)
+}
+
+func TestVerifyCustomDomain_NXDOMAINOnTXT(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-nxdomain-txt"
+	const domain = "nxdomain-txt.example.com"
+	ctx, ti := newTestInstance(t, orgID, domain)
+
+	txtName := "_gram." + domain
+	nxdomain := &net.DNSError{Err: "no such host", Name: txtName, IsNotFound: true}
+	cfg := newPassingDNSResolverConfig(testTargetCNAME, domain, orgID)
+	cfg.LookupTXTFunc = func(context.Context, string) ([]string, error) { return nil, nxdomain }
+	ti.resolver = dns.NewMockResolver(cfg)
+
+	activity := newActivity(t, ti)
+
+	err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:     orgID,
+		Domain:    domain,
+		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+	})
+	require.Error(t, err)
+
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, activities.ErrTypeDNSNotFound, appErr.Type())
+	require.True(t, appErr.NonRetryable(), "DNS-not-found should be non-retryable")
+	require.Contains(t, err.Error(), txtName)
 }
 
 // Verify ErrNoRows is what sqlc returns for missing rows (sanity check).

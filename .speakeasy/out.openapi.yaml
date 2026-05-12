@@ -8317,6 +8317,99 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /rpc/hooks.codex:
+    post:
+      tags:
+        - hooks
+      summary: codex hooks
+      description: Endpoint for Codex hook events. Handles SessionStart, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, and Stop.
+      operationId: hooks#codex
+      parameters:
+        - name: Gram-Key
+          in: header
+          description: API Key header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: API Key header
+        - name: Gram-Project
+          in: header
+          description: project header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: project header
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodexHookPayload'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodexHookResult'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
   /rpc/hooks.cursor:
     post:
       tags:
@@ -12695,6 +12788,102 @@ paths:
       x-speakeasy-name-override: deletePlugin
       x-speakeasy-react-hook:
         name: DeletePlugin
+  /rpc/plugins.downloadCodexInstallScript:
+    get:
+      description: Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.
+      operationId: downloadCodexInstallScript
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            text/x-shellscript:
+              schema:
+                format: binary
+                type: string
+          description: OK response.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+            Content-Type:
+              schema:
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: downloadCodexInstallScript plugins
+      tags:
+        - plugins
+      x-speakeasy-name-override: downloadCodexInstallScript
   /rpc/plugins.downloadObservabilityPlugin:
     get:
       description: Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
@@ -12710,6 +12899,7 @@ paths:
             enum:
               - claude
               - cursor
+              - codex
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -24710,6 +24900,57 @@ components:
           description: The name for the new cloned environment
       required:
         - new_name
+    CodexHookPayload:
+      type: object
+      properties:
+        cwd:
+          type: string
+          description: The working directory when the event fired
+        hook_event_name:
+          type: string
+          description: The type of hook event
+          enum:
+            - SessionStart
+            - PreToolUse
+            - PermissionRequest
+            - PostToolUse
+            - UserPromptSubmit
+            - Stop
+        model:
+          type: string
+          description: The model identifier
+        permission_type:
+          type: string
+          description: The type of permission being requested (PermissionRequest only)
+        prompt:
+          type: string
+          description: The user's prompt text (UserPromptSubmit only)
+        session_id:
+          type: string
+          description: The Codex session ID
+        tool_input:
+          description: The input to the tool (PreToolUse only)
+        tool_name:
+          type: string
+          description: The name of the tool
+        tool_output:
+          description: The output from the tool (PostToolUse only)
+        transcript_path:
+          type: string
+          description: Path to the conversation transcript file
+      description: Payload for Codex hook events
+      required:
+        - hook_event_name
+    CodexHookResult:
+      type: object
+      properties:
+        decision:
+          type: string
+          description: 'Permission decision for blocking events: allow or deny'
+        reason:
+          type: string
+          description: Reason for the decision, shown to the user
+      description: Result for Codex hook events
     ConfigureSlackAppRequestBody:
       type: object
       properties:

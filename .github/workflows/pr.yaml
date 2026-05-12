@@ -1488,6 +1488,25 @@ jobs:
 
           echo "✅ All CI checks passed or were skipped."
 
+  add-preview-label:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs: [changes, docker-build-server, docker-build-client]
+    if: |
+      github.event_name == 'pull_request' &&
+      !cancelled() &&
+      needs.docker-build-server.result == 'success' &&
+      needs.docker-build-client.result == 'success'
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Add preview label
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr edit ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --add-label preview
+
   dispatch-release:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [docker-build-server, assistant-runtime-image]

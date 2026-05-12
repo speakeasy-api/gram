@@ -55,10 +55,12 @@ export default function Plugins() {
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
     useState(false);
   const [isDownloadingObservability, setIsDownloadingObservability] = useState<
-    "claude" | "cursor" | null
+    "claude" | "cursor" | "codex" | null
   >(null);
 
-  const handleObservabilityDownload = async (platform: "claude" | "cursor") => {
+  const handleObservabilityDownload = async (
+    platform: "claude" | "cursor" | "codex",
+  ) => {
     setIsObservabilityDownloadMenuOpen(false);
     setIsDownloadingObservability(platform);
     try {
@@ -323,6 +325,11 @@ export default function Plugins() {
                     onClick={() => handleObservabilityDownload("cursor")}
                   >
                     Cursor
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => handleObservabilityDownload("codex")}
+                  >
+                    Codex
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

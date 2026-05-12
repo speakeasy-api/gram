@@ -5,33 +5,15 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export type DownloadObservabilityPluginSecurity = {
+export type DownloadCodexInstallScriptSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
-/**
- * Target platform.
- */
-export const Platform = {
-  Claude: "claude",
-  Cursor: "cursor",
-  Codex: "codex",
-} as const;
-/**
- * Target platform.
- */
-export type Platform = ClosedEnum<typeof Platform>;
-
-export type DownloadObservabilityPluginRequest = {
-  /**
-   * Target platform.
-   */
-  platform: Platform;
+export type DownloadCodexInstallScriptRequest = {
   /**
    * Session header
    */
@@ -42,21 +24,21 @@ export type DownloadObservabilityPluginRequest = {
   gramProject?: string | undefined;
 };
 
-export type DownloadObservabilityPluginResponse = {
+export type DownloadCodexInstallScriptResponse = {
   headers: { [k: string]: Array<string> };
   result: ReadableStream<Uint8Array>;
 };
 
 /** @internal */
-export type DownloadObservabilityPluginSecurity$Outbound = {
+export type DownloadCodexInstallScriptSecurity$Outbound = {
   "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
-export const DownloadObservabilityPluginSecurity$outboundSchema: z.ZodMiniType<
-  DownloadObservabilityPluginSecurity$Outbound,
-  DownloadObservabilityPluginSecurity
+export const DownloadCodexInstallScriptSecurity$outboundSchema: z.ZodMiniType<
+  DownloadCodexInstallScriptSecurity$Outbound,
+  DownloadCodexInstallScriptSecurity
 > = z.pipe(
   z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
@@ -70,35 +52,28 @@ export const DownloadObservabilityPluginSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function downloadObservabilityPluginSecurityToJSON(
-  downloadObservabilityPluginSecurity: DownloadObservabilityPluginSecurity,
+export function downloadCodexInstallScriptSecurityToJSON(
+  downloadCodexInstallScriptSecurity: DownloadCodexInstallScriptSecurity,
 ): string {
   return JSON.stringify(
-    DownloadObservabilityPluginSecurity$outboundSchema.parse(
-      downloadObservabilityPluginSecurity,
+    DownloadCodexInstallScriptSecurity$outboundSchema.parse(
+      downloadCodexInstallScriptSecurity,
     ),
   );
 }
 
 /** @internal */
-export const Platform$outboundSchema: z.ZodMiniEnum<typeof Platform> = z.enum(
-  Platform,
-);
-
-/** @internal */
-export type DownloadObservabilityPluginRequest$Outbound = {
-  platform: string;
+export type DownloadCodexInstallScriptRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
-export const DownloadObservabilityPluginRequest$outboundSchema: z.ZodMiniType<
-  DownloadObservabilityPluginRequest$Outbound,
-  DownloadObservabilityPluginRequest
+export const DownloadCodexInstallScriptRequest$outboundSchema: z.ZodMiniType<
+  DownloadCodexInstallScriptRequest$Outbound,
+  DownloadCodexInstallScriptRequest
 > = z.pipe(
   z.object({
-    platform: Platform$outboundSchema,
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
   }),
@@ -110,19 +85,19 @@ export const DownloadObservabilityPluginRequest$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function downloadObservabilityPluginRequestToJSON(
-  downloadObservabilityPluginRequest: DownloadObservabilityPluginRequest,
+export function downloadCodexInstallScriptRequestToJSON(
+  downloadCodexInstallScriptRequest: DownloadCodexInstallScriptRequest,
 ): string {
   return JSON.stringify(
-    DownloadObservabilityPluginRequest$outboundSchema.parse(
-      downloadObservabilityPluginRequest,
+    DownloadCodexInstallScriptRequest$outboundSchema.parse(
+      downloadCodexInstallScriptRequest,
     ),
   );
 }
 
 /** @internal */
-export const DownloadObservabilityPluginResponse$inboundSchema: z.ZodMiniType<
-  DownloadObservabilityPluginResponse,
+export const DownloadCodexInstallScriptResponse$inboundSchema: z.ZodMiniType<
+  DownloadCodexInstallScriptResponse,
   unknown
 > = z.pipe(
   z.object({
@@ -139,13 +114,13 @@ export const DownloadObservabilityPluginResponse$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function downloadObservabilityPluginResponseFromJSON(
+export function downloadCodexInstallScriptResponseFromJSON(
   jsonString: string,
-): SafeParseResult<DownloadObservabilityPluginResponse, SDKValidationError> {
+): SafeParseResult<DownloadCodexInstallScriptResponse, SDKValidationError> {
   return safeParse(
     jsonString,
     (x) =>
-      DownloadObservabilityPluginResponse$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'DownloadObservabilityPluginResponse' from JSON`,
+      DownloadCodexInstallScriptResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'DownloadCodexInstallScriptResponse' from JSON`,
   );
 }
