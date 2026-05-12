@@ -532,6 +532,155 @@ paths:
       x-speakeasy-name-override: getRole
       x-speakeasy-react-hook:
         name: Role
+  /rpc/access.listChallengeBuckets:
+    get:
+      description: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
+      operationId: listChallengeBuckets
+      parameters:
+        - allowEmptyValue: true
+          description: Filter by outcome.
+          in: query
+          name: outcome
+          schema:
+            description: Filter by outcome.
+            enum:
+              - allow
+              - deny
+            type: string
+        - allowEmptyValue: true
+          description: Filter by principal URN.
+          in: query
+          name: principal_urn
+          schema:
+            description: Filter by principal URN.
+            type: string
+        - allowEmptyValue: true
+          description: Filter by scope.
+          in: query
+          name: scope
+          schema:
+            description: Filter by scope.
+            type: string
+        - allowEmptyValue: true
+          description: Filter to a specific project.
+          in: query
+          name: project_id
+          schema:
+            description: Filter to a specific project.
+            type: string
+        - allowEmptyValue: true
+          description: Filter by resolution state. True = only resolved, false = only unresolved.
+          in: query
+          name: resolved
+          schema:
+            description: Filter by resolution state. True = only resolved, false = only unresolved.
+            type: boolean
+        - allowEmptyValue: true
+          description: Maximum number of buckets to return.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: Maximum number of buckets to return.
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Number of buckets to skip.
+          in: query
+          name: offset
+          schema:
+            default: 0
+            description: Number of buckets to skip.
+            format: int64
+            minimum: 0
+            type: integer
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListChallengeBucketsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: listChallengeBuckets access
+      tags:
+        - access
+      x-speakeasy-name-override: listChallengeBuckets
+      x-speakeasy-react-hook:
+        name: ChallengeBuckets
   /rpc/access.listChallenges:
     get:
       description: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
@@ -575,6 +724,15 @@ paths:
           schema:
             description: Filter by resolution state. True = only resolved, false = only unresolved.
             type: boolean
+        - allowEmptyValue: true
+          description: Fetch specific challenges by ID. When set, other filters and pagination are ignored.
+          in: query
+          name: ids
+          schema:
+            description: Fetch specific challenges by ID. When set, other filters and pagination are ignored.
+            items:
+              type: string
+            type: array
         - allowEmptyValue: true
           description: Maximum number of results to return.
           in: query
@@ -23931,6 +24089,127 @@ components:
       description: Result of capturing a telemetry event
       required:
         - success
+    ChallengeBucket:
+      type: object
+      properties:
+        challenge_count:
+          type: integer
+          description: Number of individual challenges in this bucket.
+          format: int64
+        challenge_ids:
+          type: array
+          items:
+            type: string
+          description: IDs of all challenges in this bucket.
+        evaluated_grant_count:
+          type: integer
+          description: Total grants evaluated.
+          format: int64
+        first_seen:
+          type: string
+          description: Timestamp of the earliest challenge in the bucket.
+          format: date-time
+        id:
+          type: string
+          description: ID of the most recent challenge in the bucket.
+        last_seen:
+          type: string
+          description: Timestamp of the most recent challenge in the bucket.
+          format: date-time
+        matched_grant_count:
+          type: integer
+          description: Number of grants that matched.
+          format: int64
+        operation:
+          type: string
+          enum:
+            - require
+            - require_any
+            - filter
+        organization_id:
+          type: string
+          description: Organization the principal was acting in.
+        outcome:
+          type: string
+          enum:
+            - allow
+            - deny
+            - error
+        photo_url:
+          type: string
+          description: User avatar URL when available.
+        principal_type:
+          type: string
+          description: Kind of principal.
+          enum:
+            - user
+            - api_key
+            - assistant
+        principal_urn:
+          type: string
+          description: Principal URN e.g. user:<uuid> or api_key:<id>.
+        project_id:
+          type: string
+          description: Project scope (empty for org-level checks).
+        reason:
+          type: string
+          enum:
+            - grant_matched
+            - no_grants
+            - scope_unsatisfied
+            - invalid_check
+            - rbac_skipped_apikey
+            - dev_override
+        resolution_role_slug:
+          type: string
+          description: Role slug assigned (when resolution_type=role_assigned).
+        resolution_type:
+          type: string
+          description: How the bucket was resolved.
+          enum:
+            - role_assigned
+            - dismissed
+        resolved_at:
+          type: string
+          description: When the bucket was resolved by an admin.
+          format: date-time
+        resolved_by:
+          type: string
+          description: URN of the admin who resolved.
+        resource_id:
+          type: string
+          description: Resource ID of the check.
+        resource_kind:
+          type: string
+          description: Resource kind of the check.
+        role_slugs:
+          type: array
+          items:
+            type: string
+          description: Roles the principal had loaded.
+        scope:
+          type: string
+          description: Scope that was checked.
+        user_email:
+          type: string
+          description: Email when available.
+      description: A group of consecutive challenges with the same dimensions that occurred within a 10-minute window.
+      required:
+        - id
+        - last_seen
+        - first_seen
+        - organization_id
+        - principal_urn
+        - principal_type
+        - operation
+        - outcome
+        - reason
+        - scope
+        - role_slugs
+        - evaluated_grant_count
+        - matched_grant_count
+        - challenge_count
+        - challenge_ids
     ChallengeResolution:
       type: object
       properties:
@@ -27538,6 +27817,21 @@ components:
           description: List of available MCP servers
       required:
         - servers
+    ListChallengeBucketsResult:
+      type: object
+      properties:
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChallengeBucket'
+          description: The challenge buckets.
+        total:
+          type: integer
+          description: Total number of matching buckets for pagination.
+          format: int64
+      required:
+        - buckets
+        - total
     ListChallengesResult:
       type: object
       properties:
@@ -28698,18 +28992,29 @@ components:
       description: OTEL log attribute with key and typed value
       required:
         - key
-        - value
     OTELAttributeValue:
       type: object
       properties:
+        arrayValue:
+          description: Array value (passed through)
+        boolValue:
+          type: boolean
+          description: Boolean value
+        bytesValue:
+          type: string
+          description: Bytes value (base64-encoded per OTLP/JSON)
+        doubleValue:
+          type: number
+          description: Double value
+          format: double
         intValue:
-          type: integer
-          description: Integer value
-          format: int64
+          description: Integer value (string-encoded per OTLP/JSON, or raw number)
+        kvlistValue:
+          description: Key-value list value (passed through)
         stringValue:
           type: string
           description: String value
-      description: OTEL attribute value - supports stringValue or intValue
+      description: OTEL attribute value - any of the OTLP/JSON value kinds
     OTELLogBody:
       type: object
       properties:
@@ -28738,11 +29043,6 @@ components:
           type: string
           description: Timestamp in nanoseconds since Unix epoch
       description: Individual OTEL log record
-      required:
-        - timeUnixNano
-        - observedTimeUnixNano
-        - body
-        - attributes
     OTELLogsPayload:
       type: object
       properties:
@@ -28752,19 +29052,25 @@ components:
             $ref: '#/components/schemas/OTELResourceLog'
           description: Array of resource logs
       description: OTEL logs export payload
-      required:
-        - resourceLogs
     OTELMetric:
       type: object
       properties:
         description:
           type: string
           description: Metric description
+        exponentialHistogram:
+          description: ExponentialHistogram metric data (passed through)
+        gauge:
+          description: Gauge metric data (passed through)
+        histogram:
+          description: Histogram metric data (passed through)
         name:
           type: string
           description: Metric name
         sum:
           $ref: '#/components/schemas/OTELSum'
+        summary:
+          description: Summary metric data (passed through)
         unit:
           type: string
           description: Metric unit
@@ -28778,8 +29084,6 @@ components:
             $ref: '#/components/schemas/OTELResourceMetrics'
           description: Array of resource metrics
       description: OTEL metrics export payload
-      required:
-        - resourceMetrics
     OTELNumberDataPoint:
       type: object
       properties:
@@ -28788,9 +29092,7 @@ components:
           description: Value as double
           format: double
         asInt:
-          type: integer
-          description: Value as integer
-          format: int64
+          description: Value as integer (string-encoded per OTLP/JSON, or raw number)
         attributes:
           type: array
           items:
@@ -28827,7 +29129,6 @@ components:
       description: OTEL resource attribute
       required:
         - key
-        - value
     OTELResourceLog:
       type: object
       properties:
@@ -28839,8 +29140,6 @@ components:
             $ref: '#/components/schemas/OTELScopeLog'
           description: Array of scope logs
       description: OTEL resource logs container
-      required:
-        - scopeLogs
     OTELResourceMetrics:
       type: object
       properties:
@@ -28873,8 +29172,6 @@ components:
         scope:
           $ref: '#/components/schemas/OTELScope'
       description: OTEL scope logs container
-      required:
-        - logRecords
     OTELScopeMetrics:
       type: object
       properties:
@@ -28890,9 +29187,7 @@ components:
       type: object
       properties:
         aggregationTemporality:
-          type: integer
-          description: Aggregation temporality
-          format: int64
+          description: Aggregation temporality (number or enum string)
         dataPoints:
           type: array
           items:
@@ -30816,6 +31111,9 @@ components:
             - destructive
             - idempotent
             - open_world
+        project_id:
+          type: string
+          description: Project filter (MCP scopes only). When set with resource_id='*', grants access to all servers in the project.
         resource_id:
           type: string
           description: The resource identifier, or '*' for all resources of this kind.

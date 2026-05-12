@@ -954,6 +954,9 @@ func genSelectorToAuthz(s *gen.Selector) authz.Selector {
 	if s.Tool != nil {
 		sel["tool"] = *s.Tool
 	}
+	if s.ProjectID != nil {
+		sel["project_id"] = *s.ProjectID
+	}
 	return sel
 }
 
@@ -963,12 +966,16 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 		ResourceID:   sel["resource_id"],
 		Disposition:  nil,
 		Tool:         nil,
+		ProjectID:    nil,
 	}
 	if v, ok := sel["disposition"]; ok {
 		s.Disposition = &v
 	}
 	if v, ok := sel["tool"]; ok {
 		s.Tool = &v
+	}
+	if v, ok := sel["project_id"]; ok {
+		s.ProjectID = &v
 	}
 	return s
 }
@@ -1314,21 +1321,15 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 		attr.UserID(authCtx.UserID),
 	)
 
-	outcome := ""
-	if payload.Outcome != nil {
-		outcome = *payload.Outcome
-	}
-	principalURN := ""
-	if payload.PrincipalUrn != nil {
-		principalURN = *payload.PrincipalUrn
-	}
-	scopeFilter := ""
-	if payload.Scope != nil {
-		scopeFilter = *payload.Scope
-	}
-	projectID := ""
-	if payload.ProjectID != nil {
-		projectID = *payload.ProjectID
+	chQueries := chrepo.New(s.chConn)
+
+	// Fast path: fetch specific challenges by ID (used for bucket expansion).
+	if len(payload.Ids) > 0 {
+		challenges, err := chQueries.ListChallengesByIDs(ctx, authCtx.ActiveOrganizationID, payload.Ids)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list challenges by ids from clickhouse").Log(ctx, s.logger)
+		}
+		return s.buildChallengeResult(ctx, authCtx, challenges, len(challenges))
 	}
 
 	// When resolved filter is active, skip CH-side pagination – fetch all matching rows,
@@ -1337,16 +1338,14 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 
 	filters := chrepo.ChallengeListFilters{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-		Outcome:        outcome,
-		PrincipalURN:   principalURN,
-		Scope:          scopeFilter,
+		ProjectID:      payload.ProjectID,
+		Outcome:        payload.Outcome,
+		PrincipalURN:   payload.PrincipalUrn,
+		Scope:          payload.Scope,
 		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
 		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 		SkipPagination: skipPagination,
 	}
-
-	chQueries := chrepo.New(s.chConn)
 
 	var total uint64
 	if !skipPagination {
@@ -1369,31 +1368,17 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 		return &gen.ListChallengesResult{Challenges: []*gen.AuthzChallenge{}, Total: int(total)}, nil
 	}
 
-	// Batch-lookup resolutions from PG.
-	challengeIDs := make([]string, len(challenges))
-	for i, c := range challenges {
-		challengeIDs[i] = c.ID
-	}
-
-	resolutions, err := repo.New(s.db).ListChallengeResolutions(ctx, repo.ListChallengeResolutionsParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ChallengeIds:   challengeIDs,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list challenge resolutions").Log(ctx, s.logger)
-	}
-	resolutionMap := make(map[string]repo.AuthzChallengeResolution, len(resolutions))
-	for _, r := range resolutions {
-		resolutionMap[r.ChallengeID] = r
-	}
-
 	// Apply resolved filter post-join if requested, then paginate in Go
 	// (CH-side pagination was skipped so total and page slice are correct).
 	if payload.Resolved != nil {
+		resolutions, err := s.lookupResolutions(ctx, authCtx.ActiveOrganizationID, challenges)
+		if err != nil {
+			return nil, err
+		}
 		wantResolved := *payload.Resolved
 		filtered := challenges[:0]
 		for _, c := range challenges {
-			_, hasResolution := resolutionMap[c.ID]
+			_, hasResolution := resolutions[c.ID]
 			if hasResolution == wantResolved {
 				filtered = append(filtered, c)
 			}
@@ -1408,6 +1393,40 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 			end := min(offset+limit, total)
 			challenges = challenges[offset:end]
 		}
+	}
+
+	return s.buildChallengeResult(ctx, authCtx, challenges, int(total))
+}
+
+// lookupResolutions batch-fetches resolution state from PG for a set of CH challenges.
+func (s *Service) lookupResolutions(ctx context.Context, orgID string, challenges []chrepo.ChallengeSummary) (map[string]repo.AuthzChallengeResolution, error) {
+	ids := make([]string, len(challenges))
+	for i, c := range challenges {
+		ids[i] = c.ID
+	}
+	resolutions, err := repo.New(s.db).ListChallengeResolutions(ctx, repo.ListChallengeResolutionsParams{
+		OrganizationID: orgID,
+		ChallengeIds:   ids,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list challenge resolutions").Log(ctx, s.logger)
+	}
+	m := make(map[string]repo.AuthzChallengeResolution, len(resolutions))
+	for _, r := range resolutions {
+		m[r.ChallengeID] = r
+	}
+	return m, nil
+}
+
+// buildChallengeResult enriches CH challenge summaries with PG resolution + user data and builds the API response.
+func (s *Service) buildChallengeResult(ctx context.Context, authCtx *contextvalues.AuthContext, challenges []chrepo.ChallengeSummary, total int) (*gen.ListChallengesResult, error) {
+	if len(challenges) == 0 {
+		return &gen.ListChallengesResult{Challenges: []*gen.AuthzChallenge{}, Total: total}, nil
+	}
+
+	resolutionMap, err := s.lookupResolutions(ctx, authCtx.ActiveOrganizationID, challenges)
+	if err != nil {
+		return nil, err
 	}
 
 	// Batch-lookup user photos from PG.
@@ -1501,7 +1520,197 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 
 	return &gen.ListChallengesResult{
 		Challenges: result,
-		Total:      int(total),
+		Total:      total,
+	}, nil
+}
+
+func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListChallengeBucketsPayload) (*gen.ListChallengeBucketsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(authCtx.ActiveOrganizationID),
+		attr.UserID(authCtx.UserID),
+	)
+
+	skipPagination := payload.Resolved != nil
+
+	filters := chrepo.ChallengeListFilters{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      payload.ProjectID,
+		Outcome:        payload.Outcome,
+		PrincipalURN:   payload.PrincipalUrn,
+		Scope:          payload.Scope,
+		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
+		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
+		SkipPagination: skipPagination,
+	}
+
+	chQueries := chrepo.New(s.chConn)
+
+	var total uint64
+	if !skipPagination {
+		count, err := chQueries.CountChallengeBuckets(ctx, filters)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "count challenge buckets from clickhouse").Log(ctx, s.logger)
+		}
+		if count == 0 {
+			return &gen.ListChallengeBucketsResult{Buckets: []*gen.ChallengeBucket{}, Total: 0}, nil
+		}
+		total = count
+	}
+
+	buckets, err := chQueries.ListChallengeBuckets(ctx, filters)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list challenge buckets from clickhouse").Log(ctx, s.logger)
+	}
+
+	if len(buckets) == 0 {
+		return &gen.ListChallengeBucketsResult{Buckets: []*gen.ChallengeBucket{}, Total: int(total)}, nil
+	}
+
+	// Batch-lookup resolutions from PG using all challenge IDs across buckets.
+	allChallengeIDs := make([]string, 0, len(buckets))
+	for _, b := range buckets {
+		allChallengeIDs = append(allChallengeIDs, b.ChallengeIDs...)
+	}
+
+	resolutions, err := repo.New(s.db).ListChallengeResolutions(ctx, repo.ListChallengeResolutionsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ChallengeIds:   allChallengeIDs,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list challenge resolutions").Log(ctx, s.logger)
+	}
+	resolutionMap := make(map[string]repo.AuthzChallengeResolution, len(resolutions))
+	for _, r := range resolutions {
+		resolutionMap[r.ChallengeID] = r
+	}
+
+	// Apply resolved filter post-join if requested, then paginate in Go.
+	if payload.Resolved != nil {
+		wantResolved := *payload.Resolved
+		filtered := buckets[:0]
+		for _, b := range buckets {
+			_, hasResolution := resolutionMap[b.ID]
+			if hasResolution == wantResolved {
+				filtered = append(filtered, b)
+			}
+		}
+		buckets = filtered
+		total = uint64(len(buckets))
+		offset := uint64(payload.Offset) //nolint:gosec // Goa validates >= 0
+		limit := uint64(payload.Limit)   //nolint:gosec // Goa validates 1..200
+		if offset >= total {
+			buckets = nil
+		} else {
+			end := min(offset+limit, total)
+			buckets = buckets[offset:end]
+		}
+	}
+
+	// Batch-lookup user photos from PG.
+	userIDs := make([]string, 0, len(buckets))
+	seen := make(map[string]bool)
+	for _, b := range buckets {
+		if b.UserID != nil && *b.UserID != "" && !seen[*b.UserID] {
+			userIDs = append(userIDs, *b.UserID)
+			seen[*b.UserID] = true
+		}
+	}
+	userMap := s.fetchChallengeUserInfo(ctx, userIDs)
+
+	// Build response.
+	result := make([]*gen.ChallengeBucket, 0, len(buckets))
+	for _, b := range buckets {
+		roleSlugs := b.RoleSlugs
+		if roleSlugs == nil {
+			roleSlugs = []string{}
+		}
+		challengeIDs := b.ChallengeIDs
+		if challengeIDs == nil {
+			challengeIDs = []string{}
+		}
+
+		var (
+			pProjectID      *string
+			pResourceKind   *string
+			pResourceID     *string
+			pUserEmail      *string
+			pPhotoURL       *string
+			pResolvedAt     *string
+			pResolutionType *string
+			pResolvedBy     *string
+			pResolutionSlug *string
+		)
+
+		if b.ProjectID != "" {
+			pProjectID = &b.ProjectID
+		}
+		if b.ResourceKind != "" {
+			pResourceKind = &b.ResourceKind
+		}
+		if b.ResourceID != "" {
+			pResourceID = &b.ResourceID
+		}
+
+		// Enrich with user data.
+		if b.UserID != nil {
+			if info, ok := userMap[*b.UserID]; ok {
+				pUserEmail = &info.email
+				pPhotoURL = info.photoURL
+			}
+		}
+		if pUserEmail == nil && b.UserEmail != nil && *b.UserEmail != "" {
+			pUserEmail = b.UserEmail
+		}
+
+		// Enrich with resolution data (use the representative challenge's ID).
+		if r, ok := resolutionMap[b.ID]; ok {
+			resolvedAt := r.CreatedAt.Time.Format(time.RFC3339)
+			pResolvedAt = &resolvedAt
+			pResolutionType = &r.ResolutionType
+			pResolvedBy = &r.ResolvedBy
+			if r.RoleSlug.Valid {
+				pResolutionSlug = &r.RoleSlug.String
+			}
+		}
+
+		result = append(result, &gen.ChallengeBucket{
+			ID:                  b.ID,
+			LastSeen:            b.LastSeen,
+			FirstSeen:           b.FirstSeen,
+			OrganizationID:      b.OrganizationID,
+			ProjectID:           pProjectID,
+			PrincipalUrn:        b.PrincipalURN,
+			PrincipalType:       b.PrincipalType,
+			UserEmail:           pUserEmail,
+			PhotoURL:            pPhotoURL,
+			Operation:           b.Operation,
+			Outcome:             b.Outcome,
+			Reason:              b.Reason,
+			Scope:               b.Scope,
+			ResourceKind:        pResourceKind,
+			ResourceID:          pResourceID,
+			RoleSlugs:           roleSlugs,
+			EvaluatedGrantCount: int(b.EvaluatedGrantCount),
+			MatchedGrantCount:   int(b.MatchedGrantCount), //nolint:gosec // small number
+			ChallengeCount:      int(b.ChallengeCount),    //nolint:gosec // small number
+			ChallengeIds:        challengeIDs,
+			ResolvedAt:          pResolvedAt,
+			ResolutionType:      pResolutionType,
+			ResolvedBy:          pResolvedBy,
+			ResolutionRoleSlug:  pResolutionSlug,
+		})
+	}
+
+	return &gen.ListChallengeBucketsResult{
+		Buckets: result,
+		Total:   int(total),
 	}, nil
 }
 

@@ -63,7 +63,7 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 		return nil, oops.E(oops.CodeUnexpected, err, "create user session issuer").Log(ctx, logger)
 	}
 
-	if err := audit.LogUserSessionIssuerCreate(ctx, dbtx, audit.LogUserSessionIssuerCreateEvent{
+	if err := s.audit.LogUserSessionIssuerCreate(ctx, dbtx, audit.LogUserSessionIssuerCreateEvent{
 		OrganizationID:       authCtx.ActiveOrganizationID,
 		ProjectID:            *authCtx.ProjectID,
 		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -146,7 +146,7 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 
 	afterView := userSessionIssuerView(updated)
 
-	if err := audit.LogUserSessionIssuerUpdate(ctx, dbtx, audit.LogUserSessionIssuerUpdateEvent{
+	if err := s.audit.LogUserSessionIssuerUpdate(ctx, dbtx, audit.LogUserSessionIssuerUpdateEvent{
 		OrganizationID:                  authCtx.ActiveOrganizationID,
 		ProjectID:                       *authCtx.ProjectID,
 		Actor:                           urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -307,7 +307,7 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 		return oops.E(oops.CodeUnexpected, err, "delete child user session consents").Log(ctx, logger)
 	}
 
-	if err := audit.LogUserSessionIssuerDelete(ctx, dbtx, audit.LogUserSessionIssuerDeleteEvent{
+	if err := s.audit.LogUserSessionIssuerDelete(ctx, dbtx, audit.LogUserSessionIssuerDeleteEvent{
 		OrganizationID:       authCtx.ActiveOrganizationID,
 		ProjectID:            *authCtx.ProjectID,
 		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

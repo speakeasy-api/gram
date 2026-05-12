@@ -44,6 +44,10 @@ type Service interface {
 	// List authz challenge events from ClickHouse, enriched with resolution state
 	// from PostgreSQL.
 	ListChallenges(context.Context, *ListChallengesPayload) (res *ListChallengesResult, err error)
+	// List authz challenges grouped into time-based burst buckets. Consecutive
+	// challenges with the same dimensions within a 10-minute window are collapsed
+	// into a single bucket.
+	ListChallengeBuckets(context.Context, *ListChallengeBucketsPayload) (res *ListChallengeBucketsResult, err error)
 	// Record resolutions for one or more denied authz challenges. The caller is
 	// responsible for assigning the role first.
 	ResolveChallenge(context.Context, *ResolveChallengePayload) (res *ResolveChallengesResult, err error)
@@ -69,7 +73,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [14]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRole", "getRBACStatus", "enableRBAC", "disableRBAC", "listChallenges", "resolveChallenge"}
+var MethodNames = [15]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRole", "getRBACStatus", "enableRBAC", "disableRBAC", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
 
 // AccessMember is the result type of the access service updateMemberRole
 // method.
@@ -123,6 +127,56 @@ type AuthzChallenge struct {
 	// When the challenge was resolved by an admin.
 	ResolvedAt *string
 	// How the challenge was resolved.
+	ResolutionType *string
+	// URN of the admin who resolved.
+	ResolvedBy *string
+	// Role slug assigned (when resolution_type=role_assigned).
+	ResolutionRoleSlug *string
+}
+
+// A group of consecutive challenges with the same dimensions that occurred
+// within a 10-minute window.
+type ChallengeBucket struct {
+	// ID of the most recent challenge in the bucket.
+	ID string
+	// Timestamp of the most recent challenge in the bucket.
+	LastSeen string
+	// Timestamp of the earliest challenge in the bucket.
+	FirstSeen string
+	// Organization the principal was acting in.
+	OrganizationID string
+	// Project scope (empty for org-level checks).
+	ProjectID *string
+	// Principal URN e.g. user:<uuid> or api_key:<id>.
+	PrincipalUrn string
+	// Kind of principal.
+	PrincipalType string
+	// Email when available.
+	UserEmail *string
+	// User avatar URL when available.
+	PhotoURL  *string
+	Operation string
+	Outcome   string
+	Reason    string
+	// Scope that was checked.
+	Scope string
+	// Resource kind of the check.
+	ResourceKind *string
+	// Resource ID of the check.
+	ResourceID *string
+	// Roles the principal had loaded.
+	RoleSlugs []string
+	// Total grants evaluated.
+	EvaluatedGrantCount int
+	// Number of grants that matched.
+	MatchedGrantCount int
+	// Number of individual challenges in this bucket.
+	ChallengeCount int
+	// IDs of all challenges in this bucket.
+	ChallengeIds []string
+	// When the bucket was resolved by an admin.
+	ResolvedAt *string
+	// How the bucket was resolved.
 	ResolutionType *string
 	// URN of the admin who resolved.
 	ResolvedBy *string
@@ -203,6 +257,36 @@ type GetRolePayload struct {
 	SessionToken *string
 }
 
+// ListChallengeBucketsPayload is the payload type of the access service
+// listChallengeBuckets method.
+type ListChallengeBucketsPayload struct {
+	// Filter by outcome.
+	Outcome *string
+	// Filter by principal URN.
+	PrincipalUrn *string
+	// Filter by scope.
+	Scope *string
+	// Filter to a specific project.
+	ProjectID *string
+	// Filter by resolution state. True = only resolved, false = only unresolved.
+	Resolved *bool
+	// Maximum number of buckets to return.
+	Limit int
+	// Number of buckets to skip.
+	Offset       int
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// ListChallengeBucketsResult is the result type of the access service
+// listChallengeBuckets method.
+type ListChallengeBucketsResult struct {
+	// The challenge buckets.
+	Buckets []*ChallengeBucket
+	// Total number of matching buckets for pagination.
+	Total int
+}
+
 // ListChallengesPayload is the payload type of the access service
 // listChallenges method.
 type ListChallengesPayload struct {
@@ -216,6 +300,9 @@ type ListChallengesPayload struct {
 	ProjectID *string
 	// Filter by resolution state. True = only resolved, false = only unresolved.
 	Resolved *bool
+	// Fetch specific challenges by ID. When set, other filters and pagination are
+	// ignored.
+	Ids []string
 	// Maximum number of results to return.
 	Limit int
 	// Number of results to skip.
@@ -373,6 +460,9 @@ type Selector struct {
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).
 	Tool *string
+	// Project filter (MCP scopes only). When set with resource_id='*', grants
+	// access to all servers in the project.
+	ProjectID *string
 }
 
 // UpdateMemberRolePayload is the payload type of the access service

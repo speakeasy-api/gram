@@ -18,15 +18,15 @@ export type OTELResourceAttribute = {
    */
   key: string;
   /**
-   * OTEL attribute value - supports stringValue or intValue
+   * OTEL attribute value - any of the OTLP/JSON value kinds
    */
-  value: OTELAttributeValue;
+  value?: OTELAttributeValue | undefined;
 };
 
 /** @internal */
 export type OTELResourceAttribute$Outbound = {
   key: string;
-  value: OTELAttributeValue$Outbound;
+  value?: OTELAttributeValue$Outbound | undefined;
 };
 
 /** @internal */
@@ -35,7 +35,7 @@ export const OTELResourceAttribute$outboundSchema: z.ZodMiniType<
   OTELResourceAttribute
 > = z.object({
   key: z.string(),
-  value: OTELAttributeValue$outboundSchema,
+  value: z.optional(OTELAttributeValue$outboundSchema),
 });
 
 export function otelResourceAttributeToJSON(

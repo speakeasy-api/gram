@@ -519,13 +519,17 @@ export function ToolsetView({
     value: group.key,
   }));
   const filterButton = (
-    <MultiSelect
-      options={groupFilterItems}
-      selectedValues={selectedGroups}
-      setSelectedValues={setSelectedGroups}
-      placeholder="Filter tools"
-      className="mb-4 w-fit capitalize"
-    />
+    <div className="relative mb-4 w-full">
+      <MultiSelect
+        options={groupFilterItems}
+        defaultValue={selectedGroups}
+        onValueChange={setSelectedGroups}
+        placeholder="Filter tools"
+        className="capitalize"
+        hideSelectAll={true}
+        autoSize={true}
+      />
+    </div>
   );
 
   // Filter tools based on selected groups

@@ -125,7 +125,7 @@ func (s *Service) RevokeUserSessionConsent(ctx context.Context, payload *gen.Rev
 		return oops.E(oops.CodeUnexpected, err, "revoke user session consent").Log(ctx, logger)
 	}
 
-	if err := audit.LogUserSessionConsentRevoke(ctx, dbtx, audit.LogUserSessionConsentRevokeEvent{
+	if err := s.audit.LogUserSessionConsentRevoke(ctx, dbtx, audit.LogUserSessionConsentRevokeEvent{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		ProjectID:             *authCtx.ProjectID,
 		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

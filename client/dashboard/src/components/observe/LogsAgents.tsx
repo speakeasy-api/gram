@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { ArrowUpIcon, ArrowDownIcon } from "lucide-react";
+import { isValidPreset } from "@/components/observe/observeFilterUtils";
 
 type SortField = "chronological" | "messageCount" | "score";
 type SortOrder = "asc" | "desc";
@@ -98,23 +99,6 @@ function ScoreLegend() {
       </div>
     </div>
   );
-}
-
-const validPresets: DateRangePreset[] = [
-  "15m",
-  "1h",
-  "4h",
-  "1d",
-  "2d",
-  "3d",
-  "7d",
-  "15d",
-  "30d",
-  "90d",
-];
-
-function isValidPreset(value: string | null): value is DateRangePreset {
-  return value !== null && validPresets.includes(value as DateRangePreset);
 }
 
 export function LogsAgentsContent() {

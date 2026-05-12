@@ -70,11 +70,8 @@ func (l *Logger) LogAssistantMemoryCreate(ctx context.Context, dbtx repo.DBTX, e
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogAssistantMemoryDeleteEvent struct {
@@ -129,11 +126,8 @@ func (l *Logger) LogAssistantMemoryDelete(ctx context.Context, dbtx repo.DBTX, e
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 func truncateForAudit(s string, limit int) string {

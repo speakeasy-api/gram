@@ -8,6 +8,7 @@ import { accessDisableRBAC } from "../funcs/accessDisableRBAC.js";
 import { accessEnableRBAC } from "../funcs/accessEnableRBAC.js";
 import { accessGetRBACStatus } from "../funcs/accessGetRBACStatus.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
+import { accessListChallengeBuckets } from "../funcs/accessListChallengeBuckets.js";
 import { accessListChallenges } from "../funcs/accessListChallenges.js";
 import { accessListGrants } from "../funcs/accessListGrants.js";
 import { accessListMembers } from "../funcs/accessListMembers.js";
@@ -129,6 +130,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Role> {
     return unwrapAsync(accessGetRole(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listChallengeBuckets access
+   *
+   * @remarks
+   * List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
+   */
+  async listChallengeBuckets(
+    request?: operations.ListChallengeBucketsRequest | undefined,
+    security?: operations.ListChallengeBucketsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListChallengeBucketsResult> {
+    return unwrapAsync(accessListChallengeBuckets(
       this,
       request,
       security,

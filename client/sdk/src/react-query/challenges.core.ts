@@ -49,6 +49,7 @@ export function buildChallengesQuery(
       scope: request?.scope,
       projectId: request?.projectId,
       resolved: request?.resolved,
+      ids: request?.ids,
       limit: request?.limit,
       offset: request?.offset,
       gramKey: request?.gramKey,
@@ -80,11 +81,12 @@ export function buildChallengesQuery(
 
 export function queryKeyChallenges(
   parameters: {
-    outcome?: operations.Outcome | undefined;
+    outcome?: operations.QueryParamOutcome | undefined;
     principalUrn?: string | undefined;
     scope?: string | undefined;
     projectId?: string | undefined;
     resolved?: boolean | undefined;
+    ids?: Array<string> | undefined;
     limit?: number | undefined;
     offset?: number | undefined;
     gramKey?: string | undefined;

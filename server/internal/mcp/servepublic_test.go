@@ -19,6 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth"
+	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -76,6 +78,64 @@ func servePublicHTTP(
 		return w, fmt.Errorf("serve public: %w", err)
 	}
 	return w, nil
+}
+
+// createPrivateOAuthToolset creates a private MCP toolset wired to a Gram
+// OAuth proxy server. Returns the toolset row. The wiring matches what
+// TestServePublic_PrivateWithOAuth_* tests construct inline today.
+func createPrivateOAuthToolset(
+	t *testing.T,
+	ctx context.Context,
+	conn toolsets_repo.DBTX,
+	authCtx *contextvalues.AuthContext,
+	slug string,
+) toolsets_repo.Toolset {
+	t.Helper()
+
+	oauthRepo := oauth_repo.New(conn)
+	oauthServer, err := oauthRepo.UpsertOAuthProxyServer(ctx, oauth_repo.UpsertOAuthProxyServerParams{
+		ProjectID: *authCtx.ProjectID,
+		Slug:      "priv-oauth-server-" + uuid.New().String()[:8],
+	})
+	require.NoError(t, err)
+
+	_, err = oauthRepo.UpsertOAuthProxyProvider(ctx, oauth_repo.UpsertOAuthProxyProviderParams{
+		ProjectID:                         *authCtx.ProjectID,
+		OauthProxyServerID:                oauthServer.ID,
+		Slug:                              "gram-provider-" + uuid.New().String()[:8],
+		ProviderType:                      string(oauth.OAuthProxyProviderTypeGram),
+		ScopesSupported:                   []string{},
+		ResponseTypesSupported:            []string{},
+		ResponseModesSupported:            []string{},
+		GrantTypesSupported:               []string{},
+		TokenEndpointAuthMethodsSupported: []string{},
+		SecurityKeyNames:                  []string{},
+		Secrets:                           []byte("{}"),
+	})
+	require.NoError(t, err)
+
+	toolsetsRepo := toolsets_repo.New(conn)
+	uniqueSlug := slug + "-" + uuid.New().String()[:8]
+	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Private OAuth MCP " + slug,
+		Slug:                   uniqueSlug,
+		Description:            conv.ToPGText("Private MCP with OAuth"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                conv.ToPGText(uniqueSlug),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	toolset, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
+		OauthProxyServerID: uuid.NullUUID{UUID: oauthServer.ID, Valid: true},
+		Slug:               toolset.Slug,
+		ProjectID:          *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	return toolset
 }
 
 // createPublicMCPToolset creates a public MCP toolset for testing.

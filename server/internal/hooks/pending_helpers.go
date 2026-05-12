@@ -334,15 +334,11 @@ func extractMetricsForClickHouse(payload *gen.MetricsPayload) ([]MetricDataPoint
 					continue
 				}
 
-				// Validate aggregation temporality is DELTA (1)
-				// DELTA = 1 means each data point represents change since last export
-				// CUMULATIVE = 2 would require different handling to avoid double-counting
-				if metric.Sum.AggregationTemporality == nil || *metric.Sum.AggregationTemporality != 1 {
-					temporality := "nil"
-					if metric.Sum.AggregationTemporality != nil {
-						temporality = fmt.Sprintf("%d", *metric.Sum.AggregationTemporality)
-					}
-					return nil, fmt.Errorf("unsupported aggregation temporality %s for metric %s (expected 1 for DELTA)", temporality, *metric.Name)
+				// Validate aggregation temporality is DELTA. Per OTLP/JSON, this
+				// can arrive as a JSON number (1) or as the enum string form
+				// ("AGGREGATION_TEMPORALITY_DELTA").
+				if !isDeltaTemporality(metric.Sum.AggregationTemporality) {
+					return nil, fmt.Errorf("unsupported aggregation temporality %v for metric %s (expected DELTA)", metric.Sum.AggregationTemporality, *metric.Name)
 				}
 
 				metricName := *metric.Name
@@ -378,12 +374,17 @@ func extractMetricsForClickHouse(payload *gen.MetricsPayload) ([]MetricDataPoint
 
 					entry := aggregated[key]
 
-					// Get the value
+					// Get the value. asDouble is always a JSON number. asInt can
+					// arrive as a JSON string ("12345", canonical OTLP/JSON) or a
+					// raw number (12345, Claude Code's own exporter); parseLooseInt64
+					// handles both shapes.
 					value := float64(0)
 					if dataPoint.AsDouble != nil {
 						value = *dataPoint.AsDouble
 					} else if dataPoint.AsInt != nil {
-						value = float64(*dataPoint.AsInt)
+						if n, ok := parseLooseInt64(dataPoint.AsInt); ok {
+							value = float64(n)
+						}
 					}
 
 					// Update timestamp to latest
@@ -421,6 +422,57 @@ func extractMetricsForClickHouse(payload *gen.MetricsPayload) ([]MetricDataPoint
 	}
 
 	return result, nil
+}
+
+// parseLooseInt64 coerces a value that arrived as `any` (because the OTLP
+// shape was declared as Any in the goa design) into an int64. It accepts:
+//   - JSON numbers (decoded as float64) — e.g. {"asInt": 12345}
+//   - JSON strings of digits — e.g. {"asInt": "12345"} (canonical OTLP/JSON)
+//   - encoding/json json.Number values, for callers that decode with UseNumber
+//   - integer types, defensively
+//
+// Returns (0, false) on anything else, including non-integral floats.
+func parseLooseInt64(v any) (int64, bool) {
+	switch t := v.(type) {
+	case nil:
+		return 0, false
+	case float64:
+		if t != float64(int64(t)) {
+			return 0, false
+		}
+		return int64(t), true
+	case float32:
+		f := float64(t)
+		if f != float64(int64(f)) {
+			return 0, false
+		}
+		return int64(f), true
+	case int:
+		return int64(t), true
+	case int32:
+		return int64(t), true
+	case int64:
+		return t, true
+	case json.Number:
+		n, err := t.Int64()
+		return n, err == nil
+	case string:
+		n, err := strconv.ParseInt(t, 10, 64)
+		return n, err == nil
+	}
+	return 0, false
+}
+
+// isDeltaTemporality returns true if the value represents OTLP DELTA
+// aggregation temporality. Accepts both the numeric form (1) and the protobuf
+// enum string form ("AGGREGATION_TEMPORALITY_DELTA") that some OTLP/JSON
+// emitters use.
+func isDeltaTemporality(v any) bool {
+	if s, ok := v.(string); ok && s == "AGGREGATION_TEMPORALITY_DELTA" {
+		return true
+	}
+	n, ok := parseLooseInt64(v)
+	return ok && n == 1
 }
 
 // flushPendingHooks retrieves all buffered hooks for a session and writes them to ClickHouse.

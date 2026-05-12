@@ -47,6 +47,10 @@ export type Selector = {
    */
   disposition?: Disposition | undefined;
   /**
+   * Project filter (MCP scopes only). When set with resource_id='*', grants access to all servers in the project.
+   */
+  projectId?: string | undefined;
+  /**
    * The resource identifier, or '*' for all resources of this kind.
    */
   resourceId: string;
@@ -78,12 +82,14 @@ export const ResourceKind$outboundSchema: z.ZodMiniEnum<typeof ResourceKind> =
 export const Selector$inboundSchema: z.ZodMiniType<Selector, unknown> = z.pipe(
   z.object({
     disposition: z.optional(Disposition$inboundSchema),
+    project_id: z.optional(z.string()),
     resource_id: z.string(),
     resource_kind: ResourceKind$inboundSchema,
     tool: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "project_id": "projectId",
       "resource_id": "resourceId",
       "resource_kind": "resourceKind",
     });
@@ -92,6 +98,7 @@ export const Selector$inboundSchema: z.ZodMiniType<Selector, unknown> = z.pipe(
 /** @internal */
 export type Selector$Outbound = {
   disposition?: string | undefined;
+  project_id?: string | undefined;
   resource_id: string;
   resource_kind: string;
   tool?: string | undefined;
@@ -104,12 +111,14 @@ export const Selector$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     disposition: z.optional(Disposition$outboundSchema),
+    projectId: z.optional(z.string()),
     resourceId: z.string(),
     resourceKind: ResourceKind$outboundSchema,
     tool: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      projectId: "project_id",
       resourceId: "resource_id",
       resourceKind: "resource_kind",
     });

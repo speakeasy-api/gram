@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/oauth"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 )
 
 // TestValidateAuthorizationRequest_ScopeEncoding guards against a regression
@@ -18,12 +19,12 @@ func TestValidateAuthorizationRequest_ScopeEncoding(t *testing.T) {
 	ctx := t.Context()
 	env := newTokenTestEnv(t)
 
-	client, err := env.clientReg.RegisterClient(ctx, &oauth.ClientInfo{
+	client, err := env.ClientReg.RegisterClient(ctx, &oauth.ClientInfo{
 		ClientName:   "test-client",
-		RedirectURIs: []string{testRedirectURI},
+		RedirectURIs: []string{oauthtest.TestRedirectURI},
 		GrantTypes:   []string{"authorization_code", "refresh_token"},
 		Scope:        "openid profile",
-	}, testMCPURL)
+	}, oauthtest.TestMCPURL)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -40,15 +41,15 @@ func TestValidateAuthorizationRequest_ScopeEncoding(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			grant, err := env.grantMgr.CreateAuthorizationGrant(
+			grant, err := env.GrantMgr.CreateAuthorizationGrant(
 				ctx,
 				&oauth.AuthorizationRequest{
 					ResponseType: "code",
 					ClientID:     client.ClientID,
-					RedirectURI:  testRedirectURI,
+					RedirectURI:  oauthtest.TestRedirectURI,
 					Scope:        tc.scope,
 				},
-				testMCPURL,
+				oauthtest.TestMCPURL,
 				uuid.New(),
 				"upstream-access-token",
 				"",

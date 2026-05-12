@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/assistants"
@@ -18,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 func TestServiceRequiresProjectGrants(t *testing.T) {
@@ -122,10 +125,121 @@ func TestServiceCreateAssistantMapsInvalidToolsetToBadRequest(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
+func TestServiceCreateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_mcp_autoenable")
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeProjectWrite,
+		Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String()),
+	})
+
+	toolsetsQ := toolsetsRepo.New(conn)
+	ts, err := toolsetsQ.CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
+		OrganizationID:         "org-test",
+		ProjectID:              projectID,
+		Name:                   "Slack",
+		Slug:                   "slack",
+		Description:            pgtype.Text{},
+		DefaultEnvironmentSlug: pgtype.Text{},
+		McpSlug:                pgtype.Text{String: "org-test-slack-xyz", Valid: true},
+		McpEnabled:             false,
+	})
+	require.NoError(t, err)
+	require.False(t, ts.McpEnabled)
+
+	_, err = svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             "Assistant",
+		Model:            "openai/gpt-4o-mini",
+		Instructions:     "",
+		Toolsets: []*types.AssistantToolsetRef{
+			{ToolsetSlug: ts.Slug, EnvironmentSlug: nil},
+		},
+		WarmTTLSeconds: nil,
+		MaxConcurrency: nil,
+		Status:         nil,
+	})
+	require.NoError(t, err)
+
+	reloaded, err := toolsetsQ.GetToolset(t.Context(), toolsetsRepo.GetToolsetParams{
+		Slug:      ts.Slug,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	require.True(t, reloaded.McpEnabled, "attaching toolset to assistant must enable MCP")
+}
+
+func TestServiceUpdateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_mcp_autoenable_update")
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeProjectWrite,
+		Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String()),
+	})
+
+	toolsetsQ := toolsetsRepo.New(conn)
+	ts, err := toolsetsQ.CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
+		OrganizationID:         "org-test",
+		ProjectID:              projectID,
+		Name:                   "Slack",
+		Slug:                   "slack",
+		Description:            pgtype.Text{},
+		DefaultEnvironmentSlug: pgtype.Text{},
+		McpSlug:                pgtype.Text{String: "org-test-slack-xyz", Valid: true},
+		McpEnabled:             false,
+	})
+	require.NoError(t, err)
+
+	created, err := svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             "Assistant",
+		Model:            "openai/gpt-4o-mini",
+		Instructions:     "",
+		Toolsets:         nil,
+		WarmTTLSeconds:   nil,
+		MaxConcurrency:   nil,
+		Status:           nil,
+	})
+	require.NoError(t, err)
+
+	_, err = svc.UpdateAssistant(ctx, &gen.UpdateAssistantPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ID:               created.ID,
+		Name:             nil,
+		Model:            nil,
+		Instructions:     nil,
+		Toolsets: []*types.AssistantToolsetRef{
+			{ToolsetSlug: ts.Slug, EnvironmentSlug: nil},
+		},
+		WarmTTLSeconds: nil,
+		MaxConcurrency: nil,
+		Status:         nil,
+	})
+	require.NoError(t, err)
+
+	reloaded, err := toolsetsQ.GetToolset(t.Context(), toolsetsRepo.GetToolsetParams{
+		Slug:      ts.Slug,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	require.True(t, reloaded.McpEnabled, "updating assistant toolsets must enable MCP on newly attached toolsets")
+}
+
 func newRBACService(t *testing.T) (*Service, context.Context, uuid.UUID) {
 	t.Helper()
+	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_rbac")
+	return svc, ctx, projectID
+}
 
-	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_rbac")
+func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Context, uuid.UUID, *pgxpool.Pool) {
+	t.Helper()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, dbName)
 	require.NoError(t, err)
 
 	proj, err := projectsRepo.New(conn).CreateProject(t.Context(), projectsRepo.CreateProjectParams{
@@ -168,7 +282,7 @@ func newRBACService(t *testing.T) (*Service, context.Context, uuid.UUID) {
 		IsAdmin:               false,
 	})
 
-	return service, ctx, projectID
+	return service, ctx, projectID, conn
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
 // RuntimePath is the experimental runtime path served by this package.
@@ -42,17 +43,20 @@ const RuntimePath = "/x/mcp/{slug}"
 
 // Service owns dependencies for the experimental MCP runtime endpoint.
 type Service struct {
-	logger                       *slog.Logger
-	tracer                       trace.Tracer
-	db                           *pgxpool.Pool
-	enc                          *encryption.Client
-	authz                        *authz.Engine
-	mcpService                   *mcp.Service
-	serverURL                    *url.URL
-	guardianPolicy               *guardian.Policy
-	proxyMetrics                 *proxy.Metrics
-	toolUsageLimitsInterceptor   *ToolUsageLimitsInterceptor
-	toolUsageTrackingInterceptor *ToolUsageTrackingInterceptor
+	logger                            *slog.Logger
+	tracer                            trace.Tracer
+	db                                *pgxpool.Pool
+	enc                               *encryption.Client
+	authz                             *authz.Engine
+	mcpService                        *mcp.Service
+	serverURL                         *url.URL
+	guardianPolicy                    *guardian.Policy
+	posthog                           *posthog.Posthog
+	proxyMetrics                      *proxy.Metrics
+	xmcpMetrics                       *metrics
+	toolsCallUsageLimitsInterceptor   *ToolsCallUsageLimitsInterceptor
+	toolsCallUsageTrackingInterceptor *ToolsCallUsageTrackingInterceptor
+	initializePostHogEventInterceptor *InitializePostHogEventInterceptor
 }
 
 // NewService constructs a Service with its full dependency graph wired up.
@@ -64,6 +68,7 @@ func NewService(
 	enc *encryption.Client,
 	authzEngine *authz.Engine,
 	guardianPolicy *guardian.Policy,
+	posthogClient *posthog.Posthog,
 	billingRepo billing.Repository,
 	billingTracker billing.Tracker,
 	mcpService *mcp.Service,
@@ -72,19 +77,23 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("xmcp"))
 
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/xmcp")
+	xmcpMetrics := newMetrics(meter, logger)
 
 	return &Service{
-		logger:                       logger,
-		tracer:                       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/xmcp"),
-		db:                           db,
-		enc:                          enc,
-		authz:                        authzEngine,
-		mcpService:                   mcpService,
-		serverURL:                    serverURL,
-		guardianPolicy:               guardianPolicy,
-		proxyMetrics:                 proxy.NewMetrics(meter, logger),
-		toolUsageLimitsInterceptor:   NewToolUsageLimitsInterceptor(billingRepo, logger),
-		toolUsageTrackingInterceptor: NewToolUsageTrackingInterceptor(billingTracker, logger),
+		logger:                            logger,
+		tracer:                            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/xmcp"),
+		db:                                db,
+		enc:                               enc,
+		authz:                             authzEngine,
+		mcpService:                        mcpService,
+		serverURL:                         serverURL,
+		guardianPolicy:                    guardianPolicy,
+		posthog:                           posthogClient,
+		proxyMetrics:                      proxy.NewMetrics(meter, logger),
+		xmcpMetrics:                       xmcpMetrics,
+		toolsCallUsageLimitsInterceptor:   NewToolsCallUsageLimitsInterceptor(billingRepo, logger),
+		toolsCallUsageTrackingInterceptor: NewToolsCallUsageTrackingInterceptor(billingTracker, logger),
+		initializePostHogEventInterceptor: NewInitializePostHogEventInterceptor(posthogClient, logger),
 	}
 }
 

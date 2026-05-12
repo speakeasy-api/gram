@@ -242,10 +242,9 @@ func TestHandleWellKnownOAuthServerMetadata_ToolsetBackendWithExternalOAuth(t *t
 	require.NotNil(t, authCtx.ProjectID)
 
 	external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
-		Slug:       "xmcp-srv-external",
-		IsPublic:   true,
-		Metadata:   nil,
-		AuthServer: nil,
+		Slug:     "xmcp-srv-external",
+		IsPublic: true,
+		Metadata: nil,
 	})
 	slug, _ := seedToolsetMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, external.Toolset, "public")
 
@@ -414,10 +413,9 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendWithExterna
 	require.NotNil(t, authCtx.ProjectID)
 
 	external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
-		Slug:       "xmcp-pr-external",
-		IsPublic:   true,
-		Metadata:   nil,
-		AuthServer: nil,
+		Slug:     "xmcp-pr-external",
+		IsPublic: true,
+		Metadata: nil,
 	})
 	slug, _ := seedToolsetMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, external.Toolset, "public")
 

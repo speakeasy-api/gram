@@ -24,7 +24,6 @@ const (
 	familySystemPromptLeak
 	familyDelimiterInjection
 	familyEncodedPayload
-	familyToolAbuse
 )
 
 // fuzzyMatchInputCap bounds the sliding-substring scan so a 10MB blob
@@ -67,16 +66,6 @@ func init() {
 			family:      familyEncodedPayload,
 			confidence:  0.7,
 			pattern:     regexp.MustCompile(`(?i)\b(decode|execute|eval|run)\b.{0,40}([A-Za-z0-9+/]{40,}={0,2}|[0-9a-fA-F]{64,})`),
-		},
-		{
-			id:          "pi.tool-abuse.shell",
-			description: "Instruction to invoke shell or destructive command",
-			family:      familyToolAbuse,
-			confidence:  0.8,
-			// `/bin/sh` lives outside the leading `\b` group: a space-then-slash
-			// transition is non-word-to-non-word, which `\b` doesn't satisfy, so
-			// the literal needs its own no-boundary alternative.
-			pattern: regexp.MustCompile(`(?i)\b(call|invoke|execute|run)\b.{0,20}(?:/bin/sh|\b(?:shell|bash|exec|rm\s+-rf|curl\s+http))`),
 		},
 	}
 
@@ -178,7 +167,6 @@ func runHeuristics(text string) []Finding {
 	findings = append(findings, runFamily(text, familySystemPromptLeak)...)
 	findings = append(findings, detectDelimiterInjection(text)...)
 	findings = append(findings, runFamily(text, familyEncodedPayload)...)
-	findings = append(findings, runFamily(text, familyToolAbuse)...)
 	return findings
 }
 

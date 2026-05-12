@@ -73,7 +73,7 @@ func BuildCreateRolePayload(accessCreateRoleBody string, accessCreateRoleApikeyT
 	{
 		err = json.Unmarshal([]byte(accessCreateRoleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"scope\": \"org:admin\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"scope\": \"org:admin\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }'")
 		}
 		if body.Grants == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("grants", "body"))
@@ -137,7 +137,7 @@ func BuildUpdateRolePayload(accessUpdateRoleBody string, accessUpdateRoleApikeyT
 	{
 		err = json.Unmarshal([]byte(accessUpdateRoleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"scope\": \"org:admin\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"scope\": \"org:admin\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }'")
 		}
 		for _, e := range body.Grants {
 			if e != nil {
@@ -362,7 +362,7 @@ func BuildDisableRBACPayload(accessDisableRBACSessionToken string) (*access.Disa
 
 // BuildListChallengesPayload builds the payload for the access listChallenges
 // endpoint from CLI flags.
-func BuildListChallengesPayload(accessListChallengesOutcome string, accessListChallengesPrincipalUrn string, accessListChallengesScope string, accessListChallengesProjectID string, accessListChallengesResolved string, accessListChallengesLimit string, accessListChallengesOffset string, accessListChallengesApikeyToken string, accessListChallengesSessionToken string) (*access.ListChallengesPayload, error) {
+func BuildListChallengesPayload(accessListChallengesOutcome string, accessListChallengesPrincipalUrn string, accessListChallengesScope string, accessListChallengesProjectID string, accessListChallengesResolved string, accessListChallengesIds string, accessListChallengesLimit string, accessListChallengesOffset string, accessListChallengesApikeyToken string, accessListChallengesSessionToken string) (*access.ListChallengesPayload, error) {
 	var err error
 	var outcome *string
 	{
@@ -402,6 +402,15 @@ func BuildListChallengesPayload(accessListChallengesOutcome string, accessListCh
 			resolved = &val
 			if err != nil {
 				return nil, fmt.Errorf("invalid value for resolved, must be BOOL")
+			}
+		}
+	}
+	var ids []string
+	{
+		if accessListChallengesIds != "" {
+			err = json.Unmarshal([]byte(accessListChallengesIds), &ids)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for ids, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
 			}
 		}
 	}
@@ -455,6 +464,115 @@ func BuildListChallengesPayload(accessListChallengesOutcome string, accessListCh
 		}
 	}
 	v := &access.ListChallengesPayload{}
+	v.Outcome = outcome
+	v.PrincipalUrn = principalUrn
+	v.Scope = scope
+	v.ProjectID = projectID
+	v.Resolved = resolved
+	v.Ids = ids
+	v.Limit = limit
+	v.Offset = offset
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListChallengeBucketsPayload builds the payload for the access
+// listChallengeBuckets endpoint from CLI flags.
+func BuildListChallengeBucketsPayload(accessListChallengeBucketsOutcome string, accessListChallengeBucketsPrincipalUrn string, accessListChallengeBucketsScope string, accessListChallengeBucketsProjectID string, accessListChallengeBucketsResolved string, accessListChallengeBucketsLimit string, accessListChallengeBucketsOffset string, accessListChallengeBucketsApikeyToken string, accessListChallengeBucketsSessionToken string) (*access.ListChallengeBucketsPayload, error) {
+	var err error
+	var outcome *string
+	{
+		if accessListChallengeBucketsOutcome != "" {
+			outcome = &accessListChallengeBucketsOutcome
+			if !(*outcome == "allow" || *outcome == "deny") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("outcome", *outcome, []any{"allow", "deny"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var principalUrn *string
+	{
+		if accessListChallengeBucketsPrincipalUrn != "" {
+			principalUrn = &accessListChallengeBucketsPrincipalUrn
+		}
+	}
+	var scope *string
+	{
+		if accessListChallengeBucketsScope != "" {
+			scope = &accessListChallengeBucketsScope
+		}
+	}
+	var projectID *string
+	{
+		if accessListChallengeBucketsProjectID != "" {
+			projectID = &accessListChallengeBucketsProjectID
+		}
+	}
+	var resolved *bool
+	{
+		if accessListChallengeBucketsResolved != "" {
+			var val bool
+			val, err = strconv.ParseBool(accessListChallengeBucketsResolved)
+			resolved = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for resolved, must be BOOL")
+			}
+		}
+	}
+	var limit int
+	{
+		if accessListChallengeBucketsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(accessListChallengeBucketsLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var offset int
+	{
+		if accessListChallengeBucketsOffset != "" {
+			var v int64
+			v, err = strconv.ParseInt(accessListChallengeBucketsOffset, 10, strconv.IntSize)
+			offset = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for offset, must be INT")
+			}
+			if offset < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("offset", offset, 0, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if accessListChallengeBucketsApikeyToken != "" {
+			apikeyToken = &accessListChallengeBucketsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListChallengeBucketsSessionToken != "" {
+			sessionToken = &accessListChallengeBucketsSessionToken
+		}
+	}
+	v := &access.ListChallengeBucketsPayload{}
 	v.Outcome = outcome
 	v.PrincipalUrn = principalUrn
 	v.Scope = scope
