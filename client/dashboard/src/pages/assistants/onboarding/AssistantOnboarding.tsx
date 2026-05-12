@@ -1,9 +1,14 @@
 import { Page } from "@/components/page-layout";
 import { useProject, useSession } from "@/contexts/Auth";
-import { useToolset } from "@/hooks/toolTypes";
-import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
+import { internalMcpUrl } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
-import { Chat, GramElementsProvider, type Model } from "@gram-ai/elements";
+import {
+  Chat,
+  GramElementsProvider,
+  type MCPServerEntry,
+  type Model,
+} from "@gram-ai/elements";
+import { useListToolsets } from "@gram/client/react-query";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { ResizablePanel, useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Loader2 } from "lucide-react";
@@ -78,7 +83,7 @@ function OnboardingShell() {
           direction="horizontal"
           className="[&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:hover:bg-primary h-full [&>[role='separator']]:relative [&>[role='separator']]:w-px [&>[role='separator']]:border-0 [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:cursor-col-resize"
         >
-          <ResizablePanel.Pane minSize={35} order={0}>
+          <ResizablePanel.Pane minSize={35}>
             <ChatPane mode={mode} />
           </ResizablePanel.Pane>
           <ResizablePanel.Pane minSize={20} defaultSize={28}>
@@ -102,12 +107,31 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
 
   const onboarding = useOnboardingTools();
 
-  const firstToolset = draft.assistant?.toolsets[0];
-  const { data: firstToolsetData } = useToolset(firstToolset?.toolsetSlug);
-  const mcpUrl = useInternalMcpUrl(firstToolsetData);
-  const gramEnvironment = firstToolset
-    ? (firstToolset.environmentSlug ?? draft.assistantEnv?.slug)
-    : undefined;
+  const { data: toolsetsData } = useListToolsets();
+  const mcps = useMemo<MCPServerEntry[] | undefined>(() => {
+    const refs = draft.assistant?.toolsets;
+    if (!refs?.length) return undefined;
+    const fallbackEnv = draft.assistantEnv?.slug;
+    const toolsetBySlug = new Map(
+      (toolsetsData?.toolsets ?? []).map((t) => [t.slug, t]),
+    );
+    const entries: MCPServerEntry[] = [];
+    for (const ref of refs) {
+      const toolset = toolsetBySlug.get(ref.toolsetSlug);
+      if (!toolset) continue;
+      entries.push({
+        url: internalMcpUrl({ slug: project.slug }, toolset),
+        name: toolset.slug,
+        environment: ref.environmentSlug ?? fallbackEnv,
+      });
+    }
+    return entries.length ? entries : undefined;
+  }, [
+    draft.assistant?.toolsets,
+    draft.assistantEnv?.slug,
+    toolsetsData?.toolsets,
+    project.slug,
+  ]);
 
   const getSession = useCallback(async () => {
     try {
@@ -202,8 +226,7 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
           },
           variant: "standalone",
           systemPrompt,
-          mcp: mcpUrl,
-          gramEnvironment,
+          mcps,
           model: {
             defaultModel: "anthropic/claude-sonnet-4.6" as Model,
             showModelPicker: false,

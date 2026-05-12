@@ -12,6 +12,8 @@ import { ClosedEnum } from "../../types/enums.js";
 export const FilterType = {
   ApiKey: "api_key",
   User: "user",
+  InternalUser: "internal_user",
+  Agent: "agent",
 } as const;
 /**
  * Type of filter to list options for
@@ -22,6 +24,10 @@ export type FilterType = ClosedEnum<typeof FilterType>;
  * Payload for listing filter options
  */
 export type ListFilterOptionsPayload = {
+  /**
+   * Optional event source filter for the option list
+   */
+  eventSource?: string | undefined;
   /**
    * Type of filter to list options for
    */
@@ -42,6 +48,7 @@ export const FilterType$outboundSchema: z.ZodMiniEnum<typeof FilterType> = z
 
 /** @internal */
 export type ListFilterOptionsPayload$Outbound = {
+  event_source?: string | undefined;
   filter_type: string;
   from: string;
   to: string;
@@ -53,12 +60,14 @@ export const ListFilterOptionsPayload$outboundSchema: z.ZodMiniType<
   ListFilterOptionsPayload
 > = z.pipe(
   z.object({
+    eventSource: z.optional(z.string()),
     filterType: FilterType$outboundSchema,
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
   }),
   z.transform((v) => {
     return remap$(v, {
+      eventSource: "event_source",
       filterType: "filter_type",
     });
   }),

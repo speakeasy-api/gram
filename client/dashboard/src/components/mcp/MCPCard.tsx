@@ -21,7 +21,7 @@ import {
   useExternalMcpOAuthConfigStatus,
 } from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
-import { Badge } from "../ui/badge";
+import { Badge } from "@speakeasy-api/moonshine";
 
 export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
   const routes = useRoutes();
@@ -65,12 +65,11 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
       overlay={
         oauthStatus === "required-unconfigured" && (
           <div className="absolute bottom-3.5 left-1/2 z-10 -translate-x-1/2">
-            <Badge
-              variant="outline"
-              className="border-warning-foreground bg-warning text-warning-foreground text-xs backdrop-blur-sm"
-            >
-              <AlertTriangleIcon />
-              OAuth Required
+            <Badge variant="warning">
+              <Badge.LeftIcon>
+                <AlertTriangleIcon />
+              </Badge.LeftIcon>
+              <Badge.Text>OAuth Required</Badge.Text>
             </Badge>
           </div>
         )

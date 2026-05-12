@@ -79,12 +79,20 @@ export function useInternalMcpUrl(
     | undefined,
 ): string | undefined {
   const project = useProject();
-
   if (!toolset) return undefined;
+  return internalMcpUrl({ slug: project.slug }, toolset);
+}
 
+/**
+ * Non-hook variant of {@link useInternalMcpUrl}. Use this when the project and
+ * toolset are already in scope (e.g. when mapping over an array of toolsets).
+ */
+export function internalMcpUrl(
+  project: { slug: string },
+  toolset: Pick<ToolsetEntry, "slug" | "mcpSlug" | "defaultEnvironmentSlug">,
+): string {
   const urlSuffix = toolset.mcpSlug
     ? toolset.mcpSlug
     : `${project.slug}/${toolset.slug}/${toolset.defaultEnvironmentSlug}`;
-
   return `${getServerURL()}/mcp/${urlSuffix}`;
 }

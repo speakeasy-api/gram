@@ -190,12 +190,18 @@ type GetObservabilityOverviewPayload struct {
 	From string
 	// End time in ISO 8601 format
 	To string
+	// Optional internal user ID filter
+	UserID *string
 	// Optional external user ID filter
 	ExternalUserID *string
 	// Optional API key ID filter
 	APIKeyID *string
 	// Optional toolset/MCP server slug filter
 	ToolsetSlug *string
+	// Optional event source filter (e.g. 'hook')
+	EventSource *string
+	// Optional hook source filter (e.g. 'cursor', 'claude-code')
+	HookSource *string
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries bool
 }
@@ -266,6 +272,10 @@ type GetUserMetricsSummaryPayload struct {
 	UserID *string
 	// External user ID to get metrics for (mutually exclusive with user_id)
 	ExternalUserID *string
+	// Optional event source filter (e.g. 'hook')
+	EventSource *string
+	// Optional hook source filter (e.g. 'cursor', 'claude-code')
+	HookSource *string
 }
 
 // GetUserMetricsSummaryResult is the result type of the telemetry service
@@ -413,6 +423,8 @@ type ListFilterOptionsPayload struct {
 	To string
 	// Type of filter to list options for
 	FilterType string
+	// Optional event source filter for the option list
+	EventSource *string
 }
 
 // ListFilterOptionsResult is the result type of the telemetry service
@@ -753,6 +765,8 @@ type SearchUsersFilter struct {
 	// Optional event source filter (e.g. 'hook'). When set, only rows with a
 	// matching event_source are included.
 	EventSource *string
+	// Optional hook source filter (e.g. 'cursor', 'claude-code').
+	HookSource *string
 }
 
 // SearchUsersPayload is the payload type of the telemetry service searchUsers

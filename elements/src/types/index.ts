@@ -25,6 +25,27 @@ export type GetSessionFn = (init: { projectSlug: string }) => Promise<string>;
 
 type ServerUrl = string;
 
+/**
+ * Configuration for a single MCP server. Used by the {@link ElementsConfig.mcps}
+ * array form when connecting to more than one server.
+ */
+export interface MCPServerEntry {
+  /** The MCP server URL. */
+  url: ServerUrl;
+  /**
+   * Namespace prefix prepended to tools from this server with `__` as the
+   * separator (e.g. `name__tool`) so that tools with identical names from
+   * different servers do not collide. When omitted, a prefix is derived from
+   * the URL.
+   */
+  name?: string;
+  /**
+   * Environment slug to bind this server's tools to. Sent as the
+   * `Gram-Environment` header on requests to this MCP server only.
+   */
+  environment?: string;
+}
+
 export const VARIANTS = ["widget", "sidecar", "standalone"] as const;
 export type Variant = (typeof VARIANTS)[number];
 
@@ -94,7 +115,8 @@ export interface ElementsConfig {
    * The Gram Server URL to use for the Elements library.
    * Can be retrieved from https://app.getgram.ai/{team}/{project}/mcp/{mcp_slug}
    *
-   * Note: This config option will likely change in the future
+   * For multiple MCP servers in a single chat, use {@link mcps} instead;
+   * `mcps` takes precedence when both are provided.
    *
    * @example
    * const config: ElementsConfig = {
@@ -102,6 +124,22 @@ export interface ElementsConfig {
    * }
    */
   mcp?: ServerUrl;
+
+  /**
+   * One or more Gram MCP servers to connect to in a single chat. Tools from
+   * each server are merged and namespaced as `<name>__<tool>` to avoid
+   * collisions when names overlap. Takes precedence over {@link mcp} when
+   * both are provided.
+   *
+   * @example
+   * const config: ElementsConfig = {
+   *   mcps: [
+   *     { url: 'https://app.getgram.ai/mcp/billing', name: 'billing' },
+   *     { url: 'https://app.getgram.ai/mcp/support', name: 'support' },
+   *   ],
+   * }
+   */
+  mcps?: MCPServerEntry[];
 
   /**
    * Custom environment variable overrides for the Elements library.

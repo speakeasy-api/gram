@@ -10,7 +10,7 @@ CREATE TABLE "session_capture_exclusions" (
   PRIMARY KEY ("id"),
   CONSTRAINT "session_capture_exclusions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
--- Create index "session_capture_exclusions_org_user_key" to table: "session_capture_exclusions"
-CREATE UNIQUE INDEX "session_capture_exclusions_org_user_key" ON "session_capture_exclusions" ("organization_id", "user_id") WHERE (deleted IS FALSE);
 -- Create index "session_capture_exclusions_org_idx" to table: "session_capture_exclusions"
 CREATE INDEX "session_capture_exclusions_org_idx" ON "session_capture_exclusions" ("organization_id") WHERE (deleted IS FALSE);
+-- Create index "session_capture_exclusions_org_user_key" to table: "session_capture_exclusions"
+CREATE UNIQUE INDEX "session_capture_exclusions_org_user_key" ON "session_capture_exclusions" ("organization_id", "user_id") WHERE (deleted IS FALSE);
