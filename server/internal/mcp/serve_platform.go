@@ -97,7 +97,9 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(bs)
+		if _, writeErr := w.Write(bs); writeErr != nil {
+			return oops.E(oops.CodeUnexpected, writeErr, "failed to write error response body").Log(ctx, s.logger)
+		}
 		return nil
 	}
 
