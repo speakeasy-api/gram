@@ -17,25 +17,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
-
-type stubWorkOSClient struct {
-	pages [][]events.Event
-	calls []events.ListEventsOpts
-}
-
-func (s *stubWorkOSClient) ListEvents(_ context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error) {
-	s.calls = append(s.calls, opts)
-
-	idx := len(s.calls) - 1
-	if idx >= len(s.pages) {
-		return events.ListEventsResponse{Data: nil}, nil
-	}
-	return events.ListEventsResponse{Data: s.pages[idx]}, nil
-}
 
 func newOrgEventsTestConn(t *testing.T, name string) *pgxpool.Pool {
 	t.Helper()
@@ -52,6 +38,12 @@ func newOrgEventPayload(t *testing.T, workosOrgID string) []byte {
 	return []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Test","external_id":"sb_` + workosOrgID + `","updated_at":"2026-05-06T12:00:00Z"}`)
 }
 
+func newWorkOSClientWithEvents(pages [][]events.Event) *workos.StubClient {
+	client := workos.NewStubClient()
+	client.SetEventPages(pages)
+	return client
+}
+
 func TestProcessWorkOSOrganizationEvents_AdvancesCursor(t *testing.T) {
 	t.Parallel()
 
@@ -61,14 +53,12 @@ func TestProcessWorkOSOrganizationEvents_AdvancesCursor(t *testing.T) {
 
 	const workosOrgID = "org_01HZTESTADVANCE"
 
-	stub := &stubWorkOSClient{
-		pages: [][]events.Event{
-			{
-				{ID: "event_01HZA", Event: "organization.updated", CreatedAt: time.Now(), Data: newOrgEventPayload(t, workosOrgID)},
-				{ID: "event_01HZB", Event: "organization.updated", CreatedAt: time.Now(), Data: newOrgEventPayload(t, workosOrgID)},
-			},
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{ID: "event_01HZA", Event: "organization.updated", CreatedAt: time.Now(), Data: newOrgEventPayload(t, workosOrgID)},
+			{ID: "event_01HZB", Event: "organization.updated", CreatedAt: time.Now(), Data: newOrgEventPayload(t, workosOrgID)},
 		},
-	}
+	})
 
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
 
@@ -100,11 +90,9 @@ func TestProcessWorkOSOrganizationEvents_ResumesFromCursor(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	stub := &stubWorkOSClient{
-		pages: [][]events.Event{
-			{{ID: "event_01HZNEXT", Event: "organization.updated", CreatedAt: time.Now(), Data: newOrgEventPayload(t, workosOrgID)}},
-		},
-	}
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{{ID: "event_01HZNEXT", Event: "organization.updated", CreatedAt: time.Now(), Data: newOrgEventPayload(t, workosOrgID)}},
+	})
 
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
 
@@ -115,8 +103,8 @@ func TestProcessWorkOSOrganizationEvents_ResumesFromCursor(t *testing.T) {
 	require.Equal(t, "event_01HZSEED", res.SinceEventID)
 	require.Equal(t, "event_01HZNEXT", res.LastEventID)
 
-	require.Len(t, stub.calls, 1)
-	require.Equal(t, "event_01HZSEED", stub.calls[0].After)
+	require.Len(t, stub.EventCalls(), 1)
+	require.Equal(t, "event_01HZSEED", stub.EventCalls()[0].After)
 }
 
 func TestProcessWorkOSOrganizationEvents_FullPageHasMore(t *testing.T) {
@@ -138,7 +126,7 @@ func TestProcessWorkOSOrganizationEvents_FullPageHasMore(t *testing.T) {
 		}
 	}
 
-	stub := &stubWorkOSClient{pages: [][]events.Event{page}}
+	stub := newWorkOSClientWithEvents([][]events.Event{page})
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
@@ -155,7 +143,7 @@ func TestProcessWorkOSOrganizationEvents_EmptyPage(t *testing.T) {
 
 	const workosOrgID = "org_01HZTESTEMPTY"
 
-	stub := &stubWorkOSClient{pages: [][]events.Event{nil}}
+	stub := newWorkOSClientWithEvents([][]events.Event{nil})
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
@@ -179,12 +167,12 @@ func TestProcessWorkOSOrganizationEvents_SkipsUnlinkedOrgWithoutExternalID(t *te
 	// First event has neither a Gram-side mapping nor an external_id — must
 	// not stall the stream. Second event in the same page carries the
 	// external_id and should be applied normally.
-	stub := &stubWorkOSClient{
-		pages: [][]events.Event{{
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
 			{ID: "event_01HZBAD", Event: "organization.updated", CreatedAt: time.Now(), Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Pending","updated_at":"2026-05-06T11:00:00Z"}`)},
 			{ID: "event_01HZGOOD", Event: "organization.updated", CreatedAt: time.Now(), Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Resolved","external_id":"sb_resolved","updated_at":"2026-05-06T12:00:00Z"}`)},
-		}},
-	}
+		},
+	})
 
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
 
@@ -215,8 +203,8 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreatedAndUpdated(t *testin
 	created := time.Date(2026, 5, 6, 10, 0, 0, 0, time.UTC)
 	updated := time.Date(2026, 5, 6, 11, 0, 0, 0, time.UTC)
 
-	stub := &stubWorkOSClient{
-		pages: [][]events.Event{{
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
 			{
 				ID:        "event_01HZA",
 				Event:     "organization.created",
@@ -231,8 +219,8 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreatedAndUpdated(t *testin
 				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Acme Inc","external_id":"` + externalID +
 					`","updated_at":"2026-05-06T11:00:00Z"}`),
 			},
-		}},
-	}
+		},
+	})
 
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
 	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
@@ -259,8 +247,8 @@ func TestProcessWorkOSOrganizationEvents_OrganizationUpdateSkippedWhenStale(t *t
 	const workosOrgID = "org_01HZSTALE"
 	const externalID = "sb_01HZSTALE"
 
-	stub := &stubWorkOSClient{
-		pages: [][]events.Event{{
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
 			{
 				ID:        "event_01HZ002",
 				Event:     "organization.updated",
@@ -276,8 +264,8 @@ func TestProcessWorkOSOrganizationEvents_OrganizationUpdateSkippedWhenStale(t *t
 				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Older","external_id":"` + externalID +
 					`","updated_at":"2026-05-06T11:00:00Z"}`),
 			},
-		}},
-	}
+		},
+	})
 
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
 	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
@@ -309,8 +297,8 @@ func TestProcessWorkOSOrganizationEvents_OrganizationDeletedSetsDisabled(t *test
 	})
 	require.NoError(t, err)
 
-	stub := &stubWorkOSClient{
-		pages: [][]events.Event{{
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
 			{
 				ID:        "event_01HZDEL",
 				Event:     "organization.deleted",
@@ -318,8 +306,8 @@ func TestProcessWorkOSOrganizationEvents_OrganizationDeletedSetsDisabled(t *test
 				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Doomed","external_id":"` + externalID +
 					`","updated_at":"2026-05-06T12:00:00Z"}`),
 			},
-		}},
-	}
+		},
+	})
 
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
@@ -340,8 +328,8 @@ func TestProcessWorkOSGlobalRoleEvents_UpsertAndDelete(t *testing.T) {
 
 	const slug = "platform-admin"
 
-	stub := &stubWorkOSClient{
-		pages: [][]events.Event{{
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
 			{
 				ID:        "event_01HZG1",
 				Event:     "role.created",
@@ -358,8 +346,8 @@ func TestProcessWorkOSGlobalRoleEvents_UpsertAndDelete(t *testing.T) {
 					`"type":"EnvironmentRole","created_at":"2026-05-06T10:00:00Z","updated_at":"2026-05-06T11:00:00Z",` +
 					`"deleted_at":"2026-05-06T11:00:00Z"}`),
 			},
-		}},
-	}
+		},
+	})
 
 	activity := activities.NewProcessWorkOSGlobalRoleEvents(logger, conn, stub)
 	_, err := activity.Do(ctx, activities.ProcessWorkOSGlobalRoleEventsParams{})
@@ -403,8 +391,8 @@ func TestProcessWorkOSOrganizationEvents_OrganizationRoleUpsertAndDelete(t *test
 	})
 	require.NoError(t, err)
 
-	stub := &stubWorkOSClient{
-		pages: [][]events.Event{{
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
 			{
 				ID:        "event_01HZR1",
 				Event:     "organization_role.created",
@@ -421,8 +409,8 @@ func TestProcessWorkOSOrganizationEvents_OrganizationRoleUpsertAndDelete(t *test
 					`","slug":"` + slug + `","name":"Billing Manager","type":"OrganizationRole",` +
 					`"created_at":"2026-05-06T10:00:00Z","updated_at":"2026-05-06T11:00:00Z","deleted_at":"2026-05-06T11:00:00Z"}`),
 			},
-		}},
-	}
+		},
+	})
 
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
@@ -466,8 +454,8 @@ func TestProcessWorkOSOrganizationEvents_OrganizationDeletedSkippedWhenStale(t *
 	})
 	require.NoError(t, err)
 
-	stub := &stubWorkOSClient{
-		pages: [][]events.Event{{
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
 			{
 				ID:        "event_01HZSTALEDEL",
 				Event:     "organization.deleted",
@@ -475,8 +463,8 @@ func TestProcessWorkOSOrganizationEvents_OrganizationDeletedSkippedWhenStale(t *
 				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Live","external_id":"` + externalID +
 					`","updated_at":"2026-05-06T11:00:00Z"}`),
 			},
-		}},
-	}
+		},
+	})
 
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
@@ -594,14 +582,14 @@ func TestProcessWorkOSOrganizationEvents_MembershipFilterIncludesMembershipTypes
 
 	const workosOrgID = "org_01HZMEMFILTER"
 
-	stub := &stubWorkOSClient{pages: [][]events.Event{nil}}
+	stub := newWorkOSClientWithEvents([][]events.Event{nil})
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
 
 	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
-	require.Len(t, stub.calls, 1)
-	require.Equal(t, workosOrgID, stub.calls[0].OrganizationId)
+	require.Len(t, stub.EventCalls(), 1)
+	require.Equal(t, workosOrgID, stub.EventCalls()[0].OrganizationId)
 	require.ElementsMatch(t, []string{
 		"organization.created",
 		"organization.updated",
@@ -612,7 +600,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipFilterIncludesMembershipTypes
 		"organization_membership.created",
 		"organization_membership.updated",
 		"organization_membership.deleted",
-	}, stub.calls[0].Events)
+	}, stub.EventCalls()[0].Events)
 }
 
 func TestProcessWorkOSOrganizationEvents_MembershipKnownUserSyncsRoles(t *testing.T) {
@@ -632,11 +620,11 @@ func TestProcessWorkOSOrganizationEvents_MembershipKnownUserSyncsRoles(t *testin
 	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
 	organizationRole := seedOrganizationRole(t, ctx, conn, organizationID, "member")
 
-	stub := &stubWorkOSClient{
-		pages: [][]events.Event{{
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
 			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZMEM1", "mem_01HZKNOWN", workosOrgID, workosUserID, updatedAt, "member"),
-		}},
-	}
+		},
+	})
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
@@ -679,11 +667,11 @@ func TestProcessWorkOSOrganizationEvents_MembershipUnknownUserStillSyncsRoles(t 
 	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
 	memberRole := seedOrganizationRole(t, ctx, conn, organizationID, "member")
 
-	stub := &stubWorkOSClient{
-		pages: [][]events.Event{{
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
 			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZMEMUNK", "mem_01HZUNKNOWN", workosOrgID, workosUserID, time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC), "member"),
-		}},
-	}
+		},
+	})
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
@@ -717,12 +705,12 @@ func TestProcessWorkOSOrganizationEvents_MembershipDeleteSoftDeletesAndClearsAss
 	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
 	seedOrganizationRole(t, ctx, conn, organizationID, "member")
 
-	stub := &stubWorkOSClient{
-		pages: [][]events.Event{{
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
 			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZDEL1", membershipID, workosOrgID, workosUserID, time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC), "member"),
 			newWorkOSMembershipEvent(t, "organization_membership.deleted", "event_01HZDEL2", membershipID, workosOrgID, workosUserID, time.Date(2026, 5, 6, 13, 0, 0, 0, time.UTC)),
-		}},
-	}
+		},
+	})
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
@@ -761,11 +749,11 @@ func TestProcessWorkOSOrganizationEvents_MembershipUnknownOrganizationSkips(t *t
 
 	const workosOrgID = "org_01HZMEMUNKORG"
 
-	stub := &stubWorkOSClient{
-		pages: [][]events.Event{{
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
 			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZMEMUNKORG", "mem_01HZUNKNOWNORG", workosOrgID, "user_01HZUNKNOWNORG", time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC), "member"),
-		}},
-	}
+		},
+	})
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
@@ -786,8 +774,8 @@ func TestProcessWorkOSOrganizationEvents_OrganizationRoleSkippedForUnknownOrg(t 
 
 	const workosOrgID = "org_01HZUNKNOWN"
 
-	stub := &stubWorkOSClient{
-		pages: [][]events.Event{{
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
 			{
 				ID:        "event_01HZUR1",
 				Event:     "organization_role.created",
@@ -796,8 +784,8 @@ func TestProcessWorkOSOrganizationEvents_OrganizationRoleSkippedForUnknownOrg(t 
 					`","slug":"phantom","name":"Phantom","type":"OrganizationRole",` +
 					`"created_at":"2026-05-06T10:00:00Z","updated_at":"2026-05-06T10:00:00Z"}`),
 			},
-		}},
-	}
+		},
+	})
 
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})

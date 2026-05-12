@@ -44,10 +44,10 @@ type ProcessWorkOSGlobalRoleEventsResult struct {
 type ProcessWorkOSGlobalRoleEvents struct {
 	db           *pgxpool.Pool
 	logger       *slog.Logger
-	workosClient EventsLister
+	workosClient WorkOSClient
 }
 
-func NewProcessWorkOSGlobalRoleEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient EventsLister) *ProcessWorkOSGlobalRoleEvents {
+func NewProcessWorkOSGlobalRoleEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSClient) *ProcessWorkOSGlobalRoleEvents {
 	return &ProcessWorkOSGlobalRoleEvents{
 		db:           db,
 		logger:       logger,

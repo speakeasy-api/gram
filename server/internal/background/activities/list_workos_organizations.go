@@ -10,10 +10,10 @@ import (
 
 type ListWorkOSOrganizations struct {
 	logger *slog.Logger
-	workos WorkOSBackfillClient
+	workos WorkOSClient
 }
 
-func NewListWorkOSOrganizations(logger *slog.Logger, workosClient WorkOSBackfillClient) *ListWorkOSOrganizations {
+func NewListWorkOSOrganizations(logger *slog.Logger, workosClient WorkOSClient) *ListWorkOSOrganizations {
 	return &ListWorkOSOrganizations{
 		logger: logger.With(attr.SlogComponent("list_workos_organizations")),
 		workos: workosClient,

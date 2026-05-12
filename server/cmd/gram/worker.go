@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -490,9 +491,13 @@ func newWorkerCommand() *cli.Command {
 				authz.EngineOpts{DevMode: c.String("environment") == "local"},
 			)
 
-			workosClient, _, err := newWorkOSClient(guardianPolicy, c)
+			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)
 			if err != nil {
 				return fmt.Errorf("failed to create WorkOS client: %w", err)
+			}
+			var backgroundWorkOSClient activities.WorkOSClient = workosClient
+			if !workosAvailable {
+				backgroundWorkOSClient = workos.NewStubClient()
 			}
 
 			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
@@ -657,7 +662,7 @@ func newWorkerCommand() *cli.Command {
 				PIIScanner:          piiScanner,
 				ShadowMCPClient:     shadowMCPClient,
 				AuditLogger:         auditLogger,
-				WorkOSClient:        workosClient,
+				WorkOSClient:        backgroundWorkOSClient,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

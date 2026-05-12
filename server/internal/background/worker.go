@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
@@ -68,7 +69,7 @@ type WorkerOptions struct {
 	PIIScanner          risk_analysis.PIIScanner
 	ShadowMCPClient     *shadowmcp.Client
 	AuditLogger         *audit.Logger
-	WorkOSClient        *workos.Client
+	WorkOSClient        activities.WorkOSClient
 }
 
 func ForDeploymentProcessing(
@@ -108,7 +109,7 @@ func ForDeploymentProcessing(
 		TemporalEnv:         nil,
 		PIIScanner:          nil,
 		ShadowMCPClient:     nil,
-		WorkOSClient:        nil,
+		WorkOSClient:        workos.NewStubClient(),
 	}
 }
 
@@ -146,7 +147,7 @@ func NewTemporalWorker(
 		PIIScanner:          nil,
 		ShadowMCPClient:     nil,
 		AuditLogger:         nil,
-		WorkOSClient:        nil,
+		WorkOSClient:        workos.NewStubClient(),
 	}
 
 	for _, o := range options {

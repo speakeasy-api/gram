@@ -26,11 +26,6 @@ import (
 
 const workosOrgEventsPageSize = 100
 
-// EventsLister is the subset of the WorkOS client used by this activity.
-type EventsLister interface {
-	ListEvents(ctx context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error)
-}
-
 type ProcessWorkOSOrganizationEventsParams struct {
 	WorkOSOrganizationID string `json:"workos_organization_id,omitempty"`
 	// SinceEventID lets a caller override the DB cursor for this run. Workflow
@@ -54,10 +49,10 @@ type ProcessWorkOSOrganizationEventsResult struct {
 type ProcessWorkOSOrganizationEvents struct {
 	db           *pgxpool.Pool
 	logger       *slog.Logger
-	workosClient EventsLister
+	workosClient WorkOSClient
 }
 
-func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient EventsLister) *ProcessWorkOSOrganizationEvents {
+func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSClient) *ProcessWorkOSOrganizationEvents {
 	return &ProcessWorkOSOrganizationEvents{
 		db:           db,
 		logger:       logger,

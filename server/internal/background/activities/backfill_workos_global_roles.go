@@ -20,10 +20,10 @@ import (
 type BackfillWorkOSGlobalRoles struct {
 	logger *slog.Logger
 	db     *pgxpool.Pool
-	workos WorkOSBackfillClient
+	workos WorkOSClient
 }
 
-func NewBackfillWorkOSGlobalRoles(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSBackfillClient) *BackfillWorkOSGlobalRoles {
+func NewBackfillWorkOSGlobalRoles(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSClient) *BackfillWorkOSGlobalRoles {
 	return &BackfillWorkOSGlobalRoles{
 		logger: logger.With(attr.SlogComponent("backfill_workos_global_roles")),
 		db:     db,

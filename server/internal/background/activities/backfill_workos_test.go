@@ -29,7 +29,7 @@ func TestBackfillWorkOSOrganization_CreatesUnlinkedOrganizationWithExternalID(t 
 	const organizationID = "gram_org_from_workos_external_id"
 	const workosOrgID = "org_01JBACKFILLCREATE"
 
-	workosClient := newStubWorkOSBackfillClient(t, ctx,
+	workosClient := newWorkOSSnapshotClient(t, ctx,
 		workos.Organization{
 			ID:         workosOrgID,
 			Name:       "Backfill Created Org",
@@ -67,7 +67,7 @@ func TestBackfillWorkOSOrganization_ExternalIDChangeDoesNotChangeOrganizationID(
 
 	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
 
-	workosClient := newStubWorkOSBackfillClient(t, ctx,
+	workosClient := newWorkOSSnapshotClient(t, ctx,
 		workos.Organization{
 			ID:         workosOrgID,
 			Name:       "Backfill Immutable Org",
@@ -107,7 +107,7 @@ func TestBackfillWorkOSOrganization_UnknownUserSyncsSingleRoleAssignment(t *test
 
 	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
 
-	workosClient := newStubWorkOSBackfillClient(t, ctx,
+	workosClient := newWorkOSSnapshotClient(t, ctx,
 		workos.Organization{
 			ID:         workosOrgID,
 			Name:       "Backfill Unknown User",
@@ -158,6 +158,74 @@ func TestBackfillWorkOSOrganization_UnknownUserSyncsSingleRoleAssignment(t *test
 	require.Empty(t, assignments[0].WorkosLastEventID.String)
 }
 
+func TestBackfillWorkOSOrganization_MembershipWithNewerEventSkipsRoleSnapshot(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_backfill_membership_newer_event_wins")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_backfill_membership_event_wins"
+	const workosOrgID = "org_01JBACKFILLMEMEVENT"
+	const workosUserID = "user_01JBACKFILLMEMEVENT"
+	const membershipID = "mem_01JBACKFILLMEMEVENT"
+	const roleSlug = "org-member"
+
+	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	seedOrganizationRoleWithCursor(t, ctx, conn, organizationID, roleSlug, "Member", "")
+	err := orgrepo.New(conn).SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       workosUserID,
+		WorkosRoleSlugs:    []string{roleSlug},
+		UserID:             conv.ToPGTextEmpty(""),
+		WorkosMembershipID: conv.ToPGText(membershipID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)),
+		WorkosLastEventID:  conv.ToPGText("event_99FRESH"),
+	})
+	require.NoError(t, err)
+
+	workosClient := newWorkOSSnapshotClient(t, ctx,
+		workos.Organization{
+			ID:         workosOrgID,
+			Name:       "Backfill Membership Event Wins",
+			ExternalID: "",
+			CreatedAt:  "2026-05-07T11:00:00Z",
+			UpdatedAt:  "2026-05-07T11:00:00Z",
+		},
+		[]workos.Role{{
+			ID:          "role_01JMEMBER",
+			Name:        "Member",
+			Slug:        roleSlug,
+			Description: "",
+			Type:        "OrganizationRole",
+			CreatedAt:   "2026-05-07T11:00:00Z",
+			UpdatedAt:   "2026-05-07T11:00:00Z",
+		}},
+		[]workos.Member{{
+			ID:             membershipID,
+			UserID:         workosUserID,
+			OrganizationID: workosOrgID,
+			Organization:   "Backfill Membership Event Wins",
+			RoleSlug:       "",
+			Status:         "active",
+			CreatedAt:      "2026-05-07T11:00:00Z",
+			UpdatedAt:      "2026-05-07T11:00:00Z",
+		}},
+	)
+	activity := activities.NewBackfillWorkOSOrganization(logger, conn, workosClient)
+
+	err = activity.Do(ctx, activities.BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+
+	assignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.Len(t, assignments, 1)
+	require.Equal(t, "event_99FRESH", assignments[0].WorkosLastEventID.String)
+}
+
 func TestBackfillWorkOSOrganization_RoleWithLastEventIDSkipsSnapshot(t *testing.T) {
 	t.Parallel()
 
@@ -172,7 +240,7 @@ func TestBackfillWorkOSOrganization_RoleWithLastEventIDSkipsSnapshot(t *testing.
 	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
 	seedOrganizationRoleWithCursor(t, ctx, conn, organizationID, roleSlug, "Billing From Event", "event_01JNEWER")
 
-	workosClient := newStubWorkOSBackfillClient(t, ctx,
+	workosClient := newWorkOSSnapshotClient(t, ctx,
 		workos.Organization{
 			ID:         workosOrgID,
 			Name:       "Backfill Event Wins",
@@ -219,7 +287,7 @@ func TestBackfillWorkOSOrganization_MissingRoleSoftDeleted(t *testing.T) {
 	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
 	seedOrganizationRoleWithCursor(t, ctx, conn, organizationID, roleSlug, "Obsolete", "")
 
-	workosClient := newStubWorkOSBackfillClient(t, ctx,
+	workosClient := newWorkOSSnapshotClient(t, ctx,
 		workos.Organization{
 			ID:         workosOrgID,
 			Name:       "Backfill Delete Role",
@@ -245,7 +313,7 @@ func TestBackfillWorkOSOrganization_MissingRoleSoftDeleted(t *testing.T) {
 	require.Empty(t, role.WorkosLastEventID.String)
 }
 
-func newStubWorkOSBackfillClient(t *testing.T, ctx context.Context, org workos.Organization, roles []workos.Role, members []workos.Member) *workos.StubClient {
+func newWorkOSSnapshotClient(t *testing.T, ctx context.Context, org workos.Organization, roles []workos.Role, members []workos.Member) *workos.StubClient {
 	t.Helper()
 
 	client := workos.NewStubClient()

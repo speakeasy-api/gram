@@ -41,15 +41,6 @@ FROM organization_metadata
 WHERE workos_id = @workos_id
 LIMIT 1;
 
--- name: ListLinkedWorkOSOrganizations :many
--- Returns WorkOS organization IDs for enabled Gram organizations linked to WorkOS.
-SELECT workos_id
-FROM organization_metadata
-WHERE workos_id IS NOT NULL
-  AND workos_id <> ''
-  AND disabled_at IS NULL
-ORDER BY id;
-
 -- name: UpsertOrganizationUserRelationship :one
 INSERT INTO organization_user_relationships (
     organization_id,

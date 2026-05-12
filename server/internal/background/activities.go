@@ -35,7 +35,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	slacktypes "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 type Activities struct {
@@ -113,25 +112,9 @@ func NewActivities(
 	piiScanner risk_analysis.PIIScanner,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
-	workosClient *workos.Client,
+	workosClient activities.WorkOSClient,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
-
-	// Only construct WorkOS sync activities when the WorkOS client is
-	// configured. Local dev without a key passes nil; the wrapper methods below
-	// return clear errors if the activities are invoked unconfigured.
-	var processWorkOSOrgEvents *activities.ProcessWorkOSOrganizationEvents
-	var processWorkOSGlobalRoleEvents *activities.ProcessWorkOSGlobalRoleEvents
-	var backfillWorkOSOrganization *activities.BackfillWorkOSOrganization
-	var backfillWorkOSGlobalRoles *activities.BackfillWorkOSGlobalRoles
-	var listWorkOSOrganizations *activities.ListWorkOSOrganizations
-	if workosClient != nil {
-		listWorkOSOrganizations = activities.NewListWorkOSOrganizations(logger, workosClient)
-		processWorkOSOrgEvents = activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient)
-		processWorkOSGlobalRoleEvents = activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient)
-		backfillWorkOSOrganization = activities.NewBackfillWorkOSOrganization(logger, db, workosClient)
-		backfillWorkOSGlobalRoles = activities.NewBackfillWorkOSGlobalRoles(logger, db, workosClient)
-	}
 
 	return &Activities{
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
@@ -171,19 +154,16 @@ func NewActivities(
 		reapSoftDeletedAssistantMems:    activities.NewReapSoftDeletedAssistantMemories(logger, db),
 		signalAssistantCoordinator:      activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		signalAssistantThread:           activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
-		listWorkOSOrganizations:         listWorkOSOrganizations,
-		backfillWorkOSOrganization:      backfillWorkOSOrganization,
-		backfillWorkOSGlobalRoles:       backfillWorkOSGlobalRoles,
-		processWorkOSOrganizationEvents: processWorkOSOrgEvents,
-		processWorkOSGlobalRoleEvents:   processWorkOSGlobalRoleEvents,
+		listWorkOSOrganizations:         activities.NewListWorkOSOrganizations(logger, workosClient),
+		backfillWorkOSOrganization:      activities.NewBackfillWorkOSOrganization(logger, db, workosClient),
+		backfillWorkOSGlobalRoles:       activities.NewBackfillWorkOSGlobalRoles(logger, db, workosClient),
+		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient),
+		processWorkOSGlobalRoleEvents:   activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient),
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
 	}
 }
 
 func (a *Activities) ListWorkOSOrganizations(ctx context.Context) ([]string, error) {
-	if a.listWorkOSOrganizations == nil {
-		return nil, fmt.Errorf("WorkOS client is not configured")
-	}
 	return a.listWorkOSOrganizations.Do(ctx)
 }
 

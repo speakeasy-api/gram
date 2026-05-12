@@ -279,36 +279,6 @@ func (q *Queries) HasOrganizationUserRelationship(ctx context.Context, arg HasOr
 	return exists, err
 }
 
-const listLinkedWorkOSOrganizations = `-- name: ListLinkedWorkOSOrganizations :many
-SELECT workos_id
-FROM organization_metadata
-WHERE workos_id IS NOT NULL
-  AND workos_id <> ''
-  AND disabled_at IS NULL
-ORDER BY id
-`
-
-// Returns WorkOS organization IDs for enabled Gram organizations linked to WorkOS.
-func (q *Queries) ListLinkedWorkOSOrganizations(ctx context.Context) ([]pgtype.Text, error) {
-	rows, err := q.db.Query(ctx, listLinkedWorkOSOrganizations)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []pgtype.Text
-	for rows.Next() {
-		var workos_id pgtype.Text
-		if err := rows.Scan(&workos_id); err != nil {
-			return nil, err
-		}
-		items = append(items, workos_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listOrganizationRoleAssignmentsByWorkOSUser = `-- name: ListOrganizationRoleAssignmentsByWorkOSUser :many
 SELECT id, organization_id, workos_user_id, user_id, role_urn, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at
 FROM organization_role_assignments

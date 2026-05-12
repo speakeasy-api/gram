@@ -6,6 +6,9 @@ import (
 	"maps"
 	"sync"
 	"time"
+
+	"github.com/workos/workos-go/v6/pkg/common"
+	"github.com/workos/workos-go/v6/pkg/events"
 )
 
 type StubClient struct {
@@ -14,6 +17,8 @@ type StubClient struct {
 	orgOrder    []string
 	globalRoles map[string]Role
 	globalOrder []string
+	eventPages  [][]events.Event
+	eventCalls  []events.ListEventsOpts
 	next        int
 	nowFn       func() time.Time
 }
@@ -35,6 +40,8 @@ func NewStubClient() *StubClient {
 		orgOrder:    make([]string, 0),
 		globalRoles: stubDefaultGlobalRoles(),
 		globalOrder: []string{"admin", "member"},
+		eventPages:  nil,
+		eventCalls:  make([]events.ListEventsOpts, 0),
 		next:        1,
 		nowFn:       time.Now,
 	}
@@ -71,6 +78,35 @@ func (s *StubClient) ListOrganizations(_ context.Context) ([]Organization, error
 	}
 
 	return orgs, nil
+}
+
+func (s *StubClient) SetEventPages(pages [][]events.Event) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	s.eventPages = append([][]events.Event(nil), pages...)
+	s.eventCalls = s.eventCalls[:0]
+}
+
+func (s *StubClient) EventCalls() []events.ListEventsOpts {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	return append([]events.ListEventsOpts(nil), s.eventCalls...)
+}
+
+func (s *StubClient) ListEvents(_ context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	s.eventCalls = append(s.eventCalls, opts)
+
+	idx := len(s.eventCalls) - 1
+	if idx >= len(s.eventPages) {
+		return events.ListEventsResponse{Data: nil, ListMetadata: common.ListMetadata{Before: "", After: ""}}, nil
+	}
+
+	return events.ListEventsResponse{Data: s.eventPages[idx], ListMetadata: common.ListMetadata{Before: "", After: ""}}, nil
 }
 
 func (s *StubClient) ListRoles(_ context.Context, orgID string) ([]Role, error) {
