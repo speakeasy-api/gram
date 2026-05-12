@@ -131,6 +131,14 @@ func TestGrantsHasAccess_shadowMCPConnectDoesNotSatisfyMCPConnect(t *testing.T) 
 	require.Nil(t, grant)
 }
 
+func TestGrantsHasAccess_shadowMCPWildcardSatisfiesShadowMCPConnect(t *testing.T) {
+	t.Parallel()
+
+	g := []Grant{NewGrant(ScopeShadowMCPConnect, WildcardResource)}
+	grant, _ := findMatchingGrant(g, Check{Scope: ScopeShadowMCPConnect, ResourceID: "rule_a"}.expand())
+	require.NotNil(t, grant)
+}
+
 func TestGrantsHasAccess_rootWildcardSatisfiesAnyScope(t *testing.T) {
 	t.Parallel()
 
