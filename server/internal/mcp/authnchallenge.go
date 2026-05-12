@@ -32,6 +32,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -119,11 +120,18 @@ func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 // the caller as a member of that org. Downstream code on the public
 // path reads org/project off the toolset row directly, the same way it
 // does for unauthenticated public-toolset traffic.
+//
+// SessionID and AccountType are populated for non-anonymous subjects so
+// authz.Engine.ShouldEnforce / PrepareContext treat the request as a
+// real authenticated session — without them the mcp:connect RBAC check
+// silently bypasses on enterprise toolsets (ShouldEnforce returns false
+// when AccountType != "enterprise"; PrepareContext skips when SessionID
+// is nil).
 func (s *Service) validateUserSessionToken(ctx context.Context, token string, toolset *toolsets_repo.Toolset) (context.Context, bool) {
 	if token == "" {
 		return ctx, false
 	}
-	subject, _, err := s.userSessionSigner.ValidateBearer(ctx, token, urn.NewToolset(toolset.ID).String(), s.chatSessionsManager)
+	subject, jti, err := s.userSessionSigner.ValidateBearer(ctx, token, urn.NewToolset(toolset.ID).String(), s.chatSessionsManager)
 	if err != nil {
 		return ctx, false
 	}
@@ -132,18 +140,22 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, to
 		return ctx, true
 	}
 
+	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgsRepo, s.billingRepository, toolset.OrganizationID)
+	if err != nil {
+		return ctx, false
+	}
 	authCtx := &contextvalues.AuthContext{
 		ActiveOrganizationID:  toolset.OrganizationID,
 		ProjectID:             &toolset.ProjectID,
 		UserID:                "",
 		ExternalUserID:        "",
 		APIKeyID:              "",
-		SessionID:             nil,
-		OrganizationSlug:      "",
+		SessionID:             &jti,
+		OrganizationSlug:      orgMetadata.Slug,
 		Email:                 nil,
-		AccountType:           "",
-		HasActiveSubscription: false,
-		Whitelisted:           false,
+		AccountType:           orgMetadata.GramAccountType,
+		HasActiveSubscription: orgMetadata.HasActiveSubscription,
+		Whitelisted:           orgMetadata.Whitelisted,
 		ProjectSlug:           nil,
 		APIKeyScopes:          nil,
 		IsAdmin:               false,
