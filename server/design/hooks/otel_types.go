@@ -6,13 +6,14 @@ import (
 
 // OTEL attribute value supporting all OTLP/JSON value kinds.
 //
-// Per the OTLP/JSON spec, 64-bit integer fields (intValue) are encoded as JSON
-// strings, not numbers. We accept all known value kinds so the decoder never
-// rejects a well-formed payload; handlers only read the kinds they care about.
+// intValue is Any (not Int64 or String) because real producers disagree:
+// canonical OTLP/JSON encodes int64 as a JSON string ("12345"), while some
+// non-conformant emitters (including Claude Code's own exporter) ship raw
+// numbers (12345). Handlers coerce with parseLooseInt64.
 var OTELAttributeValue = Type("OTELAttributeValue", func() {
 	Description("OTEL attribute value - any of the OTLP/JSON value kinds")
 	Attribute("stringValue", String, "String value")
-	Attribute("intValue", String, "Integer value (string-encoded per OTLP/JSON)")
+	Attribute("intValue", Any, "Integer value (string-encoded per OTLP/JSON, or raw number)")
 	Attribute("boolValue", Boolean, "Boolean value")
 	Attribute("doubleValue", Float64, "Double value")
 	Attribute("arrayValue", Any, "Array value (passed through)")
@@ -90,14 +91,17 @@ var OTELLogsPayload = Type("OTELLogsPayload", func() {
 
 // OTEL number data point.
 //
-// Per OTLP/JSON, asInt is string-encoded; asDouble remains a JSON number.
+// asInt is Any because OTLP/JSON producers disagree on encoding: canonical
+// OTLP/JSON ships int64 as a string ("12345"), but some emitters (Claude
+// Code's own exporter included) ship raw numbers. Handlers coerce with
+// parseLooseInt64.
 var OTELNumberDataPoint = Type("OTELNumberDataPoint", func() {
 	Description("OTEL number data point")
 	Attribute("attributes", ArrayOf(OTELAttribute), "Data point attributes")
 	Attribute("startTimeUnixNano", String, "Start timestamp in nanoseconds")
 	Attribute("timeUnixNano", String, "Timestamp in nanoseconds")
 	Attribute("asDouble", Float64, "Value as double")
-	Attribute("asInt", String, "Value as integer (string-encoded per OTLP/JSON)")
+	Attribute("asInt", Any, "Value as integer (string-encoded per OTLP/JSON, or raw number)")
 })
 
 // OTEL sum metric.

@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: aa8770734fffbb98171861065bd368f6
+  docChecksum: 3752582af3e70e41099dd9fcf33ad51f
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -559,7 +559,7 @@ trackedFiles:
   docs/models/components/otelattribute.md:
     last_write_checksum: sha1:cae5e6f364e5e3dc3aa0b6a49ca6d0075df7ec13
   docs/models/components/otelattributevalue.md:
-    last_write_checksum: sha1:2772eda4f2e03679a1751e46fcf70eea8cd682a9
+    last_write_checksum: sha1:bf35edda60c3c1ed7b5f7894d7b91b8b2b5ebc9e
   docs/models/components/otellogbody.md:
     last_write_checksum: sha1:eedd08e6ed59982d620c3cd20a0717f662727c1e
   docs/models/components/otellogrecord.md:
@@ -571,7 +571,7 @@ trackedFiles:
   docs/models/components/otelmetricspayload.md:
     last_write_checksum: sha1:7afdf8fdefce238de66821630c6e590b9af12bee
   docs/models/components/otelnumberdatapoint.md:
-    last_write_checksum: sha1:967018101c4308595fecfa600aeed9ccfd424cb9
+    last_write_checksum: sha1:14b53ade63430604618a2e0f58046198d692af65
   docs/models/components/otelresource.md:
     last_write_checksum: sha1:0dbb9731748efe970627e896732f84d9a34de6c2
   docs/models/components/otelresourceattribute.md:
@@ -3837,7 +3837,7 @@ trackedFiles:
   src/models/components/otelattribute.ts:
     last_write_checksum: sha1:c12d9f7385d4a54ac7113e78c497ae708ff8eccc
   src/models/components/otelattributevalue.ts:
-    last_write_checksum: sha1:c129b5a026c12fd988c4f3c085f27bbc1950100c
+    last_write_checksum: sha1:fb9095c36ee956b1a8e27df307112cd5836e781d
   src/models/components/otellogbody.ts:
     last_write_checksum: sha1:cb8d00884573f1ce6609987aeac27d8434edabb0
   src/models/components/otellogrecord.ts:
@@ -3849,7 +3849,7 @@ trackedFiles:
   src/models/components/otelmetricspayload.ts:
     last_write_checksum: sha1:a0d59754426baeb2639c31ec48b56c621726a8d2
   src/models/components/otelnumberdatapoint.ts:
-    last_write_checksum: sha1:a90ee819f63f2a77f38ef2cb16b1dcf4e3936088
+    last_write_checksum: sha1:ee303e39a775137b22689e807490bd207a209798
   src/models/components/otelresource.ts:
     last_write_checksum: sha1:e0f4f713f4aa854c5784f7580b0bba0757a42c6a
   src/models/components/otelresourceattribute.ts:

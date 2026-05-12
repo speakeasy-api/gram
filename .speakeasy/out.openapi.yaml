@@ -29008,8 +29008,7 @@ components:
           description: Double value
           format: double
         intValue:
-          type: string
-          description: Integer value (string-encoded per OTLP/JSON)
+          description: Integer value (string-encoded per OTLP/JSON, or raw number)
         kvlistValue:
           description: Key-value list value (passed through)
         stringValue:
@@ -29093,8 +29092,7 @@ components:
           description: Value as double
           format: double
         asInt:
-          type: string
-          description: Value as integer (string-encoded per OTLP/JSON)
+          description: Value as integer (string-encoded per OTLP/JSON, or raw number)
         attributes:
           type: array
           items:

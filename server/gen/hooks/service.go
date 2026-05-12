@@ -226,8 +226,8 @@ type OTELAttribute struct {
 type OTELAttributeValue struct {
 	// String value
 	StringValue *string
-	// Integer value (string-encoded per OTLP/JSON)
-	IntValue *string
+	// Integer value (string-encoded per OTLP/JSON, or raw number)
+	IntValue any
 	// Boolean value
 	BoolValue *bool
 	// Double value
@@ -290,8 +290,8 @@ type OTELNumberDataPoint struct {
 	TimeUnixNano *string
 	// Value as double
 	AsDouble *float64
-	// Value as integer (string-encoded per OTLP/JSON)
-	AsInt *string
+	// Value as integer (string-encoded per OTLP/JSON, or raw number)
+	AsInt any
 }
 
 // OTEL resource information

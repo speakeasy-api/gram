@@ -918,8 +918,8 @@ type OTELResourceAttributeRequestBody struct {
 type OTELAttributeValueRequestBody struct {
 	// String value
 	StringValue *string `form:"stringValue,omitempty" json:"stringValue,omitempty" xml:"stringValue,omitempty"`
-	// Integer value (string-encoded per OTLP/JSON)
-	IntValue *string `form:"intValue,omitempty" json:"intValue,omitempty" xml:"intValue,omitempty"`
+	// Integer value (string-encoded per OTLP/JSON, or raw number)
+	IntValue any `form:"intValue,omitempty" json:"intValue,omitempty" xml:"intValue,omitempty"`
 	// Boolean value
 	BoolValue *bool `form:"boolValue,omitempty" json:"boolValue,omitempty" xml:"boolValue,omitempty"`
 	// Double value
@@ -1034,8 +1034,8 @@ type OTELNumberDataPointRequestBody struct {
 	TimeUnixNano *string `form:"timeUnixNano,omitempty" json:"timeUnixNano,omitempty" xml:"timeUnixNano,omitempty"`
 	// Value as double
 	AsDouble *float64 `form:"asDouble,omitempty" json:"asDouble,omitempty" xml:"asDouble,omitempty"`
-	// Value as integer (string-encoded per OTLP/JSON)
-	AsInt *string `form:"asInt,omitempty" json:"asInt,omitempty" xml:"asInt,omitempty"`
+	// Value as integer (string-encoded per OTLP/JSON, or raw number)
+	AsInt any `form:"asInt,omitempty" json:"asInt,omitempty" xml:"asInt,omitempty"`
 }
 
 // NewClaudeResponseBody builds the HTTP response body from the result of the

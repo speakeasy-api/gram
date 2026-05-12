@@ -25,9 +25,9 @@ export type OTELAttributeValue = {
    */
   doubleValue?: number | undefined;
   /**
-   * Integer value (string-encoded per OTLP/JSON)
+   * Integer value (string-encoded per OTLP/JSON, or raw number)
    */
-  intValue?: string | undefined;
+  intValue?: any | undefined;
   /**
    * Key-value list value (passed through)
    */
@@ -44,7 +44,7 @@ export type OTELAttributeValue$Outbound = {
   boolValue?: boolean | undefined;
   bytesValue?: string | undefined;
   doubleValue?: number | undefined;
-  intValue?: string | undefined;
+  intValue?: any | undefined;
   kvlistValue?: any | undefined;
   stringValue?: string | undefined;
 };
@@ -58,7 +58,7 @@ export const OTELAttributeValue$outboundSchema: z.ZodMiniType<
   boolValue: z.optional(z.boolean()),
   bytesValue: z.optional(z.string()),
   doubleValue: z.optional(z.number()),
-  intValue: z.optional(z.string()),
+  intValue: z.optional(z.any()),
   kvlistValue: z.optional(z.any()),
   stringValue: z.optional(z.string()),
 });
