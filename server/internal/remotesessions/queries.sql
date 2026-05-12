@@ -47,9 +47,11 @@ WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
 -- name: ListRemoteSessionIssuersByProjectID :many
 SELECT *
 FROM remote_session_issuers
-WHERE project_id = @project_id AND deleted IS FALSE
-ORDER BY created_at DESC
-LIMIT 100;
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
+ORDER BY id DESC
+LIMIT sqlc.arg('limit_value');
 
 -- name: UpdateRemoteSessionIssuer :one
 UPDATE remote_session_issuers
@@ -118,8 +120,9 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
   AND (sqlc.narg('user_session_issuer_id')::uuid IS NULL OR user_session_issuer_id = sqlc.narg('user_session_issuer_id')::uuid)
-ORDER BY created_at DESC
-LIMIT 100;
+  AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
+ORDER BY id DESC
+LIMIT sqlc.arg('limit_value');
 
 -- name: UpdateRemoteSessionClient :one
 UPDATE remote_session_clients
@@ -173,8 +176,9 @@ WHERE c.project_id = @project_id
   AND c.deleted IS FALSE
   AND (sqlc.narg('principal_urn')::text IS NULL OR s.principal_urn = sqlc.narg('principal_urn')::text)
   AND (sqlc.narg('remote_session_client_id')::uuid IS NULL OR s.remote_session_client_id = sqlc.narg('remote_session_client_id')::uuid)
-ORDER BY s.created_at DESC
-LIMIT 100;
+  AND (sqlc.narg('cursor')::uuid IS NULL OR s.id < sqlc.narg('cursor')::uuid)
+ORDER BY s.id DESC
+LIMIT sqlc.arg('limit_value');
 
 -- name: GetRemoteSessionByID :one
 SELECT s.*

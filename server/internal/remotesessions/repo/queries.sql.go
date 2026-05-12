@@ -464,18 +464,27 @@ WHERE project_id = $1
   AND deleted IS FALSE
   AND ($2::uuid IS NULL OR remote_session_issuer_id = $2::uuid)
   AND ($3::uuid IS NULL OR user_session_issuer_id = $3::uuid)
-ORDER BY created_at DESC
-LIMIT 100
+  AND ($4::uuid IS NULL OR id < $4::uuid)
+ORDER BY id DESC
+LIMIT $5
 `
 
 type ListRemoteSessionClientsByProjectIDParams struct {
 	ProjectID             uuid.UUID
 	RemoteSessionIssuerID uuid.NullUUID
 	UserSessionIssuerID   uuid.NullUUID
+	Cursor                uuid.NullUUID
+	LimitValue            int32
 }
 
 func (q *Queries) ListRemoteSessionClientsByProjectID(ctx context.Context, arg ListRemoteSessionClientsByProjectIDParams) ([]RemoteSessionClient, error) {
-	rows, err := q.db.Query(ctx, listRemoteSessionClientsByProjectID, arg.ProjectID, arg.RemoteSessionIssuerID, arg.UserSessionIssuerID)
+	rows, err := q.db.Query(ctx, listRemoteSessionClientsByProjectID,
+		arg.ProjectID,
+		arg.RemoteSessionIssuerID,
+		arg.UserSessionIssuerID,
+		arg.Cursor,
+		arg.LimitValue,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -510,13 +519,21 @@ func (q *Queries) ListRemoteSessionClientsByProjectID(ctx context.Context, arg L
 const listRemoteSessionIssuersByProjectID = `-- name: ListRemoteSessionIssuersByProjectID :many
 SELECT id, project_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
-WHERE project_id = $1 AND deleted IS FALSE
-ORDER BY created_at DESC
-LIMIT 100
+WHERE project_id = $1
+  AND deleted IS FALSE
+  AND ($2::uuid IS NULL OR id < $2::uuid)
+ORDER BY id DESC
+LIMIT $3
 `
 
-func (q *Queries) ListRemoteSessionIssuersByProjectID(ctx context.Context, projectID uuid.UUID) ([]RemoteSessionIssuer, error) {
-	rows, err := q.db.Query(ctx, listRemoteSessionIssuersByProjectID, projectID)
+type ListRemoteSessionIssuersByProjectIDParams struct {
+	ProjectID  uuid.UUID
+	Cursor     uuid.NullUUID
+	LimitValue int32
+}
+
+func (q *Queries) ListRemoteSessionIssuersByProjectID(ctx context.Context, arg ListRemoteSessionIssuersByProjectIDParams) ([]RemoteSessionIssuer, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionIssuersByProjectID, arg.ProjectID, arg.Cursor, arg.LimitValue)
 	if err != nil {
 		return nil, err
 	}
@@ -563,18 +580,27 @@ WHERE c.project_id = $1
   AND c.deleted IS FALSE
   AND ($2::text IS NULL OR s.principal_urn = $2::text)
   AND ($3::uuid IS NULL OR s.remote_session_client_id = $3::uuid)
-ORDER BY s.created_at DESC
-LIMIT 100
+  AND ($4::uuid IS NULL OR s.id < $4::uuid)
+ORDER BY s.id DESC
+LIMIT $5
 `
 
 type ListRemoteSessionsByProjectIDParams struct {
 	ProjectID             uuid.UUID
 	PrincipalUrn          pgtype.Text
 	RemoteSessionClientID uuid.NullUUID
+	Cursor                uuid.NullUUID
+	LimitValue            int32
 }
 
 func (q *Queries) ListRemoteSessionsByProjectID(ctx context.Context, arg ListRemoteSessionsByProjectIDParams) ([]RemoteSession, error) {
-	rows, err := q.db.Query(ctx, listRemoteSessionsByProjectID, arg.ProjectID, arg.PrincipalUrn, arg.RemoteSessionClientID)
+	rows, err := q.db.Query(ctx, listRemoteSessionsByProjectID,
+		arg.ProjectID,
+		arg.PrincipalUrn,
+		arg.RemoteSessionClientID,
+		arg.Cursor,
+		arg.LimitValue,
+	)
 	if err != nil {
 		return nil, err
 	}

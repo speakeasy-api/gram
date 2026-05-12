@@ -39,10 +39,18 @@ func (s *Service) ListRemoteSessions(ctx context.Context, payload *gen.ListRemot
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client_id").Log(ctx, logger)
 	}
 
+	limit := pageLimit(payload.Limit)
+	cursor, err := parseCursor(payload.Cursor)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, logger)
+	}
+
 	rows, err := repo.New(s.db).ListRemoteSessionsByProjectID(ctx, repo.ListRemoteSessionsByProjectIDParams{
 		ProjectID:             *authCtx.ProjectID,
 		PrincipalUrn:          principalFilter,
 		RemoteSessionClientID: clientFilter,
+		Cursor:                cursor,
+		LimitValue:            limit,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list remote sessions").Log(ctx, logger)
@@ -53,9 +61,15 @@ func (s *Service) ListRemoteSessions(ctx context.Context, payload *gen.ListRemot
 		items = append(items, remoteSessionView(row))
 	}
 
+	var nextCursor *string
+	if len(rows) >= int(limit) {
+		c := rows[len(rows)-1].ID.String()
+		nextCursor = &c
+	}
+
 	return &gen.ListRemoteSessionsResult{
 		Items:      items,
-		NextCursor: nil,
+		NextCursor: nextCursor,
 	}, nil
 }
 
