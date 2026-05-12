@@ -22,6 +22,10 @@ type IdentitySectionId = "sso" | "directory_sync";
 
 type IdentityCardProps = {
   sectionId: IdentitySectionId;
+  openSectionId: IdentitySectionId | null;
+  setOpenSectionId: React.Dispatch<
+    React.SetStateAction<IdentitySectionId | null>
+  >;
   heading: string;
   description: string;
   providerIcon: React.ReactNode;
@@ -48,23 +52,40 @@ function useIdentityInterestCapture(sectionId: IdentitySectionId) {
   };
 }
 
-function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
-  const [open, setOpen] = useState(false);
+function ConfigureButton({
+  sectionId,
+  openSectionId,
+  setOpenSectionId,
+}: {
+  sectionId: IdentitySectionId;
+  openSectionId: IdentitySectionId | null;
+  setOpenSectionId: React.Dispatch<
+    React.SetStateAction<IdentitySectionId | null>
+  >;
+}) {
   const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const captureInterest = useIdentityInterestCapture(sectionId);
+  const open = openSectionId === sectionId;
 
   const show = () => {
     if (hideTimeout.current) clearTimeout(hideTimeout.current);
-    setOpen(true);
+    setOpenSectionId(sectionId);
   };
 
   const scheduleHide = () => {
     if (hideTimeout.current) clearTimeout(hideTimeout.current);
-    hideTimeout.current = setTimeout(() => setOpen(false), 150);
+    hideTimeout.current = setTimeout(() => {
+      setOpenSectionId((prev) => (prev === sectionId ? null : prev));
+    }, 150);
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && openSectionId === sectionId) setOpenSectionId(null);
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           variant="secondary"
@@ -104,7 +125,7 @@ function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
               rel="noopener noreferrer"
               onClick={() => captureInterest("contact_sales_clicked")}
             >
-              Contact sales
+              Talk To Us
             </a>
           </Button>
         </div>
@@ -115,6 +136,8 @@ function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
 
 function IdentitySection({
   sectionId,
+  openSectionId,
+  setOpenSectionId,
   heading,
   description,
   providerIcon,
@@ -146,7 +169,11 @@ function IdentitySection({
                 {providerSubtitle}
               </Type>
             </div>
-            <ConfigureButton sectionId={sectionId} />
+            <ConfigureButton
+              sectionId={sectionId}
+              openSectionId={openSectionId}
+              setOpenSectionId={setOpenSectionId}
+            />
           </div>
           {children}
         </div>
@@ -196,12 +223,18 @@ export default function OrgIdentity() {
 }
 
 function OrgIdentityInner() {
+  const [openSectionId, setOpenSectionId] = useState<IdentitySectionId | null>(
+    null,
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <Heading variant="h4">Identity</Heading>
       <div className="flex flex-col gap-6">
         <IdentitySection
           sectionId="sso"
+          openSectionId={openSectionId}
+          setOpenSectionId={setOpenSectionId}
           heading="Single Sign-On"
           description="Set up Single Sign-On (SSO) to allow your team to sign in to Speakeasy with your identity provider."
           providerIcon={<Lock className="text-muted-foreground h-5 w-5" />}
@@ -215,6 +248,8 @@ function OrgIdentityInner() {
 
         <IdentitySection
           sectionId="directory_sync"
+          openSectionId={openSectionId}
+          setOpenSectionId={setOpenSectionId}
           heading="Directory Sync"
           description="Automatically provision and deprovision users from your identity provider."
           providerIcon={
