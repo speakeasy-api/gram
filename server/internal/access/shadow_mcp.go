@@ -178,6 +178,9 @@ func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *
 	if err != nil {
 		return nil, err
 	}
+	if err := validateShadowMCPAllowedRoleIDs(shadowMCPRuleAllowed, payload.RoleIds); err != nil {
+		return nil, err
+	}
 
 	roleSlugs, roleIDBySlug, err := s.shadowMCPRoleMappings(ctx, workosOrgID, payload.RoleIds)
 	if err != nil {
@@ -472,6 +475,9 @@ func (s *Service) CreateShadowMCPAccessRule(ctx context.Context, payload *gen.Cr
 	if err := validateShadowMCPDisposition(payload.Disposition); err != nil {
 		return nil, err
 	}
+	if err := validateShadowMCPAllowedRoleIDs(payload.Disposition, payload.RoleIds); err != nil {
+		return nil, err
+	}
 	roleSlugs, roleIDBySlug, err := s.shadowMCPRoleMappings(ctx, workosOrgID, payload.RoleIds)
 	if err != nil {
 		return nil, err
@@ -541,6 +547,9 @@ func (s *Service) UpdateShadowMCPAccessRule(ctx context.Context, payload *gen.Up
 		return nil, err
 	}
 	if err := validateShadowMCPDisposition(payload.Disposition); err != nil {
+		return nil, err
+	}
+	if err := validateShadowMCPAllowedRoleIDs(payload.Disposition, payload.RoleIds); err != nil {
 		return nil, err
 	}
 	roleSlugs, roleIDBySlug, err := s.shadowMCPRoleMappings(ctx, workosOrgID, payload.RoleIds)
@@ -1015,6 +1024,13 @@ func validateShadowMCPDisposition(disposition string) error {
 	default:
 		return oops.E(oops.CodeBadRequest, nil, "invalid disposition")
 	}
+}
+
+func validateShadowMCPAllowedRoleIDs(disposition string, roleIDs []string) error {
+	if disposition == shadowMCPRuleAllowed && len(roleIDs) == 0 {
+		return oops.E(oops.CodeBadRequest, nil, "role_ids is required for allowed shadow mcp access rules")
+	}
+	return nil
 }
 
 func shadowMCPRepoErr(ctx context.Context, s *Service, err error, message string) error {
