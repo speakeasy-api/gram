@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -40,24 +39,19 @@ const LabelInjection = "INJECTION"
 
 // promptInjectionClassifierHTTPBatchSize is the per-request item cap. Matches the Python
 // service's MAX_BATCH default. Keeps payload size and inference time per call
-// bounded; AnalyzeBatch fan-out across batches when n > this.
+// bounded.
 const promptInjectionClassifierHTTPBatchSize = 50
-
-// promptInjectionClassifierPerBatchConcurrency is the number of in-flight HTTP requests
-// per Classify call. Mirrors the presidio client's perBatchRequestConcurrency.
-const promptInjectionClassifierPerBatchConcurrency = 2
 
 // DebertaClassifierClient calls the gram-pi-classifier sidecar's POST /detect.
 // Like PresidioClient, this is a trusted cluster-internal service so the
 // guardian policy is permissive on private IPs.
 type DebertaClassifierClient struct {
-	baseURL            string
-	httpClient         *guardian.HTTPClient
-	tracer             trace.Tracer
-	logger             *slog.Logger
-	requestConcurrency int
-	requestDuration    metric.Float64Histogram
-	requestFailures    metric.Int64Counter
+	baseURL         string
+	httpClient      *guardian.HTTPClient
+	tracer          trace.Tracer
+	logger          *slog.Logger
+	requestDuration metric.Float64Histogram
+	requestFailures metric.Int64Counter
 }
 
 // NewPromptInjectionClassifier builds a client pointing at the given base URL.
@@ -81,22 +75,13 @@ func NewPromptInjectionClassifier(baseURL string, tracerProvider trace.TracerPro
 	httpClient := unsafePolicy.PooledClient()
 
 	return &DebertaClassifierClient{
-		baseURL:            strings.TrimRight(baseURL, "/"),
-		httpClient:         httpClient,
-		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/pi_classifier"),
-		logger:             logger,
-		requestConcurrency: promptInjectionClassifierPerBatchConcurrency,
-		requestDuration:    requestDuration,
-		requestFailures:    requestFailures,
+		baseURL:         strings.TrimRight(baseURL, "/"),
+		httpClient:      httpClient,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/pi_classifier"),
+		logger:          logger,
+		requestDuration: requestDuration,
+		requestFailures: requestFailures,
 	}
-}
-
-// NewPromptInjectionClassifierWithConcurrency lets tests pin the per-batch
-// HTTP concurrency. Mirrors NewPresidioClientWithConcurrency.
-func NewPromptInjectionClassifierWithConcurrency(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger, requestConcurrency int) *DebertaClassifierClient {
-	c := NewPromptInjectionClassifier(baseURL, tracerProvider, meterProvider, logger)
-	c.requestConcurrency = requestConcurrency
-	return c
 }
 
 // StubClassifier is a no-op classifier used when --pi-classifier-url is empty.
@@ -138,48 +123,19 @@ func (c *DebertaClassifierClient) Classify(ctx context.Context, texts []string) 
 	}()
 
 	results := make([]ClassifierResult, n)
-	batches := chunkTextIndexes(n, promptInjectionClassifierHTTPBatchSize)
-	workers := min(max(1, c.requestConcurrency), len(batches))
-
-	ch := make(chan indexRange, len(batches))
-	for _, batch := range batches {
-		ch <- batch
-	}
-	close(ch)
-
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var firstErr error
-
-	for range workers {
-		wg.Go(func() {
-			for batch := range ch {
-				if ctx.Err() != nil {
-					return
-				}
-				out, callErr := c.detect(ctx, texts[batch.start:batch.end])
-				if callErr != nil {
-					mu.Lock()
-					if firstErr == nil {
-						firstErr = callErr
-					}
-					mu.Unlock()
-					c.logger.WarnContext(ctx, "pi_classifier detect failed for batch, skipping",
-						attr.SlogError(callErr),
-					)
-					continue
-				}
-				for i, r := range out {
-					results[batch.start+i] = r
-				}
-			}
-		})
-	}
-
-	wg.Wait()
-
-	if firstErr != nil {
-		return results, fmt.Errorf("pi_classifier detect: %w", firstErr)
+	for start := 0; start < n; start += promptInjectionClassifierHTTPBatchSize {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("pi_classifier context: %w", ctx.Err())
+		}
+		end := min(start+promptInjectionClassifierHTTPBatchSize, n)
+		out, callErr := c.detect(ctx, texts[start:end])
+		if callErr != nil {
+			c.logger.WarnContext(ctx, "pi_classifier detect failed for batch", attr.SlogError(callErr))
+			return nil, fmt.Errorf("pi_classifier detect: %w", callErr)
+		}
+		for i, r := range out {
+			results[start+i] = r
+		}
 	}
 	return results, nil
 }

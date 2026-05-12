@@ -30,12 +30,11 @@ func newClassifierTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	c := risk_analysis.NewPromptInjectionClassifierWithConcurrency(
+	c := risk_analysis.NewPromptInjectionClassifier(
 		srv.URL,
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		testenv.NewLogger(t),
-		1,
 	)
 	return srv, c
 }
