@@ -5,8 +5,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -794,6 +793,9 @@ func (s *Service) shadowMCPRoleMappings(ctx context.Context, workosOrgID string,
 		if !ok {
 			return nil, nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, s.logger)
 		}
+		if isSystemRole(slug) {
+			return nil, nil, oops.E(oops.CodeBadRequest, nil, "system roles cannot be assigned shadow mcp access rules").Log(ctx, s.logger)
+		}
 		if _, ok := seen[slug]; ok {
 			continue
 		}
@@ -963,59 +965,12 @@ func validateShadowMCPEvidence(fullURL, urlHost, serverIdentity *string) error {
 	return nil
 }
 
-func validateShadowMCPMatch(matchBreadth string, matchValue string) error {
-	if strings.TrimSpace(matchValue) == "" {
-		return oops.E(oops.CodeBadRequest, nil, "match_value is required")
-	}
-	switch matchBreadth {
-	case "full_url", "url_host", "server_identity":
-		return nil
-	default:
-		return oops.E(oops.CodeBadRequest, nil, "invalid match_breadth")
-	}
-}
-
 func normalizeShadowMCPMatchValue(matchBreadth string, matchValue string) (string, error) {
-	if err := validateShadowMCPMatch(matchBreadth, matchValue); err != nil {
-		return "", err
-	}
-	value := strings.TrimSpace(matchValue)
-	switch matchBreadth {
-	case "full_url":
-		u, err := url.Parse(value)
-		if err != nil || u.Scheme == "" || u.Host == "" {
-			return "", oops.E(oops.CodeBadRequest, err, "match_value must be a full URL")
-		}
-		u.Scheme = strings.ToLower(u.Scheme)
-		u.Host = normalizeShadowMCPHost(u.Host)
-		u.Fragment = ""
-		return u.String(), nil
-	case "url_host":
-		if strings.Contains(value, "://") {
-			u, err := url.Parse(value)
-			if err != nil || u.Host == "" {
-				return "", oops.E(oops.CodeBadRequest, err, "match_value must include a URL host")
-			}
-			value = u.Host
-		}
-		return normalizeShadowMCPHost(value), nil
-	case "server_identity":
-		return strings.ToLower(value), nil
-	default:
-		return "", oops.E(oops.CodeBadRequest, nil, "invalid match_breadth")
-	}
-}
-
-func normalizeShadowMCPHost(host string) string {
-	host = strings.ToLower(strings.TrimSpace(host))
-	name, port, err := net.SplitHostPort(host)
+	value, err := shadowmcp.NormalizeMatchValue(matchBreadth, matchValue)
 	if err != nil {
-		return host
+		return "", oops.E(oops.CodeBadRequest, err, "%s", err.Error())
 	}
-	if port == "80" || port == "443" {
-		return name
-	}
-	return net.JoinHostPort(name, port)
+	return value, nil
 }
 
 func validateShadowMCPDisposition(disposition string) error {

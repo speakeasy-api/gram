@@ -153,6 +153,39 @@ func TestService_ApproveShadowMCPApprovalRequest_RequiresRoleIDs(t *testing.T) {
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
+func TestService_ApproveShadowMCPApprovalRequest_RejectsSystemRoles(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	project := createShadowMCPProject(t, ctx, ti, authCtx.ActiveOrganizationID)
+	fullURL := "https://github.example.com/org/repo/mcp"
+
+	request, err := ti.service.CreateShadowMCPApprovalRequest(ctx, &gen.CreateShadowMCPApprovalRequestPayload{
+		RequestToken: shadowMCPRequestToken(t, authCtx.ActiveOrganizationID, authCtx.UserID, project.ID.String(), ShadowMCPApprovalRequestTokenInput{
+			ObservedName:    conv.PtrEmpty("GitHub"),
+			ObservedFullURL: &fullURL,
+		}),
+	})
+	require.NoError(t, err)
+
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
+		mockSystemRole("role_member", "Member", authz.SystemRoleMember),
+	}, nil).Once()
+
+	_, err = ti.service.ApproveShadowMCPApprovalRequest(ctx, &gen.ApproveShadowMCPApprovalRequestPayload{
+		ID:           request.ID,
+		MatchBreadth: "full_url",
+		MatchValue:   fullURL,
+		DisplayName:  "GitHub Shadow MCP",
+		RoleIds:      []string{"role_member"},
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
 func TestService_ApproveShadowMCPApprovalRequest_MergesExistingRuleRoleGrants(t *testing.T) {
 	t.Parallel()
 
@@ -420,6 +453,28 @@ func TestService_CreateShadowMCPAccessRule_RequiresRoleIDsForAllowedRule(t *test
 		MatchValue:   "empty-roles.example.com",
 		DisplayName:  "Empty Roles",
 		RoleIds:      nil,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestService_CreateShadowMCPAccessRule_RejectsSystemRoles(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
+		mockSystemRole("role_admin", "Admin", authz.SystemRoleAdmin),
+	}, nil).Once()
+
+	_, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
+		Disposition:  shadowMCPRuleAllowed,
+		MatchBreadth: "url_host",
+		MatchValue:   "system-role.example.com",
+		DisplayName:  "System Role",
+		RoleIds:      []string{"role_admin"},
 	})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
