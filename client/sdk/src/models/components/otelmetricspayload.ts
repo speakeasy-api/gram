@@ -16,12 +16,12 @@ export type OTELMetricsPayload = {
   /**
    * Array of resource metrics
    */
-  resourceMetrics: Array<OTELResourceMetrics>;
+  resourceMetrics?: Array<OTELResourceMetrics> | undefined;
 };
 
 /** @internal */
 export type OTELMetricsPayload$Outbound = {
-  resourceMetrics: Array<OTELResourceMetrics$Outbound>;
+  resourceMetrics?: Array<OTELResourceMetrics$Outbound> | undefined;
 };
 
 /** @internal */
@@ -29,7 +29,7 @@ export const OTELMetricsPayload$outboundSchema: z.ZodMiniType<
   OTELMetricsPayload$Outbound,
   OTELMetricsPayload
 > = z.object({
-  resourceMetrics: z.array(OTELResourceMetrics$outboundSchema),
+  resourceMetrics: z.optional(z.array(OTELResourceMetrics$outboundSchema)),
 });
 
 export function otelMetricsPayloadToJSON(
