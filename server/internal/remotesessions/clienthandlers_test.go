@@ -254,6 +254,52 @@ func TestListRemoteSessionClients(t *testing.T) {
 	}
 }
 
+func TestListRemoteSessionClients_PaginationTraversal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-page", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-page").String()
+
+	const total = 5
+	wantIDs := make(map[string]bool, total)
+	for range total {
+		id := createRemoteClient(t, ctx, ti, issuerID, userIssuerID, uuid.NewString())
+		wantIDs[id] = true
+	}
+
+	pageSize := 2
+	gotIDs := make(map[string]bool, total)
+	var cursor *string
+	pages := 0
+	for {
+		pages++
+		require.Less(t, pages, 10, "pagination did not terminate")
+		result, err := ti.service.ListRemoteSessionClients(ctx, &clientsgen.ListRemoteSessionClientsPayload{
+			RemoteSessionIssuerID: &issuerID,
+			UserSessionIssuerID:   nil,
+			Cursor:                cursor,
+			Limit:                 &pageSize,
+			SessionToken:          nil,
+			ApikeyToken:           nil,
+			ProjectSlugInput:      nil,
+		})
+		require.NoError(t, err)
+		for _, item := range result.Items {
+			require.False(t, gotIDs[item.ID], "duplicate id across pages: %s", item.ID)
+			gotIDs[item.ID] = true
+		}
+		if result.NextCursor == nil {
+			break
+		}
+		cursor = result.NextCursor
+	}
+	for id := range wantIDs {
+		require.True(t, gotIDs[id], "client %s missing from paginated traversal", id)
+	}
+}
+
 func TestUpdateRemoteSessionClient(t *testing.T) {
 	t.Parallel()
 

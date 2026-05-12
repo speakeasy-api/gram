@@ -192,6 +192,48 @@ func TestListRemoteSessionIssuers(t *testing.T) {
 	require.GreaterOrEqual(t, len(result.Items), 2)
 }
 
+func TestListRemoteSessionIssuers_PaginationTraversal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	const total = 5
+	wantIDs := make(map[string]bool, total)
+	for range total {
+		created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload(uuid.NewString()))
+		require.NoError(t, err)
+		wantIDs[created.ID] = true
+	}
+
+	pageSize := 2
+	gotIDs := make(map[string]bool, total)
+	var cursor *string
+	pages := 0
+	for {
+		pages++
+		require.Less(t, pages, 10, "pagination did not terminate")
+		result, err := ti.service.ListRemoteSessionIssuers(ctx, &gen.ListRemoteSessionIssuersPayload{
+			Cursor:           cursor,
+			Limit:            &pageSize,
+			SessionToken:     nil,
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+		})
+		require.NoError(t, err)
+		for _, item := range result.Items {
+			require.False(t, gotIDs[item.ID], "duplicate id across pages: %s", item.ID)
+			gotIDs[item.ID] = true
+		}
+		if result.NextCursor == nil {
+			break
+		}
+		cursor = result.NextCursor
+	}
+	for id := range wantIDs {
+		require.True(t, gotIDs[id], "issuer %s missing from paginated traversal", id)
+	}
+}
+
 func TestListRemoteSessionIssuers_RBACForbidden(t *testing.T) {
 	t.Parallel()
 
