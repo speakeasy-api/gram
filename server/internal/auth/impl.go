@@ -222,7 +222,6 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			for _, org := range userInfo.Organizations {
 				if org.Slug == adminOverride {
 					activeOrg = org
-					activeOrgSelected = true
 					break
 				}
 			}

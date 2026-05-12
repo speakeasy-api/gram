@@ -181,7 +181,11 @@ func (s *Manager) ClearSession(ctx context.Context, session Session) error {
 
 // GetUserInfo delegates to the identity resolver.
 func (s *Manager) GetUserInfo(ctx context.Context, userID string) (*CachedUserInfo, bool, error) {
-	return s.identity.GetUserInfo(ctx, userID)
+	info, ok, err := s.identity.GetUserInfo(ctx, userID)
+	if err != nil {
+		return nil, false, fmt.Errorf("get user info: %w", err)
+	}
+	return info, ok, nil
 }
 
 // HasAccessToOrganization delegates to the identity resolver.
@@ -191,5 +195,8 @@ func (s *Manager) HasAccessToOrganization(ctx context.Context, organizationID, u
 
 // InvalidateUserInfoCache delegates to the identity resolver.
 func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) error {
-	return s.identity.InvalidateUserInfoCache(ctx, userID)
+	if err := s.identity.InvalidateUserInfoCache(ctx, userID); err != nil {
+		return fmt.Errorf("invalidate user info cache: %w", err)
+	}
+	return nil
 }

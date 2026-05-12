@@ -2,6 +2,7 @@ package identity
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 )
@@ -23,12 +24,15 @@ func NewWorkOSAdapter(client *usermanagement.Client) *WorkOSAdapter {
 }
 
 func (a *WorkOSAdapter) AuthenticateWithCode(ctx context.Context, clientID, code string) (*AuthenticateResult, error) {
-	resp, err := a.client.AuthenticateWithCode(ctx, usermanagement.AuthenticateWithCodeOpts{ //nolint:exhaustruct // server-side exchange; browser fields not applicable
-		ClientID: clientID,
-		Code:     code,
+	resp, err := a.client.AuthenticateWithCode(ctx, usermanagement.AuthenticateWithCodeOpts{
+		ClientID:     clientID,
+		Code:         code,
+		CodeVerifier: "",
+		IPAddress:    "",
+		UserAgent:    "",
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("workos authenticate: %w", err)
 	}
 
 	return &AuthenticateResult{
@@ -46,7 +50,10 @@ func (a *WorkOSAdapter) AuthenticateWithCode(ctx context.Context, clientID, code
 }
 
 func (a *WorkOSAdapter) RevokeSession(ctx context.Context, sessionID string) error {
-	return a.client.RevokeSession(ctx, usermanagement.RevokeSessionOpts{ //nolint:exhaustruct // only session ID needed
+	if err := a.client.RevokeSession(ctx, usermanagement.RevokeSessionOpts{
 		SessionID: sessionID,
-	})
+	}); err != nil {
+		return fmt.Errorf("workos revoke session: %w", err)
+	}
+	return nil
 }

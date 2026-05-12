@@ -58,6 +58,7 @@ func (wc *Client) CreateOrganizationMembership(ctx context.Context, workosUserID
 		UserID:         workosUserID,
 		OrganizationID: workosOrgID,
 		RoleSlug:       "admin",
+		RoleSlugs:      nil,
 	})
 	if err != nil {
 		return fmt.Errorf("create organization membership: %w", err)

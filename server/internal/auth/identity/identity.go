@@ -428,8 +428,13 @@ func (r *Resolver) IsAdmin(ctx context.Context, userID string) bool {
 // call rebuilds it from the database.
 func (r *Resolver) InvalidateUserInfoCache(ctx context.Context, userID string) error {
 	err := r.userInfoCache.Delete(ctx, sessions.CachedUserInfo{
-		UserID:        userID,
-		Organizations: []sessions.Organization{},
+		UserID:             userID,
+		Admin:              false,
+		Email:              "",
+		DisplayName:        nil,
+		PhotoURL:           nil,
+		UserPylonSignature: nil,
+		Organizations:      nil,
 	})
 	if err != nil {
 		return fmt.Errorf("cache delete: %w", err)

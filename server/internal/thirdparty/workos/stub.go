@@ -331,8 +331,11 @@ func (s *StubClient) CreateOrganizationMembership(_ context.Context, workosUserI
 		ID:             membershipID,
 		UserID:         workosUserID,
 		OrganizationID: workosOrgID,
+		Organization:   "",
 		RoleSlug:       "admin",
 		Status:         "active",
+		CreatedAt:      "",
+		UpdatedAt:      "",
 	}
 
 	return nil
