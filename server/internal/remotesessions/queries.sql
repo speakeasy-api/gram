@@ -80,3 +80,86 @@ RETURNING *;
 SELECT COUNT(*)
 FROM remote_session_clients
 WHERE remote_session_issuer_id = @remote_session_issuer_id AND deleted IS FALSE;
+
+-- Remote session clients — credentials Gram uses when acting as an OAuth
+-- client of a remote_session_issuer. client_secret_encrypted is stored
+-- encrypted via the project encryption key.
+
+-- name: CreateRemoteSessionClient :one
+INSERT INTO remote_session_clients (
+    project_id,
+    remote_session_issuer_id,
+    user_session_issuer_id,
+    client_id,
+    client_secret_encrypted,
+    client_id_issued_at,
+    client_secret_expires_at
+)
+VALUES (
+    @project_id,
+    @remote_session_issuer_id,
+    @user_session_issuer_id,
+    @client_id,
+    @client_secret_encrypted,
+    @client_id_issued_at,
+    @client_secret_expires_at
+)
+RETURNING *;
+
+-- name: GetRemoteSessionClientByID :one
+SELECT *
+FROM remote_session_clients
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: ListRemoteSessionClientsByProjectID :many
+SELECT *
+FROM remote_session_clients
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
+  AND (sqlc.narg('user_session_issuer_id')::uuid IS NULL OR user_session_issuer_id = sqlc.narg('user_session_issuer_id')::uuid)
+ORDER BY created_at DESC
+LIMIT 100;
+
+-- name: UpdateRemoteSessionClient :one
+UPDATE remote_session_clients
+SET
+    client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), client_secret_encrypted),
+    client_secret_expires_at = COALESCE(sqlc.narg('client_secret_expires_at'), client_secret_expires_at),
+    user_session_issuer_id = COALESCE(sqlc.narg('user_session_issuer_id'), user_session_issuer_id),
+    updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteRemoteSessionClient :one
+UPDATE remote_session_clients
+SET deleted_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;
+
+-- name: SoftDeleteRemoteSessionsByClientID :execrows
+UPDATE remote_sessions
+SET deleted_at = clock_timestamp()
+WHERE remote_session_client_id = @remote_session_client_id AND deleted IS FALSE;
+
+-- name: CountActiveRemoteSessionsByClientID :one
+SELECT COUNT(*)
+FROM remote_sessions
+WHERE remote_session_client_id = @remote_session_client_id AND deleted IS FALSE;
+
+-- name: InsertRemoteSession :one
+INSERT INTO remote_sessions (
+    principal_urn,
+    user_session_issuer_id,
+    remote_session_client_id,
+    access_token_encrypted,
+    access_expires_at
+)
+VALUES (
+    @principal_urn,
+    @user_session_issuer_id,
+    @remote_session_client_id,
+    @access_token_encrypted,
+    @access_expires_at
+)
+RETURNING *;
