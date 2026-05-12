@@ -163,6 +163,7 @@ export * from "./rbacStatus.js";
 export * from "./redeployDeployment.js";
 export * from "./register.js";
 export * from "./registerDomain.js";
+export * from "./registerRemoteSessionIssuer.js";
 export * from "./remoteMcpServers.js";
 export * from "./remoteSessionClient.js";
 export * from "./remoteSessionClients.js";

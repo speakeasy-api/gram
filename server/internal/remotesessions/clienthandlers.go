@@ -49,6 +49,16 @@ type rfc7591Request struct {
 	Scope                   string   `json:"scope,omitempty"`
 }
 
+// dcrParams collects the inputs the RFC 7591 helper accepts. ClientName,
+// RedirectURIs are optional caller overrides; Scopes is the union of scopes
+// the issuer advertised.
+type dcrParams struct {
+	RegistrationEndpoint string
+	Scopes               []string
+	ClientName           string
+	RedirectURIs         []string
+}
+
 // rfc7591Response is the subset of an RFC 7591 registration response Gram
 // persists. client_id_issued_at and client_secret_expires_at are seconds since
 // the Unix epoch per the spec.
@@ -124,7 +134,12 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 			return nil, oops.E(oops.CodeBadRequest, nil, "issuer has no registration_endpoint; auto_register unavailable").Log(ctx, logger)
 		}
 
-		dcrResp, err := registerClientViaDCR(ctx, s.policy, regEndpoint, issuer.ScopesSupported)
+		dcrResp, err := registerClientViaDCR(ctx, s.policy, dcrParams{
+			RegistrationEndpoint: regEndpoint,
+			Scopes:               issuer.ScopesSupported,
+			ClientName:           "",
+			RedirectURIs:         nil,
+		})
 		if err != nil {
 			return nil, oops.E(oops.CodeGatewayError, err, "dynamic client registration failed").Log(ctx, logger)
 		}
@@ -429,14 +444,18 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 // registerClientViaDCR fires an RFC 7591 Dynamic Client Registration request
 // against the issuer's registration_endpoint. The guardian.Policy supplies an
 // SSRF-gated HTTP client.
-func registerClientViaDCR(ctx context.Context, policy *guardian.Policy, registrationEndpoint string, scopes []string) (rfc7591Response, error) {
+func registerClientViaDCR(ctx context.Context, policy *guardian.Policy, params dcrParams) (rfc7591Response, error) {
+	clientName := params.ClientName
+	if strings.TrimSpace(clientName) == "" {
+		clientName = "Gram"
+	}
 	reqBody, err := json.Marshal(rfc7591Request{
-		ClientName:              "Gram",
-		RedirectURIs:            nil,
+		ClientName:              clientName,
+		RedirectURIs:            params.RedirectURIs,
 		GrantTypes:              []string{"authorization_code", "refresh_token"},
 		ResponseTypes:           []string{"code"},
 		TokenEndpointAuthMethod: "client_secret_basic",
-		Scope:                   strings.Join(scopes, " "),
+		Scope:                   strings.Join(params.Scopes, " "),
 	})
 	if err != nil {
 		return rfc7591Response{}, fmt.Errorf("marshal dcr request: %w", err)
@@ -445,7 +464,7 @@ func registerClientViaDCR(ctx context.Context, policy *guardian.Policy, registra
 	reqCtx, cancel := context.WithTimeout(ctx, dcrHTTPTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, registrationEndpoint, bytes.NewReader(reqBody))
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, params.RegistrationEndpoint, bytes.NewReader(reqBody))
 	if err != nil {
 		return rfc7591Response{}, fmt.Errorf("build dcr request: %w", err)
 	}
