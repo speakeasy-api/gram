@@ -163,3 +163,32 @@ VALUES (
     @access_expires_at
 )
 RETURNING *;
+
+-- name: ListRemoteSessionsByProjectID :many
+SELECT s.*
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+WHERE c.project_id = @project_id
+  AND s.deleted IS FALSE
+  AND c.deleted IS FALSE
+  AND (sqlc.narg('principal_urn')::text IS NULL OR s.principal_urn = sqlc.narg('principal_urn')::text)
+  AND (sqlc.narg('remote_session_client_id')::uuid IS NULL OR s.remote_session_client_id = sqlc.narg('remote_session_client_id')::uuid)
+ORDER BY s.created_at DESC
+LIMIT 100;
+
+-- name: GetRemoteSessionByID :one
+SELECT s.*
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+WHERE s.id = @id AND c.project_id = @project_id AND s.deleted IS FALSE AND c.deleted IS FALSE;
+
+-- name: RevokeRemoteSession :one
+UPDATE remote_sessions AS s
+SET deleted_at = clock_timestamp()
+FROM remote_session_clients AS c
+WHERE s.id = @id
+  AND s.remote_session_client_id = c.id
+  AND c.project_id = @project_id
+  AND s.deleted IS FALSE
+  AND c.deleted IS FALSE
+RETURNING s.*;
