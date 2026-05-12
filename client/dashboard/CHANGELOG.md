@@ -1,5 +1,19 @@
 # dashboard
 
+## 0.52.0
+
+### Minor Changes
+
+- 35b4b51: The assistant onboarding chat now connects to every MCP server attached to the assistant, not just the first one, so the agent can call tools across all configured toolsets.
+- c6944af: Repurpose the Agents insights tab into an employee token observability dashboard. The new view shows per-employee token consumption, estimated cost, tool usage breakdown, and platform/model distribution. Clicking an employee row opens a detail dialog with model-level usage, time-series charts, and tool breakdown. Results can be scoped to specific coding tools like Cursor or Claude Code, and the outdated Elements setup modal no longer appears on this page.
+
+### Patch Changes
+
+- b2012be: Fix expanding panel animation on the assistant page.
+- Updated dependencies [35b4b51]
+- Updated dependencies [35b4b51]
+  - @gram-ai/elements@1.32.0
+
 ## 0.51.0
 
 ### Minor Changes
