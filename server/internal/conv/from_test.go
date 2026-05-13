@@ -2,6 +2,7 @@ package conv_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -43,6 +44,20 @@ func TestPtrInt32ToInt_Nil(t *testing.T) {
 	result := conv.PtrInt32ToInt(nil)
 
 	require.Nil(t, result)
+}
+
+func TestFromPGTimestamptz_Valid(t *testing.T) {
+	t.Parallel()
+
+	input := pgtype.Timestamptz{Time: time.Date(2024, 11, 15, 15, 4, 5, 0, time.FixedZone("test", 2*60*60)), Valid: true}
+
+	require.Equal(t, "2024-11-15T13:04:05Z", conv.FromPGTimestamptz(input))
+}
+
+func TestFromPGTimestamptz_Invalid(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, conv.FromPGTimestamptz(pgtype.Timestamptz{}))
 }
 
 func TestURLToSlug_HostAndPath(t *testing.T) {

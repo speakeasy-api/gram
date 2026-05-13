@@ -39,12 +39,6 @@ func TestService_CreateRole(t *testing.T) {
 		CreatedAt:   mockRoleTimestamp,
 		UpdatedAt:   mockRoleTimestamp,
 	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "member"),
-		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "member"),
-		// user_workos_only has never logged into Gram — should not be counted
-		mockMember(mockidp.MockOrgID, "membership_workos_only", "user_workos_only", "member"),
-	}, nil).Once()
 	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "org-custom-builder").Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
@@ -60,8 +54,12 @@ func TestService_CreateRole(t *testing.T) {
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
 
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_member", "Member", authz.SystemRoleMember))
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "user2@test.com", "User 2", "user_2", "membership_2")
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMember("", "membership_1", "user_1", authz.SystemRoleMember))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", mockMember("", "membership_2", "user_2", authz.SystemRoleMember))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "", mockMember("", "membership_workos_only", "user_workos_only", authz.SystemRoleMember))
 
 	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
 		Name:        "Custom Builder",
@@ -106,35 +104,25 @@ func TestService_CreateRole_WorkOSCreateFailure(t *testing.T) {
 	require.Contains(t, err.Error(), "create role in workos")
 }
 
-func TestService_CreateRole_ContinuesAfterConflictWhenRoleAlreadyExists(t *testing.T) {
+func TestService_CreateRole_WorkOSConflictFailure(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
-	existingRole := mockRole("role_existing", "Custom Builder", "org-custom-builder", "Can build selected resources")
 	ti.roles.On("CreateRole", mock.Anything, mockidp.MockOrgID, thirdpartyworkos.CreateRoleOpts{
 		Name:        "Custom Builder",
 		Slug:        "org-custom-builder",
 		Description: "Can build selected resources",
 	}).Return((*thirdpartyworkos.Role)(nil), &thirdpartyworkos.APIError{Method: "POST", Path: "/authorization/organizations/org_workos_test/roles", StatusCode: 409, Body: "role already exists"}).Once()
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{existingRole}, nil).Once()
 
-	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
+	_, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
 			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
 		},
 	})
-	require.NoError(t, err)
-	require.Equal(t, "role_existing", role.ID)
-	require.Equal(t, "Custom Builder", role.Name)
-
-	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder"))
-	require.Len(t, grants, 1)
-	require.Equal(t, authCtx.ActiveOrganizationID, grants[0].OrganizationID)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "create role in workos")
 }
 
 func TestService_CreateRole_RejectsEmptySlug(t *testing.T) {

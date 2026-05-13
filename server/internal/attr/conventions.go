@@ -196,6 +196,8 @@ const (
 	AccessMemberIDKey              = attribute.Key("gram.access.member.id")
 	AccessRoleIDKey                = attribute.Key("gram.access.role.id")
 	AccessRoleSlugKey              = attribute.Key("gram.access.role.slug")
+	AccessRoleSourceKey            = attribute.Key("gram.access.role.source")
+	AccessRoleDBWriteFailedKey     = attribute.Key("gram.access.role.db_write_failed_post_workos")
 	OrganizationIDKey              = attribute.Key("gram.org.id")
 	OrganizationSlugKey            = attribute.Key("gram.org.slug")
 	WorkOSOrganizationIDKey        = attribute.Key("gram.workos.organization_id")
@@ -842,6 +844,16 @@ func SlogAccessRoleID(v string) slog.Attr      { return slog.String(string(Acces
 
 func AccessRoleSlug(v string) attribute.KeyValue { return AccessRoleSlugKey.String(v) }
 func SlogAccessRoleSlug(v string) slog.Attr      { return slog.String(string(AccessRoleSlugKey), v) }
+
+func AccessRoleSource(v string) attribute.KeyValue { return AccessRoleSourceKey.String(v) }
+func SlogAccessRoleSource(v string) slog.Attr      { return slog.String(string(AccessRoleSourceKey), v) }
+
+func AccessRoleDBWriteFailed(v bool) attribute.KeyValue {
+	return AccessRoleDBWriteFailedKey.Bool(v)
+}
+func SlogAccessRoleDBWriteFailed(v bool) slog.Attr {
+	return slog.Bool(string(AccessRoleDBWriteFailedKey), v)
+}
 
 func OrganizationID(v string) attribute.KeyValue { return OrganizationIDKey.String(v) }
 func SlogOrganizationID(v string) slog.Attr      { return slog.String(string(OrganizationIDKey), v) }
