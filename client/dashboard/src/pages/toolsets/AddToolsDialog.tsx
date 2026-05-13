@@ -40,11 +40,19 @@ export function AddToolsDialog({
   const { data: defaultTools, isLoading: isDefaultLoading } = useListTools();
   const { data: deployment } = useLatestDeployment();
 
+  const externalSlugs = useMemo(() => {
+    return new Set(
+      toolset.tools.filter((t) => t.type === "external-mcp").map((t) => t.slug),
+    );
+  }, [toolset.tools]);
+
   const {
     data: externalTools,
     isLoading: isExternalLoading,
     error: externalError,
-  } = useListTools({ toolTypes: ["externalmcp"] });
+  } = useListTools({ toolTypes: ["externalmcp"] }, undefined, {
+    enabled: externalSlugs.size > 0,
+  });
 
   useEffect(() => {
     if (externalError) {
@@ -54,9 +62,11 @@ export function AddToolsDialog({
 
   const allTools = useMemo(() => {
     const base = defaultTools?.tools ?? [];
-    const external = externalTools?.tools ?? [];
+    const external = (externalTools?.tools ?? []).filter(
+      (t) => t.type === "external-mcp" && externalSlugs.has(t.slug),
+    );
     return { tools: [...base, ...external] };
-  }, [defaultTools, externalTools]);
+  }, [defaultTools, externalTools, externalSlugs]);
 
   const isLoading = isDefaultLoading || isExternalLoading;
 
