@@ -167,6 +167,92 @@ VALUES (
 )
 RETURNING *;
 
+-- name: UpsertRemoteSession :one
+-- Used by /mcp/{slug}/remote_login_callback to materialise (or refresh) the
+-- remote_session for a (subject, client) pair. Conflict target matches the
+-- partial unique index on (subject_urn, remote_session_client_id) WHERE
+-- deleted IS FALSE; on conflict we overwrite every token field. A
+-- soft-deleted row falls outside the partial index, so a re-auth after
+-- revocation inserts a fresh active row alongside the tombstone.
+INSERT INTO remote_sessions (
+    subject_urn,
+    user_session_issuer_id,
+    remote_session_client_id,
+    access_token_encrypted,
+    access_expires_at,
+    refresh_token_encrypted,
+    refresh_expires_at,
+    scopes
+)
+VALUES (
+    @subject_urn,
+    @user_session_issuer_id,
+    @remote_session_client_id,
+    @access_token_encrypted,
+    @access_expires_at,
+    @refresh_token_encrypted,
+    @refresh_expires_at,
+    @scopes
+)
+ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    access_token_encrypted = EXCLUDED.access_token_encrypted,
+    access_expires_at = EXCLUDED.access_expires_at,
+    refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
+    refresh_expires_at = EXCLUDED.refresh_expires_at,
+    scopes = EXCLUDED.scopes,
+    updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: GetActiveRemoteSession :one
+-- Look up the active remote_session for a (subject, client) binding.
+-- Single-row exact lookup; uniqueness enforced by the partial unique
+-- index on (subject_urn, remote_session_client_id) WHERE deleted IS FALSE.
+SELECT *
+FROM remote_sessions
+WHERE subject_urn = @subject_urn
+  AND remote_session_client_id = @remote_session_client_id
+  AND deleted IS FALSE;
+
+-- name: ListConnectedClientIDsForSubject :many
+-- Bulk lookup for the consent renderer: returns the set of
+-- remote_session_client_ids that have an active remote_sessions row for
+-- the given subject under a single user_session_issuer. Folds the N
+-- per-card IsConnected lookups into one round-trip. The partial unique
+-- index on (subject_urn, remote_session_client_id) WHERE deleted IS
+-- FALSE means at most one row per (subject, client), so the result set
+-- doubles as a membership set without DISTINCT.
+SELECT remote_session_client_id
+FROM remote_sessions
+WHERE subject_urn = @subject_urn
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND deleted IS FALSE;
+
+-- name: ListRemoteSessionClientsForUserSessionIssuer :many
+-- Joined client + issuer view used by the consent renderer and the
+-- ChallengeManager. Returns one row per remote_session_client linked to
+-- the given user_session_issuer.
+SELECT
+    c.id                                   AS client_id,
+    c.client_id                            AS external_client_id,
+    c.client_secret_encrypted              AS client_secret_encrypted,
+    c.remote_session_issuer_id             AS remote_session_issuer_id,
+    c.user_session_issuer_id               AS user_session_issuer_id,
+    i.slug                                 AS issuer_slug,
+    i.issuer                               AS issuer_url,
+    i.authorization_endpoint               AS authorization_endpoint,
+    i.token_endpoint                       AS token_endpoint,
+    i.scopes_supported                     AS scopes_supported,
+    i.passthrough                          AS passthrough,
+    i.oidc                                 AS oidc
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.user_session_issuer_id = @user_session_issuer_id
+  AND c.project_id              = @project_id
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+ORDER BY c.id ASC;
+
 -- name: ListRemoteSessionsByProjectID :many
 SELECT s.*
 FROM remote_sessions AS s

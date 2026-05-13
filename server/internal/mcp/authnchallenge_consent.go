@@ -5,10 +5,12 @@
 package mcp
 
 import (
+	"context"
 	"crypto/sha256"
 	_ "embed"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"html/template"
 	"net/http"
 	"net/url"
@@ -21,6 +23,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -42,11 +46,22 @@ var remoteSetHashEmpty = func() string {
 
 // consentTemplateData is the field set the consent template renders against.
 type consentTemplateData struct {
-	ClientName     string
-	MCPSlug        string
-	State          string
-	SubjectDisplay string
-	RedirectURI    string
+	ClientName         string
+	MCPSlug            string
+	State              string
+	SubjectDisplay     string
+	RedirectURI        string
+	RemoteSessionCards []remoteSessionCard
+}
+
+// remoteSessionCard is the per-remote view rendered by the {{range}} block
+// in the consent template. ChallengeURL is the upstream provider's
+// authorize URL with PKCE + state bound for this consent session.
+type remoteSessionCard struct {
+	ClientID     string
+	IssuerSlug   string
+	Connected    bool
+	ChallengeURL string
 }
 
 // HandleConsent serves the GET (consent UI) and POST (Give Access /
@@ -131,12 +146,18 @@ func (s *Service) handleConsentGet(w http.ResponseWriter, r *http.Request) error
 		subjectDisplay = challengeState.Subject.String()
 	}
 
+	cards, err := s.buildRemoteSessionCards(ctx, toolset, challengeState, mcpSlug)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build remote session cards").Log(ctx, logger)
+	}
+
 	data := consentTemplateData{
-		ClientName:     client.ClientName,
-		MCPSlug:        mcpSlug,
-		State:          stateID,
-		SubjectDisplay: subjectDisplay,
-		RedirectURI:    challengeState.RedirectURI,
+		ClientName:         client.ClientName,
+		MCPSlug:            mcpSlug,
+		State:              stateID,
+		SubjectDisplay:     subjectDisplay,
+		RedirectURI:        challengeState.RedirectURI,
+		RemoteSessionCards: cards,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -314,4 +335,60 @@ func buildClientRedirect(redirectURI, code, originalState, errCode, errDescripti
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+// buildRemoteSessionCards loads every remote_session_client linked to the
+// toolset's user_session_issuer and materialises a card per client. Each
+// card carries a connected/disconnected state (read from remote_sessions
+// for the stamped subject) plus the upstream authorize URL minted by the
+// ChallengeManager. Mints fresh per-card Redis state on every render —
+// the 10-min TTL keeps abandoned states from piling up.
+func (s *Service) buildRemoteSessionCards(
+	ctx context.Context,
+	toolset *toolsets_repo.Toolset,
+	challengeState AuthnChallengeState,
+	mcpSlug string,
+) ([]remoteSessionCard, error) {
+	clients, err := s.remoteChallengeMgr.ListClients(ctx, toolset.ProjectID, toolset.UserSessionIssuerID.UUID)
+	if err != nil {
+		return nil, fmt.Errorf("list remote session clients: %w", err)
+	}
+	if len(clients) == 0 {
+		return nil, nil
+	}
+
+	// Single round-trip for connected-state across all cards. Empty when
+	// the subject hasn't been stamped yet (early render before IDP /
+	// anonymous late-bind); the per-card check below then resolves false.
+	var connectedIDs map[uuid.UUID]struct{}
+	if challengeState.Subject != nil && !challengeState.Subject.IsZero() {
+		connectedIDs, err = s.remoteChallengeMgr.ConnectedClientIDs(ctx, *challengeState.Subject, toolset.UserSessionIssuerID.UUID)
+		if err != nil {
+			return nil, fmt.Errorf("connected client ids: %w", err)
+		}
+	}
+
+	parent := remotesessions.ParentChallenge{
+		ID:                  challengeState.ID,
+		ProjectID:           toolset.ProjectID,
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		Subject:             challengeState.Subject,
+		McpSlug:             mcpSlug,
+	}
+
+	cards := make([]remoteSessionCard, 0, len(clients))
+	for _, c := range clients {
+		challengeURL, berr := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, c)
+		if berr != nil {
+			return nil, fmt.Errorf("build authorization url for %s: %w", c.IssuerSlug, berr)
+		}
+		_, connected := connectedIDs[c.ID]
+		cards = append(cards, remoteSessionCard{
+			ClientID:     c.ID.String(),
+			IssuerSlug:   c.IssuerSlug,
+			Connected:    connected,
+			ChallengeURL: challengeURL,
+		})
+	}
+	return cards, nil
 }

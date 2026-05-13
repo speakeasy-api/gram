@@ -79,6 +79,62 @@
         font-weight: bold;
         margin-right: 10px;
       }
+      .remotes {
+        margin-bottom: 24px;
+      }
+      .remotes h3 {
+        margin: 0 0 12px 0;
+        color: #333;
+        font-size: 15px;
+      }
+      .remote-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+        border: 1px solid #e2e2e2;
+        border-radius: 6px;
+        margin-bottom: 8px;
+        background: #fff;
+      }
+      .remote-card .meta {
+        font-size: 14px;
+        color: #333;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .remote-card .meta .issuer {
+        font-weight: 600;
+      }
+      .remote-card .meta .state {
+        font-size: 12px;
+        color: #666;
+        margin-top: 2px;
+      }
+      .remote-card .state.connected {
+        color: #28a745;
+      }
+      .remote-card .state.disconnected {
+        color: #b95f00;
+      }
+      .remote-card a.btn-link {
+        padding: 8px 14px;
+        font-size: 14px;
+        font-weight: 600;
+        border-radius: 6px;
+        text-decoration: none;
+        background-color: #007bff;
+        color: white;
+      }
+      .remote-card a.btn-link:hover {
+        background-color: #0056b3;
+      }
+      .remote-card a.btn-link.connected {
+        background-color: #f3f4f6;
+        color: #333;
+        border: 1px solid #e2e2e2;
+      }
       .actions {
         display: flex;
         gap: 10px;
@@ -132,6 +188,25 @@
         <dd>{{.RedirectURI}}</dd>
         {{end}}
       </dl>
+
+      {{if .RemoteSessionCards}}
+      <div class="remotes">
+        <h3>Connect required services</h3>
+        {{range .RemoteSessionCards}}
+        <div class="remote-card">
+          <div class="meta">
+            <div class="issuer">{{.IssuerSlug}}</div>
+            {{if .Connected}}
+            <div class="state connected">✓ Connected</div>
+            {{else}}
+            <div class="state disconnected">Not connected</div>
+            {{end}}
+          </div>
+          <a class="btn-link {{if .Connected}}connected{{end}}" href="{{.ChallengeURL}}">{{if .Connected}}Reconnect{{else}}Connect{{end}}</a>
+        </div>
+        {{end}}
+      </div>
+      {{end}}
 
       <div class="actions">
         <form method="POST" action="/mcp/{{.MCPSlug}}/connect">
