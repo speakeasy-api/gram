@@ -97,6 +97,9 @@ func (t *SearchTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload
 		return oops.E(oops.CodeUnexpected, nil, "catalog tools are not configured")
 	}
 
+	if _, ok := contextvalues.GetAssistantPrincipal(ctx); !ok {
+		return oops.E(oops.CodeUnauthorized, nil, "catalog tools require an assistant principal")
+	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.E(oops.CodeUnauthorized, nil, "catalog tools require a project auth context")
