@@ -13,7 +13,7 @@ import {
   useProductFeatures,
   useRbacStatus,
 } from "@gram/client/react-query";
-import { invalidateAllFeaturesGet } from "@gram/client/react-query/featuresGet.js";
+import { invalidateAllProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { invalidateAllRbacStatus } from "@gram/client/react-query/rbacStatus.js";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
@@ -178,7 +178,7 @@ function AuthzChallengeLoggingSection() {
     error: mutError,
   } = useFeaturesSetMutation({
     onSuccess: () => {
-      invalidateAllFeaturesGet(queryClient);
+      invalidateAllProductFeatures(queryClient);
     },
   });
 

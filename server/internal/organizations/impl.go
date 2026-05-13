@@ -103,6 +103,7 @@ func NewService(
 		authz:    authzEngine,
 		orgs:     orgs,
 		features: features,
+		audit:    auditLogger,
 		svix:     svix,
 	}
 }
