@@ -180,13 +180,19 @@ async function ensureAssistant(
     warm_ttl_seconds?: number;
     max_concurrency?: number;
   },
+  idOverride?: string | null,
 ) {
   const { sdk, draft } = deps;
-  if (draft.assistantId) {
+  // streamText captures tool closures at response start, so a tool's `draft`
+  // snapshot is stale for subsequent tool calls in the same response. Callers
+  // can pass `idOverride` to force the update path against an id created
+  // moments earlier in the same response.
+  const currentId = idOverride !== undefined ? idOverride : draft.assistantId;
+  if (currentId) {
     const prevName = draft.assistant?.name;
     const updated = await sdk.assistants.update({
       updateAssistantForm: {
-        id: draft.assistantId,
+        id: currentId,
         ...(payload.name !== undefined ? { name: payload.name } : {}),
         ...(payload.instructions !== undefined
           ? { instructions: payload.instructions }
@@ -385,6 +391,25 @@ type PersonalityChoice =
 function buildAssistantTools(deps: ToolDeps) {
   const { sdk, draft, organizationId } = deps;
 
+  // Live mirror of the assistant — `draft` is closure-captured by streamText
+  // and won't pick up draft.setAssistant calls made by earlier tool calls in
+  // the same response. Tools that read assistant state across a single
+  // response (e.g. propose_name → propose_personality) consult `live` first.
+  const live: {
+    id: string | null;
+    name: string | undefined;
+    instructions: string;
+  } = {
+    id: draft.assistantId,
+    name: draft.assistant?.name,
+    instructions: draft.assistant?.instructions ?? "",
+  };
+  const trackLive = (a: { id: string; name: string; instructions: string }) => {
+    live.id = a.id;
+    live.name = a.name;
+    live.instructions = a.instructions;
+  };
+
   // The LLM may emit multiple mutating tool calls in parallel within one turn.
   // Without this, two attach_toolset calls would each read the same pre-attach
   // toolsets snapshot, compute their own next array, and PUT — last write wins.
@@ -441,7 +466,8 @@ function buildAssistantTools(deps: ToolDeps) {
         const name = userInput.name;
         return serialize(async () => {
           try {
-            await ensureAssistant(deps, { name });
+            const a = await ensureAssistant(deps, { name });
+            trackLive(a);
             return okResult({
               name,
               note: `Saved name "${name}". Now call propose_personality to let the user pick their personality.`,
@@ -465,11 +491,6 @@ function buildAssistantTools(deps: ToolDeps) {
       parameters: z.object({}),
       execute: async (_args, ctx) => {
         const toolCallId = ctx.toolCallId ?? "";
-        if (!draft.assistant?.name) {
-          return errResult(
-            "propose_personality called before the assistant has a name. Call propose_name (or update_assistant with a name) first.",
-          );
-        }
         type PersonalityPickResult = {
           success: boolean;
           cancelled?: boolean;
@@ -495,19 +516,23 @@ function buildAssistantTools(deps: ToolDeps) {
         }
 
         const p = userInput.personality;
-        const name = draft.assistant.name;
+        const name = live.name ?? "the assistant";
         return serialize(async () => {
           try {
             if (p.kind === "prebuilt") {
               const hasInstructions = p.prebuilt.instructions.trim().length > 0;
               if (hasInstructions) {
-                const current = draft.assistant?.instructions ?? "";
                 const next = setSection(
-                  current,
+                  live.instructions,
                   "Personality",
                   p.prebuilt.instructions,
                 );
-                await ensureAssistant(deps, { instructions: next });
+                const a = await ensureAssistant(
+                  deps,
+                  { instructions: next },
+                  live.id,
+                );
+                trackLive(a);
               }
               return okResult({
                 personality: {
@@ -523,9 +548,17 @@ function buildAssistantTools(deps: ToolDeps) {
               });
             }
             if (p.kind === "custom_text") {
-              const current = draft.assistant?.instructions ?? "";
-              const next = setSection(current, "Personality", p.custom_text);
-              await ensureAssistant(deps, { instructions: next });
+              const next = setSection(
+                live.instructions,
+                "Personality",
+                p.custom_text,
+              );
+              const a = await ensureAssistant(
+                deps,
+                { instructions: next },
+                live.id,
+              );
+              trackLive(a);
               return okResult({
                 personality: { kind: "custom_text" as const },
                 note: `Saved the user's pasted personality verbatim under # Personality for "${name}". Now call set_tasks with role-specific guidance. Do not modify # Personality.`,
@@ -589,7 +622,12 @@ function buildAssistantTools(deps: ToolDeps) {
       execute: async (args) =>
         serialize(async () => {
           try {
-            const a = await ensureAssistant(deps, args as UpdateAssistantArgs);
+            const a = await ensureAssistant(
+              deps,
+              args as UpdateAssistantArgs,
+              live.id,
+            );
+            trackLive(a);
             const envResult = a.name
               ? await ensureAssistantEnv(deps, a.name)
               : null;
@@ -631,9 +669,17 @@ function buildAssistantTools(deps: ToolDeps) {
         serialize(async () => {
           const { instructions } = args as SetPersonalityArgs;
           try {
-            const current = draft.assistant?.instructions ?? "";
-            const next = setSection(current, "Personality", instructions);
-            const updated = await ensureAssistant(deps, { instructions: next });
+            const next = setSection(
+              live.instructions,
+              "Personality",
+              instructions,
+            );
+            const updated = await ensureAssistant(
+              deps,
+              { instructions: next },
+              live.id,
+            );
+            trackLive(updated);
             return okResult({
               assistant: {
                 id: updated.id,
@@ -667,9 +713,13 @@ function buildAssistantTools(deps: ToolDeps) {
         serialize(async () => {
           const { tasks } = args as SetTasksArgs;
           try {
-            const current = draft.assistant?.instructions ?? "";
-            const next = setSection(current, "Tasks", tasks);
-            const updated = await ensureAssistant(deps, { instructions: next });
+            const next = setSection(live.instructions, "Tasks", tasks);
+            const updated = await ensureAssistant(
+              deps,
+              { instructions: next },
+              live.id,
+            );
+            trackLive(updated);
             return okResult({
               assistant: {
                 id: updated.id,
