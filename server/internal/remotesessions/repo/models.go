@@ -12,7 +12,7 @@ import (
 
 type RemoteSession struct {
 	ID                    uuid.UUID
-	PrincipalUrn          urn.SessionSubject
+	SubjectUrn            urn.SessionSubject
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionClientID uuid.UUID
 	AccessTokenEncrypted  string

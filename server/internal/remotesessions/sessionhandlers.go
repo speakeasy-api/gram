@@ -33,7 +33,7 @@ func (s *Service) ListRemoteSessions(ctx context.Context, payload *gen.ListRemot
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	principalFilter := conv.PtrToPGText(payload.PrincipalUrn)
+	principalFilter := conv.PtrToPGText(payload.SubjectUrn)
 	clientFilter, err := conv.PtrToNullUUID(payload.RemoteSessionClientID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client_id").Log(ctx, logger)
@@ -47,7 +47,7 @@ func (s *Service) ListRemoteSessions(ctx context.Context, payload *gen.ListRemot
 
 	rows, err := repo.New(s.db).ListRemoteSessionsByProjectID(ctx, repo.ListRemoteSessionsByProjectIDParams{
 		ProjectID:             *authCtx.ProjectID,
-		PrincipalUrn:          principalFilter,
+		SubjectUrn:            principalFilter,
 		RemoteSessionClientID: clientFilter,
 		Cursor:                cursor,
 		LimitValue:            limit,
@@ -116,7 +116,7 @@ func (s *Service) RevokeRemoteSession(ctx context.Context, payload *gen.RevokeRe
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
 		RemoteSessionURN: urn.NewRemoteSession(revoked.ID),
-		PrincipalURN:     revoked.PrincipalUrn,
+		SubjectURN:       revoked.SubjectUrn,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log remote session revoke").Log(ctx, logger)
 	}
@@ -136,7 +136,7 @@ func remoteSessionView(row repo.RemoteSession) *types.RemoteSession {
 	}
 	return &types.RemoteSession{
 		ID:                    row.ID.String(),
-		PrincipalUrn:          row.PrincipalUrn.String(),
+		SubjectUrn:            row.SubjectUrn.String(),
 		UserSessionIssuerID:   row.UserSessionIssuerID.String(),
 		RemoteSessionClientID: row.RemoteSessionClientID.String(),
 		AccessExpiresAt:       row.AccessExpiresAt.Time.Format(time.RFC3339),

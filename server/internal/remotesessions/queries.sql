@@ -152,14 +152,14 @@ WHERE remote_session_client_id = @remote_session_client_id AND deleted IS FALSE;
 
 -- name: InsertRemoteSession :one
 INSERT INTO remote_sessions (
-    principal_urn,
+    subject_urn,
     user_session_issuer_id,
     remote_session_client_id,
     access_token_encrypted,
     access_expires_at
 )
 VALUES (
-    @principal_urn,
+    @subject_urn,
     @user_session_issuer_id,
     @remote_session_client_id,
     @access_token_encrypted,
@@ -174,7 +174,7 @@ JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 WHERE c.project_id = @project_id
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
-  AND (sqlc.narg('principal_urn')::text IS NULL OR s.principal_urn = sqlc.narg('principal_urn')::text)
+  AND (sqlc.narg('subject_urn')::text IS NULL OR s.subject_urn = sqlc.narg('subject_urn')::text)
   AND (sqlc.narg('remote_session_client_id')::uuid IS NULL OR s.remote_session_client_id = sqlc.narg('remote_session_client_id')::uuid)
   AND (sqlc.narg('cursor')::uuid IS NULL OR s.id < sqlc.narg('cursor')::uuid)
 ORDER BY s.id DESC

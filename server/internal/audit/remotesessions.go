@@ -23,7 +23,7 @@ type LogRemoteSessionDeleteEvent struct {
 	ActorSlug        *string
 
 	RemoteSessionURN urn.RemoteSession
-	PrincipalURN     urn.SessionSubject
+	SubjectURN       urn.SessionSubject
 }
 
 func (l *Logger) LogRemoteSessionDelete(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionDeleteEvent) error {
@@ -41,7 +41,7 @@ func (l *Logger) LogRemoteSessionDelete(ctx context.Context, dbtx repo.DBTX, eve
 
 		SubjectID:          event.RemoteSessionURN.ID.String(),
 		SubjectType:        string(subjectTypeRemoteSession),
-		SubjectDisplayName: conv.ToPGTextEmpty(event.PrincipalURN.String()),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.SubjectURN.String()),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
 		BeforeSnapshot: nil,

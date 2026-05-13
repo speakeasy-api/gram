@@ -36,7 +36,7 @@ func TestListRemoteSessions(t *testing.T) {
 	require.NoError(t, err)
 
 	result, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{
-		PrincipalUrn:          nil,
+		SubjectUrn:            nil,
 		RemoteSessionClientID: nil,
 		Cursor:                nil,
 		Limit:                 nil,
@@ -71,7 +71,7 @@ func TestListRemoteSessions_FilteredByPrincipal(t *testing.T) {
 
 	filter := alice.String()
 	result, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{
-		PrincipalUrn:          &filter,
+		SubjectUrn:            &filter,
 		RemoteSessionClientID: nil,
 		Cursor:                nil,
 		Limit:                 nil,
@@ -81,7 +81,7 @@ func TestListRemoteSessions_FilteredByPrincipal(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Items, 1)
-	require.Equal(t, filter, result.Items[0].PrincipalUrn)
+	require.Equal(t, filter, result.Items[0].SubjectUrn)
 }
 
 func TestListRemoteSessions_FilteredByClient(t *testing.T) {
@@ -98,7 +98,7 @@ func TestListRemoteSessions_FilteredByClient(t *testing.T) {
 	insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_in_b"), userIssuerID, clientB)
 
 	result, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{
-		PrincipalUrn:          nil,
+		SubjectUrn:            nil,
 		RemoteSessionClientID: &clientA,
 		Cursor:                nil,
 		Limit:                 nil,
@@ -119,7 +119,7 @@ func TestListRemoteSessions_RBACForbidden(t *testing.T) {
 	ctx = withExactAccessGrants(t, ctx, ti.conn)
 
 	_, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{
-		PrincipalUrn:          nil,
+		SubjectUrn:            nil,
 		RemoteSessionClientID: nil,
 		Cursor:                nil,
 		Limit:                 nil,
@@ -155,7 +155,7 @@ func TestListRemoteSessions_PaginationTraversal(t *testing.T) {
 		pages++
 		require.Less(t, pages, 10, "pagination did not terminate")
 		result, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{
-			PrincipalUrn:          nil,
+			SubjectUrn:            nil,
 			RemoteSessionClientID: &clientID,
 			Cursor:                cursor,
 			Limit:                 &pageSize,
@@ -206,7 +206,7 @@ func TestRevokeRemoteSession(t *testing.T) {
 
 	// Subsequent list must omit the revoked row.
 	result, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{
-		PrincipalUrn:          nil,
+		SubjectUrn:            nil,
 		RemoteSessionClientID: &clientID,
 		Cursor:                nil,
 		Limit:                 nil,

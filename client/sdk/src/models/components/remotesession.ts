@@ -24,7 +24,7 @@ export type RemoteSession = {
   /**
    * The session's principal URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
    */
-  principalUrn: string;
+  subjectUrn: string;
   /**
    * Upstream refresh-token expiry. Null when the session has no refresh token.
    */
@@ -59,7 +59,7 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
-    principal_urn: z.string(),
+    subject_urn: z.string(),
     refresh_expires_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -75,7 +75,7 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "access_expires_at": "accessExpiresAt",
       "created_at": "createdAt",
-      "principal_urn": "principalUrn",
+      "subject_urn": "subjectUrn",
       "refresh_expires_at": "refreshExpiresAt",
       "remote_session_client_id": "remoteSessionClientId",
       "updated_at": "updatedAt",

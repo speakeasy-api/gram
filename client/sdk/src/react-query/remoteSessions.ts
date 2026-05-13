@@ -197,7 +197,7 @@ export function setRemoteSessionsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      principalUrn?: string | undefined;
+      subjectUrn?: string | undefined;
       remoteSessionClientId?: string | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
@@ -217,7 +217,7 @@ export function invalidateRemoteSessions(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      principalUrn?: string | undefined;
+      subjectUrn?: string | undefined;
       remoteSessionClientId?: string | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;

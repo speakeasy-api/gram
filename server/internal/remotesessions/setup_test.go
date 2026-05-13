@@ -163,7 +163,7 @@ func insertRemoteSession(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	require.NoError(t, err)
 
 	row, err := repo.New(conn).InsertRemoteSession(ctx, repo.InsertRemoteSessionParams{
-		PrincipalUrn:          principal,
+		SubjectUrn:            principal,
 		UserSessionIssuerID:   userIssuerUUID,
 		RemoteSessionClientID: clientUUID,
 		AccessTokenEncrypted:  "ciphertext",
