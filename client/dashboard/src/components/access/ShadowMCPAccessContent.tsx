@@ -22,6 +22,7 @@ import { Type } from "@/components/ui/type";
 import { Input } from "@/components/moon/input";
 import { Textarea } from "@/components/moon/textarea";
 import { cn } from "@/lib/utils";
+import { useRBAC } from "@/hooks/useRBAC";
 import type { ShadowMCPAccessRule } from "@gram/client/models/components/shadowmcpaccessrule.js";
 import type { ShadowMCPApprovalRequest } from "@gram/client/models/components/shadowmcpapprovalrequest.js";
 import {
@@ -137,7 +138,7 @@ function RequestStatusBadge({
       ? "success"
       : status === "denied"
         ? "destructive"
-        : "outline";
+        : "neutral";
 
   return (
     <Badge variant={variant}>
@@ -736,6 +737,8 @@ function RuleActionsMenu({
 
 export function ShadowMCPAccessContent() {
   const queryClient = useQueryClient();
+  const { hasScope } = useRBAC();
+  const canAdmin = hasScope("org:admin");
   const [requestStatusFilter, setRequestStatusFilter] =
     useState<RequestStatusFilter>("requested");
   const [ruleDispositionFilter, setRuleDispositionFilter] =
@@ -756,10 +759,14 @@ export function ShadowMCPAccessContent() {
     data: requestsData,
     isLoading: requestsLoading,
     error: requestsError,
-  } = useShadowMCPApprovalRequests({
-    limit: 100,
-    status: requestStatusFilter === "all" ? undefined : requestStatusFilter,
-  });
+  } = useShadowMCPApprovalRequests(
+    {
+      limit: 100,
+      status: requestStatusFilter === "all" ? undefined : requestStatusFilter,
+    },
+    undefined,
+    { enabled: canAdmin },
+  );
   const {
     data: rulesData,
     isLoading: rulesLoading,
@@ -1065,54 +1072,56 @@ export function ShadowMCPAccessContent() {
         }}
       />
 
-      <section className="space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <Heading variant="h5">Requests</Heading>
-            <Type muted small className="mt-1">
-              Review Shadow MCP servers users have requested after a policy
-              block.
-            </Type>
+      {canAdmin && (
+        <section className="space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <Heading variant="h5">Requests</Heading>
+              <Type muted small className="mt-1">
+                Review Shadow MCP servers users have requested after a policy
+                block.
+              </Type>
+            </div>
+            <Select
+              value={requestStatusFilter}
+              onValueChange={(value) =>
+                setRequestStatusFilter(value as RequestStatusFilter)
+              }
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="requested">Requested</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="denied">Denied</SelectItem>
+                <SelectItem value="all">All</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-          <Select
-            value={requestStatusFilter}
-            onValueChange={(value) =>
-              setRequestStatusFilter(value as RequestStatusFilter)
-            }
-          >
-            <SelectTrigger className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="requested">Requested</SelectItem>
-              <SelectItem value="approved">Approved</SelectItem>
-              <SelectItem value="denied">Denied</SelectItem>
-              <SelectItem value="all">All</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
 
-        {requestsLoading ? (
-          <SkeletonTable />
-        ) : requestsError ? (
-          <TableEmptyState
-            title="Requests could not be loaded"
-            description="Refresh the page or try again later."
-          />
-        ) : requests.length === 0 ? (
-          <TableEmptyState
-            title="No requests"
-            description="Blocked Shadow MCP servers will appear here after a user requests access."
-          />
-        ) : (
-          <Table
-            columns={requestColumns}
-            data={requests}
-            rowKey={(row) => row.id}
-            className="[&_thead]:bg-background max-h-128 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
-          />
-        )}
-      </section>
+          {requestsLoading ? (
+            <SkeletonTable />
+          ) : requestsError ? (
+            <TableEmptyState
+              title="Requests could not be loaded"
+              description="Refresh the page or try again later."
+            />
+          ) : requests.length === 0 ? (
+            <TableEmptyState
+              title="No requests"
+              description="Blocked Shadow MCP servers will appear here after a user requests access."
+            />
+          ) : (
+            <Table
+              columns={requestColumns}
+              data={requests}
+              rowKey={(row) => row.id}
+              className="[&_thead]:bg-background max-h-128 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
+            />
+          )}
+        </section>
+      )}
 
       <section className="space-y-4">
         <div className="flex items-start justify-between gap-4">
