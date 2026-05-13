@@ -201,4 +201,46 @@ func TestService_SwitchScopes(t *testing.T) {
 		require.True(t, ok, "auth context should be set after callback")
 		require.Equal(t, userInfo.Organizations[0].ID, authCtx.ActiveOrganizationID, "incorrect active organization id after switch")
 	})
+
+	t.Run("switch preserves WorkOSSessionID", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := speakeasyMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		for _, org := range userInfo.Organizations {
+			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+		}
+
+		session := sessions.Session{
+			SessionID:            "workos-session-test",
+			UserID:               userInfo.UserID,
+			ActiveOrganizationID: userInfo.Organizations[0].ID,
+			WorkOSSessionID:      "workos-sid-abc123",
+		}
+		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+
+		authCtx := &contextvalues.AuthContext{
+			SessionID:            &session.SessionID,
+			UserID:               session.UserID,
+			ActiveOrganizationID: session.ActiveOrganizationID,
+			AccountType:          "test",
+			Email:                &userInfo.Email,
+		}
+		ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+		newOrgID := userInfo.Organizations[1].ID
+		result, err := instance.service.SwitchScopes(ctx, &gen.SwitchScopesPayload{
+			OrganizationID: &newOrgID,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		// Verify the WorkOSSessionID survived the switch
+		stored, err := instance.sessionManager.GetSession(ctx, session.SessionID)
+		require.NoError(t, err)
+		require.Equal(t, "workos-sid-abc123", stored.WorkOSSessionID, "WorkOSSessionID must survive SwitchScopes")
+		require.Equal(t, newOrgID, stored.ActiveOrganizationID)
+	})
 }

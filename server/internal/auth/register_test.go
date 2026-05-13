@@ -317,4 +317,41 @@ func TestService_Register(t *testing.T) {
 		require.ErrorAs(t, err, &oopsErr)
 		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 	})
+
+	t.Run("register preserves WorkOSSessionID", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.Organizations = []MockOrganizationEntry{} // no orgs yet
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+
+		session := sessions.Session{
+			SessionID:            "workos-register-test",
+			UserID:               userInfo.UserID,
+			ActiveOrganizationID: "",
+			WorkOSSessionID:      "workos-sid-register-456",
+		}
+		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+
+		authCtx := &contextvalues.AuthContext{
+			SessionID:            &session.SessionID,
+			UserID:               session.UserID,
+			ActiveOrganizationID: "",
+			AccountType:          "test",
+			Email:                &userInfo.Email,
+		}
+		ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+		err := instance.service.Register(ctx, &gen.RegisterPayload{
+			OrgName: "Preserve Session Org",
+		})
+		require.NoError(t, err)
+
+		stored, err := instance.sessionManager.GetSession(ctx, session.SessionID)
+		require.NoError(t, err)
+		require.Equal(t, "workos-sid-register-456", stored.WorkOSSessionID, "WorkOSSessionID must survive Register")
+		require.NotEmpty(t, stored.ActiveOrganizationID, "should have an active org after Register")
+	})
 }

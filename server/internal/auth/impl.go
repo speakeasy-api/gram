@@ -375,12 +375,12 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
 	}
 
-	if err := s.sessions.StoreSession(ctx, sessions.Session{
-		SessionID:            *authCtx.SessionID,
-		ActiveOrganizationID: authCtx.ActiveOrganizationID,
-		UserID:               authCtx.UserID,
-		WorkOSSessionID:      "",
-	}); err != nil {
+	existingSession, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error loading existing session").Log(ctx, s.logger)
+	}
+	existingSession.ActiveOrganizationID = authCtx.ActiveOrganizationID
+	if err := s.sessions.UpdateSession(ctx, existingSession); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating auth session").Log(ctx, s.logger)
 	}
 
@@ -554,14 +554,12 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeUnexpected, err, "error invalidating user info cache").Log(ctx, s.logger)
 	}
 
-	session := sessions.Session{
-		SessionID:            *authCtx.SessionID,
-		UserID:               authCtx.UserID,
-		ActiveOrganizationID: org.ID,
-		WorkOSSessionID:      "",
+	existingSession, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error loading existing session").Log(ctx, s.logger)
 	}
-
-	if err := s.sessions.StoreSession(ctx, session); err != nil {
+	existingSession.ActiveOrganizationID = org.ID
+	if err := s.sessions.UpdateSession(ctx, existingSession); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error storing session").Log(ctx, s.logger)
 	}
 
@@ -773,13 +771,8 @@ func (s *Service) validateAuthNonce(ctx context.Context, payload *gen.CallbackPa
 
 	key := nonceKey(state.Nonce)
 	var stored bool
-	if err := s.nonceStore.Get(ctx, key, &stored); err != nil {
+	if err := s.nonceStore.GetAndDelete(ctx, key, &stored); err != nil {
 		return errors.New("invalid or expired login nonce")
-	}
-
-	// Delete immediately — nonce is single-use to prevent replay.
-	if err := s.nonceStore.Delete(ctx, key); err != nil {
-		s.logger.ErrorContext(ctx, "failed to delete consumed nonce", attr.SlogError(err))
 	}
 
 	return nil

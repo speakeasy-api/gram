@@ -136,6 +136,14 @@ func (s *Manager) Billing() billing.Repository {
 	return s.billingRepo
 }
 
+func (s *Manager) GetSession(ctx context.Context, sessionID string) (Session, error) {
+	session, err := s.sessionCache.Get(ctx, SessionCacheKey(sessionID))
+	if err != nil {
+		return Session{}, fmt.Errorf("get session: %w", err)
+	}
+	return session, nil
+}
+
 func (s *Manager) StoreSession(ctx context.Context, session Session) error {
 	err := s.sessionCache.Store(ctx, session)
 	if err != nil {
