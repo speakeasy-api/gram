@@ -267,7 +267,7 @@ func (q *Queries) DeleteRemoteSessionIssuer(ctx context.Context, arg DeleteRemot
 }
 
 const getRemoteSessionByID = `-- name: GetRemoteSessionByID :one
-SELECT s.id, s.principal_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted
+SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 WHERE s.id = $1 AND c.project_id = $2 AND s.deleted IS FALSE AND c.deleted IS FALSE
@@ -283,7 +283,7 @@ func (q *Queries) GetRemoteSessionByID(ctx context.Context, arg GetRemoteSession
 	var i RemoteSession
 	err := row.Scan(
 		&i.ID,
-		&i.PrincipalUrn,
+		&i.SubjectUrn,
 		&i.UserSessionIssuerID,
 		&i.RemoteSessionClientID,
 		&i.AccessTokenEncrypted,
@@ -406,7 +406,7 @@ func (q *Queries) GetRemoteSessionIssuerBySlug(ctx context.Context, arg GetRemot
 
 const insertRemoteSession = `-- name: InsertRemoteSession :one
 INSERT INTO remote_sessions (
-    principal_urn,
+    subject_urn,
     user_session_issuer_id,
     remote_session_client_id,
     access_token_encrypted,
@@ -419,11 +419,11 @@ VALUES (
     $4,
     $5
 )
-RETURNING id, principal_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, refresh_expires_at, scopes, created_at, updated_at, deleted_at, deleted
+RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, refresh_expires_at, scopes, created_at, updated_at, deleted_at, deleted
 `
 
 type InsertRemoteSessionParams struct {
-	PrincipalUrn          urn.SessionSubject
+	SubjectUrn            urn.SessionSubject
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionClientID uuid.UUID
 	AccessTokenEncrypted  string
@@ -432,7 +432,7 @@ type InsertRemoteSessionParams struct {
 
 func (q *Queries) InsertRemoteSession(ctx context.Context, arg InsertRemoteSessionParams) (RemoteSession, error) {
 	row := q.db.QueryRow(ctx, insertRemoteSession,
-		arg.PrincipalUrn,
+		arg.SubjectUrn,
 		arg.UserSessionIssuerID,
 		arg.RemoteSessionClientID,
 		arg.AccessTokenEncrypted,
@@ -441,7 +441,7 @@ func (q *Queries) InsertRemoteSession(ctx context.Context, arg InsertRemoteSessi
 	var i RemoteSession
 	err := row.Scan(
 		&i.ID,
-		&i.PrincipalUrn,
+		&i.SubjectUrn,
 		&i.UserSessionIssuerID,
 		&i.RemoteSessionClientID,
 		&i.AccessTokenEncrypted,
@@ -572,13 +572,13 @@ func (q *Queries) ListRemoteSessionIssuersByProjectID(ctx context.Context, arg L
 }
 
 const listRemoteSessionsByProjectID = `-- name: ListRemoteSessionsByProjectID :many
-SELECT s.id, s.principal_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted
+SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 WHERE c.project_id = $1
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
-  AND ($2::text IS NULL OR s.principal_urn = $2::text)
+  AND ($2::text IS NULL OR s.subject_urn = $2::text)
   AND ($3::uuid IS NULL OR s.remote_session_client_id = $3::uuid)
   AND ($4::uuid IS NULL OR s.id < $4::uuid)
 ORDER BY s.id DESC
@@ -587,7 +587,7 @@ LIMIT $5
 
 type ListRemoteSessionsByProjectIDParams struct {
 	ProjectID             uuid.UUID
-	PrincipalUrn          pgtype.Text
+	SubjectUrn            pgtype.Text
 	RemoteSessionClientID uuid.NullUUID
 	Cursor                uuid.NullUUID
 	LimitValue            int32
@@ -596,7 +596,7 @@ type ListRemoteSessionsByProjectIDParams struct {
 func (q *Queries) ListRemoteSessionsByProjectID(ctx context.Context, arg ListRemoteSessionsByProjectIDParams) ([]RemoteSession, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionsByProjectID,
 		arg.ProjectID,
-		arg.PrincipalUrn,
+		arg.SubjectUrn,
 		arg.RemoteSessionClientID,
 		arg.Cursor,
 		arg.LimitValue,
@@ -610,7 +610,7 @@ func (q *Queries) ListRemoteSessionsByProjectID(ctx context.Context, arg ListRem
 		var i RemoteSession
 		if err := rows.Scan(
 			&i.ID,
-			&i.PrincipalUrn,
+			&i.SubjectUrn,
 			&i.UserSessionIssuerID,
 			&i.RemoteSessionClientID,
 			&i.AccessTokenEncrypted,
@@ -642,7 +642,7 @@ WHERE s.id = $1
   AND c.project_id = $2
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
-RETURNING s.id, s.principal_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted
+RETURNING s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted
 `
 
 type RevokeRemoteSessionParams struct {
@@ -655,7 +655,7 @@ func (q *Queries) RevokeRemoteSession(ctx context.Context, arg RevokeRemoteSessi
 	var i RemoteSession
 	err := row.Scan(
 		&i.ID,
-		&i.PrincipalUrn,
+		&i.SubjectUrn,
 		&i.UserSessionIssuerID,
 		&i.RemoteSessionClientID,
 		&i.AccessTokenEncrypted,

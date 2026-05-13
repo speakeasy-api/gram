@@ -19,7 +19,7 @@ var _ = Service("remoteSessions", func() {
 		Description("List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).")
 
 		Payload(func() {
-			Attribute("principal_urn", String, "Exact-match filter on principal URN.")
+			Attribute("subject_urn", String, "Exact-match filter on subject URN.")
 			Attribute("remote_session_client_id", String, "Filter by remote_session_client id.", func() {
 				Format(FormatUUID)
 			})
@@ -34,7 +34,7 @@ var _ = Service("remoteSessions", func() {
 
 		HTTP(func() {
 			GET("/rpc/remoteSessions.list")
-			Param("principal_urn")
+			Param("subject_urn")
 			Param("remote_session_client_id")
 			Param("cursor")
 			Param("limit")
@@ -85,7 +85,7 @@ var RemoteSession = Type("RemoteSession", func() {
 	Attribute("id", String, "The remote_session id.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("principal_urn", String, "The session's principal URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).")
+	Attribute("subject_urn", String, "The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).")
 	Attribute("user_session_issuer_id", String, "The user_session_issuer this session is bound to.", func() {
 		Format(FormatUUID)
 	})
@@ -106,7 +106,7 @@ var RemoteSession = Type("RemoteSession", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "principal_urn", "user_session_issuer_id", "remote_session_client_id", "access_expires_at", "scopes", "created_at", "updated_at")
+	Required("id", "subject_urn", "user_session_issuer_id", "remote_session_client_id", "access_expires_at", "scopes", "created_at", "updated_at")
 })
 
 var ListRemoteSessionsResult = Type("ListRemoteSessionsResult", func() {

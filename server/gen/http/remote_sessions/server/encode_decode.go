@@ -39,7 +39,7 @@ func DecodeListRemoteSessionsRequest(mux goahttp.Muxer, decoder func(*http.Reque
 	return func(r *http.Request) (*remotesessions.ListRemoteSessionsPayload, error) {
 		var payload *remotesessions.ListRemoteSessionsPayload
 		var (
-			principalUrn          *string
+			subjectUrn            *string
 			remoteSessionClientID *string
 			cursor                *string
 			limit                 *int
@@ -49,9 +49,9 @@ func DecodeListRemoteSessionsRequest(mux goahttp.Muxer, decoder func(*http.Reque
 			err                   error
 		)
 		qp := r.URL.Query()
-		principalUrnRaw := qp.Get("principal_urn")
-		if principalUrnRaw != "" {
-			principalUrn = &principalUrnRaw
+		subjectUrnRaw := qp.Get("subject_urn")
+		if subjectUrnRaw != "" {
+			subjectUrn = &subjectUrnRaw
 		}
 		remoteSessionClientIDRaw := qp.Get("remote_session_client_id")
 		if remoteSessionClientIDRaw != "" {
@@ -90,7 +90,7 @@ func DecodeListRemoteSessionsRequest(mux goahttp.Muxer, decoder func(*http.Reque
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListRemoteSessionsPayload(principalUrn, remoteSessionClientID, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListRemoteSessionsPayload(subjectUrn, remoteSessionClientID, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -512,7 +512,7 @@ func EncodeRevokeRemoteSessionError(encoder func(context.Context, http.ResponseW
 func marshalTypesRemoteSessionToRemoteSessionResponseBody(v *types.RemoteSession) *RemoteSessionResponseBody {
 	res := &RemoteSessionResponseBody{
 		ID:                    v.ID,
-		PrincipalUrn:          v.PrincipalUrn,
+		SubjectUrn:            v.SubjectUrn,
 		UserSessionIssuerID:   v.UserSessionIssuerID,
 		RemoteSessionClientID: v.RemoteSessionClientID,
 		AccessExpiresAt:       v.AccessExpiresAt,

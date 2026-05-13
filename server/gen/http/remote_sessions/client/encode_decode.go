@@ -57,8 +57,8 @@ func EncodeListRemoteSessionsRequest(encoder func(*http.Request) goahttp.Encoder
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		if p.PrincipalUrn != nil {
-			values.Add("principal_urn", *p.PrincipalUrn)
+		if p.SubjectUrn != nil {
+			values.Add("subject_urn", *p.SubjectUrn)
 		}
 		if p.RemoteSessionClientID != nil {
 			values.Add("remote_session_client_id", *p.RemoteSessionClientID)
@@ -508,7 +508,7 @@ func DecodeRevokeRemoteSessionResponse(decoder func(*http.Response) goahttp.Deco
 func unmarshalRemoteSessionResponseBodyToTypesRemoteSession(v *RemoteSessionResponseBody) *types.RemoteSession {
 	res := &types.RemoteSession{
 		ID:                    *v.ID,
-		PrincipalUrn:          *v.PrincipalUrn,
+		SubjectUrn:            *v.SubjectUrn,
 		UserSessionIssuerID:   *v.UserSessionIssuerID,
 		RemoteSessionClientID: *v.RemoteSessionClientID,
 		AccessExpiresAt:       *v.AccessExpiresAt,

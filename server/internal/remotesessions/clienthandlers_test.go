@@ -370,7 +370,7 @@ func TestDeleteRemoteSessionClient(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = repo.New(ti.conn).InsertRemoteSession(ctx, repo.InsertRemoteSessionParams{
-		PrincipalUrn:          urn.NewUserSubject("test-principal"),
+		SubjectUrn:            urn.NewUserSubject("test-principal"),
 		UserSessionIssuerID:   userIssuerUUID,
 		RemoteSessionClientID: clientUUID,
 		AccessTokenEncrypted:  "ciphertext",

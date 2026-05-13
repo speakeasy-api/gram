@@ -54,8 +54,8 @@ var MethodNames = [2]string{"listRemoteSessions", "revokeRemoteSession"}
 // ListRemoteSessionsPayload is the payload type of the remoteSessions service
 // listRemoteSessions method.
 type ListRemoteSessionsPayload struct {
-	// Exact-match filter on principal URN.
-	PrincipalUrn *string
+	// Exact-match filter on subject URN.
+	SubjectUrn *string
 	// Filter by remote_session_client id.
 	RemoteSessionClientID *string
 	// Pagination cursor.

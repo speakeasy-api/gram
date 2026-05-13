@@ -13,9 +13,9 @@ package types
 type RemoteSession struct {
 	// The remote_session id.
 	ID string
-	// The session's principal URN (user:<id> | apikey:<uuid> |
+	// The session's subject URN (user:<id> | apikey:<uuid> |
 	// anonymous:<mcp-session-id>).
-	PrincipalUrn string
+	SubjectUrn string
 	// The user_session_issuer this session is bound to.
 	UserSessionIssuerID string
 	// The remote_session_client this session was minted against.

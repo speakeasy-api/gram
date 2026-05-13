@@ -26,9 +26,9 @@ export type ListRemoteSessionsSecurity = {
 
 export type ListRemoteSessionsRequest = {
   /**
-   * Exact-match filter on principal URN.
+   * Exact-match filter on subject URN.
    */
-  principalUrn?: string | undefined;
+  subjectUrn?: string | undefined;
   /**
    * Filter by remote_session_client id.
    */
@@ -162,7 +162,7 @@ export function listRemoteSessionsSecurityToJSON(
 
 /** @internal */
 export type ListRemoteSessionsRequest$Outbound = {
-  principal_urn?: string | undefined;
+  subject_urn?: string | undefined;
   remote_session_client_id?: string | undefined;
   cursor?: string | undefined;
   limit?: number | undefined;
@@ -177,7 +177,7 @@ export const ListRemoteSessionsRequest$outboundSchema: z.ZodMiniType<
   ListRemoteSessionsRequest
 > = z.pipe(
   z.object({
-    principalUrn: z.optional(z.string()),
+    subjectUrn: z.optional(z.string()),
     remoteSessionClientId: z.optional(z.string()),
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
@@ -187,7 +187,7 @@ export const ListRemoteSessionsRequest$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      principalUrn: "principal_urn",
+      subjectUrn: "subject_urn",
       remoteSessionClientId: "remote_session_client_id",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",

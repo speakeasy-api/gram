@@ -412,9 +412,9 @@ type RevokeRemoteSessionGatewayErrorResponseBody struct {
 type RemoteSessionResponseBody struct {
 	// The remote_session id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The session's principal URN (user:<id> | apikey:<uuid> |
+	// The session's subject URN (user:<id> | apikey:<uuid> |
 	// anonymous:<mcp-session-id>).
-	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+	SubjectUrn *string `form:"subject_urn,omitempty" json:"subject_urn,omitempty" xml:"subject_urn,omitempty"`
 	// The user_session_issuer this session is bound to.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The remote_session_client this session was minted against.
@@ -1259,8 +1259,8 @@ func ValidateRemoteSessionResponseBody(body *RemoteSessionResponseBody) (err err
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.PrincipalUrn == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	if body.SubjectUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subject_urn", "body"))
 	}
 	if body.UserSessionIssuerID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
