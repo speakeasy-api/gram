@@ -1098,7 +1098,18 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		return EnqueueResult{}, fmt.Errorf("parse assistant id: %w", err)
 	}
 	assistant, err := s.getAssistantForDispatch(ctx, assistantID)
-	if err != nil {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// Trigger targets an assistant that no longer exists (deleted, or the
+		// trigger was created against the wrong id). Retrying won't help —
+		// drop the dispatch so the activity succeeds and Temporal doesn't
+		// hammer the same row through three attempts.
+		s.logger.WarnContext(ctx, "skipping trigger dispatch: assistant not found",
+			attr.SlogAssistantID(assistantID.String()),
+			attr.SlogTriggerInstanceID(task.TriggerInstanceID),
+		)
+		return EnqueueResult{AssistantID: uuid.Nil, ThreadID: uuid.Nil, EventCreated: false}, nil
+	case err != nil:
 		return EnqueueResult{}, err
 	}
 	if assistant.Status != StatusActive {
