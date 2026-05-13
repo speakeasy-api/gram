@@ -17,6 +17,7 @@ import (
 const (
 	shadowMCPApprovalRequestTokenTTL = 7 * 24 * time.Hour
 	shadowMCPToolCallMaxBytes        = 2048
+	shadowMCPApprovalRequestPrompt   = "Would you like me to open this link in a browser?"
 )
 
 type shadowMCPRequestLinkParams struct {
@@ -37,7 +38,7 @@ func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params sha
 	if !ok {
 		return message
 	}
-	return strings.TrimSpace(message) + "\n\nRequest access: " + requestURL
+	return strings.TrimSpace(message) + "\n\nRequest access:\n" + requestURL + "\n\n" + shadowMCPApprovalRequestPrompt
 }
 
 func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadowMCPRequestLinkParams) (string, bool) {

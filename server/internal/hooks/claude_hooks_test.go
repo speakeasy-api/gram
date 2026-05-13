@@ -73,8 +73,9 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 	assert.Equal(t, "deny", *output.PermissionDecision,
 		"missing x-gram-toolset-id should be denied once auth-context metadata is in play")
 	require.NotNil(t, output.PermissionDecisionReason)
-	assert.Contains(t, *output.PermissionDecisionReason, "Request access: https://app.example.test/shadow-mcp/request#request_token=smar1.",
+	assert.Contains(t, *output.PermissionDecisionReason, "Request access:\nhttps://app.example.test/shadow-mcp/request#request_token=smar1.",
 		"shadow-MCP deny messages should include a signed approval request link")
+	assert.Contains(t, *output.PermissionDecisionReason, shadowMCPApprovalRequestPrompt)
 }
 
 func TestMergeClaudeAuthContextMetadata_PreservesAuthUserIDWhenCacheIsEmpty(t *testing.T) {
