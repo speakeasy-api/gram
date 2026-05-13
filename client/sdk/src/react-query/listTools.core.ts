@@ -48,6 +48,7 @@ export function buildListToolsQuery(
       limit: request?.limit,
       deploymentId: request?.deploymentId,
       urnPrefix: request?.urnPrefix,
+      toolTypes: request?.toolTypes,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
     }),
@@ -79,6 +80,7 @@ export function queryKeyListTools(
     limit?: number | undefined;
     deploymentId?: string | undefined;
     urnPrefix?: string | undefined;
+    toolTypes?: Array<operations.ToolTypes> | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },

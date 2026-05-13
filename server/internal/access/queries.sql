@@ -66,6 +66,12 @@ SELECT *
 FROM global_roles
 WHERE workos_slug = @workos_slug;
 
+-- name: ListGlobalRoles :many
+SELECT *
+FROM global_roles
+WHERE deleted_at IS NULL
+ORDER BY workos_slug;
+
 -- name: UpsertGlobalRole :exec
 -- Upsert an environment-level WorkOS role. Caller must have already passed
 -- the row through ShouldProcessEvent. Resurrects a previously soft-deleted
@@ -108,6 +114,13 @@ SELECT *
 FROM organization_roles
 WHERE organization_id = @organization_id
   AND workos_slug = @workos_slug;
+
+-- name: ListOrganizationRolesByOrg :many
+SELECT *
+FROM organization_roles
+WHERE organization_id = @organization_id
+  AND deleted_at IS NULL
+ORDER BY workos_slug;
 
 -- name: UpsertOrganizationRole :exec
 -- Upsert an org-scoped WorkOS role. Caller must have already passed the row

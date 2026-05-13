@@ -9,6 +9,7 @@ package server
 
 import (
 	tools "github.com/speakeasy-api/gram/server/gen/tools"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -733,12 +734,16 @@ func NewListToolsGatewayErrorResponseBody(res *goa.ServiceError) *ListToolsGatew
 }
 
 // NewListToolsPayload builds a tools service listTools endpoint payload.
-func NewListToolsPayload(cursor *string, limit *int32, deploymentID *string, urnPrefix *string, sessionToken *string, projectSlugInput *string) *tools.ListToolsPayload {
+func NewListToolsPayload(cursor *string, limit *int32, deploymentID *string, urnPrefix *string, toolTypes []string, sessionToken *string, projectSlugInput *string) *tools.ListToolsPayload {
 	v := &tools.ListToolsPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
 	v.DeploymentID = deploymentID
 	v.UrnPrefix = urnPrefix
+	v.ToolTypes = make([]types.ToolType, len(toolTypes))
+	for i, val := range toolTypes {
+		v.ToolTypes[i] = types.ToolType(val)
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
