@@ -392,12 +392,17 @@ function CopilotInstallContent() {
 
   return (
     <div className="space-y-6">
-      <div className="border-primary/30 bg-primary/5 rounded-lg border p-4">
+      <div className="border-primary/30 bg-primary/5 space-y-2 rounded-lg border p-4">
         <p className="text-muted-foreground text-sm">
           VSCode Copilot's marketplace clones plugins via each user's local git
           credentials, so Gram's published marketplace repo can't be used here.
           Distribute the plugin ZIP directly — either per-user or fleet-wide via
           MDM.
+        </p>
+        <p className="text-muted-foreground text-sm">
+          The plugin ZIP embeds a hooks-scoped Gram API key that attributes
+          every event to your org and project. No per-user email or env var
+          setup is required.
         </p>
       </div>
 
@@ -469,7 +474,8 @@ function CopilotInstallContent() {
             </h3>
             <p className="text-muted-foreground mb-3 text-sm">
               Use the same ZIP as the local install path. Stage it in your
-              internal artifact registry or MDM payload.
+              internal artifact registry or MDM payload. The embedded API key
+              applies to every machine that receives this ZIP.
             </p>
             <Button
               variant="outline"
@@ -495,33 +501,33 @@ function CopilotInstallContent() {
               entry to VSCode user settings.
             </p>
           </div>
-
-          <div className="flex items-center gap-3">
-            <Button variant="outline" size="sm" asChild>
-              <a
-                href="https://code.visualstudio.com/docs/setup/enterprise"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2"
-              >
-                <ExternalLink className="size-4" />
-                VSCode Enterprise Setup
-              </a>
-            </Button>
-            <Button variant="outline" size="sm" asChild>
-              <a
-                href="https://code.visualstudio.com/docs/copilot/customization/hooks"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2"
-              >
-                <ExternalLink className="size-4" />
-                Hooks Docs
-              </a>
-            </Button>
-          </div>
         </TabsContent>
       </Tabs>
+
+      <div className="flex items-center gap-3">
+        <Button variant="outline" size="sm" asChild>
+          <a
+            href="https://code.visualstudio.com/docs/copilot/customization/hooks"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2"
+          >
+            <ExternalLink className="size-4" />
+            Hooks Docs
+          </a>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <a
+            href="https://code.visualstudio.com/docs/setup/enterprise"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2"
+          >
+            <ExternalLink className="size-4" />
+            VSCode Enterprise Setup
+          </a>
+        </Button>
+      </div>
     </div>
   );
 }

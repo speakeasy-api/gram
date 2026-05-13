@@ -56,7 +56,7 @@ const providers: {
   },
   { id: "cursor", label: "Cursor", source: "cursor", available: true },
   { id: "codex", label: "Codex", source: "codex", available: true },
-  { id: "copilot", label: "Copilot", source: "copilot", available: false },
+  { id: "copilot", label: "Copilot", source: "copilot", available: true },
   { id: "gemini", label: "Gemini", source: "gemini", available: false },
   { id: "glean", label: "Glean", source: "glean", available: false },
   {
@@ -614,6 +614,122 @@ function CodexInstallContent({
   );
 }
 
+/**
+ * VSCode Copilot install. The marketplace mechanism doesn't apply here:
+ * VSCode clones plugin sources via each user's local git credentials, so
+ * Gram's published marketplace repo can't be used directly. Users instead
+ * download per-plugin ZIPs (from each plugin's detail page) and register
+ * the unpacked directories in `chat.pluginLocations`.
+ */
+function CopilotInstallContent() {
+  const settingsExample = `{
+  "chat.pluginLocations": {
+    "~/.gram/<plugin-name>": true
+  }
+}`;
+
+  return (
+    <div className="min-w-0 space-y-6">
+      <div className="border-primary/30 bg-primary/5 space-y-2 rounded-lg border p-4">
+        <p className="text-muted-foreground text-sm">
+          VSCode Copilot's marketplace clones plugins via each user's local git
+          credentials, so Gram's published marketplace repo can't be used here.
+          Distribute each plugin ZIP directly — either per-user or fleet-wide
+          via MDM.
+        </p>
+      </div>
+
+      <div>
+        <h4 className="mb-2 text-sm font-semibold">1. Download a plugin ZIP</h4>
+        <p className="text-muted-foreground text-sm">
+          From any plugin's detail page, use{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            Download → VSCode Copilot
+          </code>
+          . Repeat for every plugin you want to ship.
+        </p>
+      </div>
+
+      <div>
+        <h4 className="mb-2 text-sm font-semibold">
+          2. Unzip to a stable path
+        </h4>
+        <p className="text-muted-foreground text-sm">
+          Extract each plugin to a persistent directory under e.g.{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            ~/.gram/&lt;plugin-name&gt;
+          </code>
+          . VSCode reads the plugin from disk on every session.
+        </p>
+      </div>
+
+      <div>
+        <h4 className="mb-2 text-sm font-semibold">
+          3. Register each path in VSCode settings
+        </h4>
+        <p className="text-muted-foreground mb-2 text-sm">
+          Add the unpacked directories to{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            chat.pluginLocations
+          </code>{" "}
+          in VSCode user settings:
+        </p>
+        <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+          <div className="flex items-start justify-between gap-2">
+            <pre className="whitespace-pre-wrap">{settingsExample}</pre>
+            <CopyButton
+              size="inline"
+              text={settingsExample}
+              tooltip="Copy settings snippet"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h4 className="mb-2 text-sm font-semibold">
+          4. Enable observability hooks
+        </h4>
+        <p className="text-muted-foreground text-sm">
+          Download the observability plugin from the <strong>Plugins</strong>{" "}
+          overview page (
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            Download Observability Plugin → VSCode Copilot
+          </code>
+          ) and install it the same way. The embedded hooks-scoped API key
+          attributes every event to your org and project — no per-user setup
+          required.
+        </p>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Button variant="outline" size="sm" asChild>
+          <a
+            href="https://code.visualstudio.com/docs/copilot/customization/hooks"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2"
+          >
+            <ExternalLink className="size-4" />
+            Hooks Docs
+          </a>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <a
+            href="https://code.visualstudio.com/docs/setup/enterprise"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2"
+          >
+            <ExternalLink className="size-4" />
+            VSCode Enterprise Setup
+          </a>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 type DialogProps = ContentProps & {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -699,6 +815,7 @@ export function InstallInstructionsDialog({
               repoName={content.repoName}
             />
           )}
+          {selected === "copilot" && <CopilotInstallContent />}
         </div>
       </Dialog.Content>
     </Dialog>
