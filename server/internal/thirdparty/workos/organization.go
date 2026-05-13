@@ -98,3 +98,36 @@ func (wc *Client) EnsureOrgExternalID(ctx context.Context, workosOrgID, gramOrgI
 
 	return nil
 }
+
+func (wc *Client) ListOrganizations(ctx context.Context) ([]Organization, error) {
+	var out []Organization
+	var after string
+
+	for {
+		resp, err := wc.orgs.ListOrganizations(ctx, organizations.ListOrganizationsOpts{
+			Domains: nil,
+			Limit:   100,
+			Order:   "",
+			Before:  "",
+			After:   after,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list organizations: %w", err)
+		}
+
+		for _, o := range resp.Data {
+			out = append(out, Organization{
+				ID:         o.ID,
+				Name:       o.Name,
+				ExternalID: o.ExternalID,
+				CreatedAt:  o.CreatedAt,
+				UpdatedAt:  o.UpdatedAt,
+			})
+		}
+
+		if resp.ListMetadata.After == "" {
+			return out, nil
+		}
+		after = resp.ListMetadata.After
+	}
+}

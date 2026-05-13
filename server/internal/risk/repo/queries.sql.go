@@ -624,7 +624,7 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 }
 
 const listRiskResultsByChatFound = `-- name: ListRiskResultsByChatFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -660,6 +660,7 @@ type ListRiskResultsByChatFoundRow struct {
 	EndPos            pgtype.Int4
 	Confidence        pgtype.Float8
 	Tags              []string
+	DeadLetterReason  pgtype.Text
 	CreatedAt         pgtype.Timestamptz
 	ChatID            uuid.UUID
 	ChatTitle         pgtype.Text
@@ -696,6 +697,7 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 			&i.EndPos,
 			&i.Confidence,
 			&i.Tags,
+			&i.DeadLetterReason,
 			&i.CreatedAt,
 			&i.ChatID,
 			&i.ChatTitle,
@@ -712,7 +714,7 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 }
 
 const listRiskResultsByProjectAndPolicy = `-- name: ListRiskResultsByProjectAndPolicy :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -748,6 +750,7 @@ type ListRiskResultsByProjectAndPolicyRow struct {
 	EndPos            pgtype.Int4
 	Confidence        pgtype.Float8
 	Tags              []string
+	DeadLetterReason  pgtype.Text
 	CreatedAt         pgtype.Timestamptz
 	ChatID            uuid.UUID
 	ChatTitle         pgtype.Text
@@ -784,6 +787,7 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 			&i.EndPos,
 			&i.Confidence,
 			&i.Tags,
+			&i.DeadLetterReason,
 			&i.CreatedAt,
 			&i.ChatID,
 			&i.ChatTitle,
@@ -800,7 +804,7 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 }
 
 const listRiskResultsByProjectFound = `-- name: ListRiskResultsByProjectFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -834,6 +838,7 @@ type ListRiskResultsByProjectFoundRow struct {
 	EndPos            pgtype.Int4
 	Confidence        pgtype.Float8
 	Tags              []string
+	DeadLetterReason  pgtype.Text
 	CreatedAt         pgtype.Timestamptz
 	ChatID            uuid.UUID
 	ChatTitle         pgtype.Text
@@ -865,6 +870,7 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 			&i.EndPos,
 			&i.Confidence,
 			&i.Tags,
+			&i.DeadLetterReason,
 			&i.CreatedAt,
 			&i.ChatID,
 			&i.ChatTitle,

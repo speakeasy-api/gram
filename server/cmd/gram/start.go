@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -92,6 +93,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/triggers"
 
 	"github.com/speakeasy-api/gram/server/internal/tools"
@@ -509,14 +511,13 @@ func newStartCommand() *cli.Command {
 				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
 
-			workosClient, _, err := newWorkOSClient(guardianPolicy, c)
+			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)
 			if err != nil {
 				return fmt.Errorf("failed to create WorkOS client: %w", err)
 			}
-
-			workosEventsClient, err := newWorkOSEventsClient(c, guardianPolicy)
-			if err != nil {
-				return fmt.Errorf("failed to create WorkOS events client: %w", err)
+			var backgroundWorkOSClient activities.WorkOSClient = workosClient
+			if !workosAvailable {
+				backgroundWorkOSClient = workos.NewStubClient()
 			}
 
 			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, c)
@@ -1050,7 +1051,7 @@ func newStartCommand() *cli.Command {
 						PIIScanner:          piiScanner,
 						ShadowMCPClient:     shadowMCPClient,
 						AuditLogger:         auditLogger,
-						WorkOSEventsClient:  workosEventsClient,
+						WorkOSClient:        backgroundWorkOSClient,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))
