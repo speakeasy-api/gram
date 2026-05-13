@@ -8,13 +8,22 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
 
 // scanClaudeForEnforcement extracts the scannable text from a Claude hook
-// payload, resolves the project from session metadata, and runs the risk
-// scanner. Returns nil when the scanner is unavailable, the session is not
-// yet validated, or no enforcing policy matches.
+// payload, resolves the project (session metadata wins; falls back to the
+// plugin-auth context populated by Gram-Key + Gram-Project headers), and
+// runs the risk scanner. Returns nil when the scanner is unavailable, the
+// project cannot be resolved, or no enforcing policy matches.
+//
+// The authCtx fallback is critical for UserPromptSubmit on the very first
+// hook of a session: Claude Code's OTEL Logs exporter is async, so the
+// `/rpc/hooks.otel/v1/logs` request that seeds session metadata in Redis
+// can land after the first UserPromptSubmit. Without this fallback, the
+// first prompt of every session slips through unscanned even when the
+// plugin authenticated the request.
 func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.ClaudePayload) *risk.ScanResult {
 	if s.riskScanner == nil || payload.SessionID == nil {
 		return nil
@@ -25,13 +34,17 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
-	metadata, err := s.getSessionMetadata(ctx, *payload.SessionID)
-	if err != nil {
-		// Session not yet validated; cannot determine project.
-		return nil
-	}
-	projectID, err := uuid.Parse(metadata.ProjectID)
-	if err != nil {
+	var projectID uuid.UUID
+	if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
+		pid, perr := uuid.Parse(metadata.ProjectID)
+		if perr != nil {
+			return nil
+		}
+		projectID = pid
+	} else if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
+		projectID = *authCtx.ProjectID
+	} else {
+		// No session metadata and no plugin auth; project unresolvable.
 		return nil
 	}
 
