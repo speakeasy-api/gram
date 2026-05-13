@@ -395,19 +395,31 @@ function buildAssistantTools(deps: ToolDeps) {
   // and won't pick up draft.setAssistant calls made by earlier tool calls in
   // the same response. Tools that read assistant state across a single
   // response (e.g. propose_name → propose_personality) consult `live` first.
+  type LiveToolset = {
+    toolsetSlug: string;
+    environmentSlug?: string | undefined;
+  };
   const live: {
     id: string | null;
     name: string | undefined;
     instructions: string;
+    toolsets: ReadonlyArray<LiveToolset>;
   } = {
     id: draft.assistantId,
     name: draft.assistant?.name,
     instructions: draft.assistant?.instructions ?? "",
+    toolsets: draft.assistant?.toolsets ?? [],
   };
-  const trackLive = (a: { id: string; name: string; instructions: string }) => {
+  const trackLive = (a: {
+    id: string;
+    name: string;
+    instructions: string;
+    toolsets: ReadonlyArray<LiveToolset>;
+  }) => {
     live.id = a.id;
     live.name = a.name;
     live.instructions = a.instructions;
+    live.toolsets = a.toolsets;
   };
 
   // The LLM may emit multiple mutating tool calls in parallel within one turn.
@@ -754,7 +766,8 @@ function buildAssistantTools(deps: ToolDeps) {
         serialize(async () => {
           const { toolset_slug, environment_slug } = args as AttachToolsetArgs;
           try {
-            const a = await ensureAssistant(deps, {});
+            const a = await ensureAssistant(deps, {}, live.id);
+            trackLive(a);
             const notes: string[] = [];
             let boundSlug = environment_slug;
             if (!boundSlug) {
@@ -774,6 +787,7 @@ function buildAssistantTools(deps: ToolDeps) {
               updateAssistantForm: { id: a.id, toolsets: next },
             });
             draft.setAssistant(updated);
+            trackLive(updated);
             draft.invalidateAll();
             await recomputeBehaviorSection(deps, updated);
             return okResult({
@@ -798,16 +812,17 @@ function buildAssistantTools(deps: ToolDeps) {
         serialize(async () => {
           const { toolset_slug } = args as DetachToolsetArgs;
           try {
-            if (!draft.assistantId || !draft.assistant) {
+            if (!live.id) {
               return errResult("No assistant exists yet. Create one first.");
             }
-            const next = draft.assistant.toolsets.filter(
+            const next = live.toolsets.filter(
               (t) => t.toolsetSlug !== toolset_slug,
             );
             const updated = await sdk.assistants.update({
-              updateAssistantForm: { id: draft.assistantId, toolsets: next },
+              updateAssistantForm: { id: live.id, toolsets: next },
             });
             draft.setAssistant(updated);
+            trackLive(updated);
             draft.invalidateAll();
             await recomputeBehaviorSection(deps, updated);
             return okResult({ toolsets: updated.toolsets });
@@ -1061,7 +1076,8 @@ function buildAssistantTools(deps: ToolDeps) {
             const notes: string[] = [];
             let slug = environment_slug;
             if (!slug) {
-              const a = await ensureAssistant(deps, {});
+              const a = await ensureAssistant(deps, {}, live.id);
+              trackLive(a);
               const envResult = await ensureAssistantEnv(deps, a.name);
               slug = envResult.env.slug;
               if (envResult.note) notes.push(envResult.note);
@@ -1146,7 +1162,8 @@ function buildAssistantTools(deps: ToolDeps) {
             if (environment_slug) {
               slug = environment_slug;
             } else {
-              const a = await ensureAssistant(deps, {});
+              const a = await ensureAssistant(deps, {}, live.id);
+              trackLive(a);
               const envResult = await ensureAssistantEnv(deps, a.name);
               slug = envResult.env.slug;
               if (envResult.note) preNotes.push(envResult.note);
@@ -1260,7 +1277,7 @@ function buildAssistantTools(deps: ToolDeps) {
       execute: async () => {
         try {
           const res = await sdk.triggers.list();
-          const assistantId = draft.assistantId;
+          const assistantId = live.id ?? draft.assistantId;
           const scoped = assistantId
             ? res.triggers.filter(
                 (t) =>
@@ -1315,7 +1332,8 @@ function buildAssistantTools(deps: ToolDeps) {
           args as CreateTriggerArgs;
         const run = async (): Promise<ToolResult> => {
           try {
-            const a = await ensureAssistant(deps, {});
+            const a = await ensureAssistant(deps, {}, live.id);
+            trackLive(a);
             const notes: string[] = [];
             let boundEnvId = environment_id;
             if (!boundEnvId) {
@@ -1374,7 +1392,7 @@ function buildAssistantTools(deps: ToolDeps) {
             );
           }
         };
-        const key = `${draft.assistantId ?? "new"}:${definition_slug}:${name}`;
+        const key = `${live.id ?? draft.assistantId ?? "new"}:${definition_slug}:${name}`;
         const inflight = triggerCreateInFlight.get(key);
         if (inflight) return inflight;
         const p = serialize(run);
@@ -1498,7 +1516,7 @@ function buildAssistantTools(deps: ToolDeps) {
               (t) =>
                 t.definitionSlug === "slack" &&
                 t.targetKind === "assistant" &&
-                t.targetRef === draft.assistantId,
+                t.targetRef === (live.id ?? draft.assistantId),
             );
             if (slackTriggers.length > 0) {
               const first = slackTriggers[0]!;
@@ -1638,11 +1656,12 @@ function buildAssistantTools(deps: ToolDeps) {
       }),
       execute: async (args) => {
         const { message } = args as FinishArgs;
-        if (!draft.assistantId) {
+        const id = live.id ?? draft.assistantId;
+        if (!id) {
           return errResult("No assistant has been created yet.");
         }
         try {
-          const a = await sdk.assistants.get({ id: draft.assistantId });
+          const a = await sdk.assistants.get({ id });
           return okResult({
             assistant: {
               id: a.id,
