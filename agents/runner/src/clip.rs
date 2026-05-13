@@ -162,18 +162,27 @@ async fn cap_output(
     build_truncation_envelope(&body, ext, max_bytes, model_bytes, spill.as_ref())
 }
 
-/// JSON-encoded byte size of the *content* the provider adapter sends as
-/// the tool message body. For `Text`, this is `"…"` after escaping — counting
-/// raw `s.len()` would undercount escape overhead, so a quote-heavy 150 KB
-/// blob could be ~300 KB on the wire and still 413 the provider. Returns
-/// `None` only if serialization itself fails — in that case the cap can't
-/// be enforced and the output is returned untouched.
+/// JSON-encoded byte size of the *content* string that
+/// `agentkit_adapter_completions` will ship as the tool message's `content`
+/// field on the wire. The adapter flattens every variant into a single
+/// `String` (text as-is, JSON variants via `value.to_string()` /
+/// `serde_json::to_string(parts/files)`) and then puts that string in the
+/// message envelope, where it gets JSON-encoded again. Measuring against
+/// the doubly-escaped form is what catches non-Text overflow — compact JSON
+/// full of `"` is ~2× when re-encoded as a string literal. Returns `None`
+/// only if serialization fails; the cap can't be enforced and the output
+/// is returned untouched.
 fn model_bytes(output: &ToolOutput) -> Option<usize> {
+    let content = adapter_content(output)?;
+    serde_json::to_string(&content).ok().map(|s| s.len())
+}
+
+fn adapter_content(output: &ToolOutput) -> Option<String> {
     match output {
-        ToolOutput::Text(s) => serde_json::to_string(s).ok().map(|j| j.len()),
-        ToolOutput::Structured(v) => serde_json::to_string(v).ok().map(|j| j.len()),
-        ToolOutput::Parts(p) => serde_json::to_string(p).ok().map(|j| j.len()),
-        ToolOutput::Files(f) => serde_json::to_string(f).ok().map(|j| j.len()),
+        ToolOutput::Text(s) => Some(s.clone()),
+        ToolOutput::Structured(v) => Some(v.to_string()),
+        ToolOutput::Parts(p) => serde_json::to_string(p).ok(),
+        ToolOutput::Files(f) => serde_json::to_string(f).ok(),
     }
 }
 
@@ -333,24 +342,24 @@ mod tests {
     #[tokio::test]
     async fn text_over_limit_envelope_carries_preview_and_spill_pointer() {
         let dir = tempdir();
-        let body = "a".repeat(500);
+        let cap = 1024;
+        let body = "a".repeat(5000);
         let out = cap_output(
             ToolOutput::text(body.clone()),
-            100,
+            cap,
             dir.path(),
             &tool_name("my_tool"),
             &call_id("call_abc"),
         )
         .await;
+        assert!(model_bytes(&out).unwrap() <= cap);
         let map = expect_envelope(&out);
 
         assert_eq!(map.get("truncated"), Some(&Value::Bool(true)));
         assert_eq!(map.get("format").and_then(Value::as_str), Some("text"));
-        // 500 plain `a` bytes encode to `"aaa..."` = 502 bytes including the
-        // surrounding quote literals.
         assert_eq!(
             map.get("original_bytes").and_then(Value::as_u64),
-            Some(502)
+            Some(5002)
         );
 
         let preview = map.get("preview").and_then(Value::as_str).expect("preview");
@@ -410,15 +419,16 @@ mod tests {
         std::fs::write(&blocking, b"x").expect("write blocker");
         let unreachable_root = blocking.join("spill");
 
+        let cap = 1024;
         let out = cap_output(
-            ToolOutput::text("a".repeat(500)),
-            100,
+            ToolOutput::text("a".repeat(5000)),
+            cap,
             &unreachable_root,
             &tool_name("t"),
             &call_id("c"),
         )
         .await;
-        assert!(model_bytes(&out).unwrap() <= 100);
+        assert!(model_bytes(&out).unwrap() <= cap);
         let map = expect_envelope(&out);
         assert_eq!(map.get("truncated"), Some(&Value::Bool(true)));
         assert!(map.get("preview").and_then(Value::as_str).is_some());
@@ -432,15 +442,18 @@ mod tests {
     async fn structured_over_limit_spills_pretty_json_on_disk() {
         let dir = tempdir();
         let value = json!({"items": vec!["x"; 500]});
-        let original = serde_json::to_string(&value).unwrap().len();
+        let content = value.to_string();
+        let original = serde_json::to_string(&content).unwrap().len();
+        let cap = 1024;
         let out = cap_output(
             ToolOutput::Structured(value.clone()),
-            200,
+            cap,
             dir.path(),
             &tool_name("t"),
             &call_id("c"),
         )
         .await;
+        assert!(model_bytes(&out).unwrap() <= cap);
         let map = expect_envelope(&out);
         assert_eq!(map.get("format").and_then(Value::as_str), Some("json"));
         assert_eq!(
@@ -464,15 +477,17 @@ mod tests {
     #[tokio::test]
     async fn parts_over_limit_yields_envelope() {
         let dir = tempdir();
-        let parts = vec![Part::Text(TextPart::new("x".repeat(500)))];
+        let cap = 1024;
+        let parts = vec![Part::Text(TextPart::new("x".repeat(5000)))];
         let out = cap_output(
             ToolOutput::Parts(parts),
-            100,
+            cap,
             dir.path(),
             &tool_name("t"),
             &call_id("c"),
         )
         .await;
+        assert!(model_bytes(&out).unwrap() <= cap);
         let map = expect_envelope(&out);
         assert_eq!(map.get("truncated"), Some(&Value::Bool(true)));
         assert!(map.get("preview").is_some());
