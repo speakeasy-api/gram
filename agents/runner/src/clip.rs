@@ -216,11 +216,30 @@ fn sanitize_filename_component(s: &str) -> String {
 }
 
 /// Fallback when the disk spill fails. Drops the tail of the body so the
-/// provider still receives a sub-cap result. The marker — either an inline
-/// `…[truncated N bytes]` for text or a `{truncated, kept_bytes, content}`
-/// envelope for JSON — tells the model the content is incomplete.
+/// provider still receives a sub-cap result. Must measure the *encoded*
+/// size of the candidate output — cutting by raw bytes underweights escape
+/// overhead for quote/backslash-heavy bodies, and would recreate the 413
+/// the spill was meant to avoid. Shrinks iteratively until the encoded
+/// candidate fits under `max_bytes`.
 fn clip_inline(body: String, ext: &str, max_bytes: usize, original_bytes: usize) -> ToolOutput {
-    let cut = body.floor_char_boundary(max_bytes);
+    const ITERATIONS: usize = 8;
+    let mut cut = body.floor_char_boundary(body.len().min(max_bytes));
+    for _ in 0..ITERATIONS {
+        let candidate = build_clipped(&body, cut, ext, original_bytes);
+        let encoded = model_bytes(&candidate).unwrap_or(usize::MAX);
+        if encoded <= max_bytes {
+            return candidate;
+        }
+        if cut == 0 {
+            break;
+        }
+        let shrunk = (cut as f64 * (max_bytes as f64 / encoded as f64) * 0.9) as usize;
+        cut = body.floor_char_boundary(shrunk.min(cut.saturating_sub(1)));
+    }
+    build_clipped(&body, 0, ext, original_bytes)
+}
+
+fn build_clipped(body: &str, cut: usize, ext: &str, original_bytes: usize) -> ToolOutput {
     if ext == "txt" {
         let dropped = body.len() - cut;
         ToolOutput::Text(format!("{}…[truncated {dropped} bytes]", &body[..cut]))
@@ -425,13 +444,45 @@ mod tests {
         assert_eq!(sanitize_filename_component(""), "_");
     }
 
+    #[tokio::test]
+    async fn fallback_clip_respects_encoded_size_for_quote_heavy_text() {
+        // 500 `"` chars encode to ~1000 bytes after JSON escaping. With a
+        // 150-byte cap and the spill path unreachable, the inline fallback
+        // must shrink the raw cut so the encoded ToolOutput still fits —
+        // otherwise it recreates the very 413 the spill was meant to avoid.
+        let dir = tempdir();
+        let blocking = dir.path().join("not-a-dir");
+        std::fs::write(&blocking, b"x").expect("write blocker");
+        let unreachable_root = blocking.join("spill");
+
+        let out = cap_output(
+            ToolOutput::text("\"".repeat(500)),
+            150,
+            &unreachable_root,
+            &tool_name("t"),
+            &call_id("c"),
+        )
+        .await;
+        let encoded = model_bytes(&out).expect("model_bytes");
+        assert!(
+            encoded <= 150,
+            "fallback encoded size {encoded} must fit under cap 150"
+        );
+        match out {
+            ToolOutput::Text(s) => assert!(s.contains("truncated"), "marker present: {s}"),
+            other => panic!("expected Text fallback, got {other:?}"),
+        }
+    }
+
     #[test]
-    fn clip_inline_text_appends_marker() {
+    fn clip_inline_text_appends_marker_and_stays_under_cap() {
         let out = clip_inline("a".repeat(200), "txt", 100, 200);
+        let encoded = model_bytes(&out).expect("encode");
+        assert!(encoded <= 100, "encoded {encoded} under cap 100");
         match out {
             ToolOutput::Text(s) => {
-                assert!(s.starts_with(&"a".repeat(100)));
-                assert!(s.contains("truncated 100 bytes"));
+                assert!(s.contains("truncated"), "marker present: {s}");
+                assert!(s.starts_with('a'), "kept prefix is original content");
             }
             other => panic!("expected Text, got {other:?}"),
         }
@@ -439,8 +490,8 @@ mod tests {
 
     #[test]
     fn clip_inline_text_respects_utf8_boundary() {
-        // 50 × "é" = 100 bytes. Cut at byte 75 sits inside a 2-byte codepoint;
-        // floor_char_boundary must walk back to 74.
+        // 50 × "é" = 100 bytes. The clipper hops back from any cut point that
+        // would split a 2-byte codepoint.
         let out = clip_inline("é".repeat(50), "txt", 75, 100);
         match out {
             ToolOutput::Text(s) => {
