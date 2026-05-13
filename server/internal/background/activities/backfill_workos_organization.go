@@ -268,9 +268,10 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 	}
 
 	if gramUserID != "" {
-		if err := orgQueries.UpsertOrganizationUserRelationshipFromWorkOS(ctx, orgrepo.UpsertOrganizationUserRelationshipFromWorkOSParams{
+		if err := orgQueries.UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
 			OrganizationID:     organizationID,
 			UserID:             conv.ToPGText(gramUserID),
+			WorkosUserID:       conv.ToPGText(member.UserID),
 			WorkosMembershipID: conv.ToPGText(member.ID),
 			WorkosUpdatedAt:    conv.ToPGTimestamptz(parsed.updatedAt),
 			WorkosLastEventID:  conv.ToPGText(""),

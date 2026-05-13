@@ -737,7 +737,9 @@ func TestProcessWorkOSOrganizationEvents_MembershipDeleteSoftDeletesAndClearsAss
 		WorkosUserID:   workosUserID,
 	})
 	require.NoError(t, err)
-	require.Empty(t, assignments)
+	require.Len(t, assignments, 1)
+	require.True(t, assignments[0].DeletedAt.Valid)
+	require.Equal(t, "event_01HZDEL2", assignments[0].WorkosLastEventID.String)
 }
 
 func TestProcessWorkOSOrganizationEvents_MembershipUnknownOrganizationSkips(t *testing.T) {
