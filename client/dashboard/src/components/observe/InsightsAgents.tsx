@@ -249,7 +249,6 @@ export function InsightsAgentsContent() {
 
   const totalTokens = users.reduce((s, u) => s + effectiveTokens(u), 0);
   const totalCost = users.reduce((s, u) => s + u.totalCost, 0);
-  const totalSessions = users.reduce((s, u) => s + u.totalChats, 0);
   const activeUsers = users.filter((u) => effectiveTokens(u) > 0).length;
 
   const clientBreakdown = useMemo(() => {
