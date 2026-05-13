@@ -734,9 +734,6 @@ func newStartCommand() *cli.Command {
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
-			platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
-				AssistantMemoryTools: memoryTools,
-			})
 
 			// deploymentsSvc and toolsetsSvc are constructed up here (rather
 			// than inline with their Attach call below) so the catalog platform
@@ -756,6 +753,11 @@ func newStartCommand() *cli.Command {
 			)
 			platformExtras := append([]platformtools.ExternalTool{}, memoryTools...)
 			platformExtras = append(platformExtras, catalogTools...)
+
+			platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
+				AssistantMemoryTools:  memoryTools,
+				AssistantCatalogTools: catalogTools,
+			})
 
 			platformSvc := platformtoolsruntime.NewService(
 				logger,

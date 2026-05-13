@@ -18,14 +18,18 @@ type Toolset struct {
 // platform toolset registry. Add a field here when a new toolset needs an
 // external service or pre-built tool slice.
 type ToolsetDependencies struct {
-	AssistantMemoryTools []ExternalTool
+	AssistantMemoryTools  []ExternalTool
+	AssistantCatalogTools []ExternalTool
 }
 
 type toolsetBuilder func(deps ToolsetDependencies) Toolset
 
 var toolsetRegistry = []toolsetBuilder{
 	func(deps ToolsetDependencies) Toolset {
-		return NewAssistantsToolset(deps.AssistantMemoryTools...)
+		tools := make([]ExternalTool, 0, len(deps.AssistantMemoryTools)+len(deps.AssistantCatalogTools))
+		tools = append(tools, deps.AssistantMemoryTools...)
+		tools = append(tools, deps.AssistantCatalogTools...)
+		return NewAssistantsToolset(tools...)
 	},
 }
 
