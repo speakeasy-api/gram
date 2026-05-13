@@ -2,6 +2,7 @@ import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import {
+  RedirectToInsightsCosts,
   RedirectToInsightsTools,
   RedirectToLogAgents,
   RedirectToLogTools,
@@ -34,6 +35,7 @@ import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import {
+  InsightsAgentsPage,
   InsightsEmployeeDetailPage,
   InsightsEmployeesLayout,
   InsightsEmployeesPage,
@@ -364,8 +366,13 @@ const ROUTE_STRUCTURE = {
     url: "insights",
     icon: "layout-dashboard",
     component: InsightsRoot,
-    indexComponent: RedirectToInsightsTools,
+    indexComponent: RedirectToInsightsCosts,
     subPages: {
+      costs: {
+        title: "Costs",
+        url: "costs",
+        component: InsightsAgentsPage,
+      },
       tools: {
         title: "Tools",
         url: "tools",
