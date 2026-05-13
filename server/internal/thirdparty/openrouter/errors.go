@@ -36,10 +36,47 @@ func classifyHTTPError(status int, body []byte) error {
 	case http.StatusPaymentRequired:
 		return fmt.Errorf("OpenRouter API error (status %d): %s: %w", status, msg, ErrInsufficientCredits)
 	case http.StatusBadRequest, http.StatusUnprocessableEntity:
-		// Other 4xx (401 auth, 403 moderation, 404 model, 408 timeout, 429
-		// rate limit) aren't fixable by trimming and are excluded here.
-		return fmt.Errorf("OpenRouter API error (status %d): %s: %w", status, msg, ErrHistoryCorruptionCandidate)
+		// 400/422 is the strongest "request body is the problem" signal, but
+		// it also covers non-history bad params (invalid model, malformed
+		// JSON, etc). Self-heal trims the live transcript and persists it,
+		// so misclassifying a one-off param error as corruption would lose
+		// real history. Require BOTH the status code and a corruption-shaped
+		// body before opting into self-heal.
+		if looksLikeHistoryCorruption(msg) {
+			return fmt.Errorf("OpenRouter API error (status %d): %s: %w", status, msg, ErrHistoryCorruptionCandidate)
+		}
+		return fmt.Errorf("OpenRouter API error (status %d): %s", status, msg)
 	default:
 		return fmt.Errorf("OpenRouter API error (status %d): %s", status, msg)
 	}
+}
+
+// historyCorruptionBodyMarkers are fragments inference providers emit when
+// they refuse a transcript for shape reasons (tool pairing, role
+// alternation, oversize context). Kept narrow; widen only as new patterns
+// are observed in production. Body comes from the upstream verbatim so
+// matching here — at the OpenRouter boundary — is the only place the
+// fragments aren't already mangled by intermediate wrappers.
+var historyCorruptionBodyMarkers = []string{
+	// Anthropic
+	"tool_use",
+	"tool_result",
+	// Anthropic + others
+	"must alternate",
+	// OpenAI
+	"tool_calls",
+	// Context overflow
+	"maximum context length",
+	"context_length_exceeded",
+	"prompt is too long",
+}
+
+func looksLikeHistoryCorruption(body string) bool {
+	lower := strings.ToLower(body)
+	for _, marker := range historyCorruptionBodyMarkers {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
 }
