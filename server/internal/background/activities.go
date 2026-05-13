@@ -35,7 +35,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	slacktypes "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
-	"github.com/workos/workos-go/v6/pkg/events"
 )
 
 type Activities struct {
@@ -76,8 +75,12 @@ type Activities struct {
 	reapSoftDeletedAssistantMems    *activities.ReapSoftDeletedAssistantMemories
 	signalAssistantCoordinator      *activities.SignalAssistantCoordinator
 	signalAssistantThread           *activities.SignalAssistantThread
+	listWorkOSOrganizations         *activities.ListWorkOSOrganizations
+	backfillWorkOSOrganization      *activities.BackfillWorkOSOrganization
+	backfillWorkOSGlobalRoles       *activities.BackfillWorkOSGlobalRoles
 	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
 	processWorkOSGlobalRoleEvents   *activities.ProcessWorkOSGlobalRoleEvents
+	processWorkOSUserEvents         *activities.ProcessWorkOSUserEvents
 	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
 }
 
@@ -110,19 +113,9 @@ func NewActivities(
 	piiScanner risk_analysis.PIIScanner,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
-	workosEventsClient *events.Client,
+	workosClient activities.WorkOSClient,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
-
-	// Only construct the WorkOS sync activity when the events client is
-	// configured. Local dev without a key passes nil; the wrapper method below
-	// returns a clear error if the activity is invoked unconfigured.
-	var processWorkOSOrgEvents *activities.ProcessWorkOSOrganizationEvents
-	var processWorkOSGlobalRoleEvents *activities.ProcessWorkOSGlobalRoleEvents
-	if workosEventsClient != nil {
-		processWorkOSOrgEvents = activities.NewProcessWorkOSOrganizationEvents(logger, db, workosEventsClient)
-		processWorkOSGlobalRoleEvents = activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosEventsClient)
-	}
 
 	return &Activities{
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
@@ -162,24 +155,38 @@ func NewActivities(
 		reapSoftDeletedAssistantMems:    activities.NewReapSoftDeletedAssistantMemories(logger, db),
 		signalAssistantCoordinator:      activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		signalAssistantThread:           activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
-		processWorkOSOrganizationEvents: processWorkOSOrgEvents,
-		processWorkOSGlobalRoleEvents:   processWorkOSGlobalRoleEvents,
+		listWorkOSOrganizations:         activities.NewListWorkOSOrganizations(logger, workosClient),
+		backfillWorkOSOrganization:      activities.NewBackfillWorkOSOrganization(logger, db, workosClient),
+		backfillWorkOSGlobalRoles:       activities.NewBackfillWorkOSGlobalRoles(logger, db, workosClient),
+		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient),
+		processWorkOSGlobalRoleEvents:   activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient),
+		processWorkOSUserEvents:         activities.NewProcessWorkOSUserEvents(logger, db, workosClient),
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
 	}
 }
 
+func (a *Activities) ListWorkOSOrganizations(ctx context.Context) ([]string, error) {
+	return a.listWorkOSOrganizations.Do(ctx)
+}
+
+func (a *Activities) BackfillWorkOSOrganization(ctx context.Context, params activities.BackfillWorkOSOrganizationParams) error {
+	return a.backfillWorkOSOrganization.Do(ctx, params)
+}
+
+func (a *Activities) BackfillWorkOSGlobalRoles(ctx context.Context) error {
+	return a.backfillWorkOSGlobalRoles.Do(ctx)
+}
+
 func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {
-	if a.processWorkOSOrganizationEvents == nil {
-		return nil, fmt.Errorf("WorkOS events client is not configured")
-	}
 	return a.processWorkOSOrganizationEvents.Do(ctx, params)
 }
 
 func (a *Activities) ProcessWorkOSGlobalRoleEvents(ctx context.Context, params activities.ProcessWorkOSGlobalRoleEventsParams) (*activities.ProcessWorkOSGlobalRoleEventsResult, error) {
-	if a.processWorkOSGlobalRoleEvents == nil {
-		return nil, fmt.Errorf("WorkOS events client is not configured")
-	}
 	return a.processWorkOSGlobalRoleEvents.Do(ctx, params)
+}
+
+func (a *Activities) ProcessWorkOSUserEvents(ctx context.Context, params activities.ProcessWorkOSUserEventsParams) (*activities.ProcessWorkOSUserEventsResult, error) {
+	return a.processWorkOSUserEvents.Do(ctx, params)
 }
 
 func (a *Activities) TransitionDeployment(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID, status string) (*activities.TransitionDeploymentResult, error) {

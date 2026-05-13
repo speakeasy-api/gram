@@ -444,7 +444,7 @@ func TestSyncWorkOSIDs_NoMembershipForOrg(t *testing.T) {
 	// membership and the org has a workos_id set.
 	_, err = orgRepo.New(ts.conn).GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
 		OrganizationID: mockidp.MockOrgID,
-		UserID:         mockidp.MockUserID,
+		UserID:         conv.ToPGText(mockidp.MockUserID),
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "relationship should be soft-deleted when no membership exists")
 }
@@ -573,7 +573,7 @@ func TestSyncWorkOSIDs_ClearsStaleMemberships(t *testing.T) {
 
 	rel, err := orgRepo.New(ts.conn).GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
 		OrganizationID: mockidp.MockOrgID,
-		UserID:         mockidp.MockUserID,
+		UserID:         conv.ToPGText(mockidp.MockUserID),
 	})
 	require.NoError(t, err)
 	require.True(t, rel.WorkosMembershipID.Valid, "workos_membership_id should be set after first login")
@@ -591,7 +591,7 @@ func TestSyncWorkOSIDs_ClearsStaleMemberships(t *testing.T) {
 	// soft-deleted relationship returns ErrNoRows.
 	_, err = orgRepo.New(ts.conn).GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
 		OrganizationID: mockidp.MockOrgID,
-		UserID:         mockidp.MockUserID,
+		UserID:         conv.ToPGText(mockidp.MockUserID),
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "relationship should be soft-deleted after membership removed")
 }
@@ -633,7 +633,7 @@ func TestSyncWorkOSIDs_SkipsNullWorkOSIDOrgs(t *testing.T) {
 	// workos_membership_id manually set (simulating prior state).
 	err = orgRepo.New(ts.conn).AttachWorkOSUserToOrg(ctx, orgRepo.AttachWorkOSUserToOrgParams{
 		OrganizationID:     otherOrgID,
-		UserID:             mockidp.MockUserID,
+		UserID:             conv.ToPGText(mockidp.MockUserID),
 		WorkosMembershipID: pgtype.Text{String: "mem_other", Valid: true},
 	})
 	require.NoError(t, err)
@@ -645,7 +645,7 @@ func TestSyncWorkOSIDs_SkipsNullWorkOSIDOrgs(t *testing.T) {
 	// The non-WorkOS org's membership must still have its workos_membership_id.
 	rel, err := orgRepo.New(ts.conn).GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
 		OrganizationID: otherOrgID,
-		UserID:         mockidp.MockUserID,
+		UserID:         conv.ToPGText(mockidp.MockUserID),
 	})
 	require.NoError(t, err)
 	require.True(t, rel.WorkosMembershipID.Valid, "workos_membership_id on org without workos_id must not be cleared")
@@ -680,7 +680,7 @@ func TestSyncWorkOSIDs_DoesNotAffectOtherUsers(t *testing.T) {
 	// workos_id is already set by the test setup; give user 2 a workos_membership_id.
 	err = orgRepo.New(ts.conn).AttachWorkOSUserToOrg(ctx, orgRepo.AttachWorkOSUserToOrgParams{
 		OrganizationID:     mockidp.MockOrgID,
-		UserID:             otherUserID,
+		UserID:             conv.ToPGText(otherUserID),
 		WorkosMembershipID: pgtype.Text{String: "mem_user2", Valid: true},
 	})
 	require.NoError(t, err)
@@ -693,7 +693,7 @@ func TestSyncWorkOSIDs_DoesNotAffectOtherUsers(t *testing.T) {
 	// User 2's membership must be untouched.
 	rel, err := orgRepo.New(ts.conn).GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
 		OrganizationID: mockidp.MockOrgID,
-		UserID:         otherUserID,
+		UserID:         conv.ToPGText(otherUserID),
 	})
 	require.NoError(t, err)
 	require.True(t, rel.WorkosMembershipID.Valid, "other user's workos_membership_id must not be cleared")
@@ -732,7 +732,7 @@ func TestSyncWorkOSIDs_UndeletesRelationship(t *testing.T) {
 
 	_, err = orgRepo.New(ts.conn).GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
 		OrganizationID: mockidp.MockOrgID,
-		UserID:         mockidp.MockUserID,
+		UserID:         conv.ToPGText(mockidp.MockUserID),
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "relationship should be soft-deleted")
 
@@ -748,7 +748,7 @@ func TestSyncWorkOSIDs_UndeletesRelationship(t *testing.T) {
 
 	rel, err := orgRepo.New(ts.conn).GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
 		OrganizationID: mockidp.MockOrgID,
-		UserID:         mockidp.MockUserID,
+		UserID:         conv.ToPGText(mockidp.MockUserID),
 	})
 	require.NoError(t, err, "relationship should be restored after membership re-added")
 	require.True(t, rel.WorkosMembershipID.Valid)

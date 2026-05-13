@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	agen "github.com/speakeasy-api/gram/server/gen/assets"
@@ -16,6 +17,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/tools"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	externalmcprepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
+	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -1155,4 +1158,556 @@ func TestToolsService_ListTools_FunctionToolsWithMetaTags(t *testing.T) {
 
 	require.True(t, foundCreateTodo, "should find create_todo tool")
 	require.True(t, foundListAllTodos, "should find list_all_todos tool")
+}
+
+func TestToolsService_ListTools_WithToolTypesFilter(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestToolsService(t, assetStorage)
+
+	// Upload OpenAPI asset (HTTP tools)
+	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/petstore-valid.yaml"))
+	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs.Len()),
+	}, io.NopCloser(bs))
+	require.NoError(t, err, "upload openapi v3 asset")
+
+	// Upload functions file
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
+
+	// Create deployment with HTTP + function tools
+	deployment, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
+		IdempotencyKey: "test-list-tools-types-filter",
+		Openapiv3Assets: []*dgen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares.Asset.ID,
+				Name:    "petstore-doc",
+				Slug:    "petstore-doc",
+			},
+		},
+		Functions: []*dgen.AddFunctionsForm{
+			{
+				AssetID: fres.Asset.ID,
+				Name:    "filter-functions",
+				Slug:    "filter-functions",
+				Runtime: "nodejs:24",
+			},
+		},
+		Packages:         []*dgen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment")
+
+	// Create prompt template
+	_, err = ti.templates.CreateTemplate(ctx, &tgen.CreateTemplatePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             types.Slug("types-filter-template"),
+		Prompt:           "Process {{data}}",
+		Description:      new("A template for testing types filter"),
+		Engine:           "mustache",
+		Kind:             "prompt",
+		ToolsHint:        []string{"assistant"},
+		Arguments:        new(`{"type": "object", "properties": {"data": {"type": "string"}}, "required": ["data"]}`),
+	})
+	require.NoError(t, err, "create template")
+
+	// Seed external MCP tool attached to the deployment
+	deploymentUUID, err := uuid.Parse(deployment.Deployment.ID)
+	require.NoError(t, err, "parse deployment ID")
+
+	extRepo := externalmcprepo.New(ti.conn)
+	registryID, err := extRepo.CreateMCPRegistry(ctx, externalmcprepo.CreateMCPRegistryParams{
+		Name: "test-registry-types-filter",
+		Url:  "http://example.invalid/mcp",
+	})
+	require.NoError(t, err, "create mcp registry")
+
+	attachment, err := extRepo.CreateExternalMCPAttachment(ctx, externalmcprepo.CreateExternalMCPAttachmentParams{
+		DeploymentID:            deploymentUUID,
+		RegistryID:              uuid.NullUUID{UUID: registryID, Valid: true},
+		Name:                    "External MCP Test",
+		Slug:                    "types-filter-mcp",
+		RegistryServerSpecifier: "test-server",
+	})
+	require.NoError(t, err, "create external mcp attachment")
+
+	_, err = extRepo.CreateExternalMCPToolDefinition(ctx, externalmcprepo.CreateExternalMCPToolDefinitionParams{
+		ExternalMcpAttachmentID:    attachment.ID,
+		ToolUrn:                    "tools:externalmcp:types-filter-mcp:direct-tool",
+		Type:                       "direct",
+		Name:                       pgtype.Text{String: "direct_tool", Valid: true},
+		Description:                pgtype.Text{String: "A direct external mcp tool", Valid: true},
+		Schema:                     []byte(`{"type":"object"}`),
+		RemoteUrl:                  "http://example.invalid/mcp",
+		TransportType:              externalmcptypes.TransportTypeStreamableHTTP,
+		RequiresOauth:              false,
+		OauthVersion:               "none",
+		OauthAuthorizationEndpoint: pgtype.Text{},
+		OauthTokenEndpoint:         pgtype.Text{},
+		OauthRegistrationEndpoint:  pgtype.Text{},
+		OauthScopesSupported:       []string{},
+		HeaderDefinitions:          nil,
+		Title:                      pgtype.Text{},
+		ReadOnlyHint:               pgtype.Bool{},
+		DestructiveHint:            pgtype.Bool{},
+		IdempotentHint:             pgtype.Bool{},
+		OpenWorldHint:              pgtype.Bool{},
+	})
+	require.NoError(t, err, "create external mcp tool definition")
+
+	countByKind := func(tools []*types.Tool) (httpN, fnN, platformN, tplN, extN int) {
+		for _, tool := range tools {
+			switch {
+			case tool.HTTPToolDefinition != nil:
+				httpN++
+			case tool.FunctionToolDefinition != nil:
+				fnN++
+			case tool.PlatformToolDefinition != nil:
+				platformN++
+			case tool.PromptTemplate != nil:
+				tplN++
+			case tool.ExternalMcpToolDefinition != nil:
+				extN++
+			}
+		}
+		return httpN, fnN, platformN, tplN, extN
+	}
+
+	t.Run("http only", func(t *testing.T) {
+		t.Parallel()
+		result, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
+			Cursor:           nil,
+			DeploymentID:     nil,
+			SessionToken:     nil,
+			ProjectSlugInput: nil,
+			Limit:            nil,
+			ToolTypes:        []types.ToolType{types.ToolType("http")},
+		})
+		require.NoError(t, err, "list tools http only")
+		httpN, fnN, platformN, tplN, extN := countByKind(result.Tools)
+		require.Positive(t, httpN, "should return http tools")
+		require.Equal(t, 0, fnN, "should not return function tools")
+		require.Equal(t, 0, platformN, "should not return platform tools")
+		require.Equal(t, 0, tplN, "should not return prompt templates")
+		require.Equal(t, 0, extN, "should not return external mcp tools")
+	})
+
+	t.Run("function only", func(t *testing.T) {
+		t.Parallel()
+		result, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
+			Cursor:           nil,
+			DeploymentID:     nil,
+			SessionToken:     nil,
+			ProjectSlugInput: nil,
+			Limit:            nil,
+			ToolTypes:        []types.ToolType{types.ToolType("function")},
+		})
+		require.NoError(t, err, "list tools function only")
+		httpN, fnN, platformN, tplN, extN := countByKind(result.Tools)
+		require.Equal(t, 0, httpN, "should not return http tools")
+		require.Positive(t, fnN, "should return function tools")
+		require.Equal(t, 0, platformN, "should not return platform tools")
+		require.Equal(t, 0, tplN, "should not return prompt templates")
+		require.Equal(t, 0, extN, "should not return external mcp tools")
+	})
+
+	t.Run("prompt only", func(t *testing.T) {
+		t.Parallel()
+		result, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
+			Cursor:           nil,
+			DeploymentID:     nil,
+			SessionToken:     nil,
+			ProjectSlugInput: nil,
+			Limit:            nil,
+			ToolTypes:        []types.ToolType{types.ToolType("prompt")},
+		})
+		require.NoError(t, err, "list tools prompt only")
+		httpN, fnN, platformN, tplN, extN := countByKind(result.Tools)
+		require.Equal(t, 0, httpN, "should not return http tools")
+		require.Equal(t, 0, fnN, "should not return function tools")
+		require.Equal(t, 0, platformN, "should not return platform tools")
+		require.Equal(t, 1, tplN, "should return 1 prompt template")
+		require.Equal(t, 0, extN, "should not return external mcp tools")
+	})
+
+	t.Run("http + prompt", func(t *testing.T) {
+		t.Parallel()
+		result, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
+			Cursor:           nil,
+			DeploymentID:     nil,
+			SessionToken:     nil,
+			ProjectSlugInput: nil,
+			Limit:            nil,
+			ToolTypes: []types.ToolType{
+				types.ToolType("http"),
+				types.ToolType("prompt"),
+			},
+		})
+		require.NoError(t, err, "list tools http + prompt")
+		httpN, fnN, platformN, tplN, extN := countByKind(result.Tools)
+		require.Positive(t, httpN, "should return http tools")
+		require.Equal(t, 0, fnN, "should not return function tools")
+		require.Equal(t, 0, platformN, "should not return platform tools")
+		require.Equal(t, 1, tplN, "should return 1 prompt template")
+		require.Equal(t, 0, extN, "should not return external mcp tools")
+	})
+
+	t.Run("externalmcp only", func(t *testing.T) {
+		t.Parallel()
+		result, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
+			Cursor:           nil,
+			DeploymentID:     nil,
+			SessionToken:     nil,
+			ProjectSlugInput: nil,
+			Limit:            nil,
+			ToolTypes:        []types.ToolType{types.ToolType("externalmcp")},
+		})
+		require.NoError(t, err, "list tools externalmcp only")
+		httpN, fnN, platformN, tplN, extN := countByKind(result.Tools)
+		require.Equal(t, 0, httpN, "should not return http tools")
+		require.Equal(t, 0, fnN, "should not return function tools")
+		require.Equal(t, 0, platformN, "should not return platform tools")
+		require.Equal(t, 0, tplN, "should not return prompt templates")
+		require.Positive(t, extN, "should return external mcp tools")
+	})
+}
+
+func TestToolsService_ListTools_FunctionTools_LatestDeploymentOnly(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestToolsService(t, assetStorage)
+
+	// Two function uploads (independent assets)
+	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
+	fres2 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
+
+	d1, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
+		IdempotencyKey:  "test-fn-latest-first",
+		Openapiv3Assets: []*dgen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions: []*dgen.AddFunctionsForm{
+			{AssetID: fres1.Asset.ID, Name: "first-fns", Slug: "first-fns", Runtime: "nodejs:24"},
+		},
+		Packages:         []*dgen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create first deployment")
+
+	d2, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
+		IdempotencyKey:  "test-fn-latest-second",
+		Openapiv3Assets: []*dgen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions: []*dgen.AddFunctionsForm{
+			{AssetID: fres2.Asset.ID, Name: "second-fns", Slug: "second-fns", Runtime: "nodejs:24"},
+		},
+		Packages:         []*dgen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create second deployment")
+
+	result, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
+		Cursor:           nil,
+		DeploymentID:     nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Limit:            nil,
+		ToolTypes:        []types.ToolType{types.ToolType("function")},
+	})
+	require.NoError(t, err, "list function tools")
+
+	fnCount := 0
+	for _, tool := range result.Tools {
+		if tool.FunctionToolDefinition != nil {
+			fnCount++
+			require.Equal(t, d2.Deployment.ID, tool.FunctionToolDefinition.DeploymentID, "function tools should only belong to latest deployment")
+			require.NotEqual(t, d1.Deployment.ID, tool.FunctionToolDefinition.DeploymentID, "no function tools from first deployment")
+		}
+	}
+	require.Positive(t, fnCount, "should have at least one function tool")
+}
+
+func TestToolsService_ListTools_ExternalMCPTools_LatestDeploymentOnly(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestToolsService(t, assetStorage)
+
+	// Need a benign HTTP/function-free deployment to anchor each project.
+	// CreateDeployment requires at least one asset, so use a single petstore upload per deployment.
+	bs1 := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/petstore-valid.yaml"))
+	ares1, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs1.Len()),
+	}, io.NopCloser(bs1))
+	require.NoError(t, err, "upload first openapi asset")
+
+	bs2 := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/petstore-valid.yaml"))
+	ares2, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs2.Len()),
+	}, io.NopCloser(bs2))
+	require.NoError(t, err, "upload second openapi asset")
+
+	d1, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
+		IdempotencyKey: "test-ext-latest-first",
+		Openapiv3Assets: []*dgen.AddOpenAPIv3DeploymentAssetForm{
+			{AssetID: ares1.Asset.ID, Name: "petstore-d1", Slug: "petstore-d1"},
+		},
+		Functions:        []*dgen.AddFunctionsForm{},
+		Packages:         []*dgen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create first deployment")
+
+	d2, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
+		IdempotencyKey: "test-ext-latest-second",
+		Openapiv3Assets: []*dgen.AddOpenAPIv3DeploymentAssetForm{
+			{AssetID: ares2.Asset.ID, Name: "petstore-d2", Slug: "petstore-d2"},
+		},
+		Functions:        []*dgen.AddFunctionsForm{},
+		Packages:         []*dgen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create second deployment")
+
+	d1UUID, err := uuid.Parse(d1.Deployment.ID)
+	require.NoError(t, err, "parse d1 ID")
+	d2UUID, err := uuid.Parse(d2.Deployment.ID)
+	require.NoError(t, err, "parse d2 ID")
+
+	extRepo := externalmcprepo.New(ti.conn)
+
+	seedExternalMCP := func(deploymentID uuid.UUID, label, regURL string) {
+		regID, err := extRepo.CreateMCPRegistry(ctx, externalmcprepo.CreateMCPRegistryParams{
+			Name: "reg-" + label,
+			Url:  regURL,
+		})
+		require.NoError(t, err, "create mcp registry "+label)
+
+		att, err := extRepo.CreateExternalMCPAttachment(ctx, externalmcprepo.CreateExternalMCPAttachmentParams{
+			DeploymentID:            deploymentID,
+			RegistryID:              uuid.NullUUID{UUID: regID, Valid: true},
+			Name:                    "ext-" + label,
+			Slug:                    "ext-" + label,
+			RegistryServerSpecifier: "spec-" + label,
+		})
+		require.NoError(t, err, "create attachment "+label)
+
+		_, err = extRepo.CreateExternalMCPToolDefinition(ctx, externalmcprepo.CreateExternalMCPToolDefinitionParams{
+			ExternalMcpAttachmentID:    att.ID,
+			ToolUrn:                    "tools:externalmcp:ext-" + label + ":direct-" + label,
+			Type:                       "direct",
+			Name:                       pgtype.Text{String: "tool_" + label, Valid: true},
+			Description:                pgtype.Text{String: "tool " + label, Valid: true},
+			Schema:                     []byte(`{"type":"object"}`),
+			RemoteUrl:                  regURL,
+			TransportType:              externalmcptypes.TransportTypeStreamableHTTP,
+			RequiresOauth:              false,
+			OauthVersion:               "none",
+			OauthAuthorizationEndpoint: pgtype.Text{},
+			OauthTokenEndpoint:         pgtype.Text{},
+			OauthRegistrationEndpoint:  pgtype.Text{},
+			OauthScopesSupported:       []string{},
+			HeaderDefinitions:          nil,
+			Title:                      pgtype.Text{},
+			ReadOnlyHint:               pgtype.Bool{},
+			DestructiveHint:            pgtype.Bool{},
+			IdempotentHint:             pgtype.Bool{},
+			OpenWorldHint:              pgtype.Bool{},
+		})
+		require.NoError(t, err, "create tool def "+label)
+	}
+
+	seedExternalMCP(d1UUID, "first", "http://example.invalid/mcp/first")
+	seedExternalMCP(d2UUID, "second", "http://example.invalid/mcp/second")
+
+	result, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
+		Cursor:           nil,
+		DeploymentID:     nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Limit:            nil,
+		ToolTypes:        []types.ToolType{types.ToolType("externalmcp")},
+	})
+	require.NoError(t, err, "list external mcp tools")
+
+	extCount := 0
+	for _, tool := range result.Tools {
+		if tool.ExternalMcpToolDefinition != nil {
+			extCount++
+			require.Equal(t, d2.Deployment.ID, tool.ExternalMcpToolDefinition.DeploymentID, "external mcp tools should only belong to latest deployment")
+			require.NotEqual(t, d1.Deployment.ID, tool.ExternalMcpToolDefinition.DeploymentID, "no external mcp tools from first deployment")
+		}
+	}
+	require.Positive(t, extCount, "should have at least one external mcp tool")
+}
+
+func TestToolsService_ListTools_ExternalMCPTools_FilterByToolURN(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestToolsService(t, assetStorage)
+
+	// Anchor a single deployment (CreateDeployment requires at least one asset).
+	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/petstore-valid.yaml"))
+	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs.Len()),
+	}, io.NopCloser(bs))
+	require.NoError(t, err, "upload openapi asset")
+
+	d, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
+		IdempotencyKey: "test-ext-urn-filter",
+		Openapiv3Assets: []*dgen.AddOpenAPIv3DeploymentAssetForm{
+			{AssetID: ares.Asset.ID, Name: "petstore", Slug: "petstore"},
+		},
+		Functions:        []*dgen.AddFunctionsForm{},
+		Packages:         []*dgen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment")
+
+	deploymentUUID, err := uuid.Parse(d.Deployment.ID)
+	require.NoError(t, err, "parse deployment ID")
+
+	extRepo := externalmcprepo.New(ti.conn)
+
+	// Seed two distinct external MCP servers (attachments) on the same deployment.
+	seedExternalMCP := func(slug, regURL string, toolNames []string) {
+		regID, err := extRepo.CreateMCPRegistry(ctx, externalmcprepo.CreateMCPRegistryParams{
+			Name: "reg-" + slug,
+			Url:  regURL,
+		})
+		require.NoError(t, err, "create mcp registry "+slug)
+
+		att, err := extRepo.CreateExternalMCPAttachment(ctx, externalmcprepo.CreateExternalMCPAttachmentParams{
+			DeploymentID:            deploymentUUID,
+			RegistryID:              uuid.NullUUID{UUID: regID, Valid: true},
+			Name:                    "ext-" + slug,
+			Slug:                    slug,
+			RegistryServerSpecifier: "spec-" + slug,
+		})
+		require.NoError(t, err, "create attachment "+slug)
+
+		for _, tn := range toolNames {
+			_, err = extRepo.CreateExternalMCPToolDefinition(ctx, externalmcprepo.CreateExternalMCPToolDefinitionParams{
+				ExternalMcpAttachmentID:    att.ID,
+				ToolUrn:                    "tools:externalmcp:" + slug + ":" + tn,
+				Type:                       "direct",
+				Name:                       pgtype.Text{String: tn, Valid: true},
+				Description:                pgtype.Text{String: "tool " + tn, Valid: true},
+				Schema:                     []byte(`{"type":"object"}`),
+				RemoteUrl:                  regURL,
+				TransportType:              externalmcptypes.TransportTypeStreamableHTTP,
+				RequiresOauth:              false,
+				OauthVersion:               "none",
+				OauthAuthorizationEndpoint: pgtype.Text{},
+				OauthTokenEndpoint:         pgtype.Text{},
+				OauthRegistrationEndpoint:  pgtype.Text{},
+				OauthScopesSupported:       []string{},
+				HeaderDefinitions:          nil,
+				Title:                      pgtype.Text{},
+				ReadOnlyHint:               pgtype.Bool{},
+				DestructiveHint:            pgtype.Bool{},
+				IdempotentHint:             pgtype.Bool{},
+				OpenWorldHint:              pgtype.Bool{},
+			})
+			require.NoError(t, err, "create tool def "+slug+"/"+tn)
+		}
+	}
+
+	seedExternalMCP("alpha", "http://example.invalid/mcp/alpha", []string{"search", "fetch"})
+	seedExternalMCP("beta", "http://example.invalid/mcp/beta", []string{"query", "exec"})
+
+	// Filter to alpha's tools only via URN prefix.
+	alphaPrefix := "tools:externalmcp:alpha"
+	result, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
+		Cursor:           nil,
+		DeploymentID:     nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Limit:            nil,
+		UrnPrefix:        &alphaPrefix,
+		ToolTypes:        []types.ToolType{types.ToolType("externalmcp")},
+	})
+	require.NoError(t, err, "list tools alpha urn prefix")
+
+	require.Len(t, result.Tools, 2, "should return alpha's 2 tools only")
+	for _, tool := range result.Tools {
+		require.NotNil(t, tool.ExternalMcpToolDefinition, "tool should be external mcp")
+		require.True(t, strings.HasPrefix(tool.ExternalMcpToolDefinition.ToolUrn, alphaPrefix), "tool urn should start with alpha prefix, got %q", tool.ExternalMcpToolDefinition.ToolUrn)
+	}
+
+	// Fully-qualified URN should return exactly that one tool.
+	exactURN := "tools:externalmcp:beta:query"
+	result, err = ti.service.ListTools(ctx, &gen.ListToolsPayload{
+		Cursor:           nil,
+		DeploymentID:     nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Limit:            nil,
+		UrnPrefix:        &exactURN,
+		ToolTypes:        []types.ToolType{types.ToolType("externalmcp")},
+	})
+	require.NoError(t, err, "list tools exact urn")
+	require.Len(t, result.Tools, 1, "should return exactly one tool for exact urn")
+	require.NotNil(t, result.Tools[0].ExternalMcpToolDefinition, "tool should be external mcp")
+	require.Equal(t, exactURN, result.Tools[0].ExternalMcpToolDefinition.ToolUrn, "tool urn should match exact filter")
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -111,7 +112,7 @@ func seedHookUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organiz
 
 	err = organizationsrepo.New(conn).AttachWorkOSUserToOrg(ctx, organizationsrepo.AttachWorkOSUserToOrgParams{
 		OrganizationID:     organizationID,
-		UserID:             userID,
+		UserID:             conv.ToPGText(userID),
 		WorkosMembershipID: pgtype.Text{},
 	})
 	require.NoError(t, err)
