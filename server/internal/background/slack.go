@@ -104,6 +104,7 @@ func SlackEventWorkflow(ctx workflow.Context, params ProcessSlackWorkflowParams)
 					ChannelID: params.Event.Event.Channel,
 					Message:   formatListToolsSlackMessage(toolsResponse),
 					ThreadTS:  &params.Event.Event.Ts,
+					Blocks:    nil,
 				},
 			},
 		).Get(ctx, nil); err != nil {
@@ -162,6 +163,7 @@ func SlackEventWorkflow(ctx workflow.Context, params ProcessSlackWorkflowParams)
 				ChannelID: params.Event.Event.Channel,
 				Message:   chatResponse,
 				ThreadTS:  &params.Event.Event.Ts,
+				Blocks:    nil,
 			},
 		},
 	).Get(ctx, nil); err != nil {
@@ -204,6 +206,7 @@ func postSlackErrorMessage(ctx workflow.Context, a *Activities, event types.Slac
 				ChannelID: event.Event.Channel,
 				Message:   msg,
 				ThreadTS:  &event.Event.Ts,
+				Blocks:    nil,
 			},
 		},
 	).Get(ctx, nil)

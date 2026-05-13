@@ -346,6 +346,7 @@ func (s *Service) SlackAppEventHandler(w http.ResponseWriter, r *http.Request) e
 					UserID:    slackAccountID,
 					Message:   fmt.Sprintf("To use this bot, please link your Gram account first: <%s|Connect to Gram>", registerURL),
 					ThreadTS:  nil, // Intentionally don't post ephemeral messages in threads because they don't show up easily
+					Blocks:    nil,
 				}); err != nil {
 					s.logger.ErrorContext(ctx, "send ephemeral registration link", attr.SlogError(err))
 				}

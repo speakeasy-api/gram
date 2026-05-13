@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"path"
 	"reflect"
 	"slices"
@@ -395,6 +396,140 @@ func decodeSlackEvent(raw json.RawMessage) (slackEventRequestBody, error) {
 	}
 }
 
+// slackInteractionPayload is the JSON body of a Block Kit interaction
+// envelope (e.g. block_actions). Slack form-encodes this under the "payload"
+// field of the webhook request body. We only model the fields needed to
+// route the click back to the originating thread + surface action metadata.
+// See https://docs.slack.dev/interactivity/handling-user-interaction.
+type slackInteractionPayload struct {
+	Type     string `json:"type"`
+	APIAppID string `json:"api_app_id,omitempty"`
+	Team     struct {
+		ID string `json:"id"`
+	} `json:"team"`
+	User struct {
+		ID string `json:"id"`
+	} `json:"user"`
+	Channel struct {
+		ID string `json:"id"`
+	} `json:"channel"`
+	Message struct {
+		Ts       string `json:"ts"`
+		ThreadTs string `json:"thread_ts,omitempty"`
+	} `json:"message"`
+	Container struct {
+		ChannelID string `json:"channel_id,omitempty"`
+		ThreadTs  string `json:"thread_ts,omitempty"`
+		MessageTs string `json:"message_ts,omitempty"`
+	} `json:"container"`
+	Actions []struct {
+		ActionID string `json:"action_id"`
+		BlockID  string `json:"block_id"`
+		Value    string `json:"value,omitempty"`
+		Type     string `json:"type,omitempty"`
+	} `json:"actions"`
+}
+
+func isSlackInteractionRequest(headers http.Header) bool {
+	// Events API requests are application/json; interactivity requests are
+	// always application/x-www-form-urlencoded with a single `payload` field.
+	// HasPrefix tolerates an optional ;charset= parameter without paying for
+	// mime.ParseMediaType on every webhook.
+	contentType := strings.ToLower(headers.Get("Content-Type"))
+	return strings.HasPrefix(contentType, "application/x-www-form-urlencoded")
+}
+
+func handleSlackInteraction(body []byte) (*WebhookIngressResult, error) {
+	values, err := url.ParseQuery(string(body))
+	if err != nil {
+		return nil, fmt.Errorf("decode slack interaction body: %w", err)
+	}
+	rawPayload := values.Get("payload")
+	if rawPayload == "" {
+		return nil, fmt.Errorf("decode slack interaction body: missing payload")
+	}
+	var payload slackInteractionPayload
+	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
+		return nil, fmt.Errorf("decode slack interaction payload: %w", err)
+	}
+	if payload.Type != "block_actions" {
+		// Other interaction envelopes (view_submission, shortcut, etc.) are
+		// not wired through Gram triggers yet. Ack without dispatching so
+		// Slack stops retrying.
+		return &WebhookIngressResult{Response: nil, Event: nil, Task: nil}, nil
+	}
+	if len(payload.Actions) == 0 {
+		return nil, fmt.Errorf("decode slack interaction payload: no actions")
+	}
+
+	// Block Kit button clicks deliver exactly one entry in actions[].
+	// Multi-select / checkbox payloads fan out across entries; we only
+	// surface the first because button is the only interactive element
+	// the outbound model exposes today.
+	action := payload.Actions[0]
+
+	channelID := payload.Channel.ID
+	if channelID == "" {
+		channelID = payload.Container.ChannelID
+	}
+	threadID := payload.Message.ThreadTs
+	if threadID == "" {
+		threadID = payload.Container.ThreadTs
+	}
+	messageTs := payload.Message.Ts
+	if messageTs == "" {
+		messageTs = payload.Container.MessageTs
+	}
+	if threadID == "" {
+		threadID = messageTs
+	}
+
+	normalized := slackTriggerEvent{
+		EnvelopeType: "interactive",
+		EventType:    payload.Type,
+		Subtype:      "",
+		TeamID:       payload.Team.ID,
+		ChannelID:    channelID,
+		ThreadID:     threadID,
+		UserID:       payload.User.ID,
+		InviterID:    "",
+		BotID:        "",
+		AppID:        payload.APIAppID,
+		Text:         action.Value,
+		Timestamp:    messageTs,
+		Reaction:     "",
+		ItemUserID:   "",
+		ItemChannel:  "",
+		ItemTs:       "",
+		ItemType:     "",
+		ActionID:     action.ActionID,
+		ActionValue:  action.Value,
+		BlockID:      action.BlockID,
+	}
+
+	correlationID := channelID
+	if channelID != "" && threadID != "" {
+		correlationID = channelID + ":" + threadID
+	}
+	if correlationID == "" {
+		correlationID = payload.Team.ID
+	}
+
+	return &WebhookIngressResult{
+		Response: nil,
+		Event: &EventEnvelope{
+			EventID:           uuid.NewSHA1(uuid.NameSpaceURL, body).String(),
+			CorrelationID:     correlationID,
+			TriggerInstanceID: "",
+			DefinitionSlug:    "slack",
+			Event:             normalized,
+			RawPayload:        body,
+			ReceivedAt:        time.Now().UTC(),
+		},
+		Task: nil,
+	}, nil
+}
+
 type slackTriggerEvent struct {
 	EnvelopeType string `json:"envelope_type" cel:"envelope_type"`
 	EventType    string `json:"event_type" cel:"event_type"`
@@ -422,6 +557,12 @@ type slackTriggerEvent struct {
 	ItemChannel string `json:"item_channel,omitempty" cel:"item_channel"`
 	ItemTs      string `json:"item_ts,omitempty" cel:"item_ts"`
 	ItemType    string `json:"item_type,omitempty" cel:"item_type"`
+
+	// Block Kit interaction fields, set when EnvelopeType is "interactive"
+	// and EventType is "block_actions". Empty for events-API callbacks.
+	ActionID    string `json:"action_id,omitempty" cel:"action_id"`
+	ActionValue string `json:"action_value,omitempty" cel:"action_value"`
+	BlockID     string `json:"block_id,omitempty" cel:"block_id"`
 }
 
 type cronTriggerEvent struct {
@@ -441,6 +582,10 @@ var supportedSlackEventTypes = []string{
 	"app_home_opened",
 	"app_mention",
 	"app_uninstalled",
+	// Interactivity envelope, not an Events API event. Delivered to the same
+	// webhook by Slack when a user clicks a Block Kit button. See
+	// https://docs.slack.dev/interactivity/handling-user-interaction.
+	"block_actions",
 	"channel_archive",
 	"channel_created",
 	"channel_deleted",
@@ -577,6 +722,9 @@ func newSlackDefinition() Definition {
 			return nil
 		},
 		HandleWebhook: func(body []byte, headers http.Header, config Config) (*WebhookIngressResult, error) {
+			if isSlackInteractionRequest(headers) {
+				return handleSlackInteraction(body)
+			}
 
 			var req slackEventRequest
 			if err := json.Unmarshal(body, &req); err != nil {
@@ -654,6 +802,9 @@ func newSlackDefinition() Definition {
 				ItemChannel:  itemChannel,
 				ItemTs:       itemTs,
 				ItemType:     itemType,
+				ActionID:     "",
+				ActionValue:  "",
+				BlockID:      "",
 			}
 
 			correlationID := channelID
