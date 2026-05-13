@@ -19411,6 +19411,25 @@ paths:
                     description: Filter tools by URN prefix (e.g. 'tools:http:kitchen-sink' to match all tools starting with that prefix)
                     type: string
                 - allowEmptyValue: true
+                  in: query
+                  name: tool_types
+                  schema:
+                    default:
+                        - http
+                        - function
+                        - prompt
+                        - platform
+                    items:
+                        description: The type of tool
+                        enum:
+                            - http
+                            - prompt
+                            - function
+                            - platform
+                            - externalmcp
+                        type: string
+                    type: array
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -32313,6 +32332,7 @@ components:
                     description: The URN of the tool
                 type:
                     type: string
+                    description: The type of tool
                     enum:
                         - http
                         - prompt

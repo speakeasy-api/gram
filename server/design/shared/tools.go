@@ -182,11 +182,23 @@ var Tool = Type("Tool", func() {
 	Attribute("external_mcp_tool_definition", ExternalMCPToolDefinition, "The external MCP tool definition")
 })
 
-var ToolEntry = Type("ToolEntry", func() {
-	Attribute("type", String, func() {
-		Enum(string(urn.ToolKindHTTP), string(urn.ToolKindPrompt), string(urn.ToolKindFunction), string(urn.ToolKindPlatform), string(urn.ToolKindExternalMCP))
-	})
+var ToolType = Type("ToolType", String, func() {
+	Description("The type of tool")
 
+	Enum(
+		string(urn.ToolKindHTTP),
+		string(urn.ToolKindPrompt),
+		string(urn.ToolKindFunction),
+		string(urn.ToolKindPlatform),
+		string(urn.ToolKindExternalMCP),
+	)
+
+	Meta("struct:pkg:path", "types")
+	Meta("openapi:typename", "ToolType")
+})
+
+var ToolEntry = Type("ToolEntry", func() {
+	Attribute("type", ToolType)
 	Attribute("id", String, "The ID of the tool")
 	Attribute("tool_urn", String, "The URN of the tool")
 	Attribute("name", String, "The name of the tool")

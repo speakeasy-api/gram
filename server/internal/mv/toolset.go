@@ -152,7 +152,7 @@ func DescribeToolsetEntry(
 			name := conv.Default(urnToVariedName[def.ToolUrn.String()], def.Name)
 
 			tool := &types.ToolEntry{
-				Type:        string(urn.ToolKindHTTP),
+				Type:        types.ToolType(urn.ToolKindHTTP),
 				ID:          def.ID.String(),
 				Name:        name,
 				ToolUrn:     def.ToolUrn.String(),
@@ -179,7 +179,7 @@ func DescribeToolsetEntry(
 		}
 		for _, tool := range funcTools {
 			tools = append(tools, &types.ToolEntry{
-				Type:        string(urn.ToolKindFunction),
+				Type:        types.ToolType(urn.ToolKindFunction),
 				ID:          tool.ID.String(),
 				Name:        tool.Name,
 				ToolUrn:     tool.ToolUrn.String(),
@@ -204,7 +204,7 @@ func DescribeToolsetEntry(
 
 		for _, pt := range promptTools {
 			tools = append(tools, &types.ToolEntry{
-				Type:        string(urn.ToolKindPrompt),
+				Type:        types.ToolType(urn.ToolKindPrompt),
 				ID:          pt.ID.String(),
 				Name:        pt.Name,
 				ToolUrn:     pt.ToolUrn.String(),
@@ -236,7 +236,7 @@ func DescribeToolsetEntry(
 				continue // Skip if not found
 			}
 			tools = append(tools, &types.ToolEntry{
-				Type:        string(urn.ToolKindExternalMCP),
+				Type:        types.ToolType(urn.ToolKindExternalMCP),
 				ID:          externalMCPTool.ID.String(),
 				Name:        externalMCPTool.Slug + ":proxy",
 				ToolUrn:     externalMCPTool.ToolUrn,
@@ -735,7 +735,7 @@ func GetToolsetsSummary(
 			name = variedName
 		}
 		projTools[toolURN] = &types.ToolEntry{
-			Type:        string(urn.ToolKindHTTP),
+			Type:        types.ToolType(urn.ToolKindHTTP),
 			ID:          def.ID.String(),
 			Name:        name,
 			ToolUrn:     toolURN,
@@ -754,7 +754,7 @@ func GetToolsetsSummary(
 			continue
 		}
 		projTools[toolURN] = &types.ToolEntry{
-			Type:        string(urn.ToolKindFunction),
+			Type:        types.ToolType(urn.ToolKindFunction),
 			ID:          def.ID.String(),
 			Name:        def.Name,
 			ToolUrn:     toolURN,
@@ -773,7 +773,7 @@ func GetToolsetsSummary(
 			continue
 		}
 		projTools[toolURN] = &types.ToolEntry{
-			Type:        string(urn.ToolKindPrompt),
+			Type:        types.ToolType(urn.ToolKindPrompt),
 			ID:          pt.ID.String(),
 			Name:        pt.Name,
 			ToolUrn:     toolURN,
@@ -808,7 +808,7 @@ func GetToolsetsSummary(
 			continue
 		}
 		projTools[def.ToolUrn] = &types.ToolEntry{
-			Type:        string(urn.ToolKindExternalMCP),
+			Type:        types.ToolType(urn.ToolKindExternalMCP),
 			ID:          def.ID.String(),
 			Name:        def.Slug + ":proxy",
 			ToolUrn:     def.ToolUrn,
@@ -1228,7 +1228,8 @@ func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectI
 	for _, tool := range tools {
 		toolURN, err := conv.GetToolURN(*tool)
 		if err != nil || toolURN == nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
+			logger.WarnContext(ctx, "skipping variation lookup for tool with invalid urn", attr.SlogError(err))
+			continue
 		}
 		toolUrns = append(toolUrns, toolURN.String())
 	}
@@ -1269,7 +1270,7 @@ func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectI
 		}
 		toolURN, err := conv.GetToolURN(*tool)
 		if err != nil || toolURN == nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
+			continue
 		}
 
 		v, ok := urnToVariation[toolURN.String()]
@@ -1300,7 +1301,6 @@ func extractFunctionEnvVars(ctx context.Context, logger *slog.Logger, variableDa
 					AuthInputType: nil,
 				})
 			}
-
 		}
 	}
 
