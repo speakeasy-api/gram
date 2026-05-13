@@ -3,12 +3,14 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
@@ -47,6 +49,31 @@ const dispositionAssistants = "assistants"
 // nonceTTL is the maximum time a login nonce is valid. Nonces are one-time-use
 // and deleted on consumption; this TTL is a safety net for abandoned flows.
 const nonceTTL = 10 * time.Minute
+
+// nonceBindingCookie is the name of the HttpOnly cookie that binds a login
+// nonce to the browser session that initiated the OAuth flow. This prevents
+// login CSRF where an attacker crafts a callback URL that logs the victim
+// into the attacker's account.
+const nonceBindingCookie = "gram_auth_nonce"
+
+type nonceBindingKey struct{}
+
+// withNonceBinding stores a nonce binding value in the context.
+func withNonceBinding(ctx context.Context, binding string) context.Context {
+	return context.WithValue(ctx, nonceBindingKey{}, binding)
+}
+
+// nonceBindingFromContext retrieves the nonce binding value from the context.
+func nonceBindingFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(nonceBindingKey{}).(string)
+	return v
+}
+
+// TestNonceBindingContext injects a nonce binding value into the context.
+// Exported for use in tests only.
+func TestNonceBindingContext(ctx context.Context, binding string) context.Context {
+	return withNonceBinding(ctx, binding)
+}
 
 type authErr string
 
@@ -128,10 +155,69 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
+	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+
+	// Wrap Login handler: generate a random binding token, set it as an
+	// HttpOnly cookie, and inject it into the context so Login() can store
+	// it alongside the nonce in Redis.
+	server.Login = loginNonceBindingMiddleware(service.cfg.Environment)(server.Login)
+
+	// Wrap Callback handler: read the binding cookie and inject it into the
+	// context so validateAuthNonce() can verify it.
+	server.Callback = callbackNonceBindingMiddleware(server.Callback)
+
+	srv.Mount(mux, server)
+}
+
+// loginNonceBindingMiddleware generates a random nonce-binding token, sets it
+// as an HttpOnly/SameSite cookie, and stores it in the request context.
+func loginNonceBindingMiddleware(env string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			binding, err := generateNonce()
+			if err != nil {
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+
+			http.SetCookie(w, &http.Cookie{
+				Name:     nonceBindingCookie,
+				Value:    binding,
+				MaxAge:   int(nonceTTL.Seconds()),
+				Path:     "/",
+				Secure:   env != "local",
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+			})
+
+			ctx := withNonceBinding(r.Context(), binding)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// callbackNonceBindingMiddleware reads the nonce-binding cookie and injects its
+// value into the request context for validateAuthNonce to verify.
+func callbackNonceBindingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var binding string
+		if c, err := r.Cookie(nonceBindingCookie); err == nil {
+			binding = c.Value
+		}
+
+		// Clear the cookie regardless of outcome — it's single-use.
+		http.SetCookie(w, &http.Cookie{
+			Name:     nonceBindingCookie,
+			Value:    "",
+			MaxAge:   -1,
+			Path:     "/",
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		})
+
+		ctx := withNonceBinding(r.Context(), binding)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -271,7 +357,10 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error generating login nonce").Log(ctx, s.logger)
 	}
-	if err := s.nonceStore.Set(ctx, nonceKey(nonce), true, nonceTTL); err != nil {
+	// Store the nonce binding (cookie value set by middleware) so the
+	// callback can verify the same browser that started login finishes it.
+	binding := nonceBindingFromContext(ctx)
+	if err := s.nonceStore.Set(ctx, nonceKey(nonce), binding, nonceTTL); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error storing login nonce").Log(ctx, s.logger)
 	}
 
@@ -760,7 +849,9 @@ func nonceKey(nonce string) string {
 // can forge it freely.
 //
 // The nonce is stored in Redis during Login with a short TTL and consumed
-// (deleted) here atomically so each nonce is single-use.
+// (deleted) here atomically so each nonce is single-use. The stored value is
+// the nonce-binding cookie that was set on the browser during Login — this
+// ties the nonce to the specific browser session, preventing login CSRF.
 func (s *Service) validateAuthNonce(ctx context.Context, payload *gen.CallbackPayload) error {
 	state := decodeStateParam(payload)
 	if state == nil || state.Nonce == "" {
@@ -768,9 +859,17 @@ func (s *Service) validateAuthNonce(ctx context.Context, payload *gen.CallbackPa
 	}
 
 	key := nonceKey(state.Nonce)
-	var stored bool
-	if err := s.nonceStore.GetAndDelete(ctx, key, &stored); err != nil {
+	var storedBinding string
+	if err := s.nonceStore.GetAndDelete(ctx, key, &storedBinding); err != nil {
 		return errors.New("invalid or expired login nonce")
+	}
+
+	// Verify the cookie binding matches what was stored during Login.
+	// This ensures the same browser that started the login flow is
+	// completing it, preventing login CSRF attacks.
+	cookieBinding := nonceBindingFromContext(ctx)
+	if cookieBinding == "" || subtle.ConstantTimeCompare([]byte(storedBinding), []byte(cookieBinding)) != 1 {
+		return errors.New("login session mismatch: nonce not bound to this browser")
 	}
 
 	return nil

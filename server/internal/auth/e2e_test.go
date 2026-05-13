@@ -319,7 +319,7 @@ func TestE2E_Callback_NewUserNoWorkOSOrgs_AssistantsDisposition(t *testing.T) {
 
 	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
 
-	stateParam := inst.stateWithNonce(ctx, t, "/?disposition=assistants")
+	ctx, stateParam := inst.stateWithNonce(ctx, t, "/?disposition=assistants")
 
 	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &stateParam})
 	require.NoError(t, err)

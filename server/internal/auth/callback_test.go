@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
@@ -26,7 +27,7 @@ func TestService_Callback(t *testing.T) {
 			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
 		}
 
-		stateParam := instance.stateWithNonce(ctx, t, "")
+		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
 			Code:  "mock_code",
 			State: &stateParam,
@@ -55,7 +56,7 @@ func TestService_Callback(t *testing.T) {
 		}
 
 		redirectURL := "https://dev.getgram.ai/other-org/projects/default"
-		stateParam := instance.stateWithNonce(ctx, t, redirectURL)
+		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
 			Code:  "mock_code",
@@ -97,7 +98,7 @@ func TestService_Callback(t *testing.T) {
 
 		ctx = contextvalues.SetAdminOverrideInContext(ctx, "override-org")
 
-		stateParam := instance.stateWithNonce(ctx, t, "")
+		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
 			Code:  "mock_code",
 			State: &stateParam,
@@ -134,7 +135,7 @@ func TestService_Callback(t *testing.T) {
 
 		ctx = contextvalues.SetAdminOverrideInContext(ctx, "customer-org")
 
-		stateParam := instance.stateWithNonce(ctx, t, "")
+		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
 			Code:  "mock_code",
 			State: &stateParam,
@@ -159,7 +160,7 @@ func TestService_Callback(t *testing.T) {
 		userInfo.Organizations = []MockOrganizationEntry{}
 		ctx, instance := newTestAuthService(t, userInfo)
 
-		stateParam := instance.stateWithNonce(ctx, t, "/?disposition=assistants")
+		ctx, stateParam := instance.stateWithNonce(ctx, t, "/?disposition=assistants")
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
 			Code:  "mock_code",
@@ -181,7 +182,7 @@ func TestService_Callback(t *testing.T) {
 		userInfo.Organizations = []MockOrganizationEntry{}
 		ctx, instance := newTestAuthService(t, userInfo)
 
-		stateParam := instance.stateWithNonce(ctx, t, "")
+		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
 			Code:  "mock_code",
 			State: &stateParam,
@@ -235,7 +236,7 @@ func TestService_Callback(t *testing.T) {
 		ctx, instance := newTestAuthService(t, userInfo)
 
 		// Craft state with a nonce that was never stored in Redis
-		stateParam := instance.stateWithNonce(ctx, t, "")
+		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
 		// Delete the nonce to simulate a forged/expired one
 		require.NoError(t, instance.nonceStore.Delete(ctx, "auth:login_nonce:"+extractNonceFromState(t, stateParam)))
 
@@ -260,7 +261,7 @@ func TestService_Callback(t *testing.T) {
 			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
 		}
 
-		stateParam := instance.stateWithNonce(ctx, t, "")
+		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
 
 		// First callback succeeds
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
@@ -280,6 +281,58 @@ func TestService_Callback(t *testing.T) {
 		require.Empty(t, result.SessionToken)
 	})
 
+	t.Run("mismatched nonce binding cookie returns error", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		for _, org := range userInfo.Organizations {
+			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+		}
+
+		// Seed nonce with one binding but inject a different binding into
+		// the context (simulating a cookie from a different browser).
+		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
+		ctx = auth.TestNonceBindingContext(ctx, "wrong-binding-value")
+
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+			Code:  "mock_code",
+			State: &stateParam,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Contains(t, result.Location, "signin_error=", "mismatched cookie should be rejected")
+		require.Empty(t, result.SessionToken)
+	})
+
+	t.Run("missing nonce binding cookie returns error", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		for _, org := range userInfo.Organizations {
+			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+		}
+
+		// Seed nonce normally but strip the binding from context
+		// (simulating no cookie sent by the browser).
+		_, stateParam := instance.stateWithNonce(ctx, t, "")
+		// ctx has no nonce binding — simulates missing cookie
+
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+			Code:  "mock_code",
+			State: &stateParam,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Contains(t, result.Location, "signin_error=", "missing cookie should be rejected")
+		require.Empty(t, result.SessionToken)
+	})
+
 	t.Run("invalid code returns error", func(t *testing.T) {
 		t.Parallel()
 
@@ -289,7 +342,7 @@ func TestService_Callback(t *testing.T) {
 		// Override the mock server to return an error for this test
 		instance.mockAuthServer.Config.Handler = nil
 
-		stateParam := instance.stateWithNonce(ctx, t, "")
+		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
 			Code:  "invalid_code",
 			State: &stateParam,
@@ -308,7 +361,7 @@ func TestService_Callback(t *testing.T) {
 		ctx, instance := newTestAuthService(t, userInfo)
 		redirectURL := "http://localhost:3000/dashboard/projects/my-project"
 
-		stateParam := instance.stateWithNonce(ctx, t, redirectURL)
+		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
 			Code:  "mock_code",
 			State: &stateParam,
@@ -327,7 +380,7 @@ func TestService_Callback(t *testing.T) {
 		ctx, instance := newTestAuthService(t, userInfo)
 		redirectURL := "http://localhost:3000/dashboard/projects/my-project?tab=settings&view=details"
 
-		stateParam := instance.stateWithNonce(ctx, t, redirectURL)
+		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
 			Code:  "mock_code",
 			State: &stateParam,
@@ -347,7 +400,9 @@ func TestService_Callback(t *testing.T) {
 		redirectURL := "http://localhost:3000/dashboard/environments/prod"
 
 		// Simulate the full flow: Login -> Callback
-		// Login generates and stores the nonce automatically.
+		// Inject a nonce binding into context (normally set by middleware cookie).
+		ctx = auth.TestNonceBindingContext(ctx, testNonceBinding)
+
 		loginPayload := &gen.LoginPayload{
 			Redirect: &redirectURL,
 		}

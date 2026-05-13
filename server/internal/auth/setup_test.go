@@ -226,14 +226,21 @@ func newTestAuthServiceResult(_ *testing.T, svc *auth.Service, conn *pgxpool.Poo
 	}
 }
 
+// testNonceBinding is the fixed binding value used in tests to simulate the
+// cookie set during Login. Tests must inject this into the context via
+// auth.TestNonceBindingContext so that validateAuthNonce can verify it.
+const testNonceBinding = "test-nonce-binding"
+
 // seedNonce stores a nonce in Redis so hand-crafted state params pass validation in tests.
+// The stored value is the nonce binding (simulating the cookie set during Login).
 func (ti *testInstance) seedNonce(ctx context.Context, t *testing.T, nonce string) {
 	t.Helper()
-	require.NoError(t, ti.nonceStore.Set(ctx, "auth:login_nonce:"+nonce, true, 10*time.Minute))
+	require.NoError(t, ti.nonceStore.Set(ctx, "auth:login_nonce:"+nonce, testNonceBinding, 10*time.Minute))
 }
 
 // stateWithNonce builds a base64-encoded state param with the given redirect and a seeded nonce.
-func (ti *testInstance) stateWithNonce(ctx context.Context, t *testing.T, redirectURL string) string {
+// The returned context includes the nonce binding so validateAuthNonce passes.
+func (ti *testInstance) stateWithNonce(ctx context.Context, t *testing.T, redirectURL string) (context.Context, string) {
 	t.Helper()
 	nonce := fmt.Sprintf("test-nonce-%d", time.Now().UnixNano())
 	ti.seedNonce(ctx, t, nonce)
@@ -243,14 +250,14 @@ func (ti *testInstance) stateWithNonce(ctx context.Context, t *testing.T, redire
 	}
 	stateJSON, err := json.Marshal(state)
 	require.NoError(t, err)
-	return base64.RawURLEncoding.EncodeToString(stateJSON)
+	return auth.TestNonceBindingContext(ctx, testNonceBinding), base64.RawURLEncoding.EncodeToString(stateJSON)
 }
 
 // callbackWithNonce creates a CallbackPayload with a valid nonce and calls Callback.
 // Shorthand for the common pattern in e2e tests.
 func (ti *testInstance) callbackWithNonce(ctx context.Context, t *testing.T) (*gen.CallbackResult, error) {
 	t.Helper()
-	stateParam := ti.stateWithNonce(ctx, t, "")
+	ctx, stateParam := ti.stateWithNonce(ctx, t, "")
 	res, err := ti.service.Callback(ctx, &gen.CallbackPayload{
 		Code:  "mock_code",
 		State: &stateParam,
