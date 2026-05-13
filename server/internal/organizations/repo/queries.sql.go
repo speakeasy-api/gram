@@ -331,7 +331,7 @@ func (q *Queries) LinkRoleAssignmentsToUser(ctx context.Context, arg LinkRoleAss
 }
 
 const listOrganizationRoleAssignmentsByWorkOSUser = `-- name: ListOrganizationRoleAssignmentsByWorkOSUser :many
-SELECT id, organization_id, workos_user_id, user_id, role_urn, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at
+SELECT id, organization_id, workos_user_id, user_id, role_urn, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at
 FROM organization_role_assignments
 WHERE organization_id = $1
   AND workos_user_id = $2
@@ -363,6 +363,7 @@ func (q *Queries) ListOrganizationRoleAssignmentsByWorkOSUser(ctx context.Contex
 			&i.WorkosLastEventID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -620,7 +621,7 @@ upserted AS (
         $6,
         $7
     FROM input_role_urns
-    ON CONFLICT (organization_id, workos_user_id, role_urn) DO UPDATE SET
+    ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL DO UPDATE SET
         -- COALESCE preserves a backfilled user_id if the sync fires before the Gram user exists.
         user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
         workos_membership_id = EXCLUDED.workos_membership_id,

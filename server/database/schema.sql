@@ -1713,6 +1713,7 @@ CREATE TABLE IF NOT EXISTS organization_role_assignments (
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
 
   CONSTRAINT organization_role_assignments_pkey PRIMARY KEY (id),
   CONSTRAINT organization_role_assignments_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
@@ -1720,7 +1721,8 @@ CREATE TABLE IF NOT EXISTS organization_role_assignments (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_role_assignments_org_workos_user_role_key
-ON organization_role_assignments (organization_id, workos_user_id, role_urn);
+ON organization_role_assignments (organization_id, workos_user_id, role_urn)
+WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS organization_role_assignments_org_user_idx
 ON organization_role_assignments (organization_id, user_id)
