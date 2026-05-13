@@ -140,9 +140,9 @@ export function OtelForwardingSection() {
           OTEL forwarding
         </Heading>
         <Type muted small>
-          Forward a copy of every OTEL payload received on the hooks endpoint
-          to your own collector. Headers are encrypted at rest; values are
-          never returned by the API.
+          Forward a copy of every OTEL payload received on the hooks endpoint to
+          your own collector. Headers are encrypted at rest; values are never
+          returned by the API.
         </Type>
       </div>
 
@@ -203,7 +203,8 @@ export function OtelForwardingSection() {
           {headers.length === 0 ? (
             <Type variant="body" className="text-muted-foreground text-sm">
               No headers. Add any required authorization headers (e.g.
-              <code className="bg-muted ml-1 rounded px-1">Authorization</code>).
+              <code className="bg-muted ml-1 rounded px-1">Authorization</code>
+              ).
             </Type>
           ) : (
             <Stack gap={2}>
@@ -274,9 +275,7 @@ function HeaderRow({
         className="flex-1"
       />
       <Input
-        placeholder={
-          header.hasStoredValue ? "•••••• (saved)" : "Header value"
-        }
+        placeholder={header.hasStoredValue ? "•••••• (saved)" : "Header value"}
         value={header.value}
         onChange={(e) => onChange({ ...header, value: e.target.value })}
         type="password"
