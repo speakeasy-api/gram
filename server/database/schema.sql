@@ -2560,8 +2560,7 @@ CREATE TABLE IF NOT EXISTS risk_results (
   tags TEXT[],
 
   -- Populated on rows that represent a message the scanner could not analyze
-  -- after exhausting its retry budget (currently only Presidio). NULL on all
-  -- other rows, including normal findings and "no findings" markers.
+  -- after exhausting its retry budget
   dead_letter_reason TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
