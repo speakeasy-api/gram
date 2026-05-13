@@ -4,6 +4,7 @@ import { ToolsFilter } from "@/types";
 import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useMemo, useRef } from "react";
+import { trackError } from "@/lib/errorTracking";
 import { Auth } from "./useAuth";
 
 type MCPToolsResult = Awaited<
@@ -98,7 +99,7 @@ export function useMCPTools({
       }));
       perServerHeadersRef.current = serverEntries.map((s) => s.headers);
 
-      const perServerTools = await Promise.all(
+      const settled = await Promise.allSettled(
         serverEntries.map(async ({ server, headers }) => {
           const client = await createMCPClient({
             name: "gram-elements-mcp-client",
@@ -110,14 +111,38 @@ export function useMCPTools({
 
       const merged: MCPToolsResult = {};
       const namespaced = servers.length > 1;
-      for (const { server, tools } of perServerTools) {
+      let rejected = 0;
+      for (const [i, { server }] of serverEntries.entries()) {
+        const result = settled[i]!;
+        if (result.status === "rejected") {
+          rejected++;
+          trackError(result.reason, {
+            source: "custom",
+            scope: "mcp-tools",
+            serverName: server.name ?? deriveNameFromUrl(server.url),
+            serverUrl: server.url,
+          });
+          continue;
+        }
         const prefix = namespaced
           ? (server.name ?? deriveNameFromUrl(server.url))
           : null;
-        for (const [toolName, tool] of Object.entries(tools)) {
+        for (const [toolName, tool] of Object.entries(result.value.tools)) {
           const key = prefix ? `${prefix}__${toolName}` : toolName;
           merged[key] = tool;
         }
+      }
+
+      // Surface as a query rejection only when every server failed, so React
+      // Query's retry/backoff still recovers from total outages (e.g. expired
+      // auth hitting every server). Partial failures resolve normally.
+      if (rejected > 0 && rejected === serverEntries.length) {
+        const first = settled.find(
+          (r): r is PromiseRejectedResult => r.status === "rejected",
+        );
+        throw first?.reason instanceof Error
+          ? first.reason
+          : new Error("All MCP servers failed to list tools");
       }
 
       return merged;
