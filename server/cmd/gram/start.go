@@ -416,6 +416,7 @@ func newStartCommand() *cli.Command {
 	flags = append(flags, pluginsFlags...)
 	flags = append(flags, assistantRuntimeFlags...)
 	flags = append(flags, pulseMCPFlags...)
+	flags = append(flags, svixFlags...)
 
 	return &cli.Command{
 		Name:  "start",
@@ -805,6 +806,14 @@ func newStartCommand() *cli.Command {
 				return nil
 			})
 
+			svixClient, shutdown, err := newSvixClient(c, logger, guardianPolicy)
+			if shutdown != nil {
+				shutdownFuncs = append(shutdownFuncs, shutdown)
+			}
+			if err != nil {
+				return fmt.Errorf("failed to create svix webhook sender: %w", err)
+			}
+
 			// Construct the GitHub App client once; share with the plugin publish
 			// flow and the marketplace proxy so they hit the same token cache and
 			// the same App identity. nil when the App isn't configured.
@@ -1053,6 +1062,8 @@ func newStartCommand() *cli.Command {
 						ShadowMCPClient:     shadowMCPClient,
 						AuditLogger:         auditLogger,
 						WorkOSClient:        backgroundWorkOSClient,
+						SvixClient:          svixClient,
+						ProductFeatures:     productFeatures,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))
