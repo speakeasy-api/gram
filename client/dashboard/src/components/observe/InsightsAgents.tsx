@@ -1,11 +1,13 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { formatChartLabel, smoothData } from "@/components/chart/chartUtils";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { Dialog } from "@/components/ui/dialog";
 import { ErrorAlert } from "@/components/ui/alert";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -47,8 +49,10 @@ import {
   Tooltip,
   type ChartOptions,
 } from "chart.js";
+import { Button } from "@speakeasy-api/moonshine";
 import { useMemo, useState } from "react";
 import { Bar } from "react-chartjs-2";
+import { toast } from "sonner";
 
 ChartJS.register(
   CategoryScale,
@@ -547,7 +551,7 @@ export function InsightsAgentsContent() {
                 onClientFilterChange={setClientFilter}
               />
 
-              <CostDisclaimer />
+              <CostDisclaimer providers={clientBreakdown.map((c) => c.label)} />
             </>
           )}
         </div>
@@ -1062,8 +1066,30 @@ function EmployeeCostTable({
   );
 }
 
-function CostDisclaimer() {
-  const [featureModalOpen, setFeatureModalOpen] = useState(false);
+function CostDisclaimer({ providers }: { providers: string[] }) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState("");
+  const [otherProvider, setOtherProvider] = useState("");
+  const telemetry = useTelemetry();
+
+  const providerOptions = useMemo(() => {
+    const unique = Array.from(new Set(providers));
+    return unique;
+  }, [providers]);
+
+  const handleSubmit = () => {
+    const provider =
+      selectedProvider === "__other__" ? otherProvider : selectedProvider;
+    if (!provider) return;
+    telemetry.capture("feature_requested", {
+      action: "provider_cost_support",
+      provider,
+    });
+    toast.success("Request submitted — thanks for the feedback!");
+    setDialogOpen(false);
+    setSelectedProvider("");
+    setOtherProvider("");
+  };
 
   return (
     <section className="bg-muted/40 border-border rounded-xl border p-5">
@@ -1079,20 +1105,67 @@ function CostDisclaimer() {
           Missing cost data for your provider?{" "}
           <button
             type="button"
-            onClick={() => setFeatureModalOpen(true)}
+            onClick={() => setDialogOpen(true)}
             className="text-primary hover:text-primary/80 cursor-pointer font-medium underline underline-offset-2"
           >
             Request provider support
           </button>
         </p>
       </div>
-      <FeatureRequestModal
-        isOpen={featureModalOpen}
-        onClose={() => setFeatureModalOpen(false)}
-        title="Provider Cost Support"
-        description="We're working on expanding cost reporting to more AI providers. Let us know which provider you'd like to see supported and we'll prioritize accordingly."
-        actionType="provider_cost_support"
-      />
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog.Content className="sm:max-w-md">
+          <Dialog.Header>
+            <Dialog.Title>Request cost support</Dialog.Title>
+            <Dialog.Description>
+              Which provider are you missing cost data for?
+            </Dialog.Description>
+          </Dialog.Header>
+
+          <RadioGroup
+            value={selectedProvider}
+            onValueChange={setSelectedProvider}
+            className="gap-3 py-2"
+          >
+            {providerOptions.map((p) => (
+              <label
+                key={p}
+                className="flex cursor-pointer items-center gap-3 text-sm"
+              >
+                <RadioGroupItem value={p} />
+                {p}
+              </label>
+            ))}
+            <label className="flex cursor-pointer items-center gap-3 text-sm">
+              <RadioGroupItem value="__other__" />
+              Other
+            </label>
+          </RadioGroup>
+
+          {selectedProvider === "__other__" && (
+            <input
+              type="text"
+              placeholder="Provider name"
+              value={otherProvider}
+              onChange={(e) => setOtherProvider(e.target.value)}
+              className="border-input bg-background ring-ring/20 focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+            />
+          )}
+
+          <Dialog.Footer>
+            <Button
+              variant="brand"
+              disabled={
+                !selectedProvider ||
+                (selectedProvider === "__other__" && !otherProvider.trim())
+              }
+              onClick={handleSubmit}
+            >
+              Submit request
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
     </section>
   );
 }
