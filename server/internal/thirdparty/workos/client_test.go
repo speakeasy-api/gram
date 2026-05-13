@@ -93,6 +93,11 @@ func (f *fakeWorkOS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		userID := strings.TrimPrefix(path, "/user_management/users/")
 		f.handleGetUser(w, userID)
 
+	// SDK: PUT /user_management/users/{id}
+	case r.Method == http.MethodPut && strings.HasPrefix(path, "/user_management/users/") && !strings.Contains(path[len("/user_management/users/"):], "/"):
+		userID := strings.TrimPrefix(path, "/user_management/users/")
+		f.handleUpdateUser(w, r, userID)
+
 	// SDK: GET /user_management/users (list)
 	case r.Method == http.MethodGet && path == "/user_management/users":
 		f.handleListUsers(w, r)
@@ -329,6 +334,46 @@ func (f *fakeWorkOS) handleGetUser(w http.ResponseWriter, userID string) {
 		http.Error(w, "user not found", http.StatusNotFound)
 		return
 	}
+	writeJSON(w, u)
+}
+
+func (f *fakeWorkOS) handleUpdateUser(w http.ResponseWriter, r *http.Request, userID string) {
+	f.mu.Lock()
+	u, ok := f.users[userID]
+	f.mu.Unlock()
+
+	if !ok {
+		http.Error(w, "user not found", http.StatusNotFound)
+		return
+	}
+
+	var opts struct {
+		Email      string `json:"email,omitempty"`
+		FirstName  string `json:"first_name,omitempty"`
+		LastName   string `json:"last_name,omitempty"`
+		ExternalID string `json:"external_id,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&opts); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	f.mu.Lock()
+	if opts.Email != "" {
+		u.Email = opts.Email
+	}
+	if opts.FirstName != "" {
+		u.FirstName = opts.FirstName
+	}
+	if opts.LastName != "" {
+		u.LastName = opts.LastName
+	}
+	if opts.ExternalID != "" {
+		u.ExternalID = opts.ExternalID
+	}
+	f.users[userID] = u
+	f.mu.Unlock()
+
 	writeJSON(w, u)
 }
 
@@ -1002,6 +1047,72 @@ func TestEnsureOrgExternalID_Mismatch(t *testing.T) {
 	client, _ := newTestClient(t, fake)
 
 	err := client.EnsureOrgExternalID(context.Background(), "org_1", "gram-org-id-abc")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "mismatch")
+}
+
+// TestEnsureUserExternalID_PreservesExistingFields verifies that setting
+// external_id via EnsureUserExternalID does not overwrite the user's
+// existing Email, FirstName, or LastName. The UpdateUserOpts uses omitempty,
+// so zero-value fields should be omitted from the request.
+func TestEnsureUserExternalID_PreservesExistingFields(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.users["user_1"] = common.User{
+		ID:         "user_1",
+		Email:      "alice@example.com",
+		FirstName:  "Alice",
+		LastName:   "Smith",
+		ExternalID: "",
+	}
+	client, _ := newTestClient(t, fake)
+
+	err := client.EnsureUserExternalID(context.Background(), "user_1", "gram-user-abc")
+	require.NoError(t, err)
+
+	fake.mu.Lock()
+	u := fake.users["user_1"]
+	fake.mu.Unlock()
+	require.Equal(t, "gram-user-abc", u.ExternalID)
+	require.Equal(t, "alice@example.com", u.Email, "Email must not be overwritten")
+	require.Equal(t, "Alice", u.FirstName, "FirstName must not be overwritten")
+	require.Equal(t, "Smith", u.LastName, "LastName must not be overwritten")
+}
+
+// TestEnsureUserExternalID_AlreadySet verifies that when external_id already
+// matches the desired value, no update is performed.
+func TestEnsureUserExternalID_AlreadySet(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.users["user_1"] = common.User{
+		ID:         "user_1",
+		Email:      "bob@example.com",
+		ExternalID: "gram-user-abc",
+	}
+	client, _ := newTestClient(t, fake)
+
+	err := client.EnsureUserExternalID(context.Background(), "user_1", "gram-user-abc")
+	require.NoError(t, err)
+
+	fake.mu.Lock()
+	u := fake.users["user_1"]
+	fake.mu.Unlock()
+	require.Equal(t, "gram-user-abc", u.ExternalID)
+}
+
+// TestEnsureUserExternalID_Mismatch verifies that when external_id is already
+// set to a different value, EnsureUserExternalID returns an error.
+func TestEnsureUserExternalID_Mismatch(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS()
+	fake.users["user_1"] = common.User{
+		ID:         "user_1",
+		Email:      "carol@example.com",
+		ExternalID: "different-id",
+	}
+	client, _ := newTestClient(t, fake)
+
+	err := client.EnsureUserExternalID(context.Background(), "user_1", "gram-user-abc")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "mismatch")
 }
