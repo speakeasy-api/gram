@@ -40,35 +40,8 @@ func TestService_Callback(t *testing.T) {
 		require.Equal(t, result.SessionToken, result.SessionCookie)
 	})
 
-	t.Run("speakeasy user without explicit org uses first returned organization", func(t *testing.T) {
-		t.Parallel()
-
-		userInfo := speakeasyMockUserInfo()
-		userInfo.Organizations[0], userInfo.Organizations[1] = userInfo.Organizations[1], userInfo.Organizations[0]
-		ctx, instance := newTestAuthService(t, userInfo)
-
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
-		for _, org := range userInfo.Organizations {
-			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
-		}
-
-		stateParam := instance.stateWithNonce(ctx, t, "")
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
-			State: &stateParam,
-		})
-		require.NoError(t, err)
-		require.NotNil(t, result)
-
-		require.Equal(t, instance.authConfigs.SignInRedirectURL, result.Location)
-		require.NotEmpty(t, result.SessionToken)
-
-		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
-		require.NoError(t, err, "load session after callback")
-		authCtx, ok := contextvalues.GetAuthContext(ctx)
-		require.True(t, ok, "auth context should be set after callback")
-		require.Equal(t, "other-org-123", authCtx.ActiveOrganizationID, "speakeasy user without state should use first returned org")
-	})
+	// Default org selection (fallback to first org) is covered by
+	// TestE2E_Callback_MultipleOrgs and TestE2E_Callback_IDPOrgSelection.
 
 	t.Run("callback final destination selects active organization", func(t *testing.T) {
 		t.Parallel()
