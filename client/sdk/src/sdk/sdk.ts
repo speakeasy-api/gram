@@ -31,6 +31,9 @@ import { Packages } from "./packages.js";
 import { Plugins } from "./plugins.js";
 import { Projects } from "./projects.js";
 import { RemoteMcp } from "./remotemcp.js";
+import { RemoteSessionClients } from "./remotesessionclients.js";
+import { RemoteSessionIssuers } from "./remotesessionissuers.js";
+import { RemoteSessions } from "./remotesessions.js";
 import { Resources } from "./resources.js";
 import { Risk } from "./risk.js";
 import { Slack } from "./slack.js";
@@ -185,6 +188,25 @@ export class Gram extends ClientSDK {
   private _remoteMcp?: RemoteMcp;
   get remoteMcp(): RemoteMcp {
     return (this._remoteMcp ??= new RemoteMcp(this._options));
+  }
+
+  private _remoteSessionClients?: RemoteSessionClients;
+  get remoteSessionClients(): RemoteSessionClients {
+    return (this._remoteSessionClients ??= new RemoteSessionClients(
+      this._options,
+    ));
+  }
+
+  private _remoteSessionIssuers?: RemoteSessionIssuers;
+  get remoteSessionIssuers(): RemoteSessionIssuers {
+    return (this._remoteSessionIssuers ??= new RemoteSessionIssuers(
+      this._options,
+    ));
+  }
+
+  private _remoteSessions?: RemoteSessions;
+  get remoteSessions(): RemoteSessions {
+    return (this._remoteSessions ??= new RemoteSessions(this._options));
   }
 
   private _resources?: Resources;

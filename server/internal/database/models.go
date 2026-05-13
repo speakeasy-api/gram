@@ -1066,6 +1066,58 @@ type RemoteMcpServerHeader struct {
 	Deleted                bool
 }
 
+type RemoteSession struct {
+	ID                    uuid.UUID
+	PrincipalUrn          urn.SessionSubject
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	AccessTokenEncrypted  string
+	AccessExpiresAt       pgtype.Timestamptz
+	RefreshTokenEncrypted pgtype.Text
+	RefreshExpiresAt      pgtype.Timestamptz
+	Scopes                []string
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+}
+
+type RemoteSessionClient struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	ClientID              string
+	ClientSecretEncrypted pgtype.Text
+	ClientIDIssuedAt      pgtype.Timestamptz
+	ClientSecretExpiresAt pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+}
+
+type RemoteSessionIssuer struct {
+	ID                                uuid.UUID
+	ProjectID                         uuid.UUID
+	Slug                              string
+	Issuer                            string
+	AuthorizationEndpoint             pgtype.Text
+	TokenEndpoint                     pgtype.Text
+	RegistrationEndpoint              pgtype.Text
+	JwksUri                           pgtype.Text
+	ScopesSupported                   []string
+	GrantTypesSupported               []string
+	ResponseTypesSupported            []string
+	TokenEndpointAuthMethodsSupported []string
+	Oidc                              bool
+	Passthrough                       bool
+	CreatedAt                         pgtype.Timestamptz
+	UpdatedAt                         pgtype.Timestamptz
+	DeletedAt                         pgtype.Timestamptz
+	Deleted                           bool
+}
+
 type RiskPolicy struct {
 	ID                   uuid.UUID
 	ProjectID            uuid.UUID
