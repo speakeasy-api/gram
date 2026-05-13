@@ -29,6 +29,8 @@ import {
   useRoles,
 } from "@gram/client/react-query/roles.js";
 import { useApproveShadowMCPApprovalRequestMutation } from "@gram/client/react-query/approveShadowMCPApprovalRequest.js";
+import { useCreateShadowMCPAccessRuleMutation } from "@gram/client/react-query/createShadowMCPAccessRule.js";
+import { useDeleteShadowMCPAccessRuleMutation } from "@gram/client/react-query/deleteShadowMCPAccessRule.js";
 import { useDenyShadowMCPApprovalRequestMutation } from "@gram/client/react-query/denyShadowMCPApprovalRequest.js";
 import {
   invalidateAllShadowMCPAccessRules,
@@ -38,6 +40,7 @@ import {
   invalidateAllShadowMCPApprovalRequests,
   useShadowMCPApprovalRequests,
 } from "@gram/client/react-query/shadowMCPApprovalRequests.js";
+import { useUpdateShadowMCPAccessRuleMutation } from "@gram/client/react-query/updateShadowMCPAccessRule.js";
 import {
   Badge,
   Button,
@@ -66,6 +69,7 @@ import {
   getRuleDisplayName,
   roleNamesForIds,
   roleOptionsFromRoles,
+  type ShadowMCPDisposition,
   type ShadowMCPMatchBreadth,
   type ShadowMCPRoleOption,
 } from "./shadow-mcp-utils";
@@ -531,6 +535,194 @@ function ReviewRequestSheet({
   );
 }
 
+function AccessRuleSheet({
+  rule,
+  roles,
+  open,
+  isSubmitting,
+  onOpenChange,
+  onSubmit,
+}: {
+  rule: ShadowMCPAccessRule | null;
+  roles: ShadowMCPRoleOption[];
+  open: boolean;
+  isSubmitting: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (input: {
+    displayName: string;
+    disposition: ShadowMCPDisposition;
+    matchBreadth: ShadowMCPMatchBreadth;
+    matchValue: string;
+    roleIds?: string[];
+    reason?: string;
+  }) => Promise<void>;
+}) {
+  const [disposition, setDisposition] =
+    useState<ShadowMCPDisposition>("allowed");
+  const [displayName, setDisplayName] = useState("");
+  const [matchBreadth, setMatchBreadth] =
+    useState<ShadowMCPMatchBreadth>("full_url");
+  const [matchValue, setMatchValue] = useState("");
+  const [roleIds, setRoleIds] = useState<string[]>([]);
+  const [reason, setReason] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+
+    if (rule) {
+      setDisposition(rule.disposition);
+      setDisplayName(rule.displayName);
+      setMatchBreadth(rule.matchBreadth);
+      setMatchValue(rule.matchValue);
+      setRoleIds(rule.roleIds);
+      setReason(rule.reason ?? "");
+      return;
+    }
+
+    setDisposition("allowed");
+    setDisplayName("");
+    setMatchBreadth("full_url");
+    setMatchValue("");
+    setRoleIds([]);
+    setReason("");
+  }, [rule, open]);
+
+  const canSubmit =
+    displayName.trim().length > 0 &&
+    matchValue.trim().length > 0 &&
+    (disposition === "denied" || roleIds.length > 0);
+
+  const submit = async () => {
+    try {
+      await onSubmit({
+        displayName: displayName.trim(),
+        disposition,
+        matchBreadth,
+        matchValue: matchValue.trim(),
+        roleIds: disposition === "allowed" ? roleIds : undefined,
+        reason: reason.trim() || undefined,
+      });
+    } catch {
+      toast.error(
+        rule ? "Access Rule update failed" : "Access Rule creation failed",
+      );
+    }
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="sm:max-w-xl">
+        <SheetHeader>
+          <SheetTitle>
+            {rule ? "Edit Access Rule" : "Add Access Rule"}
+          </SheetTitle>
+          <SheetDescription>
+            Configure a Shadow MCP allow or deny decision.
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4">
+          <RadioGroup
+            value={disposition}
+            onValueChange={(value) =>
+              setDisposition(value as ShadowMCPDisposition)
+            }
+            className="grid grid-cols-2 gap-3"
+          >
+            <label className="border-border has-[[data-state=checked]]:border-primary flex cursor-pointer gap-3 rounded-md border p-3">
+              <RadioGroupItem value="allowed" className="mt-1" />
+              <span>
+                <Type variant="body" className="font-medium">
+                  Allow
+                </Type>
+                <Type muted small>
+                  Grant selected roles access.
+                </Type>
+              </span>
+            </label>
+            <label className="border-border has-[[data-state=checked]]:border-primary flex cursor-pointer gap-3 rounded-md border p-3">
+              <RadioGroupItem value="denied" className="mt-1" />
+              <span>
+                <Type variant="body" className="font-medium">
+                  Deny
+                </Type>
+                <Type muted small>
+                  Block matching calls.
+                </Type>
+              </span>
+            </label>
+          </RadioGroup>
+
+          <Field label="Display name">
+            <Input
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              placeholder="Datadog"
+            />
+          </Field>
+
+          <div className="grid grid-cols-[160px_1fr] gap-3">
+            <Field label="Match">
+              <Select
+                value={matchBreadth}
+                onValueChange={(value) =>
+                  setMatchBreadth(value as ShadowMCPMatchBreadth)
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MATCH_BREADTH_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Match value">
+              <Input
+                value={matchValue}
+                onChange={(event) => setMatchValue(event.target.value)}
+                placeholder="https://example.com/mcp"
+              />
+            </Field>
+          </div>
+
+          {disposition === "allowed" && (
+            <Field label="Roles">
+              <RolePicker
+                roles={roles}
+                selectedRoleIds={roleIds}
+                onChange={setRoleIds}
+              />
+            </Field>
+          )}
+
+          <Field label="Reason">
+            <Textarea
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="Optional"
+            />
+          </Field>
+        </div>
+
+        <SheetFooter>
+          <Button
+            onClick={submit}
+            disabled={!canSubmit || isSubmitting}
+            className="w-full"
+          >
+            <Button.Text>{rule ? "Save rule" : "Add rule"}</Button.Text>
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 function RuleActionsMenu({
   onEdit,
   onDelete,
@@ -572,6 +764,10 @@ export function ShadowMCPAccessContent() {
     useState<RuleDispositionFilter>("all");
   const [reviewRequest, setReviewRequest] =
     useState<ShadowMCPApprovalRequest | null>(null);
+  const [isRuleSheetOpen, setIsRuleSheetOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<ShadowMCPAccessRule | null>(
+    null,
+  );
 
   const { data: rolesData } = useRoles();
   const roles = useMemo(
@@ -600,7 +796,12 @@ export function ShadowMCPAccessContent() {
   const rules = rulesData?.rules ?? [];
   const approveRequest = useApproveShadowMCPApprovalRequestMutation();
   const denyRequest = useDenyShadowMCPApprovalRequestMutation();
+  const createRule = useCreateShadowMCPAccessRuleMutation();
+  const updateRule = useUpdateShadowMCPAccessRuleMutation();
+  const deleteRule = useDeleteShadowMCPAccessRuleMutation();
   const isReviewSubmitting = approveRequest.isPending || denyRequest.isPending;
+  const isRuleSubmitting =
+    createRule.isPending || updateRule.isPending || deleteRule.isPending;
 
   const refreshShadowMCPData = async () => {
     await Promise.all([
@@ -735,8 +936,26 @@ export function ShadowMCPAccessContent() {
       key: "actions",
       header: "",
       width: "64px",
-      render: () => (
-        <RuleActionsMenu onEdit={() => undefined} onDelete={() => undefined} />
+      render: (rule) => (
+        <RuleActionsMenu
+          onEdit={() => {
+            setEditingRule(rule);
+            setIsRuleSheetOpen(true);
+          }}
+          onDelete={async () => {
+            if (!window.confirm(`Delete Access Rule "${rule.displayName}"?`)) {
+              return;
+            }
+
+            try {
+              await deleteRule.mutateAsync({ request: { id: rule.id } });
+              await refreshShadowMCPData();
+              toast.success("Access Rule deleted");
+            } catch {
+              toast.error("Access Rule delete failed");
+            }
+          }}
+        />
       ),
     },
   ];
@@ -797,6 +1016,77 @@ export function ShadowMCPAccessContent() {
         }}
       />
 
+      <AccessRuleSheet
+        rule={editingRule}
+        roles={roles}
+        open={isRuleSheetOpen}
+        isSubmitting={isRuleSubmitting}
+        onOpenChange={(open) => {
+          setIsRuleSheetOpen(open);
+          if (!open) setEditingRule(null);
+        }}
+        onSubmit={async (input) => {
+          if (editingRule) {
+            await updateRule.mutateAsync({
+              request: {
+                updateShadowMCPAccessRuleForm: {
+                  id: editingRule.id,
+                  displayName: input.displayName,
+                  disposition: input.disposition,
+                  matchBreadth: input.matchBreadth,
+                  matchValue: input.matchValue,
+                  observedFullUrl:
+                    input.matchBreadth === "full_url"
+                      ? input.matchValue
+                      : editingRule.observedFullUrl,
+                  observedServerIdentity:
+                    input.matchBreadth === "server_identity"
+                      ? input.matchValue
+                      : editingRule.observedServerIdentity,
+                  observedUrlHost:
+                    input.matchBreadth === "url_host"
+                      ? input.matchValue
+                      : editingRule.observedUrlHost,
+                  reason: input.reason,
+                  roleIds: input.roleIds,
+                },
+              },
+            });
+            toast.success("Access Rule updated");
+          } else {
+            await createRule.mutateAsync({
+              request: {
+                shadowMCPAccessRuleForm: {
+                  displayName: input.displayName,
+                  disposition: input.disposition,
+                  matchBreadth: input.matchBreadth,
+                  matchValue: input.matchValue,
+                  observedFullUrl:
+                    input.matchBreadth === "full_url"
+                      ? input.matchValue
+                      : undefined,
+                  observedServerIdentity:
+                    input.matchBreadth === "server_identity"
+                      ? input.matchValue
+                      : undefined,
+                  observedUrlHost:
+                    input.matchBreadth === "url_host"
+                      ? input.matchValue
+                      : undefined,
+                  reason: input.reason,
+                  roleIds: input.roleIds,
+                },
+              },
+            });
+            toast.success("Access Rule created");
+          }
+
+          await refreshShadowMCPData();
+          setIsRuleSheetOpen(false);
+          setEditingRule(null);
+        }}
+      />
+
       <section>
         <div className="mb-4 flex items-start justify-between gap-4">
           <SectionHeader
@@ -849,7 +1139,12 @@ export function ShadowMCPAccessContent() {
           description="Manage the Shadow MCP servers that are explicitly allowed or denied."
           action={
             <RequireScope scope="org:admin" level="component">
-              <Button disabled>
+              <Button
+                onClick={() => {
+                  setEditingRule(null);
+                  setIsRuleSheetOpen(true);
+                }}
+              >
                 <Button.LeftIcon>
                   <Plus className="h-4 w-4" />
                 </Button.LeftIcon>
