@@ -1,4 +1,4 @@
-h1:N3lUtzpRV5ij03hFnNywVl6eYNJEAy9zIoii9T2JeJc=
+h1:i4XVcP5wm9IgK/ZAg2a/4v4P3chZxqfm5qw5vEZ6UMU=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -174,3 +174,4 @@ h1:N3lUtzpRV5ij03hFnNywVl6eYNJEAy9zIoii9T2JeJc=
 20260513005837_remotesession_tables.sql h1:5DUSVR2+u/G7JO8BIWqcIpGvcc6KosOs/CmwPR/QA6g=
 20260513113209_add_risk_results_dead_letter_reason.sql h1:BUudDtten6ipXzo+TKfESVxc2UUyCKykq0v4dKXwi+g=
 20260513120106_unique-org-workos-id.sql h1:whhKfMZ6Xf0zN4tOUbKxbyTmNU7mLmCtkZUOIG7HX2E=
+20260513143640_add-organization-invitations.sql h1:ullg5rI+Zo173EOQ56n2B6UFQB5mGLljO2FqLTeJXiQ=
