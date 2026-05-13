@@ -27397,9 +27397,6 @@ components:
     GramProductFeatures:
       type: object
       properties:
-        assistant_memory_enabled:
-          type: boolean
-          description: Whether assistant memory is enabled
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
@@ -27418,7 +27415,6 @@ components:
         - tool_io_logs_enabled
         - session_capture_enabled
         - authz_challenge_logging_enabled
-        - assistant_memory_enabled
     HTTPToolDefinition:
       type: object
       properties:
@@ -31678,7 +31674,6 @@ components:
             - tool_io_logs
             - session_capture
             - authz_challenge_logging
-            - assistant_memory
           maxLength: 60
       required:
         - feature_name
