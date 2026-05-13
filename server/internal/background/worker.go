@@ -67,6 +67,7 @@ type WorkerOptions struct {
 	AssistantsCore      *assistants.ServiceCore
 	TemporalEnv         *tenv.Environment
 	PIIScanner          risk_analysis.PIIScanner
+	PIScanner           *risk_analysis.PromptInjectionScanner
 	ShadowMCPClient     *shadowmcp.Client
 	AuditLogger         *audit.Logger
 	WorkOSClient        activities.WorkOSClient
@@ -108,6 +109,7 @@ func ForDeploymentProcessing(
 		AssistantsCore:      nil,
 		TemporalEnv:         nil,
 		PIIScanner:          nil,
+		PIScanner:           nil,
 		ShadowMCPClient:     nil,
 		WorkOSClient:        workos.NewStubClient(),
 	}
@@ -145,6 +147,7 @@ func NewTemporalWorker(
 		AssistantsCore:      nil,
 		TemporalEnv:         env,
 		PIIScanner:          nil,
+		PIScanner:           nil,
 		ShadowMCPClient:     nil,
 		AuditLogger:         nil,
 		WorkOSClient:        workos.NewStubClient(),
@@ -176,6 +179,7 @@ func NewTemporalWorker(
 			AssistantsCore:      conv.Default(o.AssistantsCore, opts.AssistantsCore),
 			TemporalEnv:         conv.Default(o.TemporalEnv, opts.TemporalEnv),
 			PIIScanner:          conv.Default(o.PIIScanner, opts.PIIScanner),
+			PIScanner:           conv.Default(o.PIScanner, opts.PIScanner),
 			ShadowMCPClient:     conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
 			AuditLogger:         conv.Default(o.AuditLogger, opts.AuditLogger),
 			WorkOSClient:        conv.Default(o.WorkOSClient, opts.WorkOSClient),
@@ -224,6 +228,7 @@ func NewTemporalWorker(
 		opts.CacheAdapter,
 		opts.AssistantsCore,
 		opts.PIIScanner,
+		opts.PIScanner,
 		opts.ShadowMCPClient,
 		opts.AuditLogger,
 		opts.WorkOSClient,

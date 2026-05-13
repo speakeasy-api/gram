@@ -96,6 +96,7 @@ export * from "./getprojectoverview.js";
 export * from "./getpublishstatus.js";
 export * from "./getrbacstatus.js";
 export * from "./getremotemcpserver.js";
+export * from "./getriskcapabilities.js";
 export * from "./getriskpolicy.js";
 export * from "./getriskpolicystatus.js";
 export * from "./getrole.js";

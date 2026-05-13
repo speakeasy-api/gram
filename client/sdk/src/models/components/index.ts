@@ -262,6 +262,7 @@ export * from "./resolvechallengesresult.js";
 export * from "./resource.js";
 export * from "./resourceentry.js";
 export * from "./responsefilter.js";
+export * from "./riskcapabilitiesresult.js";
 export * from "./riskchatsummary.js";
 export * from "./riskpolicy.js";
 export * from "./riskpolicystatus.js";

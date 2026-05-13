@@ -24,6 +24,7 @@ var _ = Service("risk", func() {
 			Attribute("name", String, "The policy name. If omitted, a name will be auto-generated.")
 			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
+			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()
@@ -74,6 +75,31 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListPolicies"}`)
 	})
 
+	Method("getRiskCapabilities", func() {
+		Description("Get server-side risk analysis capabilities for the current project.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RiskCapabilitiesResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.capabilities.get")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskCapabilities")
+		Meta("openapi:extension:x-speakeasy-group", "risk.capabilities")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCapabilities"}`)
+	})
+
 	Method("getRiskPolicy", func() {
 		Description("Get a risk analysis policy by ID.")
 
@@ -116,6 +142,7 @@ var _ = Service("risk", func() {
 			Attribute("name", String, "The policy name.")
 			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
+			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()
@@ -298,6 +325,11 @@ var _ = Service("risk", func() {
 var ListRiskPoliciesResult = Type("ListRiskPoliciesResult", func() {
 	Attribute("policies", ArrayOf(shared.RiskPolicy), "The list of risk policies.")
 	Required("policies")
+})
+
+var RiskCapabilitiesResult = Type("RiskCapabilitiesResult", func() {
+	Attribute("pi_classifier_enabled", Boolean, "Whether the prompt-injection ML classifier is configured on this server.")
+	Required("pi_classifier_enabled")
 })
 
 var ListRiskResultsResult = Type("ListRiskResultsResult", func() {

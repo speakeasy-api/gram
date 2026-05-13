@@ -403,6 +403,11 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"WORKOS_WEBHOOK_SECRET"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:    "pi-classifier-url",
+			Usage:   "Base URL of the gram-pi-classifier sidecar (e.g. http://gram-pi-classifier:8000). Empty disables L1 ML prompt-injection detection; L0 heuristics still run when a policy enables the prompt_injection source.",
+			EnvVars: []string{"PI_CLASSIFIER_URL"},
+		},
 	}
 
 	flags = append(flags, redisFlags...)
@@ -877,7 +882,16 @@ func newStartCommand() *cli.Command {
 				hookPIIScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 			}
 
-			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, meterProvider)
+			// Same shape for the L1 prompt-injection classifier sidecar. Empty URL
+			// → stub classifier (L1 disabled; L0 heuristics still run when a policy
+			// has the prompt_injection source enabled).
+			var hookPromptInjectionClassifier risk_analysis.PromptInjectionClassifier = risk_analysis.StubClassifier{}
+			if piURL := c.String("pi-classifier-url"); piURL != "" {
+				hookPromptInjectionClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
+			}
+			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, hookPromptInjectionClassifier)
+
+			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, meterProvider)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
@@ -968,7 +982,7 @@ func newStartCommand() *cli.Command {
 				logger,
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
-			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler, completionsClient, shadowMCPClient, auditLogger)
+			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler, completionsClient, shadowMCPClient, auditLogger, c.String("pi-classifier-url") != "")
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 
@@ -1004,6 +1018,12 @@ func newStartCommand() *cli.Command {
 						piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 					}
 
+					var promptInjectionClassifier risk_analysis.PromptInjectionClassifier = risk_analysis.StubClassifier{}
+					if piURL := c.String("pi-classifier-url"); piURL != "" {
+						promptInjectionClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
+					}
+					piScanner := risk_analysis.NewPromptInjectionScanner(logger, promptInjectionClassifier)
+
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:      guardianPolicy,
 						DB:                  db,
@@ -1029,6 +1049,7 @@ func newStartCommand() *cli.Command {
 						AssistantsCore:      assistantsCore,
 						TemporalEnv:         temporalEnv,
 						PIIScanner:          piiScanner,
+						PIScanner:           piScanner,
 						ShadowMCPClient:     shadowMCPClient,
 						AuditLogger:         auditLogger,
 						WorkOSClient:        backgroundWorkOSClient,
