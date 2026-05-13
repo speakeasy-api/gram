@@ -71,39 +71,41 @@ import (
 )
 
 type Service struct {
-	logger                *slog.Logger
-	tracer                trace.Tracer
-	metrics               *metrics
-	guardianPolicy        *guardian.Policy
-	db                    *pgxpool.Pool
-	authRepo              *auth_repo.Queries
-	toolsetsRepo          *toolsets_repo.Queries
-	mcpMetadataRepo       *metadata_repo.Queries
-	orgsRepo              *organizations_repo.Queries
-	auth                  *auth.Auth
-	env                   toolconfig.EnvironmentLoader
-	serverURL             *url.URL
-	posthog               *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
-	toolProxy             *gateway.ToolProxy
-	oauthService          OAuthService
-	oauthRepo             *oauth_repo.Queries
-	billingTracker        billing.Tracker
-	billingRepository     billing.Repository
-	toolsetCache          cache.TypedCacheObject[mv.ToolsetBaseContents]
-	telemLogger           *tm.Logger
-	vectorToolStore       *rag.ToolsetVectorStore
-	temporal              *temporal.Environment
-	assistantTokens       *assistanttokens.Manager
-	sessions              *sessions.Manager
-	chatSessionsManager   *chatsessions.Manager
-	externalmcpRepo       *externalmcp_repo.Queries
-	deploymentsRepo       *deployments_repo.Queries
-	enc                   *encryption.Client
-	authz                 *authz.Engine
-	shadowMCPClient       *shadowmcp.Client
-	platformExtras        []platformtools.ExternalTool
-	authnChallengeCache   cache.TypedCacheObject[AuthnChallengeState]
-	userSessionGrantCache cache.TypedCacheObject[UserSessionGrant]
+	logger                 *slog.Logger
+	tracer                 trace.Tracer
+	metrics                *metrics
+	guardianPolicy         *guardian.Policy
+	db                     *pgxpool.Pool
+	authRepo               *auth_repo.Queries
+	toolsetsRepo           *toolsets_repo.Queries
+	mcpMetadataRepo        *metadata_repo.Queries
+	orgsRepo               *organizations_repo.Queries
+	auth                   *auth.Auth
+	env                    toolconfig.EnvironmentLoader
+	serverURL              *url.URL
+	posthog                *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	toolProxy              *gateway.ToolProxy
+	oauthService           OAuthService
+	oauthRepo              *oauth_repo.Queries
+	billingTracker         billing.Tracker
+	billingRepository      billing.Repository
+	toolsetCache           cache.TypedCacheObject[mv.ToolsetBaseContents]
+	telemLogger            *tm.Logger
+	vectorToolStore        *rag.ToolsetVectorStore
+	temporal               *temporal.Environment
+	assistantTokens        *assistanttokens.Manager
+	sessions               *sessions.Manager
+	chatSessionsManager    *chatsessions.Manager
+	externalmcpRepo        *externalmcp_repo.Queries
+	deploymentsRepo        *deployments_repo.Queries
+	enc                    *encryption.Client
+	authz                  *authz.Engine
+	shadowMCPClient        *shadowmcp.Client
+	platformExtras         []platformtools.ExternalTool
+	platformFeatureChecker platformtools.FeatureChecker
+	platformToolsets       map[string]platformtools.Toolset
+	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
+	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
 	// idpClient drives the user-session AS authn-challenge path's calls to
 	// the Speakeasy IDP (issuer-gated /authorize → /idp_callback flow). The
 	// same client backs the chat-session Manager via auth/sessions, so both
@@ -165,6 +167,7 @@ func NewService(
 	auditLogger *audit.Logger,
 	platformExtras []platformtools.ExternalTool,
 	platformFeatureChecker platformtools.FeatureChecker,
+	platformToolsets map[string]platformtools.Toolset,
 	idpClient *speakeasyclient.Client,
 	userSessionSigner *usersessions.Signer,
 ) *Service {
@@ -210,21 +213,23 @@ func NewService(
 			funcCaller,
 			platformSvc,
 		),
-		oauthService:        oauthService,
-		oauthRepo:           oauth_repo.New(db),
-		billingTracker:      billingTracker,
-		billingRepository:   billingRepository,
-		toolsetCache:        cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
-		telemLogger:         telemLogger,
-		vectorToolStore:     vectorToolStore,
-		temporal:            temporal,
-		assistantTokens:     assistantTokens,
-		sessions:            sessions,
-		chatSessionsManager: chatSessionsManager,
-		enc:                 enc,
-		authz:               authzEngine,
-		shadowMCPClient:     shadowMCPClient,
-		platformExtras:      platformExtras,
+		oauthService:           oauthService,
+		oauthRepo:              oauth_repo.New(db),
+		billingTracker:         billingTracker,
+		billingRepository:      billingRepository,
+		toolsetCache:           cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
+		telemLogger:            telemLogger,
+		vectorToolStore:        vectorToolStore,
+		temporal:               temporal,
+		assistantTokens:        assistantTokens,
+		sessions:               sessions,
+		chatSessionsManager:    chatSessionsManager,
+		enc:                    enc,
+		authz:                  authzEngine,
+		shadowMCPClient:        shadowMCPClient,
+		platformExtras:         platformExtras,
+		platformFeatureChecker: platformFeatureChecker,
+		platformToolsets:       platformToolsets,
 		authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](
 			logger.With(attr.SlogCacheNamespace("authn_challenge")),
 			cacheImpl,
@@ -241,6 +246,7 @@ func NewService(
 }
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
+	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.ErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.ServePublic).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", oops.ErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return service.HandleGetServer(w, r, metadataService)
@@ -1050,7 +1056,6 @@ func (s *Service) resolveExternalMcpOAuthToken(ctx context.Context, toolset *typ
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ToolsetID:      toolsetID,
 	})
-
 	if err != nil {
 		return "", oops.E(oops.CodeUnauthorized, err, "failed to get user OAuth token")
 	}

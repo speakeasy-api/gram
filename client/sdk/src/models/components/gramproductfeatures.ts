@@ -13,10 +13,6 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type GramProductFeatures = {
   /**
-   * Whether assistant memory is enabled
-   */
-  assistantMemoryEnabled: boolean;
-  /**
    * Whether authz challenge logging to ClickHouse is enabled
    */
   authzChallengeLoggingEnabled: boolean;
@@ -40,7 +36,6 @@ export const GramProductFeatures$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    assistant_memory_enabled: z.boolean(),
     authz_challenge_logging_enabled: z.boolean(),
     logs_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
@@ -48,7 +43,6 @@ export const GramProductFeatures$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      "assistant_memory_enabled": "assistantMemoryEnabled",
       "authz_challenge_logging_enabled": "authzChallengeLoggingEnabled",
       "logs_enabled": "logsEnabled",
       "session_capture_enabled": "sessionCaptureEnabled",

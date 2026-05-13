@@ -1,6 +1,5 @@
 // Package memory implements the gram://memory/* platform tools that wrap the
-// MemoryService for use by assistant agents at runtime. These tools are gated
-// on the FeatureAssistantMemory product flag by the platformtools registry.
+// MemoryService for use by assistant agents at runtime.
 package memory
 
 import (

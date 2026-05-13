@@ -62,8 +62,6 @@ type GramProductFeatures struct {
 	SessionCaptureEnabled bool
 	// Whether authz challenge logging to ClickHouse is enabled
 	AuthzChallengeLoggingEnabled bool
-	// Whether assistant memory is enabled
-	AssistantMemoryEnabled bool
 }
 
 // SetProductFeaturePayload is the payload type of the features service
@@ -156,9 +154,6 @@ func newGramProductFeatures(vres *featuresviews.GramProductFeaturesView) *GramPr
 	if vres.AuthzChallengeLoggingEnabled != nil {
 		res.AuthzChallengeLoggingEnabled = *vres.AuthzChallengeLoggingEnabled
 	}
-	if vres.AssistantMemoryEnabled != nil {
-		res.AssistantMemoryEnabled = *vres.AssistantMemoryEnabled
-	}
 	return res
 }
 
@@ -170,7 +165,6 @@ func newGramProductFeaturesView(res *GramProductFeatures) *featuresviews.GramPro
 		ToolIoLogsEnabled:            &res.ToolIoLogsEnabled,
 		SessionCaptureEnabled:        &res.SessionCaptureEnabled,
 		AuthzChallengeLoggingEnabled: &res.AuthzChallengeLoggingEnabled,
-		AssistantMemoryEnabled:       &res.AssistantMemoryEnabled,
 	}
 	return vres
 }
