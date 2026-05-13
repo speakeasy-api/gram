@@ -226,7 +226,7 @@ export function InsightsAgentsContent() {
     throwOnError: false,
   });
 
-  const users = usersQuery.data ?? [];
+  const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data]);
   const projectMetrics = projectQuery.data ?? null;
   const timeSeries = overviewQuery.data?.timeSeries ?? [];
 
