@@ -33,10 +33,10 @@ use crate::workdir::ASSISTANT_WORKDIR;
 
 const MCP_CMD_CAPACITY: usize = 32;
 
-/// Maximum time the agent loop waits for `connect_all` before serving its first
-/// turn. Bounded so a single slow server can't gate the whole runtime; servers
-/// still connecting after this deadline keep registering their tools as they
-/// come online via the catalog reader handed to the agent.
+/// Maximum time the agent loop waits for pre-turn MCP connects before serving
+/// its first turn. Bounded so a single slow server can't gate the whole
+/// runtime; servers still connecting after this deadline keep registering
+/// their tools as they come online via the catalog reader handed to the agent.
 const MCP_STARTUP_DEADLINE: Duration = Duration::from_secs(3);
 
 pub type AppState = Arc<AsyncMutex<RuntimeHost>>;
@@ -158,7 +158,12 @@ pub async fn build_runtime(
 
     let (mcp_cmd_tx, mcp_cmd_rx) = mpsc::channel(MCP_CMD_CAPACITY);
     let (mcp_ready_tx, mcp_ready_rx) = oneshot::channel::<()>();
-    let mcp_actor = tokio::spawn(run_mcp_actor(manager, mcp_cmd_rx, mcp_ready_tx));
+    let mcp_actor = tokio::spawn(run_mcp_actor(
+        manager,
+        mcp_server_ids.clone(),
+        mcp_cmd_rx,
+        mcp_ready_tx,
+    ));
 
     let native_tools = ToolRegistry::new().with(tools::bun_run::bun_run).with(
         tools::mcp_force_reconnect::McpForceReconnectTool::new(mcp_cmd_tx.clone(), mcp_server_ids),
@@ -309,23 +314,43 @@ fn build_mcp_server_config(
 /// registered server in the background — `/configure` does not wait — and
 /// processes [`McpCmd`]s serially so the manager never needs to be shared.
 ///
-/// `ready_tx` resolves once `connect_all` returns (success or aggregate error),
-/// letting the loop start its first turn with a fully-populated tool registry
-/// rather than racing the model against in-flight handshakes. Subsequent
-/// reconnects do not re-arm it — late tools register through the catalog
-/// reader the same way they do today.
+/// Pre-turn connects run per server rather than via `connect_all`, which is
+/// all-or-nothing (`try_join_all`): one bad server (auth blip, slow handshake,
+/// missing slug rolling out) would otherwise discard tools from every other
+/// server in the batch. Out-of-turn `mcp_force_reconnect` already tolerates
+/// per-server failure; pre-turn must too.
+///
+/// `ready_tx` resolves once every per-server attempt has returned, letting the
+/// loop start its first turn against whatever registered successfully. Late
+/// tools register through the catalog reader; the model can call
+/// `mcp_force_reconnect` for any server that did not come up in time.
 async fn run_mcp_actor(
     mut manager: McpServerManager,
+    server_ids: Vec<String>,
     mut cmd_rx: mpsc::Receiver<McpCmd>,
     ready_tx: oneshot::Sender<()>,
 ) {
-    match manager.connect_all().await {
-        Ok(handles) => tracing::info!(servers = handles.len(), "mcp connect_all ok"),
-        Err(e) => tracing::warn!(
-            error = %e,
-            "mcp connect_all failed; affected tools will surface errors and the model can call mcp_force_reconnect"
-        ),
+    let total = server_ids.len();
+    let mut connected = 0usize;
+    for raw_id in &server_ids {
+        let server_id = McpServerId::new(raw_id.clone());
+        match manager.connect_server(&server_id).await {
+            Ok(handle) => {
+                connected += 1;
+                tracing::info!(
+                    server_id = %server_id,
+                    tools = handle.snapshot().tools.len(),
+                    "mcp connect ok",
+                );
+            }
+            Err(e) => tracing::warn!(
+                server_id = %server_id,
+                error = %e,
+                "mcp connect failed; assistant will see a partial tool registry and can call mcp_force_reconnect",
+            ),
+        }
     }
+    tracing::info!(connected, total, "mcp pre-turn connect complete");
     let _ = ready_tx.send(());
 
     while let Some(cmd) = cmd_rx.recv().await {
@@ -421,7 +446,7 @@ where
     }
 }
 
-/// Wait for the MCP actor's connect_all to finish, capped at
+/// Wait for the MCP actor's pre-turn connect sweep to finish, capped at
 /// `MCP_STARTUP_DEADLINE`. Logs which side won so an operator can correlate a
 /// thin first-turn registry with a slow upstream.
 async fn await_mcp_ready(rx: oneshot::Receiver<()>) {
@@ -430,7 +455,7 @@ async fn await_mcp_ready(rx: oneshot::Receiver<()>) {
         Ok(Err(_)) => tracing::debug!("mcp actor dropped ready signal; proceeding"),
         Err(_) => tracing::warn!(
             deadline_ms = MCP_STARTUP_DEADLINE.as_millis() as u64,
-            "mcp connect_all deadline hit; first turn proceeds with partial tool registry"
+            "mcp pre-turn connect deadline hit; first turn proceeds with partial tool registry"
         ),
     }
 }
