@@ -34,17 +34,8 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
-	var projectID uuid.UUID
-	if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
-		pid, perr := uuid.Parse(metadata.ProjectID)
-		if perr != nil {
-			return nil
-		}
-		projectID = pid
-	} else if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
-		projectID = *authCtx.ProjectID
-	} else {
-		// No session metadata and no plugin auth; project unresolvable.
+	projectID, ok := s.resolveClaudeScanProjectID(ctx, *payload.SessionID)
+	if !ok {
 		return nil
 	}
 
@@ -58,6 +49,26 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 	}
 
 	return result
+}
+
+// resolveClaudeScanProjectID resolves the project_id used to scope a Claude
+// hook risk scan. Session metadata cached by the OTEL Logs endpoint wins;
+// the plugin-auth context populated by Gram-Key + Gram-Project headers is
+// the fallback. Returns ok=false when neither source yields a project_id.
+func (s *Service) resolveClaudeScanProjectID(ctx context.Context, sessionID string) (uuid.UUID, bool) {
+	metadata, err := s.getSessionMetadata(ctx, sessionID)
+	if err == nil {
+		pid, perr := uuid.Parse(metadata.ProjectID)
+		if perr == nil {
+			return pid, true
+		}
+		return uuid.Nil, false
+	}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return uuid.Nil, false
+	}
+	return *authCtx.ProjectID, true
 }
 
 // scanCursorForEnforcement runs the risk scanner for a Cursor hook payload.
