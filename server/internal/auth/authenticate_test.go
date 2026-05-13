@@ -39,12 +39,9 @@ func TestAuthenticate_AdminCanAccessNonMemberOrg(t *testing.T) {
 	}
 	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
-	// Prime the user info cache so IsAdmin returns true during Authenticate.
-	// In production this is populated by Callback; here we call it directly.
-	_, _, err := instance.identityResolver.GetUserInfo(ctx, userInfo.UserID)
-	require.NoError(t, err)
-
-	ctx, err = instance.sessionManager.Authenticate(ctx, session.SessionID)
+	// No manual cache priming — Authenticate must handle a cold cache.
+	// HasAccessToOrganization populates the cache, and IsAdmin is checked after.
+	ctx, err := instance.sessionManager.Authenticate(ctx, session.SessionID)
 	require.NoError(t, err, "admin must be able to authenticate into a non-member org")
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

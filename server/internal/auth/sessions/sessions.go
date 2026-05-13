@@ -94,17 +94,20 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		IsAdmin:               false,
 	}
 
-	// Populate IsAdmin from the cached user info so the access manager can gate
-	// the RBAC scope-override header to admins only. A cache miss leaves IsAdmin
-	// false, which is the safe default.
-	authCtx.IsAdmin = s.identity.IsAdmin(ctx, session.UserID)
-
 	if session.ActiveOrganizationID == "" {
+		// Populate IsAdmin from cached user info. A cache miss leaves it false
+		// (safe default). No org membership check needed for org-less sessions.
+		authCtx.IsAdmin = s.identity.IsAdmin(ctx, session.UserID)
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 		return ctx, nil
 	}
 
+	// HasAccessToOrganization calls GetUserInfo internally, which populates
+	// the user info cache on a miss. We check IsAdmin AFTER this call so the
+	// cache is guaranteed to be warm — avoids a false-negative on cold cache.
 	_, email, ok := s.identity.HasAccessToOrganization(ctx, session.ActiveOrganizationID, session.UserID)
+	authCtx.IsAdmin = s.identity.IsAdmin(ctx, session.UserID)
+
 	if !ok {
 		if !authCtx.IsAdmin {
 			return ctx, oops.C(oops.CodeForbidden)
