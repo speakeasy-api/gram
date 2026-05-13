@@ -1,4 +1,4 @@
-//! Per-tool-result byte clipper for the assistant runtime.
+//! Per-tool-result byte cap for the assistant runtime.
 //!
 //! OpenRouter caps a single tool message at 204800 bytes and 413s the next
 //! request when a tool result exceeds it. Token-aware compaction can't catch
@@ -7,14 +7,19 @@
 //! Even when it does fire, [`SummarizeOlderStrategy`](agentkit_compaction)
 //! preserves the most recent items, so the offending tool result survives.
 //!
-//! [`ClippedToolSource`] wraps a [`ToolSource`] (the MCP catalog reader) and
-//! truncates each [`ToolOutput`] to [`MAX_TOOL_BYTES`] before it leaves the
-//! tool. Native tools (`bun_run`) already clip themselves and don't need
-//! wrapping — the bun limits are smaller, so they win.
+//! When a tool result exceeds [`MAX_TOOL_BYTES`], the full body is written
+//! to a file inside the assistant workdir — where the agent's filesystem
+//! tools can read or grep it — and the in-band result is replaced with a
+//! small envelope pointing at that file. No information is lost; the model
+//! follows up by reading the saved file. If the spill itself fails (disk
+//! full, permission denied), the body is clipped in place with a marker so
+//! the provider still gets a valid, sub-cap result.
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
-use agentkit_core::ToolOutput;
+use agentkit_core::{ToolCallId, ToolOutput};
 use agentkit_tools_core::{
     PermissionRequest, Tool, ToolCatalogEvent, ToolContext, ToolError, ToolName, ToolRequest,
     ToolResult, ToolSource, ToolSpec,
@@ -27,15 +32,20 @@ use serde_json::json;
 /// content-type discriminators).
 pub const MAX_TOOL_BYTES: usize = 150_000;
 
-/// Wraps a [`ToolSource`] so every tool it serves clips its output to
-/// [`MAX_TOOL_BYTES`].
+/// Wraps a [`ToolSource`] so every tool result either fits under
+/// [`MAX_TOOL_BYTES`] or is spilled to a file under `spill_root` and replaced
+/// with a small in-band pointer.
 pub struct ClippedToolSource<S> {
     inner: S,
+    spill_root: PathBuf,
 }
 
 impl<S> ClippedToolSource<S> {
-    pub fn new(inner: S) -> Self {
-        Self { inner }
+    pub fn new(inner: S, spill_root: impl Into<PathBuf>) -> Self {
+        Self {
+            inner,
+            spill_root: spill_root.into(),
+        }
     }
 }
 
@@ -48,9 +58,12 @@ where
     }
 
     fn get(&self, name: &ToolName) -> Option<Arc<dyn Tool>> {
-        self.inner
-            .get(name)
-            .map(|inner| Arc::new(ClippedTool { inner }) as Arc<dyn Tool>)
+        self.inner.get(name).map(|inner| {
+            Arc::new(ClippedTool {
+                inner,
+                spill_root: self.spill_root.clone(),
+            }) as Arc<dyn Tool>
+        })
     }
 
     fn drain_catalog_events(&self) -> Vec<ToolCatalogEvent> {
@@ -60,6 +73,7 @@ where
 
 struct ClippedTool {
     inner: Arc<dyn Tool>,
+    spill_root: PathBuf,
 }
 
 #[async_trait]
@@ -84,35 +98,132 @@ impl Tool for ClippedTool {
         request: ToolRequest,
         ctx: &mut ToolContext<'_>,
     ) -> Result<ToolResult, ToolError> {
+        let tool_name = request.tool_name.clone();
+        let call_id = request.call_id.clone();
         let mut result = self.inner.invoke(request, ctx).await?;
-        result.result.output = clip_output(result.result.output, MAX_TOOL_BYTES);
+        result.result.output = cap_output(
+            result.result.output,
+            MAX_TOOL_BYTES,
+            &self.spill_root,
+            &tool_name,
+            &call_id,
+        )
+        .await;
         Ok(result)
     }
 }
 
-fn clip_output(output: ToolOutput, max_bytes: usize) -> ToolOutput {
-    if let ToolOutput::Text(s) = output {
-        if s.len() <= max_bytes {
-            return ToolOutput::Text(s);
-        }
-        let cut = s.floor_char_boundary(max_bytes);
-        let dropped = s.len() - cut;
-        return ToolOutput::Text(format!("{}…[truncated {dropped} bytes]", &s[..cut]));
-    }
-    let Ok(serialized) = serde_json::to_string(&output) else {
+async fn cap_output(
+    output: ToolOutput,
+    max_bytes: usize,
+    spill_root: &Path,
+    tool_name: &ToolName,
+    call_id: &ToolCallId,
+) -> ToolOutput {
+    let Some(model_bytes) = model_bytes(&output) else {
         return output;
     };
-    if serialized.len() <= max_bytes {
+    if model_bytes <= max_bytes {
         return output;
     }
-    let original_bytes = serialized.len();
-    let cut = serialized.floor_char_boundary(max_bytes);
-    ToolOutput::Structured(json!({
-        "truncated": true,
-        "original_bytes": original_bytes,
-        "kept_bytes": cut,
-        "content": &serialized[..cut],
-    }))
+    let (body, ext) = consume_for_spill(output);
+    match write_spill(spill_root, tool_name, call_id, &body, ext).await {
+        Ok(path) => ToolOutput::Structured(json!({
+            "truncated": true,
+            "saved_to": path.display().to_string(),
+            "original_bytes": model_bytes,
+        })),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                spill_root = %spill_root.display(),
+                "spill of oversized tool result failed; clipping inline as fallback",
+            );
+            clip_inline(body, ext, max_bytes, model_bytes)
+        }
+    }
+}
+
+/// Cheap measurement against the model-facing byte budget. For `Text`, this is
+/// the inner string's length; for everything else, the compact serialized form
+/// (which is what the provider adapter ends up sending on the wire). Returns
+/// `None` only if serialization itself fails — in that case the cap can't be
+/// enforced and the output is returned untouched.
+fn model_bytes(output: &ToolOutput) -> Option<usize> {
+    match output {
+        ToolOutput::Text(s) => Some(s.len()),
+        other => serde_json::to_string(other).ok().map(|s| s.len()),
+    }
+}
+
+/// Converts the output into the body that will be written to disk. JSON
+/// variants are pretty-printed so the spilled file is easier for the agent
+/// to read or grep with the filesystem tools.
+fn consume_for_spill(output: ToolOutput) -> (String, &'static str) {
+    match output {
+        ToolOutput::Text(s) => (s, "txt"),
+        ToolOutput::Structured(v) => (serde_json::to_string_pretty(&v).unwrap_or_default(), "json"),
+        ToolOutput::Parts(p) => (serde_json::to_string_pretty(&p).unwrap_or_default(), "json"),
+        ToolOutput::Files(f) => (serde_json::to_string_pretty(&f).unwrap_or_default(), "json"),
+    }
+}
+
+async fn write_spill(
+    spill_root: &Path,
+    tool_name: &ToolName,
+    call_id: &ToolCallId,
+    body: &str,
+    ext: &str,
+) -> std::io::Result<PathBuf> {
+    // Belt-and-suspenders against duplicate (tool_name, call_id) pairs across
+    // a retry storm or a misbehaving provider — disambiguates atomically
+    // within the process.
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    tokio::fs::create_dir_all(spill_root).await?;
+    let safe_tool = sanitize_filename_component(tool_name.0.as_str());
+    let safe_call = sanitize_filename_component(&call_id.0);
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let path = spill_root.join(format!("{safe_tool}-{safe_call}-{n}.{ext}"));
+    tokio::fs::write(&path, body).await?;
+    Ok(path)
+}
+
+fn sanitize_filename_component(s: &str) -> String {
+    let cleaned: String = s
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .take(64)
+        .collect();
+    if cleaned.is_empty() {
+        "_".into()
+    } else {
+        cleaned
+    }
+}
+
+/// Fallback when the disk spill fails. Drops the tail of the body so the
+/// provider still receives a sub-cap result. The marker — either an inline
+/// `…[truncated N bytes]` for text or a `{truncated, kept_bytes, content}`
+/// envelope for JSON — tells the model the content is incomplete.
+fn clip_inline(body: String, ext: &str, max_bytes: usize, original_bytes: usize) -> ToolOutput {
+    let cut = body.floor_char_boundary(max_bytes);
+    if ext == "txt" {
+        let dropped = body.len() - cut;
+        ToolOutput::Text(format!("{}…[truncated {dropped} bytes]", &body[..cut]))
+    } else {
+        ToolOutput::Structured(json!({
+            "truncated": true,
+            "original_bytes": original_bytes,
+            "kept_bytes": cut,
+            "content": &body[..cut],
+        }))
+    }
 }
 
 #[cfg(test)]
@@ -121,44 +232,173 @@ mod tests {
     use agentkit_core::{Part, TextPart};
     use serde_json::{Value, json};
 
-    #[test]
-    fn text_under_limit_passes_through() {
-        let out = clip_output(ToolOutput::text("hello"), 100);
+    fn tempdir() -> tempfile::TempDir {
+        tempfile::tempdir().expect("tempdir")
+    }
+
+    fn tool_name(s: &str) -> ToolName {
+        ToolName::new(s)
+    }
+    fn call_id(s: &str) -> ToolCallId {
+        ToolCallId::new(s)
+    }
+
+    #[tokio::test]
+    async fn text_under_limit_passes_through() {
+        let dir = tempdir();
+        let out = cap_output(
+            ToolOutput::text("hello"),
+            100,
+            dir.path(),
+            &tool_name("t"),
+            &call_id("c"),
+        )
+        .await;
         match out {
             ToolOutput::Text(s) => assert_eq!(s, "hello"),
             other => panic!("expected Text, got {other:?}"),
         }
     }
 
-    #[test]
-    fn text_at_exact_limit_passes_through() {
-        let body = "a".repeat(100);
-        let out = clip_output(ToolOutput::text(body.clone()), 100);
+    #[tokio::test]
+    async fn text_over_limit_spills_to_file() {
+        let dir = tempdir();
+        let body = "a".repeat(500);
+        let out = cap_output(
+            ToolOutput::text(body.clone()),
+            100,
+            dir.path(),
+            &tool_name("my_tool"),
+            &call_id("call_abc"),
+        )
+        .await;
+        let map = match out {
+            ToolOutput::Structured(Value::Object(map)) => map,
+            other => panic!("expected envelope, got {other:?}"),
+        };
+        assert_eq!(map.get("truncated"), Some(&Value::Bool(true)));
+        assert_eq!(
+            map.get("original_bytes").and_then(Value::as_u64),
+            Some(500)
+        );
+        let saved_to = map
+            .get("saved_to")
+            .and_then(Value::as_str)
+            .expect("saved_to");
+        let saved_path = Path::new(saved_to);
+        assert!(saved_path.starts_with(dir.path()));
+        let on_disk = std::fs::read_to_string(saved_path).expect("read spill");
+        assert_eq!(on_disk, body);
+    }
+
+    #[tokio::test]
+    async fn structured_over_limit_spills_pretty_json() {
+        let dir = tempdir();
+        let value = json!({"items": vec!["x"; 500]});
+        let input = ToolOutput::Structured(value.clone());
+        let original = serde_json::to_string(&input).unwrap().len();
+        let out = cap_output(input, 200, dir.path(), &tool_name("t"), &call_id("c")).await;
+        let map = match out {
+            ToolOutput::Structured(Value::Object(map)) => map,
+            other => panic!("expected envelope, got {other:?}"),
+        };
+        assert_eq!(
+            map.get("original_bytes").and_then(Value::as_u64),
+            Some(original as u64)
+        );
+        let saved_to = map
+            .get("saved_to")
+            .and_then(Value::as_str)
+            .expect("saved_to");
+        assert!(saved_to.ends_with(".json"));
+        let on_disk = std::fs::read_to_string(saved_to).expect("read spill");
+        let parsed: Value = serde_json::from_str(&on_disk).expect("disk file is valid JSON");
+        assert_eq!(parsed, value);
+        assert!(
+            on_disk.contains('\n'),
+            "spilled JSON should be pretty-printed for grep/read"
+        );
+    }
+
+    #[tokio::test]
+    async fn parts_over_limit_spills() {
+        let dir = tempdir();
+        let body = "x".repeat(500);
+        let parts = vec![Part::Text(TextPart::new(body))];
+        let out = cap_output(
+            ToolOutput::Parts(parts),
+            100,
+            dir.path(),
+            &tool_name("t"),
+            &call_id("c"),
+        )
+        .await;
         match out {
-            ToolOutput::Text(s) => assert_eq!(s, body),
-            other => panic!("expected Text, got {other:?}"),
+            ToolOutput::Structured(Value::Object(map)) => {
+                assert_eq!(map.get("truncated"), Some(&Value::Bool(true)));
+                assert!(map.get("saved_to").is_some());
+            }
+            other => panic!("expected envelope, got {other:?}"),
         }
     }
 
+    #[tokio::test]
+    async fn spill_failure_falls_back_to_inline_clip() {
+        // Make spill_root a path under a regular file — create_dir_all will
+        // bail with NotADirectory, exercising the fallback branch.
+        let dir = tempdir();
+        let blocking = dir.path().join("not-a-dir");
+        std::fs::write(&blocking, b"x").expect("write blocker");
+        let unreachable_root = blocking.join("spill");
+
+        let body = "a".repeat(500);
+        let out = cap_output(
+            ToolOutput::text(body),
+            100,
+            &unreachable_root,
+            &tool_name("t"),
+            &call_id("c"),
+        )
+        .await;
+        let s = match out {
+            ToolOutput::Text(s) => s,
+            other => panic!("expected Text fallback, got {other:?}"),
+        };
+        assert!(s.contains("truncated"), "marker present: {s}");
+        assert!(s.len() < 500, "tail dropped");
+    }
+
     #[test]
-    fn text_over_limit_is_clipped_with_marker() {
-        let body = "a".repeat(200);
-        let out = clip_output(ToolOutput::text(body), 100);
+    fn sanitize_replaces_path_separators_and_caps_length() {
+        let dirty = "tool/../../etc/passwd";
+        let safe = sanitize_filename_component(dirty);
+        assert!(!safe.contains('/'));
+        assert!(!safe.contains('.'));
+
+        let long = "x".repeat(1000);
+        let safe_long = sanitize_filename_component(&long);
+        assert_eq!(safe_long.len(), 64);
+
+        assert_eq!(sanitize_filename_component(""), "_");
+    }
+
+    #[test]
+    fn clip_inline_text_appends_marker() {
+        let out = clip_inline("a".repeat(200), "txt", 100, 200);
         match out {
             ToolOutput::Text(s) => {
-                assert!(s.starts_with(&"a".repeat(100)), "kept prefix");
-                assert!(s.contains("truncated 100 bytes"), "marker present: {s}");
+                assert!(s.starts_with(&"a".repeat(100)));
+                assert!(s.contains("truncated 100 bytes"));
             }
             other => panic!("expected Text, got {other:?}"),
         }
     }
 
     #[test]
-    fn text_clip_respects_utf8_boundary() {
-        // 50 × "é" = 100 bytes total. Cut at byte 75 sits inside a 2-byte
-        // codepoint; floor_char_boundary must walk back to 74.
-        let body = "é".repeat(50);
-        let out = clip_output(ToolOutput::text(body), 75);
+    fn clip_inline_text_respects_utf8_boundary() {
+        // 50 × "é" = 100 bytes. Cut at byte 75 sits inside a 2-byte codepoint;
+        // floor_char_boundary must walk back to 74.
+        let out = clip_inline("é".repeat(50), "txt", 75, 100);
         match out {
             ToolOutput::Text(s) => {
                 let prefix = s.split('…').next().unwrap();
@@ -166,53 +406,6 @@ mod tests {
                 assert!(prefix.len() <= 75);
             }
             other => panic!("expected Text, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn structured_under_limit_passes_through() {
-        let value = json!({"k": "v"});
-        let out = clip_output(ToolOutput::Structured(value.clone()), 1000);
-        match out {
-            ToolOutput::Structured(got) => assert_eq!(got, value),
-            other => panic!("expected Structured, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn structured_over_limit_is_wrapped() {
-        let big = "x".repeat(500);
-        let value = json!({"payload": big});
-        let input = ToolOutput::Structured(value);
-        let serialized_len = serde_json::to_string(&input).unwrap().len();
-        let out = clip_output(input, 200);
-        match out {
-            ToolOutput::Structured(Value::Object(map)) => {
-                assert_eq!(map.get("truncated"), Some(&Value::Bool(true)));
-                let original = map
-                    .get("original_bytes")
-                    .and_then(Value::as_u64)
-                    .expect("original_bytes");
-                let kept = map.get("kept_bytes").and_then(Value::as_u64).expect("kept");
-                assert_eq!(original as usize, serialized_len);
-                assert!(kept <= 200);
-                assert!(map.get("content").and_then(Value::as_str).is_some());
-            }
-            other => panic!("expected Structured object, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn parts_over_limit_falls_back_to_truncation_envelope() {
-        let big = "x".repeat(500);
-        let parts = vec![Part::Text(TextPart::new(big))];
-        let out = clip_output(ToolOutput::Parts(parts), 100);
-        match out {
-            ToolOutput::Structured(Value::Object(map)) => {
-                assert_eq!(map.get("truncated"), Some(&Value::Bool(true)));
-                assert!(map.get("original_bytes").is_some());
-            }
-            other => panic!("expected truncation envelope, got {other:?}"),
         }
     }
 }
