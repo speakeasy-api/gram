@@ -193,6 +193,8 @@ SELECT
   pd.project_id,
   t.id,
   t.tool_urn,
+  t.type,
+  t.name,
   e.slug,
   t.read_only_hint,
   t.destructive_hint,
@@ -299,5 +301,12 @@ WHERE e.deployment_id = (SELECT id FROM target_deployment)
       OR t.tool_urn LIKE sqlc.narg(urn_prefix) || '%' ESCAPE '\')
  AND t.deleted IS FALSE
  AND e.deleted IS FALSE
+ AND NOT EXISTS (
+   SELECT 1
+   FROM external_mcp_tool_definitions p
+   WHERE p.external_mcp_attachment_id = e.id
+     AND p.type = 'proxy'
+     AND p.deleted IS FALSE
+ )
 ORDER BY t.id DESC;
 

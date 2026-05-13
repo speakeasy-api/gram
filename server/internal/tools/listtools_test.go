@@ -1711,3 +1711,121 @@ func TestToolsService_ListTools_ExternalMCPTools_FilterByToolURN(t *testing.T) {
 	require.NotNil(t, result.Tools[0].ExternalMcpToolDefinition, "tool should be external mcp")
 	require.Equal(t, exactURN, result.Tools[0].ExternalMcpToolDefinition.ToolUrn, "tool urn should match exact filter")
 }
+
+func TestToolsService_ListTools_ExternalMCPTools_OmitsAttachmentsWithProxyTools(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestToolsService(t, assetStorage)
+
+	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/petstore-valid.yaml"))
+	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs.Len()),
+	}, io.NopCloser(bs))
+	require.NoError(t, err, "upload openapi asset")
+
+	d, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
+		IdempotencyKey: "test-ext-proxy-omit",
+		Openapiv3Assets: []*dgen.AddOpenAPIv3DeploymentAssetForm{
+			{AssetID: ares.Asset.ID, Name: "petstore", Slug: "petstore"},
+		},
+		Functions:        []*dgen.AddFunctionsForm{},
+		Packages:         []*dgen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment")
+
+	deploymentUUID, err := uuid.Parse(d.Deployment.ID)
+	require.NoError(t, err, "parse deployment ID")
+
+	extRepo := externalmcprepo.New(ti.conn)
+
+	seedAttachment := func(slug, regURL string) uuid.UUID {
+		regID, err := extRepo.CreateMCPRegistry(ctx, externalmcprepo.CreateMCPRegistryParams{
+			Name: "reg-" + slug,
+			Url:  regURL,
+		})
+		require.NoError(t, err, "create mcp registry "+slug)
+
+		att, err := extRepo.CreateExternalMCPAttachment(ctx, externalmcprepo.CreateExternalMCPAttachmentParams{
+			DeploymentID:            deploymentUUID,
+			RegistryID:              uuid.NullUUID{UUID: regID, Valid: true},
+			Name:                    "ext-" + slug,
+			Slug:                    slug,
+			RegistryServerSpecifier: "spec-" + slug,
+		})
+		require.NoError(t, err, "create attachment "+slug)
+		return att.ID
+	}
+
+	seedTool := func(attachmentID uuid.UUID, slug, toolName, toolType, regURL string) {
+		_, err := extRepo.CreateExternalMCPToolDefinition(ctx, externalmcprepo.CreateExternalMCPToolDefinitionParams{
+			ExternalMcpAttachmentID:    attachmentID,
+			ToolUrn:                    "tools:externalmcp:" + slug + ":" + toolName,
+			Type:                       toolType,
+			Name:                       pgtype.Text{String: toolName, Valid: true},
+			Description:                pgtype.Text{String: "tool " + toolName, Valid: true},
+			Schema:                     []byte(`{"type":"object"}`),
+			RemoteUrl:                  regURL,
+			TransportType:              externalmcptypes.TransportTypeStreamableHTTP,
+			RequiresOauth:              false,
+			OauthVersion:               "none",
+			OauthAuthorizationEndpoint: pgtype.Text{},
+			OauthTokenEndpoint:         pgtype.Text{},
+			OauthRegistrationEndpoint:  pgtype.Text{},
+			OauthScopesSupported:       []string{},
+			HeaderDefinitions:          nil,
+			Title:                      pgtype.Text{},
+			ReadOnlyHint:               pgtype.Bool{},
+			DestructiveHint:            pgtype.Bool{},
+			IdempotentHint:             pgtype.Bool{},
+			OpenWorldHint:              pgtype.Bool{},
+		})
+		require.NoError(t, err, "create tool def "+slug+"/"+toolName)
+	}
+
+	// Attachment "pure" has only direct tools — should appear.
+	pureID := seedAttachment("pure", "http://example.invalid/mcp/pure")
+	seedTool(pureID, "pure", "search", "direct", "http://example.invalid/mcp/pure")
+	seedTool(pureID, "pure", "fetch", "direct", "http://example.invalid/mcp/pure")
+
+	// Attachment "mixed" has both direct and proxy tools — entire attachment must be excluded
+	// because proxy tools are not yet RBAC-compatible.
+	mixedID := seedAttachment("mixed", "http://example.invalid/mcp/mixed")
+	seedTool(mixedID, "mixed", "query", "direct", "http://example.invalid/mcp/mixed")
+	seedTool(mixedID, "mixed", "proxy", "proxy", "http://example.invalid/mcp/mixed")
+
+	result, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
+		Cursor:           nil,
+		DeploymentID:     nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Limit:            nil,
+		ToolTypes:        []types.ToolType{types.ToolType("externalmcp")},
+	})
+	require.NoError(t, err, "list external mcp tools")
+
+	for _, tool := range result.Tools {
+		require.NotNil(t, tool.ExternalMcpToolDefinition, "tool should be external mcp")
+		require.NotEqual(t, "mixed", tool.ExternalMcpToolDefinition.Slug, "tools from attachments containing proxy tools should be omitted")
+	}
+
+	pureCount := 0
+	for _, tool := range result.Tools {
+		if tool.ExternalMcpToolDefinition.Slug == "pure" {
+			pureCount++
+		}
+	}
+	require.Equal(t, 2, pureCount, "should return both direct tools from the proxy-free attachment")
+}

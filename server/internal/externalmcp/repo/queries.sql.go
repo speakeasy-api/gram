@@ -242,6 +242,8 @@ SELECT
   pd.project_id,
   t.id,
   t.tool_urn,
+  t.type,
+  t.name,
   e.slug,
   t.read_only_hint,
   t.destructive_hint,
@@ -258,6 +260,8 @@ type FindExternalMCPToolEntriesForProjectsRow struct {
 	ProjectID       uuid.UUID
 	ID              uuid.UUID
 	ToolUrn         string
+	Type            string
+	Name            pgtype.Text
 	Slug            string
 	ReadOnlyHint    pgtype.Bool
 	DestructiveHint pgtype.Bool
@@ -279,6 +283,8 @@ func (q *Queries) FindExternalMCPToolEntriesForProjects(ctx context.Context, pro
 			&i.ProjectID,
 			&i.ID,
 			&i.ToolUrn,
+			&i.Type,
+			&i.Name,
 			&i.Slug,
 			&i.ReadOnlyHint,
 			&i.DestructiveHint,
@@ -679,6 +685,13 @@ WHERE e.deployment_id = (SELECT id FROM target_deployment)
       OR t.tool_urn LIKE $1 || '%' ESCAPE '\')
  AND t.deleted IS FALSE
  AND e.deleted IS FALSE
+ AND NOT EXISTS (
+   SELECT 1
+   FROM external_mcp_tool_definitions p
+   WHERE p.external_mcp_attachment_id = e.id
+     AND p.type = 'proxy'
+     AND p.deleted IS FALSE
+ )
 ORDER BY t.id DESC
 `
 

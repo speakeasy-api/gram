@@ -19,4 +19,6 @@ type ToolEntry struct {
 	Annotations *ToolAnnotations
 	// HTTP method for HTTP tools (GET, POST, PUT, PATCH, DELETE)
 	HTTPMethod *string
+	// For external MCP tools, the underlying definition type ('direct' or 'proxy')
+	ExternalMcpKind *string
 }

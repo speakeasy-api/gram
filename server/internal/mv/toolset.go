@@ -807,13 +807,22 @@ func GetToolsetsSummary(
 		if _, exists := projTools[def.ToolUrn]; exists {
 			continue
 		}
+		kind := def.Type
+		var name string
+		switch {
+		case kind == "direct" && def.Name.Valid && def.Name.String != "":
+			name = def.Slug + ":" + def.Name.String
+		default:
+			name = def.Slug + ":" + kind
+		}
 		projTools[def.ToolUrn] = &types.ToolEntry{
-			Type:        types.ToolType(urn.ToolKindExternalMCP),
-			ID:          def.ID.String(),
-			Name:        def.Slug + ":proxy",
-			ToolUrn:     def.ToolUrn,
-			Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
-			HTTPMethod:  nil,
+			Type:            types.ToolType(urn.ToolKindExternalMCP),
+			ID:              def.ID.String(),
+			Name:            name,
+			ToolUrn:         def.ToolUrn,
+			Annotations:     conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
+			HTTPMethod:      nil,
+			ExternalMcpKind: &kind,
 		}
 	}
 

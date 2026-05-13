@@ -34,6 +34,10 @@ export type ToolEntry = {
    */
   annotations?: ToolAnnotations | undefined;
   /**
+   * For external MCP tools, the underlying definition type ('direct' or 'proxy')
+   */
+  externalMcpKind?: string | undefined;
+  /**
    * HTTP method for HTTP tools (GET, POST, PUT, PATCH, DELETE)
    */
   httpMethod?: string | undefined;
@@ -64,6 +68,7 @@ export const ToolEntry$inboundSchema: z.ZodMiniType<ToolEntry, unknown> = z
   .pipe(
     z.object({
       annotations: z.optional(ToolAnnotations$inboundSchema),
+      external_mcp_kind: z.optional(z.string()),
       http_method: z.optional(z.string()),
       id: z.string(),
       name: z.string(),
@@ -72,6 +77,7 @@ export const ToolEntry$inboundSchema: z.ZodMiniType<ToolEntry, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "external_mcp_kind": "externalMcpKind",
         "http_method": "httpMethod",
         "tool_urn": "toolUrn",
       });
