@@ -1456,7 +1456,7 @@ function buildAssistantTools(deps: ToolDeps) {
         if (userInput.installed) {
           return okResult({
             installed: true,
-            note: "User confirmed the Slack app is installed. Proceed to request_environment_secrets for SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET (if a slack trigger exists), and SLACK_USER_TOKEN (if any attached tool needs a user token).",
+            note: "User confirmed the Slack app is installed. Proceed to request_environment_secrets in Slack-UI order: SLACK_SIGNING_SECRET (if a slack trigger exists), SLACK_BOT_TOKEN, and SLACK_USER_TOKEN (if any attached tool needs a user token).",
           });
         }
         return okResult({
