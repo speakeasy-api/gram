@@ -645,7 +645,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipKnownUserSyncsRoles(t *testin
 
 	relationship, err := orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
 		OrganizationID: organizationID,
-		UserID:         userID,
+		UserID:         conv.ToPGText(userID),
 	})
 	require.NoError(t, err)
 	require.False(t, relationship.Deleted)
@@ -731,14 +731,14 @@ func TestProcessWorkOSOrganizationEvents_MembershipDeleteSoftDeletesAndClearsAss
 
 	active, err := orgrepo.New(conn).HasOrganizationUserRelationship(ctx, orgrepo.HasOrganizationUserRelationshipParams{
 		OrganizationID: organizationID,
-		UserID:         userID,
+		UserID:         conv.ToPGText(userID),
 	})
 	require.NoError(t, err)
 	require.False(t, active)
 
 	relationship, err := orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
 		OrganizationID: organizationID,
-		UserID:         userID,
+		UserID:         conv.ToPGText(userID),
 	})
 	require.NoError(t, err)
 	require.True(t, relationship.Deleted)
