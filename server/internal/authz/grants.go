@@ -16,6 +16,22 @@ import (
 
 const WildcardResource = "*"
 
+// allScopeGrants returns wildcard grants for every defined scope. Used to give
+// superadmins (e.g. during org impersonation) unrestricted access.
+func allScopeGrants() []Grant {
+	scopes := []Scope{
+		ScopeOrgRead, ScopeOrgAdmin,
+		ScopeProjectRead, ScopeProjectWrite,
+		ScopeMCPRead, ScopeMCPWrite, ScopeMCPConnect,
+		ScopeEnvironmentRead, ScopeEnvironmentWrite,
+	}
+	grants := make([]Grant, 0, len(scopes))
+	for _, s := range scopes {
+		grants = append(grants, NewGrant(s, WildcardResource))
+	}
+	return grants
+}
+
 const (
 	SystemRoleAdmin  = "admin"
 	SystemRoleMember = "member"
