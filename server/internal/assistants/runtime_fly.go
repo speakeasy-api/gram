@@ -801,25 +801,6 @@ func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 	return nil
 }
 
-// classifyTurnError distinguishes upstream completion failures (provider
-// rejected the request — replaying it won't help) from real runtime
-// problems (VM gone, connection refused, runner crashed). Only the latter
-// should churn the Fly app; surfacing every provider 4xx as
-// ErrRuntimeUnhealthy nukes-and-respawns the VM on each retry, producing
-// thousands of dead assistant_runtimes rows on a single bad input.
-//
-// Match is body-substring based because the runner wraps the upstream error
-// before returning it; agentkit-provider-openrouter prefixes failed Gram
-// completion calls with "provider error", and Gram's own gateway path
-// stamps "completion failed" with oops.CodeGatewayError.
-func classifyTurnError(err error) error {
-	msg := err.Error()
-	if strings.Contains(msg, "provider error") || strings.Contains(msg, "completion failed") {
-		return ErrCompletionFailed
-	}
-	return ErrRuntimeUnhealthy
-}
-
 func (f *FlyRuntimeBackend) ServerURL(_ context.Context, runtime assistantRuntimeRecord, raw *url.URL) (*url.URL, error) {
 	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
 		return nil, err
