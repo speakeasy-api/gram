@@ -1,5 +1,5 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { StrictMode, type ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -23,10 +23,7 @@ vi.mock("@/lib/utils", async (importOriginal) => {
 
 vi.mock("@gram/client/react-query", () => ({
   useCreateShadowMCPApprovalRequestMutation: () => ({
-    mutate: mocks.createApprovalRequest,
-    isPending: false,
-    isSuccess: false,
-    isError: false,
+    mutateAsync: mocks.createApprovalRequest,
   }),
 }));
 
@@ -45,9 +42,20 @@ function renderPage(initialPath: string) {
   );
 }
 
+function renderPageStrict(initialPath: string) {
+  return render(
+    <StrictMode>
+      <MemoryRouter initialEntries={[initialPath]}>
+        <ShadowMCPRequestAccessContent />
+      </MemoryRouter>
+    </StrictMode>,
+  );
+}
+
 beforeEach(() => {
   sessionStorage.clear();
-  mocks.createApprovalRequest.mockClear();
+  mocks.createApprovalRequest.mockReset();
+  mocks.createApprovalRequest.mockResolvedValue({});
   mocks.useSession.mockReturnValue({ session: "" });
 });
 
@@ -112,19 +120,57 @@ describe("ShadowMCPRequestAccessContent", () => {
     renderPage("/shadow-mcp/request");
 
     await waitFor(() => {
-      expect(mocks.createApprovalRequest).toHaveBeenCalledWith(
-        {
-          request: {
-            createShadowMCPApprovalRequestForm: {
-              requestToken: "smar1.stored-token",
-            },
+      expect(mocks.createApprovalRequest).toHaveBeenCalledWith({
+        request: {
+          createShadowMCPApprovalRequestForm: {
+            requestToken: "smar1.stored-token",
           },
         },
-        expect.objectContaining({
-          onSuccess: expect.any(Function),
-        }),
-      );
+      });
     });
-    expect(screen.getByText("Preparing request...")).toBeTruthy();
+  });
+
+  it("shows success after submitting even after clearing the stored token", async () => {
+    sessionStorage.setItem(
+      "shadowMcpApprovalRequestToken",
+      "smar1.stored-token",
+    );
+    mocks.useSession.mockReturnValue({ session: "session_123" });
+
+    renderPage("/shadow-mcp/request");
+
+    await waitFor(() => {
+      expect(mocks.createApprovalRequest).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(
+        sessionStorage.getItem("shadowMcpApprovalRequestToken"),
+      ).toBeNull();
+      expect(screen.getByText("Request sent")).toBeTruthy();
+      expect(
+        screen.getByText(
+          "Your admin has been notified. You can close this page.",
+        ),
+      ).toBeTruthy();
+    });
+  });
+
+  it("shows success under StrictMode without double-submitting", async () => {
+    sessionStorage.setItem(
+      "shadowMcpApprovalRequestToken",
+      "smar1.strict-token",
+    );
+    mocks.useSession.mockReturnValue({ session: "session_123" });
+
+    renderPageStrict("/shadow-mcp/request");
+
+    await waitFor(() => {
+      expect(
+        sessionStorage.getItem("shadowMcpApprovalRequestToken"),
+      ).toBeNull();
+      expect(screen.getByText("Request sent")).toBeTruthy();
+    });
+    expect(mocks.createApprovalRequest).toHaveBeenCalledOnce();
   });
 });

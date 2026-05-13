@@ -4,10 +4,11 @@ import { useSession } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
 import { useCreateShadowMCPApprovalRequestMutation } from "@gram/client/react-query";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 
 const REQUEST_TOKEN_STORAGE_KEY = "shadowMcpApprovalRequestToken";
+const inFlightSubmissions = new Map<string, Promise<void>>();
 
 type RequestAccessState =
   | "missing-token"
@@ -16,17 +17,16 @@ type RequestAccessState =
   | "complete"
   | "error";
 
+type SubmissionResult = "idle" | "complete" | "error";
+
 export function ShadowMCPRequestAccessContent() {
   const [searchParams] = useSearchParams();
   const session = useSession();
   const requestToken = getRequestToken(searchParams);
-  const hasSubmitted = useRef(false);
-  const {
-    mutate: createApprovalRequest,
-    isPending,
-    isSuccess,
-    isError,
-  } = useCreateShadowMCPApprovalRequestMutation();
+  const [submissionResult, setSubmissionResult] =
+    useState<SubmissionResult>("idle");
+  const { mutateAsync: createApprovalRequest } =
+    useCreateShadowMCPApprovalRequestMutation();
 
   useEffect(() => {
     const meta = document.createElement("meta");
@@ -40,6 +40,7 @@ export function ShadowMCPRequestAccessContent() {
 
   useEffect(() => {
     if (requestToken) {
+      setSubmissionResult("idle");
       sessionStorage.setItem(REQUEST_TOKEN_STORAGE_KEY, requestToken);
       window.history.replaceState(null, "", window.location.pathname);
     }
@@ -55,43 +56,74 @@ export function ShadowMCPRequestAccessContent() {
   }, [session.session, storedRequestToken]);
 
   useEffect(() => {
-    if (!storedRequestToken || !session.session || hasSubmitted.current) return;
+    if (!storedRequestToken || !session.session) return;
 
-    hasSubmitted.current = true;
-    createApprovalRequest(
-      {
+    let submission = inFlightSubmissions.get(storedRequestToken);
+    if (!submission) {
+      submission = createApprovalRequest({
         request: {
           createShadowMCPApprovalRequestForm: {
             requestToken: storedRequestToken,
           },
         },
-      },
-      {
-        onSuccess: () => {
-          sessionStorage.removeItem(REQUEST_TOKEN_STORAGE_KEY);
-        },
-      },
-    );
+      })
+        .then(() => undefined)
+        .finally(() => {
+          inFlightSubmissions.delete(storedRequestToken);
+        });
+      inFlightSubmissions.set(storedRequestToken, submission);
+    }
+
+    let active = true;
+    submission
+      .then(() => {
+        if (!active) return;
+        setSubmissionResult("complete");
+        sessionStorage.removeItem(REQUEST_TOKEN_STORAGE_KEY);
+      })
+      .catch(() => {
+        if (!active) return;
+        setSubmissionResult("error");
+      });
+
+    return () => {
+      active = false;
+    };
   }, [createApprovalRequest, session.session, storedRequestToken]);
 
-  const state: RequestAccessState = !storedRequestToken
-    ? "missing-token"
-    : !session.session
-      ? "authenticating"
-      : isSuccess
-        ? "complete"
-        : isError
-          ? "error"
-          : "submitting";
+  const state = getRequestAccessState({
+    hasSession: !!session.session,
+    hasToken: !!storedRequestToken,
+    submissionResult,
+  });
 
   return (
     <div className="bg-background flex min-h-screen w-full flex-col items-center justify-center p-8">
       <Stack gap={8} align="center" className="w-full max-w-sm">
         <GramLogo className="w-25" variant="vertical" />
-        <RequestAccessMessage state={state} isPending={isPending} />
+        <RequestAccessMessage
+          state={state}
+          isPending={state === "submitting"}
+        />
       </Stack>
     </div>
   );
+}
+
+function getRequestAccessState({
+  hasSession,
+  hasToken,
+  submissionResult,
+}: {
+  hasSession: boolean;
+  hasToken: boolean;
+  submissionResult: SubmissionResult;
+}): RequestAccessState {
+  if (submissionResult === "complete") return "complete";
+  if (submissionResult === "error") return "error";
+  if (!hasToken) return "missing-token";
+  if (!hasSession) return "authenticating";
+  return "submitting";
 }
 
 function getRequestToken(searchParams: URLSearchParams): string | null {
