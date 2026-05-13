@@ -72,20 +72,26 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *mcp.Service
-	conn           *pgxpool.Pool
-	sessionManager *sessions.Manager
-	serverURL      *url.URL
-	siteURL        *url.URL
-	logger         *slog.Logger
-	tracerProvider trace.TracerProvider
-	cacheAdapter   cache.Cache
-	enc            *encryption.Client
-	authzEngine    *authz.Engine
-	audit          *audit.Logger
+	service             *mcp.Service
+	conn                *pgxpool.Pool
+	sessionManager      *sessions.Manager
+	serverURL           *url.URL
+	siteURL             *url.URL
+	logger              *slog.Logger
+	tracerProvider      trace.TracerProvider
+	cacheAdapter        cache.Cache
+	authnChallengeCache cache.TypedCacheObject[mcp.AuthnChallengeState]
+	enc                 *encryption.Client
+	authzEngine         *authz.Engine
+	audit               *audit.Logger
 }
 
 func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestMCPServiceWithIdentityResolver(t, nil)
+}
+
+func newTestMCPServiceWithIdentityResolver(t *testing.T, identityResolver mcp.IdentityResolver) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -158,20 +164,23 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter)
 	auditLogger := audit.NewLogger()
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, identityResolver, userSessionSigner)
+
+	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](logger, cacheAdapter, cache.SuffixNone)
 
 	return ctx, &testInstance{
-		service:        svc,
-		conn:           conn,
-		sessionManager: sessionManager,
-		serverURL:      serverURL,
-		siteURL:        siteURL,
-		logger:         logger,
-		tracerProvider: tracerProvider,
-		cacheAdapter:   cacheAdapter,
-		enc:            enc,
-		authzEngine:    authzEngine,
-		audit:          auditLogger,
+		service:             svc,
+		conn:                conn,
+		sessionManager:      sessionManager,
+		serverURL:           serverURL,
+		siteURL:             siteURL,
+		logger:              logger,
+		tracerProvider:      tracerProvider,
+		cacheAdapter:        cacheAdapter,
+		authnChallengeCache: authnCache,
+		enc:                 enc,
+		authzEngine:         authzEngine,
+		audit:               auditLogger,
 	}
 }
 
