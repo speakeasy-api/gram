@@ -7,8 +7,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
-import { useAuditLogs, useGetProjectOverview } from "@gram/client/react-query";
+import { useAuditLogs, useGramContext } from "@gram/client/react-query";
 import { useFeaturesGet } from "@gram/client/react-query/featuresGet";
+import { telemetryGetProjectOverview } from "@gram/client/funcs/telemetryGetProjectOverview";
+import { unwrapAsync } from "@gram/client/types/fp";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { Badge, Button, Card, Icon } from "@speakeasy-api/moonshine";
@@ -55,12 +58,22 @@ export function ProjectDashboard() {
   } = useFeaturesGet();
   const logsEnabled = featuresData?.logsEnabled === true;
 
-  const { data: overview, isPending: isOverviewPending } =
-    useGetProjectOverview(
-      { getProjectMetricsSummaryPayload: { from, to } },
-      undefined,
-      { enabled: logsEnabled },
-    );
+  // The SDK's useGetProjectOverview omits the request body from its query
+  // key, so changing the date range here would otherwise return cached data.
+  // Mirror the observe-page pattern: call useQuery directly with a key that
+  // includes the from/to ISO strings.
+  const client = useGramContext();
+  const { data: overview, isPending: isOverviewPending } = useQuery({
+    queryKey: ["project", "overview", from.toISOString(), to.toISOString()],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryGetProjectOverview(client, {
+          getProjectMetricsSummaryPayload: { from, to },
+        }),
+      ),
+    enabled: logsEnabled,
+    placeholderData: keepPreviousData,
+  });
 
   const featuresSettled = !isFeaturesPending || isFeaturesError;
   const isOverviewLoading =
