@@ -1078,6 +1078,36 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 	return metricsMap, nil
 }
 
+// toolCallExpressions returns the SQL fragments used to count tool calls for a
+// given event source. Hook events (Claude Code, Cursor, Codex) carry a
+// tool_name and a hook event name but no gram_urn; we only count the
+// completion-side event so each call counts once, not once per pre/post pair.
+// Other event sources count Gram MCP tool invocations via gram_urn + HTTP
+// status.
+type toolCallExpressions struct {
+	isCall    string
+	isSuccess string
+	isFailure string
+	key       string
+}
+
+func toolCallExprsFor(eventSource string) toolCallExpressions {
+	if eventSource == "hook" {
+		return toolCallExpressions{
+			isCall:    "tool_name != '' AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')",
+			isSuccess: "tool_name != '' AND toString(attributes.gram.hook.event) = 'PostToolUse'",
+			isFailure: "tool_name != '' AND toString(attributes.gram.hook.event) = 'PostToolUseFailure'",
+			key:       "tool_name",
+		}
+	}
+	return toolCallExpressions{
+		isCall:    "startsWith(gram_urn, 'tools:')",
+		isSuccess: "startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300",
+		isFailure: "startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400",
+		key:       "gram_urn",
+	}
+}
+
 // SearchUsersParams contains the parameters for searching users with aggregated metrics.
 type SearchUsersParams struct {
 	GramProjectID    string
@@ -1106,6 +1136,8 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		groupCol = "external_user_id"
 	}
 
+	tc := toolCallExprsFor(arg.EventSource)
+
 	sb := sq.Select(
 		groupCol+" AS user_id",
 
@@ -1126,15 +1158,15 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS avg_tokens_per_request",
 		"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost",
 
-		// Tool call metrics
-		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS total_tool_calls",
-		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_call_success",
-		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_call_failure",
+		// Tool call metrics (path depends on event source — Gram MCP tools vs AI-coding hook tools)
+		"countIf("+tc.isCall+") AS total_tool_calls",
+		"countIf("+tc.isSuccess+") AS tool_call_success",
+		"countIf("+tc.isFailure+") AS tool_call_failure",
 
-		// Tool breakdowns (maps of tool URN -> count)
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:')) AS tool_counts",
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_success_counts",
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_failure_counts",
+		// Tool breakdowns (maps of tool URN or hook tool name -> count)
+		"sumMapIf(map("+tc.key+", toUInt64(1)), "+tc.isCall+") AS tool_counts",
+		"sumMapIf(map("+tc.key+", toUInt64(1)), "+tc.isSuccess+") AS tool_success_counts",
+		"sumMapIf(map("+tc.key+", toUInt64(1)), "+tc.isFailure+") AS tool_failure_counts",
 
 		// Hook source breakdowns (maps of hook source -> count)
 		"sumMapIf(map(hook_source, toUInt64(1)), hook_source != '') AS hook_source_counts",
@@ -1213,6 +1245,8 @@ type GetUserMetricsSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsSummaryParams) (*MetricsSummaryRow, error) {
+	tc := toolCallExprsFor(arg.EventSource)
+
 	sb := sq.Select(
 		// Activity timestamps
 		"min(time_unix_nano) AS first_seen_unix_nano",
@@ -1237,11 +1271,11 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		"countIf(position(toString(attributes.gen_ai.response.finish_reasons), 'stop') > 0) AS finish_reason_stop",
 		"countIf(position(toString(attributes.gen_ai.response.finish_reasons), 'tool_calls') > 0) AS finish_reason_tool_calls",
 
-		// Tool call metrics
-		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS total_tool_calls",
-		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_call_success",
-		"countIf(startsWith(toString(attributes.gram.tool.urn), 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_call_failure",
-		"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS avg_tool_duration_ms",
+		// Tool call metrics (path depends on event source — Gram MCP tools vs AI-coding hook tools)
+		"countIf("+tc.isCall+") AS total_tool_calls",
+		"countIf("+tc.isSuccess+") AS tool_call_success",
+		"countIf("+tc.isFailure+") AS tool_call_failure",
+		"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) AS avg_tool_duration_ms",
 
 		// Chat resolution metrics (from AI evaluation of chat outcomes)
 		"countIf(evaluation_score_label = 'success') AS chat_resolution_success",
@@ -1253,10 +1287,10 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		// Model breakdown (map of model name -> count)
 		"sumMapIf(map(toString(attributes.gen_ai.response.model), toUInt64(1)), toString(attributes.gen_ai.response.model) != '') AS models",
 
-		// Tool breakdowns (maps of tool URN -> count)
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:')) AS tool_counts",
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_success_counts",
-		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_failure_counts",
+		// Tool breakdowns (maps of tool URN or hook tool name -> count)
+		"sumMapIf(map("+tc.key+", toUInt64(1)), "+tc.isCall+") AS tool_counts",
+		"sumMapIf(map("+tc.key+", toUInt64(1)), "+tc.isSuccess+") AS tool_success_counts",
+		"sumMapIf(map("+tc.key+", toUInt64(1)), "+tc.isFailure+") AS tool_failure_counts",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
