@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { Outlet, useParams } from "react-router";
-import { InsightsAgentsContent } from "@/components/observe/InsightsAgents";
 import { InsightsEmployeeDetailContent } from "@/components/observe/InsightsEmployeeDetail";
 import { InsightsEmployeesContent } from "@/components/observe/InsightsEmployees";
 import { InsightsToolsContent } from "@/components/observe/InsightsTools";
@@ -19,7 +18,7 @@ export function InsightsRoot() {
     const member = membersData.members.find(
       (m) => slugify(m.name) === userSlug,
     );
-    return member ? { [userSlug]: member.name } : {};
+    return member ? { [userSlug]: member.email } : {};
   }, [userSlug, membersData]);
 
   return (
@@ -50,14 +49,6 @@ export function InsightsMCPPage() {
   return (
     <RequireScope scope="project:read" level="page">
       <InsightsMCPContent />
-    </RequireScope>
-  );
-}
-
-export function InsightsAgentsPage() {
-  return (
-    <RequireScope scope="project:read" level="page">
-      <InsightsAgentsContent />
     </RequireScope>
   );
 }

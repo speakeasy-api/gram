@@ -34,7 +34,6 @@ import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import {
-  InsightsAgentsPage,
   InsightsEmployeeDetailPage,
   InsightsEmployeesLayout,
   InsightsEmployeesPage,
@@ -376,11 +375,6 @@ const ROUTE_STRUCTURE = {
         title: "MCP Servers",
         url: "mcp",
         component: InsightsMCPPage,
-      },
-      agents: {
-        title: "Agents",
-        url: "agents",
-        component: InsightsAgentsPage,
       },
       employees: {
         title: "Employees",

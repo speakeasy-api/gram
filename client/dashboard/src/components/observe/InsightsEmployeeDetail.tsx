@@ -4,6 +4,7 @@ import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
 import { ErrorAlert } from "@/components/ui/alert";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
@@ -151,9 +152,19 @@ export function InsightsEmployeeDetailContent() {
       />
       <div className="min-h-0 w-full flex-1 overflow-y-auto p-8 pb-24">
         <div className="mx-auto flex max-w-7xl flex-col gap-6">
-          <div>
-            <h1 className="text-xl font-semibold">{displayName}</h1>
-            <p className="text-muted-foreground text-sm">{displayEmail}</p>
+          <div className="flex items-center gap-3">
+            <Avatar className="size-12">
+              {member?.photoUrl && (
+                <AvatarImage src={member.photoUrl} alt={displayName} />
+              )}
+              <AvatarFallback className="text-base font-semibold">
+                {getInitials(displayName)}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <h1 className="text-xl font-semibold">{displayName}</h1>
+              <p className="text-muted-foreground text-sm">{displayEmail}</p>
+            </div>
           </div>
 
           {error ? (
@@ -471,6 +482,15 @@ function getTotalTokens(metrics: TokenUsageTotals | null | undefined) {
   const totalTokens = metrics.totalTokens ?? 0;
   if (totalTokens > 0) return totalTokens;
   return (metrics.totalInputTokens ?? 0) + (metrics.totalOutputTokens ?? 0);
+}
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 }
 
 async function fetchUserSummary(

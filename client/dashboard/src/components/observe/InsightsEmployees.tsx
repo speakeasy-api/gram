@@ -33,7 +33,7 @@ import { useSlugs } from "@/contexts/Sdk";
 import { slugify } from "@/lib/constants";
 import { Badge } from "@speakeasy-api/moonshine";
 
-type EmployeeStatus = "compliant" | "not_compliant";
+type EmployeeStatus = "enrolled" | "not_enrolled";
 
 type Employee = {
   id: string;
@@ -52,12 +52,12 @@ const statusMeta: Record<
   EmployeeStatus,
   { label: string; variant: "success" | "destructive" }
 > = {
-  compliant: {
-    label: "Compliant",
+  enrolled: {
+    label: "Enrolled",
     variant: "success",
   },
-  not_compliant: {
-    label: "Not Compliant",
+  not_enrolled: {
+    label: "Not Enrolled",
     variant: "destructive",
   },
 };
@@ -120,10 +120,10 @@ export function InsightsEmployeesContent() {
     [members, roles, usageSummaries],
   );
   const totalEmployees = employees.length;
-  const compliantEmployees = employees.filter(
-    (item) => item.status === "compliant",
+  const enrolledEmployees = employees.filter(
+    (item) => item.status === "enrolled",
   ).length;
-  const notCompliantEmployees = totalEmployees - compliantEmployees;
+  const notEnrolledEmployees = totalEmployees - enrolledEmployees;
   const totalTokenCount = employees.reduce(
     (sum, item) => sum + item.tokenCount,
     0,
@@ -132,35 +132,35 @@ export function InsightsEmployeesContent() {
   const openUser = (name: string) => {
     navigate(`${employeesBase}/${slugify(name)}`);
   };
-  const coverage =
-    totalEmployees > 0 ? (compliantEmployees / totalEmployees) * 100 : 0;
+  const enrollmentRate =
+    totalEmployees > 0 ? (enrolledEmployees / totalEmployees) * 100 : 0;
   const prompt =
-    "Using the Employees tab context, summarize whether all employees in this project are compliant based on whether they have any Gram token usage.";
+    "Using the Employees tab context, summarize who is enrolled in this project based on whether they have any Gram token usage.";
 
   return (
     <>
       <InsightsConfig
         mcpConfig={mcpConfig}
-        title="What would you like to know about employee uptake?"
-        subtitle="Ask about enrollment, agent setup, and Gram adoption across the team"
-        contextInfo={`Project-scoped Employees tab: ${compliantEmployees} of ${totalEmployees} employees have Gram token usage in the last ${LOOKBACK_DAYS} days and are compliant; ${notCompliantEmployees} employees have no Gram token usage and are not compliant.`}
+        title="What would you like to know about employee enrollment?"
+        subtitle="Ask who is enrolled, who still needs setup, and how Gram adoption is tracking across the team"
+        contextInfo={`Project-scoped Employees tab: ${enrolledEmployees} of ${totalEmployees} employees have Gram token usage in the last ${LOOKBACK_DAYS} days and are enrolled; ${notEnrolledEmployees} employees have no Gram token usage and are not enrolled.`}
         suggestions={[
           {
             title: "Enrollment Coverage",
-            label: "Are all employees compliant?",
+            label: "Who is enrolled?",
             prompt,
           },
           {
-            title: "Missing Data",
-            label: "Who has no token usage?",
+            title: "Not Enrolled",
+            label: "Who is not enrolled?",
             prompt:
-              "Which employees are not compliant because they have no Gram token usage in this project?",
+              "Which employees are not enrolled because they have no Gram token usage in this project?",
           },
           {
-            title: "Compliance Summary",
-            label: "Summarize compliance",
+            title: "Enrollment Summary",
+            label: "Summarize enrollment",
             prompt:
-              "Summarize project employee compliance based on whether each employee has Gram token usage.",
+              "Summarize project employee enrollment based on whether each employee has Gram token usage.",
           },
           {
             title: "User Usage",
@@ -181,12 +181,12 @@ export function InsightsEmployeesContent() {
             )}
           >
             <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="text-xl font-semibold">Employee Compliance</h1>
+              <h1 className="text-xl font-semibold">Employee Enrollment</h1>
               <p className="text-muted-foreground text-sm">
                 Track Gram uptake for organization members in this project over
-                the last {LOOKBACK_DAYS} days. Employees with hook activity are
-                marked compliant; employees without any activity are marked not
-                compliant.
+                the last {LOOKBACK_DAYS} days. Employees with Gram activity are
+                marked enrolled; employees without any activity are marked not
+                enrolled.
               </p>
             </div>
             <div
@@ -211,7 +211,7 @@ export function InsightsEmployeesContent() {
 
           {error ? (
             <ErrorAlert
-              title="Unable to load employee compliance data"
+              title="Unable to load employee enrollment data"
               error={error}
             />
           ) : isLoading ? (
@@ -234,25 +234,25 @@ export function InsightsEmployeesContent() {
                   subtext="Organization members"
                 />
                 <MetricCard
-                  title="Compliant"
-                  value={compliantEmployees}
+                  title="Enrolled"
+                  value={enrolledEmployees}
                   icon="circle-check"
                   accentColor="green"
-                  subtext="Hook activity present"
+                  subtext="Gram activity present"
                 />
                 <MetricCard
-                  title="Not Compliant"
-                  value={notCompliantEmployees}
+                  title="Not Enrolled"
+                  value={notEnrolledEmployees}
                   icon="triangle-alert"
                   accentColor="orange"
-                  subtext="No hook activity found"
+                  subtext="No Gram activity found"
                 />
                 <MetricCard
                   title="Token Count"
                   value={totalTokenCount}
                   icon="gauge"
                   accentColor="purple"
-                  subtext={`${coverage.toFixed(0)}% compliance coverage`}
+                  subtext={`${enrollmentRate.toFixed(0)}% enrolled`}
                 />
               </section>
 
@@ -289,13 +289,13 @@ function EmployeeTable({
             <TableHead className="pl-6">
               <span className="flex items-center gap-1">
                 Employee
-                <SimpleTooltip tooltip="Usage is attributed by matching the email reported by each AI coding tool to the member's Gram account. Members without a Gram account won't appear as compliant until they sign up or directory sync is configured.">
+                <SimpleTooltip tooltip="Enrollment is inferred by matching the email reported by each AI coding tool to the member's Gram account. Members without a Gram account won't appear as enrolled until they sign up or directory sync is configured.">
                   <Info className="text-muted-foreground size-3 shrink-0" />
                 </SimpleTooltip>
               </span>
             </TableHead>
             <TableHead>Role</TableHead>
-            <TableHead>Compliance</TableHead>
+            <TableHead>Enrollment</TableHead>
             <TableHead>Token Count</TableHead>
             <TableHead>Last Activity</TableHead>
             <TableHead className="pr-6 text-right">Action</TableHead>
@@ -470,7 +470,7 @@ function buildEmployees(
       const tokenCount =
         (summary?.totalInputTokens ?? 0) + (summary?.totalOutputTokens ?? 0);
       const status: EmployeeStatus =
-        summary != null ? "compliant" : "not_compliant";
+        summary != null ? "enrolled" : "not_enrolled";
 
       return {
         id: member.id,
@@ -487,7 +487,7 @@ function buildEmployees(
     })
     .sort((a, b) => {
       if (a.status !== b.status) {
-        return a.status === "not_compliant" ? -1 : 1;
+        return a.status === "not_enrolled" ? -1 : 1;
       }
 
       return a.name.localeCompare(b.name);
