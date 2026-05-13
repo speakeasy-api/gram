@@ -44,10 +44,11 @@ const (
 	defaultChatTitle       = "New Chat"
 	DefaultClaudeChatTitle = "Claude Code Session"
 	DefaultCursorChatTitle = "Cursor Session"
+	DefaultCodexChatTitle  = "Codex Session"
 )
 
 func isDefaultChatTitle(title string) bool {
-	return title == defaultChatTitle || title == DefaultClaudeChatTitle || title == DefaultCursorChatTitle
+	return title == defaultChatTitle || title == DefaultClaudeChatTitle || title == DefaultCursorChatTitle || title == DefaultCodexChatTitle
 }
 
 func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) error {

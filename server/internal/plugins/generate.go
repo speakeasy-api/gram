@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"path"
@@ -107,9 +108,9 @@ var CursorObservabilityHookEvents = []string{
 func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 
-	var claudePlugins []marketplaceEntry
-	var cursorPlugins []marketplaceEntry
-	var codexPlugins []codexMarketplaceEntry
+	claudePlugins := make([]marketplaceEntry, 0)
+	cursorPlugins := make([]marketplaceEntry, 0)
+	codexPlugins := make([]codexMarketplaceEntry, 0)
 
 	// Observability plugin ships first in the marketplace so it's the first
 	// thing team admins see. Skipped when no hooks key is configured —
@@ -120,6 +121,9 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 		}
 		if err := generateCursorObservabilityPlugin(files, cfg); err != nil {
 			return nil, fmt.Errorf("generate cursor observability plugin: %w", err)
+		}
+		if err := generateCodexObservabilityPlugin(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate codex observability plugin: %w", err)
 		}
 		claudeObservability := ClaudeObservabilitySlug(cfg)
 		claudePlugins = append(claudePlugins, marketplaceEntry{
@@ -132,6 +136,18 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 			Name:        cursorObservability,
 			Source:      "./" + cursorObservability,
 			Description: "Required: Gram observability hooks for " + cfg.OrgName + ".",
+		})
+		codexObservability := CodexObservabilitySlug(cfg)
+		codexPlugins = append(codexPlugins, codexMarketplaceEntry{
+			Name: codexObservability,
+			Source: codexMarketplaceSource{
+				Source: "local",
+				Path:   "./" + codexObservability,
+			},
+			Policy: codexMarketplacePolicy{
+				Installation:   "INSTALLED_BY_DEFAULT",
+				Authentication: "ON_USE",
+			},
 		})
 	}
 
@@ -356,6 +372,7 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 		Version:     "0.1.0",
 		Description: p.Description,
 		MCPServers:  "./.mcp.json",
+		Hooks:       "",
 		Interface: &codexInterface{
 			DisplayName:      p.Name,
 			ShortDescription: p.Description,
@@ -415,6 +432,9 @@ func ClaudeObservabilitySlug(cfg GenerateConfig) string {
 }
 func CursorObservabilitySlug(cfg GenerateConfig) string {
 	return conv.ToSlug(cfg.OrgName) + "-observability-cursor"
+}
+func CodexObservabilitySlug(cfg GenerateConfig) string {
+	return conv.ToSlug(cfg.OrgName) + "-observability-codex"
 }
 
 // generateClaudeObservabilityPlugin emits the per-org observability plugin
@@ -518,6 +538,97 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir stri
 	return nil
 }
 
+// generateCodexObservabilityPlugin emits the per-org observability plugin
+// for Codex. Same shape as the Claude/Cursor variants but uses Codex's hook
+// event names and script destination URL.
+func generateCodexObservabilityPlugin(files map[string][]byte, cfg GenerateConfig) error {
+	return generateCodexObservabilityPluginInDir(files, CodexObservabilitySlug(cfg), cfg)
+}
+
+// generateCodexObservabilityPluginFlat emits the same files at the root
+// (no subdir) for direct ZIP installation.
+func generateCodexObservabilityPluginFlat(files map[string][]byte, cfg GenerateConfig) error {
+	if err := generateCodexObservabilityPluginInDir(files, "", cfg); err != nil {
+		return err
+	}
+	// Add a marketplace manifest at the root so the extracted directory can be
+	// used directly: `codex plugin marketplace add <path>`. Codex requires a
+	// marketplace root (containing .agents/plugins/marketplace.json), not a bare
+	// plugin root. path "." points back to the plugin at the ZIP root.
+	marketplaceJSON, err := marshalJSON(codexMarketplaceManifest{
+		Name:      conv.ToSlug(cfg.OrgName) + "-gram",
+		Interface: codexInterface{DisplayName: cfg.OrgName + " Plugins", ShortDescription: ""},
+		Plugins: []codexMarketplaceEntry{{
+			Name: CodexObservabilitySlug(cfg),
+			Source: codexMarketplaceSource{
+				Source: "local",
+				Path:   ".",
+			},
+			Policy: codexMarketplacePolicy{
+				Installation:   "INSTALLED_BY_DEFAULT",
+				Authentication: "ON_USE",
+			},
+		}},
+	})
+	if err != nil {
+		return fmt.Errorf("marshal marketplace.json: %w", err)
+	}
+	files[".agents/plugins/marketplace.json"] = marketplaceJSON
+
+	// Bundle install.sh at the root so users can run `bash install.sh` after
+	// extracting the ZIP. The local variant uses the script directory as the
+	// marketplace source so no remote URL is needed.
+	installScript, err := GenerateCodexInstallScript("", cfg)
+	if err != nil {
+		return fmt.Errorf("generate install script: %w", err)
+	}
+	files["install.sh"] = installScript
+
+	return nil
+}
+
+func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
+	name := subdir
+	if name == "" {
+		name = CodexObservabilitySlug(cfg)
+	}
+	pluginJSON, err := marshalJSON(codexPluginMeta{
+		Name:        name,
+		Version:     "0.1.0",
+		Description: "Gram observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Gram dashboard.",
+		MCPServers:  "",
+		Hooks:       "./hooks/hooks.json",
+		Interface: &codexInterface{
+			DisplayName:      "Observability (Codex)",
+			ShortDescription: "Gram observability hooks",
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("marshal plugin.json: %w", err)
+	}
+	files[path.Join(subdir, ".codex-plugin/plugin.json")] = pluginJSON
+
+	marketplace := conv.ToSlug(cfg.OrgName) + "-gram"
+	plugin := CodexObservabilitySlug(cfg)
+	hookCmd := fmt.Sprintf(`bash "$HOME/.codex/.tmp/marketplaces/%s/%s/hooks/hook.sh"`, marketplace, plugin)
+	hookEvents := make(map[string][]codexMatcherGroup, len(CodexObservabilityHookEvents))
+	for _, event := range CodexObservabilityHookEvents {
+		hookEvents[event] = []codexMatcherGroup{{
+			Matcher: "",
+			Hooks:   []codexHookCommand{{Type: "command", Command: hookCmd}},
+		}}
+	}
+	hooksJSON, err := marshalJSON(codexHooksConfig{Hooks: hookEvents})
+	if err != nil {
+		return fmt.Errorf("marshal hooks.json: %w", err)
+	}
+	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
+
+	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "codex")
+
+	return nil
+}
+
 // GenerateObservabilityPluginPackage produces the file map for a single
 // observability plugin for direct ZIP installation (no <org>-observability/
 // subdir). Minting a fresh hooks key is the caller's responsibility — this
@@ -532,6 +643,10 @@ func GenerateObservabilityPluginPackage(cfg GenerateConfig, platform string) (ma
 	case "cursor":
 		if err := generateCursorObservabilityPluginFlat(files, cfg); err != nil {
 			return nil, fmt.Errorf("generate cursor observability plugin: %w", err)
+		}
+	case "codex":
+		if err := generateCodexObservabilityPluginFlat(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate codex observability plugin: %w", err)
 		}
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
@@ -563,6 +678,57 @@ func renderHookScript(cfg GenerateConfig, platform string) []byte {
 
 	// %%{http_code} → %{http_code} in the emitted script (curl write-out format).
 	// %%s           → %s           in the emitted script (printf format).
+	//
+	// Claude reads hookSpecificOutput.permissionDecision from stdout on 2xx,
+	// so the body is echoed unconditionally for the claude platform.
+	// Codex treats any stdout as a structured response and rejects unknown JSON,
+	// so for codex we suppress stdout on 2xx (empty stdout = allow).
+	// Both platforms treat exit 2 as a block; the reason goes to stderr.
+	if platform == "codex" {
+		return fmt.Appendf(nil, `#!/usr/bin/env bash
+# Generated by Gram. Do not edit — overwritten on every publish.
+# Key prefix: %s (correlate with the dashboard's API Keys page).
+
+# Send a hook event to Gram. The server is the sole authority on whether to block:
+#   HTTP 2xx -> allow (exit 0, no stdout — Codex allow = empty stdout).
+#   HTTP 4xx/5xx -> block (exit 2). Server message relayed to stderr.
+# The script never makes the allow/deny decision — only the server does.
+
+set -u
+
+server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
+
+response=$(curl -s -w "\n%%{http_code}" -X POST \
+%s  -H "Content-Type: application/json" \
+  -d @- \
+  --max-time 10 \
+  "${server_url}/rpc/hooks.codex")
+
+http_code=$(echo "$response" | tail -1)
+body=$(echo "$response" | sed '$d')
+
+# curl returns 000 on connection failure — treat as block so an unreachable
+# Gram server cannot silently bypass blocking policies.
+if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
+  exit 0
+fi
+
+reason=""
+if command -v python3 >/dev/null 2>&1; then
+  reason=$(printf '%%s' "$body" | python3 -c "
+import json, sys
+try:
+    print(json.loads(sys.stdin.read()).get('message', ''), end='')
+except Exception:
+    pass
+" 2>/dev/null) || true
+fi
+
+echo "${reason:-Gram hook returned HTTP ${http_code}}" >&2
+exit 2
+`, keyPrefix, cfg.ServerURL, authHeaders)
+	}
+
 	return fmt.Appendf(nil, `#!/usr/bin/env bash
 # Generated by Gram. Do not edit — overwritten on every publish.
 # Key prefix: %s (correlate with the dashboard's API Keys page).
@@ -608,6 +774,222 @@ fi
 echo "${reason:-Gram hook returned HTTP ${http_code}}" >&2
 exit 2
 `, keyPrefix, cfg.ServerURL, authHeaders, platform)
+}
+
+// codexHookApproval is a single [hooks.state] entry that pre-approves a Codex
+// hook event without requiring the user to click through Settings → Hooks.
+type codexHookApproval struct {
+	StateKey    string
+	TrustedHash string
+}
+
+// codexEventSnakeCase maps PascalCase Codex hook event names to the snake_case
+// form that Codex stores in [hooks.state] config keys.
+func codexEventSnakeCase(event string) string {
+	switch event {
+	case "SessionStart":
+		return "session_start"
+	case "PreToolUse":
+		return "pre_tool_use"
+	case "PermissionRequest":
+		return "permission_request"
+	case "PostToolUse":
+		return "post_tool_use"
+	case "UserPromptSubmit":
+		return "user_prompt_submit"
+	case "Stop":
+		return "stop"
+	default:
+		return strings.ToLower(event)
+	}
+}
+
+// computeCodexHookHash returns the sha256:hex trusted_hash that Codex expects
+// for a single hook entry. Codex's canonical JSON varies by event:
+//
+//   - SessionStart, PreToolUse, PermissionRequest, PostToolUse:
+//     sha256(canonical_json({event_name, hooks:[{async, command, timeout, type}], matcher:""}))
+//   - UserPromptSubmit, Stop:
+//     sha256(canonical_json({event_name, hooks:[{async, command, timeout, type}]}))
+//     (no matcher field — these events predate the matcher-group schema in fingerprint.rs)
+//
+// The command uses the literal string "$HOME" (not expanded), so the hash is
+// deterministic for a given marketplace + plugin name pair.
+func computeCodexHookHash(eventSnake, marketplace, plugin string) (string, error) {
+	command := fmt.Sprintf(`bash "$HOME/.codex/.tmp/marketplaces/%s/%s/hooks/hook.sh"`, marketplace, plugin)
+	hook := map[string]any{
+		"async":   false,
+		"command": command,
+		"timeout": 600,
+		"type":    "command",
+	}
+	// json.Marshal on map[string]any sorts keys alphabetically, matching
+	// Codex's canonical JSON implementation in fingerprint.rs.
+	canonical := map[string]any{
+		"event_name": eventSnake,
+		"hooks":      []map[string]any{hook},
+	}
+	// UserPromptSubmit and Stop use a canonical without the matcher field;
+	// the older four events include matcher: "".
+	switch eventSnake {
+	case "user_prompt_submit", "stop":
+		// no matcher field
+	default:
+		canonical["matcher"] = ""
+	}
+	data, err := json.Marshal(canonical)
+	if err != nil {
+		return "", fmt.Errorf("marshal canonical JSON: %w", err)
+	}
+	sum := sha256.Sum256(data)
+	return fmt.Sprintf("sha256:%x", sum), nil
+}
+
+// computeCodexHookApprovals returns pre-computed [hooks.state] entries for all
+// Codex observability hook events for a given marketplace and plugin name.
+func computeCodexHookApprovals(marketplace, plugin string) ([]codexHookApproval, error) {
+	approvals := make([]codexHookApproval, 0, len(CodexObservabilityHookEvents))
+	for _, event := range CodexObservabilityHookEvents {
+		snake := codexEventSnakeCase(event)
+		hash, err := computeCodexHookHash(snake, marketplace, plugin)
+		if err != nil {
+			return nil, fmt.Errorf("compute hash for %s: %w", event, err)
+		}
+		approvals = append(approvals, codexHookApproval{
+			StateKey:    fmt.Sprintf(`%s@%s:hooks/hooks.json:%s:0:0`, plugin, marketplace, snake),
+			TrustedHash: hash,
+		})
+	}
+	return approvals, nil
+}
+
+// GenerateCodexInstallScript produces a bash install script that:
+//   - Registers the Gram marketplace with the Codex CLI
+//   - Patches ~/.codex/config.toml with feature flags and plugin entry
+//   - Pre-approves all hook events so users skip the manual Settings → Hooks step
+//
+// When marketplaceURL is empty the script uses the directory it was run from as
+// the marketplace source (suitable for the ZIP-bundled install.sh). When
+// marketplaceURL is non-empty the script registers the remote URL instead.
+func GenerateCodexInstallScript(marketplaceURL string, cfg GenerateConfig) ([]byte, error) {
+	marketplace := conv.ToSlug(cfg.OrgName) + "-gram"
+	plugin := CodexObservabilitySlug(cfg)
+
+	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	if err != nil {
+		return nil, fmt.Errorf("compute hook approvals: %w", err)
+	}
+
+	return renderCodexInstallScript(marketplaceURL, marketplace, plugin, approvals), nil
+}
+
+func renderCodexInstallScript(marketplaceURL, marketplace, plugin string, approvals []codexHookApproval) []byte {
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "#!/usr/bin/env bash\n")
+	fmt.Fprintf(&b, "# Gram Codex Observability Plugin — Install Script\n")
+	fmt.Fprintf(&b, "# Marketplace: %s\n\n", marketplace)
+	b.WriteString("set -euo pipefail\n\n")
+	fmt.Fprintf(&b, "MARKETPLACE_KEY=%q\n", marketplace)
+	fmt.Fprintf(&b, "PLUGIN_KEY=%q\n\n", plugin)
+
+	// Step 1: marketplace registration differs for remote vs local ZIP installs.
+	if marketplaceURL != "" {
+		fmt.Fprintf(&b, "MARKETPLACE_URL=%q\n\n", marketplaceURL)
+		b.WriteString(`# ── 1. Register & sync marketplace ──────────────────────────────────────────
+echo "→ Registering Gram marketplace..."
+if command -v codex >/dev/null 2>&1; then
+  # add is idempotent (no-ops if already registered); upgrade pulls any new commits.
+  codex plugin marketplace add "${MARKETPLACE_URL}" || true
+  codex plugin marketplace upgrade "${MARKETPLACE_KEY}"
+else
+  echo "  ⚠  'codex' not found in PATH."
+  echo "     Run manually: codex plugin marketplace add '${MARKETPLACE_URL}'"
+fi
+
+`)
+	} else {
+		b.WriteString(`# ── 1. Register marketplace (local ZIP install) ──────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+echo "→ Registering Gram marketplace from ${SCRIPT_DIR}..."
+if command -v codex >/dev/null 2>&1; then
+  codex plugin marketplace add "${SCRIPT_DIR}"
+else
+  echo "  ⚠  'codex' not found in PATH."
+  echo "     Run manually: codex plugin marketplace add '${SCRIPT_DIR}'"
+fi
+
+`)
+	}
+
+	// Step 2: patch ~/.codex/config.toml via embedded Python (always available
+	// on macOS, where Codex runs). Uses a quoted heredoc (<<'PYTHON') so bash
+	// does not expand $PLUGIN_KEY etc. inside the Python source.
+	b.WriteString(`# ── 2. Patch ~/.codex/config.toml ────────────────────────────────────────────
+echo "→ Configuring ~/.codex/config.toml..."
+python3 - <<'PYTHON'
+import os, re
+
+config_path = os.path.expanduser("~/.codex/config.toml")
+os.makedirs(os.path.dirname(config_path), exist_ok=True)
+content = open(config_path).read() if os.path.exists(config_path) else ""
+
+def ensure_dotted_key(text, key, value):
+    if re.search(r'(?m)^' + re.escape(key) + r'\s*=', text):
+        return text
+    # Insert before the first table header so the key stays at root scope.
+    # Appending after a [table] section would silently nest it inside that table.
+    m = re.search(r'(?m)^\[', text)
+    if m:
+        before = text[:m.start()].rstrip('\n')
+        return before + '\n' + key + ' = ' + value + '\n\n' + text[m.start():]
+    return text.rstrip('\n') + '\n' + key + ' = ' + value + '\n'
+
+def ensure_table_entry(text, table_header, key, value):
+    if re.search(r'(?m)^' + re.escape(table_header) + r'\s*\n(?:[^\[]*\n)*' + re.escape(key) + r'\s*=', text):
+        return text
+    if table_header not in text:
+        return text.rstrip('\n') + '\n\n' + table_header + '\n' + key + ' = ' + value + '\n'
+    idx = text.index(table_header) + len(table_header)
+    return text[:idx] + '\n' + key + ' = ' + value + text[idx:]
+
+`)
+
+	// Python literals — embedded at generation time, not expanded by bash.
+	fmt.Fprintf(&b, "PLUGIN_KEY = %q\n", plugin)
+	fmt.Fprintf(&b, "MARKETPLACE_KEY = %q\n\n", marketplace)
+
+	b.WriteString(`content = ensure_dotted_key(content, "features.hooks", "true")
+content = ensure_dotted_key(content, "features.plugin_hooks", "true")
+
+if not re.search(r'(?m)^\[hooks\.state\]', content):
+    content = content.rstrip('\n') + '\n\n[hooks.state]\n'
+
+for state_key, trusted_hash in [
+`)
+
+	for _, a := range approvals {
+		fmt.Fprintf(&b, "    (%q, %q),\n", a.StateKey, a.TrustedHash)
+	}
+
+	b.WriteString(`]:
+    section = f'[hooks.state."{state_key}"]'
+    if section not in content:
+        entry = f'\n{section}\nenabled = true\ntrusted_hash = "{trusted_hash}"\n'
+        content = content.rstrip('\n') + '\n' + entry
+
+content = ensure_table_entry(content, f'[plugins."{PLUGIN_KEY}@{MARKETPLACE_KEY}"]', "enabled", "true")
+
+with open(config_path, 'w') as f:
+    f.write(content)
+print("  ✓ Config updated.")
+PYTHON
+
+echo ""
+echo "✓ Gram observability plugin installed. Restart Codex to activate."
+`)
+
+	return []byte(b.String())
 }
 
 func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginInfo, cfg GenerateConfig) error {
@@ -829,6 +1211,31 @@ type cursorHookCommand struct {
 	Command string `json:"command"`
 }
 
+type codexHooksConfig struct {
+	Hooks map[string][]codexMatcherGroup `json:"hooks"`
+}
+
+type codexMatcherGroup struct {
+	Matcher string             `json:"matcher"`
+	Hooks   []codexHookCommand `json:"hooks"`
+}
+
+type codexHookCommand struct {
+	Type    string `json:"type"`
+	Command string `json:"command"`
+}
+
+// CodexObservabilityHookEvents are Codex's hook event names. Codex uses
+// PascalCase names and has a PermissionRequest event that Claude/Cursor lack.
+var CodexObservabilityHookEvents = []string{
+	"SessionStart",
+	"PreToolUse",
+	"PermissionRequest",
+	"PostToolUse",
+	"UserPromptSubmit",
+	"Stop",
+}
+
 // Codex types — schema verified against openai/codex @
 // f802f0a3911655ac0e2876fceedf8ad833431df3 (2026-04-24):
 //   codex-rs/core-plugins/src/manifest.rs  — plugin manifest (rename_all = "camelCase")
@@ -841,7 +1248,8 @@ type codexPluginMeta struct {
 	Name        string          `json:"name"`
 	Version     string          `json:"version"`
 	Description string          `json:"description,omitempty"`
-	MCPServers  string          `json:"mcpServers"`
+	MCPServers  string          `json:"mcpServers,omitempty"`
+	Hooks       string          `json:"hooks,omitempty"`
 	Interface   *codexInterface `json:"interface,omitempty"`
 }
 

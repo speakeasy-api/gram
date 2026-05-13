@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"slices"
 	"strings"
@@ -36,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -67,40 +67,54 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
 type Service struct {
-	logger              *slog.Logger
-	tracer              trace.Tracer
-	metrics             *metrics
-	guardianPolicy      *guardian.Policy
-	db                  *pgxpool.Pool
-	authRepo            *auth_repo.Queries
-	toolsetsRepo        *toolsets_repo.Queries
-	mcpMetadataRepo     *metadata_repo.Queries
-	orgsRepo            *organizations_repo.Queries
-	auth                *auth.Auth
-	env                 toolconfig.EnvironmentLoader
-	serverURL           *url.URL
-	posthog             *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
-	toolProxy           *gateway.ToolProxy
-	oauthService        OAuthService
-	oauthRepo           *oauth_repo.Queries
-	billingTracker      billing.Tracker
-	billingRepository   billing.Repository
-	toolsetCache        cache.TypedCacheObject[mv.ToolsetBaseContents]
-	telemLogger         *tm.Logger
-	vectorToolStore     *rag.ToolsetVectorStore
-	temporal            *temporal.Environment
-	assistantTokens     *assistanttokens.Manager
-	sessions            *sessions.Manager
-	chatSessionsManager *chatsessions.Manager
-	externalmcpRepo     *externalmcp_repo.Queries
-	deploymentsRepo     *deployments_repo.Queries
-	enc                 *encryption.Client
-	authz               *authz.Engine
-	shadowMCPClient     *shadowmcp.Client
-	platformExtras      []platformtools.ExternalTool
+	logger                *slog.Logger
+	tracer                trace.Tracer
+	metrics               *metrics
+	guardianPolicy        *guardian.Policy
+	db                    *pgxpool.Pool
+	authRepo              *auth_repo.Queries
+	toolsetsRepo          *toolsets_repo.Queries
+	mcpMetadataRepo       *metadata_repo.Queries
+	orgsRepo              *organizations_repo.Queries
+	auth                  *auth.Auth
+	env                   toolconfig.EnvironmentLoader
+	serverURL             *url.URL
+	posthog               *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	toolProxy             *gateway.ToolProxy
+	oauthService          OAuthService
+	oauthRepo             *oauth_repo.Queries
+	billingTracker        billing.Tracker
+	billingRepository     billing.Repository
+	toolsetCache          cache.TypedCacheObject[mv.ToolsetBaseContents]
+	telemLogger           *tm.Logger
+	vectorToolStore       *rag.ToolsetVectorStore
+	temporal              *temporal.Environment
+	assistantTokens       *assistanttokens.Manager
+	sessions              *sessions.Manager
+	chatSessionsManager   *chatsessions.Manager
+	externalmcpRepo       *externalmcp_repo.Queries
+	deploymentsRepo       *deployments_repo.Queries
+	enc                   *encryption.Client
+	authz                 *authz.Engine
+	shadowMCPClient       *shadowmcp.Client
+	platformExtras        []platformtools.ExternalTool
+	authnChallengeCache   cache.TypedCacheObject[AuthnChallengeState]
+	userSessionGrantCache cache.TypedCacheObject[UserSessionGrant]
+	// idpClient drives the user-session AS authn-challenge path's calls to
+	// the Speakeasy IDP (issuer-gated /authorize → /idp_callback flow). The
+	// same client backs the chat-session Manager via auth/sessions, so both
+	// paths share the user-bootstrap side effects (UpsertUser, posthog
+	// signup, WorkOS sync). See auth/speakeasyclient.
+	idpClient *speakeasyclient.Client
+	// userSessionSigner mints the SessionClaims JWT issued at /token.
+	// HS256 with GRAM_JWT_SIGNING_KEY -- same key the chat-session signer
+	// uses, intentionally separate signer code so each path is removable
+	// in isolation.
+	userSessionSigner *usersessions.Signer
 }
 
 type oauthTokenInputs struct {
@@ -151,6 +165,8 @@ func NewService(
 	auditLogger *audit.Logger,
 	platformExtras []platformtools.ExternalTool,
 	platformFeatureChecker platformtools.FeatureChecker,
+	idpClient *speakeasyclient.Client,
+	userSessionSigner *usersessions.Signer,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -209,6 +225,18 @@ func NewService(
 		authz:               authzEngine,
 		shadowMCPClient:     shadowMCPClient,
 		platformExtras:      platformExtras,
+		authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](
+			logger.With(attr.SlogCacheNamespace("authn_challenge")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
+		userSessionGrantCache: cache.NewTypedObjectCache[UserSessionGrant](
+			logger.With(attr.SlogCacheNamespace("user_session_grant")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
+		idpClient:         idpClient,
+		userSessionSigner: userSessionSigner,
 	}
 }
 
@@ -220,9 +248,19 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/install-page-{hash}.js", oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript).ServeHTTP)
 
-	// OAuth 2.1 Authorization Server Metadata
-	o11y.AttachHandler(mux, "GET", wellknown.OAuthAuthorizationServerPath+"/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", wellknown.OAuthProtectedResourcePath+"/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthProtectedResourceMetadata).ServeHTTP)
+	// OAuth metadata at the canonical RFC paths. The handlers in
+	// authnchallenge.go dispatch internally on toolsets.user_session_issuer_id:
+	// issuer-gated toolsets get the new metadata shape; legacy toolsets fall
+	// through to wellknown.Resolve* (preserving the prior behaviour).
+	o11y.AttachHandler(mux, "GET", wellknown.OAuthProtectedResourcePath+"/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleGetProtectedResource).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", wellknown.OAuthAuthorizationServerPath+"/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleGetAuthorizationServer).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/register", oops.ErrHandle(service.logger, service.HandleRegister).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/authorize", oops.ErrHandle(service.logger, service.HandleAuthorize).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/token", oops.ErrHandle(service.logger, service.HandleToken).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/revoke", oops.ErrHandle(service.logger, service.HandleRevoke).ServeHTTP)
 }
 
 // HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests
@@ -261,71 +299,6 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 	return nil
 }
 
-// handleWellKnownMetadata handles OAuth 2.1 authorization server metadata discovery
-func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	mcpSlug := chi.URLParam(r, "mcpSlug")
-	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
-	}
-
-	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
-	switch {
-	case errors.Is(err, errToolsetNotFound):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
-	}
-
-	baseURL := s.serverURL.String()
-	if customDomainCtx != nil {
-		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
-	}
-
-	result, err := wellknown.ResolveOAuthServerMetadataFromToolset(
-		ctx,
-		s.logger,
-		s.db,
-		s.oauthRepo,
-		&s.toolsetCache,
-		toolset,
-		baseURL,
-		mcpSlug,
-	)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth server metadata").Log(ctx, s.logger)
-	}
-
-	if result == nil {
-		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
-	}
-
-	// Handle proxy case - reverse proxy to external MCP OAuth server
-	if result.Kind == wellknown.OAuthServerMetadataResultKindProxy {
-		target, parseErr := url.Parse(result.ProxyURL)
-		if parseErr != nil {
-			return oops.E(oops.CodeUnexpected, parseErr, "failed to parse well-known URL").Log(ctx, s.logger)
-		}
-
-		proxy := &httputil.ReverseProxy{
-			Director: nil,
-			Rewrite: func(pr *httputil.ProxyRequest) {
-				pr.SetURL(target)
-			},
-			Transport:      nil,
-			FlushInterval:  0,
-			ErrorLog:       nil,
-			BufferPool:     nil,
-			ModifyResponse: nil,
-			ErrorHandler:   nil,
-		}
-		proxy.ServeHTTP(w, r)
-		return nil
-	}
-
-	return writeOAuthServerMetadataResponse(ctx, s.logger, w, result)
-}
-
 // writeOAuthServerMetadataResponse builds the OAuth server metadata body and
 // only commits the 200 OK status once the body is ready. This ordering matters:
 // if marshaling fails or the result kind is unrecognized, the caller's error
@@ -353,45 +326,6 @@ func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, 
 	}
 
 	return nil
-}
-
-func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	mcpSlug := chi.URLParam(r, "mcpSlug")
-	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
-	}
-
-	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
-	switch {
-	case errors.Is(err, errToolsetNotFound):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
-	}
-
-	baseURL := s.serverURL.String()
-	if customDomainCtx != nil {
-		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
-	}
-
-	metadata, err := wellknown.ResolveOAuthProtectedResourceFromToolset(
-		ctx,
-		s.logger,
-		s.db,
-		&s.toolsetCache,
-		toolset,
-		baseURL+"/mcp/"+mcpSlug,
-	)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth protected resource metadata").Log(ctx, s.logger)
-	}
-
-	if metadata == nil {
-		return oops.E(oops.CodeNotFound, nil, "not found")
-	}
-
-	return writeOAuthProtectedResourceMetadataResponse(ctx, s.logger, w, metadata)
 }
 
 // writeOAuthProtectedResourceMetadataResponse builds the OAuth protected
@@ -490,63 +424,80 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// Private MCPs still enforce identity auth at this level since that's user
 	// identity, not per-tool security.
 	oauthRequired := toolset.ExternalOauthServerID.Valid || (oAuthProxyProvider != nil)
-	oauthProtectedResourceURL, err := url.JoinPath(baseURL, wellknown.OAuthProtectedResourcePath, mcpRouteBase, mcpSlug)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to build OAuth protected resource URL").Log(ctx, s.logger)
+
+	// Issuer-gated path is fully separate from the legacy switch below: try
+	// validating a user-session JWT; on success stamp ctx and skip the legacy
+	// auth chain entirely; on miss, 401 with WWW-Authenticate so the client
+	// can discover the AS surface.
+	issuerGated := toolset.UserSessionIssuerID.Valid
+	if issuerGated {
+		newCtx, ok := s.validateUserSessionToken(ctx, authToken, toolset)
+		if !ok {
+			return WriteAuthenticateChallenge(w, baseURL, mcpSlug, "expired or invalid access token")
+		}
+		ctx = newCtx
 	}
-	switch {
-	case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
-		// External OAuth server flow — collect token if present
-		if authToken != "" {
-			tokenInputs = append(tokenInputs, oauthTokenInputs{
-				securityKeys: []string{},
-				Token:        authToken,
-			})
+
+	var oauthProtectedResourceURL string
+	if !issuerGated {
+		oauthProtectedResourceURL, err = url.JoinPath(baseURL, wellknown.OAuthProtectedResourcePath, mcpRouteBase, mcpSlug)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to build OAuth protected resource URL").Log(ctx, s.logger)
 		}
-	case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
-		// Custom OAuth provider flow — validate and collect tokens if present
-		if authToken != "" {
-			oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
-			if errors.Is(err, oauth.ErrExpiredExternalSecrets) && oauthToken != nil {
-				s.logger.InfoContext(ctx, "upstream credentials expired, attempting refresh", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
-				var refreshedToken *oauth.Token
-				refreshedToken, err = s.oauthService.RefreshProxyToken(ctx, toolset.ID, oauthToken, oAuthProxyProvider, toolset)
+		switch {
+		case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
+			// External OAuth server flow — collect token if present
+			if authToken != "" {
+				tokenInputs = append(tokenInputs, oauthTokenInputs{
+					securityKeys: []string{},
+					Token:        authToken,
+				})
+			}
+		case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
+			// Custom OAuth provider flow — validate and collect tokens if present
+			if authToken != "" {
+				oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
+				if errors.Is(err, oauth.ErrExpiredExternalSecrets) && oauthToken != nil {
+					s.logger.InfoContext(ctx, "upstream credentials expired, attempting refresh", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
+					var refreshedToken *oauth.Token
+					refreshedToken, err = s.oauthService.RefreshProxyToken(ctx, toolset.ID, oauthToken, oAuthProxyProvider, toolset)
+					if err != nil {
+						s.logger.WarnContext(ctx, "upstream token refresh failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug), attr.SlogError(err))
+					} else {
+						oauthToken = refreshedToken
+					}
+				}
 				if err != nil {
-					s.logger.WarnContext(ctx, "upstream token refresh failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug), attr.SlogError(err))
+					s.logger.WarnContext(ctx, "OAuth token validation failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(err))
 				} else {
-					oauthToken = refreshedToken
+					s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
+				}
+				// Collect upstream secrets so checkToolsetSecurity knows the user
+				// authenticated. We skip this when the Gram access token itself has
+				// expired (ErrExpiredAccessToken) — an expired token must not grant
+				// access. We still collect when only the upstream credentials expired
+				// (ErrExpiredExternalSecrets) because the user's Gram session is
+				// valid; the upstream refresh is best-effort.
+				if oauthToken != nil && !errors.Is(err, oauth.ErrExpiredAccessToken) {
+					for _, externalSecret := range oauthToken.ExternalSecrets {
+						tokenInputs = append(tokenInputs, oauthTokenInputs{
+							securityKeys: externalSecret.SecurityKeys,
+							Token:        externalSecret.Token,
+						})
+					}
 				}
 			}
+		case !toolset.McpIsPublic:
+			isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
+			ctx, err = s.RequirePrivateIdentityAuth(ctx, w, r, isOAuthCapable, toolset.ID, oauthProtectedResourceURL)
 			if err != nil {
-				s.logger.WarnContext(ctx, "OAuth token validation failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(err))
-			} else {
-				s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
+				return err
 			}
-			// Collect upstream secrets so checkToolsetSecurity knows the user
-			// authenticated. We skip this when the Gram access token itself has
-			// expired (ErrExpiredAccessToken) — an expired token must not grant
-			// access. We still collect when only the upstream credentials expired
-			// (ErrExpiredExternalSecrets) because the user's Gram session is
-			// valid; the upstream refresh is best-effort.
-			if oauthToken != nil && !errors.Is(err, oauth.ErrExpiredAccessToken) {
-				for _, externalSecret := range oauthToken.ExternalSecrets {
-					tokenInputs = append(tokenInputs, oauthTokenInputs{
-						securityKeys: externalSecret.SecurityKeys,
-						Token:        externalSecret.Token,
-					})
-				}
+		default:
+			ctx, err = s.TryPublicIdentityAuth(ctx, r, false, toolset.ID)
+			if err != nil {
+				return err
 			}
-		}
-	case !toolset.McpIsPublic:
-		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
-		ctx, err = s.RequirePrivateIdentityAuth(ctx, w, r, isOAuthCapable, toolset.ID, oauthProtectedResourceURL)
-		if err != nil {
-			return err
-		}
-	default:
-		ctx, err = s.TryPublicIdentityAuth(ctx, r, false, toolset.ID)
-		if err != nil {
-			return err
 		}
 	}
 

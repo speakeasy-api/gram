@@ -2557,6 +2557,7 @@ CREATE TABLE IF NOT EXISTS outbox_svix_relays (
   svix_message_id TEXT,
   attempts INT NOT NULL DEFAULT 0,
   last_error TEXT,
+  retry_after timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

@@ -12,7 +12,7 @@ import { useListToolsets } from "@gram/client/react-query";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { ResizablePanel, useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AssistantDraftProvider } from "./AssistantDraftContext";
@@ -164,13 +164,9 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
     session.user.id,
   ]);
 
-  const [snapshot, setSnapshot] = useState<AssistantSnapshot | null>(null);
-
-  useEffect(() => {
-    if (mode !== "edit") return;
-    if (snapshot) return;
-    if (!draft.assistant) return;
-    setSnapshot({
+  const snapshotRef = useRef<AssistantSnapshot | null>(null);
+  if (mode === "edit" && !snapshotRef.current && draft.assistant) {
+    snapshotRef.current = {
       name: draft.assistant.name,
       model: draft.assistant.model,
       status: draft.assistant.status,
@@ -179,8 +175,9 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
         slug: t.toolsetSlug,
         environmentSlug: t.environmentSlug ?? null,
       })),
-    });
-  }, [mode, draft.assistant, snapshot]);
+    };
+  }
+  const snapshot = snapshotRef.current;
 
   const ready = mode === "create" || snapshot !== null;
 

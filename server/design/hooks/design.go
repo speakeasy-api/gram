@@ -100,6 +100,34 @@ var CursorHookResult = Type("CursorHookResult", func() {
 	Attribute("agent_message", String, "Message sent back to the agent (beforeMCPExecution only)")
 })
 
+// Codex hook payload
+var CodexHookPayload = Type("CodexHookPayload", func() {
+	Description("Payload for Codex hook events")
+	Required("hook_event_name")
+	Attribute("hook_event_name", String, "The type of hook event", func() {
+		Enum("SessionStart", "PreToolUse", "PermissionRequest", "PostToolUse", "UserPromptSubmit", "Stop")
+	})
+	Attribute("session_id", String, "The Codex session ID")
+	Attribute("transcript_path", String, "Path to the conversation transcript file")
+	Attribute("cwd", String, "The working directory when the event fired")
+	Attribute("model", String, "The model identifier")
+	// PreToolUse / PostToolUse fields
+	Attribute("tool_name", String, "The name of the tool")
+	Attribute("tool_input", Any, "The input to the tool (PreToolUse only)")
+	Attribute("tool_output", Any, "The output from the tool (PostToolUse only)")
+	// PermissionRequest fields
+	Attribute("permission_type", String, "The type of permission being requested (PermissionRequest only)")
+	// UserPromptSubmit fields
+	Attribute("prompt", String, "The user's prompt text (UserPromptSubmit only)")
+})
+
+// Codex hook result
+var CodexHookResult = Type("CodexHookResult", func() {
+	Description("Result for Codex hook events")
+	Attribute("decision", String, "Permission decision for blocking events: allow or deny")
+	Attribute("reason", String, "Reason for the decision, shown to the user")
+})
+
 // Server name override types
 var ServerNameOverride = Type("ServerNameOverride", func() {
 	Description("User-defined display name for a hooks server")
@@ -155,6 +183,28 @@ var _ = Service("hooks", func() {
 
 		HTTP(func() {
 			POST("/rpc/hooks.cursor")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+		})
+	})
+
+	Method("codex", func() {
+		Description("Endpoint for Codex hook events. Handles SessionStart, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, and Stop.")
+
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("hooks")
+		})
+
+		Payload(func() {
+			Extend(CodexHookPayload)
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(CodexHookResult)
+
+		HTTP(func() {
+			POST("/rpc/hooks.codex")
 			security.ByKeyHeader()
 			security.ProjectHeader()
 		})
