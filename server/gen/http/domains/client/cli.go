@@ -68,3 +68,18 @@ func BuildDeleteDomainPayload(domainsDeleteDomainSessionToken string) (*domains.
 
 	return v, nil
 }
+
+// BuildListMcpEndpointsPayload builds the payload for the domains
+// listMcpEndpoints endpoint from CLI flags.
+func BuildListMcpEndpointsPayload(domainsListMcpEndpointsSessionToken string) (*domains.ListMcpEndpointsPayload, error) {
+	var sessionToken *string
+	{
+		if domainsListMcpEndpointsSessionToken != "" {
+			sessionToken = &domainsListMcpEndpointsSessionToken
+		}
+	}
+	v := &domains.ListMcpEndpointsPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}

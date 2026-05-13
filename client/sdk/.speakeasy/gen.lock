@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 19b4caff8ecea2caf72d3fc43a1cf96f
+  docChecksum: b1fbbfc56045c66615141e3e376c5b88
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -242,6 +242,8 @@ trackedFiles:
     last_write_checksum: sha1:bd57d178784c1f505ca00b2d9f1c502a136c5f06
   docs/models/components/customdomain.md:
     last_write_checksum: sha1:408cf80dec9f85399ba97808d4742548dc857798
+  docs/models/components/customdomainmcpendpoint.md:
+    last_write_checksum: sha1:617d60e0c7ecb67914f505e0ac62966aab59cfb9
   docs/models/components/deleteglobaltoolvariationresult.md:
     last_write_checksum: sha1:04dce9a78844146d01af0010e5af8cd64c155a00
   docs/models/components/deleterequestbody.md:
@@ -412,6 +414,8 @@ trackedFiles:
     last_write_checksum: sha1:3b302bfbd5a1a3a56e02091da748dcf7d5b90522
   docs/models/components/listchatswithresolutionsresult.md:
     last_write_checksum: sha1:b40cd5b165fd356bfa92708332fd97ba46038b5b
+  docs/models/components/listcustomdomainmcpendpointsresult.md:
+    last_write_checksum: sha1:6920209974248043f2d06294ee53e01f6d61f507
   docs/models/components/listdeploymentresult.md:
     last_write_checksum: sha1:e81f46e1358dfcee125fcfb93dfb636b707be998
   docs/models/components/listenvironmentsresult.md:
@@ -1724,6 +1728,10 @@ trackedFiles:
     last_write_checksum: sha1:bedf19038e5e84e5321809bb7c18c631bc47edca
   docs/models/operations/listcollectionssecurity.md:
     last_write_checksum: sha1:411dc2a8f76dc831ca724e2aadb82f2c41d45b39
+  docs/models/operations/listcustomdomainmcpendpointsrequest.md:
+    last_write_checksum: sha1:51760213f9a586d0a3304be63490ad5a423577ae
+  docs/models/operations/listcustomdomainmcpendpointssecurity.md:
+    last_write_checksum: sha1:34db343c439215cc369c2deb246db60e53a13fc3
   docs/models/operations/listdeploymentsrequest.md:
     last_write_checksum: sha1:fd4e1ce28cb917070b9bcbdb697464db94e567d2
   docs/models/operations/listdeploymentssecurity.md:
@@ -2447,7 +2455,7 @@ trackedFiles:
   docs/sdks/deployments/README.md:
     last_write_checksum: sha1:79dfcf6725b753739d1b9fd7ce1cd0aad3503c9a
   docs/sdks/domains/README.md:
-    last_write_checksum: sha1:6d05136dac464dac02da4ba3a2e70fad6556ed32
+    last_write_checksum: sha1:52466ad60c72aac1ec86ae9c1b37b661faa7d009
   docs/sdks/environments/README.md:
     last_write_checksum: sha1:6e3cf385846dc2b2da70e4bb9101ef11e01126a9
   docs/sdks/external/README.md:
@@ -2750,6 +2758,8 @@ trackedFiles:
     id: 9222d7e936ac
     last_write_checksum: sha1:e82bca882857fbd51f1e4c334da4d11f0db3c505
     pristine_git_object: a5e829590d65db1bb25b208dc447086c09266fb6
+  src/funcs/domainsListMcpEndpoints.ts:
+    last_write_checksum: sha1:075aab4773e69c0e084e006c97a5c4b97b0236c8
   src/funcs/domainsRegisterDomain.ts:
     id: 2ee4ec7f6d91
     last_write_checksum: sha1:6cbd4ba2c70d2c5c8d306c56128be8bea9a46255
@@ -3490,6 +3500,8 @@ trackedFiles:
     id: 0931e77e04a5
     last_write_checksum: sha1:8793582a898d08c48da8a062952def456132e664
     pristine_git_object: 525b19a5bfc890afabcef24db102709e77cb6372
+  src/models/components/customdomainmcpendpoint.ts:
+    last_write_checksum: sha1:f8efac77a26df7a14f5cdbbbd8c81f9ef7b13ab2
   src/models/components/deleteglobaltoolvariationresult.ts:
     id: 3156d841fa22
     last_write_checksum: sha1:b1b651c14d4f90bf88183b9936c52d9e01bf42c8
@@ -3670,7 +3682,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:6a361139789a3d744f541fd29e6ac54bd6cce220
+    last_write_checksum: sha1:967d037b12612fd9230f0e2090944634073ca631
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -3728,6 +3740,8 @@ trackedFiles:
     pristine_git_object: bebdca38f9f3c4f2a151d86cbbdf2494e408bef7
   src/models/components/listchatswithresolutionsresult.ts:
     last_write_checksum: sha1:729162abc369405bb22c3529f89449eeaac67de1
+  src/models/components/listcustomdomainmcpendpointsresult.ts:
+    last_write_checksum: sha1:f2e18dceef5e94ae4634359d433f2936f499b132
   src/models/components/listdeploymentresult.ts:
     id: 928cd071711c
     last_write_checksum: sha1:2745c0cb90bdf6d908831767a3433e845347920d
@@ -4672,7 +4686,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:81286efc5b62857dc70cb2f62af61f18da8a3c92
+    last_write_checksum: sha1:cee95785fe0e58ea6eebf69a001230a4db231580
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -4714,6 +4728,8 @@ trackedFiles:
     last_write_checksum: sha1:7008055d09d615b4fe08ec3e801dc289b8cc34f3
   src/models/operations/listcollectionservers.ts:
     last_write_checksum: sha1:3b6fb9ca041e8acee3d5c4f7c992bfbf3f5e4335
+  src/models/operations/listcustomdomainmcpendpoints.ts:
+    last_write_checksum: sha1:cb76a4d2d37b7e8cd8f7a0e14de1ea0d0883726f
   src/models/operations/listdeployments.ts:
     id: 3c413d710db1
     last_write_checksum: sha1:0ea74e63f2168802c45844df06d7b652dcbee209
@@ -5188,6 +5204,10 @@ trackedFiles:
     last_write_checksum: sha1:16eb6b63cfa6691d7c713e90f4f59d315b61b764
   src/react-query/createUserSessionIssuer.ts:
     last_write_checksum: sha1:7d2351e9bc15d5fb47e7dce949cfb6cff6cb02f0
+  src/react-query/customDomainMcpEndpoints.core.ts:
+    last_write_checksum: sha1:029da65c2fe94ee70581fe67ce75d1cc1f973181
+  src/react-query/customDomainMcpEndpoints.ts:
+    last_write_checksum: sha1:64bc143c89766396c4e0bbc89d5fc41ba53996aa
   src/react-query/deleteDomain.ts:
     id: 247dd372ac28
     last_write_checksum: sha1:349a21aebe7c278a176b9320bc9989ddc864ec94
@@ -5408,7 +5428,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:152c22df83812a61c6d58d8808350b92365b9f1c
+    last_write_checksum: sha1:d923e17bed7bbe8d3b66d15298d07c354bf999e7
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -6030,7 +6050,7 @@ trackedFiles:
     pristine_git_object: 284b90dd8f08150cfa95484db193c2181c3d7f30
   src/sdk/domains.ts:
     id: 70955e5c763b
-    last_write_checksum: sha1:f428878bbd2acb5aff34843cb00c05a9bbc74202
+    last_write_checksum: sha1:cda01439014ad4fed909819f64c0236080109f00
     pristine_git_object: 63da249b97f588639d8dc734fb9ef4f284493810
   src/sdk/environments.ts:
     id: 5f2a4a111fa8
@@ -9069,6 +9089,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listCustomDomainMcpEndpoints:
+    speakeasy-default-list-custom-domain-mcp-endpoints:
+      responses:
+        "200":
+          application/json: {"mcp_endpoints": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

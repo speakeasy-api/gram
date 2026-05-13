@@ -15,17 +15,19 @@ import (
 
 // Client is the "domains" service client.
 type Client struct {
-	GetDomainEndpoint    goa.Endpoint
-	CreateDomainEndpoint goa.Endpoint
-	DeleteDomainEndpoint goa.Endpoint
+	GetDomainEndpoint        goa.Endpoint
+	CreateDomainEndpoint     goa.Endpoint
+	DeleteDomainEndpoint     goa.Endpoint
+	ListMcpEndpointsEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "domains" service client given the endpoints.
-func NewClient(getDomain, createDomain, deleteDomain goa.Endpoint) *Client {
+func NewClient(getDomain, createDomain, deleteDomain, listMcpEndpoints goa.Endpoint) *Client {
 	return &Client{
-		GetDomainEndpoint:    getDomain,
-		CreateDomainEndpoint: createDomain,
-		DeleteDomainEndpoint: deleteDomain,
+		GetDomainEndpoint:        getDomain,
+		CreateDomainEndpoint:     createDomain,
+		DeleteDomainEndpoint:     deleteDomain,
+		ListMcpEndpointsEndpoint: listMcpEndpoints,
 	}
 }
 
@@ -85,4 +87,27 @@ func (c *Client) CreateDomain(ctx context.Context, p *CreateDomainPayload) (err 
 func (c *Client) DeleteDomain(ctx context.Context, p *DeleteDomainPayload) (err error) {
 	_, err = c.DeleteDomainEndpoint(ctx, p)
 	return
+}
+
+// ListMcpEndpoints calls the "listMcpEndpoints" endpoint of the "domains"
+// service.
+// ListMcpEndpoints may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListMcpEndpoints(ctx context.Context, p *ListMcpEndpointsPayload) (res *ListCustomDomainMcpEndpointsResult, err error) {
+	var ires any
+	ires, err = c.ListMcpEndpointsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListCustomDomainMcpEndpointsResult), nil
 }

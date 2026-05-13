@@ -7,9 +7,13 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useProductTier } from "@/hooks/useProductTier";
-import { useCustomDomain } from "@/hooks/useToolsetUrl";
+import {
+  customDomainMcpEndpointUrl,
+  useCustomDomain,
+} from "@/hooks/useToolsetUrl";
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn, getCustomDomainCNAME } from "@/lib/utils";
+import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints";
 import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
 import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
@@ -119,6 +123,13 @@ export function OrgDomainsInner() {
       await invalidateAllGetDomain(queryClient);
     },
   });
+
+  // Preview which MCP endpoints will be cascaded by the delete. Only fetched
+  // while the confirmation dialog is open and a domain is configured.
+  const impactQuery = useCustomDomainMcpEndpoints(undefined, undefined, {
+    enabled: isDeleteDomainDialogOpen && Boolean(domain?.domain),
+  });
+  const impactedEndpoints = impactQuery.data?.mcpEndpoints ?? [];
 
   const handleDomainInputChange = (value: string) => {
     setDomainInput(value);
@@ -263,6 +274,41 @@ export function OrgDomainsInner() {
               <span className="font-bold italic">{domain?.domain}</span>? This
               will delete the associated ingress and TLS certificate.
             </Type>
+            {impactQuery.isLoading ? (
+              <Type variant="small" muted>
+                Checking for MCP endpoints under this domain&hellip;
+              </Type>
+            ) : impactedEndpoints.length > 0 ? (
+              <div className="space-y-2">
+                <Type variant="body" className="font-semibold">
+                  {impactedEndpoints.length === 1
+                    ? "1 MCP endpoint will be deactivated:"
+                    : `${impactedEndpoints.length} MCP endpoints will be deactivated:`}
+                </Type>
+                <ul className="border-border max-h-48 list-disc space-y-1 overflow-y-auto rounded-md border px-6 py-2">
+                  {impactedEndpoints.map((endpoint) => (
+                    <li key={endpoint.id}>
+                      <Type variant="small">
+                        <span className="font-mono">
+                          {domain?.domain
+                            ? customDomainMcpEndpointUrl(
+                                domain.domain,
+                                endpoint.slug,
+                              )
+                            : endpoint.slug}
+                        </span>{" "}
+                        <Type variant="small" as="span" muted>
+                          &middot; {endpoint.projectName} &middot;{" "}
+                          {endpoint.mcpServerName ??
+                            endpoint.mcpServerSlug ??
+                            endpoint.mcpServerId}
+                        </Type>
+                      </Type>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <div className="flex justify-end space-x-2">
               <Button
                 variant="secondary"

@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createMCPEndpoint = `-- name: CreateMCPEndpoint :one
@@ -180,6 +181,68 @@ func (q *Queries) GetMCPEndpointByProjectAndCustomDomainAndSlug(ctx context.Cont
 	return i, err
 }
 
+const listMCPEndpointsByCustomDomainID = `-- name: ListMCPEndpointsByCustomDomainID :many
+SELECT
+    e.id,
+    e.project_id,
+    e.mcp_server_id,
+    e.slug,
+    p.name AS project_name,
+    p.slug AS project_slug,
+    s.name AS mcp_server_name,
+    s.slug AS mcp_server_slug
+FROM mcp_endpoints e
+JOIN projects p ON p.id = e.project_id
+JOIN mcp_servers s ON s.id = e.mcp_server_id
+WHERE e.custom_domain_id = $1::uuid
+  AND e.deleted IS FALSE
+ORDER BY p.slug, e.slug
+`
+
+type ListMCPEndpointsByCustomDomainIDRow struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	McpServerID   uuid.UUID
+	Slug          string
+	ProjectName   string
+	ProjectSlug   string
+	McpServerName pgtype.Text
+	McpServerSlug pgtype.Text
+}
+
+// List active endpoints (across every project under the owning org) registered
+// under a custom domain, with the parent mcp_server name/slug and project
+// name/slug joined in. Used by the org-scoped domains.listMcpEndpoints handler
+// to preview the impact of a custom domain deletion.
+func (q *Queries) ListMCPEndpointsByCustomDomainID(ctx context.Context, customDomainID uuid.UUID) ([]ListMCPEndpointsByCustomDomainIDRow, error) {
+	rows, err := q.db.Query(ctx, listMCPEndpointsByCustomDomainID, customDomainID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMCPEndpointsByCustomDomainIDRow
+	for rows.Next() {
+		var i ListMCPEndpointsByCustomDomainIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.McpServerID,
+			&i.Slug,
+			&i.ProjectName,
+			&i.ProjectSlug,
+			&i.McpServerName,
+			&i.McpServerSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPEndpointsByMCPServerID = `-- name: ListMCPEndpointsByMCPServerID :many
 SELECT id, project_id, custom_domain_id, mcp_server_id, slug, created_at, updated_at, deleted_at, deleted
 FROM mcp_endpoints
@@ -233,6 +296,51 @@ ORDER BY created_at DESC
 
 func (q *Queries) ListMCPEndpointsByProject(ctx context.Context, projectID uuid.UUID) ([]McpEndpoint, error) {
 	rows, err := q.db.Query(ctx, listMCPEndpointsByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpEndpoint
+	for rows.Next() {
+		var i McpEndpoint
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.CustomDomainID,
+			&i.McpServerID,
+			&i.Slug,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const softDeleteMCPEndpointsByCustomDomainID = `-- name: SoftDeleteMCPEndpointsByCustomDomainID :many
+UPDATE mcp_endpoints
+SET deleted_at = clock_timestamp()
+WHERE custom_domain_id = $1::uuid AND deleted IS FALSE
+RETURNING id, project_id, custom_domain_id, mcp_server_id, slug, created_at, updated_at, deleted_at, deleted
+`
+
+// Soft-delete all endpoints registered under a given custom_domain. Used when
+// the parent custom_domain is soft-deleted so the endpoints don't outlive the
+// domain (the FK ON DELETE SET NULL does not fire for soft deletes). Returns
+// the affected rows so the caller can emit per-endpoint audit events. Scoped
+// by custom_domain_id alone (no project_id): custom_domains are org-scoped and
+// the cascade legitimately crosses every project under the owning org. The
+// caller must verify the custom_domain belongs to its organization before
+// invoking this query.
+func (q *Queries) SoftDeleteMCPEndpointsByCustomDomainID(ctx context.Context, customDomainID uuid.UUID) ([]McpEndpoint, error) {
+	rows, err := q.db.Query(ctx, softDeleteMCPEndpointsByCustomDomainID, customDomainID)
 	if err != nil {
 		return nil, err
 	}
