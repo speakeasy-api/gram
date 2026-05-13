@@ -1,3 +1,4 @@
+-- atlas:nolint DS102
 -- Create "outbox_relays" table
 CREATE TABLE "outbox_relays" (
   "outbox_id" bigint NOT NULL,
