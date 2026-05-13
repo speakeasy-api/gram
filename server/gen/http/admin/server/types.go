@@ -1318,10 +1318,11 @@ func NewLoginPayload(returnTo *string) *admin.LoginPayload {
 }
 
 // NewCallbackPayload builds a admin service callback endpoint payload.
-func NewCallbackPayload(code string, stateParam string) *admin.CallbackPayload {
+func NewCallbackPayload(code string, stateParam string, stateCookie *string) *admin.CallbackPayload {
 	v := &admin.CallbackPayload{}
 	v.Code = code
 	v.StateParam = stateParam
+	v.StateCookie = stateCookie
 
 	return v
 }

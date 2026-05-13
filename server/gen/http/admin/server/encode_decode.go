@@ -24,6 +24,15 @@ func EncodeLoginResponse(encoder func(context.Context, http.ResponseWriter) goah
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*admin.LoginResult)
 		w.Header().Set("Location", res.Location)
+		stateCookie := res.StateCookie
+		http.SetCookie(w, &http.Cookie{
+			Name:     "gram_admin_login_state",
+			Value:    stateCookie,
+			MaxAge:   600,
+			Secure:   true,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		})
 		w.WriteHeader(http.StatusTemporaryRedirect)
 		return nil
 	}
@@ -209,7 +218,14 @@ func EncodeCallbackResponse(encoder func(context.Context, http.ResponseWriter) g
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*admin.CallbackResult)
 		w.Header().Set("Location", res.Location)
-		w.Header().Set("Gram-Admin-Session", res.SessionID)
+		sessionID := res.SessionID
+		http.SetCookie(w, &http.Cookie{
+			Name:     "gram_admin",
+			Value:    sessionID,
+			Secure:   true,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		})
 		w.WriteHeader(http.StatusTemporaryRedirect)
 		return nil
 	}
@@ -221,9 +237,11 @@ func DecodeCallbackRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 	return func(r *http.Request) (*admin.CallbackPayload, error) {
 		var payload *admin.CallbackPayload
 		var (
-			code       string
-			stateParam string
-			err        error
+			code        string
+			stateParam  string
+			stateCookie *string
+			err         error
+			c           *http.Cookie
 		)
 		qp := r.URL.Query()
 		code = qp.Get("code")
@@ -234,10 +252,18 @@ func DecodeCallbackRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if stateParam == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("state_param", "query string"))
 		}
+		c, _ = r.Cookie("gram_admin_login_state")
+		var stateCookieRaw string
+		if c != nil {
+			stateCookieRaw = c.Value
+		}
+		if stateCookieRaw != "" {
+			stateCookie = &stateCookieRaw
+		}
 		if err != nil {
 			return payload, err
 		}
-		payload = NewCallbackPayload(code, stateParam)
+		payload = NewCallbackPayload(code, stateParam, stateCookie)
 
 		return payload, nil
 	}

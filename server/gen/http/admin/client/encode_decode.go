@@ -91,10 +91,26 @@ func DecodeLoginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBo
 				err = goa.MergeErrors(err, goa.MissingFieldError("location", "header"))
 			}
 			location = locationRaw
+			var (
+				stateCookie    string
+				stateCookieRaw string
+
+				cookies = resp.Cookies()
+			)
+			for _, c := range cookies {
+				switch c.Name {
+				case "gram_admin_login_state":
+					stateCookieRaw = c.Value
+				}
+			}
+			if stateCookieRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("state_cookie", "cookie"))
+			}
+			stateCookie = stateCookieRaw
 			if err != nil {
 				return nil, goahttp.ErrValidationError("admin", "login", err)
 			}
-			res := NewLoginResultTemporaryRedirect(location)
+			res := NewLoginResultTemporaryRedirect(location, stateCookie)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -273,6 +289,13 @@ func EncodeCallbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 		if !ok {
 			return goahttp.ErrInvalidType("admin", "callback", "*admin.CallbackPayload", v)
 		}
+		if p.StateCookie != nil {
+			v := *p.StateCookie
+			req.AddCookie(&http.Cookie{
+				Name:  "gram_admin_login_state",
+				Value: v,
+			})
+		}
 		values := req.URL.Query()
 		values.Add("code", p.Code)
 		values.Add("state", p.StateParam)
@@ -313,18 +336,28 @@ func DecodeCallbackResponse(decoder func(*http.Response) goahttp.Decoder, restor
 		switch resp.StatusCode {
 		case http.StatusTemporaryRedirect:
 			var (
-				location  string
-				sessionID string
-				err       error
+				location string
+				err      error
 			)
 			locationRaw := resp.Header.Get("Location")
 			if locationRaw == "" {
 				err = goa.MergeErrors(err, goa.MissingFieldError("location", "header"))
 			}
 			location = locationRaw
-			sessionIDRaw := resp.Header.Get("Gram-Admin-Session")
+			var (
+				sessionID    string
+				sessionIDRaw string
+
+				cookies = resp.Cookies()
+			)
+			for _, c := range cookies {
+				switch c.Name {
+				case "gram_admin":
+					sessionIDRaw = c.Value
+				}
+			}
 			if sessionIDRaw == "" {
-				err = goa.MergeErrors(err, goa.MissingFieldError("session_id", "header"))
+				err = goa.MergeErrors(err, goa.MissingFieldError("session_id", "cookie"))
 			}
 			sessionID = sessionIDRaw
 			if err != nil {

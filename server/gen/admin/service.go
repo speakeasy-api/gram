@@ -55,13 +55,15 @@ type CallbackPayload struct {
 	// The state parameter returned, which should match the one generated in the
 	// login step
 	StateParam string
+	// The state cookie value for CSRF sanity checking against the state parameter
+	StateCookie *string
 }
 
 // CallbackResult is the result type of the admin service callback method.
 type CallbackResult struct {
 	// The URL to redirect the client to after processing the callback
 	Location string
-	// The session cookie value to set for the admin session
+	// The admin session cookie value
 	SessionID string
 }
 
@@ -88,6 +90,8 @@ type LoginPayload struct {
 type LoginResult struct {
 	// The URL to redirect the user to for Google authentication
 	Location string
+	// Short-lived CSRF state value set as a cookie for sanity-checking the callback
+	StateCookie string
 }
 
 // LogoutPayload is the payload type of the admin service logout method.

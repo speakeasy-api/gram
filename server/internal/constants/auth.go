@@ -19,4 +19,5 @@ const (
 
 	AdminAuthSecurityScheme = "admin_auth"
 	AdminSessionCookie      = "gram_admin"
+	AdminLoginStateCookie   = "gram_admin_login_state"
 )

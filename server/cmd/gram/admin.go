@@ -217,6 +217,7 @@ func newAdminCommand() *cli.Command {
 			redisClient, err := newRedisClient(ctx, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
 				redisPassword: c.String("redis-cache-password"),
+				enableTracing: false,
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)

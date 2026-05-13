@@ -29,20 +29,27 @@ paths:
                   schema:
                     type: string
                     description: The state parameter returned, which should match the one generated in the login step
+                - name: gram_admin_login_state
+                  in: cookie
+                  description: The state cookie value for CSRF sanity checking against the state parameter
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: The state cookie value for CSRF sanity checking against the state parameter
             responses:
                 "307":
                     description: Temporary Redirect response.
                     headers:
-                        Gram-Admin-Session:
-                            description: The session cookie value to set for the admin session
-                            schema:
-                                type: string
-                                description: The session cookie value to set for the admin session
                         Location:
                             description: The URL to redirect the client to after processing the callback
                             schema:
                                 type: string
                                 description: The URL to redirect the client to after processing the callback
+                        Set-Cookie:
+                            description: Admin session cookie
+                            schema:
+                                type: string
+                                description: Admin session cookie
                 "400":
                     description: 'bad_request: request is invalid'
                     content:
@@ -120,6 +127,11 @@ paths:
                             schema:
                                 type: string
                                 description: The URL to redirect the user to for Google authentication
+                        Set-Cookie:
+                            description: CSRF state cookie for sanity-checking the callback
+                            schema:
+                                type: string
+                                description: CSRF state cookie for sanity-checking the callback
                 "400":
                     description: 'bad_request: request is invalid'
                     content:

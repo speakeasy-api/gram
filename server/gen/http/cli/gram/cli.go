@@ -200,9 +200,10 @@ func ParseEndpoint(
 		adminLoginFlags        = flag.NewFlagSet("login", flag.ExitOnError)
 		adminLoginReturnToFlag = adminLoginFlags.String("return-to", "", "")
 
-		adminCallbackFlags          = flag.NewFlagSet("callback", flag.ExitOnError)
-		adminCallbackCodeFlag       = adminCallbackFlags.String("code", "REQUIRED", "")
-		adminCallbackStateParamFlag = adminCallbackFlags.String("state-param", "REQUIRED", "")
+		adminCallbackFlags           = flag.NewFlagSet("callback", flag.ExitOnError)
+		adminCallbackCodeFlag        = adminCallbackFlags.String("code", "REQUIRED", "")
+		adminCallbackStateParamFlag  = adminCallbackFlags.String("state-param", "REQUIRED", "")
+		adminCallbackStateCookieFlag = adminCallbackFlags.String("state-cookie", "", "")
 
 		adminLogoutFlags         = flag.NewFlagSet("logout", flag.ExitOnError)
 		adminLogoutSessionIDFlag = adminLogoutFlags.String("session-id", "", "")
@@ -2645,7 +2646,7 @@ func ParseEndpoint(
 				data, err = adminc.BuildLoginPayload(*adminLoginReturnToFlag)
 			case "callback":
 				endpoint = c.Callback()
-				data, err = adminc.BuildCallbackPayload(*adminCallbackCodeFlag, *adminCallbackStateParamFlag)
+				data, err = adminc.BuildCallbackPayload(*adminCallbackCodeFlag, *adminCallbackStateParamFlag, *adminCallbackStateCookieFlag)
 			case "logout":
 				endpoint = c.Logout()
 				data, err = adminc.BuildLogoutPayload(*adminLogoutSessionIDFlag)
@@ -3796,6 +3797,7 @@ func adminCallbackUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] admin callback", os.Args[0])
 	fmt.Fprint(os.Stderr, " -code STRING")
 	fmt.Fprint(os.Stderr, " -state-param STRING")
+	fmt.Fprint(os.Stderr, " -state-cookie STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -3805,10 +3807,11 @@ func adminCallbackUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -code STRING: `)
 	fmt.Fprintln(os.Stderr, `    -state-param STRING: `)
+	fmt.Fprintln(os.Stderr, `    -state-cookie STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin callback --code \"abc123\" --state-param \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin callback --code \"abc123\" --state-param \"abc123\" --state-cookie \"abc123\"")
 }
 
 func adminLogoutUsage() {

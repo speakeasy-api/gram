@@ -23,9 +23,9 @@ var _ = Service("admin", func() {
 		})
 
 		Result(func() {
-			Required("location")
+			Required("location", "state_cookie")
 			Attribute("location", String, "The URL to redirect the user to for Google authentication")
-			// Attribute("state_cookie", String, "The state cookie value to set for sanity checking in the callback")
+			Attribute("state_cookie", String, "Short-lived CSRF state value set as a cookie for sanity-checking the callback")
 		})
 
 		HTTP(func() {
@@ -34,11 +34,11 @@ var _ = Service("admin", func() {
 
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String)
-				// Cookie("state_cookie:gram_admin_login_state", String, "The state cookie value to set for sanity checking in the callback")
-				// CookieMaxAge(600)
-				// CookieHTTPOnly()
-				// CookieSameSite(CookieSameSiteLax)
-				// CookieSecure()
+				Cookie(fmt.Sprintf("state_cookie:%s", constants.AdminLoginStateCookie), String, "CSRF state cookie for sanity-checking the callback")
+				CookieMaxAge(600)
+				CookieHTTPOnly()
+				CookieSameSite(CookieSameSiteLax)
+				CookieSecure()
 			})
 		})
 	})
@@ -50,24 +50,27 @@ var _ = Service("admin", func() {
 			Required("code", "state_param")
 			Attribute("code", String, "The authorization code returned")
 			Attribute("state_param", String, "The state parameter returned, which should match the one generated in the login step")
-			// Attribute("state_cookie", String, "The state cookie value, which should match the state parameter for sanity checking")
+			Attribute("state_cookie", String, "The state cookie value for CSRF sanity checking against the state parameter")
 		})
 
 		Result(func() {
 			Required("location", "session_id")
 			Attribute("location", String, "The URL to redirect the client to after processing the callback")
-			Attribute("session_id", String, "The session cookie value to set for the admin session")
+			Attribute("session_id", String, "The admin session cookie value")
 		})
 
 		HTTP(func() {
 			GET("/admin/auth.callback")
 			Param("code")
 			Param("state_param:state")
-			// Cookie("state_cookie:gram_admin_login_state", String)
+			Cookie(fmt.Sprintf("state_cookie:%s", constants.AdminLoginStateCookie), String)
 
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String)
-				Header("session_id:Gram-Admin-Session", String, "The session cookie value to set for the admin session")
+				Cookie(fmt.Sprintf("session_id:%s", constants.AdminSessionCookie), String, "Admin session cookie")
+				CookieHTTPOnly()
+				CookieSameSite(CookieSameSiteLax)
+				CookieSecure()
 			})
 		})
 	})

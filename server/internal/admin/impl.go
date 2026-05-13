@@ -7,9 +7,8 @@ import (
 	"log/slog"
 	"time"
 
-	"database/sql"
-
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/trace"
@@ -118,12 +117,9 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to persist login state").Log(ctx, logger)
 	}
 
-	// TODO: set a short-lived cookie carrying the state lets us reject
-	// callbacks that did not originate from this browser session. Verify it in
-	// Callback against state query param for sanity checking.
-
 	return &gen.LoginResult{
-		Location: s.oidc.AuthCodeURL(state, challenge),
+		Location:    s.oidc.AuthCodeURL(state, challenge),
+		StateCookie: state,
 	}, nil
 }
 
@@ -135,6 +131,16 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 	if payload.StateParam == "" {
 		return nil, oops.E(oops.CodeInvalid, nil, "missing state parameter")
+	}
+
+	// Verify the state cookie matches the state query param to prevent login CSRF.
+	// The cookie is set by /admin/auth.login and must echo back the same random value.
+	stateCookie := conv.PtrValOrEmpty(payload.StateCookie, "")
+	if stateCookie == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "state cookie missing")
+	}
+	if stateCookie != payload.StateParam {
+		return nil, oops.E(oops.CodeBadRequest, nil, "state cookie does not match state parameter")
 	}
 
 	rec, err := s.loginStates.Get(ctx, LoginStateCacheKey(payload.StateParam))
@@ -179,8 +185,6 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 	s.logger.InfoContext(ctx, "admin session created", attr.SlogAuthUserEmail(identity.Email))
 
-	// TODO: clear state cookie
-
 	return &gen.CallbackResult{
 		Location:  rec.ReturnTo,
 		SessionID: sessionID,
@@ -213,7 +217,7 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 	if id, err := uuid.Parse(payload.IDOrSlug); err == nil {
 		row, err := repo.GetProjectByID(ctx, id)
 		switch {
-		case errors.Is(err, sql.ErrNoRows):
+		case errors.Is(err, pgx.ErrNoRows):
 			return nil, oops.C(oops.CodeNotFound)
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "lookup project by id").Log(ctx, s.logger)
@@ -223,7 +227,7 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 
 	row, err := repo.GetProjectBySlug(ctx, payload.IDOrSlug)
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "lookup project by slug").Log(ctx, s.logger)

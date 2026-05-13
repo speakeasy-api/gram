@@ -741,9 +741,10 @@ type GetProjectGatewayErrorResponseBody struct {
 
 // NewLoginResultTemporaryRedirect builds a "admin" service "login" endpoint
 // result from a HTTP "TemporaryRedirect" response.
-func NewLoginResultTemporaryRedirect(location string) *admin.LoginResult {
+func NewLoginResultTemporaryRedirect(location string, stateCookie string) *admin.LoginResult {
 	v := &admin.LoginResult{}
 	v.Location = location
+	v.StateCookie = stateCookie
 
 	return v
 }
