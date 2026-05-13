@@ -42,6 +42,7 @@ func DecodeListToolsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 			limit            *int32
 			deploymentID     *string
 			urnPrefix        *string
+			toolTypes        []string
 			sessionToken     *string
 			projectSlugInput *string
 			err              error
@@ -70,6 +71,22 @@ func DecodeListToolsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if urnPrefixRaw != "" {
 			urnPrefix = &urnPrefixRaw
 		}
+		{
+			toolTypesRaw := qp["tool_types"]
+			if toolTypesRaw == nil {
+				toolTypes = []string{"http", "function", "prompt", "platform"}
+			} else {
+				toolTypes = make([]string, len(toolTypesRaw))
+				for i, rv := range toolTypesRaw {
+					toolTypes[i] = rv
+				}
+			}
+		}
+		for _, e := range toolTypes {
+			if !(e == "http" || e == "prompt" || e == "function" || e == "platform" || e == "externalmcp") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("tool_types[*]", e, []any{"http", "prompt", "function", "platform", "externalmcp"}))
+			}
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -81,7 +98,7 @@ func DecodeListToolsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListToolsPayload(cursor, limit, deploymentID, urnPrefix, sessionToken, projectSlugInput)
+		payload = NewListToolsPayload(cursor, limit, deploymentID, urnPrefix, toolTypes, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

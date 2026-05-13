@@ -10,7 +10,9 @@ export function ObserveTabNav({ base }: { base: "insights" | "logs" }) {
   const tabs = [
     { label: "Tools", href: `${baseSlug}/tools` },
     { label: "MCP Servers", href: `${baseSlug}/mcp` },
-    { label: "Agents", href: `${baseSlug}/agents` },
+    ...(base === "logs"
+      ? [{ label: "Agents", href: `${baseSlug}/agents` }]
+      : []),
     ...(base === "insights"
       ? [{ label: "Employees", href: `${baseSlug}/employees` }]
       : []),
@@ -19,7 +21,9 @@ export function ObserveTabNav({ base }: { base: "insights" | "logs" }) {
   return (
     <div className="border-border flex h-auto w-full items-end border-b px-8">
       {tabs.map((tab) => {
-        const isActive = location.pathname === tab.href;
+        const isActive =
+          location.pathname === tab.href ||
+          location.pathname.startsWith(tab.href + "/");
         return (
           <Link
             key={tab.href}

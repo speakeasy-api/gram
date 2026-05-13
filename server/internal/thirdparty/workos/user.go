@@ -125,6 +125,25 @@ func (wc *Client) GetUser(ctx context.Context, userID string) (*User, error) {
 	return &user, nil
 }
 
+func (wc *Client) UpdateUserExternalID(ctx context.Context, workosUserID, externalID string) error {
+	if _, err := wc.um.UpdateUser(ctx, usermanagement.UpdateUserOpts{
+		User:             workosUserID,
+		Email:            "",
+		FirstName:        "",
+		LastName:         "",
+		EmailVerified:    false,
+		Password:         "",
+		PasswordHash:     "",
+		PasswordHashType: "",
+		ExternalID:       externalID,
+		Metadata:         nil,
+	}); err != nil {
+		return fmt.Errorf("update user external ID: %w", err)
+	}
+
+	return nil
+}
+
 // ListUserMemberships returns all organization memberships for a user across all orgs.
 // This is more efficient than calling GetOrgMembership per org since it batches the lookup.
 func (wc *Client) ListUserMemberships(ctx context.Context, userID string) ([]Member, error) {

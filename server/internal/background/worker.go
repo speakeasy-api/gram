@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	svix "github.com/svix/svix-webhooks/go"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/interceptor"
@@ -18,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
@@ -31,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -38,7 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
-	"github.com/workos/workos-go/v6/pkg/events"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 type WorkerOptions struct {
@@ -66,9 +69,12 @@ type WorkerOptions struct {
 	AssistantsCore      *assistants.ServiceCore
 	TemporalEnv         *tenv.Environment
 	PIIScanner          risk_analysis.PIIScanner
+	PIScanner           *risk_analysis.PromptInjectionScanner
 	ShadowMCPClient     *shadowmcp.Client
 	AuditLogger         *audit.Logger
-	WorkOSEventsClient  *events.Client
+	WorkOSClient        activities.WorkOSClient
+	SvixClient          *svix.Svix
+	ProductFeatures     *productfeatures.Client
 }
 
 func ForDeploymentProcessing(
@@ -107,8 +113,11 @@ func ForDeploymentProcessing(
 		AssistantsCore:      nil,
 		TemporalEnv:         nil,
 		PIIScanner:          nil,
+		PIScanner:           nil,
 		ShadowMCPClient:     nil,
-		WorkOSEventsClient:  nil,
+		WorkOSClient:        workos.NewStubClient(),
+		SvixClient:          nil,
+		ProductFeatures:     nil,
 	}
 }
 
@@ -144,9 +153,12 @@ func NewTemporalWorker(
 		AssistantsCore:      nil,
 		TemporalEnv:         env,
 		PIIScanner:          nil,
+		PIScanner:           nil,
 		ShadowMCPClient:     nil,
 		AuditLogger:         nil,
-		WorkOSEventsClient:  nil,
+		WorkOSClient:        workos.NewStubClient(),
+		SvixClient:          nil,
+		ProductFeatures:     nil,
 	}
 
 	for _, o := range options {
@@ -175,9 +187,12 @@ func NewTemporalWorker(
 			AssistantsCore:      conv.Default(o.AssistantsCore, opts.AssistantsCore),
 			TemporalEnv:         conv.Default(o.TemporalEnv, opts.TemporalEnv),
 			PIIScanner:          conv.Default(o.PIIScanner, opts.PIIScanner),
+			PIScanner:           conv.Default(o.PIScanner, opts.PIScanner),
 			ShadowMCPClient:     conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
 			AuditLogger:         conv.Default(o.AuditLogger, opts.AuditLogger),
-			WorkOSEventsClient:  conv.Default(o.WorkOSEventsClient, opts.WorkOSEventsClient),
+			WorkOSClient:        conv.Default(o.WorkOSClient, opts.WorkOSClient),
+			SvixClient:          conv.Default(o.SvixClient, opts.SvixClient),
+			ProductFeatures:     conv.Default(o.ProductFeatures, opts.ProductFeatures),
 		}
 	}
 
@@ -223,9 +238,12 @@ func NewTemporalWorker(
 		opts.CacheAdapter,
 		opts.AssistantsCore,
 		opts.PIIScanner,
+		opts.PIScanner,
 		opts.ShadowMCPClient,
 		opts.AuditLogger,
-		opts.WorkOSEventsClient,
+		opts.WorkOSClient,
+		opts.SvixClient,
+		opts.ProductFeatures,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -268,11 +286,19 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ReapSoftDeletedAssistantMemories)
 	temporalWorker.RegisterActivity(activities.SignalAssistantCoordinator)
 	temporalWorker.RegisterActivity(activities.SignalAssistantThread)
+	temporalWorker.RegisterActivity(activities.CancelAssistantsSubscription)
 	// WorkOS sync activities
+	temporalWorker.RegisterActivity(activities.ListWorkOSOrganizations)
+	temporalWorker.RegisterActivity(activities.BackfillWorkOSOrganization)
+	temporalWorker.RegisterActivity(activities.BackfillWorkOSGlobalRoles)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSGlobalRoleEvents)
-
-	temporalWorker.RegisterActivity(activities.CancelAssistantsSubscription)
+	temporalWorker.RegisterActivity(activities.ProcessWorkOSUserEvents)
+	// Outbox relay activities
+	temporalWorker.RegisterActivity(activities.FetchPendingOutboxEvents)
+	temporalWorker.RegisterActivity(activities.FilterNoopOutboxEvents)
+	temporalWorker.RegisterActivity(activities.RelayOutboxEvents)
+	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
@@ -303,8 +329,14 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflowDebounced)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSGlobalRoleEventsWorkflow)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSGlobalRoleEventsWorkflowDebounced)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSUserEventsWorkflow)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSUserEventsWorkflowDebounced)
+	temporalWorker.RegisterWorkflow(BackfillWorkOSWorkflow)
 	// Assistants signup followups
 	temporalWorker.RegisterWorkflow(CancelAssistantsSubscriptionWorkflow)
+	// Outbox -> Relay workflow and GC
+	temporalWorker.RegisterWorkflow(ProcessOutboxWorkflow)
+	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -318,6 +350,12 @@ func NewTemporalWorker(
 		}
 	}
 
+	if err := AddProcessOutboxSchedule(context.Background(), env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add relay outbox to svix schedule", attr.SlogError(err))
+		}
+	}
+
 	if err := AddAssistantReaperSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add assistant reaper schedule", attr.SlogError(err))
 	}
@@ -328,6 +366,10 @@ func NewTemporalWorker(
 
 	if err := AddAssistantMemoriesReaperSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add assistant memories reaper schedule", attr.SlogError(err))
+	}
+
+	if err := AddOutboxGCSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add outbox gc schedule", attr.SlogError(err))
 	}
 
 	return &Workers{main: temporalWorker, riskAnalysis: riskWorker}

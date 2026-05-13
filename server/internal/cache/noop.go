@@ -27,6 +27,11 @@ func (s *noopCache) Get(ctx context.Context, key string, value any) error {
 	return errors.New("no cache entry for key")
 }
 
+// GetAndDelete implements [Cache].
+func (s *noopCache) GetAndDelete(ctx context.Context, key string, value any) error {
+	return errors.New("no cache entry for key")
+}
+
 // ListAppend implements [Cache].
 func (s *noopCache) ListAppend(ctx context.Context, key string, value any, ttl time.Duration) error {
 	return nil

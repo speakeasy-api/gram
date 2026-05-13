@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	svix "github.com/svix/svix-webhooks/go"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/outbox_relay"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -27,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -35,7 +38,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	slacktypes "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
-	"github.com/workos/workos-go/v6/pkg/events"
 )
 
 type Activities struct {
@@ -76,9 +78,15 @@ type Activities struct {
 	reapSoftDeletedAssistantMems    *activities.ReapSoftDeletedAssistantMemories
 	signalAssistantCoordinator      *activities.SignalAssistantCoordinator
 	signalAssistantThread           *activities.SignalAssistantThread
+	listWorkOSOrganizations         *activities.ListWorkOSOrganizations
+	backfillWorkOSOrganization      *activities.BackfillWorkOSOrganization
+	backfillWorkOSGlobalRoles       *activities.BackfillWorkOSGlobalRoles
 	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
 	processWorkOSGlobalRoleEvents   *activities.ProcessWorkOSGlobalRoleEvents
+	processWorkOSUserEvents         *activities.ProcessWorkOSUserEvents
 	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
+	outboxRelay                     *outbox_relay.Relay
+	outboxGC                        *outbox_relay.GC
 }
 
 func NewActivities(
@@ -108,21 +116,14 @@ func NewActivities(
 	cacheAdapter cache.Cache,
 	assistantsCore *assistants.ServiceCore,
 	piiScanner risk_analysis.PIIScanner,
+	piScanner *risk_analysis.PromptInjectionScanner,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
-	workosEventsClient *events.Client,
+	workosClient activities.WorkOSClient,
+	svixClient *svix.Svix,
+	productFeatures *productfeatures.Client,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
-
-	// Only construct the WorkOS sync activity when the events client is
-	// configured. Local dev without a key passes nil; the wrapper method below
-	// returns a clear error if the activity is invoked unconfigured.
-	var processWorkOSOrgEvents *activities.ProcessWorkOSOrganizationEvents
-	var processWorkOSGlobalRoleEvents *activities.ProcessWorkOSGlobalRoleEvents
-	if workosEventsClient != nil {
-		processWorkOSOrgEvents = activities.NewProcessWorkOSOrganizationEvents(logger, db, workosEventsClient)
-		processWorkOSGlobalRoleEvents = activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosEventsClient)
-	}
 
 	return &Activities{
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
@@ -153,7 +154,7 @@ func NewActivities(
 		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
-		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, shadowMCPClient),
+		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
 		processAssistantThread:          activities.NewProcessAssistantThread(assistantsCore),
 		expireAssistantThreadRuntime:    activities.NewExpireAssistantThreadRuntime(assistantsCore),
@@ -162,24 +163,40 @@ func NewActivities(
 		reapSoftDeletedAssistantMems:    activities.NewReapSoftDeletedAssistantMemories(logger, db),
 		signalAssistantCoordinator:      activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		signalAssistantThread:           activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
-		processWorkOSOrganizationEvents: processWorkOSOrgEvents,
-		processWorkOSGlobalRoleEvents:   processWorkOSGlobalRoleEvents,
+		listWorkOSOrganizations:         activities.NewListWorkOSOrganizations(logger, workosClient),
+		backfillWorkOSOrganization:      activities.NewBackfillWorkOSOrganization(logger, db, workosClient),
+		backfillWorkOSGlobalRoles:       activities.NewBackfillWorkOSGlobalRoles(logger, db, workosClient),
+		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient),
+		processWorkOSGlobalRoleEvents:   activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient),
+		processWorkOSUserEvents:         activities.NewProcessWorkOSUserEvents(logger, db, workosClient),
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
+		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
+		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
 	}
 }
 
+func (a *Activities) ListWorkOSOrganizations(ctx context.Context) ([]string, error) {
+	return a.listWorkOSOrganizations.Do(ctx)
+}
+
+func (a *Activities) BackfillWorkOSOrganization(ctx context.Context, params activities.BackfillWorkOSOrganizationParams) error {
+	return a.backfillWorkOSOrganization.Do(ctx, params)
+}
+
+func (a *Activities) BackfillWorkOSGlobalRoles(ctx context.Context) error {
+	return a.backfillWorkOSGlobalRoles.Do(ctx)
+}
+
 func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {
-	if a.processWorkOSOrganizationEvents == nil {
-		return nil, fmt.Errorf("WorkOS events client is not configured")
-	}
 	return a.processWorkOSOrganizationEvents.Do(ctx, params)
 }
 
 func (a *Activities) ProcessWorkOSGlobalRoleEvents(ctx context.Context, params activities.ProcessWorkOSGlobalRoleEventsParams) (*activities.ProcessWorkOSGlobalRoleEventsResult, error) {
-	if a.processWorkOSGlobalRoleEvents == nil {
-		return nil, fmt.Errorf("WorkOS events client is not configured")
-	}
 	return a.processWorkOSGlobalRoleEvents.Do(ctx, params)
+}
+
+func (a *Activities) ProcessWorkOSUserEvents(ctx context.Context, params activities.ProcessWorkOSUserEventsParams) (*activities.ProcessWorkOSUserEventsResult, error) {
+	return a.processWorkOSUserEvents.Do(ctx, params)
 }
 
 func (a *Activities) TransitionDeployment(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID, status string) (*activities.TransitionDeploymentResult, error) {
@@ -357,4 +374,35 @@ func (a *Activities) SignalAssistantThread(ctx context.Context, input activities
 
 func (a *Activities) CancelAssistantsSubscription(ctx context.Context, args activities.CancelAssistantsSubscriptionArgs) error {
 	return a.cancelAssistantsSubscription.Do(ctx, args)
+}
+
+func (a *Activities) FetchPendingOutboxEvents(ctx context.Context, events outbox_relay.FetchEventArgs) (outbox_relay.FetchEventsResult, error) {
+	result, err := a.outboxRelay.FetchEvents(ctx, events)
+	if err != nil {
+		return outbox_relay.FetchEventsResult{}, fmt.Errorf("fetch pending outbox events: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) FilterNoopOutboxEvents(ctx context.Context, events []*outbox_relay.Event) ([]*outbox_relay.Event, error) {
+	result, err := a.outboxRelay.FilterNoopEvents(ctx, events)
+	if err != nil {
+		return nil, fmt.Errorf("mark outbox events noop: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) RelayOutboxEvents(ctx context.Context, args []*outbox_relay.Event) error {
+	if err := a.outboxRelay.RelayEvents(ctx, args); err != nil {
+		return fmt.Errorf("relay outbox events: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) GCOutboxProcessedRows(ctx context.Context, cutoff time.Time, batchSize int32) (int64, error) {
+	n, err := a.outboxGC.DeleteProcessedRows(ctx, cutoff, batchSize)
+	if err != nil {
+		return 0, fmt.Errorf("gc outbox processed rows: %w", err)
+	}
+	return n, nil
 }

@@ -25,6 +25,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -1097,7 +1098,18 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		return EnqueueResult{}, fmt.Errorf("parse assistant id: %w", err)
 	}
 	assistant, err := s.getAssistantForDispatch(ctx, assistantID)
-	if err != nil {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// Trigger targets an assistant that no longer exists (deleted, or the
+		// trigger was created against the wrong id). Retrying won't help —
+		// drop the dispatch so the activity succeeds and Temporal doesn't
+		// hammer the same row through three attempts.
+		s.logger.WarnContext(ctx, "skipping trigger dispatch: assistant not found",
+			attr.SlogAssistantID(assistantID.String()),
+			attr.SlogTriggerInstanceID(task.TriggerInstanceID),
+		)
+		return EnqueueResult{AssistantID: uuid.Nil, ThreadID: uuid.Nil, EventCreated: false}, nil
+	case err != nil:
 		return EnqueueResult{}, err
 	}
 	if assistant.Status != StatusActive {
@@ -1763,7 +1775,8 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 }
 
 func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetRow) ([]runtimeMCPServer, error) {
-	servers := make([]runtimeMCPServer, 0, len(toolsets))
+	platformToolsets := []string{platformtools.AssistantsPlatformToolsetSlug}
+	servers := make([]runtimeMCPServer, 0, len(toolsets)+len(platformToolsets))
 	for _, t := range toolsets {
 		if !t.McpEnabled {
 			return nil, fmt.Errorf("toolset %q does not have MCP enabled", t.ToolsetSlug)
@@ -1787,6 +1800,19 @@ func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetR
 			ID:      t.ToolsetSlug,
 			URL:     serverURL.JoinPath("mcp", t.McpSlug.String).String(),
 			Headers: headers,
+		})
+	}
+
+	// Implicit platform toolsets granted to every assistant runtime; not
+	// surfaced as user-managed toolsets and not persisted in
+	// assistant_toolsets so users can't detach them. The "_platform-" ID
+	// prefix can't collide with user toolset slugs because the slug grammar
+	// strips underscores.
+	for _, slug := range platformToolsets {
+		servers = append(servers, runtimeMCPServer{
+			ID:      "_platform-" + slug,
+			URL:     platformtools.PlatformToolsetURL(serverURL, slug),
+			Headers: nil,
 		})
 	}
 

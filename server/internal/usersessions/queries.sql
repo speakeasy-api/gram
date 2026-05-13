@@ -75,6 +75,17 @@ FROM user_session_clients AS cli
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
 WHERE cli.id = @id AND iss.project_id = @project_id AND cli.deleted IS FALSE;
 
+-- name: GetUserSessionClientByClientID :one
+-- Lookup a registered DCR client by its issuer-scoped client_id. Used by the
+-- /authorize, /token, and /revoke handlers to resolve the client behind the
+-- request. Project scoping is intentionally NOT applied here — the OAuth
+-- surface is public and the issuer_id is the authoritative scope.
+SELECT cli.*
+FROM user_session_clients AS cli
+WHERE cli.user_session_issuer_id = @user_session_issuer_id
+  AND cli.client_id = @client_id
+  AND cli.deleted IS FALSE;
+
 -- name: ListUserSessionClientsByProjectID :many
 -- Operator visibility into all DCR-issued clients in the project, with optional
 -- filter by user_session_issuer_id. Joins through issuers for project scoping.
@@ -179,6 +190,42 @@ WHERE s.id = @id
   AND s.deleted IS FALSE
 RETURNING s.*;
 
+-- name: RevokeUserSessionByRefreshTokenHash :one
+-- Soft-deletes the session matching the supplied refresh-token hash, scoped
+-- to the issuer. Used by the OAuth /revoke endpoint (RFC 7009) on the public
+-- MCP surface, where project scoping isn't applicable -- the issuer_id is
+-- the authoritative scope. Returns the affected row so the handler can push
+-- the jti into the revocation cache.
+UPDATE user_sessions
+SET deleted_at = clock_timestamp()
+WHERE user_session_issuer_id = @user_session_issuer_id
+  AND refresh_token_hash = @refresh_token_hash
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: GetUserSessionByJTI :one
+-- Looks up the session row by jti, scoped to the issuer. Used by the OAuth
+-- /revoke endpoint to verify a presented access token belongs to the
+-- authenticated client (RFC 7009 §2.1) before pushing the jti into the
+-- revocation cache.
+SELECT *
+FROM user_sessions
+WHERE user_session_issuer_id = @user_session_issuer_id
+  AND jti = @jti
+  AND deleted IS FALSE;
+
+-- name: GetUserSessionByRefreshTokenHash :one
+-- Looks up the session row by refresh-token hash, scoped to the issuer.
+-- Used by the OAuth /revoke endpoint to verify a presented refresh token
+-- belongs to the authenticated client (RFC 7009 §2.1) BEFORE soft-deleting
+-- the row — otherwise a malicious client could invalidate another client's
+-- refresh token by presenting it to /revoke.
+SELECT *
+FROM user_sessions
+WHERE user_session_issuer_id = @user_session_issuer_id
+  AND refresh_token_hash = @refresh_token_hash
+  AND deleted IS FALSE;
+
 -- The Create* queries below are exercised by tests and by the OAuth surface
 -- that lands in milestone #2 (DCR registration, /token exchange, /authorize
 -- consent). They have no exposure on the management API.
@@ -205,9 +252,13 @@ VALUES (
 RETURNING *;
 
 -- name: CreateUserSession :one
+-- user_session_client_id binds the session to the DCR client that minted it.
+-- The /token refresh path requires the same client to refresh; see
+-- HandleToken's refresh_token grant.
 INSERT INTO user_sessions (
     project_id,
     user_session_issuer_id,
+    user_session_client_id,
     subject_urn,
     jti,
     refresh_token_hash,
@@ -217,6 +268,7 @@ INSERT INTO user_sessions (
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
     @user_session_issuer_id,
+    @user_session_client_id,
     @subject_urn,
     @jti,
     @refresh_token_hash,

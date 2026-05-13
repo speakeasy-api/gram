@@ -1,0 +1,23 @@
+[project]
+name = "gram-pi-classifier"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi==0.115.6",
+    "huggingface-hub==0.26.5",
+    "numpy==1.26.4",
+    "optimum[onnxruntime]==1.23.3",
+    "pydantic==2.10.3",
+    "sentencepiece==0.2.0",
+    "torch==2.11.0",
+    "transformers==4.46.3",
+    "uvicorn[standard]==0.32.1",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

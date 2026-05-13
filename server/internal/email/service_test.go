@@ -18,7 +18,7 @@ type mockSender struct {
 
 func (m *mockSender) SendTransactional(ctx context.Context, input loops.SendTransactionalInput) error {
 	args := m.Called(ctx, input)
-	return args.Error(0) //nolint:wrapcheck // mock return is not a real error to wrap.
+	return args.Error(0)
 }
 
 func newMockSender(t *testing.T) *mockSender {

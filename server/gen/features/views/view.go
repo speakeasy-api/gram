@@ -30,8 +30,6 @@ type GramProductFeaturesView struct {
 	SessionCaptureEnabled *bool
 	// Whether authz challenge logging to ClickHouse is enabled
 	AuthzChallengeLoggingEnabled *bool
-	// Whether assistant memory is enabled
-	AssistantMemoryEnabled *bool
 }
 
 var (
@@ -43,7 +41,6 @@ var (
 			"tool_io_logs_enabled",
 			"session_capture_enabled",
 			"authz_challenge_logging_enabled",
-			"assistant_memory_enabled",
 		},
 	}
 )
@@ -74,9 +71,6 @@ func ValidateGramProductFeaturesView(result *GramProductFeaturesView) (err error
 	}
 	if result.AuthzChallengeLoggingEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("authz_challenge_logging_enabled", "result"))
-	}
-	if result.AssistantMemoryEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("assistant_memory_enabled", "result"))
 	}
 	return
 }

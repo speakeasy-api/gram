@@ -583,3 +583,102 @@ func TestWritePluginZipMakesShellScriptsExecutable(t *testing.T) {
 	require.Equal(t, uint32(0o644), modes[".claude-plugin/plugin.json"], "non-script files keep default mode")
 	require.Equal(t, uint32(0o644), modes["README.md"], "non-script files keep default mode")
 }
+
+// Each publish must stamp a fresh manifest version into every plugin.json.
+// Claude Code, Cursor, and Codex marketplaces all key cache invalidation off
+// the manifest's version field: if it doesn't change between publishes,
+// previously-installed copies are treated as up-to-date and never refreshed.
+func TestGeneratePluginPackagesStampsConfigVersionIntoEveryManifest(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name:        "Engineering Tools",
+			Slug:        "engineering-tools",
+			Description: "MCP servers",
+			Servers: []PluginServerInfo{
+				{DisplayName: "crm", MCPURL: "https://app.getgram.ai/mcp/crm"},
+			},
+		},
+	}
+
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "acme-prod",
+		Version:     "0.1.1747087200",
+	}
+
+	files, err := GeneratePluginPackages(plugins, cfg)
+	require.NoError(t, err)
+
+	// Every plugin.json the publisher writes — both per-plugin and the
+	// per-org observability bundle, across all three platforms — must carry
+	// the supplied version.
+	manifestPaths := []string{
+		"engineering-tools/.claude-plugin/plugin.json",
+		"engineering-tools-cursor/.cursor-plugin/plugin.json",
+		"engineering-tools-codex/.codex-plugin/plugin.json",
+		"acme-observability/.claude-plugin/plugin.json",
+		"acme-observability-cursor/.cursor-plugin/plugin.json",
+		"acme-observability-codex/.codex-plugin/plugin.json",
+	}
+	for _, p := range manifestPaths {
+		raw, ok := files[p]
+		require.True(t, ok, "missing manifest: %s", p)
+
+		var meta struct {
+			Version string `json:"version"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &meta), "parse %s", p)
+		require.Equal(t, "0.1.1747087200", meta.Version, "%s did not pick up cfg.Version", p)
+	}
+}
+
+// Successive publishes with bumped versions must produce different manifest
+// bytes so platform clients see a new version and pull. This is the core
+// regression test for the "republish doesn't refresh clients" gap.
+func TestGeneratePluginPackagesRepublishWithBumpedVersionRefreshesManifest(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name:        "Engineering Tools",
+			Slug:        "engineering-tools",
+			Description: "MCP servers",
+			Servers: []PluginServerInfo{
+				{DisplayName: "crm", MCPURL: "https://app.getgram.ai/mcp/crm"},
+			},
+		},
+	}
+
+	base := GenerateConfig{
+		OrgName:   "Acme",
+		ServerURL: "https://app.getgram.ai",
+	}
+
+	first := base
+	first.Version = "0.1.100"
+	firstFiles, err := GeneratePluginPackages(plugins, first)
+	require.NoError(t, err)
+
+	second := base
+	second.Version = "0.1.200"
+	secondFiles, err := GeneratePluginPackages(plugins, second)
+	require.NoError(t, err)
+
+	const manifestPath = "engineering-tools/.claude-plugin/plugin.json"
+	require.NotEqual(t,
+		string(firstFiles[manifestPath]),
+		string(secondFiles[manifestPath]),
+		"manifest bytes must differ between publishes — otherwise Claude's marketplace will not refresh",
+	)
+}
+
+// Empty cfg.Version preserves the legacy "0.1.0" so tests that don't care
+// about versioning don't have to construct one. Production callers always
+// set cfg.Version via Service.generateConfig.
+func TestPluginManifestVersionFallsBackTo010WhenUnset(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "0.1.0", pluginManifestVersion(GenerateConfig{}))
+	require.Equal(t, "0.1.42", pluginManifestVersion(GenerateConfig{Version: "0.1.42"}))
+}

@@ -18,6 +18,7 @@ import (
 
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -1247,4 +1248,29 @@ func mustParseURLForServiceTest(t *testing.T, raw string) *url.URL {
 	parsed, err := url.Parse(raw)
 	require.NoError(t, err)
 	return parsed
+}
+
+func TestServiceCoreEnqueueTriggerTaskSkipsMissingAssistant(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_enqueue_missing")
+	require.NoError(t, err)
+
+	logger := testenv.NewLogger(t)
+	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, tokens, nil, telemetry.NewStub(logger), nil)
+
+	missing := uuid.New()
+	result, err := core.EnqueueTriggerTask(t.Context(), bgtriggers.Task{
+		TriggerInstanceID: uuid.New().String(),
+		DefinitionSlug:    sourceKindSlack,
+		TargetKind:        bgtriggers.TargetKindAssistant,
+		TargetRef:         missing.String(),
+		EventID:           "evt-missing",
+		CorrelationID:     "corr-missing",
+		EventJSON:         []byte(`{}`),
+	})
+	require.NoError(t, err)
+	require.False(t, result.EventCreated)
+	require.Equal(t, uuid.Nil, result.AssistantID)
 }

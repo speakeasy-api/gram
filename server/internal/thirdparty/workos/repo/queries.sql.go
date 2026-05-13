@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getOrganizationSyncLastEventID = `-- name: GetOrganizationSyncLastEventID :one
@@ -27,11 +28,11 @@ func (q *Queries) GetOrganizationSyncLastEventID(ctx context.Context, workosOrga
 const getUserSyncLastEventID = `-- name: GetUserSyncLastEventID :one
 SELECT last_event_id
 FROM workos_user_syncs
-WHERE id = 1
+WHERE workos_user_id = $1
 `
 
-func (q *Queries) GetUserSyncLastEventID(ctx context.Context) (string, error) {
-	row := q.db.QueryRow(ctx, getUserSyncLastEventID)
+func (q *Queries) GetUserSyncLastEventID(ctx context.Context, workosUserID pgtype.Text) (string, error) {
+	row := q.db.QueryRow(ctx, getUserSyncLastEventID, workosUserID)
 	var last_event_id string
 	err := row.Scan(&last_event_id)
 	return last_event_id, err
@@ -59,16 +60,21 @@ func (q *Queries) SetOrganizationSyncLastEventID(ctx context.Context, arg SetOrg
 }
 
 const setUserSyncLastEventID = `-- name: SetUserSyncLastEventID :one
-INSERT INTO workos_user_syncs (id, last_event_id)
-VALUES (1, $1)
-ON CONFLICT (id) DO UPDATE SET
+INSERT INTO workos_user_syncs (workos_user_id, last_event_id)
+VALUES ($1, $2)
+ON CONFLICT (workos_user_id) WHERE workos_user_id IS NOT NULL DO UPDATE SET
     last_event_id = EXCLUDED.last_event_id,
     updated_at = clock_timestamp()
 RETURNING id
 `
 
-func (q *Queries) SetUserSyncLastEventID(ctx context.Context, lastEventID string) (int64, error) {
-	row := q.db.QueryRow(ctx, setUserSyncLastEventID, lastEventID)
+type SetUserSyncLastEventIDParams struct {
+	WorkosUserID pgtype.Text
+	LastEventID  string
+}
+
+func (q *Queries) SetUserSyncLastEventID(ctx context.Context, arg SetUserSyncLastEventIDParams) (int64, error) {
+	row := q.db.QueryRow(ctx, setUserSyncLastEventID, arg.WorkosUserID, arg.LastEventID)
 	var id int64
 	err := row.Scan(&id)
 	return id, err

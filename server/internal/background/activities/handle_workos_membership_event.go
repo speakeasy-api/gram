@@ -62,7 +62,7 @@ func handleOrganizationMembershipUpsert(ctx context.Context, logger *slog.Logger
 	if gramUserID != "" {
 		existing, err := orgrepo.New(dbtx).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
 			OrganizationID: org.ID,
-			UserID:         gramUserID,
+			UserID:         conv.ToPGText(gramUserID),
 		})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
@@ -82,7 +82,7 @@ func handleOrganizationMembershipUpsert(ctx context.Context, logger *slog.Logger
 		}
 		if err := orgrepo.New(dbtx).UpsertOrganizationUserRelationshipFromWorkOS(ctx, orgrepo.UpsertOrganizationUserRelationshipFromWorkOSParams{
 			OrganizationID:     org.ID,
-			UserID:             gramUserID,
+			UserID:             conv.ToPGText(gramUserID),
 			WorkosMembershipID: conv.ToPGText(payload.ID),
 			WorkosUpdatedAt:    conv.ToPGTimestamptz(payload.UpdatedAt),
 			WorkosLastEventID:  conv.ToPGText(event.ID),
@@ -133,7 +133,7 @@ func handleOrganizationMembershipDeleted(ctx context.Context, logger *slog.Logge
 	if gramUserID != "" {
 		existing, err := orgrepo.New(dbtx).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
 			OrganizationID: org.ID,
-			UserID:         gramUserID,
+			UserID:         conv.ToPGText(gramUserID),
 		})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
@@ -153,7 +153,7 @@ func handleOrganizationMembershipDeleted(ctx context.Context, logger *slog.Logge
 		}
 		if err := orgrepo.New(dbtx).MarkOrganizationUserRelationshipAsDeleted(ctx, orgrepo.MarkOrganizationUserRelationshipAsDeletedParams{
 			OrganizationID:     org.ID,
-			UserID:             gramUserID,
+			UserID:             conv.ToPGText(gramUserID),
 			WorkosMembershipID: conv.ToPGText(payload.ID),
 			WorkosUpdatedAt:    conv.ToPGTimestamptz(payload.UpdatedAt),
 			WorkosLastEventID:  conv.ToPGText(event.ID),
