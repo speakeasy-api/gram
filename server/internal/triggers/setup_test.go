@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
@@ -29,7 +30,7 @@ import (
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
 		log.Fatalf("launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -100,12 +101,18 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	serverURL, err := url.Parse("https://gram.test.local")
 	require.NoError(t, err)
 
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	auditLogger := audit.NewLogger()
+
 	app := bgtriggers.NewApp(
 		logger,
 		conn,
 		nil,
 		loader,
 		bgtriggers.NewTriggerDeliveryLogger(func(_ context.Context, _ bgtriggers.TriggerDeliveryLog) {}),
+		auditLogger,
 		serverURL,
 	)
 
@@ -114,8 +121,9 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		tracerProvider,
 		conn,
 		sessionManager,
-		authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache),
+		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache),
 		app,
+		auditLogger,
 	)
 
 	return ctx, &testInstance{

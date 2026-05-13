@@ -1,5 +1,21 @@
 # @gram-ai/elements
 
+## 1.32.0
+
+### Minor Changes
+
+- 35b4b51: Add an `mcps` config option that connects a single chat to multiple MCP servers. Tools across servers are merged and namespaced as `<name>__<tool>` so identical names don't collide; each entry can pin its own `environment` slug. When set, `mcps` takes precedence over the existing single-server `mcp` option, which continues to work unchanged.
+
+### Patch Changes
+
+- 35b4b51: Drop persisted tool calls that arrive without a `toolCallId` instead of giving them an empty-string id. Previously two such parts in the same restored thread would alias under the same key and the runtime would throw "Tool call argsText can only be appended, not updated" while loading the chat.
+
+## 1.31.0
+
+### Minor Changes
+
+- 50433e1: Upgraded dashboard and elements Tailwind dependencies to 4.2.4
+
 ## 1.30.1
 
 ### Patch Changes

@@ -159,6 +159,7 @@ type Service struct {
 	serverURL    *url.URL
 	siteURL      *url.URL
 	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
+	audit        *audit.Logger
 
 	// Hosted install page script (embedded and served with cache-busting hash)
 	installPageScriptHash string
@@ -168,7 +169,17 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, serverURL *url.URL, siteURL *url.URL, cacheAdapter cache.Cache, authzEngine *authz.Engine) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	serverURL *url.URL,
+	siteURL *url.URL,
+	cacheAdapter cache.Cache,
+	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("mcp_metadata"))
 
 	// Calculate content hash for install page script (for cache busting)
@@ -187,6 +198,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		serverURL:    serverURL,
 		siteURL:      siteURL,
 		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
+		audit:        auditLogger,
 
 		installPageScriptHash: scriptHashStr,
 		installPageScriptData: hostedPageScriptData,
@@ -388,7 +400,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		return nil, err
 	}
 
-	if err := audit.LogMCPMetadataUpdate(ctx, dbtx, audit.LogMCPMetadataUpdateEvent{
+	if err := s.audit.LogMCPMetadataUpdate(ctx, dbtx, audit.LogMCPMetadataUpdateEvent{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 

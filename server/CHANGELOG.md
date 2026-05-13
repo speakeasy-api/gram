@@ -1,5 +1,125 @@
 # server
 
+## 0.51.2
+
+### Patch Changes
+
+- fcf3fd6: Auto-enable MCP on toolsets when they are attached to an assistant, so the runtime can build a startup config without manual toggling.
+- a6f005f: Tag users who sign up with `disposition=assistants` with a PostHog person property so the assistants feature flag can target them.
+
+## 0.51.1
+
+### Patch Changes
+
+- 58d3e52: Assistant Fly runtime now provisions one app per assistant (with one machine per thread) instead of one app per thread. Reduces Fly app churn and speeds cold starts; reap continues to drain old per-thread apps automatically.
+- fce5ff5: OpenRouter responses indicating exhausted credits now surface as 402 Payment Required to chat callers instead of a generic 5xx, and the chat-resolution analyzer stops burning retries against a request that cannot succeed.
+
+## 0.51.0
+
+### Minor Changes
+
+- 280b7ef: The assistant runtime now compacts conversation history as it approaches the model's context window: older turns are summarised so long-running assistants can keep going past the original window limit. System prompt, context items, and the most recent turns are preserved.
+- f2fd934: Adds an endpoint to consume workOS webhooks to sync data from workOS
+- e7dfe3c: Add wake triggers: one-shot self-wakes that an assistant schedules from inside its own turn to resume work later. New `platform_schedule_wake` and `platform_cancel_wake` tools let an assistant set a future fire time (up to 30 days out) with an optional self-note; when the wake fires, dispatch lands on the same thread it was scheduled from. Pending wakes are cancelled automatically when the owning assistant is deleted.
+
+## 0.50.0
+
+### Minor Changes
+
+- 2609588: Add assistant memory: per-assistant long-term memory backed by vector embeddings. Agents can remember, recall, and forget facts across threads via three new platform tools (gated by the `assistant_memory` product feature). Includes a management API for listing and deleting memories, and a background reaper that hard-deletes soft-deleted rows on schedule.
+- ca625e0: Propagate assistant runtime image upgrades to existing fly.io machines: on the next admission, an idle machine running an older runtime image is recycled in place to the latest version. Mid-turn admissions are left alone so a future idle window picks up the upgrade.
+
+### Patch Changes
+
+- 2c84295: Surface `environment:read` / `environment:write` in the RBAC dev toolbar and the
+  `access.listGrants` fallback so the env-clone permission picker works end-to-end.
+
+## 0.49.0
+
+### Minor Changes
+
+- 5136b45: Add optional `remote_mcp_server_id` and `toolset_id` filter parameters to `mcpServers.list` so callers can scope the result to MCP servers backed by a single remote MCP server or toolset. The two filters are mutually exclusive.
+- 5136b45: Add `remoteMcp.verifyURL` for probing a candidate remote MCP server URL by issuing an MCP `initialize` request and reporting whether the URL is reachable. A `401` or `403` response counts as verified — auth verification is intentionally out of scope.
+
+### Patch Changes
+
+- 7834695: Fix generated observability plugin hooks not firing correctly in production. Hook events now carry explicit `async` flags matching the public Gram plugin (`false` for blocking events like `PreToolUse` and `UserPromptSubmit`, `true` for fire-and-forget events like `Stop` and `PostToolUse`). The generated `hook.sh` script now captures the HTTP response body and status code separately, forwarding the body to stdout for Claude to read `permissionDecision` from on `PreToolUse`, and exiting with code 2 on 4xx/5xx so an unreachable Gram server cannot silently bypass blocking policies.
+- 0b356a5: Fix Claude Code plugins not loading after restart. The `git-subdir` source
+  type used by the marketplace proxy does not persist the plugin cache path
+  across Claude Code sessions, causing "not cached at (not recorded)" errors
+  on every relaunch. The marketplace URL returned by `getPublishStatus` now
+  points directly at the git proxy (`/marketplace/p/{token}.git`) and the
+  install instructions emit `"source": "git"` in the `extraKnownMarketplaces`
+  snippet, which Claude Code caches reliably between sessions. The
+  URL-based manifest endpoint and its rewrite logic have been removed.
+
+## 0.48.0
+
+### Minor Changes
+
+- 0168857: Decorate `/chat/completions` responses with the upstream model's context window via a `gram_metadata` extension. The size is fetched from OpenRouter's per-model endpoints listing (smallest `context_length` across providers) and cached for 72h. The streaming path injects the value into the final SSE frame.
+- 658ff47: Auto-provision an org and attach the free-tier Polar subscription when an unauthenticated user lands on Gram with `?disposition=assistants` and has no org after IDP signin. Generates a legible random org name (e.g. `Swift Otter 42`), eagerly materializes the default project and environment, marks the org as whitelisted so it bypasses the BookDemo gate, and redirects to `/<org>/projects/default/assistants` so the credit benefit is in place before the user reaches the assistants page.
+- 9dcc221: Add `cli_destructive` risk-policy source for flagging destructive CLI commands.
+
+  Mirrors the existing `destructive_tool` shape (post-hoc batch scan, flag-only,
+  no live blocking) but is content-driven instead of annotation-driven. A
+  curated regex set covers shell (`rm -rf`, `dd`, `mkfs`, fork-bomb,
+  `chmod -R`, `chown -R`, `sudo <arg>`), git (`push --force`, `reset --hard`,
+  `clean -f`, `branch -D`), database (`DROP`, `TRUNCATE`, unguarded
+  `DELETE FROM`, `dropdb`), and cloud (`aws ec2 terminate-instances`,
+  `aws s3 rb`, `gcloud projects delete`, `kubectl delete ns/workloads`).
+
+  The scanner walks every recorded tool call's parsed arguments — no MCP
+  filter — so native Bash and `run_terminal_cmd` are now in scope alongside
+  MCP-routed calls whose arguments happen to carry destructive content.
+  First-match-wins iteration over map keys is sorted so rule_ids are
+  deterministic across runs.
+
+  PolicyCenter exposes the new source as a "Destructive CLI Commands" rule
+  category (category-toggle UX matching `destructive_tool`).
+
+- 188e614: Add a credit-balance gate on `/chat/completions` for **free-tier** orgs: pre-request check returns HTTP 402 `insufficient_credits` once the cached Polar Chat Credits balance is exhausted. Pro and enterprise stay bounded by the existing OpenRouter monthly key cap; unifying the two limit sources is tracked separately. Speakeasy-internal orgs (`specialLimitOrgs`) bypass; cache misses fail open. Self-serve top-up checkout (`usage.createTopUpCheckout`) opens a one-time Polar product configured via `POLAR_PRODUCT_IDS_TOPUP`.
+- 3547f8e: Add management APIs for user sessions:
+
+  - **userSessionIssuers**: configure the authorization servers that mint user sessions for your MCP servers.
+  - **userSessionClients**: inspect and revoke the OAuth clients that have dynamically registered against those issuers.
+  - **userSessions**: list the sessions minted for end users and revoke any that should no longer be honored.
+  - **userSessionConsents**: list and withdraw the consent records that gate which (subject, client) pairs skip the consent prompt.
+
+### Patch Changes
+
+- b29be67: Capture a `gram_assistants_signup` PostHog event when the auth callback auto-provisions an org for a user landing with `?disposition=assistants`. The event is keyed on the user's email (matches `is_first_time_user_signup`) and carries `organization_id`, `organization_slug`, `disposition`, and `has_assistants_subscription` so the funnel from signup → benefit attach is observable.
+- 6b4b80d: Fix OAuth discovery for MCP servers that host well-known metadata at the origin root regardless of endpoint path (e.g. Atlassian). When the remote URL has a path and prior discovery strategies find no authorization server metadata, the discovery chain now retries both `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server` probes against the origin root with the path stripped.
+- ce6603e: Fix catalog registry pagination so infinite scroll fetches all entries beyond the first page.
+
+  `ListServers` now returns the upstream registry's `nextCursor` alongside the server list. `ListCatalog` passes that cursor through to the API response so the frontend's `getNextPageParam` receives a non-null value and `hasNextPage` becomes `true`. Previously `NextCursor` was always `nil`, causing the intersection observer to never trigger a second fetch and silently dropping any entries past the first 50.
+
+- 5bafa07: Fix private Claude Code plugins showing "not cached at (not recorded)" after restarting Claude Code. The marketplace proxy now fetches the current HEAD commit SHA and embeds it alongside `ref` in each `git-subdir` plugin source, giving Claude Code a stable cache key that survives restarts.
+- 8ce7444: scan risk policies for prompt injection. enable the new "Prompt Injection" category in the policy editor to flag or block instruction overrides, role hijacks, system-prompt leaks, encoded payloads, delimiter injection, and shell tool-abuse attempts
+
+## 0.47.0
+
+### Minor Changes
+
+- f3f2070: Add listChallenges and resolveChallenge endpoints to the access service for the challenge resolution UI
+- f65466b: Add a marketplace proxy and end-to-end install UX so users can install Gram-published plugins in Claude Code, Claude Cowork, and Cursor without making the upstream GitHub repo public.
+
+  - **Server routes**: `GET /marketplace/m/{token}/marketplace.json` (URL-based Claude Code marketplace) and `/marketplace/p/{token}.git/...` (git Smart HTTP proxy for plugin source clones). Both stream directly from GitHub via the same GitHub App installation token used for publishing — no local mirror state, stateless. Proxy is mounted on the existing `gram start` server and wrapped with the recovery middleware so panics don't crash the process.
+  - **Token-as-secret model**: `plugin_github_connections` gains a nullable `marketplace_token` column with a partial unique index. Tokens are auto-minted on first publish and preserved across subsequent publishes; rotation is a separate (deferred) admin path. Handler-level format precheck rejects malformed tokens before the DB lookup.
+  - **Hook layout fix**: the publish flow now writes generated observability hooks at `hooks/hooks.json` (with the script alongside) instead of at the plugin root. Without the `hooks/` subdir, Claude Code and Cursor register the plugin successfully but never wire the hook events up — silently dropping every PreToolUse / PostToolUse signal.
+  - **Plugin source rewrite**: rewritten manifests use the `git-subdir` source type per the official Claude Code marketplace schema (the only valid types are `npm`, `url`, `github`, `git-subdir`; plain `"git"` produces a confusing "source type your version does not support" install error).
+  - **Dashboard**: the Plugins page surfaces the marketplace as a labeled panel with an "Install instructions" button that opens a HooksSetupDialog-styled modal. Three working provider tabs:
+    - **Claude Code** — per-user `/plugin marketplace add` plus an org-wide rollout section with a copy-paste `extraKnownMarketplaces` snippet for Claude.ai's Managed Settings.
+    - **Claude Cowork** — three-step admin walkthrough for adding the GitHub repo on Claude.ai's Plugins page.
+    - **Cursor** — three-step team-admin walkthrough for cursor.com/dashboard, mirroring what's already documented in the published repo's README.
+  - **Management API**: `plugins.getPublishStatus` now returns a `marketplace_url` field once a token has been minted; the dashboard reads from that. SDK regenerated.
+
+- f3955c2: Add Slack reaction platform tools (`platform_slack_add_reaction`, `platform_slack_remove_reaction`, `platform_slack_get_reactions`, `platform_slack_list_reactions`, `platform_slack_list_emoji`) so assistants can react to messages and discover available emoji.
+
+### Patch Changes
+
+- 504c815: Allow setting custom policy messages to be shown to end users
+
 ## 0.46.1
 
 ### Patch Changes

@@ -87,8 +87,8 @@ func (c *Client) GetObjectCompletion(ctx context.Context, request openrouter.Obj
 	return resp, nil
 }
 
-func (c *Client) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string) ([][]float32, error) {
-	embeddings, err := c.completionClient.CreateEmbeddings(ctx, orgID, model, inputs)
+func (c *Client) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string, opts ...openrouter.EmbeddingOption) ([][]float32, error) {
+	embeddings, err := c.completionClient.CreateEmbeddings(ctx, orgID, model, inputs, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("create embeddings: %w", err)
 	}

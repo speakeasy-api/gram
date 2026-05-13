@@ -15,6 +15,8 @@ func BuildRemoteMcpServerView(server repo.RemoteMcpServer, headers []repo.Remote
 	return &types.RemoteMcpServer{
 		ID:            server.ID.String(),
 		ProjectID:     server.ProjectID.String(),
+		Name:          conv.FromPGText[string](server.Name),
+		Slug:          conv.FromPGText[string](server.Slug),
 		URL:           server.Url,
 		TransportType: server.TransportType,
 		Headers:       buildRemoteMcpServerHeaderViews(headers),

@@ -297,7 +297,7 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 
 	// Handle non-200 responses
 	if httpResp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("OpenRouter API error (status %d): %s", httpResp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, classifyHTTPError(httpResp.StatusCode, body)
 	}
 
 	// Parse response
@@ -385,7 +385,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 	if httpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(httpResp.Body)
 		o11y.NoLogDefer(func() error { return httpResp.Body.Close() })
-		return nil, fmt.Errorf("OpenRouter API error (status %d): %s", httpResp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, classifyHTTPError(httpResp.StatusCode, body)
 	}
 
 	// Wrap the response body with SSE parser that accumulates metadata
@@ -436,7 +436,7 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		ProjectID:                 req.ProjectID,
 		Messages:                  messages,
 		Tools:                     nil,
-		Temperature:               nil,
+		Temperature:               req.Temperature,
 		Model:                     req.Model,
 		Stream:                    false,
 		UsageSource:               req.UsageSource,
@@ -702,7 +702,15 @@ func (c *ChatClient) emitGenAITelemetry(
 	})
 }
 
-func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string) ([][]float32, error) {
+func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string, opts ...EmbeddingOption) ([][]float32, error) {
+	var resolved EmbeddingOptions
+	for _, opt := range opts {
+		opt(&resolved)
+	}
+	return c.createEmbeddings(ctx, orgID, model, inputs, resolved.Dimensions)
+}
+
+func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model string, inputs []string, dimensions *int64) ([][]float32, error) {
 	openrouterKey, err := c.provisioner.ProvisionAPIKey(ctx, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("provisioning OpenRouter key: %w", err)
@@ -735,7 +743,7 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 		Model:          model,
 		Input:          or_operations.CreateInputUnionArrayOfStr(inputs),
 		EncodingFormat: nil,
-		Dimensions:     nil,
+		Dimensions:     dimensions,
 		User:           nil,
 		Provider:       nil,
 		InputType:      nil,

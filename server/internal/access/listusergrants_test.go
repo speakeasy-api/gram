@@ -25,6 +25,8 @@ var expectedFullAccessScopes = []string{
 	string(authz.ScopeMCPRead),
 	string(authz.ScopeMCPWrite),
 	string(authz.ScopeMCPConnect),
+	string(authz.ScopeEnvironmentRead),
+	string(authz.ScopeEnvironmentWrite),
 }
 
 func TestService_ListGrants(t *testing.T) {
@@ -173,7 +175,9 @@ func TestService_ListGrants_RBACDisabledReturnsFullAccess(t *testing.T) {
 
 	authCtx.AccountType = "enterprise"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-	ti.service.authz = authz.NewEngine(ti.service.logger, ti.conn, authztest.RBACAlwaysDisabled, ti.roles, nil)
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	ti.service.authz = authz.NewEngine(ti.service.logger, ti.conn, chConn, authztest.RBACAlwaysDisabled, authztest.ChallengeLoggingAlwaysDisabled, ti.roles, nil)
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)

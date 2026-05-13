@@ -123,8 +123,8 @@ export function AssistantDraftPanel() {
             </Section>
 
             <Section
-              title={`Toolsets (${a.toolsets.length})`}
-              empty="No toolsets attached."
+              title={`MCP Servers (${a.toolsets.length})`}
+              empty="No MCP servers attached."
               isEmpty={a.toolsets.length === 0}
             >
               <Stack gap={2}>

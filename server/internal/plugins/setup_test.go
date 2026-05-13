@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -35,7 +36,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -91,7 +92,12 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache), nil, "local", "https://app.getgram.ai")
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	auditLogger := audit.NewLogger()
+
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache), auditLogger, nil, "local", "https://app.getgram.ai")
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -138,10 +144,21 @@ func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublis
 		InstallationID: 12345,
 	}
 
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	auditLogger := audit.NewLogger()
+
 	svc := plugins.NewService(
-		logger, tracerProvider, conn, sessionManager,
-		authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache),
-		ghConfig, "local", "https://app.getgram.ai",
+		logger,
+		tracerProvider,
+		conn,
+		sessionManager,
+		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache),
+		auditLogger,
+		ghConfig,
+		"local",
+		"https://app.getgram.ai",
 	)
 
 	return ctx, &testInstance{

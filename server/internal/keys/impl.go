@@ -45,12 +45,21 @@ type Service struct {
 	authz       *authz.Engine
 	projectRepo *project_repo.Queries
 	orgsRepo    *organizations_repo.Queries
+	audit       *audit.Logger
 	keyPrefix   string
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, env string, authzEngine *authz.Engine) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	env string,
+	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("keys"))
 
 	fullKeyPrefix := auth.APIKeyPrefix(env)
@@ -63,6 +72,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		authz:       authzEngine,
 		projectRepo: project_repo.New(db),
 		orgsRepo:    organizations_repo.New(db),
+		audit:       auditLogger,
 		keyPrefix:   fullKeyPrefix,
 	}
 }
@@ -148,7 +158,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating api key").Log(ctx, s.logger)
 	}
 
-	if err := audit.LogKeyCreate(ctx, dbtx, audit.LogKeyCreateEvent{
+	if err := s.audit.LogKeyCreate(ctx, dbtx, audit.LogKeyCreateEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        projectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -253,7 +263,7 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 		return oops.E(oops.CodeUnexpected, err, "error revoking api key").Log(ctx, s.logger)
 	}
 
-	if err := audit.LogKeyRevoke(ctx, dbtx, audit.LogKeyRevokeEvent{
+	if err := s.audit.LogKeyRevoke(ctx, dbtx, audit.LogKeyRevokeEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        deleted.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

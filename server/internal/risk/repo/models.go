@@ -10,19 +10,20 @@ import (
 )
 
 type RiskPolicy struct {
-	ID               uuid.UUID
-	ProjectID        uuid.UUID
-	OrganizationID   string
-	Enabled          bool
-	Name             string
-	Sources          []string
-	PresidioEntities []string
-	Action           string
-	AutoName         bool
-	UserMessage      pgtype.Text
-	Version          int64
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	DeletedAt        pgtype.Timestamptz
-	Deleted          bool
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	OrganizationID       string
+	Enabled              bool
+	Name                 string
+	Sources              []string
+	PresidioEntities     []string
+	PromptInjectionRules []string
+	Action               string
+	AutoName             bool
+	UserMessage          pgtype.Text
+	Version              int64
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
 }

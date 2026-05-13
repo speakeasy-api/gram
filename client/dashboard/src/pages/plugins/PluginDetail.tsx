@@ -315,7 +315,7 @@ export default function PluginDetail() {
             </Dialog.Header>
             <form onSubmit={handleAddServer} className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium">Toolset</label>
+                <label className="text-sm font-medium">MCP Server</label>
                 {isLoadingToolsets ? (
                   <Skeleton className="h-9 w-full" />
                 ) : toolsets.length > 0 ? (
@@ -324,7 +324,7 @@ export default function PluginDetail() {
                     className="bg-background rounded-md border px-3 py-2 text-sm"
                     required
                   >
-                    <option value="">Select a toolset</option>
+                    <option value="">Select an MCP server</option>
                     {toolsets.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.name}
@@ -333,8 +333,8 @@ export default function PluginDetail() {
                   </select>
                 ) : (
                   <Type muted small>
-                    No toolsets available. Create a toolset in this project
-                    first.
+                    No MCP servers available. Create an MCP server in this
+                    project first.
                   </Type>
                 )}
               </div>

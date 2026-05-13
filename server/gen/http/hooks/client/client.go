@@ -23,6 +23,9 @@ type Client struct {
 	// Cursor Doer is the HTTP client used to make requests to the cursor endpoint.
 	CursorDoer goahttp.Doer
 
+	// Codex Doer is the HTTP client used to make requests to the codex endpoint.
+	CodexDoer goahttp.Doer
+
 	// Logs Doer is the HTTP client used to make requests to the logs endpoint.
 	LogsDoer goahttp.Doer
 
@@ -52,6 +55,7 @@ func NewClient(
 	return &Client{
 		ClaudeDoer:          doer,
 		CursorDoer:          doer,
+		CodexDoer:           doer,
 		LogsDoer:            doer,
 		MetricsDoer:         doer,
 		RestoreResponseBody: restoreBody,
@@ -105,6 +109,30 @@ func (c *Client) Cursor() goa.Endpoint {
 		resp, err := c.CursorDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("hooks", "cursor", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Codex returns an endpoint that makes HTTP requests to the hooks service
+// codex server.
+func (c *Client) Codex() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCodexRequest(c.encoder)
+		decodeResponse = DecodeCodexResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCodexRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CodexDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("hooks", "codex", err)
 		}
 		return decodeResponse(resp)
 	}

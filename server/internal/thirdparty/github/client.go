@@ -84,6 +84,14 @@ func (c *Client) appJWT() (string, error) {
 	return signed, nil
 }
 
+// InstallationToken returns a short-lived GitHub App installation access token
+// for the given installation. Cached and refreshed automatically — each call is
+// cheap. Suitable for use as the password slot of a basic-auth credential when
+// fetching from GitHub over HTTPS (with username "x-access-token").
+func (c *Client) InstallationToken(ctx context.Context, installationID int64) (string, error) {
+	return c.installationToken(ctx, installationID)
+}
+
 func (c *Client) installationToken(ctx context.Context, installationID int64) (string, error) {
 	// Fast path: return cached token if still valid.
 	c.mu.Lock()

@@ -30,7 +30,7 @@ type LogRemoteMcpServerCreateEvent struct {
 	RemoteMcpServerURL string
 }
 
-func LogRemoteMcpServerCreate(ctx context.Context, dbtx repo.DBTX, event LogRemoteMcpServerCreateEvent) error {
+func (l *Logger) LogRemoteMcpServerCreate(ctx context.Context, dbtx repo.DBTX, event LogRemoteMcpServerCreateEvent) error {
 	action := ActionRemoteMcpServerCreate
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -53,11 +53,7 @@ func LogRemoteMcpServerCreate(ctx context.Context, dbtx repo.DBTX, event LogRemo
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogRemoteMcpServerUpdateEvent struct {
@@ -74,7 +70,7 @@ type LogRemoteMcpServerUpdateEvent struct {
 	SnapshotAfter      *types.RemoteMcpServer
 }
 
-func LogRemoteMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, event LogRemoteMcpServerUpdateEvent) error {
+func (l *Logger) LogRemoteMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, event LogRemoteMcpServerUpdateEvent) error {
 	action := ActionRemoteMcpServerUpdate
 
 	beforeSnapshot, err := marshalAuditPayload(event.SnapshotBefore)
@@ -108,11 +104,7 @@ func LogRemoteMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, event LogRemo
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogRemoteMcpServerDeleteEvent struct {
@@ -127,7 +119,7 @@ type LogRemoteMcpServerDeleteEvent struct {
 	RemoteMcpServerURL string
 }
 
-func LogRemoteMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event LogRemoteMcpServerDeleteEvent) error {
+func (l *Logger) LogRemoteMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event LogRemoteMcpServerDeleteEvent) error {
 	action := ActionRemoteMcpServerDelete
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -150,9 +142,5 @@ func LogRemoteMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event LogRemo
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

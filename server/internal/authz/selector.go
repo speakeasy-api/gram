@@ -47,6 +47,8 @@ func ResourceKindForScope(scope Scope) string {
 		return "mcp"
 	case strings.HasPrefix(s, "org:"):
 		return "org"
+	case strings.HasPrefix(s, "environment:"):
+		return "environment"
 	default:
 		return "*"
 	}
@@ -72,7 +74,8 @@ var validDispositions = map[string]bool{
 // resource_id) are valid for each scope family. Scope families not listed here
 // allow no extra keys.
 var allowedSelectorKeys = map[string]map[string]bool{
-	"mcp": {"tool": true, "disposition": true},
+	"mcp":         {"tool": true, "disposition": true, "project_id": true},
+	"environment": {"project_id": true},
 }
 
 // ValidateSelector checks that a selector is well-formed for the given scope.
@@ -133,16 +136,18 @@ func NewSelector(scope Scope, resourceID string) Selector {
 // NewGrant creates a Grant with selector derived from scope and resource ID.
 func NewGrant(scope Scope, resourceID string) Grant {
 	return Grant{
-		Scope:    scope,
-		Selector: NewSelector(scope, resourceID),
+		PrincipalUrn: "",
+		Scope:        scope,
+		Selector:     NewSelector(scope, resourceID),
 	}
 }
 
 // NewGrantWithSelector creates a Grant with an explicit selector.
 func NewGrantWithSelector(scope Scope, selector Selector) Grant {
 	return Grant{
-		Scope:    scope,
-		Selector: selector,
+		PrincipalUrn: "",
+		Scope:        scope,
+		Selector:     selector,
 	}
 }
 

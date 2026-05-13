@@ -17,6 +17,11 @@ func CursorHooksPath() string {
 	return "/rpc/hooks.cursor"
 }
 
+// CodexHooksPath returns the URL path to the hooks service codex HTTP endpoint.
+func CodexHooksPath() string {
+	return "/rpc/hooks.codex"
+}
+
 // LogsHooksPath returns the URL path to the hooks service logs HTTP endpoint.
 func LogsHooksPath() string {
 	return "/rpc/hooks.otel/v1/logs"

@@ -22,6 +22,11 @@ func UpdateEnvironmentEnvironmentsPath() string {
 	return "/rpc/environments.update"
 }
 
+// CloneEnvironmentEnvironmentsPath returns the URL path to the environments service cloneEnvironment HTTP endpoint.
+func CloneEnvironmentEnvironmentsPath() string {
+	return "/rpc/environments.clone"
+}
+
 // DeleteEnvironmentEnvironmentsPath returns the URL path to the environments service deleteEnvironment HTTP endpoint.
 func DeleteEnvironmentEnvironmentsPath() string {
 	return "/rpc/environments.delete"

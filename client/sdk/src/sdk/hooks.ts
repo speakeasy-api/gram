@@ -3,6 +3,7 @@
  */
 
 import { hooksHooksNumberClaude } from "../funcs/hooksHooksNumberClaude.js";
+import { hooksHooksNumberCodex } from "../funcs/hooksHooksNumberCodex.js";
 import { hooksHooksNumberCursor } from "../funcs/hooksHooksNumberCursor.js";
 import { hooksHooksNumberLogs } from "../funcs/hooksHooksNumberLogs.js";
 import { hooksHooksNumberMetrics } from "../funcs/hooksHooksNumberMetrics.js";
@@ -25,6 +26,25 @@ export class Hooks extends ClientSDK {
     return unwrapAsync(hooksHooksNumberClaude(
       this,
       request,
+      options,
+    ));
+  }
+
+  /**
+   * codex hooks
+   *
+   * @remarks
+   * Endpoint for Codex hook events. Handles SessionStart, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, and Stop.
+   */
+  async hooksNumberCodex(
+    request: operations.HooksNumberCodexRequest,
+    security?: operations.HooksNumberCodexSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.CodexHookResult> {
+    return unwrapAsync(hooksHooksNumberCodex(
+      this,
+      request,
+      security,
       options,
     ));
   }

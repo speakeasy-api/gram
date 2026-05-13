@@ -42,12 +42,20 @@ type Service struct {
 	db     *pgxpool.Pool
 	auth   *auth.Auth
 	authz  *authz.Engine
+	audit  *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("mcpservers"))
 
 	return &Service{
@@ -56,6 +64,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		db:     db,
 		auth:   auth.New(logger, db, sessions, authzEngine),
 		authz:  authzEngine,
+		audit:  auditLogger,
 	}
 }
 
@@ -79,7 +88,7 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
@@ -127,7 +136,7 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "create mcp server").Log(ctx, logger)
 	}
 
-	if err := audit.LogMcpServerCreate(ctx, dbtx, audit.LogMcpServerCreateEvent{
+	if err := s.audit.LogMcpServerCreate(ctx, dbtx, audit.LogMcpServerCreateEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -151,7 +160,7 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
@@ -180,13 +189,31 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
-	servers, err := repo.New(s.db).ListMCPServersByProjectID(ctx, *authCtx.ProjectID)
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	remoteMcpServerID, err := conv.PtrToNullUUID(payload.RemoteMcpServerID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_mcp_server_id").Log(ctx, logger)
+	}
+	toolsetID, err := conv.PtrToNullUUID(payload.ToolsetID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, logger)
+	}
+	if remoteMcpServerID.Valid && toolsetID.Valid {
+		return nil, oops.E(oops.CodeInvalid, nil, "at most one of remote_mcp_server_id or toolset_id may be provided").Log(ctx, logger)
+	}
+
+	servers, err := repo.New(s.db).ListMCPServersByProjectID(ctx, repo.ListMCPServersByProjectIDParams{
+		ProjectID:         *authCtx.ProjectID,
+		RemoteMcpServerID: remoteMcpServerID,
+		ToolsetID:         toolsetID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers").Log(ctx, logger)
 	}
 
 	return &gen.ListMcpServersResult{McpServers: mv.BuildMcpServerListView(servers)}, nil
@@ -198,7 +225,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
@@ -270,7 +297,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 
 	afterView := mv.BuildMcpServerView(updated)
 
-	if err := audit.LogMcpServerUpdate(ctx, dbtx, audit.LogMcpServerUpdateEvent{
+	if err := s.audit.LogMcpServerUpdate(ctx, dbtx, audit.LogMcpServerUpdateEvent{
 		OrganizationID:          authCtx.ActiveOrganizationID,
 		ProjectID:               *authCtx.ProjectID,
 		Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -296,7 +323,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
 		return err
 	}
 
@@ -338,7 +365,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	}
 
 	for _, endpoint := range deletedEndpoints {
-		if err := audit.LogMcpEndpointDelete(ctx, dbtx, audit.LogMcpEndpointDeleteEvent{
+		if err := s.audit.LogMcpEndpointDelete(ctx, dbtx, audit.LogMcpEndpointDeleteEvent{
 			OrganizationID:   authCtx.ActiveOrganizationID,
 			ProjectID:        *authCtx.ProjectID,
 			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -351,7 +378,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		}
 	}
 
-	if err := audit.LogMcpServerDelete(ctx, dbtx, audit.LogMcpServerDeleteEvent{
+	if err := s.audit.LogMcpServerDelete(ctx, dbtx, audit.LogMcpServerDeleteEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

@@ -2,6 +2,7 @@ import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { DotCard } from "@/components/ui/dot-card";
+import { MoreActions } from "@/components/ui/more-actions";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
@@ -13,6 +14,7 @@ import { Outlet } from "react-router";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { Type } from "@/components/ui/type";
 import { handleAPIError } from "@/lib/errors";
+import { CloneEnvironmentDialog } from "./CloneEnvironmentDialog";
 import { useEnvironments } from "./useEnvironments";
 export function EnvironmentsRoot() {
   return <Outlet />;
@@ -42,6 +44,7 @@ function EnvironmentsInner() {
   const [createEnvironmentDialogOpen, setCreateEnvironmentDialogOpen] =
     useState(false);
   const [environmentName, setEnvironmentName] = useState("");
+  const [cloneSource, setCloneSource] = useState<Environment | null>(null);
 
   const createEnvironmentMutation = useCreateEnvironmentMutation({
     onSuccess: async (data) => {
@@ -121,6 +124,7 @@ function EnvironmentsInner() {
                 <EnvironmentCard
                   key={environment.id}
                   environment={environment}
+                  onClone={setCloneSource}
                 />
               ))}
             </div>
@@ -141,11 +145,25 @@ function EnvironmentsInner() {
           validate: (value) => value.length > 0,
         }}
       />
+      <CloneEnvironmentDialog
+        key={cloneSource?.id ?? ""}
+        source={cloneSource}
+        open={cloneSource !== null}
+        onOpenChange={(open) => {
+          if (!open) setCloneSource(null);
+        }}
+      />
     </>
   );
 }
 
-function EnvironmentCard({ environment }: { environment: Environment }) {
+function EnvironmentCard({
+  environment,
+  onClone,
+}: {
+  environment: Environment;
+  onClone: (environment: Environment) => void;
+}) {
   const routes = useRoutes();
 
   return (
@@ -163,6 +181,19 @@ function EnvironmentCard({ environment }: { environment: Environment }) {
           >
             {environment.name}
           </Type>
+          <RequireScope scope="environment:write" level="component">
+            <div onClick={(e) => e.stopPropagation()}>
+              <MoreActions
+                actions={[
+                  {
+                    label: "Clone",
+                    onClick: () => onClone(environment),
+                    icon: "copy",
+                  },
+                ]}
+              />
+            </div>
+          </RequireScope>
         </div>
         <Type small muted className="truncate">
           {environment.description || "No description provided"}

@@ -34,13 +34,16 @@ import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import {
-  InsightsAgentsPage,
+  InsightsEmployeeDetailPage,
+  InsightsEmployeesLayout,
+  InsightsEmployeesPage,
   InsightsHooksPage,
   InsightsMCPPage,
   InsightsRoot,
 } from "./pages/insights/Insights";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
+import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
 import Collections, { CollectionsRoot } from "./pages/collections/Collections";
 import CollectionDetail from "./pages/collections/CollectionDetail";
@@ -254,6 +257,11 @@ const ROUTE_STRUCTURE = {
         component: AddFromCatalogGate,
         indexComponent: Catalog,
       },
+      addRemoteMcp: {
+        title: "Add Custom Remote MCP Server",
+        url: "add-remote-mcp",
+        component: CreateRemoteMcp,
+      },
     },
   },
   catalog: {
@@ -368,10 +376,18 @@ const ROUTE_STRUCTURE = {
         url: "mcp",
         component: InsightsMCPPage,
       },
-      agents: {
-        title: "Agents",
-        url: "agents",
-        component: InsightsAgentsPage,
+      employees: {
+        title: "Employees",
+        url: "employees",
+        component: InsightsEmployeesLayout,
+        indexComponent: InsightsEmployeesPage,
+        subPages: {
+          detail: {
+            title: "Employee Detail",
+            url: ":userSlug",
+            component: InsightsEmployeeDetailPage,
+          },
+        },
       },
     },
   },
@@ -709,6 +725,11 @@ const ORG_ROUTE_STRUCTURE = {
       members: {
         title: "Roles & Permissions",
         url: "members",
+        component: Access,
+      },
+      challenges: {
+        title: "Roles & Permissions",
+        url: "challenges",
         component: Access,
       },
     },

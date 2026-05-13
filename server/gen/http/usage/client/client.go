@@ -33,6 +33,10 @@ type Client struct {
 	// createCheckout endpoint.
 	CreateCheckoutDoer goahttp.Doer
 
+	// CreateTopUpCheckout Doer is the HTTP client used to make requests to the
+	// createTopUpCheckout endpoint.
+	CreateTopUpCheckoutDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -57,6 +61,7 @@ func NewClient(
 		GetUsageTiersDoer:         doer,
 		CreateCustomerSessionDoer: doer,
 		CreateCheckoutDoer:        doer,
+		CreateTopUpCheckoutDoer:   doer,
 		RestoreResponseBody:       restoreBody,
 		scheme:                    scheme,
 		host:                      host,
@@ -151,6 +156,30 @@ func (c *Client) CreateCheckout() goa.Endpoint {
 		resp, err := c.CreateCheckoutDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("usage", "createCheckout", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateTopUpCheckout returns an endpoint that makes HTTP requests to the
+// usage service createTopUpCheckout server.
+func (c *Client) CreateTopUpCheckout() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateTopUpCheckoutRequest(c.encoder)
+		decodeResponse = DecodeCreateTopUpCheckoutResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateTopUpCheckoutRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateTopUpCheckoutDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "createTopUpCheckout", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -37,11 +37,19 @@ type Service struct {
 	repo   *repo.Queries
 	auth   *auth.Auth
 	authz  *authz.Engine
+	audit  *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("variations"))
 
 	return &Service{
@@ -51,6 +59,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		repo:   repo.New(db),
 		auth:   auth.New(logger, db, sessions, authzEngine),
 		authz:  authzEngine,
+		audit:  auditLogger,
 	}
 }
 
@@ -203,7 +212,7 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 
 	result := toVariation(row)
 
-	if err := audit.LogVariationUpdateGlobal(ctx, dbtx, audit.LogVariationUpdateGlobalEvent{
+	if err := s.audit.LogVariationUpdateGlobal(ctx, dbtx, audit.LogVariationUpdateGlobalEvent{
 		OrganizationID:          authCtx.ActiveOrganizationID,
 		ProjectID:               uuid.NullUUID{UUID: projectID, Valid: true},
 		Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -258,7 +267,7 @@ func (s *Service) DeleteGlobal(ctx context.Context, payload *gen.DeleteGlobalPay
 		return nil, oops.E(oops.CodeUnexpected, err, "error deleting global tool variation").Log(ctx, s.logger)
 	}
 
-	if err := audit.LogVariationDeleteGlobal(ctx, dbtx, audit.LogVariationDeleteGlobalEvent{
+	if err := s.audit.LogVariationDeleteGlobal(ctx, dbtx, audit.LogVariationDeleteGlobalEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

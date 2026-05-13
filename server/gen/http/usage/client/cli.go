@@ -55,3 +55,18 @@ func BuildCreateCheckoutPayload(usageCreateCheckoutSessionToken string) (*usage.
 
 	return v, nil
 }
+
+// BuildCreateTopUpCheckoutPayload builds the payload for the usage
+// createTopUpCheckout endpoint from CLI flags.
+func BuildCreateTopUpCheckoutPayload(usageCreateTopUpCheckoutSessionToken string) (*usage.CreateTopUpCheckoutPayload, error) {
+	var sessionToken *string
+	{
+		if usageCreateTopUpCheckoutSessionToken != "" {
+			sessionToken = &usageCreateTopUpCheckoutSessionToken
+		}
+	}
+	v := &usage.CreateTopUpCheckoutPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}

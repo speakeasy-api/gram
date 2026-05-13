@@ -43,6 +43,10 @@ export type CreateRiskPolicyRequestBody = {
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
+  /**
+   * Optional message shown to end users when this policy blocks an action or surfaces a flagged finding.
+   */
+  userMessage?: string | undefined;
 };
 
 /** @internal */
@@ -58,6 +62,7 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   name?: string | undefined;
   presidio_entities?: Array<string> | undefined;
   sources?: Array<string> | undefined;
+  user_message?: string | undefined;
 };
 
 /** @internal */
@@ -72,11 +77,13 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     name: z.optional(z.string()),
     presidioEntities: z.optional(z.array(z.string())),
     sources: z.optional(z.array(z.string())),
+    userMessage: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       autoName: "auto_name",
       presidioEntities: "presidio_entities",
+      userMessage: "user_message",
     });
   }),
 );

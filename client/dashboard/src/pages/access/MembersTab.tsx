@@ -2,12 +2,24 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
+import { cn } from "@/lib/utils";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { SkeletonTable } from "@/components/ui/skeleton";
-import { Button, Column, Icon, Table } from "@speakeasy-api/moonshine";
+import {
+  Button,
+  Column,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Icon,
+  Table,
+} from "@speakeasy-api/moonshine";
+import { Ellipsis } from "lucide-react";
 import { useState } from "react";
+import { Link, useNavigate } from "react-router";
 import { ChangeRoleDialog } from "./ChangeRoleDialog";
 import { RequireScope } from "@/components/require-scope";
 import { useOrganization } from "@/contexts/Auth";
@@ -23,10 +35,47 @@ function getInitials(name: string) {
     .slice(0, 2);
 }
 
+function MemberActionsMenu({
+  onChangeRole,
+  onViewChallenges,
+}: {
+  onChangeRole: () => void;
+  onViewChallenges: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors",
+            open && "bg-accent text-foreground",
+          )}
+        >
+          <Ellipsis className="h-4 w-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <RequireScope scope="org:admin" level="component">
+          <DropdownMenuItem onSelect={() => setTimeout(onChangeRole, 0)}>
+            Change role
+          </DropdownMenuItem>
+        </RequireScope>
+        <DropdownMenuItem onSelect={() => setTimeout(onViewChallenges, 0)}>
+          View challenges
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function MembersTab() {
   const [changingMember, setChangingMember] = useState<AccessMember | null>(
     null,
   );
+  const navigate = useNavigate();
   const organization = useOrganization();
   const telemetry = useTelemetry();
   const orgRoutes = useOrgRoutes();
@@ -35,11 +84,9 @@ export function MembersTab() {
   const { data: membersData, isLoading: membersLoading } = useMembers();
   const { data: rolesData } = useRoles();
   const roles = rolesData?.roles ?? [];
-  const members = [...(membersData?.members ?? [])].sort((a, b) => {
-    const aSystem = roles.find((r) => r.id === a.roleId)?.isSystem ?? false;
-    const bSystem = roles.find((r) => r.id === b.roleId)?.isSystem ?? false;
-    return Number(bSystem) - Number(aSystem);
-  });
+  const members = [...(membersData?.members ?? [])].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
 
   const getRoleName = (roleId: string) =>
     roles.find((r) => r.id === roleId)?.name ?? "Unknown";
@@ -50,8 +97,8 @@ export function MembersTab() {
       header: "Member",
       width: "200px",
       render: (member) => (
-        <div className="flex items-center gap-3">
-          <Avatar className="h-8 w-8">
+        <div className="flex items-center gap-3 overflow-hidden">
+          <Avatar className="h-8 w-8 shrink-0">
             {member.photoUrl && (
               <AvatarImage src={member.photoUrl} alt={member.name} />
             )}
@@ -59,7 +106,7 @@ export function MembersTab() {
               {getInitials(member.name)}
             </AvatarFallback>
           </Avatar>
-          <Type variant="body" className="font-medium">
+          <Type variant="body" className="truncate font-medium">
             {member.name}
           </Type>
         </div>
@@ -80,29 +127,39 @@ export function MembersTab() {
       header: "Role",
       width: "140px",
       render: (member) => (
-        <Type variant="body">{getRoleName(member.roleId)}</Type>
+        <Type variant="body">
+          <Link
+            to={`${orgRoutes.access.roles.href()}?editRole=${member.roleId}`}
+            className="text-primary hover:text-primary/80 underline decoration-dotted underline-offset-4 transition-colors"
+          >
+            {getRoleName(member.roleId)}
+          </Link>
+        </Type>
       ),
     },
     {
       key: "joinedAt",
       header: "Joined",
       width: "160px",
-      render: (member) => <HumanizeDateTime date={member.joinedAt} />,
+      render: (member) => (
+        <Type variant="body" className="text-muted-foreground">
+          <HumanizeDateTime date={member.joinedAt} />
+        </Type>
+      ),
     },
     {
       key: "actions",
       header: "",
-      width: "100px",
+      width: "60px",
       render: (member) => (
-        <RequireScope scope="org:admin" level="component">
-          <Button
-            variant="tertiary"
-            size="sm"
-            onClick={() => setChangingMember(member)}
-          >
-            <Button.Text className="text-primary">Change</Button.Text>
-          </Button>
-        </RequireScope>
+        <MemberActionsMenu
+          onChangeRole={() => setChangingMember(member)}
+          onViewChallenges={() => {
+            navigate(
+              `${orgRoutes.access.challenges.href()}?identity=${encodeURIComponent(member.email)}`,
+            );
+          }}
+        />
       ),
     },
   ];
@@ -130,7 +187,7 @@ export function MembersTab() {
           className="mt-4 rounded-b-none"
         />
       )}
-      <div className="border-border flex justify-center rounded-b-lg border border-t-0 py-3">
+      <div className="border-border bg-muted/20 flex justify-center rounded-b-lg border border-t-0 py-3">
         <RequireScope scope="org:admin" level="component">
           {isTeamPageEnabled ? (
             <Button

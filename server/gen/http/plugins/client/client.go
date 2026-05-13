@@ -62,6 +62,10 @@ type Client struct {
 	// the downloadObservabilityPlugin endpoint.
 	DownloadObservabilityPluginDoer goahttp.Doer
 
+	// DownloadCodexInstallScript Doer is the HTTP client used to make requests to
+	// the downloadCodexInstallScript endpoint.
+	DownloadCodexInstallScriptDoer goahttp.Doer
+
 	// GetPublishStatus Doer is the HTTP client used to make requests to the
 	// getPublishStatus endpoint.
 	GetPublishStatusDoer goahttp.Doer
@@ -101,6 +105,7 @@ func NewClient(
 		SetPluginAssignmentsDoer:        doer,
 		DownloadPluginPackageDoer:       doer,
 		DownloadObservabilityPluginDoer: doer,
+		DownloadCodexInstallScriptDoer:  doer,
 		GetPublishStatusDoer:            doer,
 		PublishPluginsDoer:              doer,
 		RestoreResponseBody:             restoreBody,
@@ -382,6 +387,35 @@ func (c *Client) DownloadObservabilityPlugin() goa.Endpoint {
 			return nil, err
 		}
 		return &plugins.DownloadObservabilityPluginResponseData{Result: res.(*plugins.DownloadObservabilityPluginResult), Body: resp.Body}, nil
+	}
+}
+
+// DownloadCodexInstallScript returns an endpoint that makes HTTP requests to
+// the plugins service downloadCodexInstallScript server.
+func (c *Client) DownloadCodexInstallScript() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDownloadCodexInstallScriptRequest(c.encoder)
+		decodeResponse = DecodeDownloadCodexInstallScriptResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDownloadCodexInstallScriptRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DownloadCodexInstallScriptDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("plugins", "downloadCodexInstallScript", err)
+		}
+		res, err := decodeResponse(resp)
+		if err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		return &plugins.DownloadCodexInstallScriptResponseData{Result: res.(*plugins.DownloadCodexInstallScriptResult), Body: resp.Body}, nil
 	}
 }
 

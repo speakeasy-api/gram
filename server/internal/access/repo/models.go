@@ -3,3 +3,61 @@
 //   sqlc v1.29.0
 
 package repo
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+// Tracks admin resolutions of authz challenge denials. challenge_id references authz_challenges.id in ClickHouse (soft cross-DB reference).
+type AuthzChallengeResolution struct {
+	ID             uuid.UUID
+	OrganizationID string
+	// UUID of the denied challenge in the ClickHouse authz_challenges table.
+	ChallengeID string
+	// The principal that was denied, copied from the challenge for query convenience.
+	PrincipalUrn string
+	Scope        string
+	ResourceKind string
+	ResourceID   string
+	// How the challenge was resolved: role_assigned, dismissed.
+	ResolutionType string
+	// When resolution_type=role_assigned, the role slug that was assigned to the principal.
+	RoleSlug pgtype.Text
+	// URN of the admin who resolved the challenge.
+	ResolvedBy string
+	CreatedAt  pgtype.Timestamptz
+}
+
+type GlobalRole struct {
+	ID                uuid.UUID
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosDeleted     bool
+	WorkosLastEventID pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
+}
+
+type OrganizationRole struct {
+	ID                uuid.UUID
+	OrganizationID    string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosDeleted     bool
+	WorkosLastEventID pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
+}

@@ -87,7 +87,7 @@ function PlaygroundAuthAlert({
   return (
     <Alert variant="warning" dismissible={false} className="rounded-xs">
       <span className="text-sm">
-        Authentication required to use this toolset
+        Authentication required to use this MCP server
         {environmentSlug
           ? ` in the ${environment?.name ?? envSlug} environment`
           : ""}
@@ -96,7 +96,7 @@ function PlaygroundAuthAlert({
           type="button"
           onClick={onConfigureClick}
           className="text-link-warning underline"
-          aria-label="Set up authentication for this toolset"
+          aria-label="Set up authentication for this MCP server"
         >
           Set up now
         </button>
@@ -135,13 +135,13 @@ function ToolsetPageAuthAlert({
   return (
     <Alert variant="warning" dismissible={true} className="rounded-xs">
       <span className="text-sm">
-        Set environment variables to test this toolset in the Playground or to
-        manage authentication with a GRAM_KEY.{" "}
+        Set environment variables to test this MCP server in the Playground or
+        to manage authentication with a GRAM_KEY.{" "}
         <button
           type="button"
           onClick={onConfigureClick}
           className="text-link-warning underline"
-          aria-label="Set up authentication for this toolset"
+          aria-label="Set up authentication for this MCP server"
         >
           Set up now
         </button>

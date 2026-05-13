@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/oauth"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 )
 
 func TestExchangeRefreshToken_Success(t *testing.T) {
@@ -17,18 +18,18 @@ func TestExchangeRefreshToken_Success(t *testing.T) {
 	toolsetID := uuid.New()
 	upstreamExpiry := time.Now().Add(24 * time.Hour)
 
-	token, clientID, clientSecret := env.issueToken(t, ctx, toolsetID,
+	issued := env.IssueToken(t, ctx, toolsetID,
 		"upstream-access", "upstream-refresh", &upstreamExpiry, []string{"api_key"})
 
-	oldAccess := token.AccessToken
-	oldRefresh := token.RefreshToken
+	oldAccess := issued.AccessToken
+	oldRefresh := issued.RefreshToken
 
-	newToken, err := env.tokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
+	newToken, err := env.TokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
 		GrantType:    "refresh_token",
 		RefreshToken: oldRefresh,
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-	}, testMCPURL, toolsetID)
+		ClientID:     issued.ClientID,
+		ClientSecret: issued.ClientSecret,
+	}, oauthtest.TestMCPURL, toolsetID)
 	require.NoError(t, err)
 
 	require.NotEmpty(t, newToken.AccessToken)
@@ -45,32 +46,32 @@ func TestExchangeRefreshToken_RotatesTokens(t *testing.T) {
 	toolsetID := uuid.New()
 	upstreamExpiry := time.Now().Add(24 * time.Hour)
 
-	token, clientID, clientSecret := env.issueToken(t, ctx, toolsetID,
+	issued := env.IssueToken(t, ctx, toolsetID,
 		"upstream-access", "upstream-refresh", &upstreamExpiry, []string{"api_key"})
 
-	oldAccess := token.AccessToken
-	oldRefresh := token.RefreshToken
+	oldAccess := issued.AccessToken
+	oldRefresh := issued.RefreshToken
 
 	// Refresh once
-	_, err := env.tokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
+	_, err := env.TokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
 		GrantType:    "refresh_token",
 		RefreshToken: oldRefresh,
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-	}, testMCPURL, toolsetID)
+		ClientID:     issued.ClientID,
+		ClientSecret: issued.ClientSecret,
+	}, oauthtest.TestMCPURL, toolsetID)
 	require.NoError(t, err)
 
 	// Old access token should be invalid
-	_, err = env.tokenService.ValidateAccessToken(ctx, toolsetID, oldAccess)
+	_, err = env.TokenService.ValidateAccessToken(ctx, toolsetID, oldAccess)
 	require.ErrorIs(t, err, oauth.ErrInvalidAccessToken)
 
 	// Old refresh token should be invalid
-	_, err = env.tokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
+	_, err = env.TokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
 		GrantType:    "refresh_token",
 		RefreshToken: oldRefresh,
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-	}, testMCPURL, toolsetID)
+		ClientID:     issued.ClientID,
+		ClientSecret: issued.ClientSecret,
+	}, oauthtest.TestMCPURL, toolsetID)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid refresh token")
 }
@@ -82,15 +83,15 @@ func TestExchangeRefreshToken_PreservesExternalSecrets(t *testing.T) {
 	toolsetID := uuid.New()
 	upstreamExpiry := time.Now().Add(24 * time.Hour)
 
-	token, clientID, clientSecret := env.issueToken(t, ctx, toolsetID,
+	issued := env.IssueToken(t, ctx, toolsetID,
 		"upstream-access-token", "upstream-refresh-token", &upstreamExpiry, []string{"Authorization"})
 
-	newToken, err := env.tokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
+	newToken, err := env.TokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
 		GrantType:    "refresh_token",
-		RefreshToken: token.RefreshToken,
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-	}, testMCPURL, toolsetID)
+		RefreshToken: issued.RefreshToken,
+		ClientID:     issued.ClientID,
+		ClientSecret: issued.ClientSecret,
+	}, oauthtest.TestMCPURL, toolsetID)
 	require.NoError(t, err)
 
 	require.Len(t, newToken.ExternalSecrets, 1)
@@ -105,11 +106,11 @@ func TestExchangeRefreshToken_MissingClientID(t *testing.T) {
 	env := newTokenTestEnv(t)
 	toolsetID := uuid.New()
 
-	_, err := env.tokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
+	_, err := env.TokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
 		GrantType:    "refresh_token",
 		RefreshToken: "some-token",
 		ClientID:     "",
-	}, testMCPURL, toolsetID)
+	}, oauthtest.TestMCPURL, toolsetID)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "client_id is required")
 }
@@ -121,19 +122,19 @@ func TestExchangeRefreshToken_InvalidRefreshToken(t *testing.T) {
 	toolsetID := uuid.New()
 
 	// Register a client so credential validation passes
-	client, err := env.clientReg.RegisterClient(ctx, &oauth.ClientInfo{
+	client, err := env.ClientReg.RegisterClient(ctx, &oauth.ClientInfo{
 		ClientName:   "test-client",
-		RedirectURIs: []string{testRedirectURI},
+		RedirectURIs: []string{oauthtest.TestRedirectURI},
 		GrantTypes:   []string{"authorization_code", "refresh_token"},
-	}, testMCPURL)
+	}, oauthtest.TestMCPURL)
 	require.NoError(t, err)
 
-	_, err = env.tokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
+	_, err = env.TokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
 		GrantType:    "refresh_token",
 		RefreshToken: "nonexistent-refresh-token",
 		ClientID:     client.ClientID,
 		ClientSecret: client.ClientSecret,
-	}, testMCPURL, toolsetID)
+	}, oauthtest.TestMCPURL, toolsetID)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid refresh token")
 }
@@ -145,24 +146,24 @@ func TestExchangeRefreshToken_ExpiredDownstreamToken(t *testing.T) {
 	toolsetID := uuid.New()
 	upstreamExpiry := time.Now().Add(365 * 24 * time.Hour)
 
-	token, clientID, clientSecret := env.issueToken(t, ctx, toolsetID,
+	issued := env.IssueToken(t, ctx, toolsetID,
 		"upstream-access", "upstream-refresh", &upstreamExpiry, []string{"api_key"})
 
 	// Directly expire the token in cache to simulate 31 days passing
-	env.expireTokenInCache(t, ctx, toolsetID, token.AccessToken, time.Now().Add(-1*time.Hour))
+	env.ExpireToken(t, ctx, toolsetID, issued.AccessToken, time.Now().Add(-1*time.Hour))
 
-	_, err := env.tokenService.ValidateAccessToken(ctx, toolsetID, token.AccessToken)
+	_, err := env.TokenService.ValidateAccessToken(ctx, toolsetID, issued.AccessToken)
 	require.ErrorIs(t, err, oauth.ErrExpiredAccessToken)
 
 	// Refresh token should still work (24h grace period on cache TTL)
-	newToken, err := env.tokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
+	newToken, err := env.TokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
 		GrantType:    "refresh_token",
-		RefreshToken: token.RefreshToken,
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-	}, testMCPURL, toolsetID)
+		RefreshToken: issued.RefreshToken,
+		ClientID:     issued.ClientID,
+		ClientSecret: issued.ClientSecret,
+	}, oauthtest.TestMCPURL, toolsetID)
 	require.NoError(t, err)
-	require.NotEqual(t, token.AccessToken, newToken.AccessToken)
+	require.NotEqual(t, issued.AccessToken, newToken.AccessToken)
 }
 
 func TestExchangeRefreshToken_ExpiredUpstreamSecrets(t *testing.T) {
@@ -173,18 +174,18 @@ func TestExchangeRefreshToken_ExpiredUpstreamSecrets(t *testing.T) {
 
 	// Issue token with an upstream secret that expires in 200ms
 	upstreamExpiry := time.Now().Add(200 * time.Millisecond)
-	token, clientID, clientSecret := env.issueToken(t, ctx, toolsetID,
+	issued := env.IssueToken(t, ctx, toolsetID,
 		"upstream-access", "upstream-refresh", &upstreamExpiry, []string{"api_key"})
 
 	// Wait for upstream secret to expire (downstream token is still valid - 30 day TTL)
 	time.Sleep(300 * time.Millisecond)
 
-	_, err := env.tokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
+	_, err := env.TokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
 		GrantType:    "refresh_token",
-		RefreshToken: token.RefreshToken,
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-	}, testMCPURL, toolsetID)
+		RefreshToken: issued.RefreshToken,
+		ClientID:     issued.ClientID,
+		ClientSecret: issued.ClientSecret,
+	}, oauthtest.TestMCPURL, toolsetID)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "underlying credentials have expired")
 }
@@ -196,14 +197,14 @@ func TestCreateTokenResponse_IncludesRefreshToken(t *testing.T) {
 	toolsetID := uuid.New()
 	upstreamExpiry := time.Now().Add(24 * time.Hour)
 
-	token, _, _ := env.issueToken(t, ctx, toolsetID,
+	issued := env.IssueToken(t, ctx, toolsetID,
 		"upstream-access", "upstream-refresh", &upstreamExpiry, []string{"api_key"})
 
-	resp := env.tokenService.CreateTokenResponse(token)
+	resp := env.TokenService.CreateTokenResponse(issued.Token)
 
 	require.NotEmpty(t, resp.RefreshToken)
-	require.Equal(t, token.RefreshToken, resp.RefreshToken)
-	require.Equal(t, token.AccessToken, resp.AccessToken)
+	require.Equal(t, issued.RefreshToken, resp.RefreshToken)
+	require.Equal(t, issued.AccessToken, resp.AccessToken)
 	require.Equal(t, "Bearer", resp.TokenType)
 	require.Positive(t, resp.ExpiresIn)
 }
@@ -216,10 +217,10 @@ func TestValidateAccessToken_ReturnsTokenOnExpiredExternalSecrets(t *testing.T) 
 
 	// Issue token with an already-expired upstream secret
 	pastTime := time.Now().Add(-1 * time.Hour)
-	token, _, _ := env.issueToken(t, ctx, toolsetID,
+	issued := env.IssueToken(t, ctx, toolsetID,
 		"upstream-access", "upstream-refresh", &pastTime, []string{"api_key"})
 
-	got, err := env.tokenService.ValidateAccessToken(ctx, toolsetID, token.AccessToken)
+	got, err := env.TokenService.ValidateAccessToken(ctx, toolsetID, issued.AccessToken)
 	require.ErrorIs(t, err, oauth.ErrExpiredExternalSecrets)
 	require.NotNil(t, got, "token should be returned alongside expired-secrets error")
 	require.Equal(t, toolsetID, got.ToolsetID)
@@ -232,10 +233,10 @@ func TestValidateAccessToken_NilExpiresAt(t *testing.T) {
 	toolsetID := uuid.New()
 
 	// Issue token with nil upstream ExpiresAt — should not trigger expiration
-	token, _, _ := env.issueToken(t, ctx, toolsetID,
+	issued := env.IssueToken(t, ctx, toolsetID,
 		"upstream-access", "upstream-refresh", nil, []string{"api_key"})
 
-	got, err := env.tokenService.ValidateAccessToken(ctx, toolsetID, token.AccessToken)
+	got, err := env.TokenService.ValidateAccessToken(ctx, toolsetID, issued.AccessToken)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	require.Len(t, got.ExternalSecrets, 1)

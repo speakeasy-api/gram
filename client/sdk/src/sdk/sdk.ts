@@ -5,6 +5,7 @@
 import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
 import { Assets } from "./assets.js";
+import { AssistantMemories } from "./assistantmemories.js";
 import { Assistants } from "./assistants.js";
 import { Auditlogs } from "./auditlogs.js";
 import { Auth } from "./auth.js";
@@ -14,6 +15,7 @@ import { Collections } from "./collections.js";
 import { Deployments } from "./deployments.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
+import { External } from "./external.js";
 import { Features } from "./features.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
@@ -25,6 +27,7 @@ import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
 import { Organizations } from "./organizations.js";
+import { OtelForwarding } from "./otelforwarding.js";
 import { Packages } from "./packages.js";
 import { Plugins } from "./plugins.js";
 import { Projects } from "./projects.js";
@@ -38,6 +41,10 @@ import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
 import { Triggers } from "./triggers.js";
 import { Usage } from "./usage.js";
+import { UserSessionClients } from "./usersessionclients.js";
+import { UserSessionConsents } from "./usersessionconsents.js";
+import { UserSessionIssuers } from "./usersessionissuers.js";
+import { UserSessions } from "./usersessions.js";
 import { Variations } from "./variations.js";
 
 export class Gram extends ClientSDK {
@@ -49,6 +56,11 @@ export class Gram extends ClientSDK {
   private _assets?: Assets;
   get assets(): Assets {
     return (this._assets ??= new Assets(this._options));
+  }
+
+  private _assistantMemories?: AssistantMemories;
+  get assistantMemories(): AssistantMemories {
+    return (this._assistantMemories ??= new AssistantMemories(this._options));
   }
 
   private _assistants?: Assistants;
@@ -94,6 +106,11 @@ export class Gram extends ClientSDK {
   private _environments?: Environments;
   get environments(): Environments {
     return (this._environments ??= new Environments(this._options));
+  }
+
+  private _external?: External;
+  get external(): External {
+    return (this._external ??= new External(this._options));
   }
 
   private _hooks?: Hooks;
@@ -144,6 +161,11 @@ export class Gram extends ClientSDK {
   private _organizations?: Organizations;
   get organizations(): Organizations {
     return (this._organizations ??= new Organizations(this._options));
+  }
+
+  private _otelForwarding?: OtelForwarding;
+  get otelForwarding(): OtelForwarding {
+    return (this._otelForwarding ??= new OtelForwarding(this._options));
   }
 
   private _packages?: Packages;
@@ -214,6 +236,28 @@ export class Gram extends ClientSDK {
   private _usage?: Usage;
   get usage(): Usage {
     return (this._usage ??= new Usage(this._options));
+  }
+
+  private _userSessionClients?: UserSessionClients;
+  get userSessionClients(): UserSessionClients {
+    return (this._userSessionClients ??= new UserSessionClients(this._options));
+  }
+
+  private _userSessionConsents?: UserSessionConsents;
+  get userSessionConsents(): UserSessionConsents {
+    return (this._userSessionConsents ??= new UserSessionConsents(
+      this._options,
+    ));
+  }
+
+  private _userSessionIssuers?: UserSessionIssuers;
+  get userSessionIssuers(): UserSessionIssuers {
+    return (this._userSessionIssuers ??= new UserSessionIssuers(this._options));
+  }
+
+  private _userSessions?: UserSessions;
+  get userSessions(): UserSessions {
+    return (this._userSessions ??= new UserSessions(this._options));
   }
 
   private _variations?: Variations;

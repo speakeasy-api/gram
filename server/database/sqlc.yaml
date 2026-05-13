@@ -58,6 +58,10 @@ overrides:
         go_type:
           import: github.com/pgvector/pgvector-go
           type: Vector
+      - db_type: "halfvec"
+        go_type:
+          import: github.com/pgvector/pgvector-go
+          type: HalfVector
       - column: external_mcp_tool_definitions.transport_type
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types
@@ -70,6 +74,14 @@ overrides:
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
           type: Principal
+      - column: user_sessions.subject_urn
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/urn
+          type: SessionSubject
+      - column: user_session_consents.subject_urn
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/urn
+          type: SessionSubject
 
 sql:
   - schema: schema.sql
@@ -369,6 +381,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/usersessions/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/usersessions/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/background/activities/queries.sql
     engine: postgresql
     gen:
@@ -491,6 +513,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/thirdparty/workos/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/thirdparty/workos/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/risk/queries.sql
     engine: postgresql
     gen:
@@ -507,5 +539,35 @@ sql:
       go:
         package: "repo"
         out: "../internal/auth/assistanttokens/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/memory/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/memory/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/outbox/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/outbox/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/otelforwarding/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/otelforwarding/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true

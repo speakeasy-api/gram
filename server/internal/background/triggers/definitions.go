@@ -141,6 +141,48 @@ type cronTriggerConfig struct {
 
 func (c cronTriggerConfig) Filter(_ any) (bool, error) { return true, nil }
 
+// MaxWakeHorizon caps how far in the future a wake trigger may be scheduled.
+const MaxWakeHorizon = 30 * 24 * time.Hour
+
+// ValidateWakeFireAt enforces the create-time bounds on a wake's fire_at.
+// Pure helper so callers can test bounds without round-tripping a DB.
+func ValidateWakeFireAt(fireAt, now time.Time) error {
+	if fireAt.IsZero() {
+		return fmt.Errorf("fire_at is required")
+	}
+	if !fireAt.After(now) {
+		return fmt.Errorf("fire_at must be in the future")
+	}
+	if fireAt.After(now.Add(MaxWakeHorizon)) {
+		return fmt.Errorf("fire_at must be within %s", MaxWakeHorizon)
+	}
+	return nil
+}
+
+// WakeConfigFields decodes a wake trigger instance's config_json blob and
+// returns the (correlation_id, fire_at) pair used by audit log call sites.
+// Returns empty strings on decode failure so callers can still record audit
+// events without taking down the workflow.
+func WakeConfigFields(configJSON []byte) (string, string) {
+	var cfg struct {
+		CorrelationID string `json:"correlation_id"`
+		FireAt        string `json:"fire_at"`
+	}
+	if len(configJSON) == 0 {
+		return "", ""
+	}
+	_ = json.Unmarshal(configJSON, &cfg)
+	return cfg.CorrelationID, cfg.FireAt
+}
+
+type wakeTriggerConfig struct {
+	FireAt        time.Time `json:"fire_at"`
+	Note          *string   `json:"note,omitempty"`
+	CorrelationID string    `json:"correlation_id"`
+}
+
+func (c wakeTriggerConfig) Filter(_ any) (bool, error) { return true, nil }
+
 type slackEventRequest struct {
 	Type      string          `json:"type"`
 	Challenge string          `json:"challenge,omitempty"`
@@ -388,6 +430,13 @@ type cronTriggerEvent struct {
 	TriggerInstanceID string `json:"trigger_instance_id" cel:"trigger_instance_id"`
 }
 
+type wakeTriggerEvent struct {
+	FiredAt           string `json:"fired_at" cel:"fired_at"`
+	ScheduledAt       string `json:"scheduled_at" cel:"scheduled_at"`
+	TriggerInstanceID string `json:"trigger_instance_id" cel:"trigger_instance_id"`
+	Note              string `json:"note,omitempty" cel:"note"`
+}
+
 var supportedSlackEventTypes = []string{
 	"app_home_opened",
 	"app_mention",
@@ -427,6 +476,7 @@ var supportedSlackEventTypes = []string{
 var registry = map[string]Definition{
 	"slack": newSlackDefinition(),
 	"cron":  newCronDefinition(),
+	"wake":  newWakeDefinition(),
 }
 
 func List() []Definition {
@@ -687,6 +737,72 @@ func newCronDefinition() Definition {
 				return "", fmt.Errorf("invalid cron config")
 			}
 			return cfg.Schedule, nil
+		},
+	}
+}
+
+func newWakeDefinition() Definition {
+	schema := buildInputSchema[wakeTriggerConfig]()
+	compiled := mustCompileSchema(schema)
+	return Definition{
+		Slug:                 "wake",
+		Title:                "Wake",
+		Description:          "One-shot self-wake of an assistant thread at an absolute future time.",
+		Kind:                 KindSchedule,
+		ConfigSchema:         schema,
+		CompiledConfigSchema: compiled,
+		EnvRequirements:      []EnvRequirement{},
+		EventType:            reflect.TypeFor[wakeTriggerEvent](),
+		DecodeConfig: func(raw map[string]any) (Config, error) {
+			cfg, err := decodeConfig[wakeTriggerConfig](raw, compiled)
+			if err != nil {
+				return nil, err
+			}
+			if cfg.FireAt.IsZero() {
+				return nil, fmt.Errorf("fire_at is required")
+			}
+			if strings.TrimSpace(cfg.CorrelationID) == "" {
+				return nil, fmt.Errorf("correlation_id is required")
+			}
+			return cfg, nil
+		},
+		AuthenticateWebhook: nil,
+		HandleWebhook:       nil,
+		BuildScheduledEvent: func(instance triggerrepo.TriggerInstance, config Config, firedAt time.Time) (*EventEnvelope, error) {
+			cfg, ok := config.(wakeTriggerConfig)
+			if !ok {
+				return nil, fmt.Errorf("invalid wake config")
+			}
+			note := ""
+			if cfg.Note != nil {
+				note = *cfg.Note
+			}
+			event := wakeTriggerEvent{
+				FiredAt:           firedAt.UTC().Format(time.RFC3339Nano),
+				ScheduledAt:       cfg.FireAt.UTC().Format(time.RFC3339Nano),
+				TriggerInstanceID: instance.ID.String(),
+				Note:              note,
+			}
+			rawPayload, err := json.Marshal(event)
+			if err != nil {
+				return nil, fmt.Errorf("marshal wake event: %w", err)
+			}
+			return &EventEnvelope{
+				EventID:           uuid.NewSHA1(uuid.NameSpaceURL, []byte(instance.ID.String()+":wake:"+event.ScheduledAt)).String(),
+				CorrelationID:     cfg.CorrelationID,
+				TriggerInstanceID: instance.ID.String(),
+				DefinitionSlug:    instance.DefinitionSlug,
+				Event:             event,
+				RawPayload:        rawPayload,
+				ReceivedAt:        firedAt.UTC(),
+			}, nil
+		},
+		ExtractSchedule: func(config Config) (string, error) {
+			cfg, ok := config.(wakeTriggerConfig)
+			if !ok {
+				return "", fmt.Errorf("invalid wake config")
+			}
+			return cfg.FireAt.UTC().Format(time.RFC3339Nano), nil
 		},
 	}
 }

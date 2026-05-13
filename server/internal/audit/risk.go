@@ -31,7 +31,7 @@ type LogRiskPolicyCreateEvent struct {
 	RiskPolicyName string
 }
 
-func LogRiskPolicyCreate(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyCreateEvent) error {
+func (l *Logger) LogRiskPolicyCreate(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyCreateEvent) error {
 	action := ActionRiskPolicyCreate
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -54,11 +54,7 @@ func LogRiskPolicyCreate(ctx context.Context, dbtx repo.DBTX, event LogRiskPolic
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogRiskPolicyUpdateEvent struct {
@@ -76,7 +72,7 @@ type LogRiskPolicyUpdateEvent struct {
 	SnapshotAfter  *types.RiskPolicy
 }
 
-func LogRiskPolicyUpdate(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyUpdateEvent) error {
+func (l *Logger) LogRiskPolicyUpdate(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyUpdateEvent) error {
 	action := ActionRiskPolicyUpdate
 
 	beforeSnapshot, err := marshalAuditPayload(event.SnapshotBefore)
@@ -110,11 +106,7 @@ func LogRiskPolicyUpdate(ctx context.Context, dbtx repo.DBTX, event LogRiskPolic
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogRiskPolicyDeleteEvent struct {
@@ -129,7 +121,7 @@ type LogRiskPolicyDeleteEvent struct {
 	RiskPolicyName string
 }
 
-func LogRiskPolicyDelete(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyDeleteEvent) error {
+func (l *Logger) LogRiskPolicyDelete(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyDeleteEvent) error {
 	action := ActionRiskPolicyDelete
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -152,11 +144,7 @@ func LogRiskPolicyDelete(ctx context.Context, dbtx repo.DBTX, event LogRiskPolic
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogRiskPolicyTriggerEvent struct {
@@ -171,7 +159,7 @@ type LogRiskPolicyTriggerEvent struct {
 	RiskPolicyName string
 }
 
-func LogRiskPolicyTrigger(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyTriggerEvent) error {
+func (l *Logger) LogRiskPolicyTrigger(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyTriggerEvent) error {
 	action := ActionRiskPolicyTrigger
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -194,9 +182,5 @@ func LogRiskPolicyTrigger(ctx context.Context, dbtx repo.DBTX, event LogRiskPoli
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"time"
 
@@ -32,12 +33,20 @@ import (
 )
 
 type Catalog struct {
-	ProductIDBase string
-	ProductIDPro  string
+	ProductIDBase       string
+	ProductIDPro        string
+	ProductIDsTopUp     []string
+	ProductIDAssistants string
 
 	MeterIDToolCalls string
 	MeterIDServers   string
 	MeterIDCredits   string
+}
+
+// IsTopUpProductID reports whether the given product ID is a configured
+// one-time credit top-up product.
+func (c *Catalog) IsTopUpProductID(id string) bool {
+	return slices.Contains(c.ProductIDsTopUp, id)
 }
 
 func (c *Catalog) Validate() error {
@@ -566,11 +575,22 @@ func (p *Client) extractCustomerTier(ctx context.Context, customerState *polarCo
 	if fields != nil {
 		// Active enterprise subscriptions return earlier with the enterprise flag in the DB
 		if len(fields.ActiveSubscriptions) >= 1 {
-			if len(fields.ActiveSubscriptions) > 1 {
-				p.logger.ErrorContext(ctx, "multiple active subscriptions found", attr.SlogOrganizationID(fields.OrganizationID))
+			// Scan every active subscription rather than indexing into [0] —
+			// the assistants signup grant lingers in ActiveSubscriptions for the
+			// remainder of the billing period (cancel_at_period_end), so a
+			// later Pro upgrade would otherwise be masked when the assistants
+			// sub happens to be returned first.
+			hasBaseTier := false
+			for _, sub := range fields.ActiveSubscriptions {
+				if sub.ProductID == p.catalog.ProductIDPro {
+					return new(billing.TierPro), true, nil
+				}
+				if sub.ProductID == p.catalog.ProductIDBase ||
+					(p.catalog.ProductIDAssistants != "" && sub.ProductID == p.catalog.ProductIDAssistants) {
+					hasBaseTier = true
+				}
 			}
-			activeSubscription := fields.ActiveSubscriptions[0]
-			if activeSubscription.ProductID == p.catalog.ProductIDBase {
+			if hasBaseTier {
 				return new(billing.TierBase), true, nil
 			}
 			// Fallback case for old accounts
@@ -811,8 +831,8 @@ func (p *Client) GetStoredPeriodUsage(ctx context.Context, orgID string) (pu *ge
 	return &state.PeriodUsage, nil
 }
 
-func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL string, successURL string) (u string, err error) {
-	ctx, span := p.tracer.Start(ctx, "polar_client.create_checkout", trace.WithAttributes(attr.OrganizationID(orgID)))
+func (p *Client) createCheckoutForProducts(ctx context.Context, spanName, orgID, serverURL, successURL string, productIDs []string) (u string, err error) {
+	ctx, span := p.tracer.Start(ctx, spanName, trace.WithAttributes(attr.OrganizationID(orgID)))
 	defer func() {
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
@@ -828,16 +848,114 @@ func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL str
 		ExternalCustomerID: &orgID,
 		EmbedOrigin:        &serverURL,
 		SuccessURL:         &successURL,
-		Products: []string{
-			p.catalog.ProductIDBase,
-		},
+		Products:           productIDs,
 	})
-
 	if err != nil {
-		return "", fmt.Errorf("create link: %w", err)
+		return "", fmt.Errorf("create checkout: %w", err)
 	}
 
 	return res.Checkout.URL, nil
+}
+
+func (p *Client) CreateCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error) {
+	return p.createCheckoutForProducts(ctx, "polar_client.create_checkout", orgID, serverURL, successURL, []string{p.catalog.ProductIDBase})
+}
+
+func (p *Client) CreateTopUpCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error) {
+	if len(p.catalog.ProductIDsTopUp) == 0 {
+		return "", errors.New("no top-up products configured")
+	}
+	return p.createCheckoutForProducts(ctx, "polar_client.create_topup_checkout", orgID, serverURL, successURL, []string{p.catalog.ProductIDsTopUp[0]})
+}
+
+func (p *Client) IsTopUpProductID(productID string) bool {
+	return p.catalog.IsTopUpProductID(productID)
+}
+
+// AttachAssistantsBenefit subscribes a fresh org to the configured assistants
+// product so its meter-credit benefit grant takes effect without a checkout.
+// Returns the new subscription ID so the caller can schedule a one-shot
+// cancel-at-period-end via Temporal. Returns empty string + nil when no
+// assistants product is configured, or when the org already holds an active
+// subscription to it.
+func (p *Client) AttachAssistantsBenefit(ctx context.Context, orgID string, email string) (subscriptionID string, err error) {
+	ctx, span := p.tracer.Start(ctx, "polar_client.attach_assistants_benefit", trace.WithAttributes(attr.OrganizationID(orgID)))
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
+	if orgID == "" {
+		return "", errors.New("organization ID is required")
+	}
+	if email == "" {
+		return "", errors.New("email is required")
+	}
+	if p.catalog.ProductIDAssistants == "" {
+		p.logger.WarnContext(ctx, "skip attach assistants benefit: no assistants product configured", attr.SlogOrganizationID(orgID))
+		return "", nil
+	}
+
+	customerState, err := p.getCustomerState(ctx, orgID)
+	if err != nil {
+		return "", fmt.Errorf("query polar customer state: %w", err)
+	}
+	if customerState == nil {
+		if _, createErr := p.polar.Customers.Create(ctx, polarComponents.CreateCustomerCreateCustomerIndividualCreate(polarComponents.CustomerIndividualCreate{
+			ExternalID: &orgID,
+			Email:      email,
+		})); createErr != nil {
+			return "", fmt.Errorf("create polar customer: %w", createErr)
+		}
+	} else if fields := unwrapCustomerState(customerState); fields != nil {
+		for _, sub := range fields.ActiveSubscriptions {
+			if sub.ProductID == p.catalog.ProductIDAssistants {
+				return "", nil
+			}
+		}
+	}
+
+	subRes, subErr := p.polar.Subscriptions.Create(ctx, polarOperations.CreateSubscriptionsCreateSubscriptionCreateSubscriptionCreateExternalCustomer(
+		polarComponents.SubscriptionCreateExternalCustomer{
+			ProductID:          p.catalog.ProductIDAssistants,
+			ExternalCustomerID: orgID,
+		},
+	))
+	if subErr != nil {
+		return "", fmt.Errorf("create polar subscription: %w", subErr)
+	}
+
+	if err := p.InvalidateBillingCustomerCaches(ctx, orgID); err != nil {
+		p.logger.WarnContext(ctx, "failed to invalidate billing caches after benefit attach", attr.SlogError(err))
+	}
+
+	if subRes == nil || subRes.Subscription == nil {
+		return "", nil
+	}
+	return subRes.Subscription.ID, nil
+}
+
+func (p *Client) CancelSubscriptionAtPeriodEnd(ctx context.Context, subscriptionID string) (err error) {
+	ctx, span := p.tracer.Start(ctx, "polar_client.cancel_subscription_at_period_end")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
+	if subscriptionID == "" {
+		return errors.New("subscription ID is required")
+	}
+
+	if _, err := p.polar.Subscriptions.Update(ctx, subscriptionID, polarComponents.CreateSubscriptionUpdateSubscriptionCancel(polarComponents.SubscriptionCancel{
+		CancelAtPeriodEnd: true,
+	})); err != nil {
+		return fmt.Errorf("update polar subscription cancel-at-period-end: %w", err)
+	}
+	return nil
 }
 
 func (p *Client) CreateCustomerSession(ctx context.Context, orgID string) (cpu string, err error) {

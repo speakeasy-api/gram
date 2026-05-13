@@ -18,9 +18,9 @@ export type OTELNumberDataPoint = {
    */
   asDouble?: number | undefined;
   /**
-   * Value as integer
+   * Value as integer (string-encoded per OTLP/JSON, or raw number)
    */
-  asInt?: number | undefined;
+  asInt?: any | undefined;
   /**
    * Data point attributes
    */
@@ -38,7 +38,7 @@ export type OTELNumberDataPoint = {
 /** @internal */
 export type OTELNumberDataPoint$Outbound = {
   asDouble?: number | undefined;
-  asInt?: number | undefined;
+  asInt?: any | undefined;
   attributes?: Array<OTELAttribute$Outbound> | undefined;
   startTimeUnixNano?: string | undefined;
   timeUnixNano?: string | undefined;
@@ -50,7 +50,7 @@ export const OTELNumberDataPoint$outboundSchema: z.ZodMiniType<
   OTELNumberDataPoint
 > = z.object({
   asDouble: z.optional(z.number()),
-  asInt: z.optional(z.int()),
+  asInt: z.optional(z.any()),
   attributes: z.optional(z.array(OTELAttribute$outboundSchema)),
   startTimeUnixNano: z.optional(z.string()),
   timeUnixNano: z.optional(z.string()),

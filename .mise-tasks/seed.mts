@@ -1396,6 +1396,8 @@ const MCP_LOGS_TOOL_URNS = new Set([
   // Audit log tools
   "tools:http:gram:gram_list_audit_logs",
   "tools:http:gram:gram_list_audit_log_facets",
+  // Employee directory tools
+  "tools:http:gram:gram_list_organization_users",
 ]);
 
 async function upsertMcpLogsToolset(init: {

@@ -535,7 +535,12 @@ func EncodeGetServerRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		values.Add("id", p.ID)
+		if p.ID != nil {
+			values.Add("id", *p.ID)
+		}
+		if p.Slug != nil {
+			values.Add("slug", *p.Slug)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -982,6 +987,248 @@ func DecodeUpdateServerResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildVerifyURLRequest instantiates a HTTP request object with method and
+// path set to call the "remoteMcp" service "verifyURL" endpoint
+func (c *Client) BuildVerifyURLRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: VerifyURLRemoteMcpPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteMcp", "verifyURL", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeVerifyURLRequest returns an encoder for requests sent to the remoteMcp
+// verifyURL server.
+func EncodeVerifyURLRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotemcp.VerifyURLPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteMcp", "verifyURL", "*remotemcp.VerifyURLPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewVerifyURLRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteMcp", "verifyURL", err)
+		}
+		return nil
+	}
+}
+
+// DecodeVerifyURLResponse returns a decoder for responses returned by the
+// remoteMcp verifyURL endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeVerifyURLResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeVerifyURLResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body VerifyURLResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "verifyURL", err)
+			}
+			err = ValidateVerifyURLResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "verifyURL", err)
+			}
+			res := NewVerifyURLResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body VerifyURLUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "verifyURL", err)
+			}
+			err = ValidateVerifyURLUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "verifyURL", err)
+			}
+			return nil, NewVerifyURLUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body VerifyURLForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "verifyURL", err)
+			}
+			err = ValidateVerifyURLForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "verifyURL", err)
+			}
+			return nil, NewVerifyURLForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body VerifyURLBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "verifyURL", err)
+			}
+			err = ValidateVerifyURLBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "verifyURL", err)
+			}
+			return nil, NewVerifyURLBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body VerifyURLNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "verifyURL", err)
+			}
+			err = ValidateVerifyURLNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "verifyURL", err)
+			}
+			return nil, NewVerifyURLNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body VerifyURLConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "verifyURL", err)
+			}
+			err = ValidateVerifyURLConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "verifyURL", err)
+			}
+			return nil, NewVerifyURLConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body VerifyURLUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "verifyURL", err)
+			}
+			err = ValidateVerifyURLUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "verifyURL", err)
+			}
+			return nil, NewVerifyURLUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body VerifyURLInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "verifyURL", err)
+			}
+			err = ValidateVerifyURLInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "verifyURL", err)
+			}
+			return nil, NewVerifyURLInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body VerifyURLInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "verifyURL", err)
+				}
+				err = ValidateVerifyURLInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "verifyURL", err)
+				}
+				return nil, NewVerifyURLInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body VerifyURLUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "verifyURL", err)
+				}
+				err = ValidateVerifyURLUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "verifyURL", err)
+				}
+				return nil, NewVerifyURLUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteMcp", "verifyURL", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body VerifyURLGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "verifyURL", err)
+			}
+			err = ValidateVerifyURLGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "verifyURL", err)
+			}
+			return nil, NewVerifyURLGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteMcp", "verifyURL", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDeleteServerRequest instantiates a HTTP request object with method and
 // path set to call the "remoteMcp" service "deleteServer" endpoint
 func (c *Client) BuildDeleteServerRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1266,6 +1513,8 @@ func unmarshalRemoteMcpServerResponseBodyToTypesRemoteMcpServer(v *RemoteMcpServ
 	res := &types.RemoteMcpServer{
 		ID:            *v.ID,
 		ProjectID:     *v.ProjectID,
+		Name:          v.Name,
+		Slug:          v.Slug,
 		URL:           *v.URL,
 		TransportType: *v.TransportType,
 		CreatedAt:     *v.CreatedAt,

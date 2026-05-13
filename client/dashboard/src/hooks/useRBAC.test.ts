@@ -24,6 +24,11 @@ describe("resourceKindForScope", () => {
     expect(resourceKindForScope("org:admin")).toBe("org");
   });
 
+  it("returns 'environment' for environment scopes", () => {
+    expect(resourceKindForScope("environment:read")).toBe("environment");
+    expect(resourceKindForScope("environment:write")).toBe("environment");
+  });
+
   it("returns '*' for unknown scope families", () => {
     expect(resourceKindForScope("root")).toBe("*");
     expect(resourceKindForScope("unknown:thing")).toBe("*");

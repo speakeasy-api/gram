@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     user_email String MATERIALIZED toString(attributes.user.email) COMMENT 'User email (materialized from attributes.user.email).',
     hook_source String MATERIALIZED toString(attributes.gram.hook.source) COMMENT 'Hook source (materialized from attributes.gram.hook.source).',
     hook_block_reason String MATERIALIZED toString(attributes.gram.hook.block_reason) COMMENT 'Hook block reason set when the Gram hook denied a tool call (materialized from attributes.gram.hook.block_reason).',
+    remote_mcp_server_id String MATERIALIZED toString(attributes.gram.remote_mcp_server.id) COMMENT 'Remote MCP server ID (materialized from attributes.gram.remote_mcp_server.id).',
     skill_name String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
@@ -87,6 +88,7 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_toolset_slug ON telemetry_logs
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_user_email ON telemetry_logs (user_email) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_hook_source ON telemetry_logs (hook_source) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_hook_block_reason ON telemetry_logs (hook_block_reason) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_remote_mcp_server_id ON telemetry_logs (remote_mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_skill_name ON telemetry_logs (skill_name) TYPE bloom_filter(0.01) GRANULARITY 1;
 
 CREATE TABLE IF NOT EXISTS trace_summaries (

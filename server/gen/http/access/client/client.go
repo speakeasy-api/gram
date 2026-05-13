@@ -65,6 +65,18 @@ type Client struct {
 	// endpoint.
 	DisableRBACDoer goahttp.Doer
 
+	// ListChallenges Doer is the HTTP client used to make requests to the
+	// listChallenges endpoint.
+	ListChallengesDoer goahttp.Doer
+
+	// ListChallengeBuckets Doer is the HTTP client used to make requests to the
+	// listChallengeBuckets endpoint.
+	ListChallengeBucketsDoer goahttp.Doer
+
+	// ResolveChallenge Doer is the HTTP client used to make requests to the
+	// resolveChallenge endpoint.
+	ResolveChallengeDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -85,23 +97,26 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListRolesDoer:        doer,
-		GetRoleDoer:          doer,
-		CreateRoleDoer:       doer,
-		UpdateRoleDoer:       doer,
-		DeleteRoleDoer:       doer,
-		ListScopesDoer:       doer,
-		ListMembersDoer:      doer,
-		ListGrantsDoer:       doer,
-		UpdateMemberRoleDoer: doer,
-		GetRBACStatusDoer:    doer,
-		EnableRBACDoer:       doer,
-		DisableRBACDoer:      doer,
-		RestoreResponseBody:  restoreBody,
-		scheme:               scheme,
-		host:                 host,
-		decoder:              dec,
-		encoder:              enc,
+		ListRolesDoer:            doer,
+		GetRoleDoer:              doer,
+		CreateRoleDoer:           doer,
+		UpdateRoleDoer:           doer,
+		DeleteRoleDoer:           doer,
+		ListScopesDoer:           doer,
+		ListMembersDoer:          doer,
+		ListGrantsDoer:           doer,
+		UpdateMemberRoleDoer:     doer,
+		GetRBACStatusDoer:        doer,
+		EnableRBACDoer:           doer,
+		DisableRBACDoer:          doer,
+		ListChallengesDoer:       doer,
+		ListChallengeBucketsDoer: doer,
+		ResolveChallengeDoer:     doer,
+		RestoreResponseBody:      restoreBody,
+		scheme:                   scheme,
+		host:                     host,
+		decoder:                  dec,
+		encoder:                  enc,
 	}
 }
 
@@ -388,6 +403,78 @@ func (c *Client) DisableRBAC() goa.Endpoint {
 		resp, err := c.DisableRBACDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "disableRBAC", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListChallenges returns an endpoint that makes HTTP requests to the access
+// service listChallenges server.
+func (c *Client) ListChallenges() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListChallengesRequest(c.encoder)
+		decodeResponse = DecodeListChallengesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListChallengesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListChallengesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listChallenges", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListChallengeBuckets returns an endpoint that makes HTTP requests to the
+// access service listChallengeBuckets server.
+func (c *Client) ListChallengeBuckets() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListChallengeBucketsRequest(c.encoder)
+		decodeResponse = DecodeListChallengeBucketsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListChallengeBucketsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListChallengeBucketsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listChallengeBuckets", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ResolveChallenge returns an endpoint that makes HTTP requests to the access
+// service resolveChallenge server.
+func (c *Client) ResolveChallenge() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeResolveChallengeRequest(c.encoder)
+		decodeResponse = DecodeResolveChallengeResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildResolveChallengeRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ResolveChallengeDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "resolveChallenge", err)
 		}
 		return decodeResponse(resp)
 	}

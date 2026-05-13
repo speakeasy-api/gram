@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -125,7 +126,11 @@ func TestCollectionsService_ListServers_IncludesUserProvidedEnvironmentHeaders(t
 	)
 	toolsetID, err := uuid.Parse(toolset.ID)
 	require.NoError(t, err)
-	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_is_public = TRUE WHERE id = $1", toolsetID)
+	err = toolsetsRepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsRepo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolsetID,
+		ProjectID:   *authCtx.ProjectID,
+	})
 	require.NoError(t, err)
 
 	mcpRepo := mcpmetarepo.New(ti.conn)

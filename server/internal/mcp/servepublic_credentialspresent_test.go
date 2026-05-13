@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"regexp"
 	"testing"
 	"time"
 
@@ -469,6 +471,151 @@ func TestServePublic_DualSecurity_APIKeyOnly_Succeeds(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
+}
+
+// ---------------------------------------------------------------------------
+// WWW-Authenticate response shape + malformed bearer header edge cases.
+// These tests pin down the contract Gram exposes to MCP clients on 401, per
+// RFC 6750 §3 (WWW-Authenticate) and §2.1 (Bearer credential syntax).
+// ---------------------------------------------------------------------------
+
+// TestServePublic_PrivateWithOAuth_WWWAuthenticateMatchesBearerResourceMetadata
+// pins down the exact WWW-Authenticate header Gram emits on 401 from an
+// OAuth-capable private MCP. The current contract is the minimal RFC 6750
+// shape augmented with the MCP discovery `resource_metadata` parameter:
+//
+//	Bearer resource_metadata="<protected-resource-url>"
+//
+// No `realm=`, `error=`, or `error_description=` parameters are set today.
+// Adding those is a deliberate, separately-tested change — this test exists
+// so that change cannot land silently.
+func TestServePublic_PrivateWithOAuth_WWWAuthenticateMatchesBearerResourceMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset := createPrivateOAuthToolset(t, ctx, ti.conn, authCtx, "priv-wwwauth-shape")
+
+	w, err := servePublicHTTP(t, context.Background(), ti, toolset.McpSlug.String, makeInitializeBody(), "definitely-not-a-real-token", nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "expired or invalid access token")
+
+	wwwAuth := w.Header().Get("WWW-Authenticate")
+	require.NotEmpty(t, wwwAuth, "WWW-Authenticate must be present on 401 for OAuth-capable resource")
+
+	// Exact-shape check: Bearer scheme + single quoted resource_metadata.
+	// The grammar is RFC 7235's auth-scheme + auth-param; the parameter
+	// value must be a quoted-string per RFC 6750 §3.
+	shape := regexp.MustCompile(`^Bearer resource_metadata="([^"]+)"$`)
+	matches := shape.FindStringSubmatch(wwwAuth)
+	require.NotNil(t, matches, "WWW-Authenticate must match `Bearer resource_metadata=\"...\"`, got: %q", wwwAuth)
+
+	// The quoted URL must be a parseable absolute URL that points at this
+	// toolset's protected-resource metadata endpoint.
+	rmURL, err := url.Parse(matches[1])
+	require.NoError(t, err, "resource_metadata URL must parse: %q", matches[1])
+	require.True(t, rmURL.IsAbs(), "resource_metadata must be an absolute URL: %q", matches[1])
+	require.Contains(t, rmURL.Path, "/.well-known/oauth-protected-resource",
+		"resource_metadata path must point at the well-known protected-resource endpoint")
+	require.Contains(t, rmURL.Path, toolset.McpSlug.String,
+		"resource_metadata path must reference this toolset's mcp slug")
+
+	// Negative: parameters Gram does NOT emit today. If any of these appear,
+	// it's a deliberate header-shape change that needs its own test update.
+	require.NotContains(t, wwwAuth, "realm=", "Gram does not emit realm= today; update this test if you added it")
+	require.NotContains(t, wwwAuth, "error=", "Gram does not emit error= today; update this test if you added it")
+	require.NotContains(t, wwwAuth, "error_description=", "Gram does not emit error_description= today; update this test if you added it")
+}
+
+// assertMalformedAuthorizationReturns401 is the shared assertion body for
+// the RFC 6750 §2.1 Bearer credential syntax edge cases against an
+// OAuth-capable private MCP. authHeaderValue == "" means: do not set the
+// Authorization header at all.
+func assertMalformedAuthorizationReturns401(t *testing.T, slugPrefix, authHeaderValue string) {
+	t.Helper()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset := createPrivateOAuthToolset(t, ctx, ti.conn, authCtx, slugPrefix)
+	mcpSlug := toolset.McpSlug.String
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug, bytes.NewReader(makeInitializeBody()))
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	if authHeaderValue != "" {
+		req.Header.Set("Authorization", authHeaderValue)
+	}
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	err := ti.service.ServePublic(w, req)
+	require.Error(t, err, "malformed/missing Authorization must produce 401")
+	require.Contains(t, err.Error(), "expired or invalid access token")
+	require.NotEmpty(t, w.Header().Get("WWW-Authenticate"),
+		"WWW-Authenticate must be present so MCP clients can discover the auth server")
+}
+
+// The TestServePublic_PrivateWithOAuth_*Bearer*_Returns401 cluster below
+// covers RFC 6750 §2.1 Bearer credential syntax edge cases at /mcp/{slug}.
+// Each malformed Authorization header must produce a 401 with the OAuth
+// WWW-Authenticate response so MCP clients can recover via discovery.
+//
+// "Bearer <unknown-token>" (a syntactically valid but unrecognised token)
+// is already covered by TestServePublic_PrivateWithOAuth_InvalidToken_Returns401WithWWWAuthenticate.
+
+// TestServePublic_PrivateWithOAuth_MissingAuthorizationHeader_Returns401
+// verifies that a private OAuth MCP rejects requests with no Authorization
+// header at all, emitting the discovery WWW-Authenticate.
+func TestServePublic_PrivateWithOAuth_MissingAuthorizationHeader_Returns401(t *testing.T) {
+	t.Parallel()
+	assertMalformedAuthorizationReturns401(t, "priv-bearer-missing", "")
+}
+
+// TestServePublic_PrivateWithOAuth_BearerPrefixOnlyNoToken_Returns401
+// verifies that an Authorization header of `Bearer ` (prefix without a
+// token value) is rejected with the discovery WWW-Authenticate.
+func TestServePublic_PrivateWithOAuth_BearerPrefixOnlyNoToken_Returns401(t *testing.T) {
+	t.Parallel()
+	assertMalformedAuthorizationReturns401(t, "priv-bearer-empty", "Bearer ")
+}
+
+// TestServePublic_PrivateWithOAuth_NonBearerSchemeBasic_Returns401
+// verifies that a Basic-scheme Authorization header is rejected with the
+// discovery WWW-Authenticate. AuthorizationBearerToken strictly requires
+// the Bearer scheme for the OAuth-validation path.
+func TestServePublic_PrivateWithOAuth_NonBearerSchemeBasic_Returns401(t *testing.T) {
+	t.Parallel()
+	assertMalformedAuthorizationReturns401(t, "priv-bearer-basic", "Basic dXNlcjpwYXNz")
+}
+
+// TestServePublic_PrivateWithOAuth_LowercaseBearerScheme_Returns401
+// verifies that a lowercase `bearer ` scheme is accepted by the case-
+// insensitive scheme parse (per RFC 7235 §2.1) — the extracted token
+// is still rejected because it is not a valid Gram OAuth token, not
+// because the scheme was lowercase. The test exists so any future
+// tightening of the parse to case-sensitive Bearer becomes an explicit
+// change.
+func TestServePublic_PrivateWithOAuth_LowercaseBearerScheme_Returns401(t *testing.T) {
+	t.Parallel()
+	assertMalformedAuthorizationReturns401(t, "priv-bearer-lower", "bearer not-a-real-token")
+}
+
+// TestServePublic_PrivateWithOAuth_BearerMultipleTokens_Returns401
+// verifies that an Authorization header carrying multiple space-separated
+// values after `Bearer ` is rejected. RFC 6750 §2.1 allows only a single
+// b64token after the scheme.
+func TestServePublic_PrivateWithOAuth_BearerMultipleTokens_Returns401(t *testing.T) {
+	t.Parallel()
+	assertMalformedAuthorizationReturns401(t, "priv-bearer-multi", "Bearer abc def")
 }
 
 // TestServePublic_DualSecurity_OAuthTokenOnly_Succeeds verifies that providing

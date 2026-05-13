@@ -913,6 +913,232 @@ func DecodeCreateCheckoutResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
+// BuildCreateTopUpCheckoutRequest instantiates a HTTP request object with
+// method and path set to call the "usage" service "createTopUpCheckout"
+// endpoint
+func (c *Client) BuildCreateTopUpCheckoutRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateTopUpCheckoutUsagePath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "createTopUpCheckout", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateTopUpCheckoutRequest returns an encoder for requests sent to the
+// usage createTopUpCheckout server.
+func EncodeCreateTopUpCheckoutRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.CreateTopUpCheckoutPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "createTopUpCheckout", "*usage.CreateTopUpCheckoutPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateTopUpCheckoutResponse returns a decoder for responses returned
+// by the usage createTopUpCheckout endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeCreateTopUpCheckoutResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateTopUpCheckoutResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body string
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createTopUpCheckout", err)
+			}
+			return body, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateTopUpCheckoutUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createTopUpCheckout", err)
+			}
+			err = ValidateCreateTopUpCheckoutUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createTopUpCheckout", err)
+			}
+			return nil, NewCreateTopUpCheckoutUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateTopUpCheckoutForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createTopUpCheckout", err)
+			}
+			err = ValidateCreateTopUpCheckoutForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createTopUpCheckout", err)
+			}
+			return nil, NewCreateTopUpCheckoutForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateTopUpCheckoutBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createTopUpCheckout", err)
+			}
+			err = ValidateCreateTopUpCheckoutBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createTopUpCheckout", err)
+			}
+			return nil, NewCreateTopUpCheckoutBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateTopUpCheckoutNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createTopUpCheckout", err)
+			}
+			err = ValidateCreateTopUpCheckoutNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createTopUpCheckout", err)
+			}
+			return nil, NewCreateTopUpCheckoutNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateTopUpCheckoutConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createTopUpCheckout", err)
+			}
+			err = ValidateCreateTopUpCheckoutConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createTopUpCheckout", err)
+			}
+			return nil, NewCreateTopUpCheckoutConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateTopUpCheckoutUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createTopUpCheckout", err)
+			}
+			err = ValidateCreateTopUpCheckoutUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createTopUpCheckout", err)
+			}
+			return nil, NewCreateTopUpCheckoutUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateTopUpCheckoutInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createTopUpCheckout", err)
+			}
+			err = ValidateCreateTopUpCheckoutInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createTopUpCheckout", err)
+			}
+			return nil, NewCreateTopUpCheckoutInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateTopUpCheckoutInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "createTopUpCheckout", err)
+				}
+				err = ValidateCreateTopUpCheckoutInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "createTopUpCheckout", err)
+				}
+				return nil, NewCreateTopUpCheckoutInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateTopUpCheckoutUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "createTopUpCheckout", err)
+				}
+				err = ValidateCreateTopUpCheckoutUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "createTopUpCheckout", err)
+				}
+				return nil, NewCreateTopUpCheckoutUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "createTopUpCheckout", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateTopUpCheckoutGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createTopUpCheckout", err)
+			}
+			err = ValidateCreateTopUpCheckoutGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createTopUpCheckout", err)
+			}
+			return nil, NewCreateTopUpCheckoutGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "createTopUpCheckout", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalTierLimitsResponseBodyToUsageTierLimits builds a value of type
 // *usage.TierLimits from a value of type *TierLimitsResponseBody.
 func unmarshalTierLimitsResponseBodyToUsageTierLimits(v *TierLimitsResponseBody) *usage.TierLimits {

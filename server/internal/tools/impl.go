@@ -40,11 +40,21 @@ type Service struct {
 	variationsRepo *vr.Queries
 	auth           *auth.Auth
 	authz          *authz.Engine
+	featureChecker platformtools.FeatureChecker
+	platformExtras []platformtools.ExternalTool
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	authzEngine *authz.Engine,
+	featureChecker platformtools.FeatureChecker,
+	platformExtras []platformtools.ExternalTool,
+) *Service {
 	logger = logger.With(attr.SlogComponent("tools"))
 
 	return &Service{
@@ -55,6 +65,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		variationsRepo: vr.New(db),
 		auth:           auth.New(logger, db, sessions, authzEngine),
 		authz:          authzEngine,
+		featureChecker: featureChecker,
+		platformExtras: platformExtras,
 	}
 }
 
@@ -289,7 +301,14 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	}
 
 	if payload.Cursor == nil {
-		result.Tools = append(result.Tools, platformtools.ListTypedTools(*authCtx.ProjectID, conv.PtrValOrEmpty(payload.UrnPrefix, ""))...)
+		result.Tools = append(result.Tools, platformtools.ListTypedTools(
+			ctx,
+			authCtx.ActiveOrganizationID,
+			*authCtx.ProjectID,
+			conv.PtrValOrEmpty(payload.UrnPrefix, ""),
+			s.featureChecker,
+			s.platformExtras...,
+		)...)
 	}
 
 	err = mv.ApplyVariations(ctx, s.logger, s.db, *authCtx.ProjectID, result.Tools)

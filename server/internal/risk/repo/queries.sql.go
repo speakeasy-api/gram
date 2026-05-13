@@ -19,7 +19,7 @@ SET version = version + 1
 WHERE id = $1
   AND project_id = $2
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 `
 
 type BumpRiskPolicyVersionParams struct {
@@ -38,6 +38,7 @@ func (q *Queries) BumpRiskPolicyVersion(ctx context.Context, arg BumpRiskPolicyV
 		&i.Name,
 		&i.Sources,
 		&i.PresidioEntities,
+		&i.PromptInjectionRules,
 		&i.Action,
 		&i.AutoName,
 		&i.UserMessage,
@@ -132,6 +133,7 @@ INSERT INTO risk_policies (
   , enabled
   , action
   , auto_name
+  , user_message
   , version
 )
 VALUES (
@@ -144,9 +146,10 @@ VALUES (
   , $7
   , $8
   , $9
+  , $10
   , 1
 )
-RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateRiskPolicyParams struct {
@@ -159,6 +162,7 @@ type CreateRiskPolicyParams struct {
 	Enabled          bool
 	Action           string
 	AutoName         bool
+	UserMessage      pgtype.Text
 }
 
 func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyParams) (RiskPolicy, error) {
@@ -172,6 +176,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.Enabled,
 		arg.Action,
 		arg.AutoName,
+		arg.UserMessage,
 	)
 	var i RiskPolicy
 	err := row.Scan(
@@ -182,6 +187,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		&i.Name,
 		&i.Sources,
 		&i.PresidioEntities,
+		&i.PromptInjectionRules,
 		&i.Action,
 		&i.AutoName,
 		&i.UserMessage,
@@ -318,7 +324,7 @@ func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageCont
 }
 
 const getRiskPolicy = `-- name: GetRiskPolicy :one
-SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE id = $1
   AND project_id = $2
@@ -341,6 +347,7 @@ func (q *Queries) GetRiskPolicy(ctx context.Context, arg GetRiskPolicyParams) (R
 		&i.Name,
 		&i.Sources,
 		&i.PresidioEntities,
+		&i.PromptInjectionRules,
 		&i.Action,
 		&i.AutoName,
 		&i.UserMessage,
@@ -351,6 +358,18 @@ func (q *Queries) GetRiskPolicy(ctx context.Context, arg GetRiskPolicyParams) (R
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const hardDeleteRiskPoliciesByProject = `-- name: HardDeleteRiskPoliciesByProject :exec
+DELETE FROM risk_policies WHERE project_id = $1
+`
+
+// Test-only helper: hard-deletes every risk policy for a project so tests can
+// verify cache behavior without the soft-delete (DeleteRiskPolicy) leaving
+// ghost rows that production lookups already filter out.
+func (q *Queries) HardDeleteRiskPoliciesByProject(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, hardDeleteRiskPoliciesByProject, projectID)
+	return err
 }
 
 type InsertRiskResultsParams struct {
@@ -372,7 +391,7 @@ type InsertRiskResultsParams struct {
 }
 
 const listEnabledEnforcingPoliciesByProject = `-- name: ListEnabledEnforcingPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
@@ -397,6 +416,7 @@ func (q *Queries) ListEnabledEnforcingPoliciesByProject(ctx context.Context, pro
 			&i.Name,
 			&i.Sources,
 			&i.PresidioEntities,
+			&i.PromptInjectionRules,
 			&i.Action,
 			&i.AutoName,
 			&i.UserMessage,
@@ -417,7 +437,7 @@ func (q *Queries) ListEnabledEnforcingPoliciesByProject(ctx context.Context, pro
 }
 
 const listEnabledRiskPoliciesByProject = `-- name: ListEnabledRiskPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
@@ -441,6 +461,7 @@ func (q *Queries) ListEnabledRiskPoliciesByProject(ctx context.Context, projectI
 			&i.Name,
 			&i.Sources,
 			&i.PresidioEntities,
+			&i.PromptInjectionRules,
 			&i.Action,
 			&i.AutoName,
 			&i.UserMessage,
@@ -461,7 +482,7 @@ func (q *Queries) ListEnabledRiskPoliciesByProject(ctx context.Context, projectI
 }
 
 const listEnabledShadowMCPPoliciesByProject = `-- name: ListEnabledShadowMCPPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
@@ -487,6 +508,7 @@ func (q *Queries) ListEnabledShadowMCPPoliciesByProject(ctx context.Context, pro
 			&i.Name,
 			&i.Sources,
 			&i.PresidioEntities,
+			&i.PromptInjectionRules,
 			&i.Action,
 			&i.AutoName,
 			&i.UserMessage,
@@ -507,7 +529,7 @@ func (q *Queries) ListEnabledShadowMCPPoliciesByProject(ctx context.Context, pro
 }
 
 const listEnabledToolIdentityPoliciesByProject = `-- name: ListEnabledToolIdentityPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
@@ -536,6 +558,7 @@ func (q *Queries) ListEnabledToolIdentityPoliciesByProject(ctx context.Context, 
 			&i.Name,
 			&i.Sources,
 			&i.PresidioEntities,
+			&i.PromptInjectionRules,
 			&i.Action,
 			&i.AutoName,
 			&i.UserMessage,
@@ -556,7 +579,7 @@ func (q *Queries) ListEnabledToolIdentityPoliciesByProject(ctx context.Context, 
 }
 
 const listRiskPolicies = `-- name: ListRiskPolicies :many
-SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -580,6 +603,7 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 			&i.Name,
 			&i.Sources,
 			&i.PresidioEntities,
+			&i.PromptInjectionRules,
 			&i.Action,
 			&i.AutoName,
 			&i.UserMessage,
@@ -600,7 +624,7 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 }
 
 const listRiskResultsByChatFound = `-- name: ListRiskResultsByChatFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -636,6 +660,7 @@ type ListRiskResultsByChatFoundRow struct {
 	EndPos            pgtype.Int4
 	Confidence        pgtype.Float8
 	Tags              []string
+	DeadLetterReason  pgtype.Text
 	CreatedAt         pgtype.Timestamptz
 	ChatID            uuid.UUID
 	ChatTitle         pgtype.Text
@@ -672,6 +697,7 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 			&i.EndPos,
 			&i.Confidence,
 			&i.Tags,
+			&i.DeadLetterReason,
 			&i.CreatedAt,
 			&i.ChatID,
 			&i.ChatTitle,
@@ -688,7 +714,7 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 }
 
 const listRiskResultsByProjectAndPolicy = `-- name: ListRiskResultsByProjectAndPolicy :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -724,6 +750,7 @@ type ListRiskResultsByProjectAndPolicyRow struct {
 	EndPos            pgtype.Int4
 	Confidence        pgtype.Float8
 	Tags              []string
+	DeadLetterReason  pgtype.Text
 	CreatedAt         pgtype.Timestamptz
 	ChatID            uuid.UUID
 	ChatTitle         pgtype.Text
@@ -760,6 +787,7 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 			&i.EndPos,
 			&i.Confidence,
 			&i.Tags,
+			&i.DeadLetterReason,
 			&i.CreatedAt,
 			&i.ChatID,
 			&i.ChatTitle,
@@ -776,7 +804,7 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 }
 
 const listRiskResultsByProjectFound = `-- name: ListRiskResultsByProjectFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -810,6 +838,7 @@ type ListRiskResultsByProjectFoundRow struct {
 	EndPos            pgtype.Int4
 	Confidence        pgtype.Float8
 	Tags              []string
+	DeadLetterReason  pgtype.Text
 	CreatedAt         pgtype.Timestamptz
 	ChatID            uuid.UUID
 	ChatTitle         pgtype.Text
@@ -841,6 +870,7 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 			&i.EndPos,
 			&i.Confidence,
 			&i.Tags,
+			&i.DeadLetterReason,
 			&i.CreatedAt,
 			&i.ChatID,
 			&i.ChatTitle,
@@ -923,6 +953,7 @@ SET name = $1
   , enabled = $4
   , action = $5
   , auto_name = $6
+  , user_message = $7
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
@@ -932,10 +963,10 @@ SET name = $1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $7
-  AND project_id = $8
+WHERE id = $8
+  AND project_id = $9
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRiskPolicyParams struct {
@@ -945,6 +976,7 @@ type UpdateRiskPolicyParams struct {
 	Enabled          bool
 	Action           string
 	AutoName         bool
+	UserMessage      pgtype.Text
 	ID               uuid.UUID
 	ProjectID        uuid.UUID
 }
@@ -957,6 +989,7 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.Enabled,
 		arg.Action,
 		arg.AutoName,
+		arg.UserMessage,
 		arg.ID,
 		arg.ProjectID,
 	)
@@ -969,6 +1002,7 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		&i.Name,
 		&i.Sources,
 		&i.PresidioEntities,
+		&i.PromptInjectionRules,
 		&i.Action,
 		&i.AutoName,
 		&i.UserMessage,

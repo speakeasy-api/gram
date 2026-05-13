@@ -18,6 +18,7 @@ import (
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -176,6 +177,17 @@ func newManagerWithFakeWorkOSConfig(t *testing.T, fake *fakeWorkOSServer, idpCfg
 	fakePosthog := posthog.New(context.Background(), logger, "test-key", "test-host", "")
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
+	speakeasyIDPClient := speakeasyclient.NewClient(
+		logger,
+		tracerProvider,
+		guardianPolicy,
+		idpSrv.URL,
+		mockidp.MockSecretKey,
+		conn,
+		workosClient,
+		fakePosthog,
+	)
+
 	mgr := sessions.NewManager(
 		logger,
 		tracerProvider,
@@ -188,7 +200,7 @@ func newManagerWithFakeWorkOSConfig(t *testing.T, fake *fakeWorkOSServer, idpCfg
 		fakePylon,
 		fakePosthog,
 		billingClient,
-		workosClient,
+		speakeasyIDPClient,
 	)
 
 	// Seed org metadata with workos_id set so the CTE can resolve WorkOS org
@@ -241,7 +253,7 @@ func TestCallbackUpsert_PopulatesWorkOSIDForExistingOrg(t *testing.T) {
 	ctx := t.Context()
 
 	// Simulate an org row that has not yet been linked to WorkOS in Gram.
-	_, err := ts.conn.Exec(ctx, `UPDATE organization_metadata SET workos_id = NULL WHERE id = $1`, workosOrgID)
+	err := orgRepo.New(ts.conn).ClearOrganizationWorkosID(ctx, workosOrgID)
 	require.NoError(t, err)
 
 	idToken := acquireIDToken(t, ctx, ts.mgr)
@@ -286,7 +298,7 @@ func TestSyncWorkOSIDs_SkipsSetOrgWorkosIDWhenValidateOmitsWorkOSID(t *testing.T
 	ts := newManagerWithFakeWorkOSConfig(t, fake, cfg)
 	ctx := t.Context()
 
-	_, err := ts.conn.Exec(ctx, `UPDATE organization_metadata SET workos_id = NULL WHERE id = $1`, mockidp.MockOrgID)
+	err := orgRepo.New(ts.conn).ClearOrganizationWorkosID(ctx, mockidp.MockOrgID)
 	require.NoError(t, err)
 
 	idToken := acquireIDToken(t, ctx, ts.mgr)
@@ -478,6 +490,16 @@ func TestSyncWorkOSIDs_NilWorkOSClient(t *testing.T) {
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
 	// workos = nil simulates OSS mode with no WorkOS configured.
+	speakeasyIDPClient := speakeasyclient.NewClient(
+		logger,
+		tracerProvider,
+		guardianPolicy,
+		idpSrv.URL,
+		mockidp.MockSecretKey,
+		conn,
+		nil,
+		fakePosthog,
+	)
 	mgr := sessions.NewManager(
 		logger,
 		tracerProvider,
@@ -490,7 +512,7 @@ func TestSyncWorkOSIDs_NilWorkOSClient(t *testing.T) {
 		fakePylon,
 		fakePosthog,
 		billingClient,
-		nil,
+		speakeasyIDPClient,
 	)
 
 	ctx := t.Context()

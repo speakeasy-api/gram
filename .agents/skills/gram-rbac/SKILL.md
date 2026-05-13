@@ -256,13 +256,13 @@ Dashboard code should never hand-roll scope checks — use the shared primitives
 
 ## Relevant mise tasks
 
-| Task                       | Purpose                                                                                                                  |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `mise run gen:goa-server`  | Regenerate `server/gen/access/**` after editing `server/design/access/design.go`.                                        |
-| `mise run gen:sdk`         | Regenerate the SDK and OpenAPI so dashboard/CLI consumers see the new scope vocabulary.                                  |
-| `mise run gen:sqlc-server` | Regenerate `server/internal/access/repo/` when `queries.sql` changes.                                                    |
-| `mise run lint:server`     | Catches `exhaustruct` violations in the scope/grant structs.                                                             |
-| `mise run test:server`     | Runs the scope-count assertions and RBAC tests. Filter with `./internal/authz/... ./internal/access/...` when iterating. |
+| Task                       | Purpose                                                                                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `mise run gen:goa-server`  | Regenerate `server/gen/access/**` after editing `server/design/access/design.go`.                                                                                  |
+| `mise run gen:sdk`         | Regenerate the SDK and OpenAPI so dashboard/CLI consumers see the new scope vocabulary.                                                                            |
+| `mise run gen:sqlc-server` | Regenerate `server/internal/access/repo/` when `queries.sql` changes. Requires `mise run infra:start` (sqlc connects to the local Postgres to type-check queries). |
+| `mise run lint:server`     | Catches `exhaustruct` violations in the scope/grant structs.                                                                                                       |
+| `mise run test:server`     | Runs the scope-count assertions and RBAC tests. Filter with `./internal/authz/... ./internal/access/...` when iterating.                                           |
 
 ## Maintaining this skill
 

@@ -32,7 +32,7 @@ type LogVariationUpdateGlobalEvent struct {
 	VariationSnapshotAfter  *types.ToolVariation
 }
 
-func LogVariationUpdateGlobal(ctx context.Context, dbtx repo.DBTX, event LogVariationUpdateGlobalEvent) error {
+func (l *Logger) LogVariationUpdateGlobal(ctx context.Context, dbtx repo.DBTX, event LogVariationUpdateGlobalEvent) error {
 	action := ActionVariationUpdateGlobal
 
 	metadata, err := marshalAuditPayload(map[string]any{
@@ -72,11 +72,8 @@ func LogVariationUpdateGlobal(ctx context.Context, dbtx repo.DBTX, event LogVari
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogVariationDeleteGlobalEvent struct {
@@ -91,7 +88,7 @@ type LogVariationDeleteGlobalEvent struct {
 	SourceToolURN urn.Tool
 }
 
-func LogVariationDeleteGlobal(ctx context.Context, dbtx repo.DBTX, event LogVariationDeleteGlobalEvent) error {
+func (l *Logger) LogVariationDeleteGlobal(ctx context.Context, dbtx repo.DBTX, event LogVariationDeleteGlobalEvent) error {
 	action := ActionVariationDeleteGlobal
 
 	metadata, err := marshalAuditPayload(map[string]any{
@@ -121,9 +118,6 @@ func LogVariationDeleteGlobal(ctx context.Context, dbtx repo.DBTX, event LogVari
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

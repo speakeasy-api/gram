@@ -30,7 +30,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type {
@@ -108,21 +108,28 @@ function useMCPServers(enabled: boolean) {
         ? `${baseUrl}/mcp/${t.mcpSlug}`
         : `${baseUrl}/mcp/${project?.slug ?? ""}/${t.slug}/${t.defaultEnvironmentSlug ?? ""}`;
       const mcpUrl = fullUrl.replace(/^https?:\/\//, "");
+      // Skip external MCP/catalog servers — tool names aren't resolved yet
+      // TODO: re-enable once external server tool names are available
+      const isExternal = t.tools.some((tool) => tool.type === "externalmcp");
+      if (isExternal) continue;
+      const tools = t.tools.map((tool) => ({
+        id: tool.id,
+        name: tool.name,
+        type: tool.type,
+        httpMethod: tool.httpMethod,
+        annotations: tool.annotations,
+      }));
+      // Skip servers with no tools
+      if (tools.length === 0) continue;
       group.servers.push({
         id: t.id,
         name: t.name,
         slug: mcpUrl,
         mcpSlug: t.mcpSlug ?? undefined,
-        tools: t.tools.map((tool) => ({
-          id: tool.id,
-          name: tool.name,
-          type: tool.type,
-          httpMethod: tool.httpMethod,
-          annotations: tool.annotations,
-        })),
+        tools,
       });
     }
-    return [...groups.values()];
+    return [...groups.values()].filter((g) => g.servers.length > 0);
   }, [data, organization.projects]);
 }
 
@@ -142,6 +149,17 @@ export function ScopePickerPopover({
   const [expanded, setExpanded] = useState(false);
   // Override for when user clicks a mode but selectors are still empty
   const [panelOverride, setPanelOverride] = useState<ActivePanel | null>(null);
+  const [resourceSearch, setResourceSearch] = useState("");
+
+  // Explicit wheel handler for the resource list — the Popover portal renders
+  // outside the Sheet's scroll-lock region, so native CSS overflow scrolling
+  // is blocked. Directly setting scrollTop bypasses react-remove-scroll.
+  const resourceListRef = useRef<HTMLDivElement>(null);
+  const handleResourceWheel = useCallback((e: React.WheelEvent) => {
+    if (resourceListRef.current) {
+      resourceListRef.current.scrollTop += e.deltaY;
+    }
+  }, []);
 
   const isMcpConnect = scope === "mcp:connect";
   const collectionGroups = useCollectionGroups(mcpServers, isMcpConnect);
@@ -164,21 +182,64 @@ export function ScopePickerPopover({
   // selectors have content, so clearing it eagerly only causes the UI to
   // jump back to "servers" when the user deselects all items.
 
-  // Org-scoped permissions have no resource picker — they're always org-wide
-  if (resourceType === "org") {
+  const projectList = useMemo(() => {
+    const seen = new Set<string>();
+    const projects: { id: string; name: string }[] = [];
+    // Include projects from org context
+    for (const p of organization.projects) {
+      if (!seen.has(p.id)) {
+        seen.add(p.id);
+        projects.push({ id: p.id, name: p.name });
+      }
+    }
+    // For MCP scopes, also include projects discovered via server groups
+    // (ensures project list matches what's visible in the server picker)
+    for (const group of mcpServers) {
+      if (!seen.has(group.projectId)) {
+        seen.add(group.projectId);
+        projects.push({ id: group.projectId, name: group.projectName });
+      }
+    }
+    return projects;
+  }, [organization.projects, mcpServers]);
+
+  const resourceKind = resourceType === "project" ? "project" : "mcp";
+
+  const filteredProjectList = useMemo(
+    () =>
+      resourceSearch
+        ? projectList.filter((p) =>
+            p.name.toLowerCase().includes(resourceSearch.toLowerCase()),
+          )
+        : projectList,
+    [projectList, resourceSearch],
+  );
+
+  const filteredMcpServers = useMemo(() => {
+    if (!resourceSearch) return mcpServers;
+    const q = resourceSearch.toLowerCase();
+    return mcpServers
+      .map((group) => ({
+        ...group,
+        servers: group.servers.filter(
+          (s) =>
+            s.name.toLowerCase().includes(q) ||
+            group.projectName.toLowerCase().includes(q),
+        ),
+      }))
+      .filter((g) => g.servers.length > 0);
+  }, [mcpServers, resourceSearch]);
+
+  // Fixed-scope permissions have no resource picker — their granularity is
+  // baked into the scope definition. Org scopes are always org-wide;
+  // environment scopes apply to every environment in the project.
+  if (resourceType === "org" || resourceType === "environment") {
     return (
       <span className="border-input text-muted-foreground inline-flex h-7 items-center rounded-md border bg-transparent px-2 py-1 text-xs">
-        All
+        {resourceType === "environment" ? "All in project" : "All"}
       </span>
     );
   }
-
-  const projectList = organization.projects.map((p) => ({
-    id: p.id,
-    name: p.name,
-  }));
-
-  const resourceKind = resourceType === "project" ? "project" : "mcp";
 
   const toggleResource = (id: string) => {
     if (selectors === null) return;
@@ -199,8 +260,25 @@ export function ScopePickerPopover({
   const isResourceSelected = (id: string) =>
     selectors?.some((s) => s.resourceId === id) ?? false;
 
+  const toggleProject = (projectId: string) => {
+    if (selectors === null) return;
+    const has = selectors.some((s) => s.projectId === projectId);
+    if (has) {
+      onChangeSelectors(selectors.filter((s) => s.projectId !== projectId));
+    } else {
+      onChangeSelectors([
+        ...selectors,
+        { resourceKind: "mcp", resourceId: "*", projectId },
+      ]);
+    }
+  };
+
+  const isProjectSelected = (projectId: string) =>
+    selectors?.some((s) => s.projectId === projectId) ?? false;
+
   const switchPanel = (panel: ActivePanel) => {
     setPanelOverride(panel);
+    setResourceSearch("");
     if (panel === "all") {
       onChangeSelectors(null);
     } else {
@@ -222,6 +300,13 @@ export function ScopePickerPopover({
         selected={activePanel === "all"}
         onClick={() => switchPanel("all")}
       />
+      {resourceType === "mcp" && (
+        <ScopeOption
+          label="Specific projects"
+          selected={activePanel === "projects"}
+          onClick={() => switchPanel("projects")}
+        />
+      )}
       <ScopeOption
         label={
           resourceType === "project" ? "Specific projects" : "Specific servers"
@@ -248,33 +333,128 @@ export function ScopePickerPopover({
 
   const resourceList = activePanel === "servers" && (
     <>
-      <div className="bg-border my-1 h-px" />
-      {resourceType === "project"
-        ? projectList.map((resource) => (
-            <ResourceCheckbox
-              key={resource.id}
-              id={resource.id}
-              name={resource.name}
-              checked={isResourceSelected(resource.id)}
-              onToggle={toggleResource}
-            />
-          ))
-        : mcpServers.map((group) => (
+      <div className="bg-border mt-1 h-px" />
+      <div className="flex items-center gap-2 px-3 py-2">
+        <input
+          type="text"
+          placeholder={
+            resourceType === "project" ? "Search projects…" : "Search servers…"
+          }
+          value={resourceSearch}
+          onChange={(e) => setResourceSearch(e.target.value)}
+          className="placeholder:text-muted-foreground flex-1 bg-transparent text-sm outline-none"
+        />
+        {resourceSearch && (
+          <button
+            type="button"
+            onClick={() => setResourceSearch("")}
+            className="text-muted-foreground hover:text-foreground shrink-0"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+      <div className="bg-border h-px" />
+      <div
+        ref={resourceListRef}
+        onWheel={handleResourceWheel}
+        className="h-[250px] overflow-y-auto"
+      >
+        {resourceType === "project" ? (
+          filteredProjectList.length === 0 ? (
+            <div className="text-muted-foreground px-3 py-3 text-sm">
+              {projectList.length === 0
+                ? "No projects found"
+                : "No matching projects"}
+            </div>
+          ) : (
+            filteredProjectList.map((resource) => (
+              <ResourceCheckbox
+                key={resource.id}
+                id={resource.id}
+                name={resource.name}
+                checked={isResourceSelected(resource.id)}
+                onToggle={toggleResource}
+              />
+            ))
+          )
+        ) : filteredMcpServers.length === 0 ? (
+          <div className="text-muted-foreground px-3 py-3 text-sm">
+            {mcpServers.length === 0
+              ? "No servers found"
+              : "No matching servers"}
+          </div>
+        ) : (
+          filteredMcpServers.map((group) => (
             <div key={group.projectId}>
-              <div className="text-muted-foreground px-3 py-1.5 text-xs font-medium">
-                {group.projectName}
-              </div>
               {group.servers.map((server) => (
                 <ResourceCheckbox
                   key={server.id}
                   id={server.id}
-                  name={server.name}
+                  name={
+                    <>
+                      <span className="text-muted-foreground/60">
+                        {group.projectName.toLowerCase()}/
+                      </span>
+                      {server.name}
+                    </>
+                  }
                   checked={isResourceSelected(server.id)}
                   onToggle={toggleResource}
                 />
               ))}
             </div>
-          ))}
+          ))
+        )}
+      </div>
+    </>
+  );
+
+  const projectPickerList = activePanel === "projects" && (
+    <>
+      <div className="bg-border mt-1 h-px" />
+      <div className="flex items-center gap-2 px-3 py-2">
+        <input
+          type="text"
+          placeholder="Search projects…"
+          value={resourceSearch}
+          onChange={(e) => setResourceSearch(e.target.value)}
+          className="placeholder:text-muted-foreground flex-1 bg-transparent text-sm outline-none"
+        />
+        {resourceSearch && (
+          <button
+            type="button"
+            onClick={() => setResourceSearch("")}
+            className="text-muted-foreground hover:text-foreground shrink-0"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+      <div className="bg-border h-px" />
+      <div
+        ref={resourceListRef}
+        onWheel={handleResourceWheel}
+        className="h-[250px] overflow-y-auto"
+      >
+        {filteredProjectList.length === 0 ? (
+          <div className="text-muted-foreground px-3 py-3 text-sm">
+            {projectList.length === 0
+              ? "No projects found"
+              : "No matching projects"}
+          </div>
+        ) : (
+          filteredProjectList.map((project) => (
+            <ResourceCheckbox
+              key={project.id}
+              id={project.id}
+              name={project.name}
+              checked={isProjectSelected(project.id)}
+              onToggle={toggleProject}
+            />
+          ))
+        )}
+      </div>
     </>
   );
 
@@ -419,10 +599,12 @@ export function ScopePickerPopover({
           className={cn(
             "p-1.5 transition-[width] duration-500",
             activePanel === "tools"
-              ? "w-[620px]"
+              ? "w-[680px]"
               : activePanel === "collection"
                 ? "w-[360px]"
-                : "max-h-[300px] w-52 overflow-y-auto",
+                : activePanel === "servers" || activePanel === "projects"
+                  ? "w-96"
+                  : "w-64",
           )}
           style={{
             transitionTimingFunction: "cubic-bezier(0.32, 0.72, 0, 1)",
@@ -430,6 +612,7 @@ export function ScopePickerPopover({
         >
           {renderScopeOptions({ includeCollection: true })}
           {resourceList}
+          {projectPickerList}
           {activePanel === "tools" && (
             <div className="-mx-1.5 -mb-1.5 flex max-h-[min(420px,60vh)] flex-col">
               {customTabs("max-h-[min(340px,50vh)]")}
@@ -508,14 +691,49 @@ function ToolSelectionPanel({
   const allServers = useMemo(
     () =>
       mcpServers
-        .flatMap((g) => g.servers)
-        .sort((a, b) => a.name.localeCompare(b.name)),
+        .flatMap((g) =>
+          g.servers.map((s) => ({ ...s, projectName: g.projectName })),
+        )
+        .sort((a, b) =>
+          `${a.projectName}/${a.name}`.localeCompare(
+            `${b.projectName}/${b.name}`,
+          ),
+        ),
     [mcpServers],
   );
   const [selectedServerId, setSelectedServerId] = useState<string | null>(
     allServers[0]?.id ?? null,
   );
   const [search, setSearch] = useState("");
+  const [serverSearch, setServerSearch] = useState("");
+  const [leftWidth, setLeftWidth] = useState(260);
+  const dragging = useRef(false);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragging.current) return;
+      const container = serverScrollRef.current?.parentElement?.parentElement;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const next = Math.max(
+        140,
+        Math.min(e.clientX - rect.left, rect.width - 180),
+      );
+      setLeftWidth(next);
+    };
+    const onUp = () => {
+      dragging.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
+
   const selectedServer = allServers.find((s) => s.id === selectedServerId);
   const tools = useMemo(
     () => selectedServer?.tools ?? [],
@@ -546,8 +764,20 @@ function ToolSelectionPanel({
     }
   }, []);
 
+  const filteredServers = useMemo(
+    () =>
+      serverSearch
+        ? allServers.filter((s) =>
+            `${s.projectName}/${s.name}`
+              .toLowerCase()
+              .includes(serverSearch.toLowerCase()),
+          )
+        : allServers,
+    [allServers, serverSearch],
+  );
+
   const serverVirtualizer = useVirtualizer({
-    count: allServers.length,
+    count: filteredServers.length,
     getScrollElement: () => serverScrollRef.current,
     estimateSize: () => 40,
     overscan: 5,
@@ -563,56 +793,98 @@ function ToolSelectionPanel({
   return (
     <div className={cn("flex min-h-0 flex-1", className)}>
       {/* Left column — server list */}
-      <div className="border-border flex min-h-0 w-[200px] shrink-0 flex-col border-r">
-        <div className="bg-muted/50 text-muted-foreground border-border flex h-10 shrink-0 items-center gap-1.5 border-b px-3 text-[10px] font-medium tracking-wider uppercase">
-          <Globe className="h-3 w-3" />
-          Server List
+      <div
+        className="border-border flex min-h-0 shrink-0 flex-col border-r"
+        style={{ width: leftWidth }}
+      >
+        <div className="border-border flex h-10 shrink-0 items-center gap-2 border-b px-3">
+          <Globe className="text-muted-foreground h-3 w-3 shrink-0" />
+          <input
+            type="text"
+            placeholder="Search servers…"
+            value={serverSearch}
+            onChange={(e) => setServerSearch(e.target.value)}
+            className="placeholder:text-muted-foreground flex-1 bg-transparent text-sm outline-none"
+          />
+          {serverSearch && (
+            <button
+              type="button"
+              onClick={() => setServerSearch("")}
+              className="text-muted-foreground hover:text-foreground shrink-0"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
         </div>
         <div
           ref={serverScrollRef}
           onWheel={handleServerWheel}
           className="min-h-0 flex-1 overflow-y-auto"
         >
-          <div
-            style={{
-              height: `${serverVirtualizer.getTotalSize()}px`,
-              position: "relative",
-            }}
-          >
-            {serverVirtualizer.getVirtualItems().map((virtualItem) => {
-              const server = allServers[virtualItem.index];
-              const isActive = selectedServerId === server.id;
-              return (
-                <button
-                  key={server.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedServerId(server.id);
-                    setSearch("");
-                  }}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: `${virtualItem.size}px`,
-                    transform: `translateY(${virtualItem.start}px)`,
-                  }}
-                  className={cn(
-                    "hover:bg-muted/50 flex cursor-pointer items-center justify-between truncate px-3 text-sm",
-                    isActive && "bg-muted font-medium",
-                  )}
-                >
-                  <span className="truncate">{server.name}</span>
-                  {isActive && (
-                    <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          {filteredServers.length === 0 ? (
+            <div className="text-muted-foreground px-3 py-3 text-sm">
+              {allServers.length === 0
+                ? "No servers found"
+                : "No matching servers"}
+            </div>
+          ) : (
+            <div
+              style={{
+                height: `${serverVirtualizer.getTotalSize()}px`,
+                position: "relative",
+              }}
+            >
+              {serverVirtualizer.getVirtualItems().map((virtualItem) => {
+                const server = filteredServers[virtualItem.index];
+                const isActive = selectedServerId === server.id;
+                return (
+                  <button
+                    key={server.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedServerId(server.id);
+                      setSearch("");
+                    }}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: `${virtualItem.size}px`,
+                      transform: `translateY(${virtualItem.start}px)`,
+                    }}
+                    className={cn(
+                      "hover:bg-muted/50 flex cursor-pointer items-center justify-between truncate px-3 text-sm",
+                      isActive && "bg-muted font-medium",
+                    )}
+                  >
+                    <span className="truncate">
+                      <span className="text-muted-foreground/60">
+                        {server.projectName.toLowerCase()}/
+                      </span>
+                      {server.name}
+                    </span>
+                    {isActive && (
+                      <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Resize handle */}
+      <div
+        onMouseDown={(e) => {
+          e.preventDefault();
+          dragging.current = true;
+          document.body.style.cursor = "col-resize";
+          document.body.style.userSelect = "none";
+        }}
+        className="hover:bg-border/80 flex w-1 shrink-0 cursor-col-resize items-center justify-center transition-colors"
+      />
 
       {/* Right column — tools for selected server */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1046,7 +1318,7 @@ function ResourceCheckbox({
   compact,
 }: {
   id: string;
-  name: string;
+  name: React.ReactNode;
   checked: boolean;
   onToggle: (id: string) => void;
   compact?: boolean;

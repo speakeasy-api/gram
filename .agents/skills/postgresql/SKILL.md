@@ -154,6 +154,7 @@ When writing SQLc queries, follow these guidelines:
 
 <relevant-tasks>
 
-- `mise run gen:sqlc-server`: generates Go code from SQLc queries
+- `mise run infra:start`: bring up the local Postgres/ClickHouse/etc containers — required before running sqlc, since sqlc connects to the database to type-check queries.
+- `mise run gen:sqlc-server`: generates Go code from SQLc queries (requires the local database from `mise run infra:start`).
 
 </relevant-tasks>

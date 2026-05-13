@@ -9,9 +9,20 @@ import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { RequireScope } from "@/components/require-scope";
-import { ArrowRight } from "lucide-react";
-import { useState } from "react";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { useOrgRoutes } from "@/routes";
+import { useRBAC } from "@/hooks/useRBAC";
+import { Outcome } from "@gram/client/models/operations/listchallengebuckets.js";
+import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
+import { ChallengesEmptyState } from "@/pages/access/ChallengesTab";
+import { useChallengeRowColumns } from "@/pages/access/useChallengeRowColumns";
+import { useGrantFlow } from "@/pages/access/useGrantFlow";
+import { Table } from "@speakeasy-api/moonshine";
+import { ArrowRight, ChevronDown, ChevronUp } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
+
+const PROJECT_LIMIT = 5;
 
 export default function OrgHome() {
   return (
@@ -36,20 +47,33 @@ export function OrgHomeInner() {
   const { orgSlug } = useSlugs();
   const client = useSdkClient();
   const navigate = useNavigate();
+  const telemetry = useTelemetry();
+  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
   const [search, setSearch] = useState("");
+  const [expanded, setExpanded] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
 
-  const projects = [...organization.projects]
-    .filter((project) => {
-      if (!search) return true;
-      const query = search.toLowerCase();
-      return (
-        project.name.toLowerCase().includes(query) ||
-        project.slug.toLowerCase().includes(query)
-      );
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const projects = useMemo(
+    () =>
+      [...organization.projects]
+        .filter((project) => {
+          if (!search) return true;
+          const query = search.toLowerCase();
+          return (
+            project.name.toLowerCase().includes(query) ||
+            project.slug.toLowerCase().includes(query)
+          );
+        })
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [organization.projects, search],
+  );
+
+  // When searching, show all results; otherwise cap at limit
+  const isSearching = search.length > 0;
+  const hasMore = !isSearching && projects.length > PROJECT_LIMIT;
+  const visibleProjects =
+    expanded || isSearching ? projects : projects.slice(0, PROJECT_LIMIT);
 
   return (
     <>
@@ -91,50 +115,80 @@ export function OrgHomeInner() {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          {projects.map((project) => (
-            <Link
-              key={project.id}
-              to={`/${orgSlug}/projects/${project.slug}`}
-              className="hover:no-underline"
-            >
-              <DotCard
-                icon={
-                  <ProjectAvatar
-                    project={project}
-                    className="h-10 w-10 rounded-md"
-                  />
-                }
+        <>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {!isSearching && (
+              <RequireScope
+                scope="org:admin"
+                level="component"
+                className="w-full"
               >
-                <Type
-                  variant="subheading"
-                  as="div"
-                  className="text-md group-hover:text-primary truncate transition-colors"
+                <CreateResourceCard
+                  onClick={() => setCreateDialogOpen(true)}
+                  title="New Project"
+                  description="Create a new project for your organization"
+                />
+              </RequireScope>
+            )}
+            {visibleProjects.map((project) => (
+              <Link
+                key={project.id}
+                to={`/${orgSlug}/projects/${project.slug}`}
+                className="hover:no-underline"
+              >
+                <DotCard
+                  icon={
+                    <ProjectAvatar
+                      project={project}
+                      className="h-10 w-10 rounded-md"
+                    />
+                  }
                 >
-                  {project.name}
-                </Type>
-                <Type small muted className="mb-3 truncate">
-                  {project.slug}
-                </Type>
+                  <Type
+                    variant="subheading"
+                    as="div"
+                    className="text-md group-hover:text-primary truncate transition-colors"
+                  >
+                    {project.name}
+                  </Type>
+                  <Type small muted className="mb-3 truncate">
+                    {project.slug}
+                  </Type>
 
-                <div className="mt-auto flex items-center justify-end pt-2">
-                  <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
-                    <span>Open</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
+                  <div className="mt-auto flex items-center justify-end pt-2">
+                    <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
+                      <span>Open</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </div>
                   </div>
-                </div>
-              </DotCard>
-            </Link>
-          ))}
-          <RequireScope scope="org:admin" level="component" className="w-full">
-            <CreateResourceCard
-              onClick={() => setCreateDialogOpen(true)}
-              title="New Project"
-              description="Create a new project for your organization"
-            />
-          </RequireScope>
-        </div>
+                </DotCard>
+              </Link>
+            ))}
+          </div>
+          {hasMore && (
+            <button
+              type="button"
+              onClick={() => setExpanded((prev) => !prev)}
+              className="text-muted-foreground hover:text-foreground mx-auto mt-4 flex items-center gap-1.5 text-sm font-medium transition-colors"
+            >
+              {expanded ? (
+                <>
+                  Show less
+                  <ChevronUp className="h-4 w-4" />
+                </>
+              ) : (
+                <>
+                  Show all {projects.length} projects
+                  <ChevronDown className="h-4 w-4" />
+                </>
+              )}
+            </button>
+          )}
+        </>
       )}
+
+      {isRbacEnabled && <RecentChallenges />}
+
       {createDialogOpen && (
         <InputDialog
           open={createDialogOpen}
@@ -163,5 +217,46 @@ export function OrgHomeInner() {
         />
       )}
     </>
+  );
+}
+
+function RecentChallenges() {
+  const orgRoutes = useOrgRoutes();
+  const { hasScope } = useRBAC();
+  const canAdmin = hasScope("org:admin");
+  const { actionsColumn, grantFlowPortals } = useGrantFlow();
+  const { data, isLoading } = useChallengeBuckets({
+    outcome: Outcome.Deny,
+    resolved: false,
+    limit: 5,
+  });
+
+  const buckets = data?.buckets ?? [];
+
+  const challengeRowColumns = useChallengeRowColumns();
+
+  const columns = useMemo(
+    () =>
+      canAdmin ? [...challengeRowColumns, actionsColumn] : challengeRowColumns,
+    [canAdmin, challengeRowColumns, actionsColumn],
+  );
+
+  if (isLoading) return null;
+
+  return (
+    <div className="mt-12">
+      <div className="mb-3 flex items-center justify-between">
+        <Heading variant="h4">Recent Challenges</Heading>
+        <orgRoutes.access.challenges.Link className="text-primary cursor-pointer text-sm font-medium hover:underline">
+          Show more
+        </orgRoutes.access.challenges.Link>
+      </div>
+      {buckets.length === 0 ? (
+        <ChallengesEmptyState outcomeFilter="deny" />
+      ) : (
+        <Table columns={columns} data={buckets} rowKey={(row) => row.id} />
+      )}
+      {grantFlowPortals}
+    </div>
   );
 }

@@ -35,9 +35,10 @@ type Toolsets struct {
 	projects        *projectsRepo.Queries
 	externalmcpRepo *externalmcpRepo.Queries
 	deploymentsRepo *deploymentsRepo.Queries
+	platformExtras  []platformtools.ExternalTool
 }
 
-func NewToolsets(tx repo.DBTX) *Toolsets {
+func NewToolsets(tx repo.DBTX, platformExtras ...platformtools.ExternalTool) *Toolsets {
 	return &Toolsets{
 		repo:            repo.New(tx),
 		toolsRepo:       toolsRepo.New(tx),
@@ -46,6 +47,7 @@ func NewToolsets(tx repo.DBTX) *Toolsets {
 		projects:        projectsRepo.New(tx),
 		externalmcpRepo: externalmcpRepo.New(tx),
 		deploymentsRepo: deploymentsRepo.New(tx),
+		platformExtras:  platformExtras,
 	}
 }
 
@@ -82,7 +84,7 @@ func (t *Toolsets) GetToolCallPlanByURN(ctx context.Context, toolUrn urn.Tool, p
 		return t.extractPromptToolCallPlan(ctx, tool)
 
 	case urn.ToolKindPlatform:
-		tool, ok := platformtools.FindToolDescriptor(toolUrn)
+		tool, ok := platformtools.FindToolDescriptor(toolUrn, t.platformExtras...)
 		if !ok {
 			return nil, fmt.Errorf("get platform tool definition by urn: not found")
 		}

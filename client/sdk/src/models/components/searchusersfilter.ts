@@ -14,20 +14,35 @@ export type SearchUsersFilter = {
    */
   deploymentId?: string | undefined;
   /**
+   * Optional event source filter (e.g. 'hook'). When set, only rows with a matching event_source are included.
+   */
+  eventSource?: string | undefined;
+  /**
    * Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
    */
   from: Date;
   /**
+   * Optional hook source filter (e.g. 'cursor', 'claude-code').
+   */
+  hookSource?: string | undefined;
+  /**
    * End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
    */
   to: Date;
+  /**
+   * Optional list of user identifiers to include. Matches user_id for internal searches and external_user_id for external searches.
+   */
+  userIds?: Array<string> | undefined;
 };
 
 /** @internal */
 export type SearchUsersFilter$Outbound = {
   deployment_id?: string | undefined;
+  event_source?: string | undefined;
   from: string;
+  hook_source?: string | undefined;
   to: string;
+  user_ids?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -37,12 +52,18 @@ export const SearchUsersFilter$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     deploymentId: z.optional(z.string()),
+    eventSource: z.optional(z.string()),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    hookSource: z.optional(z.string()),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    userIds: z.optional(z.array(z.string())),
   }),
   z.transform((v) => {
     return remap$(v, {
       deploymentId: "deployment_id",
+      eventSource: "event_source",
+      hookSource: "hook_source",
+      userIds: "user_ids",
     });
   }),
 );

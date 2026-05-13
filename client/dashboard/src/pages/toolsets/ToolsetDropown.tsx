@@ -8,7 +8,7 @@ import { useEffect, useMemo } from "react";
 export function ToolsetDropdown({
   selectedToolset,
   setSelectedToolset,
-  placeholder = "Select Toolset",
+  placeholder = "Select MCP Server",
   noLabel = false,
   disabledMessage,
   defaultSelection = "most-recent",

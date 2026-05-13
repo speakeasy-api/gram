@@ -160,6 +160,36 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 		}
 	}
 
+	// Strategy 4: Some AS servers (e.g. Atlassian) host metadata at the origin
+	// root regardless of the MCP endpoint path. When the remote URL has a path
+	// and prior strategies found nothing, retry both probes with path stripped.
+	if authServerMeta == nil {
+		if u, err := url.Parse(remoteURL); err == nil && u.Path != "" && u.Path != "/" {
+			rootURL := u.Scheme + "://" + u.Host
+
+			prURL := buildWellKnownResourceURL(rootURL)
+			meta, err := fetchJSON[protectedResourceMetadata](ctx, logger, guardianPolicy, prURL)
+			if err == nil && meta != nil {
+				resourceMeta = meta
+				if len(meta.AuthorizationServers) > 0 {
+					asURL := buildWellKnownURL(meta.AuthorizationServers[0])
+					asMeta, _ := fetchJSON[authServerMetadata](ctx, logger, guardianPolicy, asURL)
+					if asMeta != nil {
+						authServerMeta = asMeta
+					}
+				}
+			}
+
+			if authServerMeta == nil {
+				asURL := buildWellKnownURL(rootURL)
+				asMeta, _ := fetchJSON[authServerMetadata](ctx, logger, guardianPolicy, asURL)
+				if asMeta != nil {
+					authServerMeta = asMeta
+				}
+			}
+		}
+	}
+
 	// Determine the OAuth version based on what we found
 	result := &OAuthDiscoveryResult{
 		Version:               OAuthVersionNone,

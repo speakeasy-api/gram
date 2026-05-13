@@ -29,7 +29,7 @@ type LogMcpServerCreateEvent struct {
 	McpServerURN urn.McpServer
 }
 
-func LogMcpServerCreate(ctx context.Context, dbtx repo.DBTX, event LogMcpServerCreateEvent) error {
+func (l *Logger) LogMcpServerCreate(ctx context.Context, dbtx repo.DBTX, event LogMcpServerCreateEvent) error {
 	action := ActionMcpServerCreate
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -52,11 +52,7 @@ func LogMcpServerCreate(ctx context.Context, dbtx repo.DBTX, event LogMcpServerC
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogMcpServerUpdateEvent struct {
@@ -72,7 +68,7 @@ type LogMcpServerUpdateEvent struct {
 	McpServerSnapshotAfter  *types.McpServer
 }
 
-func LogMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, event LogMcpServerUpdateEvent) error {
+func (l *Logger) LogMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, event LogMcpServerUpdateEvent) error {
 	action := ActionMcpServerUpdate
 
 	beforeSnapshot, err := marshalAuditPayload(event.McpServerSnapshotBefore)
@@ -106,11 +102,7 @@ func LogMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, event LogMcpServerU
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogMcpServerDeleteEvent struct {
@@ -124,7 +116,7 @@ type LogMcpServerDeleteEvent struct {
 	McpServerURN urn.McpServer
 }
 
-func LogMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event LogMcpServerDeleteEvent) error {
+func (l *Logger) LogMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event LogMcpServerDeleteEvent) error {
 	action := ActionMcpServerDelete
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -147,9 +139,5 @@ func LogMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event LogMcpServerD
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

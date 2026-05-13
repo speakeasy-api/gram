@@ -79,11 +79,16 @@ type ListServersParams struct {
 	Cursor *string
 }
 
+// ListServersResult is the result of a ListServers call.
+type ListServersResult struct {
+	Servers    []*types.ExternalMCPServer
+	NextCursor *string
+}
+
 // listResponse represents the response from the MCP registry API.
 type listResponse struct {
 	Servers  []serverEntry `json:"servers"`
 	Metadata struct {
-		Count      int     `json:"count"`
 		NextCursor *string `json:"nextCursor"`
 	} `json:"metadata"`
 }
@@ -204,7 +209,7 @@ func toCacheSafeAny(v any) (any, error) {
 }
 
 // ListServers fetches servers from the given registry.
-func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, params ListServersParams) ([]*types.ExternalMCPServer, error) {
+func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, params ListServersParams) (ListServersResult, error) {
 	reqURL := fmt.Sprintf("%s/v0.1/servers?version=latest&limit=50", registry.URL)
 	if params.Search != nil && *params.Search != "" {
 		reqURL += fmt.Sprintf("&search=%s", *params.Search)
@@ -217,12 +222,12 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create list servers request: %w", err)
+		return ListServersResult{}, fmt.Errorf("create list servers request: %w", err)
 	}
 
 	if c.backend.Match(req) {
 		if err := c.backend.Authorize(req); err != nil {
-			return nil, fmt.Errorf("authorize list servers request: %w", err)
+			return ListServersResult{}, fmt.Errorf("authorize list servers request: %w", err)
 		}
 	}
 
@@ -232,30 +237,33 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 		cached, err := c.listCache.Get(ctx, cacheKey)
 		if err == nil {
 			c.logger.DebugContext(ctx, "registry list cache hit", attr.SlogCacheKey(cacheKey))
-			return cached.Servers, nil
+			return ListServersResult{
+				Servers:    cached.Servers,
+				NextCursor: cached.NextCursor,
+			}, nil
 		}
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch from registry: %w", err)
+		return ListServersResult{}, fmt.Errorf("failed to fetch from registry: %w", err)
 	}
 	defer o11y.LogDefer(ctx, c.logger, func() error {
 		return resp.Body.Close()
 	})
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("registry returned status %d", resp.StatusCode)
+		return ListServersResult{}, fmt.Errorf("registry returned status %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return ListServersResult{}, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	var listResp listResponse
 	if err := json.Unmarshal(body, &listResp); err != nil {
-		return nil, fmt.Errorf("failed to decode registry response: %w", err)
+		return ListServersResult{}, fmt.Errorf("failed to decode registry response: %w", err)
 	}
 
 	registryID := registry.ID.String()
@@ -293,7 +301,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 
 		meta, err := toCacheSafeAny(&s.Meta)
 		if err != nil {
-			return nil, fmt.Errorf("convert meta: %w", err)
+			return ListServersResult{}, fmt.Errorf("convert meta: %w", err)
 		}
 
 		server := &types.ExternalMCPServer{
@@ -313,18 +321,24 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 		servers = append(servers, server)
 	}
 
+	nextCursor := listResp.Metadata.NextCursor
+
 	// Store in cache on success.
 	if c.listCache != nil {
 		cacheKey := registryCacheKey("list", req)
 		if storeErr := c.listCache.Store(ctx, CachedListServersResponse{
-			Key:     cacheKey,
-			Servers: servers,
+			Key:        cacheKey,
+			Servers:    servers,
+			NextCursor: nextCursor,
 		}); storeErr != nil {
 			c.logger.WarnContext(ctx, "failed to store registry list in cache", attr.SlogError(storeErr))
 		}
 	}
 
-	return servers, nil
+	return ListServersResult{
+		Servers:    servers,
+		NextCursor: nextCursor,
+	}, nil
 }
 
 func toExternalMCPRemoteHeaders(headers []RemoteHeader) []*types.ExternalMCPRemoteHeader {

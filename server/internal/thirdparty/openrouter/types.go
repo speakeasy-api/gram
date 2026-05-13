@@ -229,6 +229,12 @@ type Usage struct {
 	TotalTokens      int `json:"total_tokens"`
 }
 
+// GramMetadata is a Gram-specific extension attached to chat completion
+// responses to surface upstream model attributes resolved by the proxy.
+type GramMetadata struct {
+	ContextWindow int `json:"context_window"`
+}
+
 // OpenAIChatResponse represents the response structure from OpenAI for non-streaming responses
 type OpenAIChatResponse struct {
 	ID      string `json:"id"`
@@ -239,5 +245,6 @@ type OpenAIChatResponse struct {
 		Message      or.ChatMessages `json:"message"`
 		FinishReason string          `json:"finish_reason"`
 	} `json:"choices"`
-	Usage *Usage `json:"usage,omitempty"`
+	Usage        *Usage        `json:"usage,omitempty"`
+	GramMetadata *GramMetadata `json:"gram_metadata,omitempty"`
 }

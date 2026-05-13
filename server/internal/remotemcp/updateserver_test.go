@@ -392,3 +392,140 @@ func TestUpdateServer_AllowsPublicIPLiteral(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "http://8.8.8.8", updated.URL)
 }
+
+func TestUpdateServer_NameSet(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		URL:              "https://mcp.example.com",
+		TransportType:    "streamable-http",
+		Headers:          []*gen.HeaderInput{},
+	})
+	require.NoError(t, err)
+
+	updated, err := ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ID:               created.ID,
+		Name:             new("New Name"),
+		Headers:          nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	require.Equal(t, "New Name", *updated.Name)
+}
+
+func TestUpdateServer_NameClearedWithEmptyString(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             new("Initial"),
+		URL:              "https://mcp.example.com",
+		TransportType:    "streamable-http",
+		Headers:          []*gen.HeaderInput{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, created.Name)
+
+	updated, err := ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ID:               created.ID,
+		Name:             new(""),
+		Headers:          nil,
+	})
+	require.NoError(t, err)
+	require.Nil(t, updated.Name)
+}
+
+func TestUpdateServer_NameNilLeavesUnchanged(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             new("Keep Me"),
+		URL:              "https://mcp.example.com",
+		TransportType:    "streamable-http",
+		Headers:          []*gen.HeaderInput{},
+	})
+	require.NoError(t, err)
+
+	updated, err := ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ID:               created.ID,
+		URL:              new("https://other.example.com"),
+		Headers:          nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	require.Equal(t, "Keep Me", *updated.Name)
+}
+
+func TestUpdateServer_SlugRecomputedOnURLChange(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		URL:              "https://api.example.com/mcp",
+		TransportType:    "streamable-http",
+		Headers:          []*gen.HeaderInput{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, created.Slug)
+	require.Contains(t, *created.Slug, "api-example-com-mcp-")
+
+	updated, err := ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ID:               created.ID,
+		URL:              new("https://other.test.com/v2"),
+		Headers:          nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Slug)
+	require.Contains(t, *updated.Slug, "other-test-com-v2-")
+	// Suffix (last 4 chars of ID) is stable across the URL change.
+	require.Equal(t, (*created.Slug)[len(*created.Slug)-4:], (*updated.Slug)[len(*updated.Slug)-4:])
+}
+
+func TestUpdateServer_SlugStableOnUnchangedURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		URL:              "https://mcp.example.com",
+		TransportType:    "streamable-http",
+		Headers:          []*gen.HeaderInput{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, created.Slug)
+
+	updated, err := ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ID:               created.ID,
+		Name:             new("Renamed"),
+		Headers:          nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Slug)
+	require.Equal(t, *created.Slug, *updated.Slug)
+}

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +15,7 @@ import {
   useClearCurrentUser,
   useCurrentUser,
   useSetCurrentUser,
+  useUpdateUser,
 } from "@/hooks/use-devidp";
 
 const WORKOS_USERS_DASHBOARD_URL =
@@ -28,6 +29,12 @@ interface WorkosUser {
   profile_picture_url?: string;
 }
 
+interface WorkosCurrentUser extends WorkosUser {
+  workos_sub: string;
+  shadow_id?: string;
+  shadow_admin: boolean;
+}
+
 async function fetchWorkos(suffix: string): Promise<unknown> {
   const res = await fetch(`/devidp/workos/${suffix}`);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -38,6 +45,8 @@ export function WorkosModePane() {
   const cur = useCurrentUser("workos");
   const set = useSetCurrentUser();
   const clear = useClearCurrentUser();
+  const updateUser = useUpdateUser();
+  const qc = useQueryClient();
   const [input, setInput] = useState("");
 
   const preview = useQuery({
@@ -60,6 +69,14 @@ export function WorkosModePane() {
     enabled: !!sub,
   });
 
+  // Fetch the workos currentUser from the mode handler — this enriches the
+  // Goa response with shadow_id and shadow_admin so we can toggle admin here.
+  const shadowQ = useQuery<WorkosCurrentUser>({
+    queryKey: ["workos", "shadow", sub],
+    queryFn: () => fetchWorkos("currentUser") as Promise<WorkosCurrentUser>,
+    enabled: !!sub,
+  });
+
   const merged: WorkosUser & { workos_sub?: string } = {
     workos_sub: sub,
     first_name: lookupQ.data?.first_name ?? current?.first_name,
@@ -71,6 +88,9 @@ export function WorkosModePane() {
   const fullName = [merged.first_name, merged.last_name]
     .filter(Boolean)
     .join(" ");
+
+  const shadowId = shadowQ.data?.shadow_id;
+  const isAdmin = shadowQ.data?.shadow_admin ?? false;
 
   return (
     <div className="space-y-6">
@@ -111,6 +131,39 @@ export function WorkosModePane() {
                 <div className="text-xs text-destructive">
                   Couldn't resolve full profile:{" "}
                   {(lookupQ.error as Error).message}
+                </div>
+              )}
+              {shadowId && (
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs text-muted-foreground">Admin:</span>
+                  <span
+                    className={`text-xs font-medium ${isAdmin ? "text-green-600" : "text-muted-foreground"}`}
+                  >
+                    {isAdmin ? "Yes" : "No"}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    disabled={updateUser.isPending}
+                    onClick={() =>
+                      updateUser.mutate(
+                        { id: shadowId, admin: !isAdmin },
+                        {
+                          onSuccess: () =>
+                            qc.invalidateQueries({
+                              queryKey: ["workos", "shadow", sub],
+                            }),
+                        },
+                      )
+                    }
+                  >
+                    {updateUser.isPending
+                      ? "…"
+                      : isAdmin
+                        ? "Revoke admin"
+                        : "Make admin"}
+                  </Button>
                 </div>
               )}
             </div>

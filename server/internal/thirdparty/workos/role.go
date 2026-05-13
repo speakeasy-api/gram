@@ -16,6 +16,7 @@ type Role struct {
 	Name        string `json:"name"`
 	Slug        string `json:"slug"`
 	Description string `json:"description"`
+	Type        string `json:"type"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
 }
@@ -41,9 +42,21 @@ func (wc *Client) ListRoles(ctx context.Context, orgID string) ([]Role, error) {
 
 	out := make([]Role, len(resp.Data))
 	for i, r := range resp.Data {
-		out[i] = Role{ID: r.ID, Name: r.Name, Slug: r.Slug, Description: r.Description, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
+		out[i] = Role{ID: r.ID, Name: r.Name, Slug: r.Slug, Description: r.Description, Type: string(r.Type), CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
 	}
 	return out, nil
+}
+
+// ListGlobalRoles lists environment-level WorkOS roles.
+func (wc *Client) ListGlobalRoles(ctx context.Context) ([]Role, error) {
+	var resp struct {
+		Data []Role `json:"data"`
+	}
+	if err := wc.do(ctx, http.MethodGet, "/authorization/roles", nil, &resp); err != nil {
+		return nil, fmt.Errorf("list global roles: %w", err)
+	}
+
+	return resp.Data, nil
 }
 
 // CreateRole creates a custom role for an organization via the WorkOS REST API.

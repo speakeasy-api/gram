@@ -5,6 +5,7 @@
 package repo
 
 import (
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -15,6 +16,10 @@ type OrganizationMetadatum struct {
 	GramAccountType    string
 	SsoConnectionID    pgtype.Text
 	WorkosID           pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+	SvixAppID          pgtype.Text
+	WebhooksEnabled    pgtype.Bool
 	Whitelisted        bool
 	FreeTrialStartedAt pgtype.Timestamptz
 	FreeTrialEndsAt    pgtype.Timestamptz
@@ -23,11 +28,27 @@ type OrganizationMetadatum struct {
 	DisabledAt         pgtype.Timestamptz
 }
 
+type OrganizationRoleAssignment struct {
+	ID                 uuid.UUID
+	OrganizationID     string
+	WorkosUserID       string
+	UserID             pgtype.Text
+	RoleUrn            string
+	WorkosMembershipID pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+}
+
 type OrganizationUserRelationship struct {
 	ID                 int64
 	OrganizationID     string
 	UserID             string
+	WorkosUserID       pgtype.Text
 	WorkosMembershipID pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz

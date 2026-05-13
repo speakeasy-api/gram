@@ -140,6 +140,17 @@ func (t *telemetryRuntimeBackend) ServerURL(ctx context.Context, runtime assista
 	return u, nil
 }
 
+func (t *telemetryRuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {
+	status, err := t.inner.Status(ctx, runtime)
+	if err != nil {
+		// Status is a probe; failures during expire are an expected race
+		// (runner already gone), not a fatal — keep the signal but at WARN.
+		t.emit(ctx, runtime, "runtime_status", "runtime status failed", "WARN", err)
+		return status, fmt.Errorf("runtime status: %w", err)
+	}
+	return status, nil
+}
+
 func (t *telemetryRuntimeBackend) Stop(ctx context.Context, runtime assistantRuntimeRecord) error {
 	err := t.inner.Stop(ctx, runtime)
 	if err != nil {
@@ -147,6 +158,16 @@ func (t *telemetryRuntimeBackend) Stop(ctx context.Context, runtime assistantRun
 		return fmt.Errorf("runtime stop: %w", err)
 	}
 	t.emit(ctx, runtime, "runtime_stop", "runtime stopped", "INFO", nil)
+	return nil
+}
+
+func (t *telemetryRuntimeBackend) Reap(ctx context.Context, runtime assistantRuntimeRecord) error {
+	err := t.inner.Reap(ctx, runtime)
+	if err != nil {
+		t.emit(ctx, runtime, "runtime_reap", "runtime reap failed", "ERROR", err)
+		return fmt.Errorf("runtime reap: %w", err)
+	}
+	t.emit(ctx, runtime, "runtime_reap", "runtime reaped", "INFO", nil)
 	return nil
 }
 

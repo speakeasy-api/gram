@@ -2,7 +2,6 @@ package audit
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
 
@@ -27,7 +26,7 @@ type LogCustomDomainCreateEvent struct {
 	DomainName      string
 }
 
-func LogCustomDomainCreate(ctx context.Context, dbtx repo.DBTX, event LogCustomDomainCreateEvent) error {
+func (l *Logger) LogCustomDomainCreate(ctx context.Context, dbtx repo.DBTX, event LogCustomDomainCreateEvent) error {
 	action := ActionCustomDomainsCreate
 
 	entry := repo.InsertAuditLogParams{
@@ -51,11 +50,7 @@ func LogCustomDomainCreate(ctx context.Context, dbtx repo.DBTX, event LogCustomD
 		AfterSnapshot:  nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogCustomDomainDeleteEvent struct {
@@ -69,7 +64,7 @@ type LogCustomDomainDeleteEvent struct {
 	DomainName      string
 }
 
-func LogCustomDomainDelete(ctx context.Context, dbtx repo.DBTX, event LogCustomDomainDeleteEvent) error {
+func (l *Logger) LogCustomDomainDelete(ctx context.Context, dbtx repo.DBTX, event LogCustomDomainDeleteEvent) error {
 	action := ActionCustomDomainsDelete
 
 	entry := repo.InsertAuditLogParams{
@@ -93,9 +88,5 @@ func LogCustomDomainDelete(ctx context.Context, dbtx repo.DBTX, event LogCustomD
 		AfterSnapshot:  nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

@@ -25,6 +25,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -39,10 +40,13 @@ const (
 
 	sourceKindSlack      = "slack"
 	sourceKindCron       = "cron"
+	sourceKindWake       = "wake"
 	runtimeStateStarting = "starting"
 	runtimeStateActive   = "active"
+	runtimeStateExpiring = "expiring"
 	runtimeStateStopped  = "stopped"
 	runtimeStateFailed   = "failed"
+	runtimeStateReaped   = "reaped"
 
 	eventStatusPending    = "pending"
 	eventStatusProcessing = "processing"
@@ -55,9 +59,16 @@ const (
 	// loop forever.
 	maxEventAttempts = 5
 
-	runtimeStartupReapGrace      = 2 * time.Minute
-	runtimeWarmExpiryReapGrace   = 1 * time.Minute
-	runtimeProcessingLeaseGrace  = 2 * time.Minute
+	runtimeStartupReapGrace     = 2 * time.Minute
+	runtimeWarmExpiryReapGrace  = 1 * time.Minute
+	runtimeProcessingLeaseGrace = 2 * time.Minute
+	// runtimeExpiringReapGrace is the cushion the reaper waits before
+	// reclaiming a row stuck in `expiring`. It must exceed the worst-case
+	// total budget of the ExpireThreadRuntime activity (Temporal
+	// ScheduleToCloseTimeout = 25m) so a still-retrying activity isn't
+	// stomped mid-flight; the row only becomes reapable after Temporal
+	// gives up.
+	runtimeExpiringReapGrace     = 30 * time.Minute
 	eventProcessingRequeueGrace  = 3 * time.Minute
 	processingLeaseHeartbeatTick = 30 * time.Second
 	admitFailureBackoff          = 30 * time.Second
@@ -240,9 +251,25 @@ type EnqueueResult struct {
 type ProcessThreadEventsResult struct {
 	AssistantID       uuid.UUID
 	WarmUntil         time.Time
+	WarmTTLSeconds    int
 	RuntimeActive     bool
 	RetryAdmission    bool
 	ProcessedAnyEvent bool
+}
+
+// ExpireThreadRuntimeResult reports the outcome of an expire attempt.
+// Stopped=false + RemainingSeconds means a turn slipped in past the warm
+// timer; the workflow should re-arm with that window and try again.
+type ExpireThreadRuntimeResult struct {
+	Stopped          bool
+	RemainingSeconds int
+}
+
+// WakeCanceller cancels every pending wake trigger owned by an assistant on
+// deletion. The trigger app implements this; assistants owns the interface to
+// avoid a dependency back into the triggers package.
+type WakeCanceller interface {
+	CancelAssistantWakes(ctx context.Context, projectID, assistantID uuid.UUID) error
 }
 
 type ServiceCore struct {
@@ -254,6 +281,8 @@ type ServiceCore struct {
 	assistantTokens *assistanttokens.Manager
 	serverURL       *url.URL
 	telemetryLogger *telemetry.Logger
+	contextWindow   *openrouter.ContextWindowResolver
+	wakeCanceller   WakeCanceller
 }
 
 func NewServiceCore(
@@ -265,6 +294,7 @@ func NewServiceCore(
 	assistantTokens *assistanttokens.Manager,
 	serverURL *url.URL,
 	telemetryLogger *telemetry.Logger,
+	contextWindow *openrouter.ContextWindowResolver,
 ) *ServiceCore {
 	return &ServiceCore{
 		logger:          logger,
@@ -275,7 +305,38 @@ func NewServiceCore(
 		assistantTokens: assistantTokens,
 		serverURL:       serverURL,
 		telemetryLogger: telemetryLogger,
+		contextWindow:   contextWindow,
+		wakeCanceller:   nil,
 	}
+}
+
+// SetWakeCanceller is set after construction to break an import cycle:
+// assistants must not import triggers.
+func (s *ServiceCore) SetWakeCanceller(c WakeCanceller) {
+	s.wakeCanceller = c
+}
+
+// resolveAssistantContextWindow returns the smallest context_length the gram
+// backend has cached for the assistant's model, or 0 on lookup failure. The
+// runner reads this from `runtimeStartupConfig` and uses it to threshold
+// input-token-aware compaction.
+func (s *ServiceCore) resolveAssistantContextWindow(ctx context.Context, model string) uint64 {
+	if s.contextWindow == nil || model == "" {
+		return 0
+	}
+	resolved := model
+	if alias := openrouter.ResolveModel(model); alias != "" {
+		resolved = alias
+	}
+	tokens, err := s.contextWindow.Resolve(ctx, resolved)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve assistant model context window", attr.SlogError(err), attr.SlogGenAIRequestModel(resolved))
+		return 0
+	}
+	if tokens <= 0 {
+		return 0
+	}
+	return uint64(tokens)
 }
 
 // emitAssistantTelemetry writes a single assistant-pipeline log event to the
@@ -364,12 +425,17 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	affected := map[uuid.UUID]struct{}{}
 
 	// 1. Retire runtime rows whose liveness markers indicate the owning
-	// process is gone:
+	// process is gone or its driving workflow has given up:
 	//   - 'starting' rows that never transitioned to active within the
 	//     startup grace window (usually server crashed mid-boot).
 	//   - 'active' rows whose warm_until passed a grace window ago (usually
 	//     server crashed after a turn; unexpected-exit callback didn't fire
 	//     because the whole process died).
+	//   - 'expiring' rows whose updated_at is older than the activity's full
+	//     retry budget — the ExpireThreadRuntime activity exhausted Temporal
+	//     attempts after CAS active->expiring without reaching Stop or
+	//     Revert. Without this the row blocks the partial unique index
+	//     ReserveAssistantRuntime depends on.
 	queries := assistantrepo.New(s.db)
 	runtimeAssistantIDs, err := queries.ReapStuckAssistantRuntimes(ctx, assistantrepo.ReapStuckAssistantRuntimesParams{
 		StoppedState:    runtimeStateStopped,
@@ -378,6 +444,8 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 		ActiveState:     runtimeStateActive,
 		WarmCutoff:      conv.ToPGTimestamptz(now.Add(-runtimeWarmExpiryReapGrace)),
 		HeartbeatCutoff: conv.ToPGTimestamptz(now.Add(-runtimeProcessingLeaseGrace)),
+		ExpiringState:   runtimeStateExpiring,
+		ExpiringCutoff:  conv.ToPGTimestamptz(now.Add(-runtimeExpiringReapGrace)),
 	})
 	if err != nil {
 		return out, fmt.Errorf("reap stuck assistant runtimes: %w", err)
@@ -414,18 +482,11 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	return out, nil
 }
 
-// HandleUnexpectedRuntimeExit is invoked by the runtime backend when a VM
-// terminates without a Stop() call. Marks the DB runtime row stopped and
-// soft-deletes it so admit can re-provision a fresh row on the next event;
-// without this the partial unique index on (assistant_thread_id) WHERE
-// deleted IS FALSE AND ended IS FALSE silently blocks admit's ON CONFLICT
-// DO NOTHING insert and the thread wedges.
-// NewUnexpectedRuntimeExitHandler returns a callback suitable for
-// RuntimeManagerConfig.OnUnexpectedExit. It only needs the db pool and a
-// logger, so it can be wired at deps.go time without creating an artificial
-// dep on ServiceCore. The handler reconciles the DB runtime row when a VM
-// dies without a Stop() call so admit can re-provision the thread on its
-// next event.
+// NewUnexpectedRuntimeExitHandler returns an OnUnexpectedExit callback that
+// reconciles the DB runtime row when a VM dies without a Stop() call. Without
+// this the partial unique index on (assistant_thread_id) WHERE deleted IS
+// FALSE AND ended IS FALSE blocks admit's ON CONFLICT DO NOTHING insert and
+// the thread wedges.
 func NewUnexpectedRuntimeExitHandler(logger *slog.Logger, db *pgxpool.Pool) func(threadID uuid.UUID) {
 	return func(threadID uuid.UUID) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -444,6 +505,7 @@ func NewUnexpectedRuntimeExitHandler(logger *slog.Logger, db *pgxpool.Pool) func
 			ThreadID:      threadID,
 			StartingState: runtimeStateStarting,
 			ActiveState:   runtimeStateActive,
+			ExpiringState: runtimeStateExpiring,
 		})
 		if err != nil {
 			logger.ErrorContext(ctx, "reconcile assistant runtime after unexpected exit failed",
@@ -452,6 +514,19 @@ func NewUnexpectedRuntimeExitHandler(logger *slog.Logger, db *pgxpool.Pool) func
 			)
 		}
 	}
+}
+
+func warmRemainingSeconds(idleSeconds *uint64, ttlSeconds int) int {
+	if ttlSeconds <= 0 {
+		return 0
+	}
+	if idleSeconds == nil {
+		return ttlSeconds
+	}
+	if *idleSeconds >= uint64(ttlSeconds) {
+		return 0
+	}
+	return ttlSeconds - int(*idleSeconds) //nolint:gosec // bounded above by ttlSeconds (int)
 }
 
 func normalizeWarmTTLSeconds(v *int) int {
@@ -614,6 +689,7 @@ func writeAssistantToolsets(
 		return nil
 	}
 	rows := make([]assistantrepo.AddAssistantToolsetsParams, 0, len(resolved))
+	toolsetIDs := make([]uuid.UUID, 0, len(resolved))
 	for _, r := range resolved {
 		rows = append(rows, assistantrepo.AddAssistantToolsetsParams{
 			AssistantID:   assistantID,
@@ -621,9 +697,20 @@ func writeAssistantToolsets(
 			EnvironmentID: r.EnvironmentID,
 			ProjectID:     projectID,
 		})
+		toolsetIDs = append(toolsetIDs, r.ToolsetID)
 	}
 	if _, err := queries.AddAssistantToolsets(ctx, rows); err != nil {
 		return fmt.Errorf("insert assistant toolsets: %w", err)
+	}
+	// The runtime startup config requires every assistant-attached toolset
+	// to be MCP-reachable; assistants address tools via the MCP server.
+	// Auto-enable on attach so the user doesn't have to toggle it
+	// separately on each toolset.
+	if err := queries.EnableMCPForToolsets(ctx, assistantrepo.EnableMCPForToolsetsParams{
+		ToolsetIds: toolsetIDs,
+		ProjectID:  projectID,
+	}); err != nil {
+		return fmt.Errorf("enable mcp for assistant toolsets: %w", err)
 	}
 	return nil
 }
@@ -845,7 +932,164 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 	if err != nil {
 		return fmt.Errorf("delete assistant: %w", err)
 	}
+
+	// Best-effort: tear down per-assistant backend resources (e.g. Fly app)
+	// inline so the common case does not wait for the janitor. Failures here
+	// must not roll back the soft-delete; the long-inactivity janitor is the
+	// safety net.
+	if reapResult, reapErr := s.ReapAssistantRuntimes(ctx, projectID, assistantID); reapErr != nil {
+		s.logger.WarnContext(ctx, "reap assistant runtimes on delete failed",
+			attr.SlogAssistantID(assistantID.String()),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogError(reapErr),
+		)
+	} else if reapResult.Reaped > 0 || reapResult.Errors > 0 {
+		s.logger.InfoContext(ctx, "reaped assistant runtimes on delete",
+			attr.SlogAssistantID(assistantID.String()),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogVisibilityInternal(),
+		)
+	}
+
+	if s.wakeCanceller != nil {
+		if cancelErr := s.wakeCanceller.CancelAssistantWakes(ctx, projectID, assistantID); cancelErr != nil {
+			s.logger.WarnContext(ctx, "cancel pending wakes on assistant delete failed",
+				attr.SlogAssistantID(assistantID.String()),
+				attr.SlogProjectID(projectID.String()),
+				attr.SlogError(cancelErr),
+			)
+		}
+	}
+
 	return nil
+}
+
+// ReapAssistantRuntimesResult summarises the outcome of one reap pass —
+// counted at the runtime-row level, not the backend-app level. A row whose
+// backend resource was already gone (404 from the Fly API, no in-memory
+// state for local) still counts as Reaped.
+type ReapAssistantRuntimesResult struct {
+	Reaped int
+	Errors int
+}
+
+// ReapAssistantRuntimes tears down backend resources for every runtime row
+// belonging to the given assistant that still carries metadata. Used by the
+// assistant-delete handler so a deletion cleans up the corresponding Fly app
+// without waiting for the janitor.
+func (s *ServiceCore) ReapAssistantRuntimes(ctx context.Context, projectID, assistantID uuid.UUID) (ReapAssistantRuntimesResult, error) {
+	rows, err := assistantrepo.New(s.db).ListAssistantRuntimesForReap(ctx, assistantrepo.ListAssistantRuntimesForReapParams{
+		AssistantID: assistantID,
+		ProjectID:   projectID,
+	})
+	if err != nil {
+		return ReapAssistantRuntimesResult{}, fmt.Errorf("list assistant runtimes for reap: %w", err)
+	}
+
+	result := ReapAssistantRuntimesResult{Reaped: 0, Errors: 0}
+	for _, row := range rows {
+		if s.reapRuntimeRow(ctx, assistantRuntimeRecord{
+			ID:                  row.ID,
+			AssistantThreadID:   row.AssistantThreadID,
+			AssistantID:         row.AssistantID,
+			ProjectID:           row.ProjectID,
+			Backend:             row.Backend,
+			BackendMetadataJSON: row.BackendMetadataJson,
+			State:               row.State,
+			WarmUntil:           row.WarmUntil,
+		}) {
+			result.Reaped++
+		} else {
+			result.Errors++
+		}
+	}
+	return result, nil
+}
+
+// ReapInactiveAssistantRuntimesParams configures one janitor sweep.
+type ReapInactiveAssistantRuntimesParams struct {
+	// InactivityThreshold is the minimum quiet period before an assistant's
+	// runtime rows become candidates for collection. The query compares
+	// against r.updated_at across all of an assistant's rows so a normal
+	// cold-warm-cold cycle keeps the assistant out of the candidate set.
+	InactivityThreshold time.Duration
+	// BatchSize caps how many runtime rows one sweep will reap. Keeps the
+	// activity duration bounded under Temporal's StartToCloseTimeout.
+	BatchSize int32
+}
+
+// ReapInactiveAssistantRuntimes drives the long-inactivity janitor. It picks
+// runtime rows whose owning assistant has had no recorded activity within
+// InactivityThreshold and tears down the corresponding backend resources.
+// Active and starting rows are filtered out at the SQL layer so an in-flight
+// admit is never collected mid-flight.
+func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params ReapInactiveAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
+	if params.InactivityThreshold <= 0 {
+		return ReapAssistantRuntimesResult{}, fmt.Errorf("inactivity threshold must be positive")
+	}
+	if params.BatchSize <= 0 {
+		return ReapAssistantRuntimesResult{}, fmt.Errorf("batch size must be positive")
+	}
+
+	rows, err := assistantrepo.New(s.db).ListInactiveAssistantRuntimesForReap(ctx, assistantrepo.ListInactiveAssistantRuntimesForReapParams{
+		StartingState:  runtimeStateStarting,
+		ActiveState:    runtimeStateActive,
+		InactiveBefore: conv.ToPGTimestamptz(time.Now().UTC().Add(-params.InactivityThreshold)),
+		LimitCount:     params.BatchSize,
+	})
+	if err != nil {
+		return ReapAssistantRuntimesResult{}, fmt.Errorf("list inactive assistant runtimes for reap: %w", err)
+	}
+
+	result := ReapAssistantRuntimesResult{Reaped: 0, Errors: 0}
+	for _, row := range rows {
+		if s.reapRuntimeRow(ctx, assistantRuntimeRecord{
+			ID:                  row.ID,
+			AssistantThreadID:   row.AssistantThreadID,
+			AssistantID:         row.AssistantID,
+			ProjectID:           row.ProjectID,
+			Backend:             row.Backend,
+			BackendMetadataJSON: row.BackendMetadataJson,
+			State:               row.State,
+			WarmUntil:           row.WarmUntil,
+		}) {
+			result.Reaped++
+		} else {
+			result.Errors++
+		}
+	}
+	return result, nil
+}
+
+// reapRuntimeRow tears down the backend resource for one row and records the
+// outcome in DB. Returns true on success (including idempotent no-op when
+// the resource was already gone). Errors are logged here so callers can
+// keep the loop simple.
+func (s *ServiceCore) reapRuntimeRow(ctx context.Context, record assistantRuntimeRecord) bool {
+	if err := s.runtime.Reap(ctx, record); err != nil {
+		s.logger.WarnContext(ctx, "reap runtime backend failed",
+			attr.SlogAssistantID(record.AssistantID.String()),
+			attr.SlogAssistantThreadID(record.AssistantThreadID.String()),
+			attr.SlogAssistantRuntimeID(record.ID.String()),
+			attr.SlogAssistantRuntimeBackend(record.Backend),
+			attr.SlogError(err),
+		)
+		return false
+	}
+
+	if err := assistantrepo.New(s.db).MarkAssistantRuntimeReaped(ctx, assistantrepo.MarkAssistantRuntimeReapedParams{
+		ReapedState: runtimeStateReaped,
+		RuntimeID:   record.ID,
+		ProjectID:   record.ProjectID,
+	}); err != nil {
+		s.logger.WarnContext(ctx, "mark assistant runtime reaped failed",
+			attr.SlogAssistantID(record.AssistantID.String()),
+			attr.SlogAssistantRuntimeID(record.ID.String()),
+			attr.SlogError(err),
+		)
+		return false
+	}
+	return true
 }
 
 func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Task) (EnqueueResult, error) {
@@ -984,6 +1228,26 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 			}
 		}
 		return sourceKindCron, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
+	case sourceKindWake:
+		var event wakeEventPayload
+		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
+			return "", nil, nil, nil, fmt.Errorf("decode wake trigger event: %w", err)
+		}
+		sourceRefJSON, err := json.Marshal(wakeSourceRef{
+			TriggerInstanceID: event.TriggerInstanceID,
+			ScheduledAt:       event.ScheduledAt,
+		})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal wake source ref: %w", err)
+		}
+		sourcePayloadJSON := task.RawPayload
+		if !json.Valid(sourcePayloadJSON) {
+			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
+			if err != nil {
+				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
+			}
+		}
+		return sourceKindWake, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	default:
 		return "", nil, nil, nil, fmt.Errorf("assistant source %q is not supported", task.DefinitionSlug)
 	}
@@ -1103,6 +1367,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		return ProcessThreadEventsResult{
 			AssistantID:       assistant.ID,
 			WarmUntil:         time.Time{},
+			WarmTTLSeconds:    assistant.WarmTTLSeconds,
 			RuntimeActive:     false,
 			RetryAdmission:    true,
 			ProcessedAnyEvent: false,
@@ -1120,6 +1385,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			return ProcessThreadEventsResult{
 				AssistantID:       assistant.ID,
 				WarmUntil:         time.Time{},
+				WarmTTLSeconds:    assistant.WarmTTLSeconds,
 				RuntimeActive:     false,
 				RetryAdmission:    true,
 				ProcessedAnyEvent: false,
@@ -1131,6 +1397,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			return ProcessThreadEventsResult{
 				AssistantID:       assistant.ID,
 				WarmUntil:         time.Time{},
+				WarmTTLSeconds:    assistant.WarmTTLSeconds,
 				RuntimeActive:     false,
 				RetryAdmission:    true,
 				ProcessedAnyEvent: false,
@@ -1181,6 +1448,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				return ProcessThreadEventsResult{
 					AssistantID:       assistant.ID,
 					WarmUntil:         time.Time{},
+					WarmTTLSeconds:    assistant.WarmTTLSeconds,
 					RuntimeActive:     false,
 					RetryAdmission:    true,
 					ProcessedAnyEvent: processedAny,
@@ -1204,6 +1472,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				return ProcessThreadEventsResult{
 					AssistantID:       assistant.ID,
 					WarmUntil:         warmUntil,
+					WarmTTLSeconds:    assistant.WarmTTLSeconds,
 					RuntimeActive:     true,
 					RetryAdmission:    false,
 					ProcessedAnyEvent: processedAny,
@@ -1224,6 +1493,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				return ProcessThreadEventsResult{
 					AssistantID:       assistant.ID,
 					WarmUntil:         warmUntil,
+					WarmTTLSeconds:    assistant.WarmTTLSeconds,
 					RuntimeActive:     true,
 					RetryAdmission:    false,
 					ProcessedAnyEvent: processedAny,
@@ -1243,6 +1513,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			return ProcessThreadEventsResult{
 				AssistantID:       assistant.ID,
 				WarmUntil:         warmUntil,
+				WarmTTLSeconds:    assistant.WarmTTLSeconds,
 				RuntimeActive:     true,
 				RetryAdmission:    true,
 				ProcessedAnyEvent: processedAny,
@@ -1263,6 +1534,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 	return ProcessThreadEventsResult{
 		AssistantID:       assistant.ID,
 		WarmUntil:         warmUntil,
+		WarmTTLSeconds:    assistant.WarmTTLSeconds,
 		RuntimeActive:     true,
 		RetryAdmission:    false,
 		ProcessedAnyEvent: processedAny,
@@ -1425,6 +1697,9 @@ func (s *ServiceCore) buildRuntimeStartupConfig(
 	completionsQuery.Set("unstable_normalizeOutboundMessages", "1")
 	completionsEndpoint.RawQuery = completionsQuery.Encode()
 	completionsURL := completionsEndpoint.String()
+
+	contextWindow := s.resolveAssistantContextWindow(ctx, assistant.Model)
+
 	return runtimeStartupConfig{
 		Model:          assistant.Model,
 		Instructions:   conv.PtrEmpty(instructions),
@@ -1433,7 +1708,7 @@ func (s *ServiceCore) buildRuntimeStartupConfig(
 		ChatID:         thread.ChatID.String(),
 		MCPServers:     mcpServers,
 		History:        history,
-		WarmTTLSeconds: assistant.WarmTTLSeconds,
+		ContextWindow:  contextWindow,
 	}, nil
 }
 
@@ -1489,7 +1764,8 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 }
 
 func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetRow) ([]runtimeMCPServer, error) {
-	servers := make([]runtimeMCPServer, 0, len(toolsets))
+	platformToolsets := []string{platformtools.AssistantsPlatformToolsetSlug}
+	servers := make([]runtimeMCPServer, 0, len(toolsets)+len(platformToolsets))
 	for _, t := range toolsets {
 		if !t.McpEnabled {
 			return nil, fmt.Errorf("toolset %q does not have MCP enabled", t.ToolsetSlug)
@@ -1516,6 +1792,19 @@ func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetR
 		})
 	}
 
+	// Implicit platform toolsets granted to every assistant runtime; not
+	// surfaced as user-managed toolsets and not persisted in
+	// assistant_toolsets so users can't detach them. The "_platform-" ID
+	// prefix can't collide with user toolset slugs because the slug grammar
+	// strips underscores.
+	for _, slug := range platformToolsets {
+		servers = append(servers, runtimeMCPServer{
+			ID:      "_platform-" + slug,
+			URL:     platformtools.PlatformToolsetURL(serverURL, slug),
+			Headers: nil,
+		})
+	}
+
 	return servers, nil
 }
 
@@ -1523,21 +1812,73 @@ func (s *ServiceCore) ProcessThreadEventsByThreadID(ctx context.Context, project
 	return s.ProcessThreadEvents(ctx, projectID, threadID)
 }
 
-func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, threadID uuid.UUID) error {
-	runtimeRecord, err := s.loadActiveRuntimeRecord(ctx, projectID, threadID)
+// ExpireThreadRuntime tears down an idle runtime, guarding the TOCTOU between
+// the workflow's warm timer and a new turn being dispatched. The CAS to
+// `expiring` blocks new dispatches; the post-CAS /state poll catches any turn
+// that slipped in (the runner clears idle_seconds synchronously inside /turn).
+func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, threadID uuid.UUID, warmTTLSeconds int) (ExpireThreadRuntimeResult, error) {
+	q := assistantrepo.New(s.db)
+
+	row, err := q.BeginExpireAssistantRuntime(ctx, assistantrepo.BeginExpireAssistantRuntimeParams{
+		ExpiringState: runtimeStateExpiring,
+		ProjectID:     projectID,
+		ThreadID:      threadID,
+		ActiveState:   runtimeStateActive,
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil
+		// No active row, or another actor (Stop, reaper, manual API) moved it
+		// before us. The runtime is going away regardless — report stopped so
+		// the workflow exits its expiry loop.
+		return ExpireThreadRuntimeResult{Stopped: true, RemainingSeconds: 0}, nil
 	case err != nil:
-		return err
+		return ExpireThreadRuntimeResult{}, fmt.Errorf("begin expire assistant runtime: %w", err)
 	}
+
+	runtimeRecord := assistantRuntimeRecord{
+		ID:                  row.ID,
+		AssistantThreadID:   row.AssistantThreadID,
+		AssistantID:         row.AssistantID,
+		ProjectID:           row.ProjectID,
+		Backend:             row.Backend,
+		BackendMetadataJSON: row.BackendMetadataJson,
+		State:               row.State,
+		WarmUntil:           row.WarmUntil,
+	}
+
+	status, statusErr := s.runtime.Status(ctx, runtimeRecord)
+	if statusErr != nil {
+		// Runtime is already gone or unhealthy — fall through to Stop so the
+		// row + backend resources get cleaned up.
+		s.logger.WarnContext(ctx, "runtime status failed during expire; tearing down",
+			attr.SlogAssistantThreadID(threadID.String()),
+			attr.SlogError(statusErr),
+		)
+	} else if remaining := warmRemainingSeconds(status.IdleSeconds, warmTTLSeconds); remaining > 0 {
+		// A turn slipped in between the workflow's warm timer and our CAS.
+		// Revert to active and let the workflow re-arm with the remaining
+		// window measured against the runner's current idle.
+		warmUntil := time.Now().UTC().Add(time.Duration(remaining) * time.Second)
+		revertErr := q.RevertExpireAssistantRuntimeToActive(ctx, assistantrepo.RevertExpireAssistantRuntimeToActiveParams{
+			ActiveState:   runtimeStateActive,
+			WarmUntil:     conv.ToPGTimestamptz(warmUntil),
+			RuntimeID:     runtimeRecord.ID,
+			ProjectID:     projectID,
+			ExpiringState: runtimeStateExpiring,
+		})
+		if revertErr != nil {
+			return ExpireThreadRuntimeResult{}, fmt.Errorf("revert expire assistant runtime: %w", revertErr)
+		}
+		return ExpireThreadRuntimeResult{Stopped: false, RemainingSeconds: remaining}, nil
+	}
+
 	if err := s.runtime.Stop(ctx, runtimeRecord); err != nil {
-		return fmt.Errorf("stop assistant runtime backend: %w", err)
+		return ExpireThreadRuntimeResult{}, fmt.Errorf("stop assistant runtime backend: %w", err)
 	}
 	if err := s.stopRuntimeRecord(ctx, projectID, threadID, runtimeStateStopped); err != nil {
-		return err
+		return ExpireThreadRuntimeResult{}, err
 	}
-	return nil
+	return ExpireThreadRuntimeResult{Stopped: true, RemainingSeconds: 0}, nil
 }
 
 func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID uuid.UUID) (assistantThreadRecord, assistantRecord, assistantRuntimeRecord, error) {
@@ -1592,28 +1933,6 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 	}
 	assistant.Toolsets = refs[assistant.ID]
 	return thread, assistant, runtime, nil
-}
-
-func (s *ServiceCore) loadActiveRuntimeRecord(ctx context.Context, projectID, threadID uuid.UUID) (assistantRuntimeRecord, error) {
-	row, err := assistantrepo.New(s.db).LoadActiveRuntimeRecord(ctx, assistantrepo.LoadActiveRuntimeRecordParams{
-		ProjectID:     projectID,
-		ThreadID:      threadID,
-		StartingState: runtimeStateStarting,
-		ActiveState:   runtimeStateActive,
-	})
-	if err != nil {
-		return assistantRuntimeRecord{}, fmt.Errorf("load active assistant runtime: %w", err)
-	}
-	return assistantRuntimeRecord{
-		ID:                  row.ID,
-		AssistantThreadID:   row.AssistantThreadID,
-		AssistantID:         row.AssistantID,
-		ProjectID:           row.ProjectID,
-		Backend:             row.Backend,
-		BackendMetadataJSON: row.BackendMetadataJson,
-		State:               row.State,
-		WarmUntil:           row.WarmUntil,
-	}, nil
 }
 
 func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID) ([]runtimeMessage, error) {
@@ -1806,6 +2125,7 @@ func (s *ServiceCore) stopRuntimeRecord(ctx context.Context, projectID, threadID
 		ThreadID:      threadID,
 		StartingState: runtimeStateStarting,
 		ActiveState:   runtimeStateActive,
+		ExpiringState: runtimeStateExpiring,
 	})
 	if err != nil {
 		return fmt.Errorf("stop assistant runtime: %w", err)

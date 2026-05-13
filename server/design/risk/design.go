@@ -30,6 +30,7 @@ var _ = Service("risk", func() {
 				Default("flag")
 			})
 			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
+			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding.")
 		})
 
 		Result(shared.RiskPolicy)
@@ -120,6 +121,7 @@ var _ = Service("risk", func() {
 				shared.RiskPolicyActionEnum()
 			})
 			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
+			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.")
 			Required("id", "name")
 		})
 

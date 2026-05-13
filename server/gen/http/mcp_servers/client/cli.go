@@ -122,7 +122,28 @@ func BuildGetMcpServerPayload(mcpServersGetMcpServerID string, mcpServersGetMcpS
 
 // BuildListMcpServersPayload builds the payload for the mcpServers
 // listMcpServers endpoint from CLI flags.
-func BuildListMcpServersPayload(mcpServersListMcpServersSessionToken string, mcpServersListMcpServersApikeyToken string, mcpServersListMcpServersProjectSlugInput string) (*mcpservers.ListMcpServersPayload, error) {
+func BuildListMcpServersPayload(mcpServersListMcpServersRemoteMcpServerID string, mcpServersListMcpServersToolsetID string, mcpServersListMcpServersSessionToken string, mcpServersListMcpServersApikeyToken string, mcpServersListMcpServersProjectSlugInput string) (*mcpservers.ListMcpServersPayload, error) {
+	var err error
+	var remoteMcpServerID *string
+	{
+		if mcpServersListMcpServersRemoteMcpServerID != "" {
+			remoteMcpServerID = &mcpServersListMcpServersRemoteMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("remote_mcp_server_id", *remoteMcpServerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var toolsetID *string
+	{
+		if mcpServersListMcpServersToolsetID != "" {
+			toolsetID = &mcpServersListMcpServersToolsetID
+			err = goa.MergeErrors(err, goa.ValidateFormat("toolset_id", *toolsetID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if mcpServersListMcpServersSessionToken != "" {
@@ -142,6 +163,8 @@ func BuildListMcpServersPayload(mcpServersListMcpServersSessionToken string, mcp
 		}
 	}
 	v := &mcpservers.ListMcpServersPayload{}
+	v.RemoteMcpServerID = remoteMcpServerID
+	v.ToolsetID = toolsetID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
