@@ -12,15 +12,21 @@ import (
 )
 
 type StubClient struct {
-	mut         sync.Mutex
-	orgs        map[string]*stubOrgState
-	orgOrder    []string
-	globalRoles map[string]Role
-	globalOrder []string
-	eventPages  [][]events.Event
-	eventCalls  []events.ListEventsOpts
-	next        int
-	nowFn       func() time.Time
+	mut                   sync.Mutex
+	orgs                  map[string]*stubOrgState
+	orgOrder              []string
+	globalRoles           map[string]Role
+	globalOrder           []string
+	eventPages            [][]events.Event
+	eventCalls            []events.ListEventsOpts
+	userExternalIDUpdates []UserExternalIDUpdate
+	next                  int
+	nowFn                 func() time.Time
+}
+
+type UserExternalIDUpdate struct {
+	WorkOSUserID string
+	ExternalID   string
 }
 
 type stubOrgState struct {
@@ -35,15 +41,16 @@ type stubOrgState struct {
 
 func NewStubClient() *StubClient {
 	return &StubClient{
-		mut:         sync.Mutex{},
-		orgs:        make(map[string]*stubOrgState),
-		orgOrder:    make([]string, 0),
-		globalRoles: stubDefaultGlobalRoles(),
-		globalOrder: []string{"admin", "member"},
-		eventPages:  nil,
-		eventCalls:  make([]events.ListEventsOpts, 0),
-		next:        1,
-		nowFn:       time.Now,
+		mut:                   sync.Mutex{},
+		orgs:                  make(map[string]*stubOrgState),
+		orgOrder:              make([]string, 0),
+		globalRoles:           stubDefaultGlobalRoles(),
+		globalOrder:           []string{"admin", "member"},
+		eventPages:            nil,
+		eventCalls:            make([]events.ListEventsOpts, 0),
+		userExternalIDUpdates: make([]UserExternalIDUpdate, 0),
+		next:                  1,
+		nowFn:                 time.Now,
 	}
 }
 
@@ -93,6 +100,13 @@ func (s *StubClient) EventCalls() []events.ListEventsOpts {
 	defer s.mut.Unlock()
 
 	return append([]events.ListEventsOpts(nil), s.eventCalls...)
+}
+
+func (s *StubClient) UserExternalIDUpdates() []UserExternalIDUpdate {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	return append([]UserExternalIDUpdate(nil), s.userExternalIDUpdates...)
 }
 
 func (s *StubClient) ListEvents(_ context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error) {
@@ -250,6 +264,14 @@ func (s *StubClient) GetUser(_ context.Context, userID string) (*User, error) {
 	}
 
 	return nil, nil
+}
+
+func (s *StubClient) UpdateUserExternalID(_ context.Context, workosUserID, externalID string) error {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	s.userExternalIDUpdates = append(s.userExternalIDUpdates, UserExternalIDUpdate{WorkOSUserID: workosUserID, ExternalID: externalID})
+	return nil
 }
 
 func (s *StubClient) ListUsersInOrg(_ context.Context, orgID string) ([]User, error) {
