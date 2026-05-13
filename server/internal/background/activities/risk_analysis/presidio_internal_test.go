@@ -328,10 +328,56 @@ func TestComputeRetryBackoffStaysWithinCap(t *testing.T) {
 func TestRequestByteCostCapsToBudget(t *testing.T) {
 	t.Parallel()
 
-	big := strings.Repeat("a", int(presidioInflightByteBudget)*2)
-	assert.Equal(t, presidioInflightByteBudget, requestByteCost(big, presidioInflightByteBudget))
-	assert.Equal(t, int64(1), requestByteCost("", presidioInflightByteBudget))
-	assert.Equal(t, int64(4), requestByteCost("defg", presidioInflightByteBudget))
+	big := strings.Repeat("a", presidioMaxMessageBytes*2)
+	assert.Equal(t, int64(presidioMaxMessageBytes), requestByteCost(big, presidioMaxMessageBytes))
+	assert.Equal(t, int64(1), requestByteCost("", presidioMaxMessageBytes))
+	assert.Equal(t, int64(4), requestByteCost("defg", presidioMaxMessageBytes))
+}
+
+// TestPresidioClientTruncatesOversizedMessages confirms the client clips a
+// message larger than presidioMaxMessageBytes to a UTF-8 boundary before
+// sending so a single fat blob can't crash Presidio (1 MB payloads have
+// been observed to kill the analyzer). The truncated payload is what
+// reaches the server; the original size is captured in logs/metrics.
+func TestPresidioClientTruncatesOversizedMessages(t *testing.T) {
+	t.Parallel()
+
+	var receivedSize int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req presidioRequest
+		assert.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		if assert.Len(t, req.Text, 1) {
+			receivedSize = len(req.Text[0])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		assert.NoError(t, json.NewEncoder(w).Encode([][]presidioResult{{}}))
+	}))
+	t.Cleanup(srv.Close)
+
+	client := newTestPresidioClient(t, srv.URL)
+	// Build an input that is double the limit and contains a multibyte rune
+	// straddling the truncation point so we exercise the UTF-8 walk-back.
+	body := strings.Repeat("a", presidioMaxMessageBytes-1) + "€" + strings.Repeat("b", presidioMaxMessageBytes)
+	_, err := client.AnalyzeBatch(t.Context(), []string{body}, nil, nil)
+	require.NoError(t, err)
+
+	// Truncation walks back to a rune start, so we land strictly inside the
+	// cap (the "€" occupies 3 bytes starting at presidioMaxMessageBytes-1).
+	assert.LessOrEqual(t, receivedSize, presidioMaxMessageBytes)
+	assert.Greater(t, receivedSize, presidioMaxMessageBytes-4, "expected truncation near the cap, not further back")
+}
+
+func TestTruncateAtRuneBoundaryHandlesMultibyte(t *testing.T) {
+	t.Parallel()
+
+	// "€" is 3 bytes in UTF-8. Cap at the middle byte: walk-back must land
+	// before the rune starts so the suffix is well-formed UTF-8.
+	in := "aa€bb"
+	assert.Equal(t, "aa", truncateAtRuneBoundary(in, 3))
+	assert.Equal(t, "aa", truncateAtRuneBoundary(in, 4))
+	assert.Equal(t, "aa€", truncateAtRuneBoundary(in, 5))
+	assert.Equal(t, in, truncateAtRuneBoundary(in, 100))
+	assert.Empty(t, truncateAtRuneBoundary(in, 0))
 }
 
 func TestIsCancelErrClassifiesContextErrors(t *testing.T) {

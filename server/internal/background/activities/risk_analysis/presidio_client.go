@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -25,11 +26,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
-// presidioInflightByteBudget caps the total bytes of /analyze request payloads
-// concurrently in flight against a single PresidioClient. Tuned conservatively;
-// raise if Presidio capacity grows. There is no separate request-count limit —
-// the byte semaphore is what bounds parallelism.
-const presidioInflightByteBudget int64 = 1 << 20 // 1 MiB
+// presidioMaxMessageBytes serves a dual role:
+//
+//  1. It caps the size of a single text we will hand to Presidio. Anything
+//     longer is truncated to a UTF-8 boundary before the request and a
+//     warning is logged so operators can spot the offender.
+//  2. It is the budget of the in-flight byte semaphore that bounds
+//     concurrent /analyze requests against a single PresidioClient. Since
+//     every request is capped at this size, the budget equals the cap and
+//     calls serialize.
+//
+// Sized 2026-05-13 from production observations: ≤2 KB completes in <2 s,
+// 80 KB takes ~30 s, 1 MB crashes the analyzer. 50 KB keeps us in the
+// linear-latency band while we work on Presidio capacity. Raise (and
+// optionally split into separate per-message-cap vs in-flight-budget
+// constants) once the analyzer scales.
+const presidioMaxMessageBytes = 50 * 1024
 
 // presidioThrottleHeartbeatInterval is how often the byte-throttle wait loop
 // calls onProgress while blocked. Must stay well below the Temporal activity
@@ -135,6 +147,7 @@ type PresidioClient struct {
 	throttleWaitDuration metric.Float64Histogram
 	attemptFailures      metric.Int64Counter
 	deadLetters          metric.Int64Counter
+	truncations          metric.Int64Counter
 }
 
 // NewPresidioClient creates a client pointing at the given base URL.
@@ -183,6 +196,12 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 		metric.WithUnit("{message}"),
 	)
 
+	truncations, _ := meter.Int64Counter(
+		"risk.presidio.truncations",
+		metric.WithDescription("Number of messages truncated to presidioMaxMessageBytes before being sent to Presidio"),
+		metric.WithUnit("{message}"),
+	)
+
 	// Empty blocklist allows connections to private IPs (Kubernetes ClusterIPs).
 	unsafePolicy, _ := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	httpClient := unsafePolicy.PooledClient()
@@ -193,8 +212,8 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio"),
 		logger:               logger,
 		requestTimeout:       analyzeRequestTimeout,
-		throttle:             semaphore.NewWeighted(presidioInflightByteBudget),
-		throttleBudget:       presidioInflightByteBudget,
+		throttle:             semaphore.NewWeighted(presidioMaxMessageBytes),
+		throttleBudget:       presidioMaxMessageBytes,
 		throttleHeartbeat:    presidioThrottleHeartbeatInterval,
 		maxAttempts:          retryMaxAttempts,
 		baseBackoff:          retryBaseBackoff,
@@ -204,6 +223,7 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 		throttleWaitDuration: throttleWaitDuration,
 		attemptFailures:      attemptFailures,
 		deadLetters:          deadLetters,
+		truncations:          truncations,
 	}
 }
 
@@ -285,6 +305,17 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, entities []string, onProgress func()) ([]Finding, bool) {
 	if onProgress != nil {
 		onProgress()
+	}
+
+	if originalSize := len(text); originalSize > presidioMaxMessageBytes {
+		text = truncateAtRuneBoundary(text, presidioMaxMessageBytes)
+		p.logger.WarnContext(ctx, "presidio: truncating oversized message",
+			attr.SlogRiskScanTextSize(originalSize),
+			attr.SlogRiskScanBatchIndex(idx),
+		)
+		if p.truncations != nil {
+			p.truncations.Add(ctx, 1)
+		}
 	}
 
 	var lastErr error
@@ -505,6 +536,19 @@ func computeRetryBackoff(base time.Duration, attempt int) time.Duration {
 		}
 	}
 	return time.Duration(rand.Int64N(int64(backoff))) // #nosec G404 -- jitter, not security-sensitive
+}
+
+// truncateAtRuneBoundary returns the longest prefix of s whose byte length is
+// <= n and that does not split a UTF-8 rune. Returns s unchanged when it
+// already fits.
+func truncateAtRuneBoundary(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 // sleepCtx pauses for d, returning false if ctx is cancelled before the
