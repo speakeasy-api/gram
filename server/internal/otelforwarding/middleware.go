@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -22,8 +23,9 @@ const (
 	// are skipped for forwarding so we don't OOM on a runaway payload.
 	MaxForwardBodyBytes = 4 * 1024 * 1024
 
-	pathLogs    = "/rpc/hooks.otel/v1/logs"
-	pathMetrics = "/rpc/hooks.otel/v1/metrics"
+	pathPrefix  = "/rpc/hooks.otel"
+	pathLogs    = pathPrefix + "/v1/logs"
+	pathMetrics = pathPrefix + "/v1/metrics"
 
 	gramKeyHeader = "Gram-Key"
 )
@@ -135,9 +137,19 @@ func tryForward(ctx context.Context, logger *slog.Logger, client *Client, forwar
 		return
 	}
 
+	subpath := strings.TrimPrefix(r.URL.Path, pathPrefix)
+	targetURL, err := url.JoinPath(cfg.URL, subpath)
+	if err != nil {
+		logger.WarnContext(ctx, "build otel forwarding target url",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+		)
+		return
+	}
+
 	forwarder.Enqueue(ctx, Job{
 		OrgID:       orgID,
-		URL:         cfg.URL,
+		URL:         targetURL,
 		ContentType: r.Header.Get("Content-Type"),
 		Headers:     cfg.Headers,
 		Body:        body,
