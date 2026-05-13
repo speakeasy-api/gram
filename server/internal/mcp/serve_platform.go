@@ -86,7 +86,7 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").Log(ctx, s.logger)
 	}
 
-	body, err := s.handlePlatformToolsetRequest(ctx, authCtx, toolset, &req)
+	body, err := s.handlePlatformToolsetRequest(ctx, authCtx, toolset, &req, r.Header.Get("Gram-Chat-ID"))
 	switch {
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
@@ -116,6 +116,7 @@ func (s *Service) handlePlatformToolsetRequest(
 	authCtx *contextvalues.AuthContext,
 	toolset platformtools.Toolset,
 	req *rawRequest,
+	chatIDHeader string,
 ) (json.RawMessage, error) {
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		start := time.Now()
@@ -134,7 +135,7 @@ func (s *Service) handlePlatformToolsetRequest(
 	case "tools/list":
 		return s.listPlatformToolsetTools(ctx, authCtx, toolset, req)
 	case "tools/call":
-		return s.callPlatformToolsetTool(ctx, authCtx, toolset, req)
+		return s.callPlatformToolsetTool(ctx, authCtx, toolset, req, chatIDHeader)
 	default:
 		return nil, &rpcError{
 			ID:      req.ID,
@@ -210,6 +211,7 @@ func (s *Service) callPlatformToolsetTool(
 	authCtx *contextvalues.AuthContext,
 	toolset platformtools.Toolset,
 	req *rawRequest,
+	chatIDHeader string,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -288,9 +290,11 @@ func (s *Service) callPlatformToolsetTool(
 	requestBytes := int64(len(requestBodyBytes))
 	var outputBytes int64
 	platformToolsetSlug := toolset.Slug
-	var chatID string
-	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
-		chatID = principal.ThreadID.String()
+	chatID := chatIDHeader
+	if chatID == "" {
+		if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+			chatID = principal.ThreadID.String()
+		}
 	}
 
 	logAttrs := tm.HTTPLogAttributes{}
