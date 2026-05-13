@@ -336,11 +336,55 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 }
 
 func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+	s.captureMCPListSnapshot(ctx, payload)
+
 	// Always allow sessions to start
 	continueVal := true
 	result := makeHookResult(payload.HookEventName)
 	result.Continue = &continueVal
 	return result, nil
+}
+
+// captureMCPListSnapshot parses the `claude mcp list` text shipped by the
+// SessionStart hook script (under additional_data.mcp_list_output) and
+// caches it under sessionMCPListCacheKey. SessionStart re-fires on
+// startup/resume/clear/compact, so this re-syncs whenever Claude reloads
+// the session — which is the closest thing to a config-change signal the
+// CLI offers today.
+func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.ClaudePayload) {
+	if payload.SessionID == nil || *payload.SessionID == "" || payload.AdditionalData == nil {
+		return
+	}
+	raw, ok := payload.AdditionalData["mcp_list_output"].(string)
+	if !ok || raw == "" {
+		return
+	}
+	entries := ParseClaudeMCPList(raw)
+	key := sessionMCPListCacheKey(*payload.SessionID)
+	if err := s.cache.Set(ctx, key, entries, sessionMCPListTTL); err != nil {
+		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
+			attr.SlogEvent("claude_hook_mcp_list_cache_set_failed"),
+			attr.SlogError(err),
+		)
+		return
+	}
+	j, _ := json.Marshal(entries)
+	print(string(j))
+}
+
+// refreshMCPListTTL extends the MCP list cache TTL for the session if the
+// key exists. Called from recordHook on every Claude hook event so the
+// snapshot survives as long as the session is active.
+func (s *Service) refreshMCPListTTL(ctx context.Context, sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	if err := s.cache.Expire(ctx, sessionMCPListCacheKey(sessionID), sessionMCPListTTL); err != nil {
+		s.logger.WarnContext(ctx, "failed to refresh MCP list TTL",
+			attr.SlogEvent("claude_hook_mcp_list_ttl_refresh_failed"),
+			attr.SlogError(err),
+		)
+	}
 }
 
 // hasOptionalPluginAuth returns true when the Claude request carries both
@@ -380,6 +424,11 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 	}
 
 	sessionID := *payload.SessionID
+
+	// Every hook event for this session is a heartbeat — extend the MCP
+	// list snapshot TTL so it survives long-running sessions and only
+	// expires after ~12h of true inactivity.
+	s.refreshMCPListTTL(ctx, sessionID)
 
 	// Both plugin-authenticated and OTEL-only requests go through the same
 	// Redis-buffered flow: persist when session metadata is in the cache,
@@ -452,15 +501,14 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	result := makeHookResult(payload.HookEventName)
 	output, _ := result.HookSpecificOutput.(*HookSpecificOutput)
 
-	// Only Gram-hosted (non-local) tool calls carry the x-gram-toolset-id
-	// property. In Claude Code, MCP-routed tools are identified by the
-	// "mcp__<server>__<tool>" name convention; native tools (Read, Edit, Bash,
-	// ...) are skipped.
+	// In Claude Code, MCP-routed tools are identified by the
+	// "mcp__<server>__<tool>" name convention; native tools (Read, Edit,
+	// Bash, ...) are skipped.
 	rawToolName := ""
 	if payload.ToolName != nil {
 		rawToolName = *payload.ToolName
 	}
-	mcpToolName, isMCP := claudeMCPToolName(rawToolName)
+	serverPrefix, _, isMCP := claudeMCPServerAndTool(rawToolName)
 	if !isMCP {
 		if output != nil {
 			output.PermissionDecision = &allow
@@ -528,20 +576,61 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		return result, nil
 	}
 
-	detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, payload.ToolInput, mcpToolName, metadata.GramOrgID)
-	if denied {
-		s.logger.InfoContext(ctx, "denying claude tool call: failed gram toolset validation",
+	// Look up the cached `claude mcp list` snapshot captured at SessionStart.
+	// If it's missing we can't enforce the policy — deny with a retry-or-
+	// restart message so the user knows the guard is fail-closed rather
+	// than silently allowing.
+	entries, cacheErr := s.getCachedMCPList(ctx, sessionID)
+	if cacheErr != nil {
+		auditReason := "missing MCP list snapshot for session"
+		userReason := "Speakeasy blocked this tool call: MCP server configuration is not available yet. Please retry in a moment, or restart Claude Code if the issue persists."
+		s.logger.InfoContext(ctx, "denying claude tool call: no cached MCP list",
+			attr.SlogEvent("claude_hook_denied_no_mcp_list"),
+			attr.SlogError(cacheErr),
+			attr.SlogValueAny(map[string]any{
+				"hookEventName": payload.HookEventName,
+				"sessionID":     sessionID,
+				"toolName":      rawToolName,
+				"policyID":      policy.ID,
+				"policyName":    policy.Name,
+			}),
+		)
+		s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+		result.SystemMessage = &userReason
+		if output != nil {
+			output.PermissionDecision = &deny
+			output.PermissionDecisionReason = &userReason
+		}
+		return result, nil
+	}
+
+	matched := matchCachedMCPEntry(entries, serverPrefix)
+	var detail string
+	switch {
+	case matched == nil:
+		detail = fmt.Sprintf("MCP server %q is not in the active configuration", serverPrefix)
+	case !isGramHostedMCPURL(matched.URL):
+		detail = fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverPrefix, matched.URL)
+	}
+	if detail != "" {
+		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
+		userReason := renderUserBlockReason(policy.UserMessage, auditReason)
+		matchedURL := ""
+		if matched != nil {
+			matchedURL = matched.URL
+		}
+		s.logger.InfoContext(ctx, "denying claude tool call: non-gram MCP server",
 			attr.SlogEvent("claude_hook_denied"),
 			attr.SlogValueAny(map[string]any{
 				"hookEventName": payload.HookEventName,
 				"toolName":      rawToolName,
+				"serverPrefix":  serverPrefix,
+				"matchedURL":    matchedURL,
 				"reason":        detail,
 				"policyID":      policy.ID,
 				"policyName":    policy.Name,
 			}),
 		)
-		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
-		userReason := renderUserBlockReason(policy.UserMessage, auditReason)
 		// Record a companion ClickHouse entry with gram.hook.block_reason set
 		// so the trace_summaries materialized view can flag this trace as
 		// blocked. Shares the original PreToolUse trace_id (derived from
@@ -565,20 +654,6 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		output.PermissionDecision = &allow
 	}
 	return result, nil
-}
-
-// claudeMCPToolName returns the bare tool name and true if rawName follows the
-// "mcp__<server>__<tool>" convention used by Claude Code for MCP-routed tools.
-// Returns ("", false) for native Claude Code tools (Read, Edit, Bash, etc.).
-func claudeMCPToolName(rawName string) (string, bool) {
-	if !strings.HasPrefix(rawName, "mcp__") {
-		return "", false
-	}
-	parts := strings.SplitN(rawName, "__", 3)
-	if len(parts) != 3 || parts[2] == "" {
-		return "", false
-	}
-	return parts[2], true
 }
 
 func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {

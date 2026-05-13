@@ -42,6 +42,11 @@ func (s *noopCache) Set(ctx context.Context, key string, value any, ttl time.Dur
 	return nil
 }
 
+// Expire implements [Cache].
+func (s *noopCache) Expire(ctx context.Context, key string, ttl time.Duration) error {
+	return nil
+}
+
 // Update implements [Cache].
 func (s *noopCache) Update(ctx context.Context, key string, value any) error {
 	return nil

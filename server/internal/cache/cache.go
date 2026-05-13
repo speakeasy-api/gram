@@ -23,6 +23,9 @@ type Cache interface {
 	Set(ctx context.Context, key string, value any, ttl time.Duration) error
 	Update(ctx context.Context, key string, value any) error
 	Delete(ctx context.Context, key string) error
+	// Expire refreshes the TTL of an existing key without touching its value.
+	// No-op if the key does not exist.
+	Expire(ctx context.Context, key string, ttl time.Duration) error
 	// List operations for atomic append/read
 	ListAppend(ctx context.Context, key string, value any, ttl time.Duration) error
 	ListRange(ctx context.Context, key string, start, stop int64, value any) error

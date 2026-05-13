@@ -62,6 +62,16 @@ func (r *RedisCacheAdapter) Update(ctx context.Context, key string, value any) e
 	})
 }
 
+func (r *RedisCacheAdapter) Expire(ctx context.Context, key string, ttl time.Duration) error {
+	// Redis EXPIRE returns 0 if the key doesn't exist; we treat that as a
+	// no-op rather than an error so callers can refresh-or-skip without
+	// pre-checking existence.
+	if err := r.client.Expire(ctx, key, ttl).Err(); err != nil {
+		return fmt.Errorf("expire: %w", err)
+	}
+	return nil
+}
+
 func (r *RedisCacheAdapter) Delete(ctx context.Context, key string) error {
 	//nolint:wrapcheck // Wrapping happens in the typed cache implementation
 	return r.cache.Delete(ctx, key)
