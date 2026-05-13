@@ -270,6 +270,90 @@ func (q *Queries) ListChallengeResolutions(ctx context.Context, arg ListChalleng
 	return items, nil
 }
 
+const listGlobalRoles = `-- name: ListGlobalRoles :many
+SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, workos_deleted_at, workos_deleted, workos_last_event_id, created_at, updated_at, deleted_at, deleted
+FROM global_roles
+WHERE deleted_at IS NULL
+ORDER BY workos_slug
+`
+
+func (q *Queries) ListGlobalRoles(ctx context.Context) ([]GlobalRole, error) {
+	rows, err := q.db.Query(ctx, listGlobalRoles)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GlobalRole
+	for rows.Next() {
+		var i GlobalRole
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkosSlug,
+			&i.WorkosName,
+			&i.WorkosDescription,
+			&i.WorkosCreatedAt,
+			&i.WorkosUpdatedAt,
+			&i.WorkosDeletedAt,
+			&i.WorkosDeleted,
+			&i.WorkosLastEventID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationRolesByOrg = `-- name: ListOrganizationRolesByOrg :many
+SELECT id, organization_id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, workos_deleted_at, workos_deleted, workos_last_event_id, created_at, updated_at, deleted_at, deleted
+FROM organization_roles
+WHERE organization_id = $1
+  AND deleted_at IS NULL
+ORDER BY workos_slug
+`
+
+func (q *Queries) ListOrganizationRolesByOrg(ctx context.Context, organizationID string) ([]OrganizationRole, error) {
+	rows, err := q.db.Query(ctx, listOrganizationRolesByOrg, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrganizationRole
+	for rows.Next() {
+		var i OrganizationRole
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.WorkosSlug,
+			&i.WorkosName,
+			&i.WorkosDescription,
+			&i.WorkosCreatedAt,
+			&i.WorkosUpdatedAt,
+			&i.WorkosDeletedAt,
+			&i.WorkosDeleted,
+			&i.WorkosLastEventID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPrincipalGrantsByOrg = `-- name: ListPrincipalGrantsByOrg :many
 
 SELECT id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at

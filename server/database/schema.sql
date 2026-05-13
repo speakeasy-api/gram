@@ -70,6 +70,9 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   CONSTRAINT organization_metadata_pkey PRIMARY KEY (id)
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_workos_id_key
+ON organization_metadata (workos_id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS projects_organization_id_slug_key
 ON projects (organization_id, slug)
 WHERE deleted IS FALSE;
@@ -808,6 +811,93 @@ WHERE deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS user_sessions_subject_idx
 ON user_sessions (subject_urn, user_session_issuer_id)
+WHERE deleted IS FALSE;
+
+-- Remote Session Issuers are references to external authorization servers
+-- that will mint tokens that can be passed on behalf of a Gram session to an
+-- MCP backend
+CREATE TABLE IF NOT EXISTS remote_session_issuers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  slug TEXT NOT NULL,
+  issuer TEXT NOT NULL,
+  authorization_endpoint TEXT,
+  token_endpoint TEXT,
+  registration_endpoint TEXT,
+  jwks_uri TEXT,
+
+  scopes_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  grant_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  response_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  token_endpoint_auth_methods_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+
+  oidc BOOLEAN NOT NULL DEFAULT FALSE,
+  passthrough BOOLEAN NOT NULL DEFAULT FALSE,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT remote_session_issuers_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_project_slug_key
+ON remote_session_issuers (project_id, slug)
+WHERE deleted IS FALSE;
+
+-- Remote Session Clients are records of Gram's client registrations with
+-- upstream authorization servers
+CREATE TABLE IF NOT EXISTS remote_session_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  remote_session_issuer_id uuid NOT NULL,
+  user_session_issuer_id uuid NOT NULL,
+
+  client_id TEXT NOT NULL,
+  client_secret_encrypted TEXT,
+  client_id_issued_at timestamptz,
+  client_secret_expires_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT remote_session_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_session_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT remote_session_clients_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE CASCADE,
+  CONSTRAINT remote_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
+);
+
+-- Remote sessions represent credentials for an external resource that have
+-- been granted to a single Gram subject
+CREATE TABLE IF NOT EXISTS remote_sessions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  subject_urn TEXT NOT NULL,
+  user_session_issuer_id uuid NOT NULL,
+  remote_session_client_id uuid NOT NULL,
+
+  access_token_encrypted TEXT NOT NULL,
+  access_expires_at timestamptz NOT NULL,
+  refresh_token_encrypted TEXT,
+  refresh_expires_at timestamptz,
+  scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT remote_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_sessions_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
+  CONSTRAINT remote_sessions_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_key
+ON remote_sessions (subject_urn, remote_session_client_id)
 WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS toolsets (
@@ -2472,6 +2562,10 @@ CREATE TABLE IF NOT EXISTS risk_results (
   confidence DOUBLE PRECISION,
   tags TEXT[],
 
+  -- Populated on rows that represent a message the scanner could not analyze
+  -- after exhausting its retry budget
+  dead_letter_reason TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT risk_results_pkey PRIMARY KEY (id),
@@ -2545,9 +2639,9 @@ ON outbox (public_id);
 CREATE INDEX IF NOT EXISTS outbox_organization_id_id_idx
 ON outbox (organization_id, id);
 
--- Per-row Svix relay tracking. One row per outbox entry that has been
+-- Per-row relay tracking. One row per outbox entry that has been
 -- considered by the relay workflow. UPDATE-heavy: each retry rewrites the row.
-CREATE TABLE IF NOT EXISTS outbox_svix_relays (
+CREATE TABLE IF NOT EXISTS outbox_relays (
   outbox_id BIGINT NOT NULL,
 
   processed_at timestamptz,
@@ -2562,13 +2656,14 @@ CREATE TABLE IF NOT EXISTS outbox_svix_relays (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT outbox_svix_relays_pkey PRIMARY KEY (outbox_id),
-  CONSTRAINT outbox_svix_relays_outbox_id_fkey FOREIGN KEY (outbox_id) REFERENCES outbox(id) ON DELETE CASCADE
+  CONSTRAINT outbox_relays_pkey PRIMARY KEY (outbox_id),
+  CONSTRAINT outbox_relays_outbox_id_fkey FOREIGN KEY (outbox_id) REFERENCES outbox(id) ON DELETE CASCADE
 ) WITH (
   fillfactor = 80,
   autovacuum_vacuum_scale_factor = 0.05,
   autovacuum_analyze_scale_factor = 0.05
 );
 
-CREATE INDEX IF NOT EXISTS outbox_svix_relays_pending_idx
-ON outbox_svix_relays (outbox_id) WHERE processed_at IS NULL AND dead_lettered IS FALSE;
+CREATE INDEX IF NOT EXISTS outbox_relays_pending_idx
+ON outbox_relays (outbox_id)
+WHERE processed_at IS NULL AND dead_lettered IS FALSE;

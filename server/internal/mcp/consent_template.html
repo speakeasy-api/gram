@@ -118,7 +118,10 @@
     <div class="consent-container">
       <div class="header">
         <h1>Authorize {{.ClientName}}</h1>
-        <p><strong>{{.ClientName}}</strong> is requesting access to the MCP server <strong>{{.MCPSlug}}</strong></p>
+        <p>
+          <strong>{{.ClientName}}</strong> is requesting access to the MCP
+          server <strong>{{.MCPSlug}}</strong>
+        </p>
       </div>
 
       <dl class="info">
@@ -133,11 +136,25 @@
       <div class="actions">
         <form method="POST" action="/mcp/{{.MCPSlug}}/connect">
           <input type="hidden" name="state" value="{{.State}}" />
-          <button type="submit" name="action" value="approve" class="btn btn-primary">Give Access</button>
+          <button
+            type="submit"
+            name="action"
+            value="approve"
+            class="btn btn-primary"
+          >
+            Give Access
+          </button>
         </form>
         <form method="POST" action="/mcp/{{.MCPSlug}}/connect">
           <input type="hidden" name="state" value="{{.State}}" />
-          <button type="submit" name="action" value="deny" class="btn btn-secondary">Cancel</button>
+          <button
+            type="submit"
+            name="action"
+            value="deny"
+            class="btn btn-secondary"
+          >
+            Cancel
+          </button>
         </form>
       </div>
     </div>

@@ -44,14 +44,14 @@ type ProcessWorkOSGlobalRoleEventsResult struct {
 type ProcessWorkOSGlobalRoleEvents struct {
 	db           *pgxpool.Pool
 	logger       *slog.Logger
-	eventsClient EventsLister
+	workosClient WorkOSClient
 }
 
-func NewProcessWorkOSGlobalRoleEvents(logger *slog.Logger, db *pgxpool.Pool, eventsClient EventsLister) *ProcessWorkOSGlobalRoleEvents {
+func NewProcessWorkOSGlobalRoleEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSClient) *ProcessWorkOSGlobalRoleEvents {
 	return &ProcessWorkOSGlobalRoleEvents{
 		db:           db,
 		logger:       logger,
-		eventsClient: eventsClient,
+		workosClient: workosClient,
 	}
 }
 
@@ -68,7 +68,7 @@ func (p *ProcessWorkOSGlobalRoleEvents) Do(ctx context.Context, params ProcessWo
 		}
 	}
 
-	resp, err := p.eventsClient.ListEvents(ctx, events.ListEventsOpts{
+	resp, err := p.workosClient.ListEvents(ctx, events.ListEventsOpts{
 		Events: []string{
 			string(workos.EventKindRoleCreated),
 			string(workos.EventKindRoleUpdated),

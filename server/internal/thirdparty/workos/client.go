@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/workos/workos-go/v6/pkg/events"
 	"github.com/workos/workos-go/v6/pkg/organizations"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 	"github.com/workos/workos-go/v6/pkg/workos_errors"
@@ -58,6 +59,7 @@ type Client struct {
 	httpClient *guardian.HTTPClient
 	orgs       *organizations.Client
 	um         *usermanagement.Client
+	events     *events.Client
 }
 
 // ClientOpts configures optional overrides for New.
@@ -99,7 +101,16 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpt
 		httpClient: httpClient,
 		orgs:       &organizations.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil},
 		um:         um,
+		events:     &events.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
 	}
+}
+
+func (wc *Client) ListEvents(ctx context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error) {
+	resp, err := wc.events.ListEvents(ctx, opts)
+	if err != nil {
+		return events.ListEventsResponse{}, wrapSDKError(err, "list events")
+	}
+	return resp, nil
 }
 
 // do performs a raw HTTP request against the WorkOS REST API.

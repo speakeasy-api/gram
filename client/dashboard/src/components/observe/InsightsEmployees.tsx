@@ -2,6 +2,7 @@ import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
 import { ErrorAlert } from "@/components/ui/alert";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -27,10 +28,13 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Info, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link } from "react-router";
+import { useNavigate } from "react-router";
 import { useSlugs } from "@/contexts/Sdk";
+import { slugify } from "@/lib/constants";
+import { Badge } from "@speakeasy-api/moonshine";
+import { HooksSetupDialog } from "@/pages/hooks/HooksSetupDialog";
 
-type EmployeeStatus = "compliant" | "not_compliant";
+type EmployeeStatus = "enrolled" | "not_enrolled";
 
 type Employee = {
   id: string;
@@ -40,25 +44,29 @@ type Employee = {
   status: EmployeeStatus;
   tokenCount: number;
   lastActivity: string;
+  photoUrl?: string | null;
 };
 
 const LOOKBACK_DAYS = 30;
 
-const statusMeta: Record<EmployeeStatus, { label: string; className: string }> =
-  {
-    compliant: {
-      label: "Compliant",
-      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    },
-    not_compliant: {
-      label: "Not Compliant",
-      className: "border-rose-200 bg-rose-50 text-rose-700",
-    },
-  };
+const statusMeta: Record<
+  EmployeeStatus,
+  { label: string; variant: "success" | "destructive" }
+> = {
+  enrolled: {
+    label: "Enrolled",
+    variant: "success",
+  },
+  not_enrolled: {
+    label: "Not Enrolled",
+    variant: "destructive",
+  },
+};
 
 export function InsightsEmployeesContent() {
   const client = useGramContext();
   const { orgSlug, projectSlug } = useSlugs();
+  const navigate = useNavigate();
   const {
     isExpanded: isInsightsOpen,
     sendPrompt,
@@ -113,44 +121,47 @@ export function InsightsEmployeesContent() {
     [members, roles, usageSummaries],
   );
   const totalEmployees = employees.length;
-  const compliantEmployees = employees.filter(
-    (item) => item.status === "compliant",
+  const enrolledEmployees = employees.filter(
+    (item) => item.status === "enrolled",
   ).length;
-  const notCompliantEmployees = totalEmployees - compliantEmployees;
+  const notEnrolledEmployees = totalEmployees - enrolledEmployees;
   const totalTokenCount = employees.reduce(
     (sum, item) => sum + item.tokenCount,
     0,
   );
-  const agentsHref = `/${orgSlug}/projects/${projectSlug}/insights/agents`;
-  const coverage =
-    totalEmployees > 0 ? (compliantEmployees / totalEmployees) * 100 : 0;
+  const employeesBase = `/${orgSlug}/projects/${projectSlug}/insights/employees`;
+  const openUser = (name: string) => {
+    navigate(`${employeesBase}/${slugify(name)}`);
+  };
+  const enrollmentRate =
+    totalEmployees > 0 ? (enrolledEmployees / totalEmployees) * 100 : 0;
   const prompt =
-    "Using the Employees tab context, summarize whether all employees in this project are compliant based on whether they have any Gram token usage.";
+    "Using the Employees tab context, summarize who is enrolled in this project based on whether they have any Gram token usage.";
 
   return (
     <>
       <InsightsConfig
         mcpConfig={mcpConfig}
-        title="What would you like to know about employee uptake?"
-        subtitle="Ask about enrollment, agent setup, and Gram adoption across the team"
-        contextInfo={`Project-scoped Employees tab: ${compliantEmployees} of ${totalEmployees} employees have Gram token usage in the last ${LOOKBACK_DAYS} days and are compliant; ${notCompliantEmployees} employees have no Gram token usage and are not compliant.`}
+        title="What would you like to know about employee enrollment?"
+        subtitle="Ask who is enrolled, who still needs setup, and how Gram adoption is tracking across the team"
+        contextInfo={`Project-scoped Employees tab: ${enrolledEmployees} of ${totalEmployees} employees have Gram Hooks activity in the last ${LOOKBACK_DAYS} days and are enrolled; ${notEnrolledEmployees} employees have no Gram Hooks activity and are not enrolled.`}
         suggestions={[
           {
             title: "Enrollment Coverage",
-            label: "Are all employees compliant?",
+            label: "Who is enrolled?",
             prompt,
           },
           {
-            title: "Missing Data",
-            label: "Who has no token usage?",
+            title: "Not Enrolled",
+            label: "Who is not enrolled?",
             prompt:
-              "Which employees are not compliant because they have no Gram token usage in this project?",
+              "Which employees are not enrolled because they have no Gram token usage in this project?",
           },
           {
-            title: "Compliance Summary",
-            label: "Summarize compliance",
+            title: "Enrollment Summary",
+            label: "Summarize enrollment",
             prompt:
-              "Summarize project employee compliance based on whether each employee has Gram token usage.",
+              "Summarize project employee enrollment based on whether each employee has Gram token usage.",
           },
           {
             title: "User Usage",
@@ -171,12 +182,12 @@ export function InsightsEmployeesContent() {
             )}
           >
             <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="text-xl font-semibold">Employee Compliance</h1>
+              <h1 className="text-xl font-semibold">Employee Enrollment</h1>
               <p className="text-muted-foreground text-sm">
                 Track Gram uptake for organization members in this project over
-                the last {LOOKBACK_DAYS} days. Employees with hook activity are
-                marked compliant; employees without any activity are marked not
-                compliant.
+                the last {LOOKBACK_DAYS} days. Employees with Gram Hooks
+                activity are marked enrolled; employees without any activity are
+                marked not enrolled.
               </p>
             </div>
             <div
@@ -201,7 +212,7 @@ export function InsightsEmployeesContent() {
 
           {error ? (
             <ErrorAlert
-              title="Unable to load employee compliance data"
+              title="Unable to load employee enrollment data"
               error={error}
             />
           ) : isLoading ? (
@@ -224,29 +235,30 @@ export function InsightsEmployeesContent() {
                   subtext="Organization members"
                 />
                 <MetricCard
-                  title="Compliant"
-                  value={compliantEmployees}
+                  title="Enrolled"
+                  value={enrolledEmployees}
                   icon="circle-check"
                   accentColor="green"
-                  subtext="Hook activity present"
+                  subtext="Gram activity present"
                 />
                 <MetricCard
-                  title="Not Compliant"
-                  value={notCompliantEmployees}
+                  title="Not Enrolled"
+                  value={notEnrolledEmployees}
                   icon="triangle-alert"
                   accentColor="orange"
-                  subtext="No hook activity found"
+                  subtext="No Gram activity found"
                 />
                 <MetricCard
                   title="Token Count"
                   value={totalTokenCount}
                   icon="gauge"
                   accentColor="purple"
-                  subtext={`${coverage.toFixed(0)}% compliance coverage`}
+                  subtext={`${enrollmentRate.toFixed(0)}% enrolled`}
                 />
               </section>
 
-              <EmployeeTable employees={employees} agentsHref={agentsHref} />
+              <EmployeeTable employees={employees} onSelectUser={openUser} />
+              <EnrollmentLegend />
             </>
           )}
         </div>
@@ -259,10 +271,10 @@ const PAGE_SIZE = 25;
 
 function EmployeeTable({
   employees,
-  agentsHref,
+  onSelectUser,
 }: {
   employees: Employee[];
-  agentsHref: string;
+  onSelectUser: (name: string) => void;
 }) {
   const [page, setPage] = useState(0);
   const totalPages = Math.ceil(employees.length / PAGE_SIZE);
@@ -276,30 +288,39 @@ function EmployeeTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>
+            <TableHead className="pl-6">
               <span className="flex items-center gap-1">
                 Employee
-                <SimpleTooltip tooltip="Usage is attributed by matching the email reported by each AI coding tool to the member's Gram account. Members without a Gram account won't appear as compliant until they sign up or directory sync is configured.">
+                <SimpleTooltip tooltip="Enrollment is inferred by matching the email reported by each AI coding tool to the member's Gram account. Members without a Gram account won't appear as enrolled until they sign up or directory sync is configured.">
                   <Info className="text-muted-foreground size-3 shrink-0" />
                 </SimpleTooltip>
               </span>
             </TableHead>
             <TableHead>Role</TableHead>
-            <TableHead>Compliance</TableHead>
+            <TableHead>Enrollment</TableHead>
             <TableHead>Token Count</TableHead>
             <TableHead>Last Activity</TableHead>
-            <TableHead>Analytics</TableHead>
+            <TableHead className="pr-6 text-right">Action</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {pageEmployees.length > 0 ? (
             pageEmployees.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell>
+              <TableRow
+                key={item.id}
+                className="cursor-pointer"
+                onClick={() => onSelectUser(item.name)}
+              >
+                <TableCell className="pl-6">
                   <div className="flex items-center gap-3">
-                    <div className="bg-muted flex size-9 items-center justify-center rounded-full text-sm font-semibold">
-                      {getInitials(item.name)}
-                    </div>
+                    <Avatar className="size-9">
+                      {item.photoUrl && (
+                        <AvatarImage src={item.photoUrl} alt={item.name} />
+                      )}
+                      <AvatarFallback className="text-sm font-semibold">
+                        {getInitials(item.name)}
+                      </AvatarFallback>
+                    </Avatar>
                     <div>
                       <p className="font-medium">{item.name}</p>
                       <p className="text-muted-foreground text-xs">
@@ -322,13 +343,18 @@ function EmployeeTable({
                 <TableCell className="text-muted-foreground text-sm">
                   {item.lastActivity}
                 </TableCell>
-                <TableCell>
-                  <Link
-                    to={`${agentsHref}?user=${encodeURIComponent(item.id)}`}
-                    className="text-primary text-sm font-medium no-underline hover:underline"
+                <TableCell className="pr-6 text-right">
+                  <button
+                    type="button"
+                    className="text-primary hover:text-primary/80 text-sm font-medium underline underline-offset-4"
+                    aria-label={`View ${item.name}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelectUser(item.name);
+                    }}
                   >
-                    View usage
-                  </Link>
+                    View
+                  </button>
                 </TableCell>
               </TableRow>
             ))
@@ -375,6 +401,36 @@ function EmployeeTable({
   );
 }
 
+function EnrollmentLegend() {
+  const [showSetupDialog, setShowSetupDialog] = useState(false);
+
+  return (
+    <>
+      <section className="bg-muted/40 border-border flex flex-col gap-4 rounded-xl border p-5 md:flex-row md:items-center md:justify-between">
+        <div className="max-w-3xl space-y-1">
+          <h2 className="text-sm font-semibold">How enrollment works</h2>
+          <p className="text-muted-foreground text-sm">
+            Employees appear as enrolled once the Gram Hooks plugin is installed
+            in their AI tool and sends activity to this project. Not enrolled
+            yet? Install the plugin to start tracking their usage.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          className="shrink-0 md:self-center"
+          onClick={() => setShowSetupDialog(true)}
+        >
+          Set up hooks
+        </Button>
+      </section>
+      <HooksSetupDialog
+        open={showSetupDialog}
+        onOpenChange={setShowSetupDialog}
+      />
+    </>
+  );
+}
+
 function EmployeesLoadingState({
   isInsightsOpen,
 }: {
@@ -415,14 +471,9 @@ function StatusPill({ status }: { status: EmployeeStatus }) {
   const meta = statusMeta[status];
 
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium",
-        meta.className,
-      )}
-    >
-      {meta.label}
-    </span>
+    <Badge variant={meta.variant}>
+      <Badge.Text>{meta.label}</Badge.Text>
+    </Badge>
   );
 }
 
@@ -451,7 +502,7 @@ function buildEmployees(
       const tokenCount =
         (summary?.totalInputTokens ?? 0) + (summary?.totalOutputTokens ?? 0);
       const status: EmployeeStatus =
-        summary != null ? "compliant" : "not_compliant";
+        summary != null ? "enrolled" : "not_enrolled";
 
       return {
         id: member.id,
@@ -460,6 +511,7 @@ function buildEmployees(
         role: roleNameById.get(member.roleId) ?? member.roleId,
         status,
         tokenCount,
+        photoUrl: member.photoUrl,
         lastActivity: summary
           ? formatUnixNano(summary.lastSeenUnixNano)
           : "No activity found",
@@ -467,7 +519,7 @@ function buildEmployees(
     })
     .sort((a, b) => {
       if (a.status !== b.status) {
-        return a.status === "not_compliant" ? -1 : 1;
+        return a.status === "not_enrolled" ? -1 : 1;
       }
 
       return a.name.localeCompare(b.name);
