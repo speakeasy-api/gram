@@ -740,6 +740,15 @@ func newStartCommand() *cli.Command {
 				platformtoolsruntime.WithExternalTools(memoryTools),
 			)
 
+			remoteChallengeManager := remotesessions.NewChallengeManager(
+				logger,
+				db,
+				encryptionClient,
+				guardianPolicy,
+				cache.NewRedisCacheAdapter(redisClient),
+				serverURL,
+			)
+
 			mcpService := mcp.NewService(
 				logger,
 				tracerProvider,
@@ -771,6 +780,7 @@ func newStartCommand() *cli.Command {
 				platformToolsets,
 				speakeasyIDPClient,
 				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
+				remoteChallengeManager,
 			)
 
 			chatClient := chat.NewAgenticChatClient(

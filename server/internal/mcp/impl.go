@@ -63,6 +63,7 @@ import (
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -117,6 +118,9 @@ type Service struct {
 	// uses, intentionally separate signer code so each path is removable
 	// in isolation.
 	userSessionSigner *usersessions.Signer
+	// remoteChallengeMgr drives the per-remote OAuth authn leg used by the
+	// interactive /connect cards and the /remote_login_callback handler.
+	remoteChallengeMgr *remotesessions.ChallengeManager
 }
 
 type oauthTokenInputs struct {
@@ -170,6 +174,7 @@ func NewService(
 	platformToolsets map[string]platformtools.Toolset,
 	idpClient *speakeasyclient.Client,
 	userSessionSigner *usersessions.Signer,
+	remoteChallengeMgr *remotesessions.ChallengeManager,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -240,8 +245,9 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		idpClient:         idpClient,
-		userSessionSigner: userSessionSigner,
+		idpClient:          idpClient,
+		userSessionSigner:  userSessionSigner,
+		remoteChallengeMgr: remoteChallengeMgr,
 	}
 }
 
@@ -267,6 +273,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/token", oops.ErrHandle(service.logger, service.HandleToken).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/revoke", oops.ErrHandle(service.logger, service.HandleRevoke).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/remote_login_callback", oops.ErrHandle(service.logger, service.remoteChallengeMgr.HandleRemoteLoginCallback).ServeHTTP)
 }
 
 // HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests
