@@ -556,6 +556,11 @@ export function InsightsAgentsContent() {
                   title={
                     valueMode === "cost" ? "Cost Over Time" : "Tokens Over Time"
                   }
+                  subtitle={
+                    clientFilter !== "all"
+                      ? "Showing all agents (per-agent breakdown not available)"
+                      : undefined
+                  }
                   chartId="tokens-over-time"
                   timeSeries={timeSeries}
                   timeRangeMs={timeRangeMs}
@@ -566,7 +571,11 @@ export function InsightsAgentsContent() {
                 <ClientBreakdownChart
                   title="Usage by Client"
                   chartId="client-breakdown"
-                  data={clientBreakdown}
+                  data={
+                    clientFilter === "all"
+                      ? clientBreakdown
+                      : clientBreakdown.filter((c) => c.source === clientFilter)
+                  }
                   valueMode={valueMode}
                   expandedChart={expandedChart}
                   onExpand={setExpandedChart}
@@ -595,6 +604,7 @@ export function InsightsAgentsContent() {
 
 function TokenTimeSeriesChart({
   title,
+  subtitle,
   chartId,
   timeSeries,
   timeRangeMs,
@@ -603,6 +613,7 @@ function TokenTimeSeriesChart({
   onExpand,
 }: {
   title: string;
+  subtitle?: string;
   chartId: string;
   timeSeries: TimeSeriesBucket[];
   timeRangeMs: number;
@@ -747,6 +758,9 @@ function TokenTimeSeriesChart({
       onExpand={onExpand}
       hasData={hasData}
     >
+      {subtitle && (
+        <p className="text-muted-foreground -mt-3 mb-2 text-xs">{subtitle}</p>
+      )}
       {!hasData ? (
         <div className="text-muted-foreground flex h-[260px] items-center justify-center text-sm">
           No data for selected time range
