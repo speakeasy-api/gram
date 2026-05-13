@@ -305,6 +305,13 @@ func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMc
 
 	serverID := server.ID.String()
 
+	// Per-call instance: the interceptor's start-time map is keyed by
+	// *proxy.ToolsCallRequest pointers, which are unique per call. A fresh
+	// instance per buildProxy means the map's natural lifetime matches the
+	// proxy's, so any leaked entries from failure paths (request fires,
+	// response doesn't) get reclaimed when the proxy is dropped.
+	clickHouseLogInterceptor := NewToolsCallClickHouseLogInterceptor(s.telemLogger, serverID, logger)
+
 	// Counter records every attempted tools/call, including those later
 	// rejected by limits or per-tool authz. This mirrors /mcp, where
 	// RecordMCPToolCall fires before the per-tool RBAC check in
@@ -331,6 +338,7 @@ func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMc
 		NewToolsCallOTELCounterInterceptor(s.xmcpMetrics, serverID, logger),
 		s.toolsCallUsageLimitsInterceptor,
 		NewToolsCallShadowMCPValidateAndStripInterceptor(s.shadowmcpClient, serverID, projectID, logger),
+		clickHouseLogInterceptor,
 	}
 	if visibility == visibilityPrivate {
 		toolsCallReqInterceptors = append(toolsCallReqInterceptors,
@@ -373,6 +381,7 @@ func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMc
 		ToolsCallRequestInterceptors: toolsCallReqInterceptors,
 		ToolsCallResponseInterceptors: []proxy.ToolsCallResponseInterceptor{
 			s.toolsCallUsageTrackingInterceptor,
+			clickHouseLogInterceptor,
 		},
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
 			NewToolsListPostHogEventInterceptor(s.posthog, serverID, logger),

@@ -146,7 +146,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, conn, enc, guardianPolicy, cacheAdapter, serverURL)
 	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr)
 
-	svc := xmcp.NewService(logger, tracerProvider, meterProvider, conn, enc, authzEngine, shadowMCPClient, guardianPolicy, posthogClient, billingClient, billingClient, mcpService, serverURL)
+	svc := xmcp.NewService(logger, tracerProvider, meterProvider, conn, enc, authzEngine, shadowMCPClient, guardianPolicy, posthogClient, billingClient, billingClient, telemLogger, mcpService, serverURL)
 
 	return ctx, &testInstance{
 		service:         svc,
