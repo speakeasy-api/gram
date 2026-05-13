@@ -8,6 +8,7 @@ package repo
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -260,6 +261,32 @@ func (q *Queries) GetOrganizationUserRelationship(ctx context.Context, arg GetOr
 		&i.DeletedAt,
 		&i.Deleted,
 	)
+	return i, err
+}
+
+const getRoleAssignmentLinkedToDifferentWorkOSUser = `-- name: GetRoleAssignmentLinkedToDifferentWorkOSUser :one
+SELECT id, workos_user_id
+FROM organization_role_assignments
+WHERE user_id = $1
+  AND workos_user_id <> $2
+ORDER BY updated_at DESC
+LIMIT 1
+`
+
+type GetRoleAssignmentLinkedToDifferentWorkOSUserParams struct {
+	UserID       pgtype.Text
+	WorkosUserID string
+}
+
+type GetRoleAssignmentLinkedToDifferentWorkOSUserRow struct {
+	ID           uuid.UUID
+	WorkosUserID string
+}
+
+func (q *Queries) GetRoleAssignmentLinkedToDifferentWorkOSUser(ctx context.Context, arg GetRoleAssignmentLinkedToDifferentWorkOSUserParams) (GetRoleAssignmentLinkedToDifferentWorkOSUserRow, error) {
+	row := q.db.QueryRow(ctx, getRoleAssignmentLinkedToDifferentWorkOSUser, arg.UserID, arg.WorkosUserID)
+	var i GetRoleAssignmentLinkedToDifferentWorkOSUserRow
+	err := row.Scan(&i.ID, &i.WorkosUserID)
 	return i, err
 }
 

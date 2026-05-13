@@ -124,7 +124,7 @@ func (p *ProcessWorkOSUserEvents) handleEvent(ctx context.Context, logger *slog.
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	externalIDUpdate, err := p.handleUserEvent(ctx, dbtx, workosUserID, event)
+	externalIDUpdate, err := p.handleUserEvent(ctx, logger, dbtx, workosUserID, event)
 	if err != nil {
 		return "", err
 	}
@@ -166,7 +166,7 @@ type workosUserEventPayload struct {
 	DeletedAt         time.Time `json:"deleted_at"`
 }
 
-func (p *ProcessWorkOSUserEvents) handleUserEvent(ctx context.Context, dbtx database.DBTX, workosUserID string, event events.Event) (*workosUserExternalIDUpdate, error) {
+func (p *ProcessWorkOSUserEvents) handleUserEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, workosUserID string, event events.Event) (*workosUserExternalIDUpdate, error) {
 	var payload workosUserEventPayload
 
 	if err := json.Unmarshal(event.Data, &payload); err != nil {
@@ -182,7 +182,7 @@ func (p *ProcessWorkOSUserEvents) handleUserEvent(ctx context.Context, dbtx data
 
 	switch workos.EventKind(event.Event) {
 	case workos.EventKindUserCreated, workos.EventKindUserUpdated:
-		return p.handleUserUpsert(ctx, dbtx, payload)
+		return p.handleUserUpsert(ctx, logger, dbtx, payload)
 	case workos.EventKindUserDeleted:
 		return nil, p.handleUserDeleted(ctx, dbtx, payload)
 	default:
@@ -190,7 +190,7 @@ func (p *ProcessWorkOSUserEvents) handleUserEvent(ctx context.Context, dbtx data
 	}
 }
 
-func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, dbtx database.DBTX, payload workosUserEventPayload) (*workosUserExternalIDUpdate, error) {
+func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, payload workosUserEventPayload) (*workosUserExternalIDUpdate, error) {
 	gramUserID, err := resolveGramUserIDForWorkOSUser(ctx, dbtx, payload)
 	if err != nil {
 		return nil, err
@@ -207,11 +207,16 @@ func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, dbtx dat
 	}); err != nil {
 		return nil, fmt.Errorf("upsert synced user: %w", err)
 	}
-	if err := organizationsrepo.New(dbtx).LinkRoleAssignmentsToUser(ctx, organizationsrepo.LinkRoleAssignmentsToUserParams{
+
+	organizationQueries := organizationsrepo.New(dbtx)
+	if err := organizationQueries.LinkRoleAssignmentsToUser(ctx, organizationsrepo.LinkRoleAssignmentsToUserParams{
 		UserID:       conv.ToPGText(gramUserID),
 		WorkosUserID: payload.ID,
 	}); err != nil {
 		return nil, fmt.Errorf("link role assignments to user: %w", err)
+	}
+	if err := logRoleAssignmentLinkedToDifferentWorkOSUser(ctx, logger, organizationQueries, gramUserID, payload.ID); err != nil {
+		return nil, err
 	}
 
 	if payload.ExternalID == "" {
@@ -222,6 +227,28 @@ func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, dbtx dat
 	}
 
 	return nil, nil
+}
+
+func logRoleAssignmentLinkedToDifferentWorkOSUser(ctx context.Context, logger *slog.Logger, organizationQueries *organizationsrepo.Queries, gramUserID, workosUserID string) error {
+	existingAssignment, err := organizationQueries.GetRoleAssignmentLinkedToDifferentWorkOSUser(ctx, organizationsrepo.GetRoleAssignmentLinkedToDifferentWorkOSUserParams{
+		UserID:       conv.ToPGText(gramUserID),
+		WorkosUserID: workosUserID,
+	})
+	switch {
+	case err == nil:
+		logger.WarnContext(ctx, "role assignment already linked to a different WorkOS user",
+			attr.SlogUserID(gramUserID),
+			attr.SlogWorkOSUserID(workosUserID),
+			attr.SlogOrganizationRoleAssignmentID(existingAssignment.ID.String()),
+			attr.SlogWorkOSLinkedUserID(existingAssignment.WorkosUserID),
+		)
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	default:
+		return fmt.Errorf("get role assignment linked to different WorkOS user: %w", err)
+	}
+
+	return nil
 }
 
 func (p *ProcessWorkOSUserEvents) handleUserDeleted(ctx context.Context, dbtx database.DBTX, payload workosUserEventPayload) error {

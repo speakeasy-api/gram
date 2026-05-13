@@ -280,6 +280,14 @@ SET user_id = @user_id,
 WHERE workos_user_id = @workos_user_id
   AND user_id IS NULL;
 
+-- name: GetRoleAssignmentLinkedToDifferentWorkOSUser :one
+SELECT id, workos_user_id
+FROM organization_role_assignments
+WHERE user_id = @user_id
+  AND workos_user_id <> @workos_user_id
+ORDER BY updated_at DESC
+LIMIT 1;
+
 -- name: ListOrganizationRoleAssignmentsByWorkOSUser :many
 SELECT *
 FROM organization_role_assignments
