@@ -29,7 +29,7 @@ WHERE organization_user_relationships.deleted_at IS NULL
 
 type AttachWorkOSUserToOrgParams struct {
 	OrganizationID     string
-	UserID             string
+	UserID             pgtype.Text
 	WorkosMembershipID pgtype.Text
 }
 
@@ -92,7 +92,7 @@ WHERE organization_id = $1
 
 type DeleteOrganizationUserRelationshipParams struct {
 	OrganizationID string
-	UserID         string
+	UserID         pgtype.Text
 }
 
 func (q *Queries) DeleteOrganizationUserRelationship(ctx context.Context, arg DeleteOrganizationUserRelationshipParams) error {
@@ -209,7 +209,7 @@ WHERE organization_id = $1
 
 type GetOrganizationRelationshipForUserParams struct {
 	OrganizationID string
-	UserID         string
+	UserID         pgtype.Text
 }
 
 func (q *Queries) GetOrganizationRelationshipForUser(ctx context.Context, arg GetOrganizationRelationshipForUserParams) (OrganizationUserRelationship, error) {
@@ -241,7 +241,7 @@ WHERE organization_id = $1
 
 type GetOrganizationUserRelationshipParams struct {
 	OrganizationID string
-	UserID         string
+	UserID         pgtype.Text
 }
 
 func (q *Queries) GetOrganizationUserRelationship(ctx context.Context, arg GetOrganizationUserRelationshipParams) (OrganizationUserRelationship, error) {
@@ -275,7 +275,7 @@ SELECT EXISTS(
 
 type HasOrganizationUserRelationshipParams struct {
 	OrganizationID string
-	UserID         string
+	UserID         pgtype.Text
 }
 
 func (q *Queries) HasOrganizationUserRelationship(ctx context.Context, arg HasOrganizationUserRelationshipParams) (bool, error) {
@@ -344,7 +344,7 @@ WHERE our.organization_id = $1
 type ListOrganizationUsersRow struct {
 	ID                 int64
 	OrganizationID     string
-	UserID             string
+	UserID             pgtype.Text
 	WorkosUserID       pgtype.Text
 	WorkosMembershipID pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz
@@ -419,7 +419,7 @@ ON CONFLICT (organization_id, user_id) DO UPDATE SET
 
 type MarkOrganizationUserRelationshipAsDeletedParams struct {
 	OrganizationID     string
-	UserID             string
+	UserID             pgtype.Text
 	WorkosMembershipID pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz
 	WorkosLastEventID  pgtype.Text
@@ -526,7 +526,7 @@ WHERE organization_user_relationships.user_id = $1
 `
 
 type SetUserWorkOSMembershipsParams struct {
-	UserID              string
+	UserID              pgtype.Text
 	WorkosOrgIds        []string
 	WorkosMembershipIds []string
 }
@@ -767,7 +767,7 @@ RETURNING id, organization_id, user_id, workos_user_id, workos_membership_id, wo
 
 type UpsertOrganizationUserRelationshipParams struct {
 	OrganizationID string
-	UserID         string
+	UserID         pgtype.Text
 }
 
 func (q *Queries) UpsertOrganizationUserRelationship(ctx context.Context, arg UpsertOrganizationUserRelationshipParams) (OrganizationUserRelationship, error) {
@@ -813,7 +813,7 @@ ON CONFLICT (organization_id, user_id) DO UPDATE SET
 
 type UpsertOrganizationUserRelationshipFromWorkOSParams struct {
 	OrganizationID     string
-	UserID             string
+	UserID             pgtype.Text
 	WorkosMembershipID pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz
 	WorkosLastEventID  pgtype.Text

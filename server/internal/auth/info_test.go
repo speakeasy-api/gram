@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
@@ -260,7 +261,7 @@ func TestService_Info_RegularUserOrgRelationshipUpserted(t *testing.T) {
 	// Confirm no relationship exists before the Info call.
 	exists, err := queries.HasOrganizationUserRelationship(ctx, orgRepo.HasOrganizationUserRelationshipParams{
 		OrganizationID: userInfo.Organizations[0].ID,
-		UserID:         userInfo.UserID,
+		UserID:         conv.ToPGText(userInfo.UserID),
 	})
 	require.NoError(t, err)
 	require.False(t, exists, "expected no org-user relationship before Info call")
@@ -294,7 +295,7 @@ func TestService_Info_RegularUserOrgRelationshipUpserted(t *testing.T) {
 	// The upsert must have created the relationship.
 	exists, err = queries.HasOrganizationUserRelationship(ctx, orgRepo.HasOrganizationUserRelationshipParams{
 		OrganizationID: userInfo.Organizations[0].ID,
-		UserID:         userInfo.UserID,
+		UserID:         conv.ToPGText(userInfo.UserID),
 	})
 	require.NoError(t, err)
 	require.True(t, exists, "expected org-user relationship to be upserted by Info call")
@@ -334,7 +335,7 @@ func TestService_Info_AdminOrgRelationshipUpserted(t *testing.T) {
 	// Confirm no relationship exists before the Info call.
 	exists, err := queries.HasOrganizationUserRelationship(ctx, orgRepo.HasOrganizationUserRelationshipParams{
 		OrganizationID: userInfo.Organizations[0].ID,
-		UserID:         userInfo.UserID,
+		UserID:         conv.ToPGText(userInfo.UserID),
 	})
 	require.NoError(t, err)
 	require.False(t, exists, "expected no org-user relationship before Info call")
@@ -368,7 +369,7 @@ func TestService_Info_AdminOrgRelationshipUpserted(t *testing.T) {
 	// The upsert must have created the relationship.
 	exists, err = queries.HasOrganizationUserRelationship(ctx, orgRepo.HasOrganizationUserRelationshipParams{
 		OrganizationID: userInfo.Organizations[0].ID,
-		UserID:         userInfo.UserID,
+		UserID:         conv.ToPGText(userInfo.UserID),
 	})
 	require.NoError(t, err)
 	require.True(t, exists, "expected org-user relationship to be upserted by Info call")
@@ -548,7 +549,7 @@ func TestService_Info_AdminVisitingCustomerOrgDoesNotUpsertRelationship(t *testi
 	queries := orgRepo.New(instance.conn)
 	exists, err := queries.HasOrganizationUserRelationship(ctx, orgRepo.HasOrganizationUserRelationshipParams{
 		OrganizationID: customerOrgID,
-		UserID:         userInfo.UserID,
+		UserID:         conv.ToPGText(userInfo.UserID),
 	})
 	require.NoError(t, err)
 	require.False(t, exists, "admin must not be upserted into a customer org's relationship table")

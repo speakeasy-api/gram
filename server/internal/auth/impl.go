@@ -423,7 +423,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	if belongsToActiveOrg {
 		if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
-			UserID:         authCtx.UserID,
+			UserID:         conv.ToPGText(authCtx.UserID),
 		}); err != nil {
 			s.logger.ErrorContext(ctx, "error upserting organization user relationship", attr.SlogError(err))
 		}

@@ -44,7 +44,7 @@ type OrganizationRoleAssignment struct {
 type OrganizationUserRelationship struct {
 	ID                 int64
 	OrganizationID     string
-	UserID             string
+	UserID             pgtype.Text
 	WorkosUserID       pgtype.Text
 	WorkosMembershipID pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz

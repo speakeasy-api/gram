@@ -269,7 +269,7 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 	if gramUserID != "" {
 		if err := orgQueries.UpsertOrganizationUserRelationshipFromWorkOS(ctx, orgrepo.UpsertOrganizationUserRelationshipFromWorkOSParams{
 			OrganizationID:     organizationID,
-			UserID:             gramUserID,
+			UserID:             conv.ToPGText(gramUserID),
 			WorkosMembershipID: conv.ToPGText(member.ID),
 			WorkosUpdatedAt:    conv.ToPGTimestamptz(parsed.updatedAt),
 			WorkosLastEventID:  conv.ToPGText(""),
@@ -330,7 +330,7 @@ func latestMembershipCursor(ctx context.Context, repo *orgrepo.Queries, organiza
 
 	existing, err := repo.GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
 		OrganizationID: organizationID,
-		UserID:         gramUserID,
+		UserID:         conv.ToPGText(gramUserID),
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
