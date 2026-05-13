@@ -18,6 +18,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
 
 export interface FilterChip {
   display: string;
@@ -47,6 +48,7 @@ export function ObserveFilterBar({
   onClearCustomRange,
   projectSlug,
   className,
+  serverNameMappings,
 }: {
   serverOptions: string[];
   onServerSelectionChange: (values: string[]) => void;
@@ -63,6 +65,7 @@ export function ObserveFilterBar({
   onClearCustomRange: () => void;
   projectSlug?: string;
   className?: string;
+  serverNameMappings?: ReturnType<typeof useServerNameMappings>;
 }) {
   const selectedServers = useMemo(
     () =>
@@ -82,12 +85,20 @@ export function ObserveFilterBar({
     [activeFilters],
   );
 
+  const serverOptionsWithDisplayNames = useMemo(() => {
+    const rawToDisplay = serverNameMappings?.rawToDisplay;
+    return serverOptions.map((rawName) => ({
+      label: rawToDisplay?.get(rawName) ?? rawName,
+      value: rawName,
+    }));
+  }, [serverOptions, serverNameMappings?.rawToDisplay]);
+
   return (
     <div
       className={cn("flex shrink-0 flex-wrap items-center gap-2", className)}
     >
       <MultiSelect
-        options={serverOptions.map((s) => ({ label: s, value: s }))}
+        options={serverOptionsWithDisplayNames}
         defaultValue={selectedServers}
         onValueChange={onServerSelectionChange}
         placeholder="Filter by server name"
