@@ -57,7 +57,7 @@ func TestService_Login(t *testing.T) {
 		require.Equal(t, expectedRedirectURI, redirectURI)
 	})
 
-	t.Run("login without redirect creates empty state", func(t *testing.T) {
+	t.Run("login without redirect creates state with nonce", func(t *testing.T) {
 		t.Parallel()
 
 		userInfo := defaultMockUserInfo()
@@ -73,7 +73,6 @@ func TestService_Login(t *testing.T) {
 		stateParam := parsedURL.Query().Get("state")
 		require.NotEmpty(t, stateParam, "state parameter should be present")
 
-		// Decode and verify state structure
 		stateBytes, err := base64.RawURLEncoding.DecodeString(stateParam)
 		require.NoError(t, err)
 
@@ -81,6 +80,7 @@ func TestService_Login(t *testing.T) {
 		err = json.Unmarshal(stateBytes, &state)
 		require.NoError(t, err)
 		require.Empty(t, state["final_destination_url"])
+		require.NotEmpty(t, state["nonce"], "state should contain a nonce")
 	})
 
 	t.Run("login with redirect encodes state parameter", func(t *testing.T) {
@@ -102,7 +102,6 @@ func TestService_Login(t *testing.T) {
 		stateParam := parsedURL.Query().Get("state")
 		require.NotEmpty(t, stateParam, "state parameter should be present")
 
-		// Decode and verify state contains redirect URL
 		stateBytes, err := base64.RawURLEncoding.DecodeString(stateParam)
 		require.NoError(t, err)
 
@@ -110,6 +109,7 @@ func TestService_Login(t *testing.T) {
 		err = json.Unmarshal(stateBytes, &state)
 		require.NoError(t, err)
 		require.Equal(t, redirectURL, state["final_destination_url"])
+		require.NotEmpty(t, state["nonce"], "state should contain a nonce")
 	})
 
 	t.Run("login with complex redirect URL encodes state correctly", func(t *testing.T) {
@@ -131,7 +131,6 @@ func TestService_Login(t *testing.T) {
 		stateParam := parsedURL.Query().Get("state")
 		require.NotEmpty(t, stateParam, "state parameter should be present")
 
-		// Decode and verify state contains full redirect URL with query parameters
 		stateBytes, err := base64.RawURLEncoding.DecodeString(stateParam)
 		require.NoError(t, err)
 
@@ -139,5 +138,6 @@ func TestService_Login(t *testing.T) {
 		err = json.Unmarshal(stateBytes, &state)
 		require.NoError(t, err)
 		require.Equal(t, redirectURL, state["final_destination_url"])
+		require.NotEmpty(t, state["nonce"], "state should contain a nonce")
 	})
 }

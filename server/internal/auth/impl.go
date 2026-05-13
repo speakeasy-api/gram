@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +12,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -28,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -39,6 +43,10 @@ import (
 )
 
 const dispositionAssistants = "assistants"
+
+// nonceTTL is the maximum time a login nonce is valid. Nonces are one-time-use
+// and deleted on consumption; this TTL is a safety net for abandoned flows.
+const nonceTTL = 10 * time.Minute
 
 type authErr string
 
@@ -71,6 +79,7 @@ type Service struct {
 	billing             billing.Repository
 	cancelSubsScheduler AssistantsSubscriptionCancelScheduler
 	posthog             *posthog.Posthog
+	nonceStore          cache.Cache
 	projectsRepo        *projectsRepo.Queries
 	envRepo             *envRepo.Queries
 	orgRepo             *orgRepo.Queries
@@ -89,6 +98,7 @@ func NewService(
 	billingRepo billing.Repository,
 	cancelSubsScheduler AssistantsSubscriptionCancelScheduler,
 	posthogClient *posthog.Posthog,
+	nonceStore cache.Cache,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
 
@@ -103,6 +113,7 @@ func NewService(
 		billing:             billingRepo,
 		cancelSubsScheduler: cancelSubsScheduler,
 		posthog:             posthogClient,
+		nonceStore:          nonceStore,
 		projectsRepo:        projectsRepo.New(db),
 		envRepo:             envRepo.New(db),
 		orgRepo:             orgRepo.New(db),
@@ -147,6 +158,10 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 	if payload.Code == "" {
 		return redirectWithError(authErrCodeLookup, errors.New("code is required"))
+	}
+
+	if err := s.validateAuthNonce(ctx, payload); err != nil {
+		return redirectWithError(authErrCodeLookup, err)
 	}
 
 	idpUser, err := s.identity.ExchangeCodeForTokens(ctx, payload.Code)
@@ -251,7 +266,16 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *gen.LoginResult, err error) {
 	callbackURL := s.buildCallbackURL(ctx)
-	state := encodeStateParam(payload)
+
+	nonce, err := generateNonce()
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error generating login nonce").Log(ctx, s.logger)
+	}
+	if err := s.nonceStore.Set(ctx, nonceKey(nonce), true, nonceTTL); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error storing login nonce").Log(ctx, s.logger)
+	}
+
+	state := encodeStateParam(payload, nonce)
 
 	authURL, err := s.identity.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
 		CallbackURL:     callbackURL,
@@ -678,11 +702,13 @@ func (s *Service) createDefaultProject(ctx context.Context, organizationID strin
 
 type loginState struct {
 	FinalDestinationURL string `json:"final_destination_url"`
+	Nonce               string `json:"nonce,omitempty"`
 }
 
-func encodeStateParam(payload *gen.LoginPayload) string {
+func encodeStateParam(payload *gen.LoginPayload, nonce string) string {
 	state := loginState{
 		FinalDestinationURL: conv.PtrValOr(payload.Redirect, ""),
+		Nonce:               nonce,
 	}
 
 	jsonBytes, err := json.Marshal(state)
@@ -715,6 +741,48 @@ func decodeStateParam(payload *gen.CallbackPayload) *loginState {
 	}
 
 	return state
+}
+
+// generateNonce produces a cryptographically random 16-byte hex string for use
+// as the OAuth state nonce.
+func generateNonce() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate nonce: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
+func nonceKey(nonce string) string {
+	return "auth:login_nonce:" + nonce
+}
+
+// validateAuthNonce validates that the OAuth callback was initiated by a Login call
+// that Gram controls, preventing CSRF attacks where an attacker crafts a
+// callback URL with a stolen authorization code. Without this, the state param
+// is caller-controlled base64 JSON with no server-side binding — an attacker
+// can forge it freely.
+//
+// The nonce is stored in Redis during Login with a short TTL and consumed
+// (deleted) here atomically so each nonce is single-use.
+func (s *Service) validateAuthNonce(ctx context.Context, payload *gen.CallbackPayload) error {
+	state := decodeStateParam(payload)
+	if state == nil || state.Nonce == "" {
+		return errors.New("missing or invalid state parameter")
+	}
+
+	key := nonceKey(state.Nonce)
+	var stored bool
+	if err := s.nonceStore.Get(ctx, key, &stored); err != nil {
+		return errors.New("invalid or expired login nonce")
+	}
+
+	// Delete immediately — nonce is single-use to prevent replay.
+	if err := s.nonceStore.Delete(ctx, key); err != nil {
+		s.logger.ErrorContext(ctx, "failed to delete consumed nonce", attr.SlogError(err))
+	}
+
+	return nil
 }
 
 // buildCallbackURL constructs the OIDC redirect_uri that the IDP will send the

@@ -2,8 +2,6 @@ package auth_test
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -133,10 +131,11 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
+	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nonceStore)
 
-	ti := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs)
+	ti := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	return ctx, &e2eInstance{testInstance: *ti, fetcher: fetcher}
 }
 
@@ -189,7 +188,7 @@ func TestE2E_Callback_NewUserWithWorkOSOrgMemberships(t *testing.T) {
 
 	// Callback fires code exchange → UpsertUserFromIDP → BuildUserInfoFromDB.
 	// No pre-seeding — the fallback must create the org and relationship.
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	result, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotContains(t, result.Location, "signin_error=", "callback should succeed without error")
@@ -254,7 +253,7 @@ func TestE2E_Callback_NewUserJoiningExistingOrg(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	result, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotContains(t, result.Location, "signin_error=")
 	require.NotEmpty(t, result.SessionToken)
@@ -291,7 +290,7 @@ func TestE2E_Callback_NewUserNoWorkOSOrgs(t *testing.T) {
 
 	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
 
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	result, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	// Zero-org users get a session but no active org.
@@ -320,9 +319,7 @@ func TestE2E_Callback_NewUserNoWorkOSOrgs_AssistantsDisposition(t *testing.T) {
 
 	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
 
-	stateJSON, err := json.Marshal(map[string]string{"final_destination_url": "/?disposition=assistants"})
-	require.NoError(t, err)
-	stateParam := base64.RawURLEncoding.EncodeToString(stateJSON)
+	stateParam := inst.stateWithNonce(ctx, t, "/?disposition=assistants")
 
 	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &stateParam})
 	require.NoError(t, err)
@@ -371,7 +368,7 @@ func TestE2E_Callback_ExistingUserWithDBOrgs(t *testing.T) {
 	require.NoError(t, inst.createTestOrganization(ctx, orgEntry, userInfo.UserID))
 	inst.setUserWorkosID(ctx, t, userInfo.UserID, workosUserID)
 
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	result, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotContains(t, result.Location, "signin_error=")
 	require.NotEmpty(t, result.SessionToken)
@@ -425,7 +422,7 @@ func TestE2E_Callback_RejoinedOrg(t *testing.T) {
 
 	// Create the user first via callback so UpsertUserFromIDP runs.
 	// Then soft-delete the relationship to simulate "user left".
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	result, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotContains(t, result.Location, "signin_error=")
 
@@ -444,7 +441,7 @@ func TestE2E_Callback_RejoinedOrg(t *testing.T) {
 
 	// Second login: relationship is soft-deleted, so ListOrganizationsForUser
 	// returns 0 rows. The fallback should fire and clear deleted_at.
-	result2, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	result2, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotContains(t, result2.Location, "signin_error=")
 	require.NotEmpty(t, result2.SessionToken)
@@ -488,7 +485,7 @@ func TestE2E_Callback_MultipleOrgs(t *testing.T) {
 
 	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
 
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	result, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotContains(t, result.Location, "signin_error=")
 	require.NotEmpty(t, result.SessionToken)
@@ -542,7 +539,7 @@ func TestE2E_Callback_IDPOrgSelection(t *testing.T) {
 
 	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
 
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	result, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotContains(t, result.Location, "signin_error=")
 	require.NotEmpty(t, result.SessionToken)
@@ -593,7 +590,7 @@ func TestE2E_Callback_ThenInfo(t *testing.T) {
 	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
 
 	// Step 1: Callback
-	callbackResult, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotContains(t, callbackResult.Location, "signin_error=")
 
@@ -647,7 +644,7 @@ func TestE2E_Callback_ThenSwitchScopes(t *testing.T) {
 	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
 
 	// Step 1: Callback (creates session with orgID1 as active)
-	callbackResult, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotContains(t, callbackResult.Location, "signin_error=")
 
@@ -687,7 +684,7 @@ func TestE2E_Callback_NoWorkOSClient(t *testing.T) {
 
 	ctx, inst := newE2EAuthService(t, userInfo, nil) // nil fetcher
 
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	result, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotContains(t, result.Location, "signin_error=")
@@ -764,7 +761,7 @@ func TestE2E_Logout(t *testing.T) {
 	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
 
 	// Step 1: Login via callback
-	callbackResult, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotContains(t, callbackResult.Location, "signin_error=")
 
@@ -804,7 +801,7 @@ func TestE2E_Register_ZeroOrgUserCreatesOrg(t *testing.T) {
 	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
 
 	// Step 1: Callback — zero orgs, gets session but no active org
-	callbackResult, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotContains(t, callbackResult.Location, "signin_error=")
 	require.NotEmpty(t, callbackResult.SessionToken)
@@ -855,7 +852,7 @@ func TestE2E_Register_CreatesWorkOSOrg(t *testing.T) {
 	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
 
 	// Login → Callback (zero orgs)
-	callbackResult, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotEmpty(t, callbackResult.SessionToken)
 
@@ -914,7 +911,7 @@ func TestE2E_Register_RejectsWhenOrgAlreadyActive(t *testing.T) {
 	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
 
 	// Callback — user gets an org via WorkOS fallback
-	callbackResult, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotContains(t, callbackResult.Location, "signin_error=")
 
@@ -942,7 +939,7 @@ func TestE2E_Register_RejectsInvalidOrgName(t *testing.T) {
 	ctx, inst := newE2EAuthService(t, userInfo, nil)
 
 	// Callback — zero orgs
-	callbackResult, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 
 	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
@@ -974,7 +971,7 @@ func TestE2E_FullOnboardingFlow(t *testing.T) {
 	assert.Contains(t, loginResult.Location, "/authorize")
 
 	// Step 2: Callback — simulates redirect back with code
-	callbackResult, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 	require.NotContains(t, callbackResult.Location, "signin_error=")
 	require.NotEmpty(t, callbackResult.SessionToken)

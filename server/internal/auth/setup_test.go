@@ -2,6 +2,7 @@ package auth_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,11 +10,13 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
+	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -67,6 +70,7 @@ type testInstance struct {
 	identityResolver *identity.Resolver
 	mockAuthServer   *httptest.Server
 	authConfigs      auth.AuthConfigurations
+	nonceStore       cache.Cache
 }
 
 // MockUserInfo represents the user info used by the mock OIDC server
@@ -155,10 +159,11 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
+	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore)
 
-	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs)
+	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 }
 
 func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.Context, *testInstance) {
@@ -202,13 +207,14 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
+	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore)
 
-	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs)
+	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 }
 
-func newTestAuthServiceResult(_ *testing.T, svc *auth.Service, conn *pgxpool.Pool, sessionManager *sessions.Manager, resolver *identity.Resolver, mockServer *httptest.Server, authConfigs auth.AuthConfigurations) *testInstance {
+func newTestAuthServiceResult(_ *testing.T, svc *auth.Service, conn *pgxpool.Pool, sessionManager *sessions.Manager, resolver *identity.Resolver, mockServer *httptest.Server, authConfigs auth.AuthConfigurations, nonceStore cache.Cache) *testInstance {
 	return &testInstance{
 		service:          svc,
 		conn:             conn,
@@ -216,7 +222,43 @@ func newTestAuthServiceResult(_ *testing.T, svc *auth.Service, conn *pgxpool.Poo
 		identityResolver: resolver,
 		mockAuthServer:   mockServer,
 		authConfigs:      authConfigs,
+		nonceStore:       nonceStore,
 	}
+}
+
+// seedNonce stores a nonce in Redis so hand-crafted state params pass validation in tests.
+func (ti *testInstance) seedNonce(ctx context.Context, t *testing.T, nonce string) {
+	t.Helper()
+	require.NoError(t, ti.nonceStore.Set(ctx, "auth:login_nonce:"+nonce, true, 10*time.Minute))
+}
+
+// stateWithNonce builds a base64-encoded state param with the given redirect and a seeded nonce.
+func (ti *testInstance) stateWithNonce(ctx context.Context, t *testing.T, redirectURL string) string {
+	t.Helper()
+	nonce := fmt.Sprintf("test-nonce-%d", time.Now().UnixNano())
+	ti.seedNonce(ctx, t, nonce)
+	state := map[string]string{
+		"final_destination_url": redirectURL,
+		"nonce":                 nonce,
+	}
+	stateJSON, err := json.Marshal(state)
+	require.NoError(t, err)
+	return base64.RawURLEncoding.EncodeToString(stateJSON)
+}
+
+// callbackWithNonce creates a CallbackPayload with a valid nonce and calls Callback.
+// Shorthand for the common pattern in e2e tests.
+func (ti *testInstance) callbackWithNonce(ctx context.Context, t *testing.T) (*gen.CallbackResult, error) {
+	t.Helper()
+	stateParam := ti.stateWithNonce(ctx, t, "")
+	res, err := ti.service.Callback(ctx, &gen.CallbackPayload{
+		Code:  "mock_code",
+		State: &stateParam,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("callback with nonce: %w", err)
+	}
+	return res, nil
 }
 
 // Helper function to create a default mock user info
