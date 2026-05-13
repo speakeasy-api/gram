@@ -226,8 +226,15 @@ export function InsightsAgentsContent() {
       "overview",
       from.toISOString(),
       to.toISOString(),
+      clientFilter,
     ],
-    queryFn: () => fetchOverview(client, from, to),
+    queryFn: () =>
+      fetchOverview(
+        client,
+        from,
+        to,
+        clientFilter !== "all" ? clientFilter : undefined,
+      ),
     throwOnError: false,
   });
 
@@ -235,10 +242,14 @@ export function InsightsAgentsContent() {
   const projectMetrics = projectQuery.data ?? null;
   const timeSeries = overviewQuery.data?.timeSeries ?? [];
 
-  const totalTokens = users.reduce((s, u) => s + u.totalTokens, 0);
+  // Derive total tokens from input + output — the API's totalTokens field
+  // is not populated by many providers (only Anthropic reports it reliably).
+  const effectiveTokens = (u: UserSummary) =>
+    u.totalInputTokens + u.totalOutputTokens;
+
+  const totalTokens = users.reduce((s, u) => s + effectiveTokens(u), 0);
   const totalCost = users.reduce((s, u) => s + u.totalCost, 0);
-  const totalSessions = users.reduce((s, u) => s + u.totalChats, 0);
-  const activeUsers = users.filter((u) => u.totalTokens > 0).length;
+  const activeUsers = users.filter((u) => effectiveTokens(u) > 0).length;
 
   const clientBreakdown = useMemo(() => {
     const map = new Map<
@@ -289,19 +300,20 @@ export function InsightsAgentsContent() {
         .sort((a, b) =>
           valueMode === "cost"
             ? b.totalCost - a.totalCost
-            : b.totalTokens - a.totalTokens,
+            : effectiveTokens(b) - effectiveTokens(a),
         )
         .map((u) => {
           const member = memberMap.get(u.userId);
+          const uTokens = effectiveTokens(u);
           return {
             ...u,
+            totalTokens: uTokens,
             displayName: member?.name ?? u.userId,
             email: member?.email ?? "",
             photoUrl: member?.photoUrl ?? null,
             costPerSession: u.totalChats > 0 ? u.totalCost / u.totalChats : 0,
             costShare: totalCost > 0 ? (u.totalCost / totalCost) * 100 : 0,
-            tokenShare:
-              totalTokens > 0 ? (u.totalTokens / totalTokens) * 100 : 0,
+            tokenShare: totalTokens > 0 ? (uTokens / totalTokens) * 100 : 0,
             clients:
               u.hookSources.length > 0
                 ? u.hookSources
@@ -340,9 +352,9 @@ export function InsightsAgentsContent() {
           u.hookSources.find((hs) => hs.source === clientFilter)?.eventCount ??
           0;
         const ratio = totalEvents > 0 ? clientEvents / totalEvents : 0;
-        const adjTokens = Math.round(u.totalTokens * ratio);
         const adjInput = Math.round(u.totalInputTokens * ratio);
         const adjOutput = Math.round(u.totalOutputTokens * ratio);
+        const adjTokens = adjInput + adjOutput;
         const adjCost = u.totalCost * ratio;
         const adjSessions = Math.round(u.totalChats * ratio);
         return {
@@ -363,6 +375,23 @@ export function InsightsAgentsContent() {
           : b.totalTokens - a.totalTokens,
       );
   }, [userRows, clientFilter, valueMode, totalCost, totalTokens]);
+
+  // Filtered aggregates for metric cards when a client is selected
+  const filteredTotalTokens = filteredUserRows.reduce(
+    (s, u) => s + u.totalTokens,
+    0,
+  );
+  const filteredTotalCost = filteredUserRows.reduce(
+    (s, u) => s + u.totalCost,
+    0,
+  );
+  const filteredTotalSessions = filteredUserRows.reduce(
+    (s, u) => s + u.totalChats,
+    0,
+  );
+  const filteredActiveUsers = filteredUserRows.filter(
+    (u) => u.totalTokens > 0,
+  ).length;
 
   const isLoading =
     membersLoading || usersQuery.isLoading || projectQuery.isLoading;
@@ -444,6 +473,18 @@ export function InsightsAgentsContent() {
               )}
             >
               <ValueModeToggle mode={valueMode} onChange={setValueMode} />
+              <select
+                value={clientFilter}
+                onChange={(e) => setClientFilter(e.target.value)}
+                className="border-border bg-background text-foreground h-[34px] rounded-md border px-2.5 text-xs"
+              >
+                <option value="all">All Agents</option>
+                {availableClients.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
               <TimeRangePicker
                 preset={customRange ? null : dateRange}
                 customRange={customRange}
@@ -472,26 +513,26 @@ export function InsightsAgentsContent() {
               >
                 <MetricCard
                   title="Total Tokens"
-                  value={totalTokens}
+                  value={filteredTotalTokens}
                   icon="gauge"
                   accentColor="blue"
-                  subtext={`${formatTokens(totalTokens)} across ${totalSessions.toLocaleString()} sessions`}
+                  subtext={`${formatTokens(filteredTotalTokens)} across ${filteredTotalSessions.toLocaleString()} sessions`}
                 />
                 <MetricCard
                   title="Total Cost"
-                  value={totalCost}
+                  value={filteredTotalCost}
                   format="number"
                   icon="credit-card"
                   accentColor="purple"
                   subtext={
-                    totalCost > 0
-                      ? formatCost(totalCost)
+                    filteredTotalCost > 0
+                      ? formatCost(filteredTotalCost)
                       : "No cost data reported"
                   }
                 />
                 <MetricCard
                   title="Active Users"
-                  value={activeUsers}
+                  value={filteredActiveUsers}
                   icon="user"
                   accentColor="green"
                   subtext={`of ${(membersData?.members ?? []).length} org members`}
@@ -531,7 +572,11 @@ export function InsightsAgentsContent() {
                 <ClientBreakdownChart
                   title="Usage by Client"
                   chartId="client-breakdown"
-                  data={clientBreakdown}
+                  data={
+                    clientFilter === "all"
+                      ? clientBreakdown
+                      : clientBreakdown.filter((c) => c.source === clientFilter)
+                  }
                   valueMode={valueMode}
                   expandedChart={expandedChart}
                   onExpand={setExpandedChart}
@@ -547,8 +592,6 @@ export function InsightsAgentsContent() {
                 users={filteredUserRows}
                 valueMode={valueMode}
                 clientFilter={clientFilter}
-                availableClients={availableClients}
-                onClientFilterChange={setClientFilter}
               />
 
               <CostDisclaimer providers={clientBreakdown.map((c) => c.label)} />
@@ -562,6 +605,7 @@ export function InsightsAgentsContent() {
 
 function TokenTimeSeriesChart({
   title,
+  subtitle,
   chartId,
   timeSeries,
   timeRangeMs,
@@ -570,6 +614,7 @@ function TokenTimeSeriesChart({
   onExpand,
 }: {
   title: string;
+  subtitle?: string;
   chartId: string;
   timeSeries: TimeSeriesBucket[];
   timeRangeMs: number;
@@ -580,7 +625,10 @@ function TokenTimeSeriesChart({
   const isExpanded = expandedChart === chartId;
   const height = isExpanded ? 420 : 260;
   const hasData = timeSeries.some(
-    (b) => (valueMode === "cost" ? b.totalCost : b.totalTokens) > 0,
+    (b) =>
+      (valueMode === "cost"
+        ? b.totalCost
+        : b.totalInputTokens + b.totalOutputTokens) > 0,
   );
 
   const chartData = useMemo(() => {
@@ -711,6 +759,9 @@ function TokenTimeSeriesChart({
       onExpand={onExpand}
       hasData={hasData}
     >
+      {subtitle && (
+        <p className="text-muted-foreground -mt-3 mb-2 text-xs">{subtitle}</p>
+      )}
       {!hasData ? (
         <div className="text-muted-foreground flex h-[260px] items-center justify-center text-sm">
           No data for selected time range
@@ -871,28 +922,117 @@ type EmployeeRow = UserSummary & {
   tokenShare: number;
 };
 
+type SortField =
+  | "employee"
+  | "input"
+  | "output"
+  | "totalTokens"
+  | "cost"
+  | "costPerSession"
+  | "sessions"
+  | "share";
+
+function SortableHead({
+  field,
+  activeField,
+  direction,
+  onSort,
+  className,
+  children,
+}: {
+  field: SortField;
+  activeField: SortField | null;
+  direction: "asc" | "desc";
+  onSort: (field: SortField) => void;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const isActive = activeField === field;
+  return (
+    <TableHead
+      className={cn("cursor-pointer select-none", className)}
+      onClick={() => onSort(field)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {children}
+        <span className="text-muted-foreground text-[10px]">
+          {isActive ? (direction === "asc" ? "▲" : "▼") : "⇅"}
+        </span>
+      </span>
+    </TableHead>
+  );
+}
+
 function EmployeeCostTable({
   users,
   valueMode,
   clientFilter,
-  availableClients,
-  onClientFilterChange,
 }: {
   users: EmployeeRow[];
   valueMode: ValueMode;
   clientFilter: string;
-  availableClients: Array<{ value: string; label: string }>;
-  onClientFilterChange: (value: string) => void;
 }) {
   const PAGE_SIZE = 10;
   const [page, setPage] = useState(0);
-  const totalPages = Math.ceil(users.length / PAGE_SIZE);
+  const isCost = valueMode === "cost";
+
+  // Default sort follows the value mode; clicking a column overrides
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setSortField(field);
+      setSortDirection("desc");
+    }
+    setPage(0);
+  };
+
+  const effectiveSortField = sortField ?? (isCost ? "cost" : "totalTokens");
+  const effectiveSortDir = sortField ? sortDirection : "desc";
+
+  const sortedUsers = useMemo(() => {
+    const getValue = (u: EmployeeRow): number | string => {
+      switch (effectiveSortField) {
+        case "employee":
+          return u.displayName.toLowerCase();
+        case "input":
+          return u.totalInputTokens;
+        case "output":
+          return u.totalOutputTokens;
+        case "totalTokens":
+          return u.totalTokens;
+        case "cost":
+          return u.totalCost;
+        case "costPerSession":
+          return u.costPerSession;
+        case "sessions":
+          return u.totalChats;
+        case "share":
+          return isCost ? u.costShare : u.tokenShare;
+        default:
+          return 0;
+      }
+    };
+    return users.slice().sort((a, b) => {
+      const va = getValue(a);
+      const vb = getValue(b);
+      const cmp =
+        typeof va === "string" && typeof vb === "string"
+          ? va.localeCompare(vb)
+          : (va as number) - (vb as number);
+      return effectiveSortDir === "asc" ? cmp : -cmp;
+    });
+  }, [users, effectiveSortField, effectiveSortDir, isCost]);
+
+  const totalPages = Math.ceil(sortedUsers.length / PAGE_SIZE);
   const safePage = Math.min(page, Math.max(totalPages - 1, 0));
-  const pageUsers = users.slice(
+  const pageUsers = sortedUsers.slice(
     safePage * PAGE_SIZE,
     (safePage + 1) * PAGE_SIZE,
   );
-  const isCost = valueMode === "cost";
 
   return (
     <section className="bg-card flex flex-col gap-4 rounded-xl border p-4">
@@ -902,43 +1042,83 @@ function EmployeeCostTable({
             {isCost ? "Cost" : "Usage"} by Employee
           </h3>
           <p className="text-muted-foreground text-xs">
-            {isCost
-              ? "Sorted by total cost (highest first)"
-              : "Sorted by total tokens (highest first)"}
             {clientFilter !== "all" &&
-              ` · filtered to ${formatPlatform(clientFilter)}`}
+              `Filtered to ${formatPlatform(clientFilter)} · `}
+            {sortedUsers.length} employee
+            {sortedUsers.length !== 1 ? "s" : ""}
           </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <select
-            value={clientFilter}
-            onChange={(e) => onClientFilterChange(e.target.value)}
-            className="border-border bg-background text-foreground rounded-md border px-2.5 py-1.5 text-xs"
-          >
-            <option value="all">All Clients</option>
-            {availableClients.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-          <span className="text-muted-foreground text-xs">
-            {users.length} employee{users.length !== 1 ? "s" : ""}
-          </span>
         </div>
       </div>
       <div className="overflow-x-auto rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="pl-6">Employee</TableHead>
-              <TableHead>Input</TableHead>
-              <TableHead>Output</TableHead>
-              <TableHead>Total Tokens</TableHead>
-              <TableHead>Cost</TableHead>
-              <TableHead>$/Session</TableHead>
-              <TableHead>Sessions</TableHead>
-              <TableHead className="pr-6">Share</TableHead>
+              <SortableHead
+                field="employee"
+                activeField={sortField}
+                direction={effectiveSortDir}
+                onSort={handleSort}
+                className="pl-6"
+              >
+                Employee
+              </SortableHead>
+              <SortableHead
+                field="input"
+                activeField={sortField}
+                direction={effectiveSortDir}
+                onSort={handleSort}
+              >
+                Input
+              </SortableHead>
+              <SortableHead
+                field="output"
+                activeField={sortField}
+                direction={effectiveSortDir}
+                onSort={handleSort}
+              >
+                Output
+              </SortableHead>
+              <SortableHead
+                field="totalTokens"
+                activeField={sortField}
+                direction={effectiveSortDir}
+                onSort={handleSort}
+              >
+                Total Tokens
+              </SortableHead>
+              <SortableHead
+                field="cost"
+                activeField={sortField}
+                direction={effectiveSortDir}
+                onSort={handleSort}
+              >
+                Cost
+              </SortableHead>
+              <SortableHead
+                field="costPerSession"
+                activeField={sortField}
+                direction={effectiveSortDir}
+                onSort={handleSort}
+              >
+                $/Session
+              </SortableHead>
+              <SortableHead
+                field="sessions"
+                activeField={sortField}
+                direction={effectiveSortDir}
+                onSort={handleSort}
+              >
+                Sessions
+              </SortableHead>
+              <SortableHead
+                field="share"
+                activeField={sortField}
+                direction={effectiveSortDir}
+                onSort={handleSort}
+                className="pr-6"
+              >
+                Share
+              </SortableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1041,8 +1221,8 @@ function EmployeeCostTable({
           <div className="flex items-center justify-between border-t px-4 py-3">
             <p className="text-muted-foreground text-sm">
               {safePage * PAGE_SIZE + 1}–
-              {Math.min((safePage + 1) * PAGE_SIZE, users.length)} of{" "}
-              {users.length}
+              {Math.min((safePage + 1) * PAGE_SIZE, sortedUsers.length)} of{" "}
+              {sortedUsers.length}
             </p>
             <div className="flex items-center gap-1">
               <button
@@ -1242,6 +1422,7 @@ async function fetchOverview(
   client: Parameters<typeof telemetryGetObservabilityOverview>[0],
   from: Date,
   to: Date,
+  hookSource?: string,
 ): Promise<GetObservabilityOverviewResult> {
   return unwrapAsync(
     telemetryGetObservabilityOverview(client, {
@@ -1250,6 +1431,7 @@ async function fetchOverview(
         to,
         includeTimeSeries: true,
         eventSource: "hook",
+        hookSource,
       },
     }),
   );

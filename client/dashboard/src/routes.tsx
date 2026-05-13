@@ -2,7 +2,6 @@ import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import {
-  RedirectToInsightsCosts,
   RedirectToInsightsTools,
   RedirectToLogAgents,
   RedirectToLogTools,
@@ -366,7 +365,7 @@ const ROUTE_STRUCTURE = {
     url: "insights",
     icon: "layout-dashboard",
     component: InsightsRoot,
-    indexComponent: RedirectToInsightsCosts,
+    indexComponent: RedirectToInsightsTools,
     subPages: {
       costs: {
         title: "Costs",
