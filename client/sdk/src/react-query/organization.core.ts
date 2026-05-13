@@ -8,23 +8,23 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { featuresGet } from "../funcs/featuresGet.js";
+import { organizationsGet } from "../funcs/organizationsGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
-export type FeaturesGetQueryData = components.GramProductFeatures;
+export type OrganizationQueryData = components.Organization;
 
-export function prefetchFeaturesGet(
+export function prefetchOrganization(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetProductFeaturesRequest | undefined,
-  security?: operations.GetProductFeaturesSecurity | undefined,
+  request?: operations.GetOrganizationRequest | undefined,
+  security?: operations.GetOrganizationSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildFeaturesGetQuery(
+    ...buildOrganizationQuery(
       client$,
       request,
       security,
@@ -33,20 +33,20 @@ export function prefetchFeaturesGet(
   });
 }
 
-export function buildFeaturesGetQuery(
+export function buildOrganizationQuery(
   client$: GramCore,
-  request?: operations.GetProductFeaturesRequest | undefined,
-  security?: operations.GetProductFeaturesSecurity | undefined,
+  request?: operations.GetOrganizationRequest | undefined,
+  security?: operations.GetOrganizationSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<FeaturesGetQueryData>;
+  queryFn: (context: QueryFunctionContext) => Promise<OrganizationQueryData>;
 } {
   return {
-    queryKey: queryKeyFeaturesGet({ gramSession: request?.gramSession }),
-    queryFn: async function featuresGetQueryFn(
+    queryKey: queryKeyOrganization({ gramSession: request?.gramSession }),
+    queryFn: async function organizationQueryFn(
       ctx,
-    ): Promise<FeaturesGetQueryData> {
+    ): Promise<OrganizationQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -58,7 +58,7 @@ export function buildFeaturesGetQuery(
         signal: sig,
       };
 
-      return unwrapAsync(featuresGet(
+      return unwrapAsync(organizationsGet(
         client$,
         request,
         security,
@@ -68,8 +68,8 @@ export function buildFeaturesGetQuery(
   };
 }
 
-export function queryKeyFeaturesGet(
+export function queryKeyOrganization(
   parameters: { gramSession?: string | undefined },
 ): QueryKey {
-  return ["@gram/client", "features", "get", parameters];
+  return ["@gram/client", "organizations", "get", parameters];
 }

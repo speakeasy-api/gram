@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildFeaturesGetQuery,
-  FeaturesGetQueryData,
-  prefetchFeaturesGet,
-  queryKeyFeaturesGet,
-} from "./featuresGet.core.js";
+  buildOrganizationQuery,
+  OrganizationQueryData,
+  prefetchOrganization,
+  queryKeyOrganization,
+} from "./organization.core.js";
 export {
-  buildFeaturesGetQuery,
-  type FeaturesGetQueryData,
-  prefetchFeaturesGet,
-  queryKeyFeaturesGet,
+  buildOrganizationQuery,
+  type OrganizationQueryData,
+  prefetchOrganization,
+  queryKeyOrganization,
 };
 
-export type FeaturesGetQueryError =
+export type OrganizationQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -53,19 +53,19 @@ export type FeaturesGetQueryError =
   | SDKValidationError;
 
 /**
- * getProductFeatures features
+ * get organizations
  *
  * @remarks
- * Get the current state of all product feature flags.
+ * Get the active organization from the session.
  */
-export function useFeaturesGet(
-  request?: operations.GetProductFeaturesRequest | undefined,
-  security?: operations.GetProductFeaturesSecurity | undefined,
-  options?: QueryHookOptions<FeaturesGetQueryData, FeaturesGetQueryError>,
-): UseQueryResult<FeaturesGetQueryData, FeaturesGetQueryError> {
+export function useOrganization(
+  request?: operations.GetOrganizationRequest | undefined,
+  security?: operations.GetOrganizationSecurity | undefined,
+  options?: QueryHookOptions<OrganizationQueryData, OrganizationQueryError>,
+): UseQueryResult<OrganizationQueryData, OrganizationQueryError> {
   const client = useGramContext();
   return useQuery({
-    ...buildFeaturesGetQuery(
+    ...buildOrganizationQuery(
       client,
       request,
       security,
@@ -76,22 +76,22 @@ export function useFeaturesGet(
 }
 
 /**
- * getProductFeatures features
+ * get organizations
  *
  * @remarks
- * Get the current state of all product feature flags.
+ * Get the active organization from the session.
  */
-export function useFeaturesGetSuspense(
-  request?: operations.GetProductFeaturesRequest | undefined,
-  security?: operations.GetProductFeaturesSecurity | undefined,
+export function useOrganizationSuspense(
+  request?: operations.GetOrganizationRequest | undefined,
+  security?: operations.GetOrganizationSecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    FeaturesGetQueryData,
-    FeaturesGetQueryError
+    OrganizationQueryData,
+    OrganizationQueryError
   >,
-): UseSuspenseQueryResult<FeaturesGetQueryData, FeaturesGetQueryError> {
+): UseSuspenseQueryResult<OrganizationQueryData, OrganizationQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildFeaturesGetQuery(
+    ...buildOrganizationQuery(
       client,
       request,
       security,
@@ -101,17 +101,17 @@ export function useFeaturesGetSuspense(
   });
 }
 
-export function setFeaturesGetData(
+export function setOrganizationData(
   client: QueryClient,
   queryKeyBase: [parameters: { gramSession?: string | undefined }],
-  data: FeaturesGetQueryData,
-): FeaturesGetQueryData | undefined {
-  const key = queryKeyFeaturesGet(...queryKeyBase);
+  data: OrganizationQueryData,
+): OrganizationQueryData | undefined {
+  const key = queryKeyOrganization(...queryKeyBase);
 
-  return client.setQueryData<FeaturesGetQueryData>(key, data);
+  return client.setQueryData<OrganizationQueryData>(key, data);
 }
 
-export function invalidateFeaturesGet(
+export function invalidateOrganization(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: { gramSession?: string | undefined }]
@@ -120,16 +120,16 @@ export function invalidateFeaturesGet(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "features", "get", ...queryKeyBase],
+    queryKey: ["@gram/client", "organizations", "get", ...queryKeyBase],
   });
 }
 
-export function invalidateAllFeaturesGet(
+export function invalidateAllOrganization(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "features", "get"],
+    queryKey: ["@gram/client", "organizations", "get"],
   });
 }

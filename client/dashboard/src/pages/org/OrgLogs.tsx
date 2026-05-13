@@ -4,12 +4,12 @@ import { Heading } from "@/components/ui/heading";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
 import { FeatureName } from "@gram/client/models/components";
-import { useFeaturesGet } from "@gram/client/react-query/featuresGet";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Eye, FileText, Monitor } from "lucide-react";
 import { useState } from "react";
 import { OtelForwardingSection } from "./OtelForwardingSection";
+import { useProductFeatures } from "@gram/client/react-query";
 
 export default function OrgLogs() {
   return (
@@ -27,7 +27,8 @@ export default function OrgLogs() {
 }
 
 export function OrgLogsInner() {
-  const { data: featuresData, isLoading: featuresLoading } = useFeaturesGet();
+  const { data: featuresData, isLoading: featuresLoading } =
+    useProductFeatures();
   const [logsEnabled, setLogsEnabled] = useState<boolean | null>(null);
   const [toolIoLogsEnabled, setToolIoLogsEnabled] = useState<boolean | null>(
     null,

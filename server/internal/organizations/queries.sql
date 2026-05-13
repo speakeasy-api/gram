@@ -334,3 +334,39 @@ SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
     workos_last_event_id = @workos_last_event_id,
     updated_at = clock_timestamp()
 WHERE workos_id = @workos_id;
+
+
+-- name: UpsertSvixAppID :one
+WITH previous AS (
+    SELECT prev.svix_app_id
+    FROM organization_metadata prev
+    WHERE
+        prev.id = @id
+        AND prev.disabled_at IS NULL
+)
+UPDATE organization_metadata om
+SET svix_app_id = @svix_app_id,
+    webhooks_enabled = TRUE,
+    updated_at = clock_timestamp()
+WHERE
+    om.id = @id
+    AND om.disabled_at IS NULL
+RETURNING
+    om.id,
+    om.svix_app_id,
+    (SELECT previous.svix_app_id FROM previous) AS previous_svix_app_id,
+    om.webhooks_enabled;
+
+-- name: SetWebhooksEnabled :one
+UPDATE organization_metadata
+SET webhooks_enabled = @enabled,
+    updated_at = clock_timestamp()
+WHERE
+    id = @id
+    AND COALESCE(webhooks_enabled, FALSE) IS DISTINCT FROM @enabled
+RETURNING id, svix_app_id, webhooks_enabled;
+
+-- name: GetSvixAppID :one
+SELECT svix_app_id
+FROM organization_metadata
+WHERE id = @id AND svix_app_id IS NOT NULL;

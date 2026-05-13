@@ -28,19 +28,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getProductFeatures features
+ * createPortalSession organizations
  *
  * @remarks
- * Get the current state of all product feature flags.
+ * Create a webhook portal session.
  */
-export function featuresGet(
+export function organizationsCreatePortalSession(
   client: GramCore,
-  request?: operations.GetProductFeaturesRequest | undefined,
-  security?: operations.GetProductFeaturesSecurity | undefined,
+  request?: operations.CreatePortalSessionRequest | undefined,
+  security?: operations.CreatePortalSessionSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.GetProductFeaturesResponseBody,
+    components.CreatePortalSessionResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -62,13 +62,13 @@ export function featuresGet(
 
 async function $do(
   client: GramCore,
-  request?: operations.GetProductFeaturesRequest | undefined,
-  security?: operations.GetProductFeaturesSecurity | undefined,
+  request?: operations.CreatePortalSessionRequest | undefined,
+  security?: operations.CreatePortalSessionSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.GetProductFeaturesResponseBody,
+      components.CreatePortalSessionResult,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -86,7 +86,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        z.optional(operations.GetProductFeaturesRequest$outboundSchema),
+        z.optional(operations.CreatePortalSessionRequest$outboundSchema),
         value,
       ),
     "Input validation failed",
@@ -97,7 +97,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/productFeatures.get")();
+  const path = pathToFunc("/rpc/organizations.createPortalSession")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
@@ -120,7 +120,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getProductFeatures",
+    operationID: "createPortalSession",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -134,7 +134,7 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -175,7 +175,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.GetProductFeaturesResponseBody,
+    components.CreatePortalSessionResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -186,7 +186,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.GetProductFeaturesResponseBody$inboundSchema),
+    M.json(200, components.CreatePortalSessionResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

@@ -14,6 +14,21 @@ import (
 	organizations "github.com/speakeasy-api/gram/server/gen/organizations"
 )
 
+// BuildGetPayload builds the payload for the organizations get endpoint from
+// CLI flags.
+func BuildGetPayload(organizationsGetSessionToken string) (*organizations.GetPayload, error) {
+	var sessionToken *string
+	{
+		if organizationsGetSessionToken != "" {
+			sessionToken = &organizationsGetSessionToken
+		}
+	}
+	v := &organizations.GetPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildSendInvitePayload builds the payload for the organizations sendInvite
 // endpoint from CLI flags.
 func BuildSendInvitePayload(organizationsSendInviteBody string, organizationsSendInviteSessionToken string) (*organizations.SendInvitePayload, error) {
@@ -118,6 +133,51 @@ func BuildRemoveUserPayload(organizationsRemoveUserUserID string, organizationsR
 	}
 	v := &organizations.RemoveUserPayload{}
 	v.UserID = userID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildEnableWebhooksPayload builds the payload for the organizations
+// enableWebhooks endpoint from CLI flags.
+func BuildEnableWebhooksPayload(organizationsEnableWebhooksSessionToken string) (*organizations.EnableWebhooksPayload, error) {
+	var sessionToken *string
+	{
+		if organizationsEnableWebhooksSessionToken != "" {
+			sessionToken = &organizationsEnableWebhooksSessionToken
+		}
+	}
+	v := &organizations.EnableWebhooksPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildDisableWebhooksPayload builds the payload for the organizations
+// disableWebhooks endpoint from CLI flags.
+func BuildDisableWebhooksPayload(organizationsDisableWebhooksSessionToken string) (*organizations.DisableWebhooksPayload, error) {
+	var sessionToken *string
+	{
+		if organizationsDisableWebhooksSessionToken != "" {
+			sessionToken = &organizationsDisableWebhooksSessionToken
+		}
+	}
+	v := &organizations.DisableWebhooksPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildCreatePortalSessionPayload builds the payload for the organizations
+// createPortalSession endpoint from CLI flags.
+func BuildCreatePortalSessionPayload(organizationsCreatePortalSessionSessionToken string) (*organizations.CreatePortalSessionPayload, error) {
+	var sessionToken *string
+	{
+		if organizationsCreatePortalSessionSessionToken != "" {
+			sessionToken = &organizationsCreatePortalSessionSessionToken
+		}
+	}
+	v := &organizations.CreatePortalSessionPayload{}
 	v.SessionToken = sessionToken
 
 	return v, nil

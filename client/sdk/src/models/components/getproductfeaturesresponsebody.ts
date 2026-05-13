@@ -8,10 +8,7 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-/**
- * Current state of product feature flags
- */
-export type GramProductFeatures = {
+export type GetProductFeaturesResponseBody = {
   /**
    * Whether authz challenge logging to ClickHouse is enabled
    */
@@ -28,11 +25,15 @@ export type GramProductFeatures = {
    * Whether tool I/O logging is enabled
    */
   toolIoLogsEnabled: boolean;
+  /**
+   * Whether webhooks are enabled
+   */
+  webhooks: boolean;
 };
 
 /** @internal */
-export const GramProductFeatures$inboundSchema: z.ZodMiniType<
-  GramProductFeatures,
+export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
+  GetProductFeaturesResponseBody,
   unknown
 > = z.pipe(
   z.object({
@@ -40,6 +41,7 @@ export const GramProductFeatures$inboundSchema: z.ZodMiniType<
     logs_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
     tool_io_logs_enabled: z.boolean(),
+    webhooks: z.boolean(),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -51,12 +53,12 @@ export const GramProductFeatures$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function gramProductFeaturesFromJSON(
+export function getProductFeaturesResponseBodyFromJSON(
   jsonString: string,
-): SafeParseResult<GramProductFeatures, SDKValidationError> {
+): SafeParseResult<GetProductFeaturesResponseBody, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => GramProductFeatures$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'GramProductFeatures' from JSON`,
+    (x) => GetProductFeaturesResponseBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetProductFeaturesResponseBody' from JSON`,
   );
 }

@@ -9,8 +9,8 @@ import { FeatureName } from "@gram/client/models/components";
 import {
   useDisableRBACMutation,
   useEnableRBACMutation,
-  useFeaturesGet,
   useFeaturesSetMutation,
+  useProductFeatures,
   useRbacStatus,
 } from "@gram/client/react-query";
 import { invalidateAllFeaturesGet } from "@gram/client/react-query/featuresGet.js";
@@ -170,7 +170,7 @@ function RBACManagementSection() {
 
 function AuthzChallengeLoggingSection() {
   const queryClient = useQueryClient();
-  const { data: features, isLoading, error } = useFeaturesGet();
+  const { data: features, isLoading, error } = useProductFeatures();
 
   const {
     mutate,

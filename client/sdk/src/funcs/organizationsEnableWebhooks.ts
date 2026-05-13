@@ -11,7 +11,6 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
-import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,19 +27,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getProductFeatures features
+ * enableWebhooks organizations
  *
  * @remarks
- * Get the current state of all product feature flags.
+ * Enable  webhooks for the active organization.
  */
-export function featuresGet(
+export function organizationsEnableWebhooks(
   client: GramCore,
-  request?: operations.GetProductFeaturesRequest | undefined,
-  security?: operations.GetProductFeaturesSecurity | undefined,
+  request?: operations.EnableWebhooksRequest | undefined,
+  security?: operations.EnableWebhooksSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.GetProductFeaturesResponseBody,
+    void,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -62,13 +61,13 @@ export function featuresGet(
 
 async function $do(
   client: GramCore,
-  request?: operations.GetProductFeaturesRequest | undefined,
-  security?: operations.GetProductFeaturesSecurity | undefined,
+  request?: operations.EnableWebhooksRequest | undefined,
+  security?: operations.EnableWebhooksSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.GetProductFeaturesResponseBody,
+      void,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -86,7 +85,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        z.optional(operations.GetProductFeaturesRequest$outboundSchema),
+        z.optional(operations.EnableWebhooksRequest$outboundSchema),
         value,
       ),
     "Input validation failed",
@@ -97,7 +96,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/productFeatures.get")();
+  const path = pathToFunc("/rpc/organizations.enableWebhooks")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
@@ -120,7 +119,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getProductFeatures",
+    operationID: "enableWebhooks",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -134,7 +133,7 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -175,7 +174,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.GetProductFeaturesResponseBody,
+    void,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -186,7 +185,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.GetProductFeaturesResponseBody$inboundSchema),
+    M.nil(204, z.void()),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,
