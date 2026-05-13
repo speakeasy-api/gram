@@ -13,11 +13,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	externalmcprepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	platformcatalog "github.com/speakeasy-api/gram/server/internal/platformtools/catalog"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
@@ -48,6 +51,22 @@ func WithTriggerTools(app *bgtriggers.App) Option {
 func WithSlackHTTPClient(client *guardian.HTTPClient) Option {
 	return func(c *config) {
 		c.deps.SlackHTTPClient = client
+	}
+}
+
+// CatalogExternalTools wires the platform_search_catalog and
+// platform_install_catalog_server tools using the live registry client +
+// repo + installer adapter. Pass the result through WithExternalTools.
+//
+// We surface these as ExternalTools (rather than rolling them into the
+// default registry struct) so callers can choose to omit them in contexts
+// where deployments + toolsets services are not constructed, e.g. the
+// background worker. The runtime catalogs them as platform tools by URN
+// either way.
+func CatalogExternalTools(installer platformcatalog.Installer, registryClient *externalmcp.RegistryClient, repo *externalmcprepo.Queries) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformcatalog.NewSearchTool(registryClient, repo), RequiredFeature: ""},
+		{Executor: platformcatalog.NewInstallTool(installer, registryClient, repo), RequiredFeature: ""},
 	}
 }
 
