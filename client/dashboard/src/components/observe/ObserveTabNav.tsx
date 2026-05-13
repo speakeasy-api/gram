@@ -10,10 +10,15 @@ export function ObserveTabNav({ base }: { base: "insights" | "logs" }) {
   const tabs = [
     { label: "Tools", href: `${baseSlug}/tools` },
     { label: "MCP Servers", href: `${baseSlug}/mcp` },
+    ...(base === "logs"
+      ? [{ label: "Agents", href: `${baseSlug}/agents` }]
+      : []),
     ...(base === "insights"
       ? [{ label: "Employees", href: `${baseSlug}/employees` }]
       : []),
-    { label: "Costs", href: `${baseSlug}/costs` },
+    ...(base === "insights"
+      ? [{ label: "Costs", href: `${baseSlug}/costs` }]
+      : []),
   ];
 
   return (
