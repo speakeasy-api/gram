@@ -2,6 +2,7 @@ import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
 import { ErrorAlert } from "@/components/ui/alert";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,6 +31,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useSlugs } from "@/contexts/Sdk";
 import { slugify } from "@/lib/constants";
+import { Badge } from "@speakeasy-api/moonshine";
 
 type EmployeeStatus = "compliant" | "not_compliant";
 
@@ -41,21 +43,24 @@ type Employee = {
   status: EmployeeStatus;
   tokenCount: number;
   lastActivity: string;
+  photoUrl?: string | null;
 };
 
 const LOOKBACK_DAYS = 30;
 
-const statusMeta: Record<EmployeeStatus, { label: string; className: string }> =
-  {
-    compliant: {
-      label: "Compliant",
-      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    },
-    not_compliant: {
-      label: "Not Compliant",
-      className: "border-rose-200 bg-rose-50 text-rose-700",
-    },
-  };
+const statusMeta: Record<
+  EmployeeStatus,
+  { label: string; variant: "success" | "destructive" }
+> = {
+  compliant: {
+    label: "Compliant",
+    variant: "success",
+  },
+  not_compliant: {
+    label: "Not Compliant",
+    variant: "destructive",
+  },
+};
 
 export function InsightsEmployeesContent() {
   const client = useGramContext();
@@ -281,7 +286,7 @@ function EmployeeTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>
+            <TableHead className="pl-6">
               <span className="flex items-center gap-1">
                 Employee
                 <SimpleTooltip tooltip="Usage is attributed by matching the email reported by each AI coding tool to the member's Gram account. Members without a Gram account won't appear as compliant until they sign up or directory sync is configured.">
@@ -293,6 +298,7 @@ function EmployeeTable({
             <TableHead>Compliance</TableHead>
             <TableHead>Token Count</TableHead>
             <TableHead>Last Activity</TableHead>
+            <TableHead className="pr-6 text-right">Action</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -303,11 +309,16 @@ function EmployeeTable({
                 className="cursor-pointer"
                 onClick={() => onSelectUser(item.name)}
               >
-                <TableCell>
+                <TableCell className="pl-6">
                   <div className="flex items-center gap-3">
-                    <div className="bg-muted flex size-9 items-center justify-center rounded-full text-sm font-semibold">
-                      {getInitials(item.name)}
-                    </div>
+                    <Avatar className="size-9">
+                      {item.photoUrl && (
+                        <AvatarImage src={item.photoUrl} alt={item.name} />
+                      )}
+                      <AvatarFallback className="text-sm font-semibold">
+                        {getInitials(item.name)}
+                      </AvatarFallback>
+                    </Avatar>
                     <div>
                       <p className="font-medium">{item.name}</p>
                       <p className="text-muted-foreground text-xs">
@@ -330,12 +341,25 @@ function EmployeeTable({
                 <TableCell className="text-muted-foreground text-sm">
                   {item.lastActivity}
                 </TableCell>
+                <TableCell className="pr-6 text-right">
+                  <button
+                    type="button"
+                    className="text-primary hover:text-primary/80 text-sm font-medium underline underline-offset-4"
+                    aria-label={`View ${item.name}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelectUser(item.name);
+                    }}
+                  >
+                    View
+                  </button>
+                </TableCell>
               </TableRow>
             ))
           ) : (
             <TableRow>
               <TableCell
-                colSpan={5}
+                colSpan={6}
                 className="text-muted-foreground py-10 text-center text-sm"
               >
                 No organization members found.
@@ -415,14 +439,9 @@ function StatusPill({ status }: { status: EmployeeStatus }) {
   const meta = statusMeta[status];
 
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium",
-        meta.className,
-      )}
-    >
-      {meta.label}
-    </span>
+    <Badge variant={meta.variant}>
+      <Badge.Text>{meta.label}</Badge.Text>
+    </Badge>
   );
 }
 
@@ -460,6 +479,7 @@ function buildEmployees(
         role: roleNameById.get(member.roleId) ?? member.roleId,
         status,
         tokenCount,
+        photoUrl: member.photoUrl,
         lastActivity: summary
           ? formatUnixNano(summary.lastSeenUnixNano)
           : "No activity found",

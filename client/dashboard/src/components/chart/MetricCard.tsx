@@ -1,4 +1,4 @@
-import { cn, Icon, type IconName } from "@speakeasy-api/moonshine";
+import { Icon, type IconName } from "@speakeasy-api/moonshine";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { getValueColor, ThresholdConfig } from "./chartUtils";
 
@@ -18,28 +18,19 @@ export type MetricCardProps = {
   tooltip?: string;
 };
 
-const accentColorsMap: Record<AccentColor, string> = {
-  red: "border-t-red-500",
-  orange: "border-t-orange-500",
-  yellow: "border-t-yellow-500",
-  green: "border-t-green-500",
-  blue: "border-t-blue-500",
-  purple: "border-t-purple-500",
-};
-
-export function MetricCard({
-  title,
-  value,
-  previousValue = 0,
-  format = "number",
-  icon,
-  invertDelta = false,
-  thresholds,
-  comparisonLabel,
-  accentColor,
-  subtext,
-  tooltip,
-}: MetricCardProps) {
+export function MetricCard(props: MetricCardProps) {
+  const {
+    title,
+    value,
+    previousValue = 0,
+    format = "number",
+    icon,
+    invertDelta = false,
+    thresholds,
+    comparisonLabel,
+    subtext,
+    tooltip,
+  } = props;
   const formatValue = (v: number) => {
     switch (format) {
       case "percent":
@@ -67,15 +58,8 @@ export function MetricCard({
 
   const valueColor = getValueColor(value, thresholds);
 
-  const accentColorClass = accentColor ? accentColorsMap[accentColor] : null;
-
   return (
-    <div
-      className={cn(
-        "bg-card rounded-lg border p-5",
-        accentColor ? `border-t-3 ${accentColorClass}` : "border-border",
-      )}
-    >
+    <div className="bg-card border-border rounded-lg border p-5">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <span className="text-sm font-semibold">{title}</span>
