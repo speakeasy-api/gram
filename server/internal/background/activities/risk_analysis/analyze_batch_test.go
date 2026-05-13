@@ -52,9 +52,18 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// PresidioClient pointed at a dead URL simulates Presidio being down
+	// Wrap the dead URL in the production retry orchestrator so the scan
+	// path mirrors what runs in the worker. After exhausting the retry
+	// budget the message dead-letters and the activity proceeds — gitleaks
+	// findings on the same message survive.
 	deadClient := risk_analysis.NewPresidioClient(
 		"http://127.0.0.1:1",
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		testenv.NewLogger(t),
+	)
+	piiScanner := risk_analysis.NewRetryingPIIScanner(
+		deadClient,
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		testenv.NewLogger(t),
@@ -65,7 +74,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		conn,
-		deadClient,
+		piiScanner,
 		nil,
 	)
 
@@ -88,6 +97,25 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 	require.NoError(t, val.Get(&result))
 	assert.Equal(t, 1, result.Processed)
 	assert.Positive(t, result.Findings, "gitleaks findings should be preserved when presidio is down")
+
+	// Presidio dead-letter should land as its own row (found=false,
+	// dead_letter_reason populated) so the failure is auditable in the DB.
+	// The production list queries filter on found IS TRUE, so we read every
+	// row via the test fixture query.
+	rows, err := testrepo.New(conn).ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+	})
+	require.NoError(t, err)
+
+	var sawDeadLetter bool
+	for _, row := range rows {
+		if row.Source == "presidio" && row.DeadLetterReason.Valid && row.DeadLetterReason.String != "" {
+			assert.False(t, row.Found, "dead-letter row must not be flagged as a finding")
+			sawDeadLetter = true
+		}
+	}
+	assert.True(t, sawDeadLetter, "expected a presidio dead-letter row with dead_letter_reason set")
 }
 
 func TestAnalyzeBatch_DestructiveToolAnnotationFinding(t *testing.T) {

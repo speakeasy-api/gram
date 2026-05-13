@@ -153,6 +153,7 @@ INSERT INTO risk_results (
   , end_pos
   , confidence
   , tags
+  , dead_letter_reason
 )
 VALUES (
     @id
@@ -170,6 +171,7 @@ VALUES (
   , @end_pos
   , @confidence
   , @tags
+  , @dead_letter_reason
 );
 
 -- name: DeleteRiskResultsForMessages :exec
