@@ -377,9 +377,9 @@ const ROUTE_STRUCTURE = {
         url: "mcp",
         component: InsightsMCPPage,
       },
-      agents: {
+      costs: {
         title: "Costs",
-        url: "agents",
+        url: "costs",
         component: InsightsAgentsPage,
       },
       employees: {

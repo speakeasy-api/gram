@@ -507,7 +507,9 @@ export function InsightsAgentsContent() {
               <section
                 className={cn(
                   "grid gap-4 transition-all duration-300",
-                  isInsightsOpen ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
+                  isInsightsOpen || expandedChart
+                    ? "grid-cols-1"
+                    : "grid-cols-1 lg:grid-cols-2",
                 )}
               >
                 <TokenTimeSeriesChart
