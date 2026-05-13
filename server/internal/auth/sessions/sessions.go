@@ -106,7 +106,14 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 
 	_, email, ok := s.identity.HasAccessToOrganization(ctx, session.ActiveOrganizationID, session.UserID)
 	if !ok {
-		return ctx, oops.C(oops.CodeForbidden)
+		if !authCtx.IsAdmin {
+			return ctx, oops.C(oops.CodeForbidden)
+		}
+		// Admin visiting a customer org they don't belong to — fall back to
+		// cached user info for the email the auth context needs.
+		if userInfo, _, err := s.identity.GetUserInfo(ctx, session.UserID); err == nil {
+			email = userInfo.Email
+		}
 	}
 
 	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgRepo, s.billingRepo, session.ActiveOrganizationID)
