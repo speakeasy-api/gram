@@ -1439,6 +1439,10 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		APIKey:      "",
 		HooksAPIKey: "",
 		ProjectSlug: projectSlug,
+		// 0.1.{epoch} stays strictly above the historical 0.1.0 manifests
+		// already in users' Claude/Cursor/Codex caches, so a re-publish is
+		// always seen as a newer version and triggers a refresh.
+		Version: fmt.Sprintf("0.1.%d", time.Now().Unix()),
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {
