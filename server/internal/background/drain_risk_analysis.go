@@ -26,11 +26,23 @@ const (
 	// drainFetchLimit is how many unanalyzed message IDs to fetch per round.
 	drainFetchLimit int32 = 20_000
 
-	// drainBatchSize is how many messages each AnalyzeBatch activity processes.
-	drainBatchSize = 1_000
+	// drainBatchSize is how many messages each AnalyzeBatch activity
+	// processes. Sized 2026-05-13 alongside analyzeBatchStartToCloseTimeout:
+	// Presidio is serialized (presidioMaxMessageBytes = byte semaphore
+	// budget) at up to ~30 s per message under load, so 100 messages caps
+	// the worst-case happy-path activity wall-clock at ~50 minutes.
+	drainBatchSize = 100
 
 	// Tuned 2026-05-01. Fleet-wide cap is perPodAnalyzeBatchConcurrency.
 	perDrainBatchConcurrency = 1
+
+	// analyzeBatchStartToCloseTimeout caps how long a single AnalyzeBatch
+	// activity may run before Temporal cancels it. Derived from the
+	// drainBatchSize × per-message worst-case happy-path latency budget
+	// (100 × ~30 s ≈ 50 min). Cancellation is a hard kill: any in-flight
+	// presidio retries lose their budget, and Temporal will retry the
+	// whole activity per RetryPolicy below.
+	analyzeBatchStartToCloseTimeout = 50 * time.Minute
 )
 
 // DrainRiskAnalysisParams identifies the policy this workflow drains.
@@ -64,15 +76,16 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 	// workflow's own queue so each environment stays isolated.
 	analyzeBatchOpts := activityOpts
 	analyzeBatchOpts.TaskQueue = RiskAnalysisTaskQueue(tenv.TaskQueueName(workflow.GetInfo(ctx).TaskQueueName))
-	// HeartbeatTimeout overrides activityOpts (30s). AnalyzeBatch's
-	// presidio scanner runs perBatchRequestConcurrency workers in
-	// parallel; onProgress() (which emits the heartbeat) fires before
-	// each /analyze call, then the worker blocks for up to
-	// analyzeRequestTimeout per call. Worst case under a fully-degraded
-	// Presidio: every worker stalls in parallel for the full per-request
-	// timeout before the next onProgress() can fire. 60s gives a 2x
-	// buffer over the 30s per-request timeout so the heartbeat budget
-	// holds even in that worst case.
+	// StartToCloseTimeout overrides activityOpts (5m). Presidio calls
+	// serialize at up to ~30 s per message, so a drainBatchSize batch can
+	// take up to ~50 minutes in the worst case. See analyzeBatchStartToCloseTimeout
+	// for the derivation; keep the constants moving together.
+	analyzeBatchOpts.StartToCloseTimeout = analyzeBatchStartToCloseTimeout
+	// HeartbeatTimeout overrides activityOpts (30s). onProgress() (which
+	// emits the heartbeat) fires before each /analyze call and again
+	// while blocked on the byte-throttle semaphore; the per-request
+	// timeout is analyzeRequestTimeout = 30 s. 60 s gives a 2x buffer over
+	// that ceiling so a single stalled call cannot starve the heartbeat.
 	analyzeBatchOpts.HeartbeatTimeout = 60 * time.Second
 	analyzeBatchCtx := workflow.WithActivityOptions(ctx, analyzeBatchOpts)
 
