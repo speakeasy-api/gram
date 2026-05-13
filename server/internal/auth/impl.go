@@ -180,6 +180,7 @@ func loginNonceBindingMiddleware(env string) func(http.Handler) http.Handler {
 				return
 			}
 
+			//nolint:exhaustruct // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
 			http.SetCookie(w, &http.Cookie{
 				Name:     nonceBindingCookie,
 				Value:    binding,
@@ -206,6 +207,7 @@ func callbackNonceBindingMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Clear the cookie regardless of outcome — it's single-use.
+		//nolint:exhaustruct // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
 		http.SetCookie(w, &http.Cookie{
 			Name:     nonceBindingCookie,
 			Value:    "",
