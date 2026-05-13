@@ -33,16 +33,17 @@ export default function BookDemo() {
     <main className="flex min-h-screen flex-col md:flex-row">
       <JourneyDemo />
 
-      <AuthLayout>
-        {/* Logout */}
-        <button
-          onClick={handleLogout}
-          className="absolute top-6 right-6 z-10 flex items-center gap-1.5 text-xs text-[#8B8684] transition-colors hover:text-slate-600"
-        >
-          <LogOutIcon className="h-3.5 w-3.5" />
-          Log out
-        </button>
-
+      <AuthLayout
+        topRight={
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 text-xs text-[#8B8684] transition-colors hover:text-slate-600"
+          >
+            <LogOutIcon className="h-3.5 w-3.5" />
+            Log out
+          </button>
+        }
+      >
         {/* Success message */}
         <div className="flex flex-col items-center gap-3 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50">
@@ -93,11 +94,11 @@ export default function BookDemo() {
           </Button>
 
           <a
-            href="mailto:support@speakeasy.com"
+            href="mailto:sales@speakeasy.com"
             className="inline-flex items-center justify-center gap-1.5 text-xs text-[#8B8684] transition-colors hover:text-slate-600"
           >
             <MailIcon className="h-3.5 w-3.5" />
-            Or contact support@speakeasy.com
+            Or contact sales@speakeasy.com
           </a>
         </div>
       </AuthLayout>
