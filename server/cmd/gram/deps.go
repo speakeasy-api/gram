@@ -480,19 +480,23 @@ func workosClientOpts(c *cli.Context) workos.ClientOpts {
 func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) (access.RoleProvider, error) {
 	apiKey := c.String("workos-api-key")
 
-	// Local dev with WORKOS_API_URL set: use the dev-idp mock-workos
-	// emulator, ignoring any real WORKOS_API_KEY that may have leaked
-	// in from the shell environment.
+	// Local dev: when a real WORKOS_API_KEY is configured (GRAM_IDP_MODE=workos),
+	// use it so the access role provider proxies through dev-idp to real WorkOS.
+	// Otherwise fall back to the mock-workos emulator or a stub.
 	if c.String("environment") == "local" {
+		haveRealKey := apiKey != ""
 		opts := workosClientOpts(c)
+
+		if haveRealKey {
+			logger.InfoContext(ctx, "using real WorkOS API key as access role provider")
+			return workos.NewClient(guardianPolicy, apiKey, opts), nil
+		}
 		if opts.Endpoint != "" {
 			logger.InfoContext(ctx, "using dev-idp mock-workos as access role provider")
 			return workos.NewClient(guardianPolicy, "dev-idp-mock", opts), nil
 		}
-		if apiKey == "" || apiKey == "unset" {
-			logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
-			return workos.NewStubClient(), nil
-		}
+		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
+		return workos.NewStubClient(), nil
 	}
 
 	switch {
