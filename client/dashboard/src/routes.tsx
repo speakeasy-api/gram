@@ -366,7 +366,7 @@ const ROUTE_STRUCTURE = {
     url: "insights",
     icon: "layout-dashboard",
     component: InsightsRoot,
-    indexComponent: RedirectToInsightsCosts,
+    indexComponent: RedirectToInsightsTools,
     subPages: {
       costs: {
         title: "Costs",
