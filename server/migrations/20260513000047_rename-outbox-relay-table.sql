@@ -1,4 +1,3 @@
--- atlas:nolint DS102
 -- Create "outbox_relays" table
 CREATE TABLE "outbox_relays" (
   "outbox_id" bigint NOT NULL,
@@ -16,5 +15,6 @@ CREATE TABLE "outbox_relays" (
 ) WITH (fillfactor = 80, autovacuum_vacuum_scale_factor = 0.05, autovacuum_analyze_scale_factor = 0.05);
 -- Create index "outbox_relays_pending_idx" to table: "outbox_relays"
 CREATE INDEX "outbox_relays_pending_idx" ON "outbox_relays" ("outbox_id") WHERE ((processed_at IS NULL) AND (dead_lettered IS FALSE));
+-- atlas:nolint DS102
 -- Drop "outbox_svix_relays" table
 DROP TABLE "outbox_svix_relays";
