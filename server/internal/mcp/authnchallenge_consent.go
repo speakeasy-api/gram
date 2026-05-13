@@ -141,6 +141,22 @@ func (s *Service) handleConsentGet(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").Log(ctx, logger)
 	}
 
+	// Public-toolset late-bind: the IDP path stamps Subject on a private
+	// toolset, but on the public path the user reaches /connect with no
+	// stamped subject. Interactive-mode remote-login cards minted below
+	// need a stable subject so the /remote_login_callback handler can
+	// attribute the resulting remote_sessions row. Stamp an anonymous URN
+	// now and persist it back to Redis; handleConsentPost's existing
+	// public-path branch will skip its own mint when it finds Subject
+	// already set.
+	if (challengeState.Subject == nil || challengeState.Subject.IsZero()) && toolset.McpIsPublic {
+		sub := urn.NewAnonymousSubject(uuid.NewString())
+		challengeState.Subject = &sub
+		if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "stamp anonymous subject").Log(ctx, logger)
+		}
+	}
+
 	subjectDisplay := "An anonymous session for this MCP server"
 	if challengeState.Subject != nil && !challengeState.Subject.IsZero() {
 		subjectDisplay = challengeState.Subject.String()
