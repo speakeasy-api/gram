@@ -144,15 +144,18 @@ async fn cap_output(
     }
 }
 
-/// Cheap measurement against the model-facing byte budget. For `Text`, this is
-/// the inner string's length; for everything else, the compact serialized form
-/// (which is what the provider adapter ends up sending on the wire). Returns
-/// `None` only if serialization itself fails — in that case the cap can't be
-/// enforced and the output is returned untouched.
+/// JSON-encoded byte size of the *content* the provider adapter sends as
+/// the tool message body. For `Text`, this is `"…"` after escaping — counting
+/// raw `s.len()` would undercount escape overhead, so a quote-heavy 150 KB
+/// blob could be ~300 KB on the wire and still 413 the provider. Returns
+/// `None` only if serialization itself fails — in that case the cap can't
+/// be enforced and the output is returned untouched.
 fn model_bytes(output: &ToolOutput) -> Option<usize> {
     match output {
-        ToolOutput::Text(s) => Some(s.len()),
-        other => serde_json::to_string(other).ok().map(|s| s.len()),
+        ToolOutput::Text(s) => serde_json::to_string(s).ok().map(|j| j.len()),
+        ToolOutput::Structured(v) => serde_json::to_string(v).ok().map(|j| j.len()),
+        ToolOutput::Parts(p) => serde_json::to_string(p).ok().map(|j| j.len()),
+        ToolOutput::Files(f) => serde_json::to_string(f).ok().map(|j| j.len()),
     }
 }
 
@@ -184,7 +187,12 @@ async fn write_spill(
     let safe_call = sanitize_filename_component(&call_id.0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
     let path = spill_root.join(format!("{safe_tool}-{safe_call}-{n}.{ext}"));
-    tokio::fs::write(&path, body).await?;
+    if let Err(error) = tokio::fs::write(&path, body).await {
+        // Best-effort cleanup so a partial ENOSPC write doesn't accumulate
+        // and choke the workdir's fixed disk cap on subsequent calls.
+        let _ = tokio::fs::remove_file(&path).await;
+        return Err(error);
+    }
     Ok(path)
 }
 
@@ -277,9 +285,11 @@ mod tests {
             other => panic!("expected envelope, got {other:?}"),
         };
         assert_eq!(map.get("truncated"), Some(&Value::Bool(true)));
+        // 500 plain `a` bytes encode to `"aaa..."` = 502 bytes after the
+        // surrounding quote literals (no escapes needed).
         assert_eq!(
             map.get("original_bytes").and_then(Value::as_u64),
-            Some(500)
+            Some(502)
         );
         let saved_to = map
             .get("saved_to")
@@ -295,9 +305,15 @@ mod tests {
     async fn structured_over_limit_spills_pretty_json() {
         let dir = tempdir();
         let value = json!({"items": vec!["x"; 500]});
-        let input = ToolOutput::Structured(value.clone());
-        let original = serde_json::to_string(&input).unwrap().len();
-        let out = cap_output(input, 200, dir.path(), &tool_name("t"), &call_id("c")).await;
+        let original = serde_json::to_string(&value).unwrap().len();
+        let out = cap_output(
+            ToolOutput::Structured(value.clone()),
+            200,
+            dir.path(),
+            &tool_name("t"),
+            &call_id("c"),
+        )
+        .await;
         let map = match out {
             ToolOutput::Structured(Value::Object(map)) => map,
             other => panic!("expected envelope, got {other:?}"),
@@ -318,6 +334,33 @@ mod tests {
             on_disk.contains('\n'),
             "spilled JSON should be pretty-printed for grep/read"
         );
+    }
+
+    #[tokio::test]
+    async fn quote_heavy_text_spills_even_when_raw_len_fits() {
+        // 100 raw `"` bytes encode to 200 bytes (`\"` for each) plus the
+        // surrounding `"…"` literal. With a 150-byte cap the raw length is
+        // under the limit but the JSON-encoded form is not — the spill must
+        // still fire.
+        let dir = tempdir();
+        let body = "\"".repeat(100);
+        assert!(body.len() < 150);
+        let out = cap_output(
+            ToolOutput::text(body.clone()),
+            150,
+            dir.path(),
+            &tool_name("t"),
+            &call_id("c"),
+        )
+        .await;
+        match out {
+            ToolOutput::Structured(Value::Object(map)) => {
+                assert_eq!(map.get("truncated"), Some(&Value::Bool(true)));
+                let saved_to = map.get("saved_to").and_then(Value::as_str).unwrap();
+                assert_eq!(std::fs::read_to_string(saved_to).unwrap(), body);
+            }
+            other => panic!("expected spill envelope, got {other:?}"),
+        }
     }
 
     #[tokio::test]
