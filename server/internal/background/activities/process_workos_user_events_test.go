@@ -163,11 +163,12 @@ func TestProcessWorkOSUserEvents_LinksOptimisticRoleAssignments(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	stub := &stubWorkOSEventsClient{pages: [][]events.Event{{
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
 		{ID: "event_user_role_assignment", Event: "user.created", CreatedAt: time.Now(), Data: userEventData(workosUserID, "role@example.com", "Role", "User", "")},
-	}}}
+	}})
 
-	activity := activities.NewProcessWorkOSUserEvents(logger, conn, stub, &stubWorkOSUserClient{})
+	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
 	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
 	require.NoError(t, err)
 	require.Equal(t, "event_user_role_assignment", res.LastEventID)
