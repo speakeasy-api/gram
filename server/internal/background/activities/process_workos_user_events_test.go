@@ -11,8 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/events"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
@@ -119,6 +121,65 @@ func TestProcessWorkOSUserEvents_CreatesUserWithExistingExternalID(t *testing.T)
 	require.Equal(t, "ada@example.com", row.Email)
 	require.Equal(t, workosUserID, row.WorkosID.String)
 	require.Empty(t, workosClient.UserExternalIDUpdates())
+}
+
+func TestProcessWorkOSUserEvents_LinksOptimisticRoleAssignments(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newUserEventsTestConn(t, "workos_user_events_link_role_assignments")
+	logger := testenv.NewLogger(t)
+
+	const workosUserID = "user_role_assignment"
+	gramID := users.UserIDFromWorkOSID(workosUserID)
+	seedTime := time.Date(2026, 5, 10, 10, 0, 0, 0, time.UTC)
+
+	_, err := orgrepo.New(conn).UpsertOrganizationMetadataFromWorkOS(ctx, orgrepo.UpsertOrganizationMetadataFromWorkOSParams{
+		ID:                "org_role_assignment",
+		Name:              "Role Assignment Org",
+		Slug:              "role-assignment-org",
+		WorkosID:          conv.ToPGText("org_role_assignment"),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(seedTime),
+		WorkosLastEventID: conv.ToPGText("event_org_role_assignment"),
+	})
+	require.NoError(t, err)
+	err = accessrepo.New(conn).UpsertGlobalRole(ctx, accessrepo.UpsertGlobalRoleParams{
+		WorkosSlug:        "assignment-role",
+		WorkosName:        "Assignment Role",
+		WorkosDescription: conv.ToPGText("Assignment Role"),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(seedTime),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(seedTime),
+		WorkosLastEventID: conv.ToPGText("event_global_role_assignment"),
+	})
+	require.NoError(t, err)
+	err = orgrepo.New(conn).SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
+		OrganizationID:     "org_role_assignment",
+		WorkosUserID:       workosUserID,
+		WorkosRoleSlugs:    []string{"assignment-role"},
+		UserID:             conv.ToPGTextEmpty(""),
+		WorkosMembershipID: conv.ToPGTextEmpty(""),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(seedTime),
+		WorkosLastEventID:  conv.ToPGText("event_assignment_optimistic"),
+	})
+	require.NoError(t, err)
+
+	stub := &stubWorkOSEventsClient{pages: [][]events.Event{{
+		{ID: "event_user_role_assignment", Event: "user.created", CreatedAt: time.Now(), Data: userEventData(workosUserID, "role@example.com", "Role", "User", "")},
+	}}}
+
+	activity := activities.NewProcessWorkOSUserEvents(logger, conn, stub, &stubWorkOSUserClient{})
+	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
+	require.NoError(t, err)
+	require.Equal(t, "event_user_role_assignment", res.LastEventID)
+
+	assignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: "org_role_assignment",
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.Len(t, assignments, 1)
+	require.True(t, assignments[0].UserID.Valid)
+	require.Equal(t, gramID, assignments[0].UserID.String)
 }
 
 func TestProcessWorkOSUserEvents_UsesExistingUserIDWhenExternalIDMissing(t *testing.T) {

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	"github.com/speakeasy-api/gram/server/internal/users"
@@ -205,6 +206,12 @@ func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, dbtx dat
 		WorkosUpdatedAt: conv.ToPGTimestamptz(payload.UpdatedAt),
 	}); err != nil {
 		return nil, fmt.Errorf("upsert synced user: %w", err)
+	}
+	if err := organizationsrepo.New(dbtx).LinkRoleAssignmentsToUser(ctx, organizationsrepo.LinkRoleAssignmentsToUserParams{
+		UserID:       conv.ToPGText(gramUserID),
+		WorkosUserID: payload.ID,
+	}); err != nil {
+		return nil, fmt.Errorf("link role assignments to user: %w", err)
 	}
 
 	if payload.ExternalID == "" {

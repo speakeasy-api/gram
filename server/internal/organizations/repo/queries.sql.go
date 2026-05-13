@@ -285,6 +285,24 @@ func (q *Queries) HasOrganizationUserRelationship(ctx context.Context, arg HasOr
 	return exists, err
 }
 
+const linkRoleAssignmentsToUser = `-- name: LinkRoleAssignmentsToUser :exec
+UPDATE organization_role_assignments
+SET user_id = $1,
+    updated_at = clock_timestamp()
+WHERE workos_user_id = $2
+  AND user_id IS NULL
+`
+
+type LinkRoleAssignmentsToUserParams struct {
+	UserID       pgtype.Text
+	WorkosUserID string
+}
+
+func (q *Queries) LinkRoleAssignmentsToUser(ctx context.Context, arg LinkRoleAssignmentsToUserParams) error {
+	_, err := q.db.Exec(ctx, linkRoleAssignmentsToUser, arg.UserID, arg.WorkosUserID)
+	return err
+}
+
 const listOrganizationRoleAssignmentsByWorkOSUser = `-- name: ListOrganizationRoleAssignmentsByWorkOSUser :many
 SELECT id, organization_id, workos_user_id, user_id, role_urn, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at
 FROM organization_role_assignments
