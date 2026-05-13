@@ -2545,9 +2545,9 @@ ON outbox (public_id);
 CREATE INDEX IF NOT EXISTS outbox_organization_id_id_idx
 ON outbox (organization_id, id);
 
--- Per-row Svix relay tracking. One row per outbox entry that has been
+-- Per-row relay tracking. One row per outbox entry that has been
 -- considered by the relay workflow. UPDATE-heavy: each retry rewrites the row.
-CREATE TABLE IF NOT EXISTS outbox_svix_relays (
+CREATE TABLE IF NOT EXISTS outbox_relays (
   outbox_id BIGINT NOT NULL,
 
   processed_at timestamptz,
@@ -2562,13 +2562,14 @@ CREATE TABLE IF NOT EXISTS outbox_svix_relays (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT outbox_svix_relays_pkey PRIMARY KEY (outbox_id),
-  CONSTRAINT outbox_svix_relays_outbox_id_fkey FOREIGN KEY (outbox_id) REFERENCES outbox(id) ON DELETE CASCADE
+  CONSTRAINT outbox_relays_pkey PRIMARY KEY (outbox_id),
+  CONSTRAINT outbox_relays_outbox_id_fkey FOREIGN KEY (outbox_id) REFERENCES outbox(id) ON DELETE CASCADE
 ) WITH (
   fillfactor = 80,
   autovacuum_vacuum_scale_factor = 0.05,
   autovacuum_analyze_scale_factor = 0.05
 );
 
-CREATE INDEX IF NOT EXISTS outbox_svix_relays_pending_idx
-ON outbox_svix_relays (outbox_id) WHERE processed_at IS NULL AND dead_lettered IS FALSE;
+CREATE INDEX IF NOT EXISTS outbox_relays_pending_idx
+ON outbox_relays (outbox_id)
+WHERE processed_at IS NULL AND dead_lettered IS FALSE;

@@ -876,7 +876,7 @@ type Outbox struct {
 	CreatedAt      pgtype.Timestamptz
 }
 
-type OutboxSvixRelay struct {
+type OutboxRelay struct {
 	OutboxID      int64
 	ProcessedAt   pgtype.Timestamptz
 	Noop          bool
