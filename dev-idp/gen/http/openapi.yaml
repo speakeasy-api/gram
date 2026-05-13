@@ -720,7 +720,7 @@ definitions:
         description: Mode whose currentUser is being reported.
         example: oauth2-1
         enum:
-          - mock-workos
+          - local-speakeasy
           - oauth2-1
           - oauth2
           - workos
@@ -758,7 +758,7 @@ definitions:
         description: Which mode's currentUser to clear.
         example: oauth2-1
         enum:
-          - mock-workos
+          - local-speakeasy
           - oauth2-1
           - oauth2
           - workos
@@ -775,7 +775,7 @@ definitions:
         description: Which mode's currentUser to read.
         example: oauth2-1
         enum:
-          - mock-workos
+          - local-speakeasy
           - oauth2-1
           - oauth2
           - workos
@@ -792,7 +792,7 @@ definitions:
         description: Which mode's currentUser to write.
         example: oauth2-1
         enum:
-          - mock-workos
+          - local-speakeasy
           - oauth2-1
           - oauth2
           - workos
@@ -1345,7 +1345,7 @@ definitions:
         format: date-time
       workos_id:
         type: string
-        description: Optional WorkOS organization id.
+        description: Optional WorkOS organization id echoed by local-speakeasy validate.
         example: abc123
     example:
       account_type: abc123
@@ -1519,7 +1519,7 @@ definitions:
         example: abc123
       workos_id:
         type: string
-        description: Optional WorkOS organization id.
+        description: Optional WorkOS organization id echoed by local-speakeasy validate.
         example: abc123
     example:
       account_type: abc123
@@ -1600,7 +1600,7 @@ definitions:
     properties:
       admin:
         type: boolean
-        description: Admin flag.
+        description: Admin flag echoed by local-speakeasy validate.
         example: false
       created_at:
         type: string
@@ -1633,7 +1633,7 @@ definitions:
         format: date-time
       whitelisted:
         type: boolean
-        description: Whitelist flag.
+        description: Whitelist flag echoed by local-speakeasy validate.
         example: false
     example:
       admin: false

@@ -45,6 +45,7 @@ type OrganizationUserRelationship struct {
 	ID                 int64
 	OrganizationID     string
 	UserID             string
+	WorkosUserID       pgtype.Text
 	WorkosMembershipID pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz
 	WorkosLastEventID  pgtype.Text

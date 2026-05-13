@@ -20,7 +20,11 @@ agentkit-reporting = { version = "0.6.0", features = ["tracing"] }
 agentkit-tool-fs = "0.6.0"
 agentkit-tools-core = { version = "0.6.0", features = ["schemars"] }
 agentkit-tools-derive = "0.6.0"
-rmcp = { version = "1.5.0", default-features = false, features = ["client", "transport-streamable-http-client-reqwest", "reqwest"] }
+rmcp = { version = "1.5.0", default-features = false, features = [
+  "client",
+  "transport-streamable-http-client-reqwest",
+  "reqwest",
+] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 

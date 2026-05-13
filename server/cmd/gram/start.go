@@ -74,7 +74,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/otelforwarding"
 	"github.com/speakeasy-api/gram/server/internal/packages"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
@@ -211,7 +213,7 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_ENCRYPTION_KEY"},
 		},
 		&cli.StringFlag{
-			Name:     "jwt-signing-key",
+			Name:     usersessions.JWTSigningKeyFlag,
 			Usage:    "Key for JWT signing",
 			Required: true,
 			EnvVars:  []string{"GRAM_JWT_SIGNING_KEY"},
@@ -559,7 +561,7 @@ func newStartCommand() *cli.Command {
 				identityResolver,
 			)
 
-			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
+			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String(usersessions.JWTSigningKeyFlag))
 
 			encryptionClient, err := encryption.New(c.String("encryption-key"))
 			if err != nil {
@@ -728,7 +730,7 @@ func newStartCommand() *cli.Command {
 			}
 
 			authorizer := auth.New(logger, db, sessionManager, authzEngine)
-			assistantTokenManager := assistanttokens.New(c.String("jwt-signing-key"), db, authzEngine)
+			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
 			assistantRuntime, err := newAssistantRuntime(ctx, logger, tracerProvider, c, guardianPolicy, db, serverURL)
 			if err != nil {
 				return err
@@ -741,6 +743,9 @@ func newStartCommand() *cli.Command {
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
+			platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
+				AssistantMemoryTools: memoryTools,
+			})
 
 			platformSvc := platformtoolsruntime.NewService(
 				logger,
@@ -781,6 +786,9 @@ func newStartCommand() *cli.Command {
 				auditLogger,
 				memoryTools,
 				platformFeatureChecker,
+				platformToolsets,
+				identityResolver,
+				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -800,6 +808,14 @@ func newStartCommand() *cli.Command {
 
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
 			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
+
+			otelForwardClient := otelforwarding.NewClient(logger, db, encryptionClient, cache.NewRedisCacheAdapter(redisClient))
+			otelForwarder := otelforwarding.NewForwarder(logger, tracerProvider, meterProvider, guardianPolicy)
+			otelForwarder.Start(ctx)
+			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
+				otelForwarder.Shutdown(ctx)
+				return nil
+			})
 
 			// Construct the GitHub App client once; share with the plugin publish
 			// flow and the marketplace proxy so they hit the same token cache and
@@ -869,6 +885,7 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
 			mux.Use(middleware.RBACOverrideMiddleware())
+			mux.Use(otelforwarding.Middleware(logger, otelForwardClient, otelForwarder))
 
 			// Reuse the same Presidio client the worker uses for offline analysis
 			// so the runtime hook scanner can flag/redact PII inputs too.
@@ -892,10 +909,10 @@ func newStartCommand() *cli.Command {
 				db,
 				sessionManager,
 				authzEngine,
-				productFeatures,
 				memorySvc,
 			))
 			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, riskScanner, shadowMCPClient, chatWriter))
+			otelforwarding.Attach(mux, otelforwarding.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, otelForwardClient))
 			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			auth.Attach(mux, auth.NewService(
 				logger,
@@ -937,7 +954,7 @@ func newStartCommand() *cli.Command {
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			templates.Attach(mux, templates.NewService(logger, tracerProvider, db, sessionManager, toolsetsSvc, authzEngine, auditLogger))
-			assets.Attach(mux, assets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, chatSessionsManager, assetStorage, c.String("jwt-signing-key"), authzEngine, auditLogger))
+			assets.Attach(mux, assets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, chatSessionsManager, assetStorage, c.String(usersessions.JWTSigningKeyFlag), authzEngine, auditLogger))
 			deployments.Attach(mux, deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, auditLogger))
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))

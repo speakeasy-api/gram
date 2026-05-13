@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	Claude  goa.Endpoint
 	Cursor  goa.Endpoint
+	Codex   goa.Endpoint
 	Logs    goa.Endpoint
 	Metrics goa.Endpoint
 }
@@ -29,6 +30,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		Claude:  NewClaudeEndpoint(s),
 		Cursor:  NewCursorEndpoint(s, a.APIKeyAuth),
+		Codex:   NewCodexEndpoint(s, a.APIKeyAuth),
 		Logs:    NewLogsEndpoint(s, a.APIKeyAuth),
 		Metrics: NewMetricsEndpoint(s, a.APIKeyAuth),
 	}
@@ -38,6 +40,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Claude = m(e.Claude)
 	e.Cursor = m(e.Cursor)
+	e.Codex = m(e.Codex)
 	e.Logs = m(e.Logs)
 	e.Metrics = m(e.Metrics)
 }
@@ -83,6 +86,41 @@ func NewCursorEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 			return nil, err
 		}
 		return s.Cursor(ctx, p)
+	}
+}
+
+// NewCodexEndpoint returns an endpoint function that calls the method "codex"
+// of service "hooks".
+func NewCodexEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CodexPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"hooks"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"hooks"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.Codex(ctx, p)
 	}
 }
 

@@ -201,7 +201,7 @@ func (q *Queries) GetOrganizationNameByWorkosID(ctx context.Context, workosID pg
 }
 
 const getOrganizationRelationshipForUser = `-- name: GetOrganizationRelationshipForUser :one
-SELECT id, organization_id, user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, user_id, workos_user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
 FROM organization_user_relationships
 WHERE organization_id = $1
   AND user_id = $2
@@ -219,6 +219,7 @@ func (q *Queries) GetOrganizationRelationshipForUser(ctx context.Context, arg Ge
 		&i.ID,
 		&i.OrganizationID,
 		&i.UserID,
+		&i.WorkosUserID,
 		&i.WorkosMembershipID,
 		&i.WorkosUpdatedAt,
 		&i.WorkosLastEventID,
@@ -231,7 +232,7 @@ func (q *Queries) GetOrganizationRelationshipForUser(ctx context.Context, arg Ge
 }
 
 const getOrganizationUserRelationship = `-- name: GetOrganizationUserRelationship :one
-SELECT id, organization_id, user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, user_id, workos_user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
 FROM organization_user_relationships
 WHERE organization_id = $1
   AND user_id = $2
@@ -250,6 +251,7 @@ func (q *Queries) GetOrganizationUserRelationship(ctx context.Context, arg GetOr
 		&i.ID,
 		&i.OrganizationID,
 		&i.UserID,
+		&i.WorkosUserID,
 		&i.WorkosMembershipID,
 		&i.WorkosUpdatedAt,
 		&i.WorkosLastEventID,
@@ -329,7 +331,7 @@ func (q *Queries) ListOrganizationRoleAssignmentsByWorkOSUser(ctx context.Contex
 
 const listOrganizationUsers = `-- name: ListOrganizationUsers :many
 SELECT
-  our.id, our.organization_id, our.user_id, our.workos_membership_id, our.workos_updated_at, our.workos_last_event_id, our.created_at, our.updated_at, our.deleted_at, our.deleted,
+  our.id, our.organization_id, our.user_id, our.workos_user_id, our.workos_membership_id, our.workos_updated_at, our.workos_last_event_id, our.created_at, our.updated_at, our.deleted_at, our.deleted,
   u.email AS user_email,
   u.display_name AS user_display_name,
   u.photo_url AS user_photo_url
@@ -343,6 +345,7 @@ type ListOrganizationUsersRow struct {
 	ID                 int64
 	OrganizationID     string
 	UserID             string
+	WorkosUserID       pgtype.Text
 	WorkosMembershipID pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz
 	WorkosLastEventID  pgtype.Text
@@ -368,6 +371,7 @@ func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID stri
 			&i.ID,
 			&i.OrganizationID,
 			&i.UserID,
+			&i.WorkosUserID,
 			&i.WorkosMembershipID,
 			&i.WorkosUpdatedAt,
 			&i.WorkosLastEventID,
@@ -799,7 +803,7 @@ INSERT INTO organization_user_relationships (
 )
 ON CONFLICT (organization_id, user_id) DO UPDATE SET
     updated_at = clock_timestamp()
-RETURNING id, organization_id, user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, user_id, workos_user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertOrganizationUserRelationshipParams struct {
@@ -814,6 +818,7 @@ func (q *Queries) UpsertOrganizationUserRelationship(ctx context.Context, arg Up
 		&i.ID,
 		&i.OrganizationID,
 		&i.UserID,
+		&i.WorkosUserID,
 		&i.WorkosMembershipID,
 		&i.WorkosUpdatedAt,
 		&i.WorkosLastEventID,

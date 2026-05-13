@@ -127,6 +127,31 @@ type CursorRequestBody struct {
 	Duration *float64 `form:"duration,omitempty" json:"duration,omitempty" xml:"duration,omitempty"`
 }
 
+// CodexRequestBody is the type of the "hooks" service "codex" endpoint HTTP
+// request body.
+type CodexRequestBody struct {
+	// The type of hook event
+	HookEventName *string `form:"hook_event_name,omitempty" json:"hook_event_name,omitempty" xml:"hook_event_name,omitempty"`
+	// The Codex session ID
+	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// Path to the conversation transcript file
+	TranscriptPath *string `form:"transcript_path,omitempty" json:"transcript_path,omitempty" xml:"transcript_path,omitempty"`
+	// The working directory when the event fired
+	Cwd *string `form:"cwd,omitempty" json:"cwd,omitempty" xml:"cwd,omitempty"`
+	// The model identifier
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The name of the tool
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// The input to the tool (PreToolUse only)
+	ToolInput any `form:"tool_input,omitempty" json:"tool_input,omitempty" xml:"tool_input,omitempty"`
+	// The output from the tool (PostToolUse only)
+	ToolOutput any `form:"tool_output,omitempty" json:"tool_output,omitempty" xml:"tool_output,omitempty"`
+	// The type of permission being requested (PermissionRequest only)
+	PermissionType *string `form:"permission_type,omitempty" json:"permission_type,omitempty" xml:"permission_type,omitempty"`
+	// The user's prompt text (UserPromptSubmit only)
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+}
+
 // LogsRequestBody is the type of the "hooks" service "logs" endpoint HTTP
 // request body.
 type LogsRequestBody struct {
@@ -167,6 +192,15 @@ type CursorResponseBody struct {
 	AdditionalContext *string `form:"additional_context,omitempty" json:"additional_context,omitempty" xml:"additional_context,omitempty"`
 	// Message sent back to the agent (beforeMCPExecution only)
 	AgentMessage *string `form:"agent_message,omitempty" json:"agent_message,omitempty" xml:"agent_message,omitempty"`
+}
+
+// CodexResponseBody is the type of the "hooks" service "codex" endpoint HTTP
+// response body.
+type CodexResponseBody struct {
+	// Permission decision for blocking events: allow or deny
+	Decision *string `form:"decision,omitempty" json:"decision,omitempty" xml:"decision,omitempty"`
+	// Reason for the decision, shown to the user
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
 // ClaudeUnauthorizedResponseBody is the type of the "hooks" service "claude"
@@ -514,6 +548,186 @@ type CursorUnexpectedResponseBody struct {
 // CursorGatewayErrorResponseBody is the type of the "hooks" service "cursor"
 // endpoint HTTP response body for the "gateway_error" error.
 type CursorGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CodexUnauthorizedResponseBody is the type of the "hooks" service "codex"
+// endpoint HTTP response body for the "unauthorized" error.
+type CodexUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CodexForbiddenResponseBody is the type of the "hooks" service "codex"
+// endpoint HTTP response body for the "forbidden" error.
+type CodexForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CodexBadRequestResponseBody is the type of the "hooks" service "codex"
+// endpoint HTTP response body for the "bad_request" error.
+type CodexBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CodexNotFoundResponseBody is the type of the "hooks" service "codex"
+// endpoint HTTP response body for the "not_found" error.
+type CodexNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CodexConflictResponseBody is the type of the "hooks" service "codex"
+// endpoint HTTP response body for the "conflict" error.
+type CodexConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CodexUnsupportedMediaResponseBody is the type of the "hooks" service "codex"
+// endpoint HTTP response body for the "unsupported_media" error.
+type CodexUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CodexInvalidResponseBody is the type of the "hooks" service "codex" endpoint
+// HTTP response body for the "invalid" error.
+type CodexInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CodexInvariantViolationResponseBody is the type of the "hooks" service
+// "codex" endpoint HTTP response body for the "invariant_violation" error.
+type CodexInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CodexUnexpectedResponseBody is the type of the "hooks" service "codex"
+// endpoint HTTP response body for the "unexpected" error.
+type CodexUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CodexGatewayErrorResponseBody is the type of the "hooks" service "codex"
+// endpoint HTTP response body for the "gateway_error" error.
+type CodexGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -918,8 +1132,18 @@ type OTELResourceAttributeRequestBody struct {
 type OTELAttributeValueRequestBody struct {
 	// String value
 	StringValue *string `form:"stringValue,omitempty" json:"stringValue,omitempty" xml:"stringValue,omitempty"`
-	// Integer value
-	IntValue *int64 `form:"intValue,omitempty" json:"intValue,omitempty" xml:"intValue,omitempty"`
+	// Integer value (string-encoded per OTLP/JSON, or raw number)
+	IntValue any `form:"intValue,omitempty" json:"intValue,omitempty" xml:"intValue,omitempty"`
+	// Boolean value
+	BoolValue *bool `form:"boolValue,omitempty" json:"boolValue,omitempty" xml:"boolValue,omitempty"`
+	// Double value
+	DoubleValue *float64 `form:"doubleValue,omitempty" json:"doubleValue,omitempty" xml:"doubleValue,omitempty"`
+	// Array value (passed through)
+	ArrayValue any `form:"arrayValue,omitempty" json:"arrayValue,omitempty" xml:"arrayValue,omitempty"`
+	// Key-value list value (passed through)
+	KvlistValue any `form:"kvlistValue,omitempty" json:"kvlistValue,omitempty" xml:"kvlistValue,omitempty"`
+	// Bytes value (base64-encoded per OTLP/JSON)
+	BytesValue *string `form:"bytesValue,omitempty" json:"bytesValue,omitempty" xml:"bytesValue,omitempty"`
 }
 
 // OTELScopeLogRequestBody is used to define fields on request body types.
@@ -993,12 +1217,20 @@ type OTELMetricRequestBody struct {
 	Unit *string `form:"unit,omitempty" json:"unit,omitempty" xml:"unit,omitempty"`
 	// Sum metric data
 	Sum *OTELSumRequestBody `form:"sum,omitempty" json:"sum,omitempty" xml:"sum,omitempty"`
+	// Gauge metric data (passed through)
+	Gauge any `form:"gauge,omitempty" json:"gauge,omitempty" xml:"gauge,omitempty"`
+	// Histogram metric data (passed through)
+	Histogram any `form:"histogram,omitempty" json:"histogram,omitempty" xml:"histogram,omitempty"`
+	// ExponentialHistogram metric data (passed through)
+	ExponentialHistogram any `form:"exponentialHistogram,omitempty" json:"exponentialHistogram,omitempty" xml:"exponentialHistogram,omitempty"`
+	// Summary metric data (passed through)
+	Summary any `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 }
 
 // OTELSumRequestBody is used to define fields on request body types.
 type OTELSumRequestBody struct {
-	// Aggregation temporality
-	AggregationTemporality *int `form:"aggregationTemporality,omitempty" json:"aggregationTemporality,omitempty" xml:"aggregationTemporality,omitempty"`
+	// Aggregation temporality (number or enum string)
+	AggregationTemporality any `form:"aggregationTemporality,omitempty" json:"aggregationTemporality,omitempty" xml:"aggregationTemporality,omitempty"`
 	// Whether the sum is monotonic
 	IsMonotonic *bool `form:"isMonotonic,omitempty" json:"isMonotonic,omitempty" xml:"isMonotonic,omitempty"`
 	// Data points
@@ -1016,8 +1248,8 @@ type OTELNumberDataPointRequestBody struct {
 	TimeUnixNano *string `form:"timeUnixNano,omitempty" json:"timeUnixNano,omitempty" xml:"timeUnixNano,omitempty"`
 	// Value as double
 	AsDouble *float64 `form:"asDouble,omitempty" json:"asDouble,omitempty" xml:"asDouble,omitempty"`
-	// Value as integer
-	AsInt *int64 `form:"asInt,omitempty" json:"asInt,omitempty" xml:"asInt,omitempty"`
+	// Value as integer (string-encoded per OTLP/JSON, or raw number)
+	AsInt any `form:"asInt,omitempty" json:"asInt,omitempty" xml:"asInt,omitempty"`
 }
 
 // NewClaudeResponseBody builds the HTTP response body from the result of the
@@ -1041,6 +1273,16 @@ func NewCursorResponseBody(res *hooks.CursorHookResult) *CursorResponseBody {
 		UserMessage:       res.UserMessage,
 		AdditionalContext: res.AdditionalContext,
 		AgentMessage:      res.AgentMessage,
+	}
+	return body
+}
+
+// NewCodexResponseBody builds the HTTP response body from the result of the
+// "codex" endpoint of the "hooks" service.
+func NewCodexResponseBody(res *hooks.CodexHookResult) *CodexResponseBody {
+	body := &CodexResponseBody{
+		Decision: res.Decision,
+		Reason:   res.Reason,
 	}
 	return body
 }
@@ -1315,6 +1557,146 @@ func NewCursorUnexpectedResponseBody(res *goa.ServiceError) *CursorUnexpectedRes
 // result of the "cursor" endpoint of the "hooks" service.
 func NewCursorGatewayErrorResponseBody(res *goa.ServiceError) *CursorGatewayErrorResponseBody {
 	body := &CursorGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCodexUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "codex" endpoint of the "hooks" service.
+func NewCodexUnauthorizedResponseBody(res *goa.ServiceError) *CodexUnauthorizedResponseBody {
+	body := &CodexUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCodexForbiddenResponseBody builds the HTTP response body from the result
+// of the "codex" endpoint of the "hooks" service.
+func NewCodexForbiddenResponseBody(res *goa.ServiceError) *CodexForbiddenResponseBody {
+	body := &CodexForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCodexBadRequestResponseBody builds the HTTP response body from the result
+// of the "codex" endpoint of the "hooks" service.
+func NewCodexBadRequestResponseBody(res *goa.ServiceError) *CodexBadRequestResponseBody {
+	body := &CodexBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCodexNotFoundResponseBody builds the HTTP response body from the result
+// of the "codex" endpoint of the "hooks" service.
+func NewCodexNotFoundResponseBody(res *goa.ServiceError) *CodexNotFoundResponseBody {
+	body := &CodexNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCodexConflictResponseBody builds the HTTP response body from the result
+// of the "codex" endpoint of the "hooks" service.
+func NewCodexConflictResponseBody(res *goa.ServiceError) *CodexConflictResponseBody {
+	body := &CodexConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCodexUnsupportedMediaResponseBody builds the HTTP response body from the
+// result of the "codex" endpoint of the "hooks" service.
+func NewCodexUnsupportedMediaResponseBody(res *goa.ServiceError) *CodexUnsupportedMediaResponseBody {
+	body := &CodexUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCodexInvalidResponseBody builds the HTTP response body from the result of
+// the "codex" endpoint of the "hooks" service.
+func NewCodexInvalidResponseBody(res *goa.ServiceError) *CodexInvalidResponseBody {
+	body := &CodexInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCodexInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "codex" endpoint of the "hooks" service.
+func NewCodexInvariantViolationResponseBody(res *goa.ServiceError) *CodexInvariantViolationResponseBody {
+	body := &CodexInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCodexUnexpectedResponseBody builds the HTTP response body from the result
+// of the "codex" endpoint of the "hooks" service.
+func NewCodexUnexpectedResponseBody(res *goa.ServiceError) *CodexUnexpectedResponseBody {
+	body := &CodexUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCodexGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "codex" endpoint of the "hooks" service.
+func NewCodexGatewayErrorResponseBody(res *goa.ServiceError) *CodexGatewayErrorResponseBody {
+	body := &CodexGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1688,16 +2070,38 @@ func NewCursorPayload(body *CursorRequestBody, apikeyToken *string, projectSlugI
 	return v
 }
 
+// NewCodexPayload builds a hooks service codex endpoint payload.
+func NewCodexPayload(body *CodexRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.CodexPayload {
+	v := &hooks.CodexPayload{
+		HookEventName:  *body.HookEventName,
+		SessionID:      body.SessionID,
+		TranscriptPath: body.TranscriptPath,
+		Cwd:            body.Cwd,
+		Model:          body.Model,
+		ToolName:       body.ToolName,
+		ToolInput:      body.ToolInput,
+		ToolOutput:     body.ToolOutput,
+		PermissionType: body.PermissionType,
+		Prompt:         body.Prompt,
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewLogsPayload builds a hooks service logs endpoint payload.
 func NewLogsPayload(body *LogsRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.LogsPayload {
 	v := &hooks.LogsPayload{}
-	v.ResourceLogs = make([]*hooks.OTELResourceLog, len(body.ResourceLogs))
-	for i, val := range body.ResourceLogs {
-		if val == nil {
-			v.ResourceLogs[i] = nil
-			continue
+	if body.ResourceLogs != nil {
+		v.ResourceLogs = make([]*hooks.OTELResourceLog, len(body.ResourceLogs))
+		for i, val := range body.ResourceLogs {
+			if val == nil {
+				v.ResourceLogs[i] = nil
+				continue
+			}
+			v.ResourceLogs[i] = unmarshalOTELResourceLogRequestBodyToHooksOTELResourceLog(val)
 		}
-		v.ResourceLogs[i] = unmarshalOTELResourceLogRequestBodyToHooksOTELResourceLog(val)
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1708,13 +2112,15 @@ func NewLogsPayload(body *LogsRequestBody, apikeyToken *string, projectSlugInput
 // NewMetricsPayload builds a hooks service metrics endpoint payload.
 func NewMetricsPayload(body *MetricsRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.MetricsPayload {
 	v := &hooks.MetricsPayload{}
-	v.ResourceMetrics = make([]*hooks.OTELResourceMetrics, len(body.ResourceMetrics))
-	for i, val := range body.ResourceMetrics {
-		if val == nil {
-			v.ResourceMetrics[i] = nil
-			continue
+	if body.ResourceMetrics != nil {
+		v.ResourceMetrics = make([]*hooks.OTELResourceMetrics, len(body.ResourceMetrics))
+		for i, val := range body.ResourceMetrics {
+			if val == nil {
+				v.ResourceMetrics[i] = nil
+				continue
+			}
+			v.ResourceMetrics[i] = unmarshalOTELResourceMetricsRequestBodyToHooksOTELResourceMetrics(val)
 		}
-		v.ResourceMetrics[i] = unmarshalOTELResourceMetricsRequestBodyToHooksOTELResourceMetrics(val)
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1743,11 +2149,21 @@ func ValidateCursorRequestBody(body *CursorRequestBody) (err error) {
 	return
 }
 
+// ValidateCodexRequestBody runs the validations defined on CodexRequestBody
+func ValidateCodexRequestBody(body *CodexRequestBody) (err error) {
+	if body.HookEventName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hook_event_name", "body"))
+	}
+	if body.HookEventName != nil {
+		if !(*body.HookEventName == "SessionStart" || *body.HookEventName == "PreToolUse" || *body.HookEventName == "PermissionRequest" || *body.HookEventName == "PostToolUse" || *body.HookEventName == "UserPromptSubmit" || *body.HookEventName == "Stop") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", *body.HookEventName, []any{"SessionStart", "PreToolUse", "PermissionRequest", "PostToolUse", "UserPromptSubmit", "Stop"}))
+		}
+	}
+	return
+}
+
 // ValidateLogsRequestBody runs the validations defined on LogsRequestBody
 func ValidateLogsRequestBody(body *LogsRequestBody) (err error) {
-	if body.ResourceLogs == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("resourceLogs", "body"))
-	}
 	for _, e := range body.ResourceLogs {
 		if e != nil {
 			if err2 := ValidateOTELResourceLogRequestBody(e); err2 != nil {
@@ -1760,9 +2176,6 @@ func ValidateLogsRequestBody(body *LogsRequestBody) (err error) {
 
 // ValidateMetricsRequestBody runs the validations defined on MetricsRequestBody
 func ValidateMetricsRequestBody(body *MetricsRequestBody) (err error) {
-	if body.ResourceMetrics == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("resourceMetrics", "body"))
-	}
 	for _, e := range body.ResourceMetrics {
 		if e != nil {
 			if err2 := ValidateOTELResourceMetricsRequestBody(e); err2 != nil {
@@ -1776,9 +2189,6 @@ func ValidateMetricsRequestBody(body *MetricsRequestBody) (err error) {
 // ValidateOTELResourceLogRequestBody runs the validations defined on
 // OTELResourceLogRequestBody
 func ValidateOTELResourceLogRequestBody(body *OTELResourceLogRequestBody) (err error) {
-	if body.ScopeLogs == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scopeLogs", "body"))
-	}
 	if body.Resource != nil {
 		if err2 := ValidateOTELResourceRequestBody(body.Resource); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -1813,18 +2223,12 @@ func ValidateOTELResourceAttributeRequestBody(body *OTELResourceAttributeRequest
 	if body.Key == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
 	}
-	if body.Value == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
-	}
 	return
 }
 
 // ValidateOTELScopeLogRequestBody runs the validations defined on
 // OTELScopeLogRequestBody
 func ValidateOTELScopeLogRequestBody(body *OTELScopeLogRequestBody) (err error) {
-	if body.LogRecords == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("logRecords", "body"))
-	}
 	for _, e := range body.LogRecords {
 		if e != nil {
 			if err2 := ValidateOTELLogRecordRequestBody(e); err2 != nil {
@@ -1838,18 +2242,6 @@ func ValidateOTELScopeLogRequestBody(body *OTELScopeLogRequestBody) (err error) 
 // ValidateOTELLogRecordRequestBody runs the validations defined on
 // OTELLogRecordRequestBody
 func ValidateOTELLogRecordRequestBody(body *OTELLogRecordRequestBody) (err error) {
-	if body.TimeUnixNano == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeUnixNano", "body"))
-	}
-	if body.ObservedTimeUnixNano == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("observedTimeUnixNano", "body"))
-	}
-	if body.Body == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("body", "body"))
-	}
-	if body.Attributes == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("attributes", "body"))
-	}
 	for _, e := range body.Attributes {
 		if e != nil {
 			if err2 := ValidateOTELAttributeRequestBody(e); err2 != nil {
@@ -1865,9 +2257,6 @@ func ValidateOTELLogRecordRequestBody(body *OTELLogRecordRequestBody) (err error
 func ValidateOTELAttributeRequestBody(body *OTELAttributeRequestBody) (err error) {
 	if body.Key == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
-	}
-	if body.Value == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
 	}
 	return
 }

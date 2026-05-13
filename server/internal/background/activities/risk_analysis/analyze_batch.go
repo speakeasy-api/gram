@@ -196,6 +196,7 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	var wg sync.WaitGroup
 	var gitleaksErr error
+	var presidioErr error
 
 	if slices.Contains(args.Sources, "gitleaks") {
 		wg.Go(func() {
@@ -210,17 +211,22 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	if slices.Contains(args.Sources, "presidio") {
 		wg.Go(func() {
+			// PIIScanner may return partial results alongside an error;
+			// always consume results so successful per-text findings are
+			// preserved even when some HTTP calls failed.
 			results, err := a.piiScanner.AnalyzeBatch(ctx, contents, args.PresidioEntities, func() {
 				activity.RecordHeartbeat(ctx, "presidio")
 			})
+			if results != nil {
+				presidioFindings = results
+			}
 			if err != nil {
-				a.logger.WarnContext(ctx, "presidio scan failed, continuing with gitleaks only", attr.SlogError(err))
+				presidioErr = err
+				a.logger.WarnContext(ctx, "presidio scan returned errors, using partial results", attr.SlogError(err))
 				if a.metrics.presidioScanSkipped != nil {
 					a.metrics.presidioScanSkipped.Add(ctx, 1)
 				}
-				return
 			}
-			presidioFindings = results
 		})
 	}
 
@@ -243,6 +249,26 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	if gitleaksErr != nil {
 		scanSpan.SetStatus(codes.Error, gitleaksErr.Error())
 		return nil, fmt.Errorf("gitleaks scan batch: %w", gitleaksErr)
+	}
+
+	// When the activity ctx was canceled (heartbeat timeout, parent
+	// workflow stop, etc.) report it as a scan-layer failure instead of
+	// letting control fall through to writeResults where db.Begin would
+	// surface a misleading "begin transaction: context canceled". Join
+	// the underlying Presidio error so the chain reflects the actual
+	// cause when Presidio degradation triggered the cancellation.
+	//
+	// Partial findings from gitleaks/promptInjection/presidio captured
+	// so far are intentionally discarded — Temporal will retry the
+	// activity (RetryPolicy.MaximumAttempts), and any partial write to
+	// the DB here would race the cancellation anyway.
+	if ctx.Err() != nil {
+		err := fmt.Errorf("scan canceled: %w", ctx.Err())
+		if presidioErr != nil {
+			err = errors.Join(err, fmt.Errorf("presidio: %w", presidioErr))
+		}
+		scanSpan.SetStatus(codes.Error, err.Error())
+		return nil, err
 	}
 
 	if slices.Contains(args.Sources, shadowmcp.SourceShadowMCP) {

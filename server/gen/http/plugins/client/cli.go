@@ -424,8 +424,8 @@ func BuildDownloadObservabilityPluginPayload(pluginsDownloadObservabilityPluginP
 	var platform string
 	{
 		platform = pluginsDownloadObservabilityPluginPlatform
-		if !(platform == "claude" || platform == "cursor") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor"}))
+		if !(platform == "claude" || platform == "cursor" || platform == "codex") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex"}))
 		}
 		if err != nil {
 			return nil, err
@@ -445,6 +445,28 @@ func BuildDownloadObservabilityPluginPayload(pluginsDownloadObservabilityPluginP
 	}
 	v := &plugins.DownloadObservabilityPluginPayload{}
 	v.Platform = platform
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDownloadCodexInstallScriptPayload builds the payload for the plugins
+// downloadCodexInstallScript endpoint from CLI flags.
+func BuildDownloadCodexInstallScriptPayload(pluginsDownloadCodexInstallScriptSessionToken string, pluginsDownloadCodexInstallScriptProjectSlugInput string) (*plugins.DownloadCodexInstallScriptPayload, error) {
+	var sessionToken *string
+	{
+		if pluginsDownloadCodexInstallScriptSessionToken != "" {
+			sessionToken = &pluginsDownloadCodexInstallScriptSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsDownloadCodexInstallScriptProjectSlugInput != "" {
+			projectSlugInput = &pluginsDownloadCodexInstallScriptProjectSlugInput
+		}
+	}
+	v := &plugins.DownloadCodexInstallScriptPayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -481,7 +503,7 @@ func BuildPublishPluginsPayload(pluginsPublishPluginsBody string, pluginsPublish
 	{
 		err = json.Unmarshal([]byte(pluginsPublishPluginsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"github_username\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"github_usernames\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -496,8 +518,12 @@ func BuildPublishPluginsPayload(pluginsPublishPluginsBody string, pluginsPublish
 			projectSlugInput = &pluginsPublishPluginsProjectSlugInput
 		}
 	}
-	v := &plugins.PublishPluginsPayload{
-		GithubUsername: body.GithubUsername,
+	v := &plugins.PublishPluginsPayload{}
+	if body.GithubUsernames != nil {
+		v.GithubUsernames = make([]string, len(body.GithubUsernames))
+		for i, val := range body.GithubUsernames {
+			v.GithubUsernames[i] = val
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

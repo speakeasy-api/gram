@@ -166,11 +166,11 @@ function DraftState({ app }: { app: SlackAppResult }) {
     <Stack gap={6} className="max-w-xl">
       <div>
         <Type variant="body" className="mb-2 font-medium">
-          Step 1: Create the app in Slack
+          Step 1: Set up your Slack connection
         </Type>
         <Type muted small className="mb-3 block">
-          Click the button below to open Slack with a pre-filled manifest for
-          your app.
+          Click the button below to open Slack with the setup pre-filled. Pick
+          your workspace, then click Create.
         </Type>
         <Button
           variant="secondary"
@@ -188,8 +188,8 @@ function DraftState({ app }: { app: SlackAppResult }) {
           Step 2: Paste your credentials
         </Type>
         <Type muted small className="mb-3 block">
-          After creating the app in Slack, copy the credentials from the app's
-          Basic Information page.
+          Once the connection is created in Slack, open its Basic Information
+          page and copy each value below.
         </Type>
         <Stack gap={3}>
           <div>

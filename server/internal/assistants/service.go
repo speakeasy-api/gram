@@ -25,6 +25,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -688,6 +689,7 @@ func writeAssistantToolsets(
 		return nil
 	}
 	rows := make([]assistantrepo.AddAssistantToolsetsParams, 0, len(resolved))
+	toolsetIDs := make([]uuid.UUID, 0, len(resolved))
 	for _, r := range resolved {
 		rows = append(rows, assistantrepo.AddAssistantToolsetsParams{
 			AssistantID:   assistantID,
@@ -695,9 +697,20 @@ func writeAssistantToolsets(
 			EnvironmentID: r.EnvironmentID,
 			ProjectID:     projectID,
 		})
+		toolsetIDs = append(toolsetIDs, r.ToolsetID)
 	}
 	if _, err := queries.AddAssistantToolsets(ctx, rows); err != nil {
 		return fmt.Errorf("insert assistant toolsets: %w", err)
+	}
+	// The runtime startup config requires every assistant-attached toolset
+	// to be MCP-reachable; assistants address tools via the MCP server.
+	// Auto-enable on attach so the user doesn't have to toggle it
+	// separately on each toolset.
+	if err := queries.EnableMCPForToolsets(ctx, assistantrepo.EnableMCPForToolsetsParams{
+		ToolsetIds: toolsetIDs,
+		ProjectID:  projectID,
+	}); err != nil {
+		return fmt.Errorf("enable mcp for assistant toolsets: %w", err)
 	}
 	return nil
 }
@@ -1751,7 +1764,8 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 }
 
 func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetRow) ([]runtimeMCPServer, error) {
-	servers := make([]runtimeMCPServer, 0, len(toolsets))
+	platformToolsets := []string{platformtools.AssistantsPlatformToolsetSlug}
+	servers := make([]runtimeMCPServer, 0, len(toolsets)+len(platformToolsets))
 	for _, t := range toolsets {
 		if !t.McpEnabled {
 			return nil, fmt.Errorf("toolset %q does not have MCP enabled", t.ToolsetSlug)
@@ -1775,6 +1789,19 @@ func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetR
 			ID:      t.ToolsetSlug,
 			URL:     serverURL.JoinPath("mcp", t.McpSlug.String).String(),
 			Headers: headers,
+		})
+	}
+
+	// Implicit platform toolsets granted to every assistant runtime; not
+	// surfaced as user-managed toolsets and not persisted in
+	// assistant_toolsets so users can't detach them. The "_platform-" ID
+	// prefix can't collide with user toolset slugs because the slug grammar
+	// strips underscores.
+	for _, slug := range platformToolsets {
+		servers = append(servers, runtimeMCPServer{
+			ID:      "_platform-" + slug,
+			URL:     platformtools.PlatformToolsetURL(serverURL, slug),
+			Headers: nil,
 		})
 	}
 

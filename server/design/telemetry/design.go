@@ -679,6 +679,7 @@ var SearchUsersFilter = Type("SearchUsersFilter", func() {
 	})
 	Attribute("user_ids", ArrayOf(String), "Optional list of user identifiers to include. Matches user_id for internal searches and external_user_id for external searches.")
 	Attribute("event_source", String, "Optional event source filter (e.g. 'hook'). When set, only rows with a matching event_source are included.")
+	Attribute("hook_source", String, "Optional hook source filter (e.g. 'cursor', 'claude-code').")
 
 	Required("from", "to")
 })
@@ -943,6 +944,8 @@ var GetUserMetricsSummaryPayload = Type("GetUserMetricsSummaryPayload", func() {
 	})
 	Attribute("user_id", String, "User ID to get metrics for (mutually exclusive with external_user_id)")
 	Attribute("external_user_id", String, "External user ID to get metrics for (mutually exclusive with user_id)")
+	Attribute("event_source", String, "Optional event source filter (e.g. 'hook')")
+	Attribute("hook_source", String, "Optional hook source filter (e.g. 'cursor', 'claude-code')")
 
 	Required("from", "to")
 })
@@ -968,9 +971,12 @@ var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", fu
 		Format(FormatDateTime)
 		Example("2025-12-19T11:00:00Z")
 	})
+	Attribute("user_id", String, "Optional internal user ID filter")
 	Attribute("external_user_id", String, "Optional external user ID filter")
 	Attribute("api_key_id", String, "Optional API key ID filter")
 	Attribute("toolset_slug", String, "Optional toolset/MCP server slug filter")
+	Attribute("event_source", String, "Optional event source filter (e.g. 'hook')")
+	Attribute("hook_source", String, "Optional hook source filter (e.g. 'cursor', 'claude-code')")
 	Attribute("include_time_series", Boolean, "Whether to include time series data (default: true)", func() {
 		Default(true)
 	})
@@ -1198,8 +1204,9 @@ var ListFilterOptionsPayload = Type("ListFilterOptionsPayload", func() {
 		Example("2025-12-19T11:00:00Z")
 	})
 	Attribute("filter_type", String, "Type of filter to list options for", func() {
-		Enum("api_key", "user")
+		Enum("api_key", "user", "internal_user", "agent")
 	})
+	Attribute("event_source", String, "Optional event source filter for the option list")
 
 	Required("from", "to", "filter_type")
 })

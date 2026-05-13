@@ -507,6 +507,42 @@ func TestGenerateClaudeObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t
 	}
 }
 
+func TestGenerateCodexObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	hooksJSON := files[CodexObservabilitySlug(cfg)+"/hooks/hooks.json"]
+	require.NotNil(t, hooksJSON, "codex observability hooks/hooks.json missing")
+
+	var parsed codexHooksConfig
+	require.NoError(t, json.Unmarshal(hooksJSON, &parsed))
+
+	for _, event := range CodexObservabilityHookEvents {
+		require.Contains(t, parsed.Hooks, event, "event %q must be registered in hooks.json or Codex will silently drop it", event)
+	}
+}
+
+func TestGenerateCodexObservabilityPluginScriptPostsToCodexEndpoint(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	script := string(files[CodexObservabilitySlug(cfg)+"/hooks/hook.sh"])
+	require.Contains(t, script, "hooks.codex", "hook.sh must POST to the codex endpoint")
+	require.Contains(t, script, cfg.HooksAPIKey, "hook.sh must embed the API key")
+}
+
 func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {
 	t.Parallel()
 	files, err := GeneratePluginPackages(nil, GenerateConfig{

@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
@@ -103,11 +102,10 @@ func NewService(
 // svc. Pass the same slice to every consumer so dispatch and listing share
 // one set of executor instances.
 func MemoryExternalTools(svc *memory.MemoryService) []platformtools.ExternalTool {
-	feature := string(productfeatures.FeatureAssistantMemory)
 	return []platformtools.ExternalTool{
-		{Executor: platformmemory.NewRememberTool(svc), RequiredFeature: feature},
-		{Executor: platformmemory.NewRecallTool(svc), RequiredFeature: feature},
-		{Executor: platformmemory.NewForgetTool(svc), RequiredFeature: feature},
+		{Executor: platformmemory.NewRememberTool(svc), RequiredFeature: ""},
+		{Executor: platformmemory.NewRecallTool(svc), RequiredFeature: ""},
+		{Executor: platformmemory.NewForgetTool(svc), RequiredFeature: ""},
 	}
 }
 

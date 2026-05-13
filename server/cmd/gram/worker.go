@@ -53,6 +53,7 @@ import (
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
 func newWorkerCommand() *cli.Command {
@@ -280,7 +281,7 @@ func newWorkerCommand() *cli.Command {
 			EnvVars: []string{"GRAM_IDP_CLIENT_SECRET"},
 		},
 		&cli.StringFlag{
-			Name:     "jwt-signing-key",
+			Name:     usersessions.JWTSigningKeyFlag,
 			Usage:    "Key for JWT signing",
 			Required: true,
 			EnvVars:  []string{"GRAM_JWT_SIGNING_KEY"},
@@ -583,12 +584,12 @@ func newWorkerCommand() *cli.Command {
 
 			sessionManager := sessions.NewManager(logger, tracerProvider, db, redisClient, cache.SuffixNone, idpClient, billingRepo, identityResolver)
 
-			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
+			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String(usersessions.JWTSigningKeyFlag))
 
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, identityResolver, guardianPolicy)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL)
 
-			assistantTokenManager := assistanttokens.New(c.String("jwt-signing-key"), db, authzEngine)
+			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
 
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient))
 
@@ -631,6 +632,9 @@ func newWorkerCommand() *cli.Command {
 				auditLogger,
 				memoryTools,
 				platformFeatureChecker,
+				nil,
+				identityResolver,
+				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
 			)
 
 			chatClient := chat.NewAgenticChatClient(

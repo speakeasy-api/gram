@@ -40,6 +40,7 @@ import (
 	mcpregistriesc "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/client"
 	mcpserversc "github.com/speakeasy-api/gram/server/gen/http/mcp_servers/client"
 	organizationsc "github.com/speakeasy-api/gram/server/gen/http/organizations/client"
+	otelforwardingc "github.com/speakeasy-api/gram/server/gen/http/otel_forwarding/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
@@ -85,7 +86,7 @@ func UsageCommands() []string {
 		"collections (create|list|update|delete|attach-server|detach-server|list-servers)",
 		"functions get-signed-asset-url",
 		"hooks-server-names (list|upsert|delete)",
-		"hooks (claude|cursor|logs|metrics)",
+		"hooks (claude|cursor|codex|logs|metrics)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
@@ -93,8 +94,9 @@ func UsageCommands() []string {
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|update-mcp-server|delete-mcp-server)",
 		"organizations (send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user)",
+		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
-		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|get-publish-status|publish-plugins)",
+		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|verify-url|delete-server)",
@@ -677,6 +679,11 @@ func ParseEndpoint(
 		hooksCursorApikeyTokenFlag      = hooksCursorFlags.String("apikey-token", "", "")
 		hooksCursorProjectSlugInputFlag = hooksCursorFlags.String("project-slug-input", "", "")
 
+		hooksCodexFlags                = flag.NewFlagSet("codex", flag.ExitOnError)
+		hooksCodexBodyFlag             = hooksCodexFlags.String("body", "REQUIRED", "")
+		hooksCodexApikeyTokenFlag      = hooksCodexFlags.String("apikey-token", "", "")
+		hooksCodexProjectSlugInputFlag = hooksCodexFlags.String("project-slug-input", "", "")
+
 		hooksLogsFlags                = flag.NewFlagSet("logs", flag.ExitOnError)
 		hooksLogsBodyFlag             = hooksLogsFlags.String("body", "REQUIRED", "")
 		hooksLogsApikeyTokenFlag      = hooksLogsFlags.String("apikey-token", "", "")
@@ -835,6 +842,21 @@ func ParseEndpoint(
 		organizationsRemoveUserUserIDFlag       = organizationsRemoveUserFlags.String("user-id", "REQUIRED", "")
 		organizationsRemoveUserSessionTokenFlag = organizationsRemoveUserFlags.String("session-token", "", "")
 
+		otelForwardingFlags = flag.NewFlagSet("otel-forwarding", flag.ContinueOnError)
+
+		otelForwardingGetConfigFlags            = flag.NewFlagSet("get-config", flag.ExitOnError)
+		otelForwardingGetConfigApikeyTokenFlag  = otelForwardingGetConfigFlags.String("apikey-token", "", "")
+		otelForwardingGetConfigSessionTokenFlag = otelForwardingGetConfigFlags.String("session-token", "", "")
+
+		otelForwardingUpsertConfigFlags            = flag.NewFlagSet("upsert-config", flag.ExitOnError)
+		otelForwardingUpsertConfigBodyFlag         = otelForwardingUpsertConfigFlags.String("body", "REQUIRED", "")
+		otelForwardingUpsertConfigApikeyTokenFlag  = otelForwardingUpsertConfigFlags.String("apikey-token", "", "")
+		otelForwardingUpsertConfigSessionTokenFlag = otelForwardingUpsertConfigFlags.String("session-token", "", "")
+
+		otelForwardingDeleteConfigFlags            = flag.NewFlagSet("delete-config", flag.ExitOnError)
+		otelForwardingDeleteConfigApikeyTokenFlag  = otelForwardingDeleteConfigFlags.String("apikey-token", "", "")
+		otelForwardingDeleteConfigSessionTokenFlag = otelForwardingDeleteConfigFlags.String("session-token", "", "")
+
 		packagesFlags = flag.NewFlagSet("packages", flag.ContinueOnError)
 
 		packagesCreatePackageFlags                = flag.NewFlagSet("create-package", flag.ExitOnError)
@@ -923,6 +945,10 @@ func ParseEndpoint(
 		pluginsDownloadObservabilityPluginPlatformFlag         = pluginsDownloadObservabilityPluginFlags.String("platform", "REQUIRED", "")
 		pluginsDownloadObservabilityPluginSessionTokenFlag     = pluginsDownloadObservabilityPluginFlags.String("session-token", "", "")
 		pluginsDownloadObservabilityPluginProjectSlugInputFlag = pluginsDownloadObservabilityPluginFlags.String("project-slug-input", "", "")
+
+		pluginsDownloadCodexInstallScriptFlags                = flag.NewFlagSet("download-codex-install-script", flag.ExitOnError)
+		pluginsDownloadCodexInstallScriptSessionTokenFlag     = pluginsDownloadCodexInstallScriptFlags.String("session-token", "", "")
+		pluginsDownloadCodexInstallScriptProjectSlugInputFlag = pluginsDownloadCodexInstallScriptFlags.String("project-slug-input", "", "")
 
 		pluginsGetPublishStatusFlags                = flag.NewFlagSet("get-publish-status", flag.ExitOnError)
 		pluginsGetPublishStatusSessionTokenFlag     = pluginsGetPublishStatusFlags.String("session-token", "", "")
@@ -1631,6 +1657,7 @@ func ParseEndpoint(
 	hooksFlags.Usage = hooksUsage
 	hooksClaudeFlags.Usage = hooksClaudeUsage
 	hooksCursorFlags.Usage = hooksCursorUsage
+	hooksCodexFlags.Usage = hooksCodexUsage
 	hooksLogsFlags.Usage = hooksLogsUsage
 	hooksMetricsFlags.Usage = hooksMetricsUsage
 
@@ -1674,6 +1701,11 @@ func ParseEndpoint(
 	organizationsListUsersFlags.Usage = organizationsListUsersUsage
 	organizationsRemoveUserFlags.Usage = organizationsRemoveUserUsage
 
+	otelForwardingFlags.Usage = otelForwardingUsage
+	otelForwardingGetConfigFlags.Usage = otelForwardingGetConfigUsage
+	otelForwardingUpsertConfigFlags.Usage = otelForwardingUpsertConfigUsage
+	otelForwardingDeleteConfigFlags.Usage = otelForwardingDeleteConfigUsage
+
 	packagesFlags.Usage = packagesUsage
 	packagesCreatePackageFlags.Usage = packagesCreatePackageUsage
 	packagesUpdatePackageFlags.Usage = packagesUpdatePackageUsage
@@ -1693,6 +1725,7 @@ func ParseEndpoint(
 	pluginsSetPluginAssignmentsFlags.Usage = pluginsSetPluginAssignmentsUsage
 	pluginsDownloadPluginPackageFlags.Usage = pluginsDownloadPluginPackageUsage
 	pluginsDownloadObservabilityPluginFlags.Usage = pluginsDownloadObservabilityPluginUsage
+	pluginsDownloadCodexInstallScriptFlags.Usage = pluginsDownloadCodexInstallScriptUsage
 	pluginsGetPublishStatusFlags.Usage = pluginsGetPublishStatusUsage
 	pluginsPublishPluginsFlags.Usage = pluginsPublishPluginsUsage
 
@@ -1890,6 +1923,8 @@ func ParseEndpoint(
 			svcf = mcpServersFlags
 		case "organizations":
 			svcf = organizationsFlags
+		case "otel-forwarding":
+			svcf = otelForwardingFlags
 		case "packages":
 			svcf = packagesFlags
 		case "plugins":
@@ -2299,6 +2334,9 @@ func ParseEndpoint(
 			case "cursor":
 				epf = hooksCursorFlags
 
+			case "codex":
+				epf = hooksCodexFlags
+
 			case "logs":
 				epf = hooksLogsFlags
 
@@ -2413,6 +2451,19 @@ func ParseEndpoint(
 
 			}
 
+		case "otel-forwarding":
+			switch epn {
+			case "get-config":
+				epf = otelForwardingGetConfigFlags
+
+			case "upsert-config":
+				epf = otelForwardingUpsertConfigFlags
+
+			case "delete-config":
+				epf = otelForwardingDeleteConfigFlags
+
+			}
+
 		case "packages":
 			switch epn {
 			case "create-package":
@@ -2466,6 +2517,9 @@ func ParseEndpoint(
 
 			case "download-observability-plugin":
 				epf = pluginsDownloadObservabilityPluginFlags
+
+			case "download-codex-install-script":
+				epf = pluginsDownloadCodexInstallScriptFlags
 
 			case "get-publish-status":
 				epf = pluginsGetPublishStatusFlags
@@ -3212,6 +3266,9 @@ func ParseEndpoint(
 			case "cursor":
 				endpoint = c.Cursor()
 				data, err = hooksc.BuildCursorPayload(*hooksCursorBodyFlag, *hooksCursorApikeyTokenFlag, *hooksCursorProjectSlugInputFlag)
+			case "codex":
+				endpoint = c.Codex()
+				data, err = hooksc.BuildCodexPayload(*hooksCodexBodyFlag, *hooksCodexApikeyTokenFlag, *hooksCodexProjectSlugInputFlag)
 			case "logs":
 				endpoint = c.Logs()
 				data, err = hooksc.BuildLogsPayload(*hooksLogsBodyFlag, *hooksLogsApikeyTokenFlag, *hooksLogsProjectSlugInputFlag)
@@ -3325,6 +3382,19 @@ func ParseEndpoint(
 				endpoint = c.RemoveUser()
 				data, err = organizationsc.BuildRemoveUserPayload(*organizationsRemoveUserUserIDFlag, *organizationsRemoveUserSessionTokenFlag)
 			}
+		case "otel-forwarding":
+			c := otelforwardingc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-config":
+				endpoint = c.GetConfig()
+				data, err = otelforwardingc.BuildGetConfigPayload(*otelForwardingGetConfigApikeyTokenFlag, *otelForwardingGetConfigSessionTokenFlag)
+			case "upsert-config":
+				endpoint = c.UpsertConfig()
+				data, err = otelforwardingc.BuildUpsertConfigPayload(*otelForwardingUpsertConfigBodyFlag, *otelForwardingUpsertConfigApikeyTokenFlag, *otelForwardingUpsertConfigSessionTokenFlag)
+			case "delete-config":
+				endpoint = c.DeleteConfig()
+				data, err = otelforwardingc.BuildDeleteConfigPayload(*otelForwardingDeleteConfigApikeyTokenFlag, *otelForwardingDeleteConfigSessionTokenFlag)
+			}
 		case "packages":
 			c := packagesc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -3380,6 +3450,9 @@ func ParseEndpoint(
 			case "download-observability-plugin":
 				endpoint = c.DownloadObservabilityPlugin()
 				data, err = pluginsc.BuildDownloadObservabilityPluginPayload(*pluginsDownloadObservabilityPluginPlatformFlag, *pluginsDownloadObservabilityPluginSessionTokenFlag, *pluginsDownloadObservabilityPluginProjectSlugInputFlag)
+			case "download-codex-install-script":
+				endpoint = c.DownloadCodexInstallScript()
+				data, err = pluginsc.BuildDownloadCodexInstallScriptPayload(*pluginsDownloadCodexInstallScriptSessionTokenFlag, *pluginsDownloadCodexInstallScriptProjectSlugInputFlag)
 			case "get-publish-status":
 				endpoint = c.GetPublishStatus()
 				data, err = pluginsc.BuildGetPublishStatusPayload(*pluginsGetPublishStatusSessionTokenFlag, *pluginsGetPublishStatusProjectSlugInputFlag)
@@ -6105,6 +6178,7 @@ func hooksUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    claude: Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.`)
 	fmt.Fprintln(os.Stderr, `    cursor: Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure, beforeMCPExecution, and afterMCPExecution.`)
+	fmt.Fprintln(os.Stderr, `    codex: Endpoint for Codex hook events. Handles SessionStart, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, and Stop.`)
 	fmt.Fprintln(os.Stderr, `    logs: Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.`)
 	fmt.Fprintln(os.Stderr, `    metrics: Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.`)
 	fmt.Fprintln(os.Stderr)
@@ -6155,6 +6229,28 @@ func hooksCursorUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks cursor --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cache_read_tokens\": 1,\n      \"cache_write_tokens\": 1,\n      \"command\": \"abc123\",\n      \"composer_mode\": \"abc123\",\n      \"conversation_id\": \"abc123\",\n      \"cursor_version\": \"abc123\",\n      \"duration\": 1,\n      \"duration_ms\": 1,\n      \"error\": \"abc123\",\n      \"generation_id\": \"abc123\",\n      \"hook_event_name\": \"abc123\",\n      \"input_tokens\": 1,\n      \"is_interrupt\": false,\n      \"loop_count\": 1,\n      \"model\": \"abc123\",\n      \"output_tokens\": 1,\n      \"prompt\": \"abc123\",\n      \"result_json\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"status\": \"abc123\",\n      \"text\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"url\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+func hooksCodexUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hooks codex", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Endpoint for Codex hook events. Handles SessionStart, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, and Stop.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks codex --body '{\n      \"cwd\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"model\": \"abc123\",\n      \"permission_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_output\": \"abc123\",\n      \"transcript_path\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func hooksLogsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] hooks logs", os.Args[0])
@@ -6174,7 +6270,7 @@ func hooksLogsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks logs --body '{\n      \"resourceLogs\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"intValue\": 1,\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeLogs\": [\n               {\n                  \"logRecords\": [\n                     {\n                        \"attributes\": [\n                           {\n                              \"key\": \"abc123\",\n                              \"value\": {\n                                 \"intValue\": 1,\n                                 \"stringValue\": \"abc123\"\n                              }\n                           }\n                        ],\n                        \"body\": {\n                           \"stringValue\": \"abc123\"\n                        },\n                        \"droppedAttributesCount\": 1,\n                        \"observedTimeUnixNano\": \"abc123\",\n                        \"timeUnixNano\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks logs --body '{\n      \"resourceLogs\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"arrayValue\": \"abc123\",\n                        \"boolValue\": false,\n                        \"bytesValue\": \"abc123\",\n                        \"doubleValue\": 1,\n                        \"intValue\": \"abc123\",\n                        \"kvlistValue\": \"abc123\",\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeLogs\": [\n               {\n                  \"logRecords\": [\n                     {\n                        \"attributes\": [\n                           {\n                              \"key\": \"abc123\",\n                              \"value\": {\n                                 \"arrayValue\": \"abc123\",\n                                 \"boolValue\": false,\n                                 \"bytesValue\": \"abc123\",\n                                 \"doubleValue\": 1,\n                                 \"intValue\": \"abc123\",\n                                 \"kvlistValue\": \"abc123\",\n                                 \"stringValue\": \"abc123\"\n                              }\n                           }\n                        ],\n                        \"body\": {\n                           \"stringValue\": \"abc123\"\n                        },\n                        \"droppedAttributesCount\": 1,\n                        \"observedTimeUnixNano\": \"abc123\",\n                        \"timeUnixNano\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func hooksMetricsUsage() {
@@ -6196,7 +6292,7 @@ func hooksMetricsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks metrics --body '{\n      \"resourceMetrics\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"intValue\": 1,\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeMetrics\": [\n               {\n                  \"metrics\": [\n                     {\n                        \"description\": \"abc123\",\n                        \"name\": \"abc123\",\n                        \"sum\": {\n                           \"aggregationTemporality\": 1,\n                           \"dataPoints\": [\n                              {\n                                 \"asDouble\": 1,\n                                 \"asInt\": 1,\n                                 \"attributes\": [\n                                    {\n                                       \"key\": \"abc123\",\n                                       \"value\": {\n                                          \"intValue\": 1,\n                                          \"stringValue\": \"abc123\"\n                                       }\n                                    }\n                                 ],\n                                 \"startTimeUnixNano\": \"abc123\",\n                                 \"timeUnixNano\": \"abc123\"\n                              }\n                           ],\n                           \"isMonotonic\": false\n                        },\n                        \"unit\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks metrics --body '{\n      \"resourceMetrics\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"arrayValue\": \"abc123\",\n                        \"boolValue\": false,\n                        \"bytesValue\": \"abc123\",\n                        \"doubleValue\": 1,\n                        \"intValue\": \"abc123\",\n                        \"kvlistValue\": \"abc123\",\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeMetrics\": [\n               {\n                  \"metrics\": [\n                     {\n                        \"description\": \"abc123\",\n                        \"exponentialHistogram\": \"abc123\",\n                        \"gauge\": \"abc123\",\n                        \"histogram\": \"abc123\",\n                        \"name\": \"abc123\",\n                        \"sum\": {\n                           \"aggregationTemporality\": \"abc123\",\n                           \"dataPoints\": [\n                              {\n                                 \"asDouble\": 1,\n                                 \"asInt\": \"abc123\",\n                                 \"attributes\": [\n                                    {\n                                       \"key\": \"abc123\",\n                                       \"value\": {\n                                          \"arrayValue\": \"abc123\",\n                                          \"boolValue\": false,\n                                          \"bytesValue\": \"abc123\",\n                                          \"doubleValue\": 1,\n                                          \"intValue\": \"abc123\",\n                                          \"kvlistValue\": \"abc123\",\n                                          \"stringValue\": \"abc123\"\n                                       }\n                                    }\n                                 ],\n                                 \"startTimeUnixNano\": \"abc123\",\n                                 \"timeUnixNano\": \"abc123\"\n                              }\n                           ],\n                           \"isMonotonic\": false\n                        },\n                        \"summary\": \"abc123\",\n                        \"unit\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // instancesUsage displays the usage of the instances command and its
@@ -6874,6 +6970,81 @@ func organizationsRemoveUserUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations remove-user --user-id \"abc123\" --session-token \"abc123\"")
 }
 
+// otelForwardingUsage displays the usage of the otel-forwarding command and
+// its subcommands.
+func otelForwardingUsage() {
+	fmt.Fprintln(os.Stderr, `Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] otel-forwarding COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-config: Get the org-wide OTEL forwarding config. Returns an empty config (enabled=false, no URL) when none is set.`)
+	fmt.Fprintln(os.Stderr, `    upsert-config: Create or update the org-wide OTEL forwarding config. Replaces the full header set on each call.`)
+	fmt.Fprintln(os.Stderr, `    delete-config: Delete the org-wide OTEL forwarding config.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s otel-forwarding COMMAND --help\n", os.Args[0])
+}
+func otelForwardingGetConfigUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] otel-forwarding get-config", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the org-wide OTEL forwarding config. Returns an empty config (enabled=false, no URL) when none is set.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "otel-forwarding get-config --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func otelForwardingUpsertConfigUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] otel-forwarding upsert-config", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or update the org-wide OTEL forwarding config. Replaces the full header set on each call.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "otel-forwarding upsert-config --body '{\n      \"enabled\": false,\n      \"endpoint_url\": \"abc123\",\n      \"headers\": [\n         {\n            \"name\": \"abc123\",\n            \"value\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func otelForwardingDeleteConfigUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] otel-forwarding delete-config", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete the org-wide OTEL forwarding config.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "otel-forwarding delete-config --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
 // packagesUsage displays the usage of the packages command and its subcommands.
 func packagesUsage() {
 	fmt.Fprintln(os.Stderr, `Manages packages in Gram.`)
@@ -7022,6 +7193,7 @@ func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `    set-plugin-assignments: Replace all assignments for a plugin with the given list of principal URNs.`)
 	fmt.Fprintln(os.Stderr, `    download-plugin-package: Download a ZIP of a single plugin package for direct installation.`)
 	fmt.Fprintln(os.Stderr, `    download-observability-plugin: Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.`)
+	fmt.Fprintln(os.Stderr, `    download-codex-install-script: Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.`)
 	fmt.Fprintln(os.Stderr, `    get-publish-status: Check whether GitHub publishing is configured and connected for this project.`)
 	fmt.Fprintln(os.Stderr, `    publish-plugins: Generate and publish all plugin packages to a GitHub repository.`)
 	fmt.Fprintln(os.Stderr)
@@ -7272,6 +7444,26 @@ func pluginsDownloadObservabilityPluginUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins download-observability-plugin --platform \"cursor\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+func pluginsDownloadCodexInstallScriptUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins download-codex-install-script", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins download-codex-install-script --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func pluginsGetPublishStatusUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] plugins get-publish-status", os.Args[0])
@@ -7311,7 +7503,7 @@ func pluginsPublishPluginsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins publish-plugins --body '{\n      \"github_username\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins publish-plugins --body '{\n      \"github_usernames\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // featuresUsage displays the usage of the features command and its subcommands.
@@ -8256,7 +8448,7 @@ func telemetrySearchUsersUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry search-users --body '{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"event_source\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"user_ids\": [\n            \"abc123\"\n         ]\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\",\n      \"user_type\": \"external\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry search-users --body '{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"event_source\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"hook_source\": \"abc123\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"user_ids\": [\n            \"abc123\"\n         ]\n      },\n      \"limit\": 2,\n      \"sort\": \"desc\",\n      \"user_type\": \"external\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryCaptureEventUsage() {
@@ -8330,7 +8522,7 @@ func telemetryGetUserMetricsSummaryUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-user-metrics-summary --body '{\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-user-metrics-summary --body '{\n      \"event_source\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_source\": \"abc123\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryGetObservabilityOverviewUsage() {
@@ -8354,7 +8546,7 @@ func telemetryGetObservabilityOverviewUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-observability-overview --body '{\n      \"api_key_id\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"include_time_series\": false,\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"toolset_slug\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-observability-overview --body '{\n      \"api_key_id\": \"abc123\",\n      \"event_source\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_source\": \"abc123\",\n      \"include_time_series\": false,\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"toolset_slug\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryGetProjectOverviewUsage() {
@@ -8402,7 +8594,7 @@ func telemetryListFilterOptionsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry list-filter-options --body '{\n      \"filter_type\": \"user\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry list-filter-options --body '{\n      \"event_source\": \"abc123\",\n      \"filter_type\": \"user\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryListAttributeKeysUsage() {

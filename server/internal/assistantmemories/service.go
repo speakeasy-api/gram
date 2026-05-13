@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/memory/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
 // memoryStore is the subset of memory.MemoryService that this service depends
@@ -33,19 +32,12 @@ type memoryStore interface {
 
 var _ memoryStore = (*memory.MemoryService)(nil)
 
-// featureChecker is the productfeatures surface this service consumes.
-// *productfeatures.Client implements it.
-type featureChecker interface {
-	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
-}
-
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	auth     *auth.Auth
-	authz    *authz.Engine
-	features featureChecker
-	memory   memoryStore
+	tracer trace.Tracer
+	logger *slog.Logger
+	auth   *auth.Auth
+	authz  *authz.Engine
+	memory memoryStore
 }
 
 var (
@@ -59,17 +51,15 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
-	features featureChecker,
 	memorySvc *memory.MemoryService,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("assistantmemories"))
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistantmemories"),
-		logger:   logger,
-		auth:     auth.New(logger, db, sessions, authzEngine),
-		authz:    authzEngine,
-		features: features,
-		memory:   memorySvc,
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistantmemories"),
+		logger: logger,
+		auth:   auth.New(logger, db, sessions, authzEngine),
+		authz:  authzEngine,
+		memory: memorySvc,
 	}
 }
 

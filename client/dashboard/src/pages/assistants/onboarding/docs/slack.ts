@@ -7,7 +7,7 @@ export const SLACK_DOCS: IntegrationDoc = {
     "Wire an assistant to a Slack workspace end-to-end: respond to events, talk to users, and react to schedules.",
   body: `# Slack integration
 
-Wire the assistant end-to-end with the user's Slack workspace: it reads/sends messages via the bot AND can be triggered by Slack events. The user creates and installs a Slack app, then pastes credentials into the assistant's environment — Slack does not let us OAuth on their behalf for a brand-new app.
+Wire the assistant end-to-end with the user's Slack workspace: it reads/sends messages via the bot AND can be triggered by Slack events. The user installs a Slack connection in their workspace, then pastes credentials into the assistant's environment — Slack does not let us OAuth on their behalf for a brand-new integration. The user-facing flow is split into TWO cards: an install card (\`show_slack_app_guide\` — handles workspace pick, install, and Event Subscriptions Retry) followed by a tokens card (\`request_environment_secrets\`). Never call these two tools in the same turn — emit \`show_slack_app_guide\` alone, wait for it to resolve, then emit \`request_environment_secrets\` in a later turn.
 
 ## Default rule: always create a slack trigger
 
@@ -32,9 +32,9 @@ Required keys for the default flow:
 2. **Declare keys.** \`add_environment_keys({ keys: ["SLACK_BOT_TOKEN", "SLACK_USER_TOKEN", "SLACK_SIGNING_SECRET"] })\`.
 3. **Create the slack trigger.** \`create_trigger\` with \`definition_slug: "slack"\` and the relevant \`event_types\` (default \`["app_mention", "message"]\`). The response includes a \`webhook_url\` that already responds to Slack's \`url_verification\` challenge. Remember the trigger \`id\` for step 8d.
 4. **Create any additional triggers the user asked for** (e.g. \`cron\` for a scheduled digest). These are additive.
-5. **Show the app guide.** Skip if \`SLACK_BOT_TOKEN\` is already populated (check \`list_environments\` → \`populated_entry_names\`). Otherwise \`show_slack_app_guide\` with the slack trigger's \`webhook_url\`. The manifest always grants the full bot- and user-scope supersets; do not pass scope overrides. **This tool BLOCKS** until the user clicks "I've installed it" — do not call other tools in parallel with it.
-6. **User installs the app.** Slack mints both \`xoxb-\` (bot) and \`xoxp-\` (user) tokens at install + approval.
-7. **Request values.** Once the guide resolves with \`installed: true\`, call \`request_environment_secrets\` for \`SLACK_BOT_TOKEN\` (OAuth & Permissions → Bot User OAuth Token), \`SLACK_USER_TOKEN\` (OAuth & Permissions → User OAuth Token), and \`SLACK_SIGNING_SECRET\` (Basic Information → App Credentials). If the guide resolved with \`cancelled: true\`, do not call \`request_environment_secrets\` — they have nothing to paste.
+5. **Show the install card.** Skip if \`SLACK_BOT_TOKEN\` is already populated (check \`list_environments\` → \`populated_entry_names\`). Otherwise \`show_slack_app_guide\` with the slack trigger's \`webhook_url\`. The manifest always grants the full bot- and user-scope supersets; do not pass scope overrides. The card walks the user through install + Event Subscriptions Retry — it does NOT collect any tokens. **This tool BLOCKS** until the user clicks "I'm done" — do not call other tools in parallel with it.
+6. **User installs the connection.** Slack mints both \`xoxb-\` (bot) and \`xoxp-\` (user) tokens at install + approval.
+7. **Show the tokens card.** Once the install card resolves with \`installed: true\`, call \`request_environment_secrets\` for \`SLACK_BOT_TOKEN\` (OAuth & Permissions → Bot User OAuth Token), \`SLACK_USER_TOKEN\` (OAuth & Permissions → User OAuth Token), and \`SLACK_SIGNING_SECRET\` (Basic Information → App Credentials). This is a separate card, not part of the install card. If the install card resolved with \`cancelled: true\`, do not call \`request_environment_secrets\` — they have nothing to paste.
 8. **Self-handshake.** Single short burst, no confirmation:
    - **a.** Ask for the user's Slack handle.
    - **b.** DM the user a greeting in the assistant's voice (the persona picked via \`propose_identity\`). Do not template.
@@ -54,7 +54,7 @@ Same as the recommended flow with these differences:
 
 ## Webhook URL not yet available
 
-If for some reason the webhook URL isn't available at step 5 (e.g. trigger creation deferred): call \`show_slack_app_guide\` without \`webhook_url\`. The manifest is scope-only and Slack accepts it. After install, create the slack trigger and use \`show_webhook_url\` so the user pastes the URL into Event Subscriptions → Request URL manually and subscribes to \`bot_events\` in Slack's UI.
+If for some reason the webhook URL isn't available at step 5 (e.g. trigger creation deferred): call \`show_slack_app_guide\` without \`webhook_url\`. The card drops the Event Subscriptions Retry step automatically. The manifest is scope-only and Slack accepts it. After install, create the slack trigger and use \`show_webhook_url\` so the user pastes the URL into Event Subscriptions → Request URL manually and subscribes to \`bot_events\` in Slack's UI.
 
 ## Trigger config
 

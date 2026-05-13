@@ -581,9 +581,12 @@ type GetTimeSeriesMetricsParams struct {
 	TimeStart       int64
 	TimeEnd         int64
 	IntervalSeconds int64  // Bucket interval in seconds
+	UserID          string // Optional filter
 	ExternalUserID  string // Optional filter
 	APIKeyID        string // Optional filter
 	ToolsetSlug     string // Optional filter - filters by toolset/MCP server slug
+	EventSource     string // Optional filter - filters by event_source
+	HookSource      string // Optional filter - filters by hook_source
 }
 
 // GetTimeSeriesMetrics retrieves time-bucketed metrics for the observability overview charts.
@@ -618,8 +621,8 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 			"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost",
 			"countIf(startsWith(gram_urn, 'tools:')) AS total_tool_calls",
 			"countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS failed_tool_calls",
-			"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) AS avg_tool_latency_ms",
-			"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gen_ai.conversation.duration) != '') AS avg_session_duration_ms",
+			"if(isNaN(avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:'))), 0, avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:'))) AS avg_tool_latency_ms",
+			"if(isNaN(avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gen_ai.conversation.duration) != '')), 0, avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gen_ai.conversation.duration) != '')) AS avg_session_duration_ms",
 		).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -630,11 +633,20 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
 	}
+	if arg.UserID != "" {
+		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
+	}
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
 	}
 	if arg.ToolsetSlug != "" {
 		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+	}
+	if arg.EventSource != "" {
+		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
+	}
+	if arg.HookSource != "" {
+		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
 
 	// ClickHouse fills missing buckets with zeros via WITH FILL.
@@ -676,9 +688,12 @@ type GetToolMetricsBreakdownParams struct {
 	GramProjectID  string
 	TimeStart      int64
 	TimeEnd        int64
+	UserID         string // Optional filter
 	ExternalUserID string // Optional filter
 	APIKeyID       string // Optional filter
 	ToolsetSlug    string // Optional filter - filters by toolset/MCP server slug
+	EventSource    string // Optional filter - filters by event_source
+	HookSource     string // Optional filter - filters by hook_source
 	Limit          int
 	SortBy         string // "count" or "failure_rate"
 }
@@ -705,11 +720,20 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
 	}
+	if arg.UserID != "" {
+		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
+	}
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
 	}
 	if arg.ToolsetSlug != "" {
 		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+	}
+	if arg.EventSource != "" {
+		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
+	}
+	if arg.HookSource != "" {
+		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
 
 	sb = sb.GroupBy("gram_urn")
@@ -755,18 +779,21 @@ type GetOverviewSummaryParams struct {
 	GramProjectID  string
 	TimeStart      int64
 	TimeEnd        int64
+	UserID         string // Optional filter
 	ExternalUserID string // Optional filter
 	APIKeyID       string // Optional filter
 	ToolsetSlug    string // Optional filter - filters by toolset/MCP server slug
+	EventSource    string // Optional filter - filters by event_source
+	HookSource     string // Optional filter - filters by hook_source
 }
 
 // GetOverviewSummary retrieves aggregated summary metrics for the observability overview.
 // When no filters are applied, reads from the pre-aggregated metrics_summaries MV.
-// Falls back to scanning telemetry_logs when external_user_id or api_key_id filters are set.
+// Falls back to scanning telemetry_logs when user_id, external_user_id, or api_key_id filters are set.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	hasFilters := arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != ""
+	hasFilters := arg.UserID != "" || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.EventSource != "" || arg.HookSource != ""
 
 	var sb squirrel.SelectBuilder
 	if hasFilters {
@@ -847,8 +874,8 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 		"uniqExactIf(chat_id, chat_id != '') as total_chats",
 		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'success') as resolved_chats",
 		"uniqExactIf(chat_id, chat_id != '' AND evaluation_score_label = 'failure') as failed_chats",
-		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gen_ai.conversation.duration) != '') as avg_session_duration_ms",
-		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, evaluation_score_label = 'success') as avg_resolution_time_ms",
+		"if(isNaN(avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gen_ai.conversation.duration) != '')), 0, avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gen_ai.conversation.duration) != '')) as avg_session_duration_ms",
+		"if(isNaN(avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, evaluation_score_label = 'success')), 0, avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, evaluation_score_label = 'success')) as avg_resolution_time_ms",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') as total_output_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') as total_tokens",
@@ -857,7 +884,7 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 		"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') as total_cost",
 		"countIf(startsWith(gram_urn, 'tools:')) as total_tool_calls",
 		"countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) as failed_tool_calls",
-		"avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:')) as avg_latency_ms",
+		"if(isNaN(avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:'))), 0, avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:'))) as avg_latency_ms",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -867,11 +894,20 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
 	}
+	if arg.UserID != "" {
+		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
+	}
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
 	}
 	if arg.ToolsetSlug != "" {
 		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+	}
+	if arg.EventSource != "" {
+		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
+	}
+	if arg.HookSource != "" {
+		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
 
 	return sb
@@ -1049,6 +1085,7 @@ type SearchUsersParams struct {
 	TimeEnd          int64
 	GramDeploymentID string // optional
 	EventSource      string // optional; e.g. "hook"
+	HookSource       string // optional; e.g. "cursor"
 	GroupBy          string // "user_id" or "external_user_id"
 	UserIDs          []string
 	SortOrder        string // "asc" or "desc"
@@ -1116,6 +1153,9 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	if arg.EventSource != "" {
 		sb = sb.Where("event_source = ?", arg.EventSource)
 	}
+	if arg.HookSource != "" {
+		sb = sb.Where("hook_source = ?", arg.HookSource)
+	}
 	if len(arg.UserIDs) > 0 {
 		sb = sb.Where(squirrel.Eq{groupCol: arg.UserIDs})
 	}
@@ -1164,6 +1204,8 @@ type GetUserMetricsSummaryParams struct {
 	TimeEnd        int64
 	UserID         string // user_id (mutually exclusive with ExternalUserID)
 	ExternalUserID string // external_user_id (mutually exclusive with UserID)
+	EventSource    string // Optional filter - filters by event_source
+	HookSource     string // Optional filter - filters by hook_source
 }
 
 // GetUserMetricsSummary retrieves aggregated metrics for a specific user.
@@ -1226,6 +1268,12 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
 	} else if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+	}
+	if arg.EventSource != "" {
+		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
+	}
+	if arg.HookSource != "" {
+		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
 
 	query, args, err := sb.ToSql()
@@ -1314,11 +1362,12 @@ type ListFilterOptionsParams struct {
 	GramProjectID string
 	TimeStart     int64
 	TimeEnd       int64
-	FilterType    string // "api_key" or "user"
+	FilterType    string // "api_key", "user", "internal_user", or "agent"
+	EventSource   string // Optional filter - filters by event_source
 	Limit         int
 }
 
-// ListFilterOptions retrieves distinct filter values (API keys or users) for a time period.
+// ListFilterOptions retrieves distinct filter values for a time period.
 // Results are sorted by event count descending.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
@@ -1329,6 +1378,10 @@ func (q *Queries) ListFilterOptions(ctx context.Context, arg ListFilterOptionsPa
 		groupCol = "api_key_id"
 	case "user":
 		groupCol = "external_user_id"
+	case "internal_user":
+		groupCol = "user_id"
+	case "agent":
+		groupCol = "hook_source"
 	default:
 		return nil, fmt.Errorf("invalid filter type: %s", arg.FilterType)
 	}
@@ -1346,6 +1399,10 @@ func (q *Queries) ListFilterOptions(ctx context.Context, arg ListFilterOptionsPa
 		GroupBy(groupCol).
 		OrderBy("count DESC").
 		Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
+
+	if arg.EventSource != "" {
+		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
+	}
 
 	query, args, err := sb.ToSql()
 	if err != nil {

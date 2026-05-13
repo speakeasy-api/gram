@@ -567,6 +567,14 @@ func (m *mapCache) Get(_ context.Context, key string, value any) error {
 	return nil
 }
 
+func (m *mapCache) GetAndDelete(ctx context.Context, key string, value any) error {
+	if err := m.Get(ctx, key, value); err != nil {
+		return err
+	}
+	delete(m.items, key)
+	return nil
+}
+
 func (m *mapCache) Set(_ context.Context, key string, value any, _ time.Duration) error {
 	item, err := json.Marshal(value)
 	if err != nil {

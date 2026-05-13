@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
@@ -27,6 +28,13 @@ type PIIScanner interface {
 	// AnalyzeBatch sends multiple texts to the PII analyzer and returns
 	// findings for each. The outer slice is indexed by input position.
 	// When entities is non-empty, only those entity types are detected.
+	//
+	// Implementations may return partial results alongside a non-nil error
+	// when some inputs were analyzed successfully but others failed —
+	// callers MUST consume results regardless of error so successful
+	// findings are not discarded. The returned error reflects the most
+	// diagnostic failure observed (cancellation errors are de-prioritized
+	// in favor of underlying causes).
 	AnalyzeBatch(ctx context.Context, texts []string, entities []string, onProgress func()) ([][]Finding, error)
 }
 
@@ -57,6 +65,14 @@ const presidioRetryBackoff = 100 * time.Millisecond
 
 const presidioRetryBackoffCap = 1 * time.Second
 
+// Per-request timeout for /analyze. Tuned 2026-05-12 from production
+// risk.presidio.request_duration data: healthy avg <1s, healthy max 5s typical
+// (occasional 40-75s tail), degraded calls observed at 60-180s. 30s detects
+// degradation aggressively while clearing healthy traffic with ~6x margin.
+// Must stay <= AnalyzeBatch HeartbeatTimeout in drain_risk_analysis.go (60s),
+// otherwise a single stalled call can starve the activity heartbeat.
+const analyzeRequestTimeout = 30 * time.Second
+
 // PresidioClient calls the Presidio Analyzer HTTP API.
 // Presidio is a trusted cluster-internal service, so the client uses an
 // unsafe guardian policy with an empty blocklist. The default policy blocks
@@ -68,7 +84,9 @@ type PresidioClient struct {
 	logger             *slog.Logger
 	requestConcurrency int
 	retryBackoff       time.Duration
+	requestTimeout     time.Duration
 	requestDuration    metric.Float64Histogram
+	requestSize        metric.Int64Histogram
 	requestFailures    metric.Int64Counter
 }
 
@@ -81,6 +99,16 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 		metric.WithDescription("Duration of individual Presidio /analyze HTTP requests in seconds"),
 		metric.WithUnit("s"),
 		metric.WithExplicitBucketBoundaries(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
+	)
+
+	// Bucket boundaries span 1 KiB to 4 MiB on powers of 4 to cover both
+	// typical chat-message batches and tail payloads dominated by
+	// oversized tool-call JSON.
+	requestSize, _ := meter.Int64Histogram(
+		"risk.presidio.request_size",
+		metric.WithDescription("Size of Presidio /analyze HTTP request bodies in bytes"),
+		metric.WithUnit("By"),
+		metric.WithExplicitBucketBoundaries(1024, 4096, 16384, 65536, 262144, 1048576, 4194304),
 	)
 
 	requestFailures, _ := meter.Int64Counter(
@@ -100,7 +128,9 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 		logger:             logger,
 		requestConcurrency: perBatchRequestConcurrency,
 		retryBackoff:       presidioRetryBackoff,
+		requestTimeout:     analyzeRequestTimeout,
 		requestDuration:    requestDuration,
+		requestSize:        requestSize,
 		requestFailures:    requestFailures,
 	}
 }
@@ -183,32 +213,41 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 	}
 	close(ch)
 
+	var firstErrMu sync.Mutex
+	var firstErr error
+	captureErr := func(e error) {
+		firstErrMu.Lock()
+		defer firstErrMu.Unlock()
+		firstErr = mergeFirstErr(firstErr, e)
+	}
+
 	var wg sync.WaitGroup
 	for range workers {
 		wg.Go(func() {
 			for batch := range ch {
-				p.analyzeRange(ctx, texts, entities, batch, results, onProgress)
+				p.analyzeRange(ctx, texts, entities, batch, results, onProgress, captureErr)
 			}
 		})
 	}
 
 	wg.Wait()
-	return results, nil
+	return results, firstErr
 }
 
-func (p *PresidioClient) analyzeRange(ctx context.Context, texts []string, entities []string, batch indexRange, results [][]Finding, onProgress func()) {
-	if ok, err := p.tryAnalyzeRange(ctx, texts, entities, batch, results, onProgress); !ok {
-		p.splitFailedRange(ctx, texts, entities, batch, results, onProgress, err, 0)
+func (p *PresidioClient) analyzeRange(ctx context.Context, texts []string, entities []string, batch indexRange, results [][]Finding, onProgress func(), captureErr func(error)) {
+	if ok, err := p.tryAnalyzeRange(ctx, texts, entities, batch, results, onProgress, captureErr); !ok {
+		p.splitFailedRange(ctx, texts, entities, batch, results, onProgress, captureErr, err, 0)
 	}
 }
 
-func (p *PresidioClient) tryAnalyzeRange(ctx context.Context, texts []string, entities []string, batch indexRange, results [][]Finding, onProgress func()) (bool, error) {
+func (p *PresidioClient) tryAnalyzeRange(ctx context.Context, texts []string, entities []string, batch indexRange, results [][]Finding, onProgress func(), captureErr func(error)) (bool, error) {
 	if onProgress != nil {
 		onProgress()
 	}
 
 	findings, err := p.analyze(ctx, texts[batch.start:batch.end], entities)
 	if err != nil {
+		captureErr(err)
 		return false, err
 	}
 
@@ -221,7 +260,7 @@ func (p *PresidioClient) tryAnalyzeRange(ctx context.Context, texts []string, en
 	return true, nil
 }
 
-func (p *PresidioClient) splitFailedRange(ctx context.Context, texts []string, entities []string, batch indexRange, results [][]Finding, onProgress func(), cause error, depth int) {
+func (p *PresidioClient) splitFailedRange(ctx context.Context, texts []string, entities []string, batch indexRange, results [][]Finding, onProgress func(), captureErr func(error), cause error, depth int) {
 	if ctx.Err() != nil {
 		return
 	}
@@ -247,13 +286,35 @@ func (p *PresidioClient) splitFailedRange(ctx context.Context, texts []string, e
 	left := indexRange{start: batch.start, end: mid}
 	right := indexRange{start: mid, end: batch.end}
 
-	leftOK, leftErr := p.tryAnalyzeRange(ctx, texts, entities, left, results, onProgress)
-	rightOK, rightErr := p.tryAnalyzeRange(ctx, texts, entities, right, results, onProgress)
+	leftOK, leftErr := p.tryAnalyzeRange(ctx, texts, entities, left, results, onProgress, captureErr)
+	rightOK, rightErr := p.tryAnalyzeRange(ctx, texts, entities, right, results, onProgress, captureErr)
 	if !leftOK {
-		p.splitFailedRange(ctx, texts, entities, left, results, onProgress, leftErr, depth+1)
+		p.splitFailedRange(ctx, texts, entities, left, results, onProgress, captureErr, leftErr, depth+1)
 	}
 	if !rightOK {
-		p.splitFailedRange(ctx, texts, entities, right, results, onProgress, rightErr, depth+1)
+		p.splitFailedRange(ctx, texts, entities, right, results, onProgress, captureErr, rightErr, depth+1)
+	}
+}
+
+func isCancelErr(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+// mergeFirstErr returns the better of two errors for surfacing in the
+// activity-level error chain. Prefers non-cancel errors: cancellation is a
+// downstream consequence (parent ctx canceled, sibling's timeout elapsed) —
+// the underlying Presidio failure that triggered it is what the caller needs
+// to see.
+func mergeFirstErr(existing, candidate error) error {
+	switch {
+	case candidate == nil:
+		return existing
+	case existing == nil:
+		return candidate
+	case isCancelErr(existing) && !isCancelErr(candidate):
+		return candidate
+	default:
+		return existing
 	}
 }
 
@@ -340,7 +401,14 @@ func (p *PresidioClient) analyze(ctx context.Context, texts []string, entities [
 		return nil, fmt.Errorf("marshal presidio request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+"/analyze", bytes.NewReader(body))
+	if p.requestSize != nil {
+		p.requestSize.Record(ctx, int64(len(body)))
+	}
+
+	reqCtx, cancel := context.WithTimeout(ctx, p.requestTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, p.baseURL+"/analyze", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create presidio request: %w", err)
 	}

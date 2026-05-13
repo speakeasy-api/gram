@@ -18,6 +18,18 @@ export type OTELMetric = {
    */
   description?: string | undefined;
   /**
+   * ExponentialHistogram metric data (passed through)
+   */
+  exponentialHistogram?: any | undefined;
+  /**
+   * Gauge metric data (passed through)
+   */
+  gauge?: any | undefined;
+  /**
+   * Histogram metric data (passed through)
+   */
+  histogram?: any | undefined;
+  /**
    * Metric name
    */
   name?: string | undefined;
@@ -25,6 +37,10 @@ export type OTELMetric = {
    * OTEL sum metric
    */
   sum?: OTELSum | undefined;
+  /**
+   * Summary metric data (passed through)
+   */
+  summary?: any | undefined;
   /**
    * Metric unit
    */
@@ -34,8 +50,12 @@ export type OTELMetric = {
 /** @internal */
 export type OTELMetric$Outbound = {
   description?: string | undefined;
+  exponentialHistogram?: any | undefined;
+  gauge?: any | undefined;
+  histogram?: any | undefined;
   name?: string | undefined;
   sum?: OTELSum$Outbound | undefined;
+  summary?: any | undefined;
   unit?: string | undefined;
 };
 
@@ -45,8 +65,12 @@ export const OTELMetric$outboundSchema: z.ZodMiniType<
   OTELMetric
 > = z.object({
   description: z.optional(z.string()),
+  exponentialHistogram: z.optional(z.any()),
+  gauge: z.optional(z.any()),
+  histogram: z.optional(z.any()),
   name: z.optional(z.string()),
   sum: z.optional(OTELSum$outboundSchema),
+  summary: z.optional(z.any()),
   unit: z.optional(z.string()),
 });
 
