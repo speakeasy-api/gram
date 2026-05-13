@@ -23,6 +23,7 @@ use tokio::sync::{Mutex as AsyncMutex, Notify, oneshot};
 
 use agentkit_compaction::AgentBuilderCompactorExt;
 
+use crate::clip::ClippedToolSource;
 use crate::compaction::build_compactor;
 use crate::errors::RunnerError;
 use crate::http_layer::{McpRotatingClient, TokenRegistry, build_http};
@@ -154,7 +155,7 @@ pub async fn build_runtime(
         mcp_server_ids.push(server.id.clone());
         manager.register_server(build_mcp_server_config(server, &http_client, &tokens)?);
     }
-    let mcp_source = manager.source();
+    let mcp_source = ClippedToolSource::new(manager.source());
 
     let (mcp_cmd_tx, mcp_cmd_rx) = mpsc::channel(MCP_CMD_CAPACITY);
     let (mcp_ready_tx, mcp_ready_rx) = oneshot::channel::<()>();
