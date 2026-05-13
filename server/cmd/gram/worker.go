@@ -303,6 +303,11 @@ func newWorkerCommand() *cli.Command {
 			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
 			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},
 		},
+		&cli.StringFlag{
+			Name:    "pi-classifier-url",
+			Usage:   "Base URL of the gram-pi-classifier service (e.g. http://gram-pi-classifier:8000). Empty disables L1 ML prompt-injection detection; L0 heuristics still run when a policy enables the prompt_injection source.",
+			EnvVars: []string{"PI_CLASSIFIER_URL"},
+		},
 	}
 
 	flags = append(flags, redisFlags...)
