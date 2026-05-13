@@ -32,6 +32,7 @@ import { useNavigate } from "react-router";
 import { useSlugs } from "@/contexts/Sdk";
 import { slugify } from "@/lib/constants";
 import { Badge } from "@speakeasy-api/moonshine";
+import { HooksSetupDialog } from "@/pages/hooks/HooksSetupDialog";
 
 type EmployeeStatus = "enrolled" | "not_enrolled";
 
@@ -143,7 +144,7 @@ export function InsightsEmployeesContent() {
         mcpConfig={mcpConfig}
         title="What would you like to know about employee enrollment?"
         subtitle="Ask who is enrolled, who still needs setup, and how Gram adoption is tracking across the team"
-        contextInfo={`Project-scoped Employees tab: ${enrolledEmployees} of ${totalEmployees} employees have Gram token usage in the last ${LOOKBACK_DAYS} days and are enrolled; ${notEnrolledEmployees} employees have no Gram token usage and are not enrolled.`}
+        contextInfo={`Project-scoped Employees tab: ${enrolledEmployees} of ${totalEmployees} employees have Gram Hooks activity in the last ${LOOKBACK_DAYS} days and are enrolled; ${notEnrolledEmployees} employees have no Gram Hooks activity and are not enrolled.`}
         suggestions={[
           {
             title: "Enrollment Coverage",
@@ -184,9 +185,9 @@ export function InsightsEmployeesContent() {
               <h1 className="text-xl font-semibold">Employee Enrollment</h1>
               <p className="text-muted-foreground text-sm">
                 Track Gram uptake for organization members in this project over
-                the last {LOOKBACK_DAYS} days. Employees with Gram activity are
-                marked enrolled; employees without any activity are marked not
-                enrolled.
+                the last {LOOKBACK_DAYS} days. Employees with Gram Hooks
+                activity are marked enrolled; employees without any activity are
+                marked not enrolled.
               </p>
             </div>
             <div
@@ -257,6 +258,7 @@ export function InsightsEmployeesContent() {
               </section>
 
               <EmployeeTable employees={employees} onSelectUser={openUser} />
+              <EnrollmentLegend />
             </>
           )}
         </div>
@@ -396,6 +398,36 @@ function EmployeeTable({
         </div>
       )}
     </section>
+  );
+}
+
+function EnrollmentLegend() {
+  const [showSetupDialog, setShowSetupDialog] = useState(false);
+
+  return (
+    <>
+      <section className="bg-muted/40 border-border flex flex-col gap-4 rounded-xl border p-5 md:flex-row md:items-center md:justify-between">
+        <div className="max-w-3xl space-y-1">
+          <h2 className="text-sm font-semibold">How enrollment works</h2>
+          <p className="text-muted-foreground text-sm">
+            Employees appear as enrolled once the Gram Hooks plugin is installed
+            in their AI tool and sends activity to this project. Not enrolled
+            yet? Install the plugin to start tracking their usage.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          className="shrink-0 md:self-center"
+          onClick={() => setShowSetupDialog(true)}
+        >
+          Set up hooks
+        </Button>
+      </section>
+      <HooksSetupDialog
+        open={showSetupDialog}
+        onOpenChange={setShowSetupDialog}
+      />
+    </>
   );
 }
 
