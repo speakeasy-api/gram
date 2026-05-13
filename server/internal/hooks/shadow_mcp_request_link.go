@@ -2,7 +2,6 @@ package hooks
 
 import (
 	"context"
-	"encoding/json"
 	"net/url"
 	"strings"
 	"time"
@@ -16,7 +15,6 @@ import (
 
 const (
 	shadowMCPApprovalRequestTokenTTL = 7 * 24 * time.Hour
-	shadowMCPToolCallMaxBytes        = 2048
 	shadowMCPApprovalRequestPrompt   = "Would you like me to open this link in a browser?"
 )
 
@@ -60,7 +58,7 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 		ObservedURLHost:        stringPtrOrNil(evidence.URLHost),
 		ObservedServerIdentity: stringPtrOrNil(evidence.ServerIdentity),
 		ToolName:               stringPtrOrNil(params.ToolName),
-		ToolCall:               shadowMCPToolCallJSON(params.ToolName, params.ToolInput),
+		ToolCall:               nil,
 		BlockReason:            stringPtrOrNil(params.AuditReason),
 		RiskPolicyID:           uuidStringPtrOrNil(params.RiskPolicyID),
 		RiskResultID:           nil,
@@ -92,30 +90,6 @@ func observedShadowMCPName(evidence shadowmcp.AccessEvidence, toolName string) *
 	default:
 		return nil
 	}
-}
-
-func shadowMCPToolCallJSON(toolName string, toolInput any) *string {
-	payload := map[string]any{
-		"tool_name":  toolName,
-		"tool_input": toolInput,
-	}
-	b, err := json.Marshal(payload)
-	if err != nil {
-		return nil
-	}
-	if len(b) > shadowMCPToolCallMaxBytes {
-		payload = map[string]any{
-			"tool_name":            toolName,
-			"tool_input_omitted":   true,
-			"tool_input_max_bytes": shadowMCPToolCallMaxBytes,
-		}
-		b, err = json.Marshal(payload)
-		if err != nil {
-			return nil
-		}
-	}
-	value := string(b)
-	return &value
 }
 
 func stringPtrOrNil(value string) *string {

@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -32,7 +33,7 @@ func TestShadowMCPApprovalRequestURLUsesFragmentToken(t *testing.T) {
 			ServerIdentity: "Example MCP",
 		},
 		ToolName:     "list_issues",
-		ToolInput:    map[string]any{"limit": 10},
+		ToolInput:    map[string]any{"prompt": strings.Repeat("x", 10_000)},
 		RiskPolicyID: "00000000-0000-0000-0000-000000000002",
 	})
 	require.True(t, ok)
@@ -48,6 +49,7 @@ func TestShadowMCPApprovalRequestURLUsesFragmentToken(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, requestURL, "?request_token=")
 	require.Contains(t, fragment.Get("request_token"), "smar1.")
+	require.Less(t, len(requestURL), 1200, "approval link should not embed full tool input")
 }
 
 func TestShadowMCPApprovalRequestURLRequiresEvidence(t *testing.T) {
