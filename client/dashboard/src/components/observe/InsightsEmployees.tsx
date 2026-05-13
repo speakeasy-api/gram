@@ -27,8 +27,9 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Info, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link } from "react-router";
+import { useNavigate } from "react-router";
 import { useSlugs } from "@/contexts/Sdk";
+import { slugify } from "@/lib/constants";
 
 type EmployeeStatus = "compliant" | "not_compliant";
 
@@ -59,6 +60,7 @@ const statusMeta: Record<EmployeeStatus, { label: string; className: string }> =
 export function InsightsEmployeesContent() {
   const client = useGramContext();
   const { orgSlug, projectSlug } = useSlugs();
+  const navigate = useNavigate();
   const {
     isExpanded: isInsightsOpen,
     sendPrompt,
@@ -121,7 +123,10 @@ export function InsightsEmployeesContent() {
     (sum, item) => sum + item.tokenCount,
     0,
   );
-  const agentsHref = `/${orgSlug}/projects/${projectSlug}/insights/agents`;
+  const employeesBase = `/${orgSlug}/projects/${projectSlug}/insights/employees`;
+  const openUser = (name: string) => {
+    navigate(`${employeesBase}/${slugify(name)}`);
+  };
   const coverage =
     totalEmployees > 0 ? (compliantEmployees / totalEmployees) * 100 : 0;
   const prompt =
@@ -246,7 +251,7 @@ export function InsightsEmployeesContent() {
                 />
               </section>
 
-              <EmployeeTable employees={employees} agentsHref={agentsHref} />
+              <EmployeeTable employees={employees} onSelectUser={openUser} />
             </>
           )}
         </div>
@@ -259,10 +264,10 @@ const PAGE_SIZE = 25;
 
 function EmployeeTable({
   employees,
-  agentsHref,
+  onSelectUser,
 }: {
   employees: Employee[];
-  agentsHref: string;
+  onSelectUser: (name: string) => void;
 }) {
   const [page, setPage] = useState(0);
   const totalPages = Math.ceil(employees.length / PAGE_SIZE);
@@ -288,13 +293,16 @@ function EmployeeTable({
             <TableHead>Compliance</TableHead>
             <TableHead>Token Count</TableHead>
             <TableHead>Last Activity</TableHead>
-            <TableHead>Analytics</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {pageEmployees.length > 0 ? (
             pageEmployees.map((item) => (
-              <TableRow key={item.id}>
+              <TableRow
+                key={item.id}
+                className="cursor-pointer"
+                onClick={() => onSelectUser(item.name)}
+              >
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <div className="bg-muted flex size-9 items-center justify-center rounded-full text-sm font-semibold">
@@ -322,20 +330,12 @@ function EmployeeTable({
                 <TableCell className="text-muted-foreground text-sm">
                   {item.lastActivity}
                 </TableCell>
-                <TableCell>
-                  <Link
-                    to={`${agentsHref}?user=${encodeURIComponent(item.id)}`}
-                    className="text-primary text-sm font-medium no-underline hover:underline"
-                  >
-                    View usage
-                  </Link>
-                </TableCell>
               </TableRow>
             ))
           ) : (
             <TableRow>
               <TableCell
-                colSpan={6}
+                colSpan={5}
                 className="text-muted-foreground py-10 text-center text-sm"
               >
                 No organization members found.

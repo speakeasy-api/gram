@@ -19,7 +19,9 @@ export function ObserveTabNav({ base }: { base: "insights" | "logs" }) {
   return (
     <div className="border-border flex h-auto w-full items-end border-b px-8">
       {tabs.map((tab) => {
-        const isActive = location.pathname === tab.href;
+        const isActive =
+          location.pathname === tab.href ||
+          location.pathname.startsWith(tab.href + "/");
         return (
           <Link
             key={tab.href}
