@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { formatChartLabel, smoothData } from "@/components/chart/chartUtils";
 import { MetricCard } from "@/components/chart/MetricCard";
@@ -1062,6 +1063,8 @@ function EmployeeCostTable({
 }
 
 function CostDisclaimer() {
+  const [featureModalOpen, setFeatureModalOpen] = useState(false);
+
   return (
     <section className="bg-muted/40 border-border rounded-xl border p-5">
       <div className="max-w-3xl space-y-1">
@@ -1072,7 +1075,24 @@ function CostDisclaimer() {
           estimate costs. Token counts are always available regardless of
           provider.
         </p>
+        <p className="text-muted-foreground pt-1 text-sm">
+          Missing cost data for your provider?{" "}
+          <button
+            type="button"
+            onClick={() => setFeatureModalOpen(true)}
+            className="text-primary hover:text-primary/80 cursor-pointer font-medium underline underline-offset-2"
+          >
+            Request provider support
+          </button>
+        </p>
       </div>
+      <FeatureRequestModal
+        isOpen={featureModalOpen}
+        onClose={() => setFeatureModalOpen(false)}
+        title="Provider Cost Support"
+        description="We're working on expanding cost reporting to more AI providers. Let us know which provider you'd like to see supported and we'll prioritize accordingly."
+        actionType="provider_cost_support"
+      />
     </section>
   );
 }
