@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { useListCollections } from "@gram/client/react-query/listCollections.js";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
+import { useShadowMCPAccessRules } from "@gram/client/react-query/shadowMCPAccessRules.js";
 import {
   AlertTriangle,
   Check,
@@ -148,6 +149,16 @@ export function ScopePickerPopover({
 }: ScopePickerPopoverProps) {
   const organization = useOrganization();
   const mcpServers = useMCPServers(resourceType === "mcp");
+  const isShadowMCPConnect = scope === "shadow_mcp:connect";
+  const { data: shadowMCPRulesData } = useShadowMCPAccessRules(
+    { disposition: "allowed", limit: 100 },
+    undefined,
+    { enabled: isShadowMCPConnect },
+  );
+  const shadowMCPRules = useMemo(
+    () => shadowMCPRulesData?.rules ?? [],
+    [shadowMCPRulesData?.rules],
+  );
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   // Override for when user clicks a mode but selectors are still empty
@@ -206,7 +217,12 @@ export function ScopePickerPopover({
     return projects;
   }, [organization.projects, mcpServers]);
 
-  const resourceKind = resourceType === "project" ? "project" : "mcp";
+  const resourceKind =
+    resourceType === "project"
+      ? "project"
+      : resourceType === "shadow_mcp"
+        ? "shadow_mcp"
+        : "mcp";
 
   const filteredProjectList = useMemo(
     () =>
@@ -232,6 +248,16 @@ export function ScopePickerPopover({
       }))
       .filter((g) => g.servers.length > 0);
   }, [mcpServers, resourceSearch]);
+
+  const filteredShadowMCPRules = useMemo(() => {
+    if (!resourceSearch) return shadowMCPRules;
+    const q = resourceSearch.toLowerCase();
+    return shadowMCPRules.filter(
+      (rule) =>
+        rule.displayName.toLowerCase().includes(q) ||
+        rule.matchValue.toLowerCase().includes(q),
+    );
+  }, [shadowMCPRules, resourceSearch]);
 
   // Fixed-scope permissions have no resource picker — their granularity is
   // baked into the scope definition. Org scopes are always org-wide;
@@ -299,11 +325,17 @@ export function ScopePickerPopover({
   }) => (
     <div className="shrink-0 pb-1.5">
       <ScopeOption
-        label={resourceType === "project" ? "All projects" : "All servers"}
+        label={
+          resourceType === "project"
+            ? "All projects"
+            : isShadowMCPConnect
+              ? "All Shadow MCP"
+              : "All servers"
+        }
         selected={activePanel === "all"}
         onClick={() => switchPanel("all")}
       />
-      {resourceType === "mcp" && (
+      {resourceType === "mcp" && !isShadowMCPConnect && (
         <ScopeOption
           label="Specific projects"
           selected={activePanel === "projects"}
@@ -317,14 +349,14 @@ export function ScopePickerPopover({
         selected={activePanel === "servers"}
         onClick={() => switchPanel("servers")}
       />
-      {isMcpConnect && (
+      {isMcpConnect && !isShadowMCPConnect && (
         <ScopeOption
           label="Specific tools"
           selected={activePanel === "tools"}
           onClick={() => switchPanel("tools")}
         />
       )}
-      {isMcpConnect && includeCollection && (
+      {isMcpConnect && !isShadowMCPConnect && includeCollection && (
         <ScopeOption
           label="Specific collections"
           selected={activePanel === "collection"}
@@ -341,7 +373,11 @@ export function ScopePickerPopover({
         <input
           type="text"
           placeholder={
-            resourceType === "project" ? "Search projects…" : "Search servers…"
+            resourceType === "project"
+              ? "Search projects…"
+              : isShadowMCPConnect
+                ? "Search rules…"
+                : "Search servers…"
           }
           value={resourceSearch}
           onChange={(e) => setResourceSearch(e.target.value)}
@@ -363,7 +399,33 @@ export function ScopePickerPopover({
         onWheel={handleResourceWheel}
         className="h-[250px] overflow-y-auto"
       >
-        {resourceType === "project" ? (
+        {isShadowMCPConnect ? (
+          filteredShadowMCPRules.length === 0 ? (
+            <div className="text-muted-foreground px-3 py-3 text-sm">
+              {shadowMCPRules.length === 0
+                ? "No allowed Shadow MCP rules found"
+                : "No matching rules"}
+            </div>
+          ) : (
+            filteredShadowMCPRules.map((rule) => (
+              <ResourceCheckbox
+                key={rule.id}
+                id={rule.id}
+                name={
+                  <>
+                    <span>{rule.displayName}</span>
+                    <span className="text-muted-foreground/60">
+                      {" "}
+                      {rule.matchValue}
+                    </span>
+                  </>
+                }
+                checked={isResourceSelected(rule.id)}
+                onToggle={toggleResource}
+              />
+            ))
+          )
+        ) : resourceType === "project" ? (
           filteredProjectList.length === 0 ? (
             <div className="text-muted-foreground px-3 py-3 text-sm">
               {projectList.length === 0

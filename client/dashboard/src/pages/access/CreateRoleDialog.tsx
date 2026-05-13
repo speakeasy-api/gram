@@ -126,7 +126,11 @@ export function CreateRoleDialog({
     ];
     return groupOrder.map((g) => ({
       ...g,
-      scopes: scopes.filter((s) => s.resourceType === g.resourceType),
+      scopes: scopes.filter(
+        (s) =>
+          s.resourceType === g.resourceType ||
+          (g.resourceType === "mcp" && s.resourceType === "shadow_mcp"),
+      ),
     }));
   }, [scopesData]);
 

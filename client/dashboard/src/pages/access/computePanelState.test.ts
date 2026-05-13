@@ -62,6 +62,11 @@ describe("computePanelState", () => {
       expect(result).toEqual({ activePanel: "all", label: "All projects" });
     });
 
+    it("null selectors with shadow mcp resourceType", () => {
+      const result = computePanelState(null, [], "shadow_mcp");
+      expect(result).toEqual({ activePanel: "all", label: "All Shadow MCP" });
+    });
+
     it("ignores collection data when null", () => {
       const result = computePanelState(null, collections, "mcp");
       expect(result.activePanel).toBe("all");
