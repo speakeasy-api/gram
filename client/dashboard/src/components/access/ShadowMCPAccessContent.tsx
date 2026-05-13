@@ -1,5 +1,7 @@
 import { RequireScope } from "@/components/require-scope";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Heading } from "@/components/ui/heading";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -8,13 +10,34 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SkeletonTable } from "@/components/ui/skeleton";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
+import { Input } from "@/components/moon/input";
+import { Textarea } from "@/components/moon/textarea";
 import { cn } from "@/lib/utils";
 import type { ShadowMCPAccessRule } from "@gram/client/models/components/shadowmcpaccessrule.js";
 import type { ShadowMCPApprovalRequest } from "@gram/client/models/components/shadowmcpapprovalrequest.js";
-import { useRoles } from "@gram/client/react-query/roles.js";
-import { useShadowMCPAccessRules } from "@gram/client/react-query/shadowMCPAccessRules.js";
-import { useShadowMCPApprovalRequests } from "@gram/client/react-query/shadowMCPApprovalRequests.js";
+import {
+  invalidateAllRoles,
+  useRoles,
+} from "@gram/client/react-query/roles.js";
+import { useApproveShadowMCPApprovalRequestMutation } from "@gram/client/react-query/approveShadowMCPApprovalRequest.js";
+import { useDenyShadowMCPApprovalRequestMutation } from "@gram/client/react-query/denyShadowMCPApprovalRequest.js";
+import {
+  invalidateAllShadowMCPAccessRules,
+  useShadowMCPAccessRules,
+} from "@gram/client/react-query/shadowMCPAccessRules.js";
+import {
+  invalidateAllShadowMCPApprovalRequests,
+  useShadowMCPApprovalRequests,
+} from "@gram/client/react-query/shadowMCPApprovalRequests.js";
 import {
   Badge,
   Button,
@@ -25,13 +48,17 @@ import {
   DropdownMenuTrigger,
   Table,
 } from "@speakeasy-api/moonshine";
+import { useQueryClient } from "@tanstack/react-query";
 import { Ellipsis, Plus } from "lucide-react";
 import type React from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   formatShortDate,
+  getDefaultMatchBreadth,
   getDispositionLabel,
   getMatchBreadthLabel,
+  getMatchValue,
   getRequesterDetail,
   getRequesterLabel,
   getRequestDisplayName,
@@ -39,10 +66,22 @@ import {
   getRuleDisplayName,
   roleNamesForIds,
   roleOptionsFromRoles,
+  type ShadowMCPMatchBreadth,
+  type ShadowMCPRoleOption,
 } from "./shadow-mcp-utils";
 
 type RequestStatusFilter = "requested" | "approved" | "denied" | "all";
 type RuleDispositionFilter = "allowed" | "denied" | "all";
+type ReviewAction = "approve" | "deny";
+
+const MATCH_BREADTH_OPTIONS: {
+  value: ShadowMCPMatchBreadth;
+  label: string;
+}[] = [
+  { value: "full_url", label: "Full URL" },
+  { value: "url_host", label: "URL host" },
+  { value: "server_identity", label: "Server identity" },
+];
 
 function SectionHeader({
   title,
@@ -171,6 +210,327 @@ function RoleSummary({
   );
 }
 
+function RolePicker({
+  roles,
+  selectedRoleIds,
+  onChange,
+}: {
+  roles: ShadowMCPRoleOption[];
+  selectedRoleIds: string[];
+  onChange: (roleIds: string[]) => void;
+}) {
+  const editableRoles = roles.filter((role) => !role.isSystem);
+
+  if (editableRoles.length === 0) {
+    return (
+      <div className="border-border bg-muted/30 rounded-md border px-3 py-3">
+        <Type muted small>
+          Create a custom role before assigning Shadow MCP access.
+        </Type>
+      </div>
+    );
+  }
+
+  const toggleRole = (roleId: string) => {
+    if (selectedRoleIds.includes(roleId)) {
+      onChange(selectedRoleIds.filter((id) => id !== roleId));
+    } else {
+      onChange([...selectedRoleIds, roleId]);
+    }
+  };
+
+  return (
+    <div className="border-border divide-border divide-y rounded-md border">
+      {editableRoles.map((role) => (
+        <label
+          key={role.id}
+          className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 px-3 py-2.5"
+        >
+          <Checkbox
+            checked={selectedRoleIds.includes(role.id)}
+            onCheckedChange={() => toggleRole(role.id)}
+            className="mt-0.5"
+          />
+          <div className="min-w-0 flex-1">
+            <Type variant="body" className="text-sm font-medium">
+              {role.name}
+            </Type>
+            {role.description && (
+              <Type
+                variant="body"
+                className="text-muted-foreground mt-0.5 text-xs"
+              >
+                {role.description}
+              </Type>
+            )}
+          </div>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="space-y-2">
+      <Type variant="body" className="text-sm font-medium">
+        {label}
+      </Type>
+      {children}
+    </label>
+  );
+}
+
+function ReviewRequestSheet({
+  request,
+  roles,
+  open,
+  isSubmitting,
+  onOpenChange,
+  onApprove,
+  onDeny,
+}: {
+  request: ShadowMCPApprovalRequest | null;
+  roles: ShadowMCPRoleOption[];
+  open: boolean;
+  isSubmitting: boolean;
+  onOpenChange: (open: boolean) => void;
+  onApprove: (input: {
+    displayName: string;
+    matchBreadth: ShadowMCPMatchBreadth;
+    matchValue: string;
+    roleIds: string[];
+    reason?: string;
+  }) => Promise<void>;
+  onDeny: (input: {
+    createDenyRule: boolean;
+    displayName?: string;
+    matchBreadth?: ShadowMCPMatchBreadth;
+    matchValue?: string;
+    reason?: string;
+  }) => Promise<void>;
+}) {
+  const [action, setAction] = useState<ReviewAction>("approve");
+  const [displayName, setDisplayName] = useState("");
+  const [matchBreadth, setMatchBreadth] =
+    useState<ShadowMCPMatchBreadth>("full_url");
+  const [matchValue, setMatchValue] = useState("");
+  const [roleIds, setRoleIds] = useState<string[]>([]);
+  const [reason, setReason] = useState("");
+  const [createDenyRule, setCreateDenyRule] = useState(true);
+
+  useEffect(() => {
+    if (!request || !open) return;
+
+    const nextMatchBreadth = getDefaultMatchBreadth(request);
+    setAction("approve");
+    setDisplayName(getRequestDisplayName(request));
+    setMatchBreadth(nextMatchBreadth);
+    setMatchValue(getMatchValue(request, nextMatchBreadth));
+    setRoleIds([]);
+    setReason("");
+    setCreateDenyRule(true);
+  }, [request, open]);
+
+  if (!request) return null;
+
+  const canSubmit =
+    action === "approve"
+      ? displayName.trim().length > 0 &&
+        matchValue.trim().length > 0 &&
+        roleIds.length > 0
+      : !createDenyRule ||
+        (displayName.trim().length > 0 && matchValue.trim().length > 0);
+
+  const submit = async () => {
+    const trimmedReason = reason.trim() || undefined;
+
+    try {
+      if (action === "approve") {
+        await onApprove({
+          displayName: displayName.trim(),
+          matchBreadth,
+          matchValue: matchValue.trim(),
+          roleIds,
+          reason: trimmedReason,
+        });
+      } else {
+        await onDeny({
+          createDenyRule,
+          displayName: createDenyRule ? displayName.trim() : undefined,
+          matchBreadth: createDenyRule ? matchBreadth : undefined,
+          matchValue: createDenyRule ? matchValue.trim() : undefined,
+          reason: trimmedReason,
+        });
+      }
+    } catch {
+      toast.error("Request review failed");
+    }
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="sm:max-w-xl">
+        <SheetHeader>
+          <SheetTitle>Review request</SheetTitle>
+          <SheetDescription>
+            Decide how this Shadow MCP server should be handled.
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4">
+          <div className="border-border rounded-md border px-3 py-3">
+            <ServerCell
+              name={getRequestDisplayName(request)}
+              detail={request.observedFullUrl ?? request.observedUrlHost}
+            />
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <div>
+                <Type muted small>
+                  Requester
+                </Type>
+                <Type variant="body" className="mt-1 text-sm">
+                  {getRequesterLabel(request)}
+                </Type>
+              </div>
+              <div>
+                <Type muted small>
+                  Last blocked
+                </Type>
+                <Type variant="body" className="mt-1 text-sm">
+                  {formatShortDate(request.lastBlockedAt)}
+                </Type>
+              </div>
+            </div>
+          </div>
+
+          <RadioGroup
+            value={action}
+            onValueChange={(value) => setAction(value as ReviewAction)}
+            className="grid grid-cols-2 gap-3"
+          >
+            <label className="border-border has-[[data-state=checked]]:border-primary flex cursor-pointer gap-3 rounded-md border p-3">
+              <RadioGroupItem value="approve" className="mt-1" />
+              <span>
+                <Type variant="body" className="font-medium">
+                  Approve
+                </Type>
+                <Type muted small>
+                  Create an allow rule.
+                </Type>
+              </span>
+            </label>
+            <label className="border-border has-[[data-state=checked]]:border-primary flex cursor-pointer gap-3 rounded-md border p-3">
+              <RadioGroupItem value="deny" className="mt-1" />
+              <span>
+                <Type variant="body" className="font-medium">
+                  Deny
+                </Type>
+                <Type muted small>
+                  Reject the request.
+                </Type>
+              </span>
+            </label>
+          </RadioGroup>
+
+          {(action === "approve" || createDenyRule) && (
+            <>
+              <Field label="Display name">
+                <Input
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                />
+              </Field>
+
+              <div className="grid grid-cols-[160px_1fr] gap-3">
+                <Field label="Match">
+                  <Select
+                    value={matchBreadth}
+                    onValueChange={(value) => {
+                      const nextBreadth = value as ShadowMCPMatchBreadth;
+                      setMatchBreadth(nextBreadth);
+                      setMatchValue(getMatchValue(request, nextBreadth));
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MATCH_BREADTH_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Match value">
+                  <Input
+                    value={matchValue}
+                    onChange={(event) => setMatchValue(event.target.value)}
+                  />
+                </Field>
+              </div>
+            </>
+          )}
+
+          {action === "approve" ? (
+            <Field label="Roles">
+              <RolePicker
+                roles={roles}
+                selectedRoleIds={roleIds}
+                onChange={setRoleIds}
+              />
+            </Field>
+          ) : (
+            <label className="flex items-start gap-3">
+              <Checkbox
+                checked={createDenyRule}
+                onCheckedChange={(checked) => setCreateDenyRule(!!checked)}
+                className="mt-0.5"
+              />
+              <span>
+                <Type variant="body" className="text-sm font-medium">
+                  Create deny rule
+                </Type>
+                <Type muted small>
+                  Future matching calls will be blocked explicitly.
+                </Type>
+              </span>
+            </label>
+          )}
+
+          <Field label="Reason">
+            <Textarea
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="Optional"
+            />
+          </Field>
+        </div>
+
+        <SheetFooter>
+          <Button
+            onClick={submit}
+            disabled={!canSubmit || isSubmitting}
+            className="w-full"
+          >
+            <Button.Text>
+              {action === "approve" ? "Approve request" : "Deny request"}
+            </Button.Text>
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 function RuleActionsMenu({
   onEdit,
   onDelete,
@@ -205,10 +565,13 @@ function RuleActionsMenu({
 }
 
 export function ShadowMCPAccessContent() {
+  const queryClient = useQueryClient();
   const [requestStatusFilter, setRequestStatusFilter] =
     useState<RequestStatusFilter>("requested");
   const [ruleDispositionFilter, setRuleDispositionFilter] =
     useState<RuleDispositionFilter>("all");
+  const [reviewRequest, setReviewRequest] =
+    useState<ShadowMCPApprovalRequest | null>(null);
 
   const { data: rolesData } = useRoles();
   const roles = useMemo(
@@ -235,6 +598,17 @@ export function ShadowMCPAccessContent() {
 
   const requests = requestsData?.requests ?? [];
   const rules = rulesData?.rules ?? [];
+  const approveRequest = useApproveShadowMCPApprovalRequestMutation();
+  const denyRequest = useDenyShadowMCPApprovalRequestMutation();
+  const isReviewSubmitting = approveRequest.isPending || denyRequest.isPending;
+
+  const refreshShadowMCPData = async () => {
+    await Promise.all([
+      invalidateAllShadowMCPApprovalRequests(queryClient),
+      invalidateAllShadowMCPAccessRules(queryClient),
+      invalidateAllRoles(queryClient),
+    ]);
+  };
 
   const requestColumns: Column<ShadowMCPApprovalRequest>[] = [
     {
@@ -288,9 +662,13 @@ export function ShadowMCPAccessContent() {
       key: "actions",
       header: "",
       width: "96px",
-      render: () => (
+      render: (request) => (
         <RequireScope scope="org:admin" level="component">
-          <Button size="sm" disabled>
+          <Button
+            size="sm"
+            disabled={request.status !== "requested"}
+            onClick={() => setReviewRequest(request)}
+          >
             <Button.Text>Review</Button.Text>
           </Button>
         </RequireScope>
@@ -365,6 +743,60 @@ export function ShadowMCPAccessContent() {
 
   return (
     <div className="space-y-8">
+      <ReviewRequestSheet
+        request={reviewRequest}
+        roles={roles}
+        open={!!reviewRequest}
+        isSubmitting={isReviewSubmitting}
+        onOpenChange={(open) => {
+          if (!open) setReviewRequest(null);
+        }}
+        onApprove={async (input) => {
+          if (!reviewRequest) return;
+
+          await approveRequest.mutateAsync({
+            request: {
+              approveShadowMCPApprovalRequestForm: {
+                id: reviewRequest.id,
+                displayName: input.displayName,
+                matchBreadth: input.matchBreadth,
+                matchValue: input.matchValue,
+                observedFullUrl: reviewRequest.observedFullUrl,
+                observedServerIdentity: reviewRequest.observedServerIdentity,
+                observedUrlHost: reviewRequest.observedUrlHost,
+                reason: input.reason,
+                roleIds: input.roleIds,
+              },
+            },
+          });
+          await refreshShadowMCPData();
+          toast.success("Request approved");
+          setReviewRequest(null);
+        }}
+        onDeny={async (input) => {
+          if (!reviewRequest) return;
+
+          await denyRequest.mutateAsync({
+            request: {
+              denyShadowMCPApprovalRequestForm: {
+                id: reviewRequest.id,
+                createDenyRule: input.createDenyRule,
+                displayName: input.displayName,
+                matchBreadth: input.matchBreadth,
+                matchValue: input.matchValue,
+                observedFullUrl: reviewRequest.observedFullUrl,
+                observedServerIdentity: reviewRequest.observedServerIdentity,
+                observedUrlHost: reviewRequest.observedUrlHost,
+                reason: input.reason,
+              },
+            },
+          });
+          await refreshShadowMCPData();
+          toast.success("Request denied");
+          setReviewRequest(null);
+        }}
+      />
+
       <section>
         <div className="mb-4 flex items-start justify-between gap-4">
           <SectionHeader
