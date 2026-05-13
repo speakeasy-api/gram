@@ -32,6 +32,14 @@ use serde_json::json;
 /// content-type discriminators).
 pub const MAX_TOOL_BYTES: usize = 150_000;
 
+/// 4 MiB. The assistant workdir is a fixed 256 MiB ext4 image
+/// (`agents/runtime-image/Dockerfile`), shared with `bun_run` temp files and
+/// any artifacts the agent writes itself. Bounding each spill keeps a single
+/// runaway MCP response from filling the image and breaking subsequent
+/// filesystem-tool / `bun_run` / spill calls. Truncated spills still carry
+/// the leading body — enough for the agent to inspect with `head`/`grep`.
+pub const MAX_SPILL_BYTES: usize = 4 * 1024 * 1024;
+
 /// Wraps a [`ToolSource`] so every tool result either fits under
 /// [`MAX_TOOL_BYTES`] or is spilled to a file under `spill_root` and replaced
 /// with a small in-band pointer.
@@ -127,11 +135,12 @@ async fn cap_output(
         return output;
     }
     let (body, ext) = consume_for_spill(output);
-    match write_spill(spill_root, tool_name, call_id, &body, ext).await {
-        Ok(path) => ToolOutput::Structured(json!({
+    match write_spill(spill_root, tool_name, call_id, &body, ext, MAX_SPILL_BYTES).await {
+        Ok((path, saved_bytes)) => ToolOutput::Structured(json!({
             "truncated": true,
             "saved_to": path.display().to_string(),
             "original_bytes": model_bytes,
+            "saved_bytes": saved_bytes,
         })),
         Err(error) => {
             tracing::warn!(
@@ -177,7 +186,8 @@ async fn write_spill(
     call_id: &ToolCallId,
     body: &str,
     ext: &str,
-) -> std::io::Result<PathBuf> {
+    max_spill_bytes: usize,
+) -> std::io::Result<(PathBuf, usize)> {
     // Belt-and-suspenders against duplicate (tool_name, call_id) pairs across
     // a retry storm or a misbehaving provider — disambiguates atomically
     // within the process.
@@ -187,13 +197,15 @@ async fn write_spill(
     let safe_call = sanitize_filename_component(&call_id.0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
     let path = spill_root.join(format!("{safe_tool}-{safe_call}-{n}.{ext}"));
-    if let Err(error) = tokio::fs::write(&path, body).await {
+    let to_write_end = body.floor_char_boundary(body.len().min(max_spill_bytes));
+    let to_write = &body[..to_write_end];
+    if let Err(error) = tokio::fs::write(&path, to_write).await {
         // Best-effort cleanup so a partial ENOSPC write doesn't accumulate
         // and choke the workdir's fixed disk cap on subsequent calls.
         let _ = tokio::fs::remove_file(&path).await;
         return Err(error);
     }
-    Ok(path)
+    Ok((path, to_write.len()))
 }
 
 fn sanitize_filename_component(s: &str) -> String {
@@ -380,6 +392,19 @@ mod tests {
             }
             other => panic!("expected spill envelope, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn write_spill_truncates_body_to_max_spill_bytes() {
+        let dir = tempdir();
+        let body = "a".repeat(1000);
+        let (path, saved) =
+            write_spill(dir.path(), &tool_name("t"), &call_id("c"), &body, "txt", 200)
+                .await
+                .expect("write");
+        assert_eq!(saved, 200);
+        let on_disk = std::fs::read(&path).expect("read");
+        assert_eq!(on_disk.len(), 200);
     }
 
     #[tokio::test]
