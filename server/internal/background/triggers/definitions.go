@@ -472,6 +472,12 @@ func handleSlackInteraction(body []byte) (*WebhookIngressResult, error) {
 	if channelID == "" {
 		channelID = payload.Container.ChannelID
 	}
+	// Mirror the events path: keep threadID empty for clicks on a top-level
+	// message so the correlation is channel-only and lines up with the
+	// assistant thread opened by the original Events API message. Falling
+	// back to message.ts here would fork the conversation onto a new
+	// "channel:bot_message_ts" correlation that does not match the
+	// originating thread.
 	threadID := payload.Message.ThreadTs
 	if threadID == "" {
 		threadID = payload.Container.ThreadTs
@@ -479,9 +485,6 @@ func handleSlackInteraction(body []byte) (*WebhookIngressResult, error) {
 	messageTs := payload.Message.Ts
 	if messageTs == "" {
 		messageTs = payload.Container.MessageTs
-	}
-	if threadID == "" {
-		threadID = messageTs
 	}
 
 	normalized := slackTriggerEvent{

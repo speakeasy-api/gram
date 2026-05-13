@@ -333,7 +333,7 @@ func TestSlackHandleWebhookBlockActionsRoutesToThread(t *testing.T) {
 	require.Equal(t, "approved", normalized.Text)
 }
 
-func TestSlackHandleWebhookBlockActionsTopLevelMessageKeysOnMessageTs(t *testing.T) {
+func TestSlackHandleWebhookBlockActionsTopLevelMessageStaysChannelOnly(t *testing.T) {
 	t.Parallel()
 
 	definition, ok := GetDefinition("slack")
@@ -342,6 +342,10 @@ func TestSlackHandleWebhookBlockActionsTopLevelMessageKeysOnMessageTs(t *testing
 	config, err := definition.DecodeConfig(nil)
 	require.NoError(t, err)
 
+	// Click on a top-level (non-threaded) message: message.thread_ts is
+	// empty. The events path leaves threadID empty in this case so the
+	// correlation collapses to the channel, matching the assistant thread
+	// that the originating top-level Events API message opened.
 	payload := `{"type":"block_actions","team":{"id":"T1"},"user":{"id":"U1"},"channel":{"id":"C1"},"message":{"ts":"1700000001.000200"},"actions":[{"action_id":"x","block_id":"b","value":"v","type":"button"}]}`
 	body := []byte("payload=" + url.QueryEscape(payload))
 	headers := signedSlackHeaders(t, body, "secret")
@@ -351,10 +355,11 @@ func TestSlackHandleWebhookBlockActionsTopLevelMessageKeysOnMessageTs(t *testing
 	require.NoError(t, err)
 	require.NotNil(t, result.Event)
 
-	require.Equal(t, "C1:1700000001.000200", result.Event.CorrelationID)
+	require.Equal(t, "C1", result.Event.CorrelationID)
 	normalized, ok := result.Event.Event.(slackTriggerEvent)
 	require.True(t, ok)
-	require.Equal(t, "1700000001.000200", normalized.ThreadID)
+	require.Empty(t, normalized.ThreadID)
+	require.Equal(t, "1700000001.000200", normalized.Timestamp)
 }
 
 func TestSlackHandleWebhookIgnoresUnsupportedInteractionType(t *testing.T) {
