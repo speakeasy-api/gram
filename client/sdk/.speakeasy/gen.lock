@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 19b4caff8ecea2caf72d3fc43a1cf96f
+  docChecksum: 3761d83fedd1460a36a93e49207a3e40
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -333,7 +333,7 @@ trackedFiles:
   docs/models/components/getmetricssummaryresult.md:
     last_write_checksum: sha1:24f8b6ad1e5b6cbd5a7157d8f6ac0c5ad8c59c4a
   docs/models/components/getobservabilityoverviewpayload.md:
-    last_write_checksum: sha1:83e4335af8c343bcd00a7b69c1c8ff9f77cd0763
+    last_write_checksum: sha1:7fbf85481453216d99e15b0c70faf466910105d2
   docs/models/components/getobservabilityoverviewresult.md:
     last_write_checksum: sha1:0a0b5e2c3e4fb403705fe952952431992e172785
   docs/models/components/getprojectmetricssummarypayload.md:
@@ -3625,7 +3625,7 @@ trackedFiles:
   src/models/components/getmetricssummaryresult.ts:
     last_write_checksum: sha1:5a47b03d97c320d6c11cd80f0401d5c42da3f011
   src/models/components/getobservabilityoverviewpayload.ts:
-    last_write_checksum: sha1:00b704e91817742f21bd515a9d4ed72f40ce35cb
+    last_write_checksum: sha1:07bd958845b9cfdf7ebe84125e3b4ef413dca1ad
   src/models/components/getobservabilityoverviewresult.ts:
     last_write_checksum: sha1:0dbfa9a9afa50661ca0f7406e2ddc5e59aab954e
   src/models/components/getprojectmetricssummarypayload.ts:

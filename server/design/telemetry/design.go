@@ -975,6 +975,9 @@ var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", fu
 	Attribute("external_user_id", String, "Optional external user ID filter")
 	Attribute("api_key_id", String, "Optional API key ID filter")
 	Attribute("toolset_slug", String, "Optional toolset/MCP server slug filter")
+	Attribute("remote_mcp_server_id", String, "Optional Remote MCP server ID filter", func() {
+		Format(FormatUUID)
+	})
 	Attribute("event_source", String, "Optional event source filter (e.g. 'hook')")
 	Attribute("hook_source", String, "Optional hook source filter (e.g. 'cursor', 'claude-code')")
 	Attribute("include_time_series", Boolean, "Whether to include time series data (default: true)", func() {
