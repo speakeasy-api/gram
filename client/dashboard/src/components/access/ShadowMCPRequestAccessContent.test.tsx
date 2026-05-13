@@ -1,4 +1,10 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { StrictMode, type ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,6 +34,17 @@ vi.mock("@gram/client/react-query", () => ({
 }));
 
 vi.mock("@speakeasy-api/moonshine", () => ({
+  Button: Object.assign(
+    ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => (
+      <button onClick={onClick}>{children}</button>
+    ),
+    {
+      LeftIcon: ({ children }: { children: ReactNode }) => (
+        <span>{children}</span>
+      ),
+      Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+    },
+  ),
   Icon: ({ name }: { name: string }) => <span data-icon={name} />,
   Stack: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
@@ -54,6 +71,7 @@ function renderPageStrict(initialPath: string) {
 
 beforeEach(() => {
   sessionStorage.clear();
+  window.history.replaceState(null, "", "/");
   mocks.createApprovalRequest.mockReset();
   mocks.createApprovalRequest.mockResolvedValue({});
   mocks.useSession.mockReturnValue({ session: "" });
@@ -108,6 +126,20 @@ describe("ShadowMCPRequestAccessContent", () => {
       configurable: true,
       value: location,
     });
+  });
+
+  it("ignores query tokens so request tokens are not exposed in referrers", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/shadow-mcp/request?request_token=smar1.query-token",
+    );
+
+    renderPage("/shadow-mcp/request?request_token=smar1.query-token");
+
+    expect(screen.getByText("Link expired")).toBeTruthy();
+    expect(sessionStorage.getItem("shadowMcpApprovalRequestToken")).toBeNull();
+    expect(mocks.createApprovalRequest).not.toHaveBeenCalled();
   });
 
   it("submits the stored request token after authentication", async () => {
@@ -172,5 +204,38 @@ describe("ShadowMCPRequestAccessContent", () => {
       expect(screen.getByText("Request sent")).toBeTruthy();
     });
     expect(mocks.createApprovalRequest).toHaveBeenCalledOnce();
+  });
+
+  it("shows submit failure separately and retries the stored token", async () => {
+    sessionStorage.setItem(
+      "shadowMcpApprovalRequestToken",
+      "smar1.retry-token",
+    );
+    mocks.useSession.mockReturnValue({ session: "session_123" });
+    mocks.createApprovalRequest
+      .mockRejectedValueOnce(new Error("network failed"))
+      .mockResolvedValueOnce({});
+
+    renderPage("/shadow-mcp/request");
+
+    await waitFor(() => {
+      expect(screen.getByText("Request failed")).toBeTruthy();
+    });
+    expect(
+      screen.getByText(
+        "We could not send this request. Check your connection and try again.",
+      ),
+    ).toBeTruthy();
+    expect(sessionStorage.getItem("shadowMcpApprovalRequestToken")).toBe(
+      "smar1.retry-token",
+    );
+
+    fireEvent.click(screen.getByText("Try again"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Request sent")).toBeTruthy();
+    });
+    expect(mocks.createApprovalRequest).toHaveBeenCalledTimes(2);
+    expect(sessionStorage.getItem("shadowMcpApprovalRequestToken")).toBeNull();
   });
 });

@@ -3,9 +3,8 @@ import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
 import { useCreateShadowMCPApprovalRequestMutation } from "@gram/client/react-query";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router";
 
 const REQUEST_TOKEN_STORAGE_KEY = "shadowMcpApprovalRequestToken";
 const inFlightSubmissions = new Map<string, Promise<void>>();
@@ -20,11 +19,11 @@ type RequestAccessState =
 type SubmissionResult = "idle" | "complete" | "error";
 
 export function ShadowMCPRequestAccessContent() {
-  const [searchParams] = useSearchParams();
   const session = useSession();
-  const requestToken = getRequestToken(searchParams);
+  const requestToken = getRequestToken();
   const [submissionResult, setSubmissionResult] =
     useState<SubmissionResult>("idle");
+  const [retryCount, setRetryCount] = useState(0);
   const { mutateAsync: createApprovalRequest } =
     useCreateShadowMCPApprovalRequestMutation();
 
@@ -89,7 +88,7 @@ export function ShadowMCPRequestAccessContent() {
     return () => {
       active = false;
     };
-  }, [createApprovalRequest, session.session, storedRequestToken]);
+  }, [createApprovalRequest, retryCount, session.session, storedRequestToken]);
 
   const state = getRequestAccessState({
     hasSession: !!session.session,
@@ -104,6 +103,10 @@ export function ShadowMCPRequestAccessContent() {
         <RequestAccessMessage
           state={state}
           isPending={state === "submitting"}
+          onRetry={() => {
+            setSubmissionResult("idle");
+            setRetryCount((count) => count + 1);
+          }}
         />
       </Stack>
     </div>
@@ -126,11 +129,7 @@ function getRequestAccessState({
   return "submitting";
 }
 
-function getRequestToken(searchParams: URLSearchParams): string | null {
-  const queryToken =
-    searchParams.get("request_token") ?? searchParams.get("token");
-  if (queryToken) return queryToken;
-
+function getRequestToken(): string | null {
   const hashParams = new URLSearchParams(
     window.location.hash.replace(/^#/, ""),
   );
@@ -140,9 +139,11 @@ function getRequestToken(searchParams: URLSearchParams): string | null {
 function RequestAccessMessage({
   state,
   isPending,
+  onRetry,
 }: {
   state: RequestAccessState;
   isPending: boolean;
+  onRetry: () => void;
 }) {
   if (state === "complete") {
     return (
@@ -176,7 +177,7 @@ function RequestAccessMessage({
     );
   }
 
-  if (state === "missing-token" || state === "error") {
+  if (state === "missing-token") {
     return (
       <Stack gap={3} align="center">
         <div className="bg-destructive/10 flex h-11 w-11 items-center justify-center rounded-full">
@@ -191,6 +192,30 @@ function RequestAccessMessage({
             again to generate a new request.
           </Type>
         </Stack>
+      </Stack>
+    );
+  }
+
+  if (state === "error") {
+    return (
+      <Stack gap={3} align="center">
+        <div className="bg-destructive/10 flex h-11 w-11 items-center justify-center rounded-full">
+          <Icon name="circle-x" className="text-destructive h-5 w-5" />
+        </div>
+        <Stack gap={1} align="center">
+          <Type variant="subheading" className="text-center">
+            Request failed
+          </Type>
+          <Type muted small className="text-center">
+            We could not send this request. Check your connection and try again.
+          </Type>
+        </Stack>
+        <Button variant="secondary" onClick={onRetry}>
+          <Button.LeftIcon>
+            <Icon name="refresh-cw" className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Try again</Button.Text>
+        </Button>
       </Stack>
     );
   }
