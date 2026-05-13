@@ -67,7 +67,7 @@ func WithSlackHTTPClient(client *guardian.HTTPClient) Option {
 func CatalogExternalTools(installer platformcatalog.Installer, registryClient *externalmcp.RegistryClient, repo *externalmcprepo.Queries, deploymentsRepo *deploymentsrepo.Queries) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
 		{Executor: platformcatalog.NewSearchTool(registryClient, repo), RequiredFeature: ""},
-		{Executor: platformcatalog.NewInstallTool(installer, registryClient, repo, deploymentsRepo), RequiredFeature: ""},
+		{Executor: platformcatalog.NewInstallTool(installer, repo, deploymentsRepo), RequiredFeature: ""},
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"io"
 
 	deploymentsgen "github.com/speakeasy-api/gram/server/gen/deployments"
+	registriesgen "github.com/speakeasy-api/gram/server/gen/mcp_registries"
 	toolsetsgen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
@@ -21,23 +22,25 @@ const (
 	ToolNameInstallCatalogTool = "platform_install_catalog_server"
 )
 
-// Installer is the subset of deployments + toolsets behavior the install tool
-// depends on. The live wiring constructs an adapter that forwards to the
-// running deployments.Service and toolsets.Service; tests substitute a fake.
+// Installer is the subset of deployments + toolsets + external MCP behavior
+// the install tool depends on. The live wiring constructs an adapter that
+// forwards to the running services; tests substitute a fake.
 type Installer interface {
 	Evolve(ctx context.Context, payload *deploymentsgen.EvolvePayload) (*deploymentsgen.EvolveResult, error)
 	CreateToolset(ctx context.Context, payload *toolsetsgen.CreateToolsetPayload) (*types.Toolset, error)
 	UpdateToolset(ctx context.Context, payload *toolsetsgen.UpdateToolsetPayload) (*types.Toolset, error)
+	GetCatalogServerDetails(ctx context.Context, payload *registriesgen.GetServerDetailsPayload) (*types.ExternalMCPServer, error)
 }
 
-// FuncInstaller adapts the deployments.Service and toolsets.Service method
-// values to the Installer interface without forcing catalog to depend on the
-// concrete service packages (those import platformtools, which would form a
-// cycle).
+// FuncInstaller adapts the deployments.Service, toolsets.Service, and
+// externalmcp.Service method values to the Installer interface without
+// forcing catalog to depend on the concrete service packages (some of them
+// pull platformtools, which would form a cycle).
 type FuncInstaller struct {
-	EvolveFn        func(ctx context.Context, payload *deploymentsgen.EvolvePayload) (*deploymentsgen.EvolveResult, error)
-	CreateToolsetFn func(ctx context.Context, payload *toolsetsgen.CreateToolsetPayload) (*types.Toolset, error)
-	UpdateToolsetFn func(ctx context.Context, payload *toolsetsgen.UpdateToolsetPayload) (*types.Toolset, error)
+	EvolveFn                  func(ctx context.Context, payload *deploymentsgen.EvolvePayload) (*deploymentsgen.EvolveResult, error)
+	CreateToolsetFn           func(ctx context.Context, payload *toolsetsgen.CreateToolsetPayload) (*types.Toolset, error)
+	UpdateToolsetFn           func(ctx context.Context, payload *toolsetsgen.UpdateToolsetPayload) (*types.Toolset, error)
+	GetCatalogServerDetailsFn func(ctx context.Context, payload *registriesgen.GetServerDetailsPayload) (*types.ExternalMCPServer, error)
 }
 
 func (f *FuncInstaller) Evolve(ctx context.Context, payload *deploymentsgen.EvolvePayload) (*deploymentsgen.EvolveResult, error) {
@@ -50,6 +53,10 @@ func (f *FuncInstaller) CreateToolset(ctx context.Context, payload *toolsetsgen.
 
 func (f *FuncInstaller) UpdateToolset(ctx context.Context, payload *toolsetsgen.UpdateToolsetPayload) (*types.Toolset, error) {
 	return f.UpdateToolsetFn(ctx, payload)
+}
+
+func (f *FuncInstaller) GetCatalogServerDetails(ctx context.Context, payload *registriesgen.GetServerDetailsPayload) (*types.ExternalMCPServer, error) {
+	return f.GetCatalogServerDetailsFn(ctx, payload)
 }
 
 func decodePayload(payload io.Reader, target any) error {

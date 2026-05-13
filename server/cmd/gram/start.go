@@ -743,11 +743,13 @@ func newStartCommand() *cli.Command {
 			// the dashboard catalog dialog.
 			deploymentsSvc := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, auditLogger)
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
+			externalMcpSvc := externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine)
 			catalogTools := platformtoolsruntime.CatalogExternalTools(
 				&platformcatalog.FuncInstaller{
-					EvolveFn:        deploymentsSvc.Evolve,
-					CreateToolsetFn: toolsetsSvc.CreateToolset,
-					UpdateToolsetFn: toolsetsSvc.UpdateToolset,
+					EvolveFn:                  deploymentsSvc.Evolve,
+					CreateToolsetFn:           toolsetsSvc.CreateToolset,
+					UpdateToolsetFn:           toolsetsSvc.UpdateToolset,
+					GetCatalogServerDetailsFn: externalMcpSvc.GetServerDetails,
 				},
 				mcpRegistryClient,
 				externalmcprepo.New(db),
@@ -1000,7 +1002,7 @@ func newStartCommand() *cli.Command {
 			oauth.Attach(mux, oauthService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine))
 			mcpmetadata.Attach(mux, mcpMetadataService)
-			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine))
+			externalmcp.Attach(mux, externalMcpSvc)
 			collections.Attach(mux, collections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, serverURL))
 			mcp.Attach(mux, mcpService, mcpMetadataService)
 			chat.Attach(mux, chatService)

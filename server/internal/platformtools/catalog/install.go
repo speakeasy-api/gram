@@ -11,12 +11,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	deploymentsgen "github.com/speakeasy-api/gram/server/gen/deployments"
+	registriesgen "github.com/speakeasy-api/gram/server/gen/mcp_registries"
 	toolsetsgen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	externalmcprepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
@@ -45,13 +45,12 @@ type installResult struct {
 // invoke it directly.
 type InstallTool struct {
 	descriptor      core.ToolDescriptor
-	registryClient  *externalmcp.RegistryClient
 	repo            *externalmcprepo.Queries
 	deploymentsRepo *deploymentsrepo.Queries
 	installer       Installer
 }
 
-func NewInstallTool(installer Installer, registryClient *externalmcp.RegistryClient, repo *externalmcprepo.Queries, deploymentsRepo *deploymentsrepo.Queries) *InstallTool {
+func NewInstallTool(installer Installer, repo *externalmcprepo.Queries, deploymentsRepo *deploymentsrepo.Queries) *InstallTool {
 	readOnly := false
 	destructive := false
 	idempotent := false
@@ -59,7 +58,6 @@ func NewInstallTool(installer Installer, registryClient *externalmcp.RegistryCli
 
 	return &InstallTool{
 		installer:       installer,
-		registryClient:  registryClient,
 		repo:            repo,
 		deploymentsRepo: deploymentsRepo,
 		descriptor: core.ToolDescriptor{
@@ -84,7 +82,7 @@ func (t *InstallTool) Descriptor() core.ToolDescriptor {
 }
 
 func (t *InstallTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.installer == nil || t.registryClient == nil || t.repo == nil || t.deploymentsRepo == nil {
+	if t.installer == nil || t.repo == nil || t.deploymentsRepo == nil {
 		return oops.E(oops.CodeUnexpected, nil, "catalog tools are not configured")
 	}
 
@@ -107,25 +105,31 @@ func (t *InstallTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payloa
 		return oops.E(oops.CodeBadRequest, nil, "registry_specifier is required")
 	}
 
-	registry, err := t.repo.GetMCPRegistryByID(ctx, registryID)
-	if err != nil {
-		return fmt.Errorf("get mcp registry: %w", err)
-	}
-
-	// Fetch tool + remote details so we can build the same tool URN list the
-	// dashboard would build (one URN per tool, falling back to :proxy when
-	// the server's tools are not known yet).
-	details, err := t.registryClient.GetServerDetails(ctx, externalmcp.Registry{
-		ID:  registry.ID,
-		URL: registry.Url,
-	}, specifier, nil)
+	// Fetch full server details (tools + every remote) via the catalog
+	// service. The Goa method runs project-read authz and returns the
+	// full *types.ExternalMCPServer, which is what the dashboard uses to
+	// drive the install dialog.
+	details, err := t.installer.GetCatalogServerDetails(ctx, &registriesgen.GetServerDetailsPayload{
+		RegistryID:       registryID.String(),
+		ServerSpecifier:  specifier,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
 	if err != nil {
 		return fmt.Errorf("fetch catalog server details: %w", err)
+	}
+	if details == nil {
+		return oops.E(oops.CodeUnexpected, nil, "catalog server details returned no server")
 	}
 
 	displayName := strings.TrimSpace(conv.PtrValOrEmpty(input.Name, ""))
 	if displayName == "" {
-		displayName = defaultDisplayName(specifier, details.Name)
+		fallback := ""
+		if details.Title != nil {
+			fallback = *details.Title
+		}
+		displayName = defaultDisplayName(specifier, fallback)
 	}
 
 	slug := slugFromName(displayName)
@@ -144,6 +148,12 @@ func (t *InstallTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payloa
 		return err
 	}
 
+	// Pass every streamable-http remote (the dashboard's "Select all"
+	// default after filterToHttpRemotes). When the registry only exposes
+	// SSE remotes, fall back to those; nil leaves the backend to auto-pick
+	// a single remote, which is not "all".
+	selectedRemotes := remoteURLsForInstall(details.Remotes)
+
 	regIDStr := registryID.String()
 	registrySpecifier := specifier
 	evolvePayload := &deploymentsgen.EvolvePayload{
@@ -161,7 +171,7 @@ func (t *InstallTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payloa
 			Name:                                displayName,
 			Slug:                                types.Slug(slug),
 			RegistryServerSpecifier:             registrySpecifier,
-			SelectedRemotes:                     nil,
+			SelectedRemotes:                     selectedRemotes,
 		}},
 		ExcludeOpenapiv3Assets: nil,
 		ExcludePackages:        nil,
@@ -190,10 +200,10 @@ func (t *InstallTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payloa
 
 	toolURNs := make([]string, 0, len(details.Tools))
 	for _, tool := range details.Tools {
-		if tool.Name == "" {
+		if tool == nil || tool.Name == nil || *tool.Name == "" {
 			continue
 		}
-		toolURNs = append(toolURNs, fmt.Sprintf("tools:externalmcp:%s:%s", slug, tool.Name))
+		toolURNs = append(toolURNs, fmt.Sprintf("tools:externalmcp:%s:%s", slug, *tool.Name))
 	}
 	if len(toolURNs) == 0 {
 		toolURNs = []string{fmt.Sprintf("tools:externalmcp:%s:proxy", slug)}
@@ -302,6 +312,36 @@ func (t *InstallTool) ensureNoConflictingSlug(ctx context.Context, projectID uui
 			"a different MCP server (%s) is already installed in this project as %q. Re-run with a name argument to disambiguate.",
 			attachment.RegistryServerSpecifier, slug,
 		)
+	}
+	return nil
+}
+
+// remoteURLsForInstall returns every streamable-http remote URL, falling back
+// to sse URLs only if no streamable-http remote exists. Mirrors the dashboard
+// "filterToHttpRemotes + Select all" path: assistants don't pick a remote, so
+// the install always wires up every endpoint the catalog server offers.
+func remoteURLsForInstall(remotes []*types.ExternalMCPRemote) []string {
+	if len(remotes) == 0 {
+		return nil
+	}
+	streamable := make([]string, 0, len(remotes))
+	sse := make([]string, 0, len(remotes))
+	for _, remote := range remotes {
+		if remote == nil || remote.URL == "" {
+			continue
+		}
+		switch remote.TransportType {
+		case "streamable-http":
+			streamable = append(streamable, remote.URL)
+		case "sse":
+			sse = append(sse, remote.URL)
+		}
+	}
+	if len(streamable) > 0 {
+		return streamable
+	}
+	if len(sse) > 0 {
+		return sse
 	}
 	return nil
 }
