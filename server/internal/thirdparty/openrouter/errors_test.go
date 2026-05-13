@@ -85,6 +85,44 @@ func TestChatClient_GetCompletion_Non402_DoesNotWrapInsufficientCredits(t *testi
 	assert.False(t, IsInsufficientCredits(err), "non-402 must not be classified as insufficient credits")
 }
 
+func TestChatClient_GetCompletion_WrapsHistoryCorruptionForBadRequest(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name           string
+		status         int
+		body           string
+		wantCorruption bool
+	}{
+		{"400 invalid_request", http.StatusBadRequest, `{"error":{"type":"invalid_request_error","message":"messages: tool_use_ids were found without corresponding tool_use blocks"}}`, true},
+		{"422 unprocessable", http.StatusUnprocessableEntity, `{"error":{"message":"messages must alternate"}}`, true},
+		{"403 moderation is NOT corruption", http.StatusForbidden, `{"error":{"type":"content_policy_violation"}}`, false},
+		{"429 rate limit is NOT corruption", http.StatusTooManyRequests, `{"error":{"message":"rate_limit_exceeded"}}`, false},
+		{"500 upstream blip is NOT corruption", http.StatusInternalServerError, `{"error":{"message":"upstream"}}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			t.Cleanup(server.Close)
+
+			client := newTestClientForServer(t, server)
+			_, err := client.GetCompletion(context.Background(), CompletionRequest{
+				OrgID:       "test-org",
+				ProjectID:   uuid.New().String(),
+				Messages:    []or.ChatMessages{CreateMessageUser("hi")},
+				ChatID:      uuid.New(),
+				UsageSource: billing.ModelUsageSourcePlayground,
+			})
+			require.Error(t, err)
+			require.Equal(t, tc.wantCorruption, IsHistoryCorruptionCandidate(err))
+		})
+	}
+}
+
 func newTestClientForServer(t *testing.T, server *httptest.Server) *ChatClient {
 	t.Helper()
 

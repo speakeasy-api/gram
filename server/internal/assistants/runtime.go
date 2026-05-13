@@ -28,6 +28,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
 
@@ -317,6 +318,31 @@ var ErrRuntimeUnhealthy = errors.New("assistant runtime unhealthy")
 // fail the event and leave the VM warm to handle subsequent events.
 var ErrCompletionFailed = errors.New("assistant completion failed")
 
+// ErrHistoryCorrupted signals the upstream provider rejected the replayed
+// transcript as malformed or oversize. Distinct from ErrCompletionFailed:
+// trimming history and retrying typically clears it, so callers self-heal
+// once per event before giving up.
+var ErrHistoryCorrupted = errors.New("assistant chat history corrupted")
+
+// classifyTurnError buckets a /turn error into runtime-unhealthy (tear
+// down), completion-failed (terminal), or history-corrupted (self-heal).
+// "provider error" is agentkit-provider-openrouter's prefix; "completion
+// failed" is Gram's gateway-stamped variant. chat.IsHistoryCorrupted
+// detects the Gram-owned marker stamped on upstream 400/422 responses.
+func classifyTurnError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if chat.IsHistoryCorrupted(err) {
+		return ErrHistoryCorrupted
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "provider error") || strings.Contains(msg, "completion failed") {
+		return ErrCompletionFailed
+	}
+	return ErrRuntimeUnhealthy
+}
+
 func (m *RuntimeManager) Backend() string {
 	return runtimeBackendLocal
 }
@@ -578,7 +604,7 @@ func (m *RuntimeManager) RunTurn(
 		MaxTimeSeconds: 30 * 60,
 		IdempotencyKey: idempotencyKey,
 	}); err != nil {
-		return fmt.Errorf("%w: execute turn request: %w", ErrRuntimeUnhealthy, err)
+		return fmt.Errorf("%w: execute turn request: %w", classifyTurnError(err), err)
 	}
 	return nil
 }
