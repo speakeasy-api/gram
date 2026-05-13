@@ -28,6 +28,7 @@ type WorkOSClient interface {
 	ListOrganizations(ctx context.Context) ([]workos.Organization, error)
 	ListRoles(ctx context.Context, orgID string) ([]workos.Role, error)
 	ListOrgMemberships(ctx context.Context, orgID string) ([]workos.Member, error)
+	ListOrgUsers(ctx context.Context, orgID string) (map[string]workos.User, error)
 	ListGlobalRoles(ctx context.Context) ([]workos.Role, error)
 	ListEvents(ctx context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error)
 	UpdateUserExternalID(ctx context.Context, workosUserID, externalID string) error
@@ -124,6 +125,10 @@ func (b *BackfillWorkOSOrganization) Do(ctx context.Context, params BackfillWork
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	if err := backfillWorkOSOrganizationUsers(ctx, logger, b.db, b.workos, params.WorkOSOrganizationID); err != nil {
+		return err
 	}
 
 	return nil

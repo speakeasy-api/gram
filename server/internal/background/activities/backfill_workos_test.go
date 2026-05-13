@@ -17,6 +17,8 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/users"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 func TestBackfillWorkOSOrganization_CreatesUnlinkedOrganizationWithExternalID(t *testing.T) {
@@ -316,6 +318,95 @@ func TestBackfillWorkOSOrganization_MissingRoleSoftDeleted(t *testing.T) {
 	require.True(t, role.Deleted)
 	require.True(t, role.WorkosDeleted)
 	require.Empty(t, role.WorkosLastEventID.String)
+}
+
+func TestBackfillWorkOSOrganization_BackfillsUsersAndLinksOptimisticRows(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_backfill_user_links_optimistic")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_backfill_user_links"
+	const workosOrgID = "org_01JBACKFILLUSERLINKS"
+	const workosUserID = "user_01JBACKFILLUSERLINKS"
+	const membershipID = "mem_01JBACKFILLUSERLINKS"
+	const roleSlug = "support"
+	gramUserID := users.UserIDFromWorkOSID(workosUserID)
+	updatedAt := time.Date(2026, 5, 7, 11, 0, 0, 0, time.UTC)
+
+	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	err := accessrepo.New(conn).UpsertGlobalRole(ctx, accessrepo.UpsertGlobalRoleParams{
+		WorkosSlug:        roleSlug,
+		WorkosName:        "Support",
+		WorkosDescription: conv.ToPGText("Support"),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(updatedAt),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(updatedAt),
+		WorkosLastEventID: conv.ToPGText(""),
+	})
+	require.NoError(t, err)
+	err = orgrepo.New(conn).UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
+		OrganizationID:     organizationID,
+		UserID:             conv.ToPGTextEmpty(""),
+		WorkosUserID:       conv.ToPGText(workosUserID),
+		WorkosMembershipID: conv.ToPGText(membershipID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(updatedAt),
+		WorkosLastEventID:  conv.ToPGText(""),
+	})
+	require.NoError(t, err)
+	err = orgrepo.New(conn).SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       workosUserID,
+		UserID:             conv.ToPGTextEmpty(""),
+		WorkosMembershipID: conv.ToPGText(membershipID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(updatedAt),
+		WorkosLastEventID:  conv.ToPGText(""),
+		WorkosRoleSlugs:    []string{roleSlug},
+	})
+	require.NoError(t, err)
+
+	workosClient := workos.NewStubClient()
+	workosClient.UpsertOrganization(workos.Organization{
+		ID:         workosOrgID,
+		Name:       "Backfill User Links",
+		ExternalID: organizationID,
+		CreatedAt:  "2026-05-07T10:00:00Z",
+		UpdatedAt:  "2026-05-07T10:00:00Z",
+	})
+	workosClient.UpsertUser(workosOrgID, workos.User{
+		ID:                workosUserID,
+		ExternalID:        "",
+		FirstName:         "Backfill",
+		LastName:          "User",
+		Email:             "backfill-user@example.com",
+		ProfilePictureURL: "",
+		CreatedAt:         "2026-05-07T10:00:00Z",
+		UpdatedAt:         "2026-05-07T12:00:00Z",
+	})
+
+	activity := activities.NewBackfillWorkOSOrganization(logger, conn, workosClient)
+	err = activity.Do(ctx, activities.BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+
+	row, err := usersrepo.New(conn).GetUser(ctx, gramUserID)
+	require.NoError(t, err)
+	require.Equal(t, "backfill-user@example.com", row.Email)
+
+	relationship, err := orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.NoError(t, err)
+	require.Equal(t, membershipID, relationship.WorkosMembershipID.String)
+
+	assignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.Len(t, assignments, 1)
+	require.Equal(t, gramUserID, assignments[0].UserID.String)
+	require.Equal(t, []workos.UserExternalIDUpdate{{WorkOSUserID: workosUserID, ExternalID: gramUserID}}, workosClient.UserExternalIDUpdates())
 }
 
 func newWorkOSSnapshotClient(t *testing.T, ctx context.Context, org workos.Organization, roles []workos.Role, members []workos.Member) *workos.StubClient {

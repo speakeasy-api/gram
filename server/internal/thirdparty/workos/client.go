@@ -167,10 +167,13 @@ func (wc *Client) newRequest(ctx context.Context, method, path string, body []by
 func convertUser(u usermanagement.User) User {
 	return User{
 		ID:                u.ID,
+		ExternalID:        u.ExternalID,
 		FirstName:         u.FirstName,
 		LastName:          u.LastName,
 		Email:             u.Email,
 		ProfilePictureURL: u.ProfilePictureURL,
+		CreatedAt:         u.CreatedAt,
+		UpdatedAt:         u.UpdatedAt,
 	}
 }
 
