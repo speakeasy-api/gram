@@ -844,8 +844,10 @@ func newStartCommand() *cli.Command {
 
 			// TEMP: unauthenticated proxy to Presidio /analyze for load
 			// testing in the dev preview env. Mounted via the outermost
-			// mux.Use middleware so it bypasses auth/CORS/etc. Remove once
-			// load testing is complete.
+			// mux.Use middleware so it bypasses auth/CORS/etc. The path
+			// lives under /rpc/ so the preview ingress (which only routes
+			// /rpc/* and /mcp/* to the server) lets the request through.
+			// Remove once load testing is complete.
 			var presidioProxy http.Handler
 			if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
 				target, err := url.Parse(presidioURL)
@@ -866,7 +868,7 @@ func newStartCommand() *cli.Command {
 					ModifyResponse: nil,
 					ErrorHandler:   nil,
 				}
-				logger.InfoContext(ctx, "temp presidio proxy: enabled at POST /temp/presidio/analyze",
+				logger.InfoContext(ctx, "temp presidio proxy: enabled at POST /rpc/temp.presidioAnalyze",
 					attr.SlogServerAddress(c.String("address")),
 				)
 			}
@@ -878,7 +880,7 @@ func newStartCommand() *cli.Command {
 						w.WriteHeader(http.StatusOK)
 						return
 					}
-					if presidioProxy != nil && r.Method == http.MethodPost && r.URL.Path == "/temp/presidio/analyze" {
+					if presidioProxy != nil && r.Method == http.MethodPost && r.URL.Path == "/rpc/temp.presidioAnalyze" {
 						presidioProxy.ServeHTTP(w, r)
 						return
 					}
