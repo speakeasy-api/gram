@@ -526,7 +526,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	if user, err := userrepo.New(s.db).GetUserByEmail(ctx, inviteeEmail); err == nil {
 		if _, err := repo.UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
 			OrganizationID: invite.OrganizationID,
-			UserID:         user.ID,
+			UserID:         conv.ToPGText(user.ID),
 		}); err != nil {
 			s.logger.WarnContext(ctx, "invite callback: failed to create org membership", attr.SlogError(err))
 		}

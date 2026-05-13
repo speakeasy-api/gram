@@ -1664,34 +1664,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_user_relationships_workos_members
 ON organization_user_relationships (workos_membership_id)
 WHERE deleted IS FALSE;
 
-CREATE TABLE IF NOT EXISTS organization_invitations (
-  id UUID NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
-  email TEXT NOT NULL CHECK (email <> ''),
-  token_hash TEXT NOT NULL CHECK (token_hash <> ''),
-  inviter_user_id TEXT,
-  role_slug TEXT,
-  state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'accepted', 'revoked', 'expired')),
-
-  expires_at timestamptz NOT NULL DEFAULT clock_timestamp() + INTERVAL '7 days',
-  accepted_at timestamptz,
-  revoked_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT organization_invitations_pkey PRIMARY KEY (id),
-  CONSTRAINT organization_invitations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT organization_invitations_inviter_user_id_fkey FOREIGN KEY (inviter_user_id) REFERENCES users (id) ON DELETE SET NULL
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS organization_invitations_token_hash_key
-ON organization_invitations (token_hash);
-
--- Only one pending invite per email per org at a time.
-CREATE UNIQUE INDEX IF NOT EXISTS organization_invitations_org_email_pending_key
-ON organization_invitations (organization_id, email)
-WHERE state = 'pending';
-
 CREATE INDEX IF NOT EXISTS organization_user_relationships_org_workos_user_idx
 ON organization_user_relationships (organization_id, workos_user_id)
 WHERE workos_user_id IS NOT NULL AND deleted IS FALSE;
