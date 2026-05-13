@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/stretchr/testify/require"
@@ -160,7 +161,8 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	auditLogger := audit.NewLogger()
 	idpClient := speakeasyclient.NewClient(logger, tracerProvider, guardianPolicy, "http://idp.test", "test-secret-key", conn, nil, posthog)
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, idpClient, userSessionSigner)
+	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, conn, enc, guardianPolicy, cacheAdapter, serverURL)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, idpClient, userSessionSigner, remoteChallengeMgr)
 
 	return ctx, &testInstance{
 		service:        svc,

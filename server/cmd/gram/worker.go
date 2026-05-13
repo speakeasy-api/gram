@@ -43,6 +43,7 @@ import (
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -572,6 +573,15 @@ func newWorkerCommand() *cli.Command {
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
+			remoteChallengeManager := remotesessions.NewChallengeManager(
+				logger,
+				db,
+				encryptionClient,
+				guardianPolicy,
+				cache.NewRedisCacheAdapter(redisClient),
+				serverURL,
+			)
+
 			mcpService := mcp.NewService(
 				logger,
 				tracerProvider,
@@ -603,6 +613,7 @@ func newWorkerCommand() *cli.Command {
 				nil,
 				speakeasyIDPClient,
 				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
+				remoteChallengeManager,
 			)
 
 			chatClient := chat.NewAgenticChatClient(
