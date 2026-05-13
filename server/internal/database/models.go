@@ -1153,6 +1153,7 @@ type RiskResult struct {
 	EndPos            pgtype.Int4
 	Confidence        pgtype.Float8
 	Tags              []string
+	DeadLetterReason  pgtype.Text
 	CreatedAt         pgtype.Timestamptz
 }
 
