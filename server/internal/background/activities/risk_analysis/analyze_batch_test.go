@@ -52,18 +52,12 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Wrap the dead URL in the production retry orchestrator so the scan
+	// Point the production PresidioClient at a dead URL so the activity
 	// path mirrors what runs in the worker. After exhausting the retry
 	// budget the message dead-letters and the activity proceeds — gitleaks
 	// findings on the same message survive.
-	deadClient := risk_analysis.NewPresidioClient(
+	piiScanner := risk_analysis.NewPresidioClient(
 		"http://127.0.0.1:1",
-		testenv.NewTracerProvider(t),
-		testenv.NewMeterProvider(t),
-		testenv.NewLogger(t),
-	)
-	piiScanner := risk_analysis.NewRetryingPIIScanner(
-		deadClient,
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		testenv.NewLogger(t),

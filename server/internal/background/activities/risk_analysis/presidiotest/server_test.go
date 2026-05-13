@@ -203,10 +203,9 @@ func TestMockServer_AnalyzeRequestCount(t *testing.T) {
 	_, err := client.AnalyzeBatch(t.Context(), messages, nil, nil)
 	require.NoError(t, err)
 
-	// The Presidio client no longer sub-batches: it issues exactly one
-	// /analyze request per call regardless of input size. Fan-out (and
-	// therefore request count) is the orchestrator's responsibility.
-	require.Equal(t, int64(1), server.AnalyzeRequestCount())
+	// The Presidio client fans out one HTTP request per text — failures
+	// isolate to a single message and there is no internal sub-batching.
+	require.Equal(t, int64(len(messages)), server.AnalyzeRequestCount())
 }
 
 func TestMockServer_HealthEndpointReturnsOK(t *testing.T) {

@@ -30,29 +30,6 @@ func TestStubPIIScannerReturnsEmptyResults(t *testing.T) {
 	}
 }
 
-// TestPresidioClientSingleAttemptPerCall confirms that AnalyzeBatch issues
-// exactly one HTTP request and surfaces non-200 responses verbatim. No
-// internal retry, no bisect: the retry budget lives in RetryingPIIScanner.
-func TestPresidioClientSingleAttemptPerCall(t *testing.T) {
-	t.Parallel()
-
-	var calls atomic.Int64
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		calls.Add(1)
-		http.Error(w, "presidio down", http.StatusServiceUnavailable)
-	}))
-	t.Cleanup(srv.Close)
-
-	client := NewPresidioClient(srv.URL, otel.GetTracerProvider(), otel.GetMeterProvider(), testLogger(t))
-
-	results, err := client.AnalyzeBatch(t.Context(), []string{"one"}, nil, nil)
-	require.Error(t, err)
-	require.ErrorContains(t, err, "presidio returned status 503")
-	require.Len(t, results, 1)
-	assert.Empty(t, results[0])
-	assert.Equal(t, int64(1), calls.Load(), "presidio client must not retry internally")
-}
-
 // TestPresidioClientShortCircuitsOnAllEmptyTexts asserts the client skips the
 // HTTP round-trip (and the byte semaphore) when every input is the empty
 // string — Presidio would either 500 or return no findings, so the work is
@@ -77,25 +54,45 @@ func TestPresidioClientShortCircuitsOnAllEmptyTexts(t *testing.T) {
 	assert.Equal(t, int64(0), calls.Load(), "presidio /analyze must not be called when every input is empty")
 }
 
-// TestPresidioClientRequestPayload confirms the client emits a single
-// /analyze POST containing all texts in the input slice exactly as given.
-func TestPresidioClientRequestPayload(t *testing.T) {
+// TestAnalyzeOnceSingleAttemptNoRetry asserts the inner single-attempt
+// method does NOT retry on failure — retry lives one level up in
+// analyzeOne. This is the test that justifies keeping analyzeOnce as a
+// separate seam under analyzeOne.
+func TestAnalyzeOnceSingleAttemptNoRetry(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		http.Error(w, "presidio down", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(srv.Close)
+
+	client := newTestPresidioClient(t, srv.URL)
+	_, err := client.analyzeOnce(t.Context(), "one", nil, nil)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "presidio returned status 503")
+	assert.Equal(t, int64(1), calls.Load(), "analyzeOnce must not retry internally")
+}
+
+// TestAnalyzeOnceRequestPayload confirms the inner single-attempt method
+// emits one /analyze POST carrying the text in a one-element array and
+// passes the requested entities + language through verbatim.
+func TestAnalyzeOnceRequestPayload(t *testing.T) {
 	t.Parallel()
 
 	var got presidioRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.NoError(t, json.NewDecoder(r.Body).Decode(&got))
 		w.Header().Set("Content-Type", "application/json")
-		assert.NoError(t, json.NewEncoder(w).Encode(make([][]presidioResult, len(got.Text))))
+		assert.NoError(t, json.NewEncoder(w).Encode([][]presidioResult{{}}))
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewPresidioClient(srv.URL, otel.GetTracerProvider(), otel.GetMeterProvider(), testLogger(t))
-
-	results, err := client.AnalyzeBatch(t.Context(), []string{"alpha", "beta"}, []string{"EMAIL_ADDRESS"}, nil)
+	client := newTestPresidioClient(t, srv.URL)
+	_, err := client.analyzeOnce(t.Context(), "alpha", []string{"EMAIL_ADDRESS"}, nil)
 	require.NoError(t, err)
-	require.Len(t, results, 2)
-	assert.Equal(t, []string{"alpha", "beta"}, got.Text)
+	assert.Equal(t, []string{"alpha"}, got.Text)
 	assert.Equal(t, []string{"EMAIL_ADDRESS"}, got.Entities)
 	assert.Equal(t, "en", got.Language)
 }
@@ -114,7 +111,7 @@ func TestPresidioClientThrottleFiresHeartbeatWhileBlocked(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewPresidioClient(srv.URL, otel.GetTracerProvider(), otel.GetMeterProvider(), testLogger(t))
+	client := newTestPresidioClient(t, srv.URL)
 	// Shrink the throttle so the test deterministically blocks on a tiny
 	// payload, and tighten the heartbeat interval so onProgress fires fast.
 	client.throttle = semaphore.NewWeighted(4)
@@ -150,9 +147,9 @@ type callOutcome struct {
 	err     error
 }
 
-// TestRetryingPIIScannerRetriesThenSucceeds verifies the per-text retry budget
+// TestPresidioClientRetriesThenSucceeds verifies the per-text retry budget
 // is honored and the scanner returns real findings once Presidio recovers.
-func TestRetryingPIIScannerRetriesThenSucceeds(t *testing.T) {
+func TestPresidioClientRetriesThenSucceeds(t *testing.T) {
 	t.Parallel()
 
 	var hits atomic.Int64
@@ -179,8 +176,8 @@ func TestRetryingPIIScannerRetriesThenSucceeds(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	scanner := newTestRetryingScanner(t, srv.URL)
-	results, err := scanner.AnalyzeBatch(t.Context(), []string{"contact alice@example.com"}, nil, nil)
+	client := newTestPresidioClient(t, srv.URL)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"contact alice@example.com"}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Len(t, results[0], 1)
@@ -189,11 +186,11 @@ func TestRetryingPIIScannerRetriesThenSucceeds(t *testing.T) {
 	assert.GreaterOrEqual(t, hits.Load(), int64(2), "expected at least one retry before success")
 }
 
-// TestRetryingPIIScannerDeadLettersAfterExhausting validates the orchestrator
+// TestPresidioClientDeadLettersAfterExhausting validates the retry budget
 // emits a DL sentinel after maxAttempts failures rather than surfacing the
 // error to the caller. Logs the per-text size so post-incident triage can
 // recover what failed.
-func TestRetryingPIIScannerDeadLettersAfterExhausting(t *testing.T) {
+func TestPresidioClientDeadLettersAfterExhausting(t *testing.T) {
 	t.Parallel()
 
 	var hits atomic.Int64
@@ -203,8 +200,8 @@ func TestRetryingPIIScannerDeadLettersAfterExhausting(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	scanner := newTestRetryingScanner(t, srv.URL)
-	results, err := scanner.AnalyzeBatch(t.Context(), []string{"will be dead-lettered"}, nil, nil)
+	client := newTestPresidioClient(t, srv.URL)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"will be dead-lettered"}, nil, nil)
 	require.NoError(t, err, "per-text failures must not bubble up as activity-layer errors")
 	require.Len(t, results, 1)
 	require.Len(t, results[0], 1)
@@ -213,13 +210,13 @@ func TestRetryingPIIScannerDeadLettersAfterExhausting(t *testing.T) {
 	assert.Equal(t, SourcePresidio, dl.Source)
 	assert.Equal(t, DeadLetterRuleID, dl.RuleID)
 	assert.NotEmpty(t, dl.DeadLetterReason)
-	assert.Equal(t, int64(retryingMaxAttempts), hits.Load())
+	assert.Equal(t, int64(retryMaxAttempts), hits.Load())
 }
 
-// TestRetryingPIIScannerIsolatesPoisonedMessages confirms that a single
+// TestPresidioClientIsolatesPoisonedMessages confirms that a single
 // poisoned message dead-letters without affecting its batch siblings — the
 // failure mode the old bisecting client could not cleanly handle.
-func TestRetryingPIIScannerIsolatesPoisonedMessages(t *testing.T) {
+func TestPresidioClientIsolatesPoisonedMessages(t *testing.T) {
 	t.Parallel()
 
 	var hits atomic.Int64
@@ -238,8 +235,8 @@ func TestRetryingPIIScannerIsolatesPoisonedMessages(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	scanner := newTestRetryingScanner(t, srv.URL)
-	results, err := scanner.AnalyzeBatch(t.Context(), []string{"clean a", "poison", "clean b"}, nil, nil)
+	client := newTestPresidioClient(t, srv.URL)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"clean a", "poison", "clean b"}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 3)
 
@@ -252,19 +249,13 @@ func TestRetryingPIIScannerIsolatesPoisonedMessages(t *testing.T) {
 	assert.NotEmpty(t, results[1][0].DeadLetterReason)
 }
 
-// TestRetryingPIIScannerSurfacesOuterContextCancellation asserts that an
+// TestPresidioClientSurfacesOuterContextCancellation asserts that an
 // outer-ctx cancellation aborts cleanly and returns an error so the Temporal
 // activity layer can retry the whole batch rather than treating partial
 // results as final.
-func TestRetryingPIIScannerSurfacesOuterContextCancellation(t *testing.T) {
+func TestPresidioClientSurfacesOuterContextCancellation(t *testing.T) {
 	t.Parallel()
 
-	// Server blocks until either the request's own ctx is cancelled or the
-	// test releases it. Keep-alive connection reuse means the client-side
-	// ctx-cancel does not always propagate to r.Context().Done() before the
-	// test tears down, so an explicit release channel keeps srv.Close from
-	// hanging on the in-flight handler. LIFO cleanup: release first, then
-	// Close.
 	released := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		select {
@@ -275,21 +266,21 @@ func TestRetryingPIIScannerSurfacesOuterContextCancellation(t *testing.T) {
 	t.Cleanup(srv.Close)
 	t.Cleanup(func() { close(released) })
 
-	scanner := newTestRetryingScanner(t, srv.URL)
+	client := newTestPresidioClient(t, srv.URL)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel() // cancel before the call so the first ctx.Err() check trips
 
-	_, err := scanner.AnalyzeBatch(ctx, []string{"hang"}, nil, nil)
+	_, err := client.AnalyzeBatch(ctx, []string{"hang"}, nil, nil)
 	require.Error(t, err)
 	require.ErrorIs(t, err, context.Canceled)
 }
 
-// TestRetryingPIIScannerDeadLettersOnPerRequestTimeout confirms that
-// transient inner-timeouts consume the retry budget rather than bailing
-// early — once exhausted the message dead-letters with the underlying
-// deadline-exceeded error captured.
-func TestRetryingPIIScannerDeadLettersOnPerRequestTimeout(t *testing.T) {
+// TestPresidioClientDeadLettersOnPerRequestTimeout confirms that transient
+// inner-timeouts consume the retry budget rather than bailing early — once
+// exhausted the message dead-letters with the underlying deadline-exceeded
+// error captured.
+func TestPresidioClientDeadLettersOnPerRequestTimeout(t *testing.T) {
 	t.Parallel()
 
 	released := make(chan struct{})
@@ -302,12 +293,12 @@ func TestRetryingPIIScannerDeadLettersOnPerRequestTimeout(t *testing.T) {
 	t.Cleanup(srv.Close)
 	t.Cleanup(func() { close(released) })
 
-	scanner := newTestRetryingScanner(t, srv.URL)
+	client := newTestPresidioClient(t, srv.URL)
 	// Shrink per-request timeout so the test exercises the retry path
 	// without waiting out the 30s production default.
-	scanner.client.requestTimeout = 30 * time.Millisecond
+	client.requestTimeout = 30 * time.Millisecond
 
-	results, err := scanner.AnalyzeBatch(t.Context(), []string{"hang"}, nil, nil)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"hang"}, nil, nil)
 	require.NoError(t, err, "inner per-request timeouts must not bubble up as activity-layer errors")
 	require.Len(t, results, 1)
 	require.Len(t, results[0], 1)
@@ -326,7 +317,7 @@ func TestComputeRetryBackoffStaysWithinCap(t *testing.T) {
 	for attempt := range 10 {
 		got := computeRetryBackoff(50*time.Millisecond, attempt)
 		assert.GreaterOrEqual(t, got, time.Duration(0))
-		assert.LessOrEqual(t, got, retryingMaxBackoff)
+		assert.LessOrEqual(t, got, retryMaxBackoff)
 	}
 	assert.Zero(t, computeRetryBackoff(0, 5))
 }
@@ -338,9 +329,9 @@ func TestRequestByteCostCapsToBudget(t *testing.T) {
 	t.Parallel()
 
 	big := strings.Repeat("a", int(presidioInflightByteBudget)*2)
-	assert.Equal(t, presidioInflightByteBudget, requestByteCost([]string{big}, presidioInflightByteBudget))
-	assert.Equal(t, int64(1), requestByteCost([]string{""}, presidioInflightByteBudget))
-	assert.Equal(t, int64(7), requestByteCost([]string{"abc", "defg"}, presidioInflightByteBudget))
+	assert.Equal(t, presidioInflightByteBudget, requestByteCost(big, presidioInflightByteBudget))
+	assert.Equal(t, int64(1), requestByteCost("", presidioInflightByteBudget))
+	assert.Equal(t, int64(4), requestByteCost("defg", presidioInflightByteBudget))
 }
 
 func TestIsCancelErrClassifiesContextErrors(t *testing.T) {
@@ -361,12 +352,11 @@ func testLogger(t *testing.T) *slog.Logger {
 	return slog.New(slog.NewTextHandler(t.Output(), nil))
 }
 
-func newTestRetryingScanner(t *testing.T, baseURL string) *RetryingPIIScanner {
+func newTestPresidioClient(t *testing.T, baseURL string) *PresidioClient {
 	t.Helper()
 	client := NewPresidioClient(baseURL, otel.GetTracerProvider(), otel.GetMeterProvider(), testLogger(t))
-	scanner := NewRetryingPIIScanner(client, otel.GetTracerProvider(), otel.GetMeterProvider(), testLogger(t))
 	// Zero backoff keeps tests deterministic; retry budget stays at the
-	// production default.
-	scanner.baseBackoff = 0
-	return scanner
+	// production default so retry-related assertions stay representative.
+	client.baseBackoff = 0
+	return client
 }
