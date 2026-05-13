@@ -78,7 +78,7 @@ func GenerateShadowMCPApprovalRequestToken(jwtSecret string, input ShadowMCPAppr
 			Subject:   shadowMCPApprovalRequestTokenSubject,
 			Audience:  nil,
 			ExpiresAt: jwt.NewNumericDate(expiry),
-			NotBefore: jwt.NewNumericDate(now.Add(-time.Minute)),
+			NotBefore: jwt.NewNumericDate(now),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ID:        uuid.NewString(),
 		},
