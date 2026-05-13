@@ -18,12 +18,12 @@ import (
 
 // BuildListRemoteSessionsPayload builds the payload for the remoteSessions
 // listRemoteSessions endpoint from CLI flags.
-func BuildListRemoteSessionsPayload(remoteSessionsListRemoteSessionsPrincipalUrn string, remoteSessionsListRemoteSessionsRemoteSessionClientID string, remoteSessionsListRemoteSessionsCursor string, remoteSessionsListRemoteSessionsLimit string, remoteSessionsListRemoteSessionsSessionToken string, remoteSessionsListRemoteSessionsApikeyToken string, remoteSessionsListRemoteSessionsProjectSlugInput string) (*remotesessions.ListRemoteSessionsPayload, error) {
+func BuildListRemoteSessionsPayload(remoteSessionsListRemoteSessionsSubjectUrn string, remoteSessionsListRemoteSessionsRemoteSessionClientID string, remoteSessionsListRemoteSessionsCursor string, remoteSessionsListRemoteSessionsLimit string, remoteSessionsListRemoteSessionsSessionToken string, remoteSessionsListRemoteSessionsApikeyToken string, remoteSessionsListRemoteSessionsProjectSlugInput string) (*remotesessions.ListRemoteSessionsPayload, error) {
 	var err error
-	var principalUrn *string
+	var subjectUrn *string
 	{
-		if remoteSessionsListRemoteSessionsPrincipalUrn != "" {
-			principalUrn = &remoteSessionsListRemoteSessionsPrincipalUrn
+		if remoteSessionsListRemoteSessionsSubjectUrn != "" {
+			subjectUrn = &remoteSessionsListRemoteSessionsSubjectUrn
 		}
 	}
 	var remoteSessionClientID *string
@@ -73,7 +73,7 @@ func BuildListRemoteSessionsPayload(remoteSessionsListRemoteSessionsPrincipalUrn
 		}
 	}
 	v := &remotesessions.ListRemoteSessionsPayload{}
-	v.PrincipalUrn = principalUrn
+	v.SubjectUrn = subjectUrn
 	v.RemoteSessionClientID = remoteSessionClientID
 	v.Cursor = cursor
 	v.Limit = limit

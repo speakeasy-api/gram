@@ -82,7 +82,7 @@ overrides:
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
           type: SessionSubject
-      - column: remote_sessions.principal_urn
+      - column: remote_sessions.subject_urn
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
           type: SessionSubject

@@ -75,7 +75,7 @@ export function buildRemoteSessionsQuery(
 } {
   return {
     queryKey: queryKeyRemoteSessions({
-      principalUrn: request?.principalUrn,
+      subjectUrn: request?.subjectUrn,
       remoteSessionClientId: request?.remoteSessionClientId,
       cursor: request?.cursor,
       limit: request?.limit,
@@ -120,7 +120,7 @@ export function buildRemoteSessionsInfiniteQuery(
 } {
   return {
     queryKey: queryKeyRemoteSessionsInfinite({
-      principalUrn: request?.principalUrn,
+      subjectUrn: request?.subjectUrn,
       remoteSessionClientId: request?.remoteSessionClientId,
       cursor: request?.cursor,
       limit: request?.limit,
@@ -162,7 +162,7 @@ export function buildRemoteSessionsInfiniteQuery(
 
 export function queryKeyRemoteSessions(
   parameters: {
-    principalUrn?: string | undefined;
+    subjectUrn?: string | undefined;
     remoteSessionClientId?: string | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
@@ -176,7 +176,7 @@ export function queryKeyRemoteSessions(
 
 export function queryKeyRemoteSessionsInfinite(
   parameters: {
-    principalUrn?: string | undefined;
+    subjectUrn?: string | undefined;
     remoteSessionClientId?: string | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;

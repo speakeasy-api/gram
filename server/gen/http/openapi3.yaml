@@ -16657,11 +16657,11 @@ paths:
             operationId: listRemoteSessions
             parameters:
                 - allowEmptyValue: true
-                  description: Exact-match filter on principal URN.
+                  description: Exact-match filter on subject URN.
                   in: query
-                  name: principal_urn
+                  name: subject_urn
                   schema:
-                    description: Exact-match filter on principal URN.
+                    description: Exact-match filter on subject URN.
                     type: string
                 - allowEmptyValue: true
                   description: Filter by remote_session_client id.
@@ -32066,9 +32066,6 @@ components:
                     type: string
                     description: The remote_session id.
                     format: uuid
-                principal_urn:
-                    type: string
-                    description: The session's principal URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
                 refresh_expires_at:
                     type: string
                     description: Upstream refresh-token expiry. Null when the session has no refresh token.
@@ -32082,6 +32079,9 @@ components:
                     items:
                         type: string
                     description: Scopes held by this session.
+                subject_urn:
+                    type: string
+                    description: The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
                 updated_at:
                     type: string
                     format: date-time
@@ -32092,7 +32092,7 @@ components:
             description: A remote_session record — Gram's upstream OAuth session for a (principal, remote_session_client) pair. access_token_encrypted and refresh_token_encrypted are never returned.
             required:
                 - id
-                - principal_urn
+                - subject_urn
                 - user_session_issuer_id
                 - remote_session_client_id
                 - access_expires_at

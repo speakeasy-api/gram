@@ -22,10 +22,6 @@ export type RemoteSession = {
    */
   id: string;
   /**
-   * The session's principal URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
-   */
-  principalUrn: string;
-  /**
    * Upstream refresh-token expiry. Null when the session has no refresh token.
    */
   refreshExpiresAt?: Date | undefined;
@@ -37,6 +33,10 @@ export type RemoteSession = {
    * Scopes held by this session.
    */
   scopes: Array<string>;
+  /**
+   * The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
+   */
+  subjectUrn: string;
   updatedAt: Date;
   /**
    * The user_session_issuer this session is bound to.
@@ -59,12 +59,12 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
-    principal_urn: z.string(),
     refresh_expires_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     remote_session_client_id: z.string(),
     scopes: z.array(z.string()),
+    subject_urn: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -75,9 +75,9 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "access_expires_at": "accessExpiresAt",
       "created_at": "createdAt",
-      "principal_urn": "principalUrn",
       "refresh_expires_at": "refreshExpiresAt",
       "remote_session_client_id": "remoteSessionClientId",
+      "subject_urn": "subjectUrn",
       "updated_at": "updatedAt",
       "user_session_issuer_id": "userSessionIssuerId",
     });

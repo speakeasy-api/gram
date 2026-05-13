@@ -411,9 +411,9 @@ type RevokeRemoteSessionGatewayErrorResponseBody struct {
 type RemoteSessionResponseBody struct {
 	// The remote_session id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The session's principal URN (user:<id> | apikey:<uuid> |
+	// The session's subject URN (user:<id> | apikey:<uuid> |
 	// anonymous:<mcp-session-id>).
-	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	SubjectUrn string `form:"subject_urn" json:"subject_urn" xml:"subject_urn"`
 	// The user_session_issuer this session is bound to.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
 	// The remote_session_client this session was minted against.
@@ -751,9 +751,9 @@ func NewRevokeRemoteSessionGatewayErrorResponseBody(res *goa.ServiceError) *Revo
 
 // NewListRemoteSessionsPayload builds a remoteSessions service
 // listRemoteSessions endpoint payload.
-func NewListRemoteSessionsPayload(principalUrn *string, remoteSessionClientID *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.ListRemoteSessionsPayload {
+func NewListRemoteSessionsPayload(subjectUrn *string, remoteSessionClientID *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.ListRemoteSessionsPayload {
 	v := &remotesessions.ListRemoteSessionsPayload{}
-	v.PrincipalUrn = principalUrn
+	v.SubjectUrn = subjectUrn
 	v.RemoteSessionClientID = remoteSessionClientID
 	v.Cursor = cursor
 	v.Limit = limit

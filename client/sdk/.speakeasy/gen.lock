@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: e4f20286649fe0de39749d9d93f1a038
+  docChecksum: 1e29e9b3a062e6b21b306c91fbeda2ff
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -459,7 +459,7 @@ trackedFiles:
   docs/models/components/listremotesessionissuersresult.md:
     last_write_checksum: sha1:5cafc961917f96a34ac008b5b2412291beafad86
   docs/models/components/listremotesessionsresult.md:
-    last_write_checksum: sha1:1f0aa5544d4326396e5e7049be935c1249d2300c
+    last_write_checksum: sha1:9167be20b8026d35154333aa3e463625d109b466
   docs/models/components/listresourcesresult.md:
     last_write_checksum: sha1:3de6d1a4f57c5c9780302387837144a54bccbefb
   docs/models/components/listresponsebody.md:
@@ -673,7 +673,7 @@ trackedFiles:
   docs/models/components/remotemcpserverheader.md:
     last_write_checksum: sha1:cc918575b590c6274a0dfd5272ba73887347b85b
   docs/models/components/remotesession.md:
-    last_write_checksum: sha1:3c49931d1afde5391ea7dae7acc68ad8d363de13
+    last_write_checksum: sha1:1a841bc06d7e7e0184097774d0161bfc72ad3992
   docs/models/components/remotesessionclient.md:
     last_write_checksum: sha1:dd3d7938a6134394da6934baa80cc920294d875d
   docs/models/components/remotesessionissuer.md:
@@ -1913,9 +1913,9 @@ trackedFiles:
   docs/models/operations/listremotesessionissuerssecurityoption2.md:
     last_write_checksum: sha1:0ee4e94cb4518b0065dd2770d9703ffd35bfc8fb
   docs/models/operations/listremotesessionsrequest.md:
-    last_write_checksum: sha1:b37be781510a0d9d8e82a9335c6bb40948b62c71
+    last_write_checksum: sha1:adece415f682e9df4cd7c56f4690a63d8596e489
   docs/models/operations/listremotesessionsresponse.md:
-    last_write_checksum: sha1:374be75c8767e658b33c4f4ba86ca763d203876e
+    last_write_checksum: sha1:468929aadc5b0dff8c8c4febaf63df06af1fe576
   docs/models/operations/listremotesessionssecurity.md:
     last_write_checksum: sha1:85c684bb418dd6d606f6b8a0c8e6ddb020cfa980
   docs/models/operations/listremotesessionssecurityoption1.md:
@@ -3129,7 +3129,7 @@ trackedFiles:
   src/funcs/remoteSessionIssuersUpdate.ts:
     last_write_checksum: sha1:0fbc7c84895e72dae26a043678db6affe778b73a
   src/funcs/remoteSessionsList.ts:
-    last_write_checksum: sha1:028f955e88a0bb80205ea0f6490efe1e8d7408eb
+    last_write_checksum: sha1:d7a438720ec6847b5b527a6ec58205b10a3665a7
   src/funcs/remoteSessionsRevoke.ts:
     last_write_checksum: sha1:337bc1293cae8c060bd41d4502cfa80437f9c722
   src/funcs/resourcesList.ts:
@@ -4155,7 +4155,7 @@ trackedFiles:
   src/models/components/remotemcpserverheader.ts:
     last_write_checksum: sha1:b2a28c595f1be94a48ccd1dbedae31ee5129ffca
   src/models/components/remotesession.ts:
-    last_write_checksum: sha1:bb0def608d035ec36bd02705c73156fbcf973be0
+    last_write_checksum: sha1:de6e908085fc4b717e692fa00d8d1ba41b3faf80
   src/models/components/remotesessionclient.ts:
     last_write_checksum: sha1:6676ce6a3e57a2fee8e0b3a57d3f2fdb5119a9d3
   src/models/components/remotesessionissuer.ts:
@@ -4927,7 +4927,7 @@ trackedFiles:
   src/models/operations/listremotesessionissuers.ts:
     last_write_checksum: sha1:7fabe92c693a2f26564ff7d7f7985acf8f4ec8b8
   src/models/operations/listremotesessions.ts:
-    last_write_checksum: sha1:53d67af6f958d9d8251b39cbbd16d80a39ed0497
+    last_write_checksum: sha1:68da4962e9554173993bc62a0692c218fd27ba7f
   src/models/operations/listresources.ts:
     id: 4fe7b46e911f
     last_write_checksum: sha1:21c3d13bb096e5d799797de84857bf115f2061d4
@@ -5887,9 +5887,9 @@ trackedFiles:
   src/react-query/remoteSessionIssuers.ts:
     last_write_checksum: sha1:e5271cb196c93ac0e891fc5da60b7156568529ce
   src/react-query/remoteSessions.core.ts:
-    last_write_checksum: sha1:1616773401bd490c976984504fdb7c6be1198c89
+    last_write_checksum: sha1:d13a77edd891d6d35e6891270ead13925a818223
   src/react-query/remoteSessions.ts:
-    last_write_checksum: sha1:39da5e0896ad1cb7aebd691f0870d41aee7800f3
+    last_write_checksum: sha1:db9bb2a98702d55b0ee81e0cdd5c6d8e306ce4ca
   src/react-query/removeOAuthServer.ts:
     id: 8a451126703b
     last_write_checksum: sha1:7379aef75e33f6ff7b9964466e5a11361be1450a
@@ -9334,6 +9334,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  registerRemoteSessionIssuer:
+    speakeasy-default-register-remote-session-issuer:
+      requestBody:
+        application/json: {"remote_session_issuer_id": "1e826ab2-2500-4ffd-bdef-ea5679cc505e", "user_session_issuer_id": "03284045-4224-41ff-9e32-c26b0b2a9d05"}
+      responses:
+        "200":
+          application/json: {"client_id": "<id>", "client_id_issued_at": "2025-07-30T12:06:14.591Z", "created_at": "2026-10-22T21:28:55.296Z", "id": "524e1029-d4d5-4f17-9495-cedc60b7d2f1", "project_id": "5c1a6193-9eb6-4960-9c4f-2466213f4fd2", "remote_session_issuer_id": "34acd637-0ae3-4a8c-8afd-82d4bed3af5f", "updated_at": "2024-06-24T19:19:48.477Z", "user_session_issuer_id": "4085844d-7b10-4c2d-beb1-bf418c4f81a6"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   updateRemoteSessionIssuer:
     speakeasy-default-update-remote-session-issuer:
       requestBody:
@@ -9349,7 +9360,7 @@ examples:
     speakeasy-default-list-remote-sessions:
       responses:
         "200":
-          application/json: {"items": [{"access_expires_at": "2024-09-18T19:52:35.216Z", "created_at": "2025-06-25T03:58:38.213Z", "id": "76f5a024-f760-4790-9f33-86cefb473bbd", "principal_urn": "<value>", "remote_session_client_id": "c03234ad-d599-4275-892b-21510431aa26", "scopes": ["<value 1>", "<value 2>"], "updated_at": "2026-10-08T08:51:04.188Z", "user_session_issuer_id": "61d59c70-8167-403c-9355-d62475e48c32"}]}
+          application/json: {"items": [{"access_expires_at": "2024-09-18T19:52:35.216Z", "created_at": "2025-06-25T03:58:38.213Z", "id": "76f5a024-f760-4790-9f33-86cefb473bbd", "remote_session_client_id": "c03234ad-d599-4275-892b-21510431aa26", "scopes": ["<value 1>", "<value 2>"], "subject_urn": "<value>", "updated_at": "2026-10-08T08:51:04.188Z", "user_session_issuer_id": "61d59c70-8167-403c-9355-d62475e48c32"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -9363,41 +9374,6 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  registerRemoteSessionIssuer:
-    speakeasy-default-register-remote-session-issuer:
-      requestBody:
-        application/json: {"remote_session_issuer_id": "1e826ab2-2500-4ffd-bdef-ea5679cc505e", "user_session_issuer_id": "03284045-4224-41ff-9e32-c26b0b2a9d05"}
-      responses:
-        "200":
-          application/json: {"client_id": "<id>", "client_id_issued_at": "2025-07-30T12:06:14.591Z", "created_at": "2026-10-22T21:28:55.296Z", "id": "524e1029-d4d5-4f17-9495-cedc60b7d2f1", "project_id": "5c1a6193-9eb6-4960-9c4f-2466213f4fd2", "remote_session_issuer_id": "34acd637-0ae3-4a8c-8afd-82d4bed3af5f", "updated_at": "2024-06-24T19:19:48.477Z", "user_session_issuer_id": "4085844d-7b10-4c2d-beb1-bf418c4f81a6"}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-<<<<<<< HEAD
-||||||| parent of 18ec6a3d3 (chore: regenerate SDK for register endpoint)
-=======
-  hooks#codex:
-    speakeasy-default-hooks#codex:
-      requestBody:
-        application/json: {"hook_event_name": "PreToolUse"}
-      responses:
-        "200":
-          application/json: {}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  downloadCodexInstallScript:
-    speakeasy-default-download-codex-install-script:
-      responses:
-        "200":
-          text/x-shellscript: "x-file: example.file"
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
->>>>>>> 18ec6a3d3 (chore: regenerate SDK for register endpoint)
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:
