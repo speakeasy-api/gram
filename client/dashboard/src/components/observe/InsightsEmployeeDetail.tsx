@@ -1,3 +1,4 @@
+import { Icon } from "@speakeasy-api/moonshine";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { formatChartLabel } from "@/components/chart/chartUtils";
 import { MetricCard } from "@/components/chart/MetricCard";
@@ -184,15 +185,8 @@ export function InsightsEmployeeDetailContent() {
                     : "grid-cols-1 md:grid-cols-3",
                 )}
               >
-                <MetricCard
-                  title="First Activity"
-                  value={0}
-                  icon="calendar"
-                  subtext={
-                    summary
-                      ? formatUnixNano(summary.firstSeenUnixNano)
-                      : "No activity"
-                  }
+                <FirstActivityCard
+                  firstSeenUnixNano={summary?.firstSeenUnixNano}
                 />
                 <MetricCard
                   title="Total Tokens"
@@ -203,7 +197,7 @@ export function InsightsEmployeeDetailContent() {
                   title="Tool Calls"
                   value={summary?.totalToolCalls ?? 0}
                   icon="wrench"
-                  subtext={`${(summary?.toolCallSuccess ?? 0).toLocaleString()} ok / ${(summary?.toolCallFailure ?? 0).toLocaleString()} blocked`}
+                  subtext={`${(summary?.toolCallSuccess ?? 0).toLocaleString()} succeeded / ${(summary?.toolCallFailure ?? 0).toLocaleString()} failed`}
                 />
               </section>
 
@@ -285,6 +279,50 @@ export function InsightsEmployeeDetailContent() {
       </div>
     </>
   );
+}
+
+function FirstActivityCard({
+  firstSeenUnixNano,
+}: {
+  firstSeenUnixNano?: string | null;
+}) {
+  const hasActivity =
+    firstSeenUnixNano != null &&
+    firstSeenUnixNano !== "" &&
+    firstSeenUnixNano !== "0";
+  const date = hasActivity ? unixNanoToDate(firstSeenUnixNano) : null;
+  const primary = date
+    ? date.toLocaleDateString([], {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : "No activity";
+  const subtext = date ? `${daysSince(date).toLocaleString()} days ago` : null;
+
+  return (
+    <div className="bg-card border-border rounded-lg border p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-sm font-semibold">First Activity</span>
+        <div className="bg-muted/50 rounded-lg p-2">
+          <Icon name="calendar" className="text-muted-foreground size-4" />
+        </div>
+      </div>
+      <span className="block text-3xl font-semibold tracking-tight">
+        {primary}
+      </span>
+      {subtext && (
+        <span className="text-muted-foreground mt-1 block text-xs">
+          {subtext}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function daysSince(date: Date) {
+  const ms = Date.now() - date.getTime();
+  return Math.max(0, Math.floor(ms / 86_400_000));
 }
 
 function DetailLoadingState({ isInsightsOpen }: { isInsightsOpen: boolean }) {
@@ -561,15 +599,6 @@ function unixNanoToDate(value: string) {
   const nanos = BigInt(value);
   const millis = Number(nanos / 1_000_000n);
   return new Date(millis);
-}
-
-function formatUnixNano(value: string) {
-  const date = unixNanoToDate(value);
-  return date.toLocaleDateString([], {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 function formatPlatform(value: string) {
