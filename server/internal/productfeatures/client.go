@@ -2,8 +2,10 @@ package productfeatures
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/trace"
@@ -43,7 +45,17 @@ func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, fe
 		OrganizationID: organizationID,
 		FeatureName:    string(feature),
 	})
-	if err != nil {
+	switch {
+	case errors.Is(err, context.Canceled):
+		// Do not cache results if the context was canceled, as this likely
+		// indicates a timeout or shutdown in progress. Caching in this case
+		// could lead to incorrect feature flag states being stored.
+		return false, nil
+	case errors.Is(err, pgx.ErrNoRows):
+		// If there is no row, the feature is not enabled. Cache this result to
+		// avoid hitting the database repeatedly for missing features.
+		res = false
+	case err != nil:
 		return false, oops.E(
 			oops.CodeUnexpected,
 			err,
@@ -67,6 +79,23 @@ func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, fe
 	}
 
 	return res, nil
+}
+
+// PlatformFeatureCheck adapts IsFeatureEnabled to the
+// platformtools.FeatureChecker signature so it can gate platform-tool
+// dispatch. Errors degrade to "disabled" so a transient lookup failure does
+// not silently grant access; the underlying error is logged for ops.
+func (c *Client) PlatformFeatureCheck(ctx context.Context, organizationID string, feature string) bool {
+	enabled, err := c.IsFeatureEnabled(ctx, organizationID, Feature(feature))
+	if err != nil {
+		c.logger.ErrorContext(ctx, "platform tool feature check failed",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProductFeatureName(feature),
+		)
+		return false
+	}
+	return enabled
 }
 
 // UpdateFeatureCache stores the given enabled state for the feature directly

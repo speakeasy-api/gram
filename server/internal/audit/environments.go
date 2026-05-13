@@ -31,7 +31,7 @@ type LogEnvironmentCreateEvent struct {
 	EnvironmentSlug string
 }
 
-func LogEnvironmentCreate(ctx context.Context, dbtx repo.DBTX, event LogEnvironmentCreateEvent) error {
+func (l *Logger) LogEnvironmentCreate(ctx context.Context, dbtx repo.DBTX, event LogEnvironmentCreateEvent) error {
 	action := ActionEnvironmentCreate
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -54,11 +54,7 @@ func LogEnvironmentCreate(ctx context.Context, dbtx repo.DBTX, event LogEnvironm
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogEnvironmentUpdateEvent struct {
@@ -76,7 +72,7 @@ type LogEnvironmentUpdateEvent struct {
 	EnvironmentSnapshotAfter  *types.Environment
 }
 
-func LogEnvironmentUpdate(ctx context.Context, dbtx repo.DBTX, event LogEnvironmentUpdateEvent) error {
+func (l *Logger) LogEnvironmentUpdate(ctx context.Context, dbtx repo.DBTX, event LogEnvironmentUpdateEvent) error {
 	action := ActionEnvironmentUpdate
 
 	beforeSnapshot, err := marshalAuditPayload(event.EnvironmentSnapshotBefore)
@@ -110,11 +106,7 @@ func LogEnvironmentUpdate(ctx context.Context, dbtx repo.DBTX, event LogEnvironm
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogEnvironmentDeleteEvent struct {
@@ -130,7 +122,7 @@ type LogEnvironmentDeleteEvent struct {
 	EnvironmentSlug string
 }
 
-func LogEnvironmentDelete(ctx context.Context, dbtx repo.DBTX, event LogEnvironmentDeleteEvent) error {
+func (l *Logger) LogEnvironmentDelete(ctx context.Context, dbtx repo.DBTX, event LogEnvironmentDeleteEvent) error {
 	action := ActionEnvironmentDelete
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -153,9 +145,5 @@ func LogEnvironmentDelete(ctx context.Context, dbtx repo.DBTX, event LogEnvironm
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

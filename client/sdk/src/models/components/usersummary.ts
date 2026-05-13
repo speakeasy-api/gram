@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  HookSourceUsage,
+  HookSourceUsage$inboundSchema,
+} from "./hooksourceusage.js";
 import { ToolUsage, ToolUsage$inboundSchema } from "./toolusage.js";
 
 /**
@@ -29,6 +33,10 @@ export type UserSummary = {
    * Earliest activity timestamp in Unix nanoseconds
    */
   firstSeenUnixNano: string;
+  /**
+   * Per-hook-source usage breakdown
+   */
+  hookSources: Array<HookSourceUsage>;
   /**
    * Latest activity timestamp in Unix nanoseconds
    */
@@ -87,6 +95,7 @@ export const UserSummary$inboundSchema: z.ZodMiniType<UserSummary, unknown> = z
       cache_creation_input_tokens: z.int(),
       cache_read_input_tokens: z.int(),
       first_seen_unix_nano: z.string(),
+      hook_sources: z.array(HookSourceUsage$inboundSchema),
       last_seen_unix_nano: z.string(),
       tool_call_failure: z.int(),
       tool_call_success: z.int(),
@@ -106,6 +115,7 @@ export const UserSummary$inboundSchema: z.ZodMiniType<UserSummary, unknown> = z
         "cache_creation_input_tokens": "cacheCreationInputTokens",
         "cache_read_input_tokens": "cacheReadInputTokens",
         "first_seen_unix_nano": "firstSeenUnixNano",
+        "hook_sources": "hookSources",
         "last_seen_unix_nano": "lastSeenUnixNano",
         "tool_call_failure": "toolCallFailure",
         "tool_call_success": "toolCallSuccess",

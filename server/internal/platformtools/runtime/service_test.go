@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -17,7 +18,7 @@ import (
 func TestService_ExecuteTool_RequiresProjectAuthContext(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService(testenv.NewLogger(t), nil, nil)
+	svc := NewService(testenv.NewLogger(t), nil, nil, audit.NewLogger())
 	projectID := uuid.New()
 
 	_, err := svc.ExecuteTool(context.Background(), &gateway.ToolCallPlan{
@@ -39,7 +40,7 @@ func TestService_ExecuteTool_RequiresProjectAuthContext(t *testing.T) {
 func TestService_ExecuteTool_RejectsMismatchedProjectAuthContext(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService(testenv.NewLogger(t), nil, nil)
+	svc := NewService(testenv.NewLogger(t), nil, nil, audit.NewLogger())
 	descriptorProjectID := uuid.New()
 	authProjectID := uuid.New()
 	ctx := contextvalues.SetAuthContext(context.Background(), &contextvalues.AuthContext{

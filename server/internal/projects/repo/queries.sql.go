@@ -63,6 +63,35 @@ func (q *Queries) DeleteProject(ctx context.Context, id uuid.UUID) (uuid.UUID, e
 	return id, err
 }
 
+const getFirstProject = `-- name: GetFirstProject :one
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+FROM projects
+WHERE deleted IS FALSE
+ORDER BY id ASC
+LIMIT 1
+`
+
+// GetFirstProject returns any non-deleted project. Used by the hooks
+// local-dev session-cache fallback to pick a target project without
+// needing to know which org owns it. Local-dev only.
+func (q *Queries) GetFirstProject(ctx context.Context) (Project, error) {
+	row := q.db.QueryRow(ctx, getFirstProject)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.OrganizationID,
+		&i.LogoAssetID,
+		&i.FunctionsRunnerVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getProjectByID = `-- name: GetProjectByID :one
 SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
 FROM projects
@@ -127,7 +156,7 @@ SELECT
     p.slug as project_slug,
     
     -- Organization metadata fields
-    om.id, om.name, om.slug, om.gram_account_type, om.sso_connection_id, om.workos_id, om.whitelisted, om.free_trial_started_at, om.free_trial_ends_at, om.created_at, om.updated_at, om.disabled_at
+    om.id, om.name, om.slug, om.gram_account_type, om.sso_connection_id, om.workos_id, om.workos_updated_at, om.workos_last_event_id, om.svix_app_id, om.webhooks_enabled, om.whitelisted, om.free_trial_started_at, om.free_trial_ends_at, om.created_at, om.updated_at, om.disabled_at
     
 FROM projects p
 INNER JOIN organization_metadata om ON p.organization_id = om.id
@@ -145,6 +174,10 @@ type GetProjectWithOrganizationMetadataRow struct {
 	GramAccountType    string
 	SsoConnectionID    pgtype.Text
 	WorkosID           pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+	SvixAppID          pgtype.Text
+	WebhooksEnabled    pgtype.Bool
 	Whitelisted        bool
 	FreeTrialStartedAt pgtype.Timestamptz
 	FreeTrialEndsAt    pgtype.Timestamptz
@@ -166,6 +199,10 @@ func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uui
 		&i.GramAccountType,
 		&i.SsoConnectionID,
 		&i.WorkosID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
 		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
 		&i.FreeTrialEndsAt,

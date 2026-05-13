@@ -126,6 +126,37 @@ type CreateChatMessageParams struct {
 	Generation       int32
 }
 
+const createChatMessageWithToolCalls = `-- name: CreateChatMessageWithToolCalls :exec
+INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls, tool_call_id, generation)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+`
+
+type CreateChatMessageWithToolCallsParams struct {
+	ChatID     uuid.UUID
+	ProjectID  uuid.NullUUID
+	Role       string
+	Content    string
+	ToolCalls  []byte
+	ToolCallID pgtype.Text
+	Generation int32
+}
+
+// Inserts a single chat_messages row with optional tool_calls JSON,
+// tool_call_id, and generation, for callers seeding tool-turn history without
+// the full CreateChatMessage :copyfrom batch shape.
+func (q *Queries) CreateChatMessageWithToolCalls(ctx context.Context, arg CreateChatMessageWithToolCallsParams) error {
+	_, err := q.db.Exec(ctx, createChatMessageWithToolCalls,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Role,
+		arg.Content,
+		arg.ToolCalls,
+		arg.ToolCallID,
+		arg.Generation,
+	)
+	return err
+}
+
 const deleteChatResolutions = `-- name: DeleteChatResolutions :exec
 DELETE FROM chat_resolutions WHERE chat_id = $1
 `
@@ -780,6 +811,73 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 	return items, nil
 }
 
+const listChatMessagesByGeneration = `-- name: ListChatMessagesByGeneration :many
+SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at FROM chat_messages cm
+WHERE cm.chat_id = $1
+  AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
+  AND cm.generation = $3::integer
+ORDER BY cm.seq ASC
+`
+
+type ListChatMessagesByGenerationParams struct {
+	ChatID     uuid.UUID
+	ProjectID  uuid.UUID
+	Generation int32
+}
+
+// Returns rows for an explicit generation, used to pin a snapshot across
+// multiple reads (e.g. across Temporal activities) so indices stay stable
+// even if a new generation is appended mid-workflow.
+func (q *Queries) ListChatMessagesByGeneration(ctx context.Context, arg ListChatMessagesByGenerationParams) ([]ChatMessage, error) {
+	rows, err := q.db.Query(ctx, listChatMessagesByGeneration, arg.ChatID, arg.ProjectID, arg.Generation)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ChatMessage
+	for rows.Next() {
+		var i ChatMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.ChatID,
+			&i.ProjectID,
+			&i.Role,
+			&i.Content,
+			&i.ContentRaw,
+			&i.ContentAssetUrl,
+			&i.Model,
+			&i.MessageID,
+			&i.FinishReason,
+			&i.ToolCalls,
+			&i.PromptTokens,
+			&i.CompletionTokens,
+			&i.TotalTokens,
+			&i.StorageError,
+			&i.UserID,
+			&i.ExternalUserID,
+			&i.Origin,
+			&i.UserAgent,
+			&i.IpAddress,
+			&i.Source,
+			&i.ToolCallID,
+			&i.ToolUrn,
+			&i.ToolOutcome,
+			&i.ToolOutcomeNotes,
+			&i.ContentHash,
+			&i.Generation,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatMessagesForMatch = `-- name: ListChatMessagesForMatch :many
 SELECT id, role, content, tool_call_id, tool_calls
 FROM chat_messages
@@ -1182,6 +1280,70 @@ func (q *Queries) ListChatsWithResolutions(ctx context.Context, arg ListChatsWit
 			&i.Score,
 			&i.ResolutionCreatedAt,
 			&i.MessageIds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLatestGenerationChatMessages = `-- name: ListLatestGenerationChatMessages :many
+SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at FROM chat_messages cm
+WHERE cm.chat_id = $1
+  AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
+  AND cm.generation = (SELECT MAX(generation) FROM chat_messages WHERE chat_id = $1)
+ORDER BY cm.seq ASC
+`
+
+type ListLatestGenerationChatMessagesParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Returns only the latest-generation rows; older generations are audit-only.
+func (q *Queries) ListLatestGenerationChatMessages(ctx context.Context, arg ListLatestGenerationChatMessagesParams) ([]ChatMessage, error) {
+	rows, err := q.db.Query(ctx, listLatestGenerationChatMessages, arg.ChatID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ChatMessage
+	for rows.Next() {
+		var i ChatMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.ChatID,
+			&i.ProjectID,
+			&i.Role,
+			&i.Content,
+			&i.ContentRaw,
+			&i.ContentAssetUrl,
+			&i.Model,
+			&i.MessageID,
+			&i.FinishReason,
+			&i.ToolCalls,
+			&i.PromptTokens,
+			&i.CompletionTokens,
+			&i.TotalTokens,
+			&i.StorageError,
+			&i.UserID,
+			&i.ExternalUserID,
+			&i.Origin,
+			&i.UserAgent,
+			&i.IpAddress,
+			&i.Source,
+			&i.ToolCallID,
+			&i.ToolUrn,
+			&i.ToolOutcome,
+			&i.ToolOutcomeNotes,
+			&i.ContentHash,
+			&i.Generation,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

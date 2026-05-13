@@ -27,6 +27,11 @@ func UpdateServerRemoteMcpPath() string {
 	return "/rpc/remoteMcp.updateServer"
 }
 
+// VerifyURLRemoteMcpPath returns the URL path to the remoteMcp service verifyURL HTTP endpoint.
+func VerifyURLRemoteMcpPath() string {
+	return "/rpc/remoteMcp.verifyURL"
+}
+
 // DeleteServerRemoteMcpPath returns the URL path to the remoteMcp service deleteServer HTTP endpoint.
 func DeleteServerRemoteMcpPath() string {
 	return "/rpc/remoteMcp.deleteServer"

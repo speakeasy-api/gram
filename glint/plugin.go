@@ -31,6 +31,7 @@ type ruleSettings struct {
 	AuditEventURNTyping        auditEventURNTypingSettings        `json:"audit-event-urn-typing"`
 	NoDirectChatMessageInsert  noDirectChatMessageInsertSettings  `json:"no-direct-chat-message-insert"`
 	NoSqlErrNoRows             noSqlErrNoRowsSettings             `json:"no-sql-err-no-rows"`
+	NoTestingRawSql            noTestingRawSqlSettings            `json:"no-testing-raw-sql"`
 }
 
 type plugin struct {
@@ -80,6 +81,9 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	}
 	if !p.settings.Rules.NoSqlErrNoRows.Disabled {
 		analyzers = append(analyzers, newNoSqlErrNoRowsAnalyzer(p.settings.Rules.NoSqlErrNoRows))
+	}
+	if !p.settings.Rules.NoTestingRawSql.Disabled {
+		analyzers = append(analyzers, newNoTestingRawSqlAnalyzer(p.settings.Rules.NoTestingRawSql))
 	}
 
 	return analyzers, nil

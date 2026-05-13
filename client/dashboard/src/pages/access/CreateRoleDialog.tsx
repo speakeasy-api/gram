@@ -48,6 +48,7 @@ interface CreateRoleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editingRole?: Role | null;
+  onRoleCreated?: (roleName: string) => void;
 }
 
 function grantsFromRole(role: Role): Record<string, RoleGrant> {
@@ -86,6 +87,7 @@ export function CreateRoleDialog({
   open,
   onOpenChange,
   editingRole,
+  onRoleCreated,
 }: CreateRoleDialogProps) {
   const isEditing = !!editingRole;
   const isSystemRole = !!editingRole?.isSystem;
@@ -119,6 +121,7 @@ export function CreateRoleDialog({
     const groupOrder: { label: string; resourceType: string }[] = [
       { label: "Organization", resourceType: "org" },
       { label: "Build & Deploy", resourceType: "project" },
+      { label: "Environments", resourceType: "environment" },
       { label: "MCP Servers", resourceType: "mcp" },
     ];
     return groupOrder.map((g) => ({
@@ -174,6 +177,7 @@ export function CreateRoleDialog({
         invalidateAllRoles(queryClient),
         invalidateAllMembers(queryClient),
       ]);
+      onRoleCreated?.(name);
       handleClose();
     },
   });

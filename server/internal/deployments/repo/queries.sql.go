@@ -434,6 +434,21 @@ func (q *Queries) CreateDeploymentFunctionsAccess(ctx context.Context, arg Creat
 	return id, err
 }
 
+const createDeploymentStatus = `-- name: CreateDeploymentStatus :exec
+INSERT INTO deployment_statuses (deployment_id, status)
+VALUES ($1, $2)
+`
+
+type CreateDeploymentStatusParams struct {
+	DeploymentID uuid.UUID
+	Status       string
+}
+
+func (q *Queries) CreateDeploymentStatus(ctx context.Context, arg CreateDeploymentStatusParams) error {
+	_, err := q.db.Exec(ctx, createDeploymentStatus, arg.DeploymentID, arg.Status)
+	return err
+}
+
 const createFunctionsResource = `-- name: CreateFunctionsResource :one
 INSERT INTO function_resource_definitions (
     deployment_id
@@ -1527,6 +1542,33 @@ LIMIT 1
 
 func (q *Queries) GetLatestDeploymentID(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, getLatestDeploymentID, projectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertDeployment = `-- name: InsertDeployment :one
+INSERT INTO deployments (project_id, organization_id, user_id, idempotency_key)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type InsertDeploymentParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         string
+	IdempotencyKey string
+}
+
+// Inserts a minimal deployment row and returns its ID without the conflict
+// handling of CreateDeployment.
+func (q *Queries) InsertDeployment(ctx context.Context, arg InsertDeploymentParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertDeployment,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.IdempotencyKey,
+	)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err

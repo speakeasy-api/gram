@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
@@ -20,6 +21,38 @@ import (
 // lookup + bufferHook fallback rather than the plugin attribution path.
 func otelOnlyCtx(ctx context.Context) context.Context {
 	return contextvalues.SetAuthContext(ctx, nil)
+}
+
+func TestBuildTelemetryAttributesWithMetadata_ResolvesUserIDFromEmail(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	userID := "claude-user-id"
+	userEmail := "claude-user@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
+
+	metadata := &SessionMetadata{
+		SessionID:   uuid.NewString(),
+		ServiceName: "",
+		UserEmail:   userEmail,
+		UserID:      "",
+		ClaudeOrgID: "",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		SessionID:     &metadata.SessionID,
+	}, metadata)
+
+	assert.Equal(t, userEmail, attrs[attr.UserEmailKey])
+	assert.Equal(t, userID, attrs[attr.UserIDKey])
+	assert.Equal(t, userID, metadata.UserID)
 }
 
 var (
@@ -140,11 +173,12 @@ func TestFlushPendingHooks_DirectCall(t *testing.T) {
 	// Create session metadata
 	metadata := SessionMetadata{
 		SessionID:   sessionID,
+		ServiceName: "test-service",
 		UserEmail:   "test@example.com",
+		UserID:      "",
+		ClaudeOrgID: "claude-org-123",
 		GramOrgID:   uuid.NewString(),
 		ProjectID:   uuid.NewString(),
-		ServiceName: "test-service",
-		ClaudeOrgID: "claude-org-123",
 	}
 
 	// Call flushPendingHooks directly
@@ -166,11 +200,12 @@ func TestFlushPendingHooks_EmptyList(t *testing.T) {
 	// Create session metadata
 	metadata := SessionMetadata{
 		SessionID:   sessionID,
+		ServiceName: "test-service",
 		UserEmail:   "test@example.com",
+		UserID:      "",
+		ClaudeOrgID: "claude-org-123",
 		GramOrgID:   uuid.NewString(),
 		ProjectID:   uuid.NewString(),
-		ServiceName: "test-service",
-		ClaudeOrgID: "claude-org-123",
 	}
 
 	// Call flushPendingHooks with no buffered hooks (should not error)
@@ -237,11 +272,12 @@ func TestSessionMetadata_CacheSetGet(t *testing.T) {
 	sessionID := uuid.NewString()
 	metadata := SessionMetadata{
 		SessionID:   sessionID,
+		ServiceName: "test-service",
 		UserEmail:   "user@example.com",
+		UserID:      "",
+		ClaudeOrgID: "claude-org-456",
 		GramOrgID:   uuid.NewString(),
 		ProjectID:   uuid.NewString(),
-		ServiceName: "test-service",
-		ClaudeOrgID: "claude-org-456",
 	}
 
 	cacheAdapter := cache.NewRedisCacheAdapter(ti.redisClient)

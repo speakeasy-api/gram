@@ -26,3 +26,8 @@ func CreateCustomerSessionUsagePath() string {
 func CreateCheckoutUsagePath() string {
 	return "/rpc/usage.createCheckout"
 }
+
+// CreateTopUpCheckoutUsagePath returns the URL path to the usage service createTopUpCheckout HTTP endpoint.
+func CreateTopUpCheckoutUsagePath() string {
+	return "/rpc/usage.createTopUpCheckout"
+}

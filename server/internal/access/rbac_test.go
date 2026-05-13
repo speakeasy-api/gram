@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
+	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -99,7 +99,7 @@ func TestService_ListScopes_AllowsOrgReadGrant(t *testing.T) {
 
 	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Scopes, 7)
+	require.Len(t, result.Scopes, 9)
 }
 
 func TestService_ListMembers_ForbiddenWithoutOrgReadGrant(t *testing.T) {

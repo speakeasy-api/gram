@@ -140,10 +140,13 @@ run();
 * [enableRBAC](docs/sdks/access/README.md#enablerbac) - enableRBAC access
 * [getRBACStatus](docs/sdks/access/README.md#getrbacstatus) - getRBACStatus access
 * [getRole](docs/sdks/access/README.md#getrole) - getRole access
+* [listChallengeBuckets](docs/sdks/access/README.md#listchallengebuckets) - listChallengeBuckets access
+* [listChallenges](docs/sdks/access/README.md#listchallenges) - listChallenges access
 * [listGrants](docs/sdks/access/README.md#listgrants) - listGrants access
 * [listMembers](docs/sdks/access/README.md#listmembers) - listMembers access
 * [listRoles](docs/sdks/access/README.md#listroles) - listRoles access
 * [listScopes](docs/sdks/access/README.md#listscopes) - listScopes access
+* [resolveChallenge](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
 * [updateMemberRole](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
 * [updateRole](docs/sdks/access/README.md#updaterole) - updateRole access
 
@@ -161,6 +164,12 @@ run();
 * [uploadFunctions](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 * [uploadImage](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 * [uploadOpenAPIv3](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
+
+### [AssistantMemories](docs/sdks/assistantmemories/README.md)
+
+* [delete](docs/sdks/assistantmemories/README.md#delete) - deleteAssistantMemory assistantMemories
+* [get](docs/sdks/assistantmemories/README.md#get) - getAssistantMemory assistantMemories
+* [list](docs/sdks/assistantmemories/README.md#list) - listAssistantMemories assistantMemories
 
 ### [Assistants](docs/sdks/assistants/README.md)
 
@@ -228,6 +237,7 @@ run();
 
 ### [Environments](docs/sdks/environments/README.md)
 
+* [clone](docs/sdks/environments/README.md#clone) - cloneEnvironment environments
 * [create](docs/sdks/environments/README.md#create) - createEnvironment environments
 * [deleteBySlug](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 * [deleteSourceLink](docs/sdks/environments/README.md#deletesourcelink) - deleteSourceEnvironmentLink environments
@@ -239,6 +249,10 @@ run();
 * [setToolsetLink](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 * [updateBySlug](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 
+### [External](docs/sdks/external/README.md)
+
+* [receiveWorkOSWebhook](docs/sdks/external/README.md#receiveworkoswebhook) - receiveWorkOSWebhook external
+
 ### [Features](docs/sdks/features/README.md)
 
 * [get](docs/sdks/features/README.md#get) - getProductFeatures features
@@ -247,6 +261,7 @@ run();
 ### [Hooks](docs/sdks/hooks/README.md)
 
 * [hooksNumberClaude](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
+* [hooksNumberCodex](docs/sdks/hooks/README.md#hooksnumbercodex) - codex hooks
 * [hooksNumberCursor](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks
 * [hooksNumberLogs](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
 * [hooksNumberMetrics](docs/sdks/hooks/README.md#hooksnumbermetrics) - metrics hooks
@@ -311,6 +326,12 @@ run();
 * [revokeInvite](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
 * [sendInvite](docs/sdks/organizations/README.md#sendinvite) - sendInvite organizations
 
+### [OtelForwarding](docs/sdks/otelforwarding/README.md)
+
+* [deleteConfig](docs/sdks/otelforwarding/README.md#deleteconfig) - deleteConfig otelForwarding
+* [getConfig](docs/sdks/otelforwarding/README.md#getconfig) - getConfig otelForwarding
+* [upsertConfig](docs/sdks/otelforwarding/README.md#upsertconfig) - upsertConfig otelForwarding
+
 ### [Packages](docs/sdks/packages/README.md)
 
 * [create](docs/sdks/packages/README.md#create) - createPackage packages
@@ -324,6 +345,7 @@ run();
 * [addPluginServer](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
 * [createPlugin](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
 * [deletePlugin](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
+* [downloadCodexInstallScript](docs/sdks/plugins/README.md#downloadcodexinstallscript) - downloadCodexInstallScript plugins
 * [downloadObservabilityPlugin](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 * [downloadPluginPackage](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 * [getPlugin](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
@@ -353,6 +375,7 @@ run();
 * [getServer](docs/sdks/remotemcp/README.md#getserver) - getServer remoteMcp
 * [listServers](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
 * [updateServer](docs/sdks/remotemcp/README.md#updateserver) - updateServer remoteMcp
+* [verifyURL](docs/sdks/remotemcp/README.md#verifyurl) - verifyURL remoteMcp
 
 ### [Resources](docs/sdks/resources/README.md)
 
@@ -442,8 +465,33 @@ run();
 
 * [createCheckout](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 * [createCustomerSession](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
+* [createTopUpCheckout](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
 * [getPeriodUsage](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
 * [getUsageTiers](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
+
+### [UserSessionClients](docs/sdks/usersessionclients/README.md)
+
+* [get](docs/sdks/usersessionclients/README.md#get) - getUserSessionClient userSessionClients
+* [list](docs/sdks/usersessionclients/README.md#list) - listUserSessionClients userSessionClients
+* [revoke](docs/sdks/usersessionclients/README.md#revoke) - revokeUserSessionClient userSessionClients
+
+### [UserSessionConsents](docs/sdks/usersessionconsents/README.md)
+
+* [list](docs/sdks/usersessionconsents/README.md#list) - listUserSessionConsents userSessionConsents
+* [revoke](docs/sdks/usersessionconsents/README.md#revoke) - revokeUserSessionConsent userSessionConsents
+
+### [UserSessionIssuers](docs/sdks/usersessionissuers/README.md)
+
+* [create](docs/sdks/usersessionissuers/README.md#create) - createUserSessionIssuer userSessionIssuers
+* [delete](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
+* [get](docs/sdks/usersessionissuers/README.md#get) - getUserSessionIssuer userSessionIssuers
+* [list](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
+* [update](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
+
+### [UserSessions](docs/sdks/usersessions/README.md)
+
+* [list](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
+* [revoke](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
 
 ### [Variations](docs/sdks/variations/README.md)
 
@@ -475,10 +523,13 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`accessEnableRBAC`](docs/sdks/access/README.md#enablerbac) - enableRBAC access
 - [`accessGetRBACStatus`](docs/sdks/access/README.md#getrbacstatus) - getRBACStatus access
 - [`accessGetRole`](docs/sdks/access/README.md#getrole) - getRole access
+- [`accessListChallengeBuckets`](docs/sdks/access/README.md#listchallengebuckets) - listChallengeBuckets access
+- [`accessListChallenges`](docs/sdks/access/README.md#listchallenges) - listChallenges access
 - [`accessListGrants`](docs/sdks/access/README.md#listgrants) - listGrants access
 - [`accessListMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`accessListRoles`](docs/sdks/access/README.md#listroles) - listRoles access
 - [`accessListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
+- [`accessResolveChallenge`](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
 - [`accessUpdateMemberRole`](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
 - [`accessUpdateRole`](docs/sdks/access/README.md#updaterole) - updateRole access
 - [`assetsCreateSignedChatAttachmentURL`](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
@@ -493,6 +544,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`assetsUploadFunctions`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 - [`assetsUploadImage`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`assetsUploadOpenAPIv3`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
+- [`assistantMemoriesDelete`](docs/sdks/assistantmemories/README.md#delete) - deleteAssistantMemory assistantMemories
+- [`assistantMemoriesGet`](docs/sdks/assistantmemories/README.md#get) - getAssistantMemory assistantMemories
+- [`assistantMemoriesList`](docs/sdks/assistantmemories/README.md#list) - listAssistantMemories assistantMemories
 - [`assistantsCreate`](docs/sdks/assistants/README.md#create) - createAssistant assistants
 - [`assistantsDelete`](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
 - [`assistantsGet`](docs/sdks/assistants/README.md#get) - getAssistant assistants
@@ -533,6 +587,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`domainsDeleteDomain`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`domainsGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
 - [`domainsRegisterDomain`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
+- [`environmentsClone`](docs/sdks/environments/README.md#clone) - cloneEnvironment environments
 - [`environmentsCreate`](docs/sdks/environments/README.md#create) - createEnvironment environments
 - [`environmentsDeleteBySlug`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`environmentsDeleteSourceLink`](docs/sdks/environments/README.md#deletesourcelink) - deleteSourceEnvironmentLink environments
@@ -543,9 +598,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`environmentsSetSourceLink`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`environmentsSetToolsetLink`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 - [`environmentsUpdateBySlug`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
+- [`externalReceiveWorkOSWebhook`](docs/sdks/external/README.md#receiveworkoswebhook) - receiveWorkOSWebhook external
 - [`featuresGet`](docs/sdks/features/README.md#get) - getProductFeatures features
 - [`featuresSet`](docs/sdks/features/README.md#set) - setProductFeature features
 - [`hooksHooksNumberClaude`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
+- [`hooksHooksNumberCodex`](docs/sdks/hooks/README.md#hooksnumbercodex) - codex hooks
 - [`hooksHooksNumberCursor`](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks
 - [`hooksHooksNumberLogs`](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
 - [`hooksHooksNumberMetrics`](docs/sdks/hooks/README.md#hooksnumbermetrics) - metrics hooks
@@ -582,6 +639,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`organizationsRemoveUser`](docs/sdks/organizations/README.md#removeuser) - removeUser organizations
 - [`organizationsRevokeInvite`](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
 - [`organizationsSendInvite`](docs/sdks/organizations/README.md#sendinvite) - sendInvite organizations
+- [`otelForwardingDeleteConfig`](docs/sdks/otelforwarding/README.md#deleteconfig) - deleteConfig otelForwarding
+- [`otelForwardingGetConfig`](docs/sdks/otelforwarding/README.md#getconfig) - getConfig otelForwarding
+- [`otelForwardingUpsertConfig`](docs/sdks/otelforwarding/README.md#upsertconfig) - upsertConfig otelForwarding
 - [`packagesCreate`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`packagesList`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`packagesListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
@@ -590,6 +650,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`pluginsAddPluginServer`](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
 - [`pluginsCreatePlugin`](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
 - [`pluginsDeletePlugin`](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
+- [`pluginsDownloadCodexInstallScript`](docs/sdks/plugins/README.md#downloadcodexinstallscript) - downloadCodexInstallScript plugins
 - [`pluginsDownloadObservabilityPlugin`](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 - [`pluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 - [`pluginsGetPlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
@@ -613,6 +674,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`remoteMcpGetServer`](docs/sdks/remotemcp/README.md#getserver) - getServer remoteMcp
 - [`remoteMcpListServers`](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
 - [`remoteMcpUpdateServer`](docs/sdks/remotemcp/README.md#updateserver) - updateServer remoteMcp
+- [`remoteMcpVerifyURL`](docs/sdks/remotemcp/README.md#verifyurl) - verifyURL remoteMcp
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
 - [`riskPoliciesCreate`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
 - [`riskPoliciesDelete`](docs/sdks/policies/README.md#delete) - deleteRiskPolicy risk
@@ -672,8 +734,21 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`triggersUpdate`](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers
 - [`usageCreateCheckout`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`usageCreateCustomerSession`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
+- [`usageCreateTopUpCheckout`](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
 - [`usageGetPeriodUsage`](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
 - [`usageGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
+- [`userSessionClientsGet`](docs/sdks/usersessionclients/README.md#get) - getUserSessionClient userSessionClients
+- [`userSessionClientsList`](docs/sdks/usersessionclients/README.md#list) - listUserSessionClients userSessionClients
+- [`userSessionClientsRevoke`](docs/sdks/usersessionclients/README.md#revoke) - revokeUserSessionClient userSessionClients
+- [`userSessionConsentsList`](docs/sdks/usersessionconsents/README.md#list) - listUserSessionConsents userSessionConsents
+- [`userSessionConsentsRevoke`](docs/sdks/usersessionconsents/README.md#revoke) - revokeUserSessionConsent userSessionConsents
+- [`userSessionIssuersCreate`](docs/sdks/usersessionissuers/README.md#create) - createUserSessionIssuer userSessionIssuers
+- [`userSessionIssuersDelete`](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
+- [`userSessionIssuersGet`](docs/sdks/usersessionissuers/README.md#get) - getUserSessionIssuer userSessionIssuers
+- [`userSessionIssuersList`](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
+- [`userSessionIssuersUpdate`](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
+- [`userSessionsList`](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
+- [`userSessionsRevoke`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
 - [`variationsDeleteGlobal`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`variationsListGlobal`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
 - [`variationsUpsertGlobal`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
@@ -707,6 +782,7 @@ To learn about this feature and how to get started, check
 - [`useAddExternalOAuthServerMutation`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 - [`useAddOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
 - [`useAddPluginServerMutation`](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
+- [`useAssistantMemoriesDeleteMutation`](docs/sdks/assistantmemories/README.md#delete) - deleteAssistantMemory assistantMemories
 - [`useAssistantsCreateMutation`](docs/sdks/assistants/README.md#create) - createAssistant assistants
 - [`useAssistantsDeleteMutation`](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
 - [`useAssistantsGet`](docs/sdks/assistants/README.md#get) - getAssistant assistants
@@ -714,12 +790,15 @@ To learn about this feature and how to get started, check
 - [`useAssistantsUpdateMutation`](docs/sdks/assistants/README.md#update) - updateAssistant assistants
 - [`useAuditLogFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
 - [`useAuditLogs`](docs/sdks/auditlogs/README.md#list) - list auditlogs
+- [`useChallengeBuckets`](docs/sdks/access/README.md#listchallengebuckets) - listChallengeBuckets access
+- [`useChallenges`](docs/sdks/access/README.md#listchallenges) - listChallenges access
 - [`useChatDeleteMutation`](docs/sdks/chat/README.md#delete) - deleteChat chat
 - [`useChatGenerateTitleMutation`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 - [`useChatSessionsCreateMutation`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`useChatSessionsRevokeMutation`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
 - [`useChatSubmitFeedbackMutation`](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
+- [`useCloneEnvironmentMutation`](docs/sdks/environments/README.md#clone) - cloneEnvironment environments
 - [`useCloneToolsetMutation`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 - [`useCollectionsAttachServerMutation`](docs/sdks/collections/README.md#attachserver) - attachServer collections
 - [`useCollectionsCreateMutation`](docs/sdks/collections/README.md#create) - create collections
@@ -744,12 +823,15 @@ To learn about this feature and how to get started, check
 - [`useCreateSlackAppMutation`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
 - [`useCreateTemplateMutation`](docs/sdks/templates/README.md#create) - createTemplate templates
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
+- [`useCreateTopUpCheckoutMutation`](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
 - [`useCreateTriggerMutation`](docs/sdks/triggers/README.md#create) - createTriggerInstance triggers
+- [`useCreateUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#create) - createUserSessionIssuer userSessionIssuers
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`useDeleteMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#delete) - deleteMcpEndpoint mcpEndpoints
 - [`useDeleteMcpServerMutation`](docs/sdks/mcpservers/README.md#delete) - deleteMcpServer mcpServers
+- [`useDeleteOtelForwardingConfigMutation`](docs/sdks/otelforwarding/README.md#deleteconfig) - deleteConfig otelForwarding
 - [`useDeletePluginMutation`](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
 - [`useDeleteProjectMutation`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
 - [`useDeleteRemoteMcpServerMutation`](docs/sdks/remotemcp/README.md#deleteserver) - deleteServer remoteMcp
@@ -760,6 +842,7 @@ To learn about this feature and how to get started, check
 - [`useDeleteToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletetoolsetlink) - deleteToolsetEnvironmentLink environments
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`useDeleteTriggerMutation`](docs/sdks/triggers/README.md#delete) - deleteTriggerInstance triggers
+- [`useDeleteUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 - [`useDisableRBACMutation`](docs/sdks/access/README.md#disablerbac) - disableRBAC access
@@ -769,6 +852,7 @@ To learn about this feature and how to get started, check
 - [`useFeaturesGet`](docs/sdks/features/README.md#get) - getProductFeatures features
 - [`useFeaturesSetMutation`](docs/sdks/features/README.md#set) - setProductFeature features
 - [`useFetchOpenAPIv3FromURLMutation`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
+- [`useGetAssistantMemory`](docs/sdks/assistantmemories/README.md#get) - getAssistantMemory assistantMemories
 - [`useGetCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`useGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
 - [`useGetHooksSummary`](docs/sdks/telemetry/README.md#gethookssummary) - getHooksSummary telemetry
@@ -789,6 +873,7 @@ To learn about this feature and how to get started, check
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
 - [`useGrants`](docs/sdks/access/README.md#listgrants) - listGrants access
 - [`useHooksHooksNumberClaudeMutation`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
+- [`useHooksHooksNumberCodexMutation`](docs/sdks/hooks/README.md#hooksnumbercodex) - codex hooks
 - [`useHooksHooksNumberCursorMutation`](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks
 - [`useHooksHooksNumberLogsMutation`](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
 - [`useHooksHooksNumberMetricsMutation`](docs/sdks/hooks/README.md#hooksnumbermetrics) - metrics hooks
@@ -801,6 +886,7 @@ To learn about this feature and how to get started, check
 - [`useListAllowedOrigins`](docs/sdks/projects/README.md#listallowedorigins) - listAllowedOrigins projects
 - [`useListAPIKeys`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`useListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
+- [`useListAssistantMemories`](docs/sdks/assistantmemories/README.md#list) - listAssistantMemories assistantMemories
 - [`useListAttributeKeys`](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 - [`useListChats`](docs/sdks/chat/README.md#list) - listChats chat
 - [`useListChatsWithResolutions`](docs/sdks/chat/README.md#listchatswithresolutions) - listChatsWithResolutions chat
@@ -831,9 +917,11 @@ To learn about this feature and how to get started, check
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`useMcpServers`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
+- [`useOtelForwardingConfig`](docs/sdks/otelforwarding/README.md#getconfig) - getConfig otelForwarding
 - [`usePauseTriggerMutation`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 - [`usePlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
 - [`usePlugins`](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
+- [`usePluginsDownloadCodexInstallScript`](docs/sdks/plugins/README.md#downloadcodexinstallscript) - downloadCodexInstallScript plugins
 - [`usePluginsDownloadObservabilityPlugin`](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 - [`usePluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
@@ -851,9 +939,13 @@ To learn about this feature and how to get started, check
 - [`useRemovePluginServerMutation`](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
+- [`useResolveChallengeMutation`](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
 - [`useResumeTriggerMutation`](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useRevokeInviteMutation`](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
+- [`useRevokeUserSessionClientMutation`](docs/sdks/usersessionclients/README.md#revoke) - revokeUserSessionClient userSessionClients
+- [`useRevokeUserSessionConsentMutation`](docs/sdks/usersessionconsents/README.md#revoke) - revokeUserSessionConsent userSessionConsents
+- [`useRevokeUserSessionMutation`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
 - [`useRiskCreatePolicyMutation`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
 - [`useRiskListPolicies`](docs/sdks/policies/README.md#list) - listRiskPolicies risk
 - [`useRiskListResults`](docs/sdks/results/README.md#list) - listRiskResults risk
@@ -902,13 +994,22 @@ To learn about this feature and how to get started, check
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`useUpdateTriggerMutation`](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers
+- [`useUpdateUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
 - [`useUploadChatAttachmentMutation`](docs/sdks/assets/README.md#uploadchatattachment) - uploadChatAttachment assets
 - [`useUploadFunctionsMutation`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 - [`useUploadImageMutation`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 - [`useUpsertAllowedOriginMutation`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 - [`useUpsertGlobalVariationMutation`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
+- [`useUpsertOtelForwardingConfigMutation`](docs/sdks/otelforwarding/README.md#upsertconfig) - upsertConfig otelForwarding
+- [`useUserSessionClient`](docs/sdks/usersessionclients/README.md#get) - getUserSessionClient userSessionClients
+- [`useUserSessionClients`](docs/sdks/usersessionclients/README.md#list) - listUserSessionClients userSessionClients
+- [`useUserSessionConsents`](docs/sdks/usersessionconsents/README.md#list) - listUserSessionConsents userSessionConsents
+- [`useUserSessionIssuer`](docs/sdks/usersessionissuers/README.md#get) - getUserSessionIssuer userSessionIssuers
+- [`useUserSessionIssuers`](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
+- [`useUserSessions`](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
 - [`useValidateAPIKey`](docs/sdks/keys/README.md#validate) - verifyKey keys
+- [`useVerifyRemoteMcpURLMutation`](docs/sdks/remotemcp/README.md#verifyurl) - verifyURL remoteMcp
 
 </details>
 <!-- End React hooks with TanStack Query [react-query] -->
@@ -931,7 +1032,9 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.auditlogs.list();
+  const result = await gram.assistantMemories.list({
+    assistantId: "56bcc863-cc81-4d15-92ee-28eb89e8930f",
+  });
 
   for await (const page of result) {
     console.log(page);
@@ -1124,7 +1227,7 @@ run();
 ### Error Classes
 **Primary errors:**
 * [`GramError`](./src/models/errors/gramerror.ts): The base class for HTTP error responses.
-  * [`ServiceError`](./src/models/errors/serviceerror.ts): unauthorized access.
+  * [`ServiceError`](./src/models/errors/serviceerror.ts): unauthorized access. *
 
 <details><summary>Less common errors (6)</summary>
 
@@ -1142,6 +1245,8 @@ run();
 * [`ResponseValidationError`](./src/models/errors/responsevalidationerror.ts): Type mismatch between the data returned from the server and the structure expected by the SDK. See `error.rawValue` for the raw value and `error.pretty()` for a nicely formatted multi-line string.
 
 </details>
+
+\* Check [the method documentation](#available-resources-and-operations) to see if the error is applicable.
 <!-- End Error Handling [errors] -->
 
 <!-- Start Server Selection [server] -->

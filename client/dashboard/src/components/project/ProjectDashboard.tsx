@@ -7,18 +7,25 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
-import { useAuditLogs, useGetProjectOverview } from "@gram/client/react-query";
+import { useAuditLogs, useGramContext } from "@gram/client/react-query";
 import { useFeaturesGet } from "@gram/client/react-query/featuresGet";
+import { telemetryGetProjectOverview } from "@gram/client/funcs/telemetryGetProjectOverview";
+import { unwrapAsync } from "@gram/client/types/fp";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { subDays } from "date-fns";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { Badge, Button, Card, Icon } from "@speakeasy-api/moonshine";
+import { TimeRangePicker } from "@gram-ai/elements";
 import { Wand2 } from "lucide-react";
 import {
   INSIGHTS_AI_RAINBOW_CLASS,
   type InsightsConfigOptions,
 } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
+import {
+  formatDateRangeLabel,
+  useDateRangeFilter,
+} from "@/components/observe/useDateRangeFilter";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
 import { ProjectOnboardingBanner } from "./ProjectOnboarding";
 
@@ -28,8 +35,21 @@ export function ProjectDashboard() {
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
 
-  const to = useMemo(() => new Date(), []);
-  const from = useMemo(() => subDays(to, 7), [to]);
+  const {
+    dateRange,
+    customRange,
+    customRangeLabel,
+    from,
+    to,
+    setDateRangeParam,
+    setCustomRangeParam,
+    clearCustomRange,
+  } = useDateRangeFilter();
+
+  const rangeLabel = useMemo(
+    () => formatDateRangeLabel(dateRange, customRangeLabel),
+    [dateRange, customRangeLabel],
+  );
 
   const {
     data: featuresData,
@@ -38,12 +58,22 @@ export function ProjectDashboard() {
   } = useFeaturesGet();
   const logsEnabled = featuresData?.logsEnabled === true;
 
-  const { data: overview, isPending: isOverviewPending } =
-    useGetProjectOverview(
-      { getProjectMetricsSummaryPayload: { from, to } },
-      undefined,
-      { enabled: logsEnabled },
-    );
+  // The SDK's useGetProjectOverview omits the request body from its query
+  // key, so changing the date range here would otherwise return cached data.
+  // Mirror the observe-page pattern: call useQuery directly with a key that
+  // includes the from/to ISO strings.
+  const client = useGramContext();
+  const { data: overview, isPending: isOverviewPending } = useQuery({
+    queryKey: ["project", "overview", from.toISOString(), to.toISOString()],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryGetProjectOverview(client, {
+          getProjectMetricsSummaryPayload: { from, to },
+        }),
+      ),
+    enabled: logsEnabled,
+    placeholderData: keepPreviousData,
+  });
 
   const featuresSettled = !isFeaturesPending || isFeaturesError;
   const isOverviewLoading =
@@ -106,7 +136,7 @@ export function ProjectDashboard() {
     return () => setInsightsOverride(null);
   }, [setInsightsOverride]);
 
-  const timeWindowContext = `The user is on the Project Overview dashboard. The selected period is the last 7 days (from ${from.toISOString()} to ${to.toISOString()}).`;
+  const timeWindowContext = `The user is on the Project Overview dashboard. The selected period is the ${rangeLabel} (from ${from.toISOString()} to ${to.toISOString()}).`;
 
   return (
     <Page.Section>
@@ -117,10 +147,15 @@ export function ProjectDashboard() {
         </Badge>
       </Page.Section.Description>
       <Page.Section.CTA>
-        {logsEnabled && !isProjectEmpty && (
-          <p className="text-muted text-xs">
-            Showing data from the last 7 days
-          </p>
+        {logsEnabled && (
+          <TimeRangePicker
+            preset={customRange ? null : dateRange}
+            customRange={customRange}
+            customRangeLabel={customRangeLabel}
+            onPresetChange={setDateRangeParam}
+            onCustomRangeChange={setCustomRangeParam}
+            onClearCustomRange={clearCustomRange}
+          />
         )}
       </Page.Section.CTA>
 
@@ -197,9 +232,8 @@ export function ProjectDashboard() {
                             suggestions: [
                               {
                                 title: "Top users & usage patterns",
-                                label: "Last 7 days",
-                                prompt:
-                                  "Who are my top 5 end users in the last 7 days, and what is each user's main usage pattern — tool calls, skill invocations, agent sessions, or a mix?",
+                                label: rangeLabel,
+                                prompt: `Who are my top 5 end users in the ${rangeLabel}, and what is each user's main usage pattern — tool calls, skill invocations, agent sessions, or a mix?`,
                               },
                             ],
                           })
@@ -241,9 +275,8 @@ export function ProjectDashboard() {
                             suggestions: [
                               {
                                 title: "Top servers & hot tools",
-                                label: "Last 7 days",
-                                prompt:
-                                  "Which servers received the most tool calls in the last 7 days, and which specific tools on each server are driving that volume? Lets look at data from all logs including hooks telemetry.",
+                                label: rangeLabel,
+                                prompt: `Which servers received the most tool calls in the ${rangeLabel}, and which specific tools on each server are driving that volume? Lets look at data from all logs including hooks telemetry.`,
                               },
                             ],
                           })
@@ -288,9 +321,8 @@ export function ProjectDashboard() {
                             suggestions: [
                               {
                                 title: "Power users & agent behavior",
-                                label: "Last 7 days",
-                                prompt:
-                                  "For the users with the most agent sessions in the last 7 days, what are the common prompts they send and which tools get invoked most often?",
+                                label: rangeLabel,
+                                prompt: `For the users with the most agent sessions in the ${rangeLabel}, what are the common prompts they send and which tools get invoked most often?`,
                               },
                             ],
                           })
@@ -363,9 +395,8 @@ export function ProjectDashboard() {
                             suggestions: [
                               {
                                 title: "LLM clients & reliability",
-                                label: "Last 7 days",
-                                prompt:
-                                  "Break down tool-call activity by LLM client in the last 7 days and highlight any clients with unusually high error rates or latency.",
+                                label: rangeLabel,
+                                prompt: `Break down tool-call activity by LLM client in the ${rangeLabel} and highlight any clients with unusually high error rates or latency.`,
                               },
                             ],
                           })

@@ -1,5 +1,162 @@
 # dashboard
 
+## 0.52.0
+
+### Minor Changes
+
+- 35b4b51: The assistant onboarding chat now connects to every MCP server attached to the assistant, not just the first one, so the agent can call tools across all configured toolsets.
+- c6944af: Repurpose the Agents insights tab into an employee token observability dashboard. The new view shows per-employee token consumption, estimated cost, tool usage breakdown, and platform/model distribution. Clicking an employee row opens a detail dialog with model-level usage, time-series charts, and tool breakdown. Results can be scoped to specific coding tools like Cursor or Claude Code, and the outdated Elements setup modal no longer appears on this page.
+
+### Patch Changes
+
+- b2012be: Fix expanding panel animation on the assistant page.
+- Updated dependencies [35b4b51]
+- Updated dependencies [35b4b51]
+  - @gram-ai/elements@1.32.0
+
+## 0.51.0
+
+### Minor Changes
+
+- 1f34b03: Unified the Observe filter bar for Insights Tools and Logs Tools views; server, email, and type filters are now multi-select dropdowns with OR semantics.
+- 5d80d8c: Rebuild the assistant-onboarding Slack install step as two separate cards: an install card (workspace pick, install, Event Subscriptions Retry) followed by a tokens card. Copy rewritten for non-technical users, with the Event Subscriptions Retry step called out as the most common silent failure.
+
+## 0.50.0
+
+### Minor Changes
+
+- 575c0ac: Overhauled MultiSelect component: new onValueChange/defaultValue API, option grouping, per-option styling, and singleLine fixed-height mode.
+
+### Patch Changes
+
+- 0ac8dba: Refactor Security Overview to use Page.Section wrappers, scrollable tables, and a lighter category label.
+
+## 0.49.1
+
+### Patch Changes
+
+- 6b070cd: Assistant onboarding now installs a Slack app reliably end-to-end: the install card stays in view until you click "I've installed it", a single approval grants both the bot and user OAuth tokens, and the generated manifest can no longer be rejected by Slack. Slack-touching assistants now get a Slack trigger by default — additive with any cron or other trigger you asked for — so the bot is reachable bidirectionally and you can talk back to it.
+
+## 0.49.0
+
+### Minor Changes
+
+- 5b1da59: Add an Employees tab to the AI Insights section that tracks Gram uptake and compliance across organization members. Shows per-member token usage, compliance status, and last activity over the last 30 days, paginated at 25 per page. Usage is attributed by matching the email reported by each AI coding tool (Claude Code, Cursor) to the member's Gram account.
+
+### Patch Changes
+
+- 79d57ad: Always grant the full Slack bot-scope superset in the assistant onboarding manifest builder, regardless of which platform tools are attached. Slack manifests are static post-install — adding a scope later forces the user to delete the app and re-OAuth — so per-tool scope gating only locked future capabilities behind a forced re-install.
+- 2c84295: Surface `environment:read` / `environment:write` in the RBAC dev toolbar and the
+  `access.listGrants` fallback so the env-clone permission picker works end-to-end.
+
+## 0.48.0
+
+### Minor Changes
+
+- 5136b45: Add the initial Remote MCP source management UI under the gram-remote-mcp feature flag: a Custom remote server entry in the Add Source dropdown, a URL-only create form, and a detail page with Overview, MCP Servers, and Settings tabs covering URL edit and a delete flow that lists the linked MCP servers and endpoints. Also renames the existing Third party server entry to Registry server.
+- 50433e1: Upgraded dashboard and elements Tailwind dependencies to 4.2.4
+
+### Patch Changes
+
+- d1bdd11: Fix a crash in the RBAC dev toolbar when toggling `environment:read` or
+  `environment:write` for the first time. The toggle handler spread `undefined`
+  into a new state entry, producing an object without the `resources` field;
+  the next render then crashed reading `.length` on undefined. Hardened
+  `toggleScope` and `setScopeResources` to materialize a known-good baseline
+  before spreading, and added a defensive `!= null` at the render site so any
+  legacy malformed localStorage state can't crash either.
+- 0b356a5: Fix Claude Code plugins not loading after restart. The `git-subdir` source
+  type used by the marketplace proxy does not persist the plugin cache path
+  across Claude Code sessions, causing "not cached at (not recorded)" errors
+  on every relaunch. The marketplace URL returned by `getPublishStatus` now
+  points directly at the git proxy (`/marketplace/p/{token}.git`) and the
+  install instructions emit `"source": "git"` in the `extraKnownMarketplaces`
+  snippet, which Claude Code caches reliably between sessions. The
+  URL-based manifest endpoint and its rewrite logic have been removed.
+- Updated dependencies [50433e1]
+  - @gram-ai/elements@1.31.0
+
+## 0.47.0
+
+### Minor Changes
+
+- 658ff47: Auto-provision an org and attach the free-tier Polar subscription when an unauthenticated user lands on Gram with `?disposition=assistants` and has no org after IDP signin. Generates a legible random org name (e.g. `Swift Otter 42`), eagerly materializes the default project and environment, marks the org as whitelisted so it bypasses the BookDemo gate, and redirects to `/<org>/projects/default/assistants` so the credit benefit is in place before the user reaches the assistants page.
+- 9dcc221: Add `cli_destructive` risk-policy source for flagging destructive CLI commands.
+
+  Mirrors the existing `destructive_tool` shape (post-hoc batch scan, flag-only,
+  no live blocking) but is content-driven instead of annotation-driven. A
+  curated regex set covers shell (`rm -rf`, `dd`, `mkfs`, fork-bomb,
+  `chmod -R`, `chown -R`, `sudo <arg>`), git (`push --force`, `reset --hard`,
+  `clean -f`, `branch -D`), database (`DROP`, `TRUNCATE`, unguarded
+  `DELETE FROM`, `dropdb`), and cloud (`aws ec2 terminate-instances`,
+  `aws s3 rb`, `gcloud projects delete`, `kubectl delete ns/workloads`).
+
+  The scanner walks every recorded tool call's parsed arguments — no MCP
+  filter — so native Bash and `run_terminal_cmd` are now in scope alongside
+  MCP-routed calls whose arguments happen to carry destructive content.
+  First-match-wins iteration over map keys is sorted so rule_ids are
+  deterministic across runs.
+
+  PolicyCenter exposes the new source as a "Destructive CLI Commands" rule
+  category (category-toggle UX matching `destructive_tool`).
+
+### Patch Changes
+
+- 188e614: Add a credit-balance gate on `/chat/completions` for **free-tier** orgs: pre-request check returns HTTP 402 `insufficient_credits` once the cached Polar Chat Credits balance is exhausted. Pro and enterprise stay bounded by the existing OpenRouter monthly key cap; unifying the two limit sources is tracked separately. Speakeasy-internal orgs (`specialLimitOrgs`) bypass; cache misses fail open. Self-serve top-up checkout (`usage.createTopUpCheckout`) opens a one-time Polar product configured via `POLAR_PRODUCT_IDS_TOPUP`.
+- e9f4a92: Add a Clone action to environment cards in the Environments page. The clone
+  dialog lets users pick a new name and choose whether to copy only the variable
+  names (with empty placeholders) or duplicate the encrypted secret values from
+  the source. Encrypted secret values are never decrypted during the clone —
+  ciphertext is copied row-to-row inside Postgres. Clone is gated by a project-
+  level `environment:write` scope plus a per-resource read check on the source
+  environment (either an `environment:read` grant on that specific env or a
+  `project:read` grant on the project).
+- 8ce7444: scan risk policies for prompt injection. enable the new "Prompt Injection" category in the policy editor to flag or block instruction overrides, role hijacks, system-prompt leaks, encoded payloads, delimiter injection, and shell tool-abuse attempts
+- a25df49: Filter the "Recent Challenges" widget on the org home page to only show
+  denied, unresolved challenges (previously it listed any challenge in any
+  status). When there are no denied challenges, the widget now renders the
+  same empty state used on the Denied tab of the Challenges page.
+
+## 0.46.0
+
+### Minor Changes
+
+- f65466b: Add a marketplace proxy and end-to-end install UX so users can install Gram-published plugins in Claude Code, Claude Cowork, and Cursor without making the upstream GitHub repo public.
+
+  - **Server routes**: `GET /marketplace/m/{token}/marketplace.json` (URL-based Claude Code marketplace) and `/marketplace/p/{token}.git/...` (git Smart HTTP proxy for plugin source clones). Both stream directly from GitHub via the same GitHub App installation token used for publishing — no local mirror state, stateless. Proxy is mounted on the existing `gram start` server and wrapped with the recovery middleware so panics don't crash the process.
+  - **Token-as-secret model**: `plugin_github_connections` gains a nullable `marketplace_token` column with a partial unique index. Tokens are auto-minted on first publish and preserved across subsequent publishes; rotation is a separate (deferred) admin path. Handler-level format precheck rejects malformed tokens before the DB lookup.
+  - **Hook layout fix**: the publish flow now writes generated observability hooks at `hooks/hooks.json` (with the script alongside) instead of at the plugin root. Without the `hooks/` subdir, Claude Code and Cursor register the plugin successfully but never wire the hook events up — silently dropping every PreToolUse / PostToolUse signal.
+  - **Plugin source rewrite**: rewritten manifests use the `git-subdir` source type per the official Claude Code marketplace schema (the only valid types are `npm`, `url`, `github`, `git-subdir`; plain `"git"` produces a confusing "source type your version does not support" install error).
+  - **Dashboard**: the Plugins page surfaces the marketplace as a labeled panel with an "Install instructions" button that opens a HooksSetupDialog-styled modal. Three working provider tabs:
+    - **Claude Code** — per-user `/plugin marketplace add` plus an org-wide rollout section with a copy-paste `extraKnownMarketplaces` snippet for Claude.ai's Managed Settings.
+    - **Claude Cowork** — three-step admin walkthrough for adding the GitHub repo on Claude.ai's Plugins page.
+    - **Cursor** — three-step team-admin walkthrough for cursor.com/dashboard, mirroring what's already documented in the published repo's README.
+  - **Management API**: `plugins.getPublishStatus` now returns a `marketplace_url` field once a token has been minted; the dashboard reads from that. SDK regenerated.
+
+- 0978641: Default-attach Slack reaction tools during assistant onboarding and inject reaction etiquette guidance into the assistant's `# Behavior` section. Slack manifest builder now maps the reaction tool handlers to the `reactions:write`, `reactions:read`, and `emoji:read` bot scopes.
+
+### Patch Changes
+
+- b27c6bd: Allow publishing to GitHub when the org has only the observability plugin (no custom plugins required)
+- 504c815: Allow setting custom policy messages to be shown to end users
+
+## 0.45.2
+
+### Patch Changes
+
+- 485e9fa: Tag chat sessions started from the Assistants page with `X-Gram-Source: assistant` (was `assistant-onboarding`). Agent session logs now show `assistant` as the source for these sessions instead of conflating ongoing assistant chats with the onboarding flow.
+- abf9f59: fix certain agent session side panel failing to load conversation history
+- 07819a8: Show function memory and instances on source overview
+- 8701c12: Redesign the MCP servers list on the plugin detail page so each entry
+  matches the card pattern from the MCP list page: the Network icon in
+  the dot-pattern sidebar, name plus tool-count badge in the header, and
+  the Public / Private / Disabled status indicator on the footer left.
+  The footer right has a trash icon button that removes the server from
+  the plugin, and servers whose toolset has been deleted are flagged
+  inline. Also extracts the shared status indicator from MCPCard,
+  MCPTableRow, and the new card into a reusable
+  `MCPStatusIndicator` component.
+
 ## 0.45.1
 
 ### Patch Changes

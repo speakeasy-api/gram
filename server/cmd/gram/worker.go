@@ -21,8 +21,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -36,8 +38,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpclient"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
+	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -48,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
 func newWorkerCommand() *cli.Command {
@@ -233,6 +238,19 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"POLAR_METER_ID_CREDITS"},
 			Required: false,
 		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:     "polar-product-id-assistants",
+			Aliases:  []string{"polar.product_id_assistants"},
+			Usage:    "The product ID granting the assistants benefit in Polar (auto-attached on assistants-disposition signup)",
+			EnvVars:  []string{"POLAR_PRODUCT_ID_ASSISTANTS"},
+			Required: false,
+		}),
+		&cli.StringSliceFlag{
+			Name:     "polar-product-ids-topup",
+			Usage:    "Product IDs of one-time credit top-up packs in Polar",
+			EnvVars:  []string{"POLAR_PRODUCT_IDS_TOPUP"},
+			Required: false,
+		},
 		&cli.StringFlag{
 			Name:    "custom-domain-cname",
 			Usage:   "The expected CNAME target for custom domain verification (e.g., cname.getgram.ai.)",
@@ -257,7 +275,7 @@ func newWorkerCommand() *cli.Command {
 			Required: true,
 		},
 		&cli.StringFlag{
-			Name:     "jwt-signing-key",
+			Name:     usersessions.JWTSigningKeyFlag,
 			Usage:    "Key for JWT signing",
 			Required: true,
 			EnvVars:  []string{"GRAM_JWT_SIGNING_KEY"},
@@ -266,6 +284,18 @@ func newWorkerCommand() *cli.Command {
 			Name:     "config-file",
 			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
 			EnvVars:  []string{"GRAM_CONFIG_FILE"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "workos-api-key",
+			Usage:    "WorkOS API key for WorkOS API calls",
+			EnvVars:  []string{"WORKOS_API_KEY"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "workos-endpoint",
+			Usage:    "Base URL for WorkOS API calls. Leave unset for production (defaults to https://api.workos.com); set to the dev-idp's local-speakeasy mode for fully-local development.",
+			EnvVars:  []string{"WORKOS_API_URL"},
 			Required: false,
 		},
 		&cli.StringFlag{
@@ -362,6 +392,8 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create encryption client: %w", err)
 			}
 
+			auditLogger := newAuditLogger()
+
 			mcpMetadataRepo := mcpmetadata_repo.New(db)
 			env := environments.NewEnvironmentEntries(logger, db, encryptionClient, mcpMetadataRepo)
 
@@ -439,6 +471,7 @@ func newWorkerCommand() *cli.Command {
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
 			sessionCaptureEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture)
 			rbacEnabled := authz.IsRBACEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureRBAC))
+			challengeLoggingEnabled := authz.ChallengeLoggingEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureAuthzChallengeLogging))
 
 			// Create ClickHouse client and telemetry service for resolution events
 			chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
@@ -451,11 +484,22 @@ func newWorkerCommand() *cli.Command {
 			authzEngine := authz.NewEngine(
 				logger,
 				db,
+				chDB,
 				rbacEnabled,
+				challengeLoggingEnabled,
 				workos.NewStubClient(),
 				cache.NewRedisCacheAdapter(redisClient),
 				authz.EngineOpts{DevMode: c.String("environment") == "local"},
 			)
+
+			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)
+			if err != nil {
+				return fmt.Errorf("failed to create WorkOS client: %w", err)
+			}
+			var backgroundWorkOSClient activities.WorkOSClient = workosClient
+			if !workosAvailable {
+				backgroundWorkOSClient = workos.NewStubClient()
+			}
 
 			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
@@ -477,7 +521,7 @@ func newWorkerCommand() *cli.Command {
 				logger,
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
-			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler))
+			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger))
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
@@ -510,16 +554,28 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create pylon client: %w", err)
 			}
 
-			sessionManager := sessions.NewManager(logger, tracerProvider, guardianPolicy, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, billingRepo, nil)
+			speakeasyIDPClient := speakeasyclient.NewClient(logger, tracerProvider, guardianPolicy, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), db, nil, posthogClient)
+			sessionManager := sessions.NewManager(logger, tracerProvider, guardianPolicy, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, billingRepo, speakeasyIDPClient)
 
-			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
+			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String(usersessions.JWTSigningKeyFlag))
 
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, guardianPolicy)
-			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, serverURL)
+			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL)
 
-			assistantTokenManager := assistanttokens.New(c.String("jwt-signing-key"), db, authzEngine)
+			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
 
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient))
+
+			memorySvc := memory.NewMemoryService(
+				logger,
+				tracerProvider,
+				meterProvider,
+				db,
+				completionsClient,
+				auditLogger,
+			)
+			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
+			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			mcpService := mcp.NewService(
 				logger,
@@ -546,6 +602,12 @@ func newWorkerCommand() *cli.Command {
 				authzEngine,
 				assistantTokenManager,
 				shadowMCPClient,
+				auditLogger,
+				memoryTools,
+				platformFeatureChecker,
+				nil,
+				speakeasyIDPClient,
+				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -557,11 +619,13 @@ func newWorkerCommand() *cli.Command {
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
 
-			assistantRuntime, err := newAssistantRuntime(ctx, logger, c, guardianPolicy, db, serverURL)
+			assistantRuntime, err := newAssistantRuntime(ctx, logger, tracerProvider, c, guardianPolicy, db, serverURL)
 			if err != nil {
 				return err
 			}
-			assistantsCore := assistants.NewServiceCore(logger, db, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger)
+			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
+			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, db, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver)
+			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
@@ -601,6 +665,8 @@ func newWorkerCommand() *cli.Command {
 				TemporalEnv:         temporalEnv,
 				PIIScanner:          piiScanner,
 				ShadowMCPClient:     shadowMCPClient,
+				AuditLogger:         auditLogger,
+				WorkOSClient:        backgroundWorkOSClient,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

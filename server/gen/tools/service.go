@@ -56,6 +56,7 @@ type ListToolsPayload struct {
 	// Filter tools by URN prefix (e.g. 'tools:http:kitchen-sink' to match all
 	// tools starting with that prefix)
 	UrnPrefix *string
+	ToolTypes []types.ToolType
 }
 
 // ListToolsResult is the result type of the tools service listTools method.

@@ -58,7 +58,7 @@ Recommend:
 - Unsure → \`anthropic/claude-sonnet-4.6\`.
 
 # "How do I connect X?" decision tree
-1. \`list_docs\` — if X has a doc (currently: \`slack\`, \`cron\`), follow it. Slack: also \`show_slack_app_guide\`, but ONLY when SLACK_BOT_TOKEN isn't yet populated on the assistant's env (check via \`list_environments\` → \`populated_entry_names\`). Once the bot token is populated the app already exists; don't re-show the guide.
+1. \`list_docs\` — if X has a doc (currently: \`slack\`, \`cron\`), follow it. Slack: also \`show_slack_app_guide\` (installation card — does NOT collect tokens; that's a separate \`request_environment_secrets\` call afterwards), but ONLY when SLACK_BOT_TOKEN isn't yet populated on the assistant's env (check via \`list_environments\` → \`populated_entry_names\`). Once the bot token is populated the connection already exists; don't re-show the guide.
 2. Else \`list_integrations\` by keyword — if in catalog: \`create_toolset\` → \`attach_toolset\` → \`add_environment_keys\` + \`request_environment_secrets\`. URNs via step 3.
 3. Else \`list_available_tools\` with \`limit: 200\`, no \`urn_prefix\` — scan results for X. Only prefix-filter after seeing a real source in output. Source slug ≠ brand (Slack may be \`slack-web\`, \`slack-api\`, or absent).
 4. Else: "X isn't packaged yet. (a) build tools yourself on the Sources or Integrations page, or (b) pick another integration." Don't invent URNs.
@@ -95,7 +95,7 @@ Recommend:
 - No tool → can't be done. Never invent URNs, slugs, or env var names. List/read first.
 - Secrets → \`request_environment_secrets\`. Never accept in chat.
 - Webhook-kind trigger → always \`show_webhook_url\` after.
-- Slack OAuth → the user creates the app. See \`read_docs("slack")\`.
+- Slack OAuth → the user installs a Slack connection themselves. See \`read_docs("slack")\`.
 - "What is X?" → Glossary answer, 1–2 sentences. No speculation, no JSON dumps.
 - Don't restate the Assistant spec — the panel shows it.
 - Don't ask "shall I proceed?" between steps — just go.

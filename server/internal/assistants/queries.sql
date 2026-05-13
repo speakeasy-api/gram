@@ -13,6 +13,10 @@ WHERE deleted IS FALSE
       AND warm_until < @warm_cutoff
       AND COALESCE(last_heartbeat_at, updated_at) < @heartbeat_cutoff
     )
+    -- Backstop for activities that exhaust Temporal's retry budget after CAS
+    -- active->expiring without reaching Stop. Without this the partial unique
+    -- index on (assistant_thread_id) blocks new admits indefinitely.
+    OR (state = @expiring_state AND updated_at < @expiring_cutoff)
   )
 RETURNING assistant_id;
 
@@ -30,6 +34,12 @@ RETURNING assistant_id;
 SELECT project_id
 FROM assistant_threads
 WHERE id = @thread_id;
+
+-- name: ResolveThreadCorrelation :one
+SELECT id, project_id, assistant_id, correlation_id
+FROM assistant_threads
+WHERE id = @thread_id
+  AND deleted IS FALSE;
 
 -- name: ResolveToolsetsForWrite :many
 SELECT id, slug
@@ -79,6 +89,22 @@ INSERT INTO assistant_toolsets (
   @environment_id,
   @project_id
 );
+
+-- name: EnableMCPForToolsets :exec
+-- Flips mcp_enabled to TRUE for the listed toolsets in a project. Every
+-- toolset attached to an assistant must be MCP-reachable for the runtime's
+-- startup config to build; we enable on attach so users don't have to do it
+-- separately. Bypasses the unpaid-plan public-server cap on purpose: an
+-- assistant-attached toolset has no working alternative. mcp_slug is
+-- required for an MCP-reachable toolset, so we skip rows that lack one.
+UPDATE toolsets
+SET mcp_enabled = TRUE,
+    updated_at = clock_timestamp()
+WHERE id = ANY(@toolset_ids::UUID[])
+  AND project_id = @project_id
+  AND mcp_enabled IS FALSE
+  AND mcp_slug IS NOT NULL
+  AND deleted IS FALSE;
 
 -- name: CreateAssistant :one
 INSERT INTO assistants (
@@ -261,6 +287,20 @@ WHERE t.project_id = @project_id
         OR (r.state = @active_state AND (r.warm_until IS NULL OR r.warm_until > clock_timestamp()))
       )
   )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_runtimes lr
+    WHERE lr.project_id = t.project_id
+      AND lr.assistant_thread_id = t.id
+      AND lr.state = @failed_state
+      AND lr.updated_at > @admit_failure_backoff_cutoff
+      AND lr.created_at = (
+        SELECT MAX(rlatest.created_at)
+        FROM assistant_runtimes rlatest
+        WHERE rlatest.project_id = t.project_id
+          AND rlatest.assistant_thread_id = t.id
+      )
+  )
 ORDER BY (
   SELECT MIN(e.created_at)
   FROM assistant_thread_events e
@@ -361,17 +401,6 @@ WHERE t.id = @thread_id
 ORDER BY r.created_at DESC
 LIMIT 1;
 
--- name: LoadActiveRuntimeRecord :one
-SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
-FROM assistant_runtimes
-WHERE project_id = @project_id
-  AND assistant_thread_id = @thread_id
-  AND deleted IS FALSE
-  AND ended IS FALSE
-  AND state IN (@starting_state, @active_state)
-ORDER BY created_at DESC
-LIMIT 1;
-
 -- name: ClaimNextPendingEvent :one
 WITH next_event AS (
   SELECT e.id
@@ -450,4 +479,164 @@ WHERE project_id = @project_id
   AND assistant_thread_id = @thread_id
   AND deleted IS FALSE
   AND ended IS FALSE
-  AND state IN (@starting_state, @active_state);
+  AND state IN (@starting_state, @active_state, @expiring_state);
+
+-- name: ListAssistantRuntimesForReap :many
+-- Returns every runtime row for an assistant that still carries backend
+-- metadata, regardless of soft-delete state. A stopped row whose Fly app
+-- was not collected leaves its app_name in metadata and would otherwise
+-- be invisible to deleted-aware queries.
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
+FROM assistant_runtimes
+WHERE assistant_id = @assistant_id
+  AND project_id = @project_id
+  AND backend_metadata_json <> '{}'::jsonb;
+
+-- name: ListInactiveAssistantRuntimesForReap :many
+-- Returns runtime rows that still carry backend metadata and whose owning
+-- assistant has had no runtime activity since @inactive_before. Active and
+-- starting rows are excluded so a long-running session that updated_at
+-- recently is never collected mid-flight.
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
+FROM assistant_runtimes r
+WHERE r.backend_metadata_json <> '{}'::jsonb
+  AND r.state NOT IN (@starting_state, @active_state)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_runtimes r2
+    WHERE r2.assistant_id = r.assistant_id
+      AND r2.updated_at >= @inactive_before
+      AND r2.backend_metadata_json <> '{}'::jsonb
+  )
+ORDER BY r.updated_at ASC
+LIMIT @limit_count;
+
+-- name: MarkAssistantRuntimeReaped :exec
+-- Records that the backend resource (e.g. Fly app) for this runtime has
+-- been torn down. Clearing backend_metadata_json removes it from the reap
+-- candidate set so the janitor stops re-scanning it.
+UPDATE assistant_runtimes
+SET state = @reaped_state,
+    backend_metadata_json = '{}'::jsonb,
+    updated_at = clock_timestamp(),
+    ended_at = COALESCE(ended_at, clock_timestamp()),
+    deleted_at = COALESCE(deleted_at, clock_timestamp())
+WHERE id = @runtime_id
+  AND project_id = @project_id;
+
+-- name: BeginExpireAssistantRuntime :one
+-- Accepts both `active` and `expiring` so a Temporal-retried attempt (after
+-- Stop failed mid-flight) re-enters the Status/Stop path idempotently.
+-- ErrNoRows means another actor (Stop, reaper, manual API) already finalized
+-- the row; callers must not then call Stop.
+UPDATE assistant_runtimes
+SET
+  state = @expiring_state,
+  updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND assistant_thread_id = @thread_id
+  AND state IN (@active_state, @expiring_state)
+  AND deleted IS FALSE
+  AND ended IS FALSE
+RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until;
+
+-- name: RevertExpireAssistantRuntimeToActive :exec
+UPDATE assistant_runtimes
+SET
+  state = @active_state,
+  warm_until = @warm_until,
+  last_heartbeat_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+WHERE id = @runtime_id
+  AND project_id = @project_id
+  AND state = @expiring_state;
+
+-- name: CreateAssistantRuntime :exec
+-- Inserts an assistant_runtimes row with caller-controlled id, timestamps,
+-- ended_at, and deleted_at so callers can simulate stale, stuck, ended, or
+-- soft-deleted runtimes. ReserveAssistantRuntime is the conflict-aware
+-- production path that re-derives backend metadata from the most recent
+-- runtime; this query accepts the row verbatim. Explicit id + ended_at also
+-- let multiple runtime rows coexist on the same thread (the active-runtime
+-- unique index ignores ended/deleted rows).
+INSERT INTO assistant_runtimes (
+  id,
+  assistant_thread_id,
+  assistant_id,
+  project_id,
+  backend,
+  backend_metadata_json,
+  state,
+  warm_until,
+  last_heartbeat_at,
+  updated_at,
+  ended_at,
+  deleted_at
+) VALUES (
+  @id,
+  @assistant_thread_id,
+  @assistant_id,
+  @project_id,
+  @backend,
+  @backend_metadata_json,
+  @state,
+  @warm_until,
+  @last_heartbeat_at,
+  @updated_at,
+  @ended_at,
+  @deleted_at
+);
+
+-- name: GetAssistantRuntime :one
+SELECT * FROM assistant_runtimes
+WHERE id = @id
+  AND project_id = @project_id;
+
+-- name: BackdateAssistantRuntimeUpdatedAt :exec
+-- Test-only helper: rewinds updated_at on the active runtime for a thread so
+-- backoff windows that key off updated_at can be exercised without sleeping.
+UPDATE assistant_runtimes
+SET updated_at = @updated_at
+WHERE assistant_thread_id = @assistant_thread_id
+  AND state = @state;
+
+-- name: GetAssistantIgnoringDeleted :one
+SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+FROM assistants
+WHERE id = @assistant_id
+  AND project_id = @project_id;
+
+-- name: SetAssistantStatus :exec
+UPDATE assistants SET status = @status WHERE id = @id AND project_id = @project_id;
+
+-- name: SoftDeleteAssistantThread :exec
+UPDATE assistant_threads SET deleted_at = clock_timestamp() WHERE id = @id AND project_id = @project_id;
+
+-- name: SetAssistantThreadEventStatus :exec
+UPDATE assistant_thread_events
+SET status = @status, updated_at = @updated_at
+WHERE id = @id AND project_id = @project_id;
+
+-- name: GetActiveAssistantRuntimeByThreadID :one
+SELECT * FROM assistant_runtimes
+WHERE assistant_thread_id = @assistant_thread_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY created_at DESC
+LIMIT 1;
+
+-- name: GetLatestAssistantRuntimeByThreadID :one
+-- Returns the most recent runtime for a thread regardless of deletion status,
+-- so callers can assert on a runtime that was just soft-deleted.
+SELECT * FROM assistant_runtimes
+WHERE assistant_thread_id = @assistant_thread_id
+  AND project_id = @project_id
+ORDER BY created_at DESC
+LIMIT 1;
+
+-- name: GetLatestAssistantThreadEventByThreadID :one
+SELECT * FROM assistant_thread_events
+WHERE assistant_thread_id = @assistant_thread_id
+  AND project_id = @project_id
+ORDER BY created_at DESC
+LIMIT 1;

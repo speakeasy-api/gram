@@ -30,7 +30,7 @@ type LogMcpEndpointCreateEvent struct {
 	Slug           string
 }
 
-func LogMcpEndpointCreate(ctx context.Context, dbtx repo.DBTX, event LogMcpEndpointCreateEvent) error {
+func (l *Logger) LogMcpEndpointCreate(ctx context.Context, dbtx repo.DBTX, event LogMcpEndpointCreateEvent) error {
 	action := ActionMcpEndpointCreate
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -53,11 +53,7 @@ func LogMcpEndpointCreate(ctx context.Context, dbtx repo.DBTX, event LogMcpEndpo
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogMcpEndpointUpdateEvent struct {
@@ -74,7 +70,7 @@ type LogMcpEndpointUpdateEvent struct {
 	McpEndpointSnapshotAfter  *types.McpEndpoint
 }
 
-func LogMcpEndpointUpdate(ctx context.Context, dbtx repo.DBTX, event LogMcpEndpointUpdateEvent) error {
+func (l *Logger) LogMcpEndpointUpdate(ctx context.Context, dbtx repo.DBTX, event LogMcpEndpointUpdateEvent) error {
 	action := ActionMcpEndpointUpdate
 
 	beforeSnapshot, err := marshalAuditPayload(event.McpEndpointSnapshotBefore)
@@ -108,11 +104,7 @@ func LogMcpEndpointUpdate(ctx context.Context, dbtx repo.DBTX, event LogMcpEndpo
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogMcpEndpointDeleteEvent struct {
@@ -127,7 +119,7 @@ type LogMcpEndpointDeleteEvent struct {
 	Slug           string
 }
 
-func LogMcpEndpointDelete(ctx context.Context, dbtx repo.DBTX, event LogMcpEndpointDeleteEvent) error {
+func (l *Logger) LogMcpEndpointDelete(ctx context.Context, dbtx repo.DBTX, event LogMcpEndpointDeleteEvent) error {
 	action := ActionMcpEndpointDelete
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -150,9 +142,5 @@ func LogMcpEndpointDelete(ctx context.Context, dbtx repo.DBTX, event LogMcpEndpo
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

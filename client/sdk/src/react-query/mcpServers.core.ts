@@ -44,6 +44,8 @@ export function buildMcpServersQuery(
 } {
   return {
     queryKey: queryKeyMcpServers({
+      remoteMcpServerId: request?.remoteMcpServerId,
+      toolsetId: request?.toolsetId,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
       gramProject: request?.gramProject,
@@ -74,6 +76,8 @@ export function buildMcpServersQuery(
 
 export function queryKeyMcpServers(
   parameters: {
+    remoteMcpServerId?: string | undefined;
+    toolsetId?: string | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;

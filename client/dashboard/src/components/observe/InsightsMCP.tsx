@@ -35,8 +35,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Check, ChevronDown } from "lucide-react";
-import { McpIcon } from "@/components/ui/mcp-icon";
+import { Check, ChevronRight, ChevronDown } from "lucide-react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -49,11 +48,12 @@ import {
   type TooltipItem,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
-import { ChevronRight } from "lucide-react";
 import { useRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@speakeasy-api/moonshine";
+import { MCPServerFilter } from "@/components/observe/ObserveFilterBar";
+import { isValidPreset } from "@/components/observe/observeFilterUtils";
 
 function hasTimeSeriesData(
   timeSeries: Array<{
@@ -217,7 +217,31 @@ ChartJS.register(
   Legend,
 );
 
-type FilterDimension = "all" | "api_key" | "user";
+type FilterDimension = "all" | "api_key" | "user" | "agent";
+type UserFilterType = "external" | "internal";
+type FilterOption = { id: string; label: string; count: number };
+type OverviewFilterParams = {
+  apiKeyId?: string;
+  externalUserId?: string;
+  userId?: string;
+  toolsetSlug?: string;
+  eventSource?: string;
+  hookSource?: string;
+};
+
+const DEFAULT_FILTER_DIMENSIONS: FilterDimension[] = ["all", "api_key", "user"];
+const FILTER_LABELS: Record<FilterDimension, string> = {
+  all: "All",
+  api_key: "API Key",
+  user: "User",
+  agent: "Agent",
+};
+const FILTER_PLURAL_LABELS: Record<FilterDimension, string> = {
+  all: "Items",
+  api_key: "API Keys",
+  user: "Users",
+  agent: "Agents",
+};
 
 export type InsightsContentProps = {
   data: GetObservabilityOverviewResult;
@@ -235,6 +259,9 @@ export type InsightsContentProps = {
   timeRangeMs: number;
   onTimeRangeSelect: (from: Date, to: Date) => void;
   navigateToLogs: (toolUrn?: string) => void;
+  filterDimension: FilterDimension;
+  selectedFilterValue: string | null;
+  filterParams: OverviewFilterParams;
 };
 
 function FilterBar({
@@ -243,6 +270,7 @@ function FilterBar({
   selectedValue,
   onValueChange,
   options,
+  dimensions,
   disabled,
 }: {
   dimension: FilterDimension;
@@ -250,14 +278,18 @@ function FilterBar({
   selectedValue: string | null;
   onValueChange: (value: string | null) => void;
   options: Array<{ id: string; label: string; count: number }>;
+  dimensions: FilterDimension[];
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
   const selectedOption = options.find((o) => o.id === selectedValue);
-  const displayLabel = selectedOption
-    ? selectedOption.label || selectedOption.id
-    : `All ${dimension === "api_key" ? "API Keys" : "Users"}`;
+  const displayLabel =
+    dimension === "all"
+      ? "All"
+      : selectedOption
+        ? selectedOption.label || selectedOption.id
+        : `All ${FILTER_PLURAL_LABELS[dimension]}`;
 
   return (
     <div
@@ -267,10 +299,8 @@ function FilterBar({
         Filter by
       </span>
       <div className="border-border flex h-[42px] items-center rounded-md border p-1">
-        {(["all", "api_key", "user"] as const).map((value) => {
+        {dimensions.map((value) => {
           const isSelected = dimension === value;
-          const label =
-            value === "all" ? "All" : value === "api_key" ? "API Key" : "User";
           return (
             <button
               key={value}
@@ -286,7 +316,7 @@ function FilterBar({
                 disabled:cursor-not-allowed
               `}
             >
-              {label}
+              {FILTER_LABELS[value]}
             </button>
           );
         })}
@@ -312,7 +342,7 @@ function FilterBar({
           <PopoverContent className="w-[220px] p-0" align="end">
             <Command>
               <CommandInput
-                placeholder={`Search ${dimension === "api_key" ? "API keys" : "users"}...`}
+                placeholder={`Search ${FILTER_PLURAL_LABELS[dimension].toLowerCase()}...`}
                 className="h-9"
               />
               <CommandList>
@@ -329,9 +359,7 @@ function FilterBar({
                     <Check
                       className={`mr-2 size-4 ${selectedValue === null ? "opacity-100" : "opacity-0"}`}
                     />
-                    <span>
-                      All {dimension === "api_key" ? "API Keys" : "Users"}
-                    </span>
+                    <span>All {FILTER_PLURAL_LABELS[dimension]}</span>
                   </CommandItem>
                   {options.map((option) => (
                     <CommandItem
@@ -366,113 +394,16 @@ function FilterBar({
   );
 }
 
-function MCPServerFilter({
-  selectedServer,
-  onServerChange,
-  toolsets,
-  isLoading,
-  disabled,
-}: {
-  selectedServer: string | null;
-  onServerChange: (serverId: string | null) => void;
-  toolsets: Array<{ slug: string; name: string }>;
-  isLoading?: boolean;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-
-  const selectedToolset = toolsets.find((t) => t.slug === selectedServer);
-  const displayLabel = selectedToolset?.name ?? "All Servers";
-
-  return (
-    <div
-      className={`flex items-center gap-2 ${disabled ? "pointer-events-none opacity-50" : ""}`}
-    >
-      <span className="text-muted-foreground hidden text-sm font-medium 2xl:inline">
-        Filter by
-      </span>
-      <div className="border-border flex h-[42px] items-center rounded-md border p-1">
-        <div className="flex h-8 items-center gap-1.5 px-3">
-          <McpIcon className="text-muted-foreground size-3.5" />
-          <span className="text-foreground text-sm font-medium">Server</span>
-        </div>
-        <div className="bg-border/50 mx-1 h-6 w-px" />
-        <Popover open={!disabled && open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <button
-              disabled={disabled || isLoading}
-              className={`flex h-8 min-w-[140px] items-center justify-between gap-2 rounded px-2 text-sm transition-colors ${
-                disabled || isLoading
-                  ? "cursor-not-allowed opacity-40"
-                  : "hover:bg-muted/50"
-              }`}
-            >
-              <span className="max-w-[120px] truncate">
-                {isLoading ? "Loading..." : displayLabel}
-              </span>
-              <ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[220px] p-0" align="end">
-            <Command>
-              <CommandInput placeholder="Search servers..." className="h-9" />
-              <CommandList>
-                <CommandEmpty>No servers found.</CommandEmpty>
-                <CommandGroup>
-                  <CommandItem
-                    value="__all__"
-                    onSelect={() => {
-                      onServerChange(null);
-                      setOpen(false);
-                    }}
-                    className="cursor-pointer"
-                  >
-                    <Check
-                      className={`mr-2 size-4 ${selectedServer === null ? "opacity-100" : "opacity-0"}`}
-                    />
-                    <span>All Servers</span>
-                  </CommandItem>
-                  {toolsets.map((toolset) => (
-                    <CommandItem
-                      key={toolset.slug}
-                      value={toolset.name}
-                      onSelect={() => {
-                        onServerChange(toolset.slug);
-                        setOpen(false);
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <Check
-                        className={`mr-2 size-4 ${selectedServer === toolset.slug ? "opacity-100" : "opacity-0"}`}
-                      />
-                      <span className="truncate">{toolset.name}</span>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-      </div>
-    </div>
-  );
-}
-
-const validPresets: DateRangePreset[] = [
-  "15m",
-  "1h",
-  "4h",
-  "1d",
-  "2d",
-  "3d",
-  "7d",
-  "15d",
-  "30d",
-  "90d",
-];
-
-function isValidPreset(value: string | null): value is DateRangePreset {
-  return value !== null && validPresets.includes(value as DateRangePreset);
+function getListFilterType(
+  dimension: FilterDimension,
+  userFilterType: UserFilterType,
+): FilterType {
+  if (dimension === "api_key") return FilterType.ApiKey;
+  if (dimension === "agent") return FilterType.Agent;
+  if (dimension === "user" && userFilterType === "internal") {
+    return FilterType.InternalUser;
+  }
+  return FilterType.User;
 }
 
 function toLocalISOString(date: Date): string {
@@ -519,12 +450,25 @@ export function InsightsOverviewShell({
   children,
   noDataKind,
   showMcpFilter,
+  filterDimensions = DEFAULT_FILTER_DIMENSIONS,
+  userFilterType = "external",
+  fixedEventSource,
+  mapFilterOptions,
+  showSetupRequiredModal = true,
   title = "MCP Servers",
   subtitle = "Monitor agent sessions, tool performance, and system health",
 }: {
   children: (props: InsightsContentProps) => React.ReactNode;
-  noDataKind: "tools" | "chats";
+  noDataKind: "tools" | "agent_sessions";
   showMcpFilter: boolean;
+  filterDimensions?: FilterDimension[];
+  userFilterType?: UserFilterType;
+  fixedEventSource?: string;
+  mapFilterOptions?: (
+    options: FilterOption[],
+    dimension: FilterDimension,
+  ) => FilterOption[];
+  showSetupRequiredModal?: boolean;
   title?: string;
   subtitle?: string;
 }) {
@@ -599,8 +543,11 @@ export function InsightsOverviewShell({
     return null;
   }, [urlFrom, urlTo]);
 
-  const filterDimension: FilterDimension =
-    urlFilter === "api_key" || urlFilter === "user" ? urlFilter : "all";
+  const filterDimension: FilterDimension = filterDimensions.includes(
+    urlFilter as FilterDimension,
+  )
+    ? (urlFilter as FilterDimension)
+    : "all";
 
   const selectedFilterValue = urlFilterId ?? null;
 
@@ -692,6 +639,8 @@ export function InsightsOverviewShell({
       "observability",
       "filterOptions",
       filterDimension,
+      userFilterType,
+      fixedEventSource,
       from.toISOString(),
       to.toISOString(),
     ],
@@ -701,29 +650,37 @@ export function InsightsOverviewShell({
           listFilterOptionsPayload: {
             from,
             to,
-            filterType:
-              filterDimension === "api_key"
-                ? FilterType.ApiKey
-                : FilterType.User,
+            filterType: getListFilterType(filterDimension, userFilterType),
+            eventSource: fixedEventSource,
           },
         }),
       ),
     placeholderData: keepPreviousData,
     enabled: filterDimension !== "all",
   });
+  const displayFilterOptions = useMemo(() => {
+    const options = filterOptions?.options ?? [];
+    return mapFilterOptions
+      ? mapFilterOptions(options, filterDimension)
+      : options;
+  }, [filterDimension, filterOptions?.options, mapFilterOptions]);
 
   const filterParams = useMemo(() => {
-    const params: {
-      apiKeyId?: string;
-      externalUserId?: string;
-      toolsetSlug?: string;
-    } = {};
+    const params: OverviewFilterParams = {};
+
+    if (fixedEventSource) {
+      params.eventSource = fixedEventSource;
+    }
 
     if (filterDimension !== "all" && selectedFilterValue) {
       if (filterDimension === "api_key") {
         params.apiKeyId = selectedFilterValue;
-      } else {
+      } else if (filterDimension === "user" && userFilterType === "external") {
         params.externalUserId = selectedFilterValue;
+      } else if (filterDimension === "user") {
+        params.userId = selectedFilterValue;
+      } else if (filterDimension === "agent") {
+        params.hookSource = selectedFilterValue;
       }
     }
 
@@ -732,7 +689,14 @@ export function InsightsOverviewShell({
     }
 
     return params;
-  }, [filterDimension, selectedFilterValue, selectedMcpServer, showMcpFilter]);
+  }, [
+    filterDimension,
+    fixedEventSource,
+    selectedFilterValue,
+    selectedMcpServer,
+    showMcpFilter,
+    userFilterType,
+  ]);
 
   const { data, isPending, isFetching, error, refetch, isLogsDisabled } =
     useLogsEnabledErrorCheck(
@@ -769,6 +733,20 @@ export function InsightsOverviewShell({
       });
     return `Viewing data from ${formatDate(from)} to ${formatDate(to)}`;
   }, [from, to]);
+  const sessionSuggestion =
+    noDataKind === "agent_sessions"
+      ? {
+          title: "Resolution Summary",
+          label: "Summarize agent session resolutions",
+          prompt:
+            "Summarize the agent session resolution metrics for the current period. What's the success rate?",
+        }
+      : {
+          title: "Resolution Summary",
+          label: "Summarize chat resolutions",
+          prompt:
+            "Summarize the chat resolution metrics for the current period. What's the success rate?",
+        };
 
   return (
     <>
@@ -779,12 +757,7 @@ export function InsightsOverviewShell({
         contextInfo={dateRangeContext}
         hideTrigger={isLogsDisabled}
         suggestions={[
-          {
-            title: "Resolution Summary",
-            label: "Summarize chat resolutions",
-            prompt:
-              "Summarize the chat resolution metrics for the current period. What's the success rate?",
-          },
+          sessionSuggestion,
           {
             title: "Tool Failures",
             label: "Analyze failing tools",
@@ -805,7 +778,8 @@ export function InsightsOverviewShell({
           onFilterDimensionChange={setFilterDimensionParam}
           selectedFilterValue={selectedFilterValue}
           onSelectedFilterValueChange={setSelectedFilterValueParam}
-          filterOptions={filterOptions?.options ?? []}
+          filterOptions={displayFilterOptions}
+          filterDimensions={filterDimensions}
           dateRange={dateRange}
           onDateRangeChange={setDateRangeParam}
           customRange={customRange}
@@ -836,7 +810,11 @@ export function InsightsOverviewShell({
           refetch={refetch}
           hasSeenSetupModal={hasSeenSetupModal}
           onSetupModalSeen={markSetupModalSeen}
+          showSetupRequiredModal={showSetupRequiredModal}
           noDataKind={noDataKind}
+          filterDimension={filterDimension}
+          selectedFilterValue={selectedFilterValue}
+          filterParams={filterParams}
         >
           {children}
         </InsightsOverviewContent>
@@ -851,6 +829,7 @@ function InsightsPageHeader({
   selectedFilterValue,
   onSelectedFilterValueChange,
   filterOptions,
+  filterDimensions,
   dateRange,
   onDateRangeChange,
   customRange,
@@ -871,6 +850,7 @@ function InsightsPageHeader({
   selectedFilterValue: string | null;
   onSelectedFilterValueChange: (v: string | null) => void;
   filterOptions: Array<{ id: string; label: string; count: number }>;
+  filterDimensions: FilterDimension[];
   dateRange: DateRangePreset;
   onDateRangeChange: (preset: DateRangePreset) => void;
   customRange: { from: Date; to: Date } | null;
@@ -923,6 +903,7 @@ function InsightsPageHeader({
             selectedValue={selectedFilterValue}
             onValueChange={onSelectedFilterValueChange}
             options={filterOptions}
+            dimensions={filterDimensions}
             disabled={disabled}
           />
         )}
@@ -986,7 +967,11 @@ function InsightsOverviewContent({
   refetch,
   hasSeenSetupModal,
   onSetupModalSeen,
+  showSetupRequiredModal,
   noDataKind,
+  filterDimension,
+  selectedFilterValue,
+  filterParams,
   children,
 }: {
   isPending: boolean;
@@ -1000,7 +985,11 @@ function InsightsOverviewContent({
   refetch: () => void;
   hasSeenSetupModal: boolean;
   onSetupModalSeen: () => void;
-  noDataKind: "tools" | "chats";
+  showSetupRequiredModal: boolean;
+  noDataKind: "tools" | "agent_sessions";
+  filterDimension: FilterDimension;
+  selectedFilterValue: string | null;
+  filterParams: OverviewFilterParams;
   children: (props: InsightsContentProps) => React.ReactNode;
 }) {
   const routes = useRoutes();
@@ -1059,10 +1048,16 @@ function InsightsOverviewContent({
   }, [data]);
 
   React.useEffect(() => {
-    if (!isPending && data && !hasAnyData && !hasSeenSetupModal) {
+    if (
+      showSetupRequiredModal &&
+      !isPending &&
+      data &&
+      !hasAnyData &&
+      !hasSeenSetupModal
+    ) {
       setShowSetupModal(true);
     }
-  }, [isPending, data, hasAnyData, hasSeenSetupModal]);
+  }, [showSetupRequiredModal, isPending, data, hasAnyData, hasSeenSetupModal]);
 
   if (isLogsDisabled) {
     return (
@@ -1125,23 +1120,27 @@ function InsightsOverviewContent({
         timeRangeMs,
         onTimeRangeSelect,
         navigateToLogs,
+        filterDimension,
+        selectedFilterValue,
+        filterParams,
       })}
 
-      {/* Setup modal for total empty state */}
-      <SetupRequiredModal
-        open={showSetupModal}
-        onClose={() => {
-          setShowSetupModal(false);
-          onSetupModalSeen();
-          setIsExpanded(false);
-        }}
-        onNavigateToElements={() => {
-          setShowSetupModal(false);
-          onSetupModalSeen();
-          setIsExpanded(false);
-          routes.elements.goTo();
-        }}
-      />
+      {showSetupRequiredModal && (
+        <SetupRequiredModal
+          open={showSetupModal}
+          onClose={() => {
+            setShowSetupModal(false);
+            onSetupModalSeen();
+            setIsExpanded(false);
+          }}
+          onNavigateToElements={() => {
+            setShowSetupModal(false);
+            onSetupModalSeen();
+            setIsExpanded(false);
+            routes.elements.goTo();
+          }}
+        />
+      )}
     </div>
   );
 }

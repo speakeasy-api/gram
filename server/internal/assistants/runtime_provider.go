@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/superfly/fly-go/tokens"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
@@ -67,13 +68,13 @@ func normalizeRuntimeProvider(provider string) string {
 	}
 }
 
-func NewRuntimeBackend(logger *slog.Logger, httpPolicy *guardian.Policy, config RuntimeBackendConfig) RuntimeBackend {
+func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider, httpPolicy *guardian.Policy, config RuntimeBackendConfig) RuntimeBackend {
 	provider := normalizeRuntimeProvider(config.Provider)
 	switch provider {
 	case RuntimeProviderLocal:
 		return NewRuntimeManager(logger, httpPolicy, config.Local)
 	case RuntimeProviderFlyIO:
-		return NewFlyRuntimeBackend(logger, httpPolicy, config.Fly)
+		return NewFlyRuntimeBackend(logger, tracerProvider, httpPolicy, config.Fly)
 	default:
 		panic(fmt.Sprintf("assistants.NewRuntimeBackend: unsupported provider %q (CLI validation should have rejected this)", provider))
 	}

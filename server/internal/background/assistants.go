@@ -171,27 +171,79 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 			waitFor = max(warmUntil.Sub(workflow.Now(ctx).UTC()), 0)
 		}
 
-		expired := false
-		selector := workflow.NewSelector(ctx)
-		selector.AddFuture(workflow.NewTimer(ctx, waitFor), func(workflow.Future) {
-			expired = true
-		})
-		selector.AddReceive(signalCh, func(c workflow.ReceiveChannel, more bool) {
-			var ignored struct{}
-			c.Receive(ctx, &ignored)
-		})
-		selector.Select(ctx)
+		// Workflows that started on the previous code (single-shot timer +
+		// expire + signal) replay through DefaultVersion to keep history
+		// deterministic. New starts use v1, which adds a re-arm loop so the
+		// expire activity can revert to active when its post-CAS status poll
+		// finds a turn slipped in past the warm timer.
+		v := workflow.GetVersion(ctx, "expire-toctou-revert", workflow.DefaultVersion, 1)
+		if v == workflow.DefaultVersion {
+			expired := false
+			selector := workflow.NewSelector(ctx)
+			selector.AddFuture(workflow.NewTimer(ctx, waitFor), func(workflow.Future) {
+				expired = true
+			})
+			selector.AddReceive(signalCh, func(c workflow.ReceiveChannel, more bool) {
+				var ignored struct{}
+				c.Receive(ctx, &ignored)
+			})
+			selector.Select(ctx)
 
-		if !expired {
+			if !expired {
+				continue
+			}
+
+			if err := workflow.ExecuteActivity(ctx, a.ExpireAssistantThreadRuntime, activities.ExpireAssistantThreadRuntimeInput{
+				ThreadID:       input.ThreadID,
+				ProjectID:      input.ProjectID,
+				WarmTTLSeconds: 0, // v0 disables the revert path; activity falls through to Stop.
+			}).Get(ctx, nil); err != nil {
+				return err
+			}
+			if err := workflow.ExecuteActivity(ctx, a.SignalAssistantCoordinator, activities.SignalAssistantCoordinatorInput{
+				AssistantID: result.AssistantID,
+			}).Get(ctx, nil); err != nil {
+				return err
+			}
+			return nil
+		}
+
+		runtimeStopped := false
+		for {
+			timerFired := false
+			selector := workflow.NewSelector(ctx)
+			selector.AddFuture(workflow.NewTimer(ctx, waitFor), func(workflow.Future) {
+				timerFired = true
+			})
+			selector.AddReceive(signalCh, func(c workflow.ReceiveChannel, more bool) {
+				var ignored struct{}
+				c.Receive(ctx, &ignored)
+			})
+			selector.Select(ctx)
+
+			if !timerFired {
+				break
+			}
+
+			var expireResult activities.ExpireAssistantThreadRuntimeResult
+			if err := workflow.ExecuteActivity(ctx, a.ExpireAssistantThreadRuntime, activities.ExpireAssistantThreadRuntimeInput{
+				ThreadID:       input.ThreadID,
+				ProjectID:      input.ProjectID,
+				WarmTTLSeconds: result.WarmTTLSeconds,
+			}).Get(ctx, &expireResult); err != nil {
+				return err
+			}
+			if expireResult.Stopped {
+				runtimeStopped = true
+				break
+			}
+			waitFor = time.Duration(expireResult.RemainingSeconds) * time.Second
+		}
+
+		if !runtimeStopped {
 			continue
 		}
 
-		if err := workflow.ExecuteActivity(ctx, a.ExpireAssistantThreadRuntime, activities.ExpireAssistantThreadRuntimeInput{
-			ThreadID:  input.ThreadID,
-			ProjectID: input.ProjectID,
-		}).Get(ctx, nil); err != nil {
-			return err
-		}
 		if err := workflow.ExecuteActivity(ctx, a.SignalAssistantCoordinator, activities.SignalAssistantCoordinatorInput{
 			AssistantID: result.AssistantID,
 		}).Get(ctx, nil); err != nil {

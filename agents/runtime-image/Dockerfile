@@ -1,4 +1,4 @@
-FROM rust:1.91-bookworm AS runner-builder
+FROM rust:1.95-bookworm AS runner-builder
 
 WORKDIR /src
 COPY agents/runner/Cargo.toml agents/runner/Cargo.lock ./agents/runner/
@@ -30,6 +30,19 @@ RUN target=node_modules/playwright-core/lib/utilsBundle.js \
  && sed -i "s|const ws = exports.ws = require('./utilsBundleImpl').ws;|const ws = exports.ws = 'Bun' in globalThis ? require('ws') : require('./utilsBundleImpl').ws;|" "$target" \
  && grep -q "'Bun' in globalThis ? require('ws')" "$target"
 
+FROM debian:bookworm-slim AS workdir-template
+# 256 MiB hard cap on assistant workspace + bundled sandbox helpers.
+ARG WORKDIR_IMAGE_SIZE=268435456
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends e2fsprogs util-linux \
+  && rm -rf /var/lib/apt/lists/*
+WORKDIR /staging
+COPY agents/runtime-image/sandbox/package.json /staging/package.json
+COPY agents/runtime-image/sandbox/browser.ts /staging/browser.ts
+COPY --from=sandbox-deps /sandbox/node_modules /staging/node_modules
+RUN fallocate -l "${WORKDIR_IMAGE_SIZE}" /workdir-template.ext4 \
+ && mke2fs -t ext4 -d /staging -F /workdir-template.ext4
+
 FROM debian:bookworm-slim AS lightpanda
 ARG TARGETARCH
 ARG LIGHTPANDA_VERSION=0.2.8
@@ -57,7 +70,9 @@ RUN apt-get update \
     iproute2 \
     libcurl4 \
     libssl3 \
+    mount \
     procps \
+    util-linux \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=runner-builder /src/agents/runner/target/release/gram-assistant-runner /usr/local/bin/gram-assistant-runner
@@ -66,9 +81,10 @@ COPY --from=lightpanda /lightpanda /usr/local/bin/lightpanda
 COPY agents/runtime-image/lightpanda-supervise.sh /usr/local/bin/lightpanda-supervise
 COPY agents/runtime-image/init.sh /init
 
-COPY agents/runtime-image/sandbox/package.json /tmp/bun-sandbox/package.json
-COPY agents/runtime-image/sandbox/browser.ts /tmp/bun-sandbox/browser.ts
-COPY --from=sandbox-deps /sandbox/node_modules /tmp/bun-sandbox/node_modules
+# Fixed-size ext4 prepopulated with the sandbox helpers; init.sh loop-mounts
+# it at /var/lib/gram-assistant/work so the assistant has a persistent
+# workdir whose disk usage is hard-capped by the image size.
+COPY --from=workdir-template /workdir-template.ext4 /usr/share/gram/workdir-template.ext4
 
 RUN chmod 0755 /init /usr/local/bin/gram-assistant-runner /usr/local/bin/bun /usr/local/bin/lightpanda /usr/local/bin/lightpanda-supervise
 

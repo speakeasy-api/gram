@@ -2,12 +2,22 @@ import { useSession } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { JourneyDemo } from "./components/journey-demo";
 import { RegisterSection } from "./components/login-section";
-import { useSearchParams } from "react-router";
+import { Navigate, useSearchParams } from "react-router";
 
 export default function Register() {
   const routes = useRoutes();
   const session = useSession();
   const [searchParams] = useSearchParams();
+
+  const disposition = searchParams.get("disposition");
+  if (disposition === "assistants") {
+    return (
+      <Navigate
+        to={`/login?disposition=${encodeURIComponent(disposition)}`}
+        replace
+      />
+    );
+  }
 
   if (session.activeOrganizationId !== "") {
     const redirect = searchParams.get("redirect");

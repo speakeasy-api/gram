@@ -158,6 +158,24 @@ ORDER BY seq ASC;
 SELECT COUNT(*) FROM chat_messages
 WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid);
 
+-- name: ListLatestGenerationChatMessages :many
+-- Returns only the latest-generation rows; older generations are audit-only.
+SELECT cm.* FROM chat_messages cm
+WHERE cm.chat_id = @chat_id
+  AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+  AND cm.generation = (SELECT MAX(generation) FROM chat_messages WHERE chat_id = @chat_id)
+ORDER BY cm.seq ASC;
+
+-- name: ListChatMessagesByGeneration :many
+-- Returns rows for an explicit generation, used to pin a snapshot across
+-- multiple reads (e.g. across Temporal activities) so indices stay stable
+-- even if a new generation is appended mid-workflow.
+SELECT cm.* FROM chat_messages cm
+WHERE cm.chat_id = @chat_id
+  AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+  AND cm.generation = @generation::integer
+ORDER BY cm.seq ASC;
+
 -- name: GetMaxGenerationForChat :one
 SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages WHERE chat_id = @chat_id;
 
@@ -502,3 +520,10 @@ SELECT
   COALESCE(AVG(duration_ms), 0)::double precision as avg_session_duration_ms,
   COALESCE(AVG(CASE WHEN resolution_status != '' THEN duration_ms END), 0)::double precision as avg_resolution_time_ms
 FROM chat_stats;
+
+-- name: CreateChatMessageWithToolCalls :exec
+-- Inserts a single chat_messages row with optional tool_calls JSON,
+-- tool_call_id, and generation, for callers seeding tool-turn history without
+-- the full CreateChatMessage :copyfrom batch shape.
+INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls, tool_call_id, generation)
+VALUES (@chat_id, @project_id, @role, @content, @tool_calls, @tool_call_id, @generation);

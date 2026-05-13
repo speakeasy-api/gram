@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -34,8 +35,14 @@ var (
 	infra *testenv.Environment
 )
 
+type noopCancelScheduler struct{}
+
+func (noopCancelScheduler) ScheduleCancelAssistantsSubscription(ctx context.Context, subscriptionID string) error {
+	return nil
+}
+
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -302,7 +309,8 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, billingClient, nil)
+	speakeasyIDPClient := speakeasyclient.NewClient(logger, testenv.NewTracerProvider(t), guardianPolicy, mockServer.URL, "test-secret-key", conn, nil, posthog)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, billingClient, speakeasyIDPClient)
 
 	authConfigs := auth.AuthConfigurations{
 		SpeakeasyServerAddress: mockServer.URL,
@@ -311,8 +319,11 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 		Environment:            "test",
 	}
 
-	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, authzEngine)
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog)
 
 	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, mockServer, authConfigs)
 }
@@ -342,7 +353,8 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, billingClient, nil)
+	speakeasyIDPClient := speakeasyclient.NewClient(logger, testenv.NewTracerProvider(t), guardianPolicy, mockServer.URL, "test-secret-key", conn, nil, posthog)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, billingClient, speakeasyIDPClient)
 
 	authConfigs := auth.AuthConfigurations{
 		SpeakeasyServerAddress: mockServer.URL,
@@ -351,8 +363,11 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 		Environment:            "test",
 	}
 
-	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, authzEngine)
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog)
 
 	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, mockServer, authConfigs)
 }

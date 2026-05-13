@@ -21,6 +21,8 @@ import (
 	"github.com/superfly/fly-go"
 	"github.com/superfly/fly-go/flaps"
 	"github.com/superfly/fly-go/tokens"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -60,8 +62,13 @@ type flyRuntimeAppIdentity struct {
 	Created  bool
 }
 
-type flyRuntimeStateResponse struct {
-	Configured bool `json:"configured"`
+// runnerStateResponse mirrors agents/runner/src/wire.rs::RunnerStateResponse.
+// IdleSeconds is `0` while a turn is in flight (the runner clears its idle
+// clock on /turn enqueue) and absent only when the runner has never been
+// /configured. Both shapes are the source the manager polls to gate expiry.
+type runnerStateResponse struct {
+	Configured  bool    `json:"configured"`
+	IdleSeconds *uint64 `json:"idle_seconds,omitempty"`
 }
 
 type flyRuntimeAPIClient interface {
@@ -74,10 +81,13 @@ type flyRuntimeAPIClient interface {
 }
 
 type flyRuntimeFlapsClient interface {
+	Destroy(ctx context.Context, appName string, in fly.RemoveMachineInput, nonce string) error
 	Get(ctx context.Context, appName, machineID string) (*fly.Machine, error)
 	Launch(ctx context.Context, appName string, input fly.LaunchMachineInput) (*fly.Machine, error)
 	List(ctx context.Context, appName, state string) ([]*fly.Machine, error)
 	Start(ctx context.Context, appName, machineID string, nonce string) (*fly.MachineStartResponse, error)
+	Stop(ctx context.Context, appName string, in fly.StopMachineInput, nonce string) error
+	Update(ctx context.Context, appName string, input fly.LaunchMachineInput, nonce string) (*fly.Machine, error)
 	Wait(ctx context.Context, appName string, machine *fly.Machine, state string, timeout time.Duration) error
 }
 
@@ -115,13 +125,14 @@ func (f *defaultFlyRuntimeFlapsFactory) New(ctx context.Context) (flyRuntimeFlap
 
 type FlyRuntimeBackend struct {
 	logger       *slog.Logger
+	tracer       trace.Tracer
 	config       FlyRuntimeConfig
 	client       flyRuntimeAPIClient
 	flapsFactory flyRuntimeFlapsFactory
 	httpClient   flyRuntimeHTTPDoer
 }
 
-func NewFlyRuntimeBackend(logger *slog.Logger, httpPolicy *guardian.Policy, config FlyRuntimeConfig) *FlyRuntimeBackend {
+func NewFlyRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider, httpPolicy *guardian.Policy, config FlyRuntimeConfig) *FlyRuntimeBackend {
 	config.DefaultFlyRegion = firstNonEmpty(config.DefaultFlyRegion, defaultFlyRuntimeRegion)
 	config.AppNamePrefix = sanitizeFlyAppNamePrefix(firstNonEmpty(config.AppNamePrefix, defaultFlyRuntimePrefix))
 	if config.AppNamePrefix == "" {
@@ -155,6 +166,7 @@ func NewFlyRuntimeBackend(logger *slog.Logger, httpPolicy *guardian.Policy, conf
 
 	return &FlyRuntimeBackend{
 		logger: logger.With(attr.SlogComponent("assistants_flyio_runtime")),
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
 		config: config,
 		client: client,
 		flapsFactory: &defaultFlyRuntimeFlapsFactory{
@@ -208,7 +220,7 @@ func (f *FlyRuntimeBackend) ensureExisting(
 ) (RuntimeBackendEnsureResult, error) {
 	appName := metadata.AppName
 	if appName == "" {
-		appName = f.appName(runtime.AssistantThreadID)
+		appName = f.appName(runtime.AssistantID)
 	}
 
 	appURL := metadata.AppURL
@@ -216,7 +228,7 @@ func (f *FlyRuntimeBackend) ensureExisting(
 		appURL = flyRuntimeAppURL(appName)
 	}
 
-	app, err := f.ensureApp(ctx, appName)
+	app, err := f.tracedEnsureApp(ctx, appName)
 	if err != nil {
 		return RuntimeBackendEnsureResult{}, err
 	}
@@ -234,7 +246,7 @@ func (f *FlyRuntimeBackend) ensureExisting(
 		metadata.LastBootID = ""
 	}
 
-	machine, err := f.resolveMachine(ctx, flapsClient, appName, runtime.AssistantThreadID, metadata.MachineID, metadata.LastBootID, sameAppIncarnation)
+	machine, err := f.tracedResolveMachine(ctx, flapsClient, appName, runtime.AssistantThreadID, metadata.MachineID, metadata.LastBootID, sameAppIncarnation)
 	if err != nil {
 		if errors.Is(err, errFlyAppCorrupted) {
 			f.logger.WarnContext(ctx,
@@ -255,39 +267,52 @@ func (f *FlyRuntimeBackend) ensureExisting(
 
 	coldStart := false
 	if machine == nil {
-		machine, err = f.launchMachine(ctx, flapsClient, runtime, appName)
+		coldStart = true
+		launched, err := f.tracedLaunchMachine(ctx, flapsClient, runtime, appName)
 		if err != nil {
 			return RuntimeBackendEnsureResult{}, err
 		}
-		coldStart = true
+		machine = launched
+		if err := f.tracedWaitStarted(ctx, flapsClient, appName, machine, coldStart); err != nil {
+			return RuntimeBackendEnsureResult{}, fmt.Errorf("wait for assistant fly runtime machine launch: %w", err)
+		}
+	} else {
+		recycled, err := f.maybeRecycleImage(ctx, flapsClient, runtime, appName, appURL, appIP, machine)
+		if err != nil {
+			return RuntimeBackendEnsureResult{}, err
+		}
+		if recycled != nil {
+			machine = recycled
+			coldStart = true
+		}
 	}
 
 	if !machine.IsActive() {
+		coldStart = true
 		if _, err := flapsClient.Start(ctx, appName, machine.ID, ""); err != nil {
 			return RuntimeBackendEnsureResult{}, fmt.Errorf("start assistant fly runtime machine: %w", err)
 		}
-		if err := flapsClient.Wait(ctx, appName, machine, "started", defaultFlyRuntimeHealthTimeout); err != nil {
+		if err := f.tracedWaitStarted(ctx, flapsClient, appName, machine, coldStart); err != nil {
 			return RuntimeBackendEnsureResult{}, fmt.Errorf("wait for assistant fly runtime machine start: %w", err)
 		}
-		coldStart = true
 		refreshed, getErr := flapsClient.Get(ctx, appName, machine.ID)
 		if getErr == nil && refreshed != nil {
 			machine = refreshed
 		}
 	}
 
-	target := flyRuntimeTarget{URL: appURL, IP: appIP}
-	if err := f.waitForRuntimeHealth(ctx, target); err != nil {
+	if !coldStart && machine.InstanceID != "" && machine.InstanceID != metadata.LastBootID {
+		coldStart = true
+	}
+
+	target := flyRuntimeTarget{URL: appURL, IP: appIP, MachineID: machine.ID}
+	if err := f.tracedWaitHealth(ctx, target, coldStart); err != nil {
 		return RuntimeBackendEnsureResult{}, fmt.Errorf("wait for assistant fly runtime health: %w", err)
 	}
 
-	state, err := f.runtimeState(ctx, target)
+	state, err := f.tracedRuntimeState(ctx, target, coldStart)
 	if err != nil {
 		return RuntimeBackendEnsureResult{}, fmt.Errorf("load assistant fly runtime state: %w", err)
-	}
-
-	if machine.InstanceID != "" && machine.InstanceID != metadata.LastBootID {
-		coldStart = true
 	}
 
 	needsConfigure := !state.Configured
@@ -445,9 +470,6 @@ func (f *FlyRuntimeBackend) launchMachine(
 	if err != nil {
 		return nil, fmt.Errorf("launch assistant fly runtime machine: %w", err)
 	}
-	if err := flapsClient.Wait(ctx, appName, machine, "started", defaultFlyRuntimeHealthTimeout); err != nil {
-		return nil, fmt.Errorf("wait for assistant fly runtime machine launch: %w", err)
-	}
 	return machine, nil
 }
 
@@ -494,18 +516,256 @@ func (f *FlyRuntimeBackend) Configure(ctx context.Context, runtime assistantRunt
 	if err != nil {
 		return fmt.Errorf("marshal assistant fly runtime config: %w", err)
 	}
-	_, err = f.runtimeRequest(ctx, targetFromMetadata(metadata), runtimeHTTPRequest{
+	if _, err := f.runtimeRequest(ctx, targetFromMetadata(metadata), runtimeHTTPRequest{
 		Method:         http.MethodPost,
 		Path:           "/configure",
 		ContentType:    "application/json",
 		Body:           body,
 		MaxTimeSeconds: 0,
 		IdempotencyKey: "",
-	})
-	if err != nil {
+	}); err != nil {
 		return fmt.Errorf("configure assistant fly runtime: %w", err)
 	}
 	return nil
+}
+
+func (f *FlyRuntimeBackend) tracedEnsureApp(ctx context.Context, appName string) (app flyRuntimeAppIdentity, err error) {
+	ctx, span := f.tracer.Start(ctx, "assistants.runtime.ensureApp")
+	defer func() {
+		if err != nil {
+			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	app, err = f.ensureApp(ctx, appName)
+	span.SetAttributes(attr.AssistantAppCreated(app.Created))
+	return app, err
+}
+
+func (f *FlyRuntimeBackend) tracedResolveMachine(
+	ctx context.Context,
+	flapsClient flyRuntimeFlapsClient,
+	appName string,
+	threadID uuid.UUID,
+	machineID string,
+	lastBootID string,
+	sameAppIncarnation bool,
+) (machine *fly.Machine, err error) {
+	ctx, span := f.tracer.Start(ctx, "assistants.runtime.resolveMachine")
+	defer func() {
+		if err != nil {
+			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	return f.resolveMachine(ctx, flapsClient, appName, threadID, machineID, lastBootID, sameAppIncarnation)
+}
+
+// maybeRecycleImage applies an in-place machine update when the running
+// machine's image lags behind the configured runtime image. Preserves the
+// app + allocated IP so callers don't pay the DNS-propagation cost of a
+// fresh app, and gates on the runner's /state idle clock so an in-flight
+// turn isn't interrupted — the next admission catches it idle. Returns the
+// post-update machine when a recycle happened, nil otherwise.
+func (f *FlyRuntimeBackend) maybeRecycleImage(
+	ctx context.Context,
+	flapsClient flyRuntimeFlapsClient,
+	runtime assistantRuntimeRecord,
+	appName string,
+	appURL string,
+	appIP string,
+	machine *fly.Machine,
+) (*fly.Machine, error) {
+	desired := f.desiredImageRef()
+	actual := machineImageRef(machine)
+	// Empty ImageRef means flaps returned a partial machine record (e.g.
+	// HostStatus != ok or a stale list response). Recycling on missing data
+	// would churn healthy runtimes — skip and let the next admission retry.
+	if actual == "" || desired == actual {
+		return nil, nil
+	}
+
+	target := flyRuntimeTarget{URL: appURL, IP: appIP, MachineID: machine.ID}
+	if machine.State == fly.MachineStateStarted {
+		state, stateErr := f.runtimeState(ctx, target)
+		// /state probe success + idle_seconds==0 means a turn is in flight
+		// (runner clears the idle clock synchronously on /turn enqueue).
+		// Skip recycling so we don't reboot mid-turn; a later admission with
+		// an idle runner picks the upgrade up. Probe errors fall through to
+		// recycle — the runner is unreachable on the stale image anyway and
+		// waitForRuntimeHealth would just fail next.
+		if stateErr == nil && state.IdleSeconds != nil && *state.IdleSeconds == 0 {
+			f.logger.InfoContext(ctx,
+				"assistant fly runtime image recycle skipped: turn in flight",
+				attr.SlogFlyAppName(appName),
+				attr.SlogAssistantImageDesired(desired),
+				attr.SlogAssistantImageActual(actual),
+			)
+			return nil, nil
+		}
+	}
+
+	f.logger.InfoContext(ctx,
+		"assistant fly runtime recycling: image upgrade",
+		attr.SlogFlyAppName(appName),
+		attr.SlogAssistantImageDesired(desired),
+		attr.SlogAssistantImageActual(actual),
+	)
+
+	updated, err := f.tracedRecycleMachine(ctx, flapsClient, runtime, appName, machine, desired, actual)
+	if err != nil {
+		return nil, fmt.Errorf("recycle assistant fly runtime machine: %w", err)
+	}
+	if err := f.tracedWaitStarted(ctx, flapsClient, appName, updated, true); err != nil {
+		return nil, fmt.Errorf("wait for assistant fly runtime machine recycle: %w", err)
+	}
+	return updated, nil
+}
+
+// desiredImageRef returns the configured runtime image reference in the same
+// "<repo>:<tag>" form fly's MachineImageRef serialises into.
+func (f *FlyRuntimeBackend) desiredImageRef() string {
+	return fmt.Sprintf("%s:%s", f.config.OCIImage, f.config.ImageVersion)
+}
+
+// machineImageRef rebuilds the "<registry>/<repo>:<tag>" form from a fly
+// Machine's ImageRef so it can be compared verbatim to desiredImageRef. The
+// digest is intentionally omitted — fly populates it post-pull, but the
+// configured image version is always a tag (helm sets it from image.tag).
+func machineImageRef(machine *fly.Machine) string {
+	if machine == nil {
+		return ""
+	}
+	ref := machine.ImageRef
+	repo := ref.Repository
+	if ref.Registry != "" && repo != "" {
+		repo = ref.Registry + "/" + ref.Repository
+	} else if ref.Registry != "" {
+		repo = ref.Registry
+	}
+	if ref.Tag == "" {
+		return repo
+	}
+	return repo + ":" + ref.Tag
+}
+
+func (f *FlyRuntimeBackend) recycleMachine(
+	ctx context.Context,
+	flapsClient flyRuntimeFlapsClient,
+	runtime assistantRuntimeRecord,
+	appName string,
+	machine *fly.Machine,
+) (*fly.Machine, error) {
+	updated, err := flapsClient.Update(ctx, appName, fly.LaunchMachineInput{
+		ID:                  machine.ID,
+		Config:              f.machineConfig(runtime),
+		Region:              firstNonEmpty(machine.Region, f.config.DefaultFlyRegion),
+		Name:                machine.Name,
+		RequiresReplacement: false,
+	}, "")
+	if err != nil {
+		return nil, fmt.Errorf("update assistant fly runtime machine: %w", err)
+	}
+	return updated, nil
+}
+
+func (f *FlyRuntimeBackend) tracedRecycleMachine(
+	ctx context.Context,
+	flapsClient flyRuntimeFlapsClient,
+	runtime assistantRuntimeRecord,
+	appName string,
+	machine *fly.Machine,
+	desired string,
+	actual string,
+) (updated *fly.Machine, err error) {
+	ctx, span := f.tracer.Start(ctx, "assistants.runtime.recycleMachine",
+		trace.WithAttributes(
+			attr.AssistantImageRecycle(true),
+			attr.AssistantImageDesired(desired),
+			attr.AssistantImageActual(actual),
+			attr.FlyAppName(appName),
+		),
+	)
+	defer func() {
+		if err != nil {
+			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	return f.recycleMachine(ctx, flapsClient, runtime, appName, machine)
+}
+
+func (f *FlyRuntimeBackend) tracedLaunchMachine(
+	ctx context.Context,
+	flapsClient flyRuntimeFlapsClient,
+	runtime assistantRuntimeRecord,
+	appName string,
+) (machine *fly.Machine, err error) {
+	ctx, span := f.tracer.Start(ctx, "assistants.runtime.launchMachine",
+		trace.WithAttributes(attr.AssistantColdStart(true)),
+	)
+	defer func() {
+		if err != nil {
+			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	return f.launchMachine(ctx, flapsClient, runtime, appName)
+}
+
+func (f *FlyRuntimeBackend) tracedWaitStarted(
+	ctx context.Context,
+	flapsClient flyRuntimeFlapsClient,
+	appName string,
+	machine *fly.Machine,
+	coldStart bool,
+) (err error) {
+	ctx, span := f.tracer.Start(ctx, "assistants.runtime.waitStarted",
+		trace.WithAttributes(attr.AssistantColdStart(coldStart)),
+	)
+	defer func() {
+		if err != nil {
+			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	if waitErr := flapsClient.Wait(ctx, appName, machine, "started", defaultFlyRuntimeHealthTimeout); waitErr != nil {
+		return fmt.Errorf("flaps wait started: %w", waitErr)
+	}
+	return nil
+}
+
+func (f *FlyRuntimeBackend) tracedWaitHealth(ctx context.Context, target flyRuntimeTarget, coldStart bool) (err error) {
+	ctx, span := f.tracer.Start(ctx, "assistants.runtime.waitHealth",
+		trace.WithAttributes(attr.AssistantColdStart(coldStart)),
+	)
+	defer func() {
+		if err != nil {
+			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	return f.waitForRuntimeHealth(ctx, target)
+}
+
+func (f *FlyRuntimeBackend) tracedRuntimeState(ctx context.Context, target flyRuntimeTarget, coldStart bool) (state runnerStateResponse, err error) {
+	ctx, span := f.tracer.Start(ctx, "assistants.runtime.runtimeState",
+		trace.WithAttributes(attr.AssistantColdStart(coldStart)),
+	)
+	defer func() {
+		if err != nil {
+			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	return f.runtimeState(ctx, target)
 }
 
 func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, idempotencyKey string, authToken string, prompt string) error {
@@ -580,7 +840,57 @@ func (f *FlyRuntimeBackend) ServerURL(_ context.Context, runtime assistantRuntim
 	return &cloned, nil
 }
 
+func (f *FlyRuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {
+	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
+		return RuntimeBackendStatus{}, err
+	}
+	metadata, err := decodeFlyRuntimeMetadata(runtime.BackendMetadataJSON)
+	if err != nil {
+		return RuntimeBackendStatus{}, err
+	}
+	if metadata.AppURL == "" {
+		return RuntimeBackendStatus{}, fmt.Errorf("assistant fly runtime app url is not available")
+	}
+	state, err := f.runtimeState(ctx, targetFromMetadata(metadata))
+	if err != nil {
+		return RuntimeBackendStatus{}, fmt.Errorf("load assistant fly runtime state: %w", err)
+	}
+	return RuntimeBackendStatus(state), nil
+}
+
+// Stop pauses the machine but preserves the app, allocated IP, and backend
+// metadata so a subsequent admit can resume the same incarnation.
 func (f *FlyRuntimeBackend) Stop(ctx context.Context, runtime assistantRuntimeRecord) error {
+	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
+		return err
+	}
+	metadata, err := decodeFlyRuntimeMetadata(runtime.BackendMetadataJSON)
+	if err != nil {
+		return err
+	}
+	if metadata.AppName == "" || metadata.MachineID == "" {
+		return nil
+	}
+
+	flapsClient, err := f.flapsFactory.New(ctx)
+	if err != nil {
+		return fmt.Errorf("create fly runtime flaps client: %w", err)
+	}
+
+	if err := flapsClient.Stop(ctx, metadata.AppName, fly.StopMachineInput{
+		ID: metadata.MachineID,
+	}, ""); err != nil && !isFlyNotFound(err) {
+		return fmt.Errorf("stop assistant fly runtime machine: %w", err)
+	}
+	return nil
+}
+
+// Reap tears down one thread's slot in the assistant's Fly app: destroys
+// the thread's machine, then deletes the app only if no other thread still
+// holds a machine in it. Legacy per-thread apps (one machine each) collapse
+// to app deletion in one call; new per-assistant apps survive until the
+// last thread's machine is reaped.
+func (f *FlyRuntimeBackend) Reap(ctx context.Context, runtime assistantRuntimeRecord) error {
 	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
 		return err
 	}
@@ -591,6 +901,38 @@ func (f *FlyRuntimeBackend) Stop(ctx context.Context, runtime assistantRuntimeRe
 	if metadata.AppName == "" {
 		return nil
 	}
+
+	flapsClient, err := f.flapsFactory.New(ctx)
+	if err != nil {
+		return fmt.Errorf("create fly runtime flaps client: %w", err)
+	}
+
+	if metadata.MachineID != "" {
+		if err := flapsClient.Destroy(ctx, metadata.AppName, fly.RemoveMachineInput{
+			ID:   metadata.MachineID,
+			Kill: true,
+		}, ""); err != nil && !isFlyNotFound(err) {
+			return fmt.Errorf("destroy assistant fly runtime machine: %w", err)
+		}
+	}
+
+	machines, err := flapsClient.List(ctx, metadata.AppName, "")
+	switch {
+	case err == nil:
+		for _, m := range machines {
+			if m == nil || m.ID == metadata.MachineID {
+				continue
+			}
+			if m.IsActive() {
+				return nil
+			}
+		}
+	case isFlyNotFound(err):
+		return nil
+	default:
+		return fmt.Errorf("list assistant fly runtime machines: %w", err)
+	}
+
 	return f.deleteApp(ctx, metadata.AppName)
 }
 
@@ -662,14 +1004,17 @@ func (f *FlyRuntimeBackend) machineConfig(runtime assistantRuntimeRecord) *fly.M
 // calls can bypass public DNS — a freshly created app's A record can take
 // 30-60s to propagate, but the shared IP is routable the moment Fly's proxy
 // sees the allocation. Dial the IP directly, keep the hostname on the URL so
-// SNI + wildcard cert verification still pass.
+// SNI + wildcard cert verification still pass. MachineID pins the Fly proxy
+// to this thread's VM via fly-force-instance-id so siblings sharing the
+// per-assistant app can't intercept the request.
 type flyRuntimeTarget struct {
-	URL string
-	IP  string
+	URL       string
+	IP        string
+	MachineID string
 }
 
 func targetFromMetadata(md flyRuntimeMetadata) flyRuntimeTarget {
-	return flyRuntimeTarget{URL: md.AppURL, IP: md.AppIP}
+	return flyRuntimeTarget{URL: md.AppURL, IP: md.AppIP, MachineID: md.MachineID}
 }
 
 func (f *FlyRuntimeBackend) waitForRuntimeHealth(ctx context.Context, target flyRuntimeTarget) error {
@@ -695,7 +1040,7 @@ func (f *FlyRuntimeBackend) waitForRuntimeHealth(ctx context.Context, target fly
 	}
 }
 
-func (f *FlyRuntimeBackend) runtimeState(ctx context.Context, target flyRuntimeTarget) (flyRuntimeStateResponse, error) {
+func (f *FlyRuntimeBackend) runtimeState(ctx context.Context, target flyRuntimeTarget) (runnerStateResponse, error) {
 	body, err := f.runtimeRequest(ctx, target, runtimeHTTPRequest{
 		Method:         http.MethodGet,
 		Path:           "/state",
@@ -705,11 +1050,11 @@ func (f *FlyRuntimeBackend) runtimeState(ctx context.Context, target flyRuntimeT
 		IdempotencyKey: "",
 	})
 	if err != nil {
-		return flyRuntimeStateResponse{}, err
+		return runnerStateResponse{}, err
 	}
-	var state flyRuntimeStateResponse
+	var state runnerStateResponse
 	if err := json.Unmarshal(body, &state); err != nil {
-		return flyRuntimeStateResponse{}, fmt.Errorf("decode assistant fly runtime state: %w", err)
+		return runnerStateResponse{}, fmt.Errorf("decode assistant fly runtime state: %w", err)
 	}
 	return state, nil
 }
@@ -738,6 +1083,14 @@ func (f *FlyRuntimeBackend) runtimeRequest(ctx context.Context, target flyRuntim
 	if request.IdempotencyKey != "" {
 		req.Header.Set("X-Idempotency-Key", request.IdempotencyKey)
 	}
+	if target.MachineID != "" {
+		// Pin the request to this thread's VM. With many machines on the
+		// per-assistant app, the proxy would otherwise round-robin and let
+		// /configure, /turn, /state hit a sibling — cross-thread leak that
+		// the runner cannot recover from (configure returns 409, turn
+		// enqueues onto the wrong runtime).
+		req.Header.Set("Fly-Force-Instance-Id", target.MachineID)
+	}
 
 	client := f.clientForTarget(target)
 	resp, err := client.Do(req)
@@ -758,8 +1111,12 @@ func (f *FlyRuntimeBackend) runtimeRequest(ctx context.Context, target flyRuntim
 	return body, nil
 }
 
-func (f *FlyRuntimeBackend) appName(threadID uuid.UUID) string {
-	return fmt.Sprintf("%s-%s", f.config.AppNamePrefix, strings.ToLower(threadID.String()))
+// appName derives the Fly app name from the assistant ID. One app per
+// assistant, many machines (one per thread) inside it. Legacy rows whose
+// metadata still records a per-thread app name keep using that app until
+// Reap drains it.
+func (f *FlyRuntimeBackend) appName(assistantID uuid.UUID) string {
+	return fmt.Sprintf("%s-%s", f.config.AppNamePrefix, strings.ToLower(assistantID.String()))
 }
 
 func decodeFlyRuntimeMetadata(raw []byte) (flyRuntimeMetadata, error) {
@@ -852,6 +1209,38 @@ func isFlyAppPropagating(err error) bool {
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "no rows in result set") || strings.Contains(msg, "failed to get app")
+}
+
+// classifySetupError buckets a setup-phase error into one of a fixed set of
+// failure classes for span attribute reporting. Sentinel/typed errors win
+// over message substring matches; unmapped errors fall into "unknown".
+func classifySetupError(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, errFlyAppCorrupted):
+		return "app_corrupted"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	case isFlyAppPropagating(err):
+		return "app_propagation"
+	case isFlyNotFound(err):
+		return "not_found"
+	case isFlyAppNameTaken(err):
+		return "conflict"
+	case isFlyIPAlreadyAssigned(err):
+		return "ip_already_assigned"
+	}
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "timed out"), strings.Contains(msg, "deadline exceeded"):
+		return "timeout"
+	case strings.Contains(msg, "connection refused"), strings.Contains(msg, "eof"), strings.Contains(msg, "reset by peer"):
+		return "network"
+	}
+	return "unknown"
 }
 
 type assistantFlyLogger struct {

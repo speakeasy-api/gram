@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.30.1**](../README.md)
+[**@gram-ai/elements v1.32.0**](../README.md)
 
 ***
 
@@ -100,13 +100,36 @@ const config: ElementsConfig = {
 The Gram Server URL to use for the Elements library.
 Can be retrieved from https://app.getgram.ai/{team}/{project}/mcp/{mcp_slug}
 
-Note: This config option will likely change in the future
+For multiple MCP servers in a single chat, use [mcps](#mcps) instead;
+`mcps` takes precedence when both are provided.
 
 #### Example
 
 ```ts
 const config: ElementsConfig = {
   mcp: 'https://app.getgram.ai/mcp/your-mcp-slug',
+}
+```
+
+***
+
+### mcps?
+
+> `optional` **mcps**: [`MCPServerEntry`](MCPServerEntry.md)[]
+
+One or more Gram MCP servers to connect to in a single chat. Tools from
+each server are merged and namespaced as `<name>__<tool>` to avoid
+collisions when names overlap. Takes precedence over [mcp](#mcp) when
+both are provided.
+
+#### Example
+
+```ts
+const config: ElementsConfig = {
+  mcps: [
+    { url: 'https://app.getgram.ai/mcp/billing', name: 'billing' },
+    { url: 'https://app.getgram.ai/mcp/support', name: 'support' },
+  ],
 }
 ```
 

@@ -33,6 +33,8 @@ type GetProductFeaturesResponseBody struct {
 	ToolIoLogsEnabled bool `form:"tool_io_logs_enabled" json:"tool_io_logs_enabled" xml:"tool_io_logs_enabled"`
 	// Whether Claude Code session capture is enabled
 	SessionCaptureEnabled bool `form:"session_capture_enabled" json:"session_capture_enabled" xml:"session_capture_enabled"`
+	// Whether authz challenge logging to ClickHouse is enabled
+	AuthzChallengeLoggingEnabled bool `form:"authz_challenge_logging_enabled" json:"authz_challenge_logging_enabled" xml:"authz_challenge_logging_enabled"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -412,9 +414,10 @@ type SetProductFeatureGatewayErrorResponseBody struct {
 // result of the "getProductFeatures" endpoint of the "features" service.
 func NewGetProductFeaturesResponseBody(res *featuresviews.GramProductFeaturesView) *GetProductFeaturesResponseBody {
 	body := &GetProductFeaturesResponseBody{
-		LogsEnabled:           *res.LogsEnabled,
-		ToolIoLogsEnabled:     *res.ToolIoLogsEnabled,
-		SessionCaptureEnabled: *res.SessionCaptureEnabled,
+		LogsEnabled:                  *res.LogsEnabled,
+		ToolIoLogsEnabled:            *res.ToolIoLogsEnabled,
+		SessionCaptureEnabled:        *res.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled: *res.AuthzChallengeLoggingEnabled,
 	}
 	return body
 }
@@ -743,8 +746,8 @@ func ValidateSetProductFeatureRequestBody(body *SetProductFeatureRequestBody) (e
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.FeatureName != nil {
-		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture"}))
+		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging"}))
 		}
 	}
 	if body.FeatureName != nil {

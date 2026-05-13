@@ -5,6 +5,7 @@
 import { pluginsAddPluginServer } from "../funcs/pluginsAddPluginServer.js";
 import { pluginsCreatePlugin } from "../funcs/pluginsCreatePlugin.js";
 import { pluginsDeletePlugin } from "../funcs/pluginsDeletePlugin.js";
+import { pluginsDownloadCodexInstallScript } from "../funcs/pluginsDownloadCodexInstallScript.js";
 import { pluginsDownloadObservabilityPlugin } from "../funcs/pluginsDownloadObservabilityPlugin.js";
 import { pluginsDownloadPluginPackage } from "../funcs/pluginsDownloadPluginPackage.js";
 import { pluginsGetPlugin } from "../funcs/pluginsGetPlugin.js";
@@ -71,6 +72,25 @@ export class Plugins extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(pluginsDeletePlugin(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * downloadCodexInstallScript plugins
+   *
+   * @remarks
+   * Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.
+   */
+  async downloadCodexInstallScript(
+    request?: operations.DownloadCodexInstallScriptRequest | undefined,
+    security?: operations.DownloadCodexInstallScriptSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<operations.DownloadCodexInstallScriptResponse> {
+    return unwrapAsync(pluginsDownloadCodexInstallScript(
       this,
       request,
       security,

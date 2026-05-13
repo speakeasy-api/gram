@@ -50,6 +50,25 @@ type UpdateMemberRoleRequestBody struct {
 	RoleID string `form:"role_id" json:"role_id" xml:"role_id"`
 }
 
+// ResolveChallengeRequestBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP request body.
+type ResolveChallengeRequestBody struct {
+	// IDs of the challenges in ClickHouse to resolve.
+	ChallengeIds []string `form:"challenge_ids" json:"challenge_ids" xml:"challenge_ids"`
+	// Principal that was denied.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	// Scope that was denied.
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// Resource kind from the challenge.
+	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
+	// Resource ID from the challenge.
+	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	// How the challenge is being resolved.
+	ResolutionType string `form:"resolution_type" json:"resolution_type" xml:"resolution_type"`
+	// Role slug to assign (required when resolution_type=role_assigned).
+	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
+}
+
 // ListRolesResponseBody is the type of the "access" service "listRoles"
 // endpoint HTTP response body.
 type ListRolesResponseBody struct {
@@ -157,6 +176,31 @@ type UpdateMemberRoleResponseBody struct {
 type GetRBACStatusResponseBody struct {
 	// Whether RBAC enforcement is currently enabled for this organization.
 	RbacEnabled *bool `form:"rbac_enabled,omitempty" json:"rbac_enabled,omitempty" xml:"rbac_enabled,omitempty"`
+}
+
+// ListChallengesResponseBody is the type of the "access" service
+// "listChallenges" endpoint HTTP response body.
+type ListChallengesResponseBody struct {
+	// The challenge events.
+	Challenges []*AuthzChallengeResponseBody `form:"challenges,omitempty" json:"challenges,omitempty" xml:"challenges,omitempty"`
+	// Total number of matching challenges for pagination.
+	Total *int `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
+}
+
+// ListChallengeBucketsResponseBody is the type of the "access" service
+// "listChallengeBuckets" endpoint HTTP response body.
+type ListChallengeBucketsResponseBody struct {
+	// The challenge buckets.
+	Buckets []*ChallengeBucketResponseBody `form:"buckets,omitempty" json:"buckets,omitempty" xml:"buckets,omitempty"`
+	// Total number of matching buckets for pagination.
+	Total *int `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
+}
+
+// ResolveChallengeResponseBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP response body.
+type ResolveChallengeResponseBody struct {
+	// The created resolution records.
+	Resolutions []*ChallengeResolutionResponseBody `form:"resolutions,omitempty" json:"resolutions,omitempty" xml:"resolutions,omitempty"`
 }
 
 // ListRolesUnauthorizedResponseBody is the type of the "access" service
@@ -2325,6 +2369,557 @@ type DisableRBACGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListChallengesUnauthorizedResponseBody is the type of the "access" service
+// "listChallenges" endpoint HTTP response body for the "unauthorized" error.
+type ListChallengesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengesForbiddenResponseBody is the type of the "access" service
+// "listChallenges" endpoint HTTP response body for the "forbidden" error.
+type ListChallengesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengesBadRequestResponseBody is the type of the "access" service
+// "listChallenges" endpoint HTTP response body for the "bad_request" error.
+type ListChallengesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengesNotFoundResponseBody is the type of the "access" service
+// "listChallenges" endpoint HTTP response body for the "not_found" error.
+type ListChallengesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengesConflictResponseBody is the type of the "access" service
+// "listChallenges" endpoint HTTP response body for the "conflict" error.
+type ListChallengesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengesUnsupportedMediaResponseBody is the type of the "access"
+// service "listChallenges" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListChallengesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengesInvalidResponseBody is the type of the "access" service
+// "listChallenges" endpoint HTTP response body for the "invalid" error.
+type ListChallengesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengesInvariantViolationResponseBody is the type of the "access"
+// service "listChallenges" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListChallengesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengesUnexpectedResponseBody is the type of the "access" service
+// "listChallenges" endpoint HTTP response body for the "unexpected" error.
+type ListChallengesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengesGatewayErrorResponseBody is the type of the "access" service
+// "listChallenges" endpoint HTTP response body for the "gateway_error" error.
+type ListChallengesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengeBucketsUnauthorizedResponseBody is the type of the "access"
+// service "listChallengeBuckets" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListChallengeBucketsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengeBucketsForbiddenResponseBody is the type of the "access"
+// service "listChallengeBuckets" endpoint HTTP response body for the
+// "forbidden" error.
+type ListChallengeBucketsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengeBucketsBadRequestResponseBody is the type of the "access"
+// service "listChallengeBuckets" endpoint HTTP response body for the
+// "bad_request" error.
+type ListChallengeBucketsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengeBucketsNotFoundResponseBody is the type of the "access" service
+// "listChallengeBuckets" endpoint HTTP response body for the "not_found" error.
+type ListChallengeBucketsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengeBucketsConflictResponseBody is the type of the "access" service
+// "listChallengeBuckets" endpoint HTTP response body for the "conflict" error.
+type ListChallengeBucketsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengeBucketsUnsupportedMediaResponseBody is the type of the "access"
+// service "listChallengeBuckets" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListChallengeBucketsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengeBucketsInvalidResponseBody is the type of the "access" service
+// "listChallengeBuckets" endpoint HTTP response body for the "invalid" error.
+type ListChallengeBucketsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengeBucketsInvariantViolationResponseBody is the type of the
+// "access" service "listChallengeBuckets" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListChallengeBucketsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengeBucketsUnexpectedResponseBody is the type of the "access"
+// service "listChallengeBuckets" endpoint HTTP response body for the
+// "unexpected" error.
+type ListChallengeBucketsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListChallengeBucketsGatewayErrorResponseBody is the type of the "access"
+// service "listChallengeBuckets" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListChallengeBucketsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveChallengeUnauthorizedResponseBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP response body for the "unauthorized" error.
+type ResolveChallengeUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveChallengeForbiddenResponseBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP response body for the "forbidden" error.
+type ResolveChallengeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveChallengeBadRequestResponseBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP response body for the "bad_request" error.
+type ResolveChallengeBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveChallengeNotFoundResponseBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP response body for the "not_found" error.
+type ResolveChallengeNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveChallengeConflictResponseBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP response body for the "conflict" error.
+type ResolveChallengeConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveChallengeUnsupportedMediaResponseBody is the type of the "access"
+// service "resolveChallenge" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ResolveChallengeUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveChallengeInvalidResponseBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP response body for the "invalid" error.
+type ResolveChallengeInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveChallengeInvariantViolationResponseBody is the type of the "access"
+// service "resolveChallenge" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ResolveChallengeInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveChallengeUnexpectedResponseBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP response body for the "unexpected" error.
+type ResolveChallengeUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ResolveChallengeGatewayErrorResponseBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP response body for the "gateway_error" error.
+type ResolveChallengeGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // RoleResponseBody is used to define fields on response body types.
 type RoleResponseBody struct {
 	// Unique role identifier.
@@ -2361,6 +2956,9 @@ type SelectorResponseBody struct {
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
+	// Project filter (MCP scopes only). When set with resource_id='*', grants
+	// access to all servers in the project.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 }
 
 // RoleGrantRequestBody is used to define fields on request body types.
@@ -2381,6 +2979,9 @@ type SelectorRequestBody struct {
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
+	// Project filter (MCP scopes only). When set with resource_id='*', grants
+	// access to all servers in the project.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 }
 
 // ScopeDefinitionResponseBody is used to define fields on response body types.
@@ -2417,6 +3018,123 @@ type ListRoleGrantResponseBody struct {
 	SubScopes []string `form:"sub_scopes,omitempty" json:"sub_scopes,omitempty" xml:"sub_scopes,omitempty"`
 	// Selector constraints. Null means unrestricted.
 	Selectors []*SelectorResponseBody `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
+}
+
+// AuthzChallengeResponseBody is used to define fields on response body types.
+type AuthzChallengeResponseBody struct {
+	// Unique challenge identifier.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// When the authz decision was made.
+	Timestamp *string `form:"timestamp,omitempty" json:"timestamp,omitempty" xml:"timestamp,omitempty"`
+	// Organization the principal was acting in.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Project scope (empty for org-level checks).
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Principal URN e.g. user:<uuid> or api_key:<id>.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+	// Kind of principal.
+	PrincipalType *string `form:"principal_type,omitempty" json:"principal_type,omitempty" xml:"principal_type,omitempty"`
+	// Email when available.
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// User avatar URL when available.
+	PhotoURL  *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
+	Operation *string `form:"operation,omitempty" json:"operation,omitempty" xml:"operation,omitempty"`
+	Outcome   *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
+	Reason    *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Scope that was checked.
+	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Resource kind of the check.
+	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
+	// Resource ID of the check.
+	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	// Roles the principal had loaded.
+	RoleSlugs []string `form:"role_slugs,omitempty" json:"role_slugs,omitempty" xml:"role_slugs,omitempty"`
+	// Total grants evaluated.
+	EvaluatedGrantCount *int `form:"evaluated_grant_count,omitempty" json:"evaluated_grant_count,omitempty" xml:"evaluated_grant_count,omitempty"`
+	// Number of grants that matched.
+	MatchedGrantCount *int `form:"matched_grant_count,omitempty" json:"matched_grant_count,omitempty" xml:"matched_grant_count,omitempty"`
+	// When the challenge was resolved by an admin.
+	ResolvedAt *string `form:"resolved_at,omitempty" json:"resolved_at,omitempty" xml:"resolved_at,omitempty"`
+	// How the challenge was resolved.
+	ResolutionType *string `form:"resolution_type,omitempty" json:"resolution_type,omitempty" xml:"resolution_type,omitempty"`
+	// URN of the admin who resolved.
+	ResolvedBy *string `form:"resolved_by,omitempty" json:"resolved_by,omitempty" xml:"resolved_by,omitempty"`
+	// Role slug assigned (when resolution_type=role_assigned).
+	ResolutionRoleSlug *string `form:"resolution_role_slug,omitempty" json:"resolution_role_slug,omitempty" xml:"resolution_role_slug,omitempty"`
+}
+
+// ChallengeBucketResponseBody is used to define fields on response body types.
+type ChallengeBucketResponseBody struct {
+	// ID of the most recent challenge in the bucket.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Timestamp of the most recent challenge in the bucket.
+	LastSeen *string `form:"last_seen,omitempty" json:"last_seen,omitempty" xml:"last_seen,omitempty"`
+	// Timestamp of the earliest challenge in the bucket.
+	FirstSeen *string `form:"first_seen,omitempty" json:"first_seen,omitempty" xml:"first_seen,omitempty"`
+	// Organization the principal was acting in.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Project scope (empty for org-level checks).
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Principal URN e.g. user:<uuid> or api_key:<id>.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+	// Kind of principal.
+	PrincipalType *string `form:"principal_type,omitempty" json:"principal_type,omitempty" xml:"principal_type,omitempty"`
+	// Email when available.
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// User avatar URL when available.
+	PhotoURL  *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
+	Operation *string `form:"operation,omitempty" json:"operation,omitempty" xml:"operation,omitempty"`
+	Outcome   *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
+	Reason    *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Scope that was checked.
+	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Resource kind of the check.
+	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
+	// Resource ID of the check.
+	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	// Roles the principal had loaded.
+	RoleSlugs []string `form:"role_slugs,omitempty" json:"role_slugs,omitempty" xml:"role_slugs,omitempty"`
+	// Total grants evaluated.
+	EvaluatedGrantCount *int `form:"evaluated_grant_count,omitempty" json:"evaluated_grant_count,omitempty" xml:"evaluated_grant_count,omitempty"`
+	// Number of grants that matched.
+	MatchedGrantCount *int `form:"matched_grant_count,omitempty" json:"matched_grant_count,omitempty" xml:"matched_grant_count,omitempty"`
+	// Number of individual challenges in this bucket.
+	ChallengeCount *int `form:"challenge_count,omitempty" json:"challenge_count,omitempty" xml:"challenge_count,omitempty"`
+	// IDs of all challenges in this bucket.
+	ChallengeIds []string `form:"challenge_ids,omitempty" json:"challenge_ids,omitempty" xml:"challenge_ids,omitempty"`
+	// When the bucket was resolved by an admin.
+	ResolvedAt *string `form:"resolved_at,omitempty" json:"resolved_at,omitempty" xml:"resolved_at,omitempty"`
+	// How the bucket was resolved.
+	ResolutionType *string `form:"resolution_type,omitempty" json:"resolution_type,omitempty" xml:"resolution_type,omitempty"`
+	// URN of the admin who resolved.
+	ResolvedBy *string `form:"resolved_by,omitempty" json:"resolved_by,omitempty" xml:"resolved_by,omitempty"`
+	// Role slug assigned (when resolution_type=role_assigned).
+	ResolutionRoleSlug *string `form:"resolution_role_slug,omitempty" json:"resolution_role_slug,omitempty" xml:"resolution_role_slug,omitempty"`
+}
+
+// ChallengeResolutionResponseBody is used to define fields on response body
+// types.
+type ChallengeResolutionResponseBody struct {
+	// Resolution record ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// ClickHouse challenge ID.
+	ChallengeID *string `form:"challenge_id,omitempty" json:"challenge_id,omitempty" xml:"challenge_id,omitempty"`
+	// Denied principal.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+	// Denied scope.
+	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Resource kind.
+	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
+	// Resource ID.
+	ResourceID     *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	ResolutionType *string `form:"resolution_type,omitempty" json:"resolution_type,omitempty" xml:"resolution_type,omitempty"`
+	// Assigned role slug.
+	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
+	// Admin who resolved.
+	ResolvedBy *string `form:"resolved_by,omitempty" json:"resolved_by,omitempty" xml:"resolved_by,omitempty"`
+	CreatedAt  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
 
 // NewCreateRoleRequestBody builds the HTTP request body from the payload of
@@ -2480,6 +3198,28 @@ func NewUpdateMemberRoleRequestBody(p *access.UpdateMemberRolePayload) *UpdateMe
 	body := &UpdateMemberRoleRequestBody{
 		UserID: p.UserID,
 		RoleID: p.RoleID,
+	}
+	return body
+}
+
+// NewResolveChallengeRequestBody builds the HTTP request body from the payload
+// of the "resolveChallenge" endpoint of the "access" service.
+func NewResolveChallengeRequestBody(p *access.ResolveChallengePayload) *ResolveChallengeRequestBody {
+	body := &ResolveChallengeRequestBody{
+		PrincipalUrn:   p.PrincipalUrn,
+		Scope:          p.Scope,
+		ResourceKind:   p.ResourceKind,
+		ResourceID:     p.ResourceID,
+		ResolutionType: p.ResolutionType,
+		RoleSlug:       p.RoleSlug,
+	}
+	if p.ChallengeIds != nil {
+		body.ChallengeIds = make([]string, len(p.ChallengeIds))
+		for i, val := range p.ChallengeIds {
+			body.ChallengeIds[i] = val
+		}
+	} else {
+		body.ChallengeIds = []string{}
 	}
 	return body
 }
@@ -4440,6 +5180,508 @@ func NewDisableRBACGatewayError(body *DisableRBACGatewayErrorResponseBody) *goa.
 	return v
 }
 
+// NewListChallengesResultOK builds a "access" service "listChallenges"
+// endpoint result from a HTTP "OK" response.
+func NewListChallengesResultOK(body *ListChallengesResponseBody) *access.ListChallengesResult {
+	v := &access.ListChallengesResult{
+		Total: *body.Total,
+	}
+	v.Challenges = make([]*access.AuthzChallenge, len(body.Challenges))
+	for i, val := range body.Challenges {
+		if val == nil {
+			v.Challenges[i] = nil
+			continue
+		}
+		v.Challenges[i] = unmarshalAuthzChallengeResponseBodyToAccessAuthzChallenge(val)
+	}
+
+	return v
+}
+
+// NewListChallengesUnauthorized builds a access service listChallenges
+// endpoint unauthorized error.
+func NewListChallengesUnauthorized(body *ListChallengesUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengesForbidden builds a access service listChallenges endpoint
+// forbidden error.
+func NewListChallengesForbidden(body *ListChallengesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengesBadRequest builds a access service listChallenges endpoint
+// bad_request error.
+func NewListChallengesBadRequest(body *ListChallengesBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengesNotFound builds a access service listChallenges endpoint
+// not_found error.
+func NewListChallengesNotFound(body *ListChallengesNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengesConflict builds a access service listChallenges endpoint
+// conflict error.
+func NewListChallengesConflict(body *ListChallengesConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengesUnsupportedMedia builds a access service listChallenges
+// endpoint unsupported_media error.
+func NewListChallengesUnsupportedMedia(body *ListChallengesUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengesInvalid builds a access service listChallenges endpoint
+// invalid error.
+func NewListChallengesInvalid(body *ListChallengesInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengesInvariantViolation builds a access service listChallenges
+// endpoint invariant_violation error.
+func NewListChallengesInvariantViolation(body *ListChallengesInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengesUnexpected builds a access service listChallenges endpoint
+// unexpected error.
+func NewListChallengesUnexpected(body *ListChallengesUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengesGatewayError builds a access service listChallenges
+// endpoint gateway_error error.
+func NewListChallengesGatewayError(body *ListChallengesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengeBucketsResultOK builds a "access" service
+// "listChallengeBuckets" endpoint result from a HTTP "OK" response.
+func NewListChallengeBucketsResultOK(body *ListChallengeBucketsResponseBody) *access.ListChallengeBucketsResult {
+	v := &access.ListChallengeBucketsResult{
+		Total: *body.Total,
+	}
+	v.Buckets = make([]*access.ChallengeBucket, len(body.Buckets))
+	for i, val := range body.Buckets {
+		if val == nil {
+			v.Buckets[i] = nil
+			continue
+		}
+		v.Buckets[i] = unmarshalChallengeBucketResponseBodyToAccessChallengeBucket(val)
+	}
+
+	return v
+}
+
+// NewListChallengeBucketsUnauthorized builds a access service
+// listChallengeBuckets endpoint unauthorized error.
+func NewListChallengeBucketsUnauthorized(body *ListChallengeBucketsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengeBucketsForbidden builds a access service
+// listChallengeBuckets endpoint forbidden error.
+func NewListChallengeBucketsForbidden(body *ListChallengeBucketsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengeBucketsBadRequest builds a access service
+// listChallengeBuckets endpoint bad_request error.
+func NewListChallengeBucketsBadRequest(body *ListChallengeBucketsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengeBucketsNotFound builds a access service listChallengeBuckets
+// endpoint not_found error.
+func NewListChallengeBucketsNotFound(body *ListChallengeBucketsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengeBucketsConflict builds a access service listChallengeBuckets
+// endpoint conflict error.
+func NewListChallengeBucketsConflict(body *ListChallengeBucketsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengeBucketsUnsupportedMedia builds a access service
+// listChallengeBuckets endpoint unsupported_media error.
+func NewListChallengeBucketsUnsupportedMedia(body *ListChallengeBucketsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengeBucketsInvalid builds a access service listChallengeBuckets
+// endpoint invalid error.
+func NewListChallengeBucketsInvalid(body *ListChallengeBucketsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengeBucketsInvariantViolation builds a access service
+// listChallengeBuckets endpoint invariant_violation error.
+func NewListChallengeBucketsInvariantViolation(body *ListChallengeBucketsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengeBucketsUnexpected builds a access service
+// listChallengeBuckets endpoint unexpected error.
+func NewListChallengeBucketsUnexpected(body *ListChallengeBucketsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListChallengeBucketsGatewayError builds a access service
+// listChallengeBuckets endpoint gateway_error error.
+func NewListChallengeBucketsGatewayError(body *ListChallengeBucketsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveChallengesResultCreated builds a "access" service
+// "resolveChallenge" endpoint result from a HTTP "Created" response.
+func NewResolveChallengesResultCreated(body *ResolveChallengeResponseBody) *access.ResolveChallengesResult {
+	v := &access.ResolveChallengesResult{}
+	v.Resolutions = make([]*access.ChallengeResolution, len(body.Resolutions))
+	for i, val := range body.Resolutions {
+		if val == nil {
+			v.Resolutions[i] = nil
+			continue
+		}
+		v.Resolutions[i] = unmarshalChallengeResolutionResponseBodyToAccessChallengeResolution(val)
+	}
+
+	return v
+}
+
+// NewResolveChallengeUnauthorized builds a access service resolveChallenge
+// endpoint unauthorized error.
+func NewResolveChallengeUnauthorized(body *ResolveChallengeUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveChallengeForbidden builds a access service resolveChallenge
+// endpoint forbidden error.
+func NewResolveChallengeForbidden(body *ResolveChallengeForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveChallengeBadRequest builds a access service resolveChallenge
+// endpoint bad_request error.
+func NewResolveChallengeBadRequest(body *ResolveChallengeBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveChallengeNotFound builds a access service resolveChallenge
+// endpoint not_found error.
+func NewResolveChallengeNotFound(body *ResolveChallengeNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveChallengeConflict builds a access service resolveChallenge
+// endpoint conflict error.
+func NewResolveChallengeConflict(body *ResolveChallengeConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveChallengeUnsupportedMedia builds a access service resolveChallenge
+// endpoint unsupported_media error.
+func NewResolveChallengeUnsupportedMedia(body *ResolveChallengeUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveChallengeInvalid builds a access service resolveChallenge endpoint
+// invalid error.
+func NewResolveChallengeInvalid(body *ResolveChallengeInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveChallengeInvariantViolation builds a access service
+// resolveChallenge endpoint invariant_violation error.
+func NewResolveChallengeInvariantViolation(body *ResolveChallengeInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveChallengeUnexpected builds a access service resolveChallenge
+// endpoint unexpected error.
+func NewResolveChallengeUnexpected(body *ResolveChallengeUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewResolveChallengeGatewayError builds a access service resolveChallenge
+// endpoint gateway_error error.
+func NewResolveChallengeGatewayError(body *ResolveChallengeGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateListRolesResponseBody runs the validations defined on
 // ListRolesResponseBody
 func ValidateListRolesResponseBody(body *ListRolesResponseBody) (err error) {
@@ -4662,6 +5904,60 @@ func ValidateUpdateMemberRoleResponseBody(body *UpdateMemberRoleResponseBody) (e
 func ValidateGetRBACStatusResponseBody(body *GetRBACStatusResponseBody) (err error) {
 	if body.RbacEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("rbac_enabled", "body"))
+	}
+	return
+}
+
+// ValidateListChallengesResponseBody runs the validations defined on
+// ListChallengesResponseBody
+func ValidateListChallengesResponseBody(body *ListChallengesResponseBody) (err error) {
+	if body.Challenges == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("challenges", "body"))
+	}
+	if body.Total == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
+	}
+	for _, e := range body.Challenges {
+		if e != nil {
+			if err2 := ValidateAuthzChallengeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateListChallengeBucketsResponseBody runs the validations defined on
+// ListChallengeBucketsResponseBody
+func ValidateListChallengeBucketsResponseBody(body *ListChallengeBucketsResponseBody) (err error) {
+	if body.Buckets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("buckets", "body"))
+	}
+	if body.Total == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
+	}
+	for _, e := range body.Buckets {
+		if e != nil {
+			if err2 := ValidateChallengeBucketResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateResolveChallengeResponseBody runs the validations defined on
+// ResolveChallengeResponseBody
+func ValidateResolveChallengeResponseBody(body *ResolveChallengeResponseBody) (err error) {
+	if body.Resolutions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resolutions", "body"))
+	}
+	for _, e := range body.Resolutions {
+		if e != nil {
+			if err2 := ValidateChallengeResolutionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -7546,6 +8842,726 @@ func ValidateDisableRBACGatewayErrorResponseBody(body *DisableRBACGatewayErrorRe
 	return
 }
 
+// ValidateListChallengesUnauthorizedResponseBody runs the validations defined
+// on listChallenges_unauthorized_response_body
+func ValidateListChallengesUnauthorizedResponseBody(body *ListChallengesUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengesForbiddenResponseBody runs the validations defined on
+// listChallenges_forbidden_response_body
+func ValidateListChallengesForbiddenResponseBody(body *ListChallengesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengesBadRequestResponseBody runs the validations defined on
+// listChallenges_bad_request_response_body
+func ValidateListChallengesBadRequestResponseBody(body *ListChallengesBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengesNotFoundResponseBody runs the validations defined on
+// listChallenges_not_found_response_body
+func ValidateListChallengesNotFoundResponseBody(body *ListChallengesNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengesConflictResponseBody runs the validations defined on
+// listChallenges_conflict_response_body
+func ValidateListChallengesConflictResponseBody(body *ListChallengesConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengesUnsupportedMediaResponseBody runs the validations
+// defined on listChallenges_unsupported_media_response_body
+func ValidateListChallengesUnsupportedMediaResponseBody(body *ListChallengesUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengesInvalidResponseBody runs the validations defined on
+// listChallenges_invalid_response_body
+func ValidateListChallengesInvalidResponseBody(body *ListChallengesInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengesInvariantViolationResponseBody runs the validations
+// defined on listChallenges_invariant_violation_response_body
+func ValidateListChallengesInvariantViolationResponseBody(body *ListChallengesInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengesUnexpectedResponseBody runs the validations defined on
+// listChallenges_unexpected_response_body
+func ValidateListChallengesUnexpectedResponseBody(body *ListChallengesUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengesGatewayErrorResponseBody runs the validations defined
+// on listChallenges_gateway_error_response_body
+func ValidateListChallengesGatewayErrorResponseBody(body *ListChallengesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengeBucketsUnauthorizedResponseBody runs the validations
+// defined on listChallengeBuckets_unauthorized_response_body
+func ValidateListChallengeBucketsUnauthorizedResponseBody(body *ListChallengeBucketsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengeBucketsForbiddenResponseBody runs the validations
+// defined on listChallengeBuckets_forbidden_response_body
+func ValidateListChallengeBucketsForbiddenResponseBody(body *ListChallengeBucketsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengeBucketsBadRequestResponseBody runs the validations
+// defined on listChallengeBuckets_bad_request_response_body
+func ValidateListChallengeBucketsBadRequestResponseBody(body *ListChallengeBucketsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengeBucketsNotFoundResponseBody runs the validations
+// defined on listChallengeBuckets_not_found_response_body
+func ValidateListChallengeBucketsNotFoundResponseBody(body *ListChallengeBucketsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengeBucketsConflictResponseBody runs the validations
+// defined on listChallengeBuckets_conflict_response_body
+func ValidateListChallengeBucketsConflictResponseBody(body *ListChallengeBucketsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengeBucketsUnsupportedMediaResponseBody runs the
+// validations defined on listChallengeBuckets_unsupported_media_response_body
+func ValidateListChallengeBucketsUnsupportedMediaResponseBody(body *ListChallengeBucketsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengeBucketsInvalidResponseBody runs the validations defined
+// on listChallengeBuckets_invalid_response_body
+func ValidateListChallengeBucketsInvalidResponseBody(body *ListChallengeBucketsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengeBucketsInvariantViolationResponseBody runs the
+// validations defined on listChallengeBuckets_invariant_violation_response_body
+func ValidateListChallengeBucketsInvariantViolationResponseBody(body *ListChallengeBucketsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengeBucketsUnexpectedResponseBody runs the validations
+// defined on listChallengeBuckets_unexpected_response_body
+func ValidateListChallengeBucketsUnexpectedResponseBody(body *ListChallengeBucketsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListChallengeBucketsGatewayErrorResponseBody runs the validations
+// defined on listChallengeBuckets_gateway_error_response_body
+func ValidateListChallengeBucketsGatewayErrorResponseBody(body *ListChallengeBucketsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveChallengeUnauthorizedResponseBody runs the validations
+// defined on resolveChallenge_unauthorized_response_body
+func ValidateResolveChallengeUnauthorizedResponseBody(body *ResolveChallengeUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveChallengeForbiddenResponseBody runs the validations defined
+// on resolveChallenge_forbidden_response_body
+func ValidateResolveChallengeForbiddenResponseBody(body *ResolveChallengeForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveChallengeBadRequestResponseBody runs the validations defined
+// on resolveChallenge_bad_request_response_body
+func ValidateResolveChallengeBadRequestResponseBody(body *ResolveChallengeBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveChallengeNotFoundResponseBody runs the validations defined on
+// resolveChallenge_not_found_response_body
+func ValidateResolveChallengeNotFoundResponseBody(body *ResolveChallengeNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveChallengeConflictResponseBody runs the validations defined on
+// resolveChallenge_conflict_response_body
+func ValidateResolveChallengeConflictResponseBody(body *ResolveChallengeConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveChallengeUnsupportedMediaResponseBody runs the validations
+// defined on resolveChallenge_unsupported_media_response_body
+func ValidateResolveChallengeUnsupportedMediaResponseBody(body *ResolveChallengeUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveChallengeInvalidResponseBody runs the validations defined on
+// resolveChallenge_invalid_response_body
+func ValidateResolveChallengeInvalidResponseBody(body *ResolveChallengeInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveChallengeInvariantViolationResponseBody runs the validations
+// defined on resolveChallenge_invariant_violation_response_body
+func ValidateResolveChallengeInvariantViolationResponseBody(body *ResolveChallengeInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveChallengeUnexpectedResponseBody runs the validations defined
+// on resolveChallenge_unexpected_response_body
+func ValidateResolveChallengeUnexpectedResponseBody(body *ResolveChallengeUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateResolveChallengeGatewayErrorResponseBody runs the validations
+// defined on resolveChallenge_gateway_error_response_body
+func ValidateResolveChallengeGatewayErrorResponseBody(body *ResolveChallengeGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateRoleResponseBody runs the validations defined on RoleResponseBody
 func ValidateRoleResponseBody(body *RoleResponseBody) (err error) {
 	if body.ID == nil {
@@ -7595,8 +9611,8 @@ func ValidateRoleGrantResponseBody(body *RoleGrantResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write"}))
 		}
 	}
 	for _, e := range body.Selectors {
@@ -7619,8 +9635,8 @@ func ValidateSelectorResponseBody(body *SelectorResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
 	}
 	if body.ResourceKind != nil {
-		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "*"}))
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "*"}))
 		}
 	}
 	if body.Disposition != nil {
@@ -7634,8 +9650,8 @@ func ValidateSelectorResponseBody(body *SelectorResponseBody) (err error) {
 // ValidateRoleGrantRequestBody runs the validations defined on
 // RoleGrantRequestBody
 func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
-	if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect"}))
+	if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write"}))
 	}
 	for _, e := range body.Selectors {
 		if e != nil {
@@ -7650,8 +9666,8 @@ func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
 // ValidateSelectorRequestBody runs the validations defined on
 // SelectorRequestBody
 func ValidateSelectorRequestBody(body *SelectorRequestBody) (err error) {
-	if !(body.ResourceKind == "project" || body.ResourceKind == "mcp" || body.ResourceKind == "org" || body.ResourceKind == "*") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", body.ResourceKind, []any{"project", "mcp", "org", "*"}))
+	if !(body.ResourceKind == "project" || body.ResourceKind == "mcp" || body.ResourceKind == "org" || body.ResourceKind == "environment" || body.ResourceKind == "*") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", body.ResourceKind, []any{"project", "mcp", "org", "environment", "*"}))
 	}
 	if body.Disposition != nil {
 		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
@@ -7674,13 +9690,13 @@ func ValidateScopeDefinitionResponseBody(body *ScopeDefinitionResponseBody) (err
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_type", "body"))
 	}
 	if body.Slug != nil {
-		if !(*body.Slug == "org:read" || *body.Slug == "org:admin" || *body.Slug == "project:read" || *body.Slug == "project:write" || *body.Slug == "mcp:read" || *body.Slug == "mcp:write" || *body.Slug == "mcp:connect") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.slug", *body.Slug, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect"}))
+		if !(*body.Slug == "org:read" || *body.Slug == "org:admin" || *body.Slug == "project:read" || *body.Slug == "project:write" || *body.Slug == "mcp:read" || *body.Slug == "mcp:write" || *body.Slug == "mcp:connect" || *body.Slug == "environment:read" || *body.Slug == "environment:write") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.slug", *body.Slug, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write"}))
 		}
 	}
 	if body.ResourceType != nil {
-		if !(*body.ResourceType == "org" || *body.ResourceType == "project" || *body.ResourceType == "mcp") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_type", *body.ResourceType, []any{"org", "project", "mcp"}))
+		if !(*body.ResourceType == "org" || *body.ResourceType == "project" || *body.ResourceType == "mcp" || *body.ResourceType == "environment") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_type", *body.ResourceType, []any{"org", "project", "mcp", "environment"}))
 		}
 	}
 	return
@@ -7717,13 +9733,13 @@ func ValidateListRoleGrantResponseBody(body *ListRoleGrantResponseBody) (err err
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write"}))
 		}
 	}
 	for _, e := range body.SubScopes {
-		if !(e == "org:read" || e == "org:admin" || e == "project:read" || e == "project:write" || e == "mcp:read" || e == "mcp:write" || e == "mcp:connect") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sub_scopes[*]", e, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect"}))
+		if !(e == "org:read" || e == "org:admin" || e == "project:read" || e == "project:write" || e == "mcp:read" || e == "mcp:write" || e == "mcp:connect" || e == "environment:read" || e == "environment:write") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sub_scopes[*]", e, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write"}))
 		}
 	}
 	for _, e := range body.Selectors {
@@ -7732,6 +9748,202 @@ func ValidateListRoleGrantResponseBody(body *ListRoleGrantResponseBody) (err err
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateAuthzChallengeResponseBody runs the validations defined on
+// AuthzChallengeResponseBody
+func ValidateAuthzChallengeResponseBody(body *AuthzChallengeResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Timestamp == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timestamp", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	}
+	if body.PrincipalType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_type", "body"))
+	}
+	if body.Operation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("operation", "body"))
+	}
+	if body.Outcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.RoleSlugs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_slugs", "body"))
+	}
+	if body.EvaluatedGrantCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("evaluated_grant_count", "body"))
+	}
+	if body.MatchedGrantCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("matched_grant_count", "body"))
+	}
+	if body.Timestamp != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.timestamp", *body.Timestamp, goa.FormatDateTime))
+	}
+	if body.PrincipalType != nil {
+		if !(*body.PrincipalType == "user" || *body.PrincipalType == "api_key" || *body.PrincipalType == "assistant") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.principal_type", *body.PrincipalType, []any{"user", "api_key", "assistant"}))
+		}
+	}
+	if body.Operation != nil {
+		if !(*body.Operation == "require" || *body.Operation == "require_any" || *body.Operation == "filter") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.operation", *body.Operation, []any{"require", "require_any", "filter"}))
+		}
+	}
+	if body.Outcome != nil {
+		if !(*body.Outcome == "allow" || *body.Outcome == "deny" || *body.Outcome == "error") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"allow", "deny", "error"}))
+		}
+	}
+	if body.Reason != nil {
+		if !(*body.Reason == "grant_matched" || *body.Reason == "no_grants" || *body.Reason == "scope_unsatisfied" || *body.Reason == "invalid_check" || *body.Reason == "rbac_skipped_apikey" || *body.Reason == "dev_override") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reason", *body.Reason, []any{"grant_matched", "no_grants", "scope_unsatisfied", "invalid_check", "rbac_skipped_apikey", "dev_override"}))
+		}
+	}
+	if body.ResolvedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resolved_at", *body.ResolvedAt, goa.FormatDateTime))
+	}
+	if body.ResolutionType != nil {
+		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "dismissed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "dismissed"}))
+		}
+	}
+	return
+}
+
+// ValidateChallengeBucketResponseBody runs the validations defined on
+// ChallengeBucketResponseBody
+func ValidateChallengeBucketResponseBody(body *ChallengeBucketResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.LastSeen == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("last_seen", "body"))
+	}
+	if body.FirstSeen == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("first_seen", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	}
+	if body.PrincipalType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_type", "body"))
+	}
+	if body.Operation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("operation", "body"))
+	}
+	if body.Outcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.RoleSlugs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_slugs", "body"))
+	}
+	if body.EvaluatedGrantCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("evaluated_grant_count", "body"))
+	}
+	if body.MatchedGrantCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("matched_grant_count", "body"))
+	}
+	if body.ChallengeCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("challenge_count", "body"))
+	}
+	if body.ChallengeIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("challenge_ids", "body"))
+	}
+	if body.LastSeen != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen", *body.LastSeen, goa.FormatDateTime))
+	}
+	if body.FirstSeen != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_seen", *body.FirstSeen, goa.FormatDateTime))
+	}
+	if body.PrincipalType != nil {
+		if !(*body.PrincipalType == "user" || *body.PrincipalType == "api_key" || *body.PrincipalType == "assistant") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.principal_type", *body.PrincipalType, []any{"user", "api_key", "assistant"}))
+		}
+	}
+	if body.Operation != nil {
+		if !(*body.Operation == "require" || *body.Operation == "require_any" || *body.Operation == "filter") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.operation", *body.Operation, []any{"require", "require_any", "filter"}))
+		}
+	}
+	if body.Outcome != nil {
+		if !(*body.Outcome == "allow" || *body.Outcome == "deny" || *body.Outcome == "error") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"allow", "deny", "error"}))
+		}
+	}
+	if body.Reason != nil {
+		if !(*body.Reason == "grant_matched" || *body.Reason == "no_grants" || *body.Reason == "scope_unsatisfied" || *body.Reason == "invalid_check" || *body.Reason == "rbac_skipped_apikey" || *body.Reason == "dev_override") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reason", *body.Reason, []any{"grant_matched", "no_grants", "scope_unsatisfied", "invalid_check", "rbac_skipped_apikey", "dev_override"}))
+		}
+	}
+	if body.ResolvedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resolved_at", *body.ResolvedAt, goa.FormatDateTime))
+	}
+	if body.ResolutionType != nil {
+		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "dismissed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "dismissed"}))
+		}
+	}
+	return
+}
+
+// ValidateChallengeResolutionResponseBody runs the validations defined on
+// ChallengeResolutionResponseBody
+func ValidateChallengeResolutionResponseBody(body *ChallengeResolutionResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ChallengeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("challenge_id", "body"))
+	}
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	}
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.ResolutionType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resolution_type", "body"))
+	}
+	if body.ResolvedBy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resolved_by", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.ResolutionType != nil {
+		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "dismissed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "dismissed"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	return
 }

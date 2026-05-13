@@ -141,7 +141,13 @@ const (
 	AssistantRuntimeIDKey          = attribute.Key("gram.assistant.runtime_id")
 	AssistantRuntimeBackendKey     = attribute.Key("gram.assistant.runtime_backend")
 	AssistantPhaseKey              = attribute.Key("gram.assistant.phase")
+	AssistantColdStartKey          = attribute.Key("gram.assistant.cold_start")
+	AssistantAppCreatedKey         = attribute.Key("gram.assistant.app_created")
+	AssistantSetupFailureClassKey  = attribute.Key("gram.assistant.setup_failure_class")
 	AssistantServerIPKey           = attribute.Key("gram.assistant.server_ip")
+	AssistantImageRecycleKey       = attribute.Key("gram.assistant.image_recycle")
+	AssistantImageDesiredKey       = attribute.Key("gram.assistant.image_desired")
+	AssistantImageActualKey        = attribute.Key("gram.assistant.image_actual")
 	ChatModelKey                   = attribute.Key("gram.chat.model")
 	ChatToolCountKey               = attribute.Key("gram.chat.tool_count")
 	ChatToolNamesKey               = attribute.Key("gram.chat.tool_names")
@@ -165,6 +171,12 @@ const (
 	MimeTypeKey                    = attribute.Key("mime.type")
 	OAuthAuthorizationEndpointKey  = attribute.Key("gram.oauth.authorization_endpoint")
 	OAuthClientIDKey               = attribute.Key("gram.oauth.client_id")
+	OAuthClientNameKey             = attribute.Key("gram.oauth.client_name")
+	// OAuthErrorKey / OAuthErrorDescriptionKey carry the `error` /
+	// `error_description` parameters from RFC 6749 / RFC 7591 error responses
+	// — used across DCR registration, /authorize, /token, and /revoke.
+	OAuthErrorKey                  = attribute.Key("gram.oauth.error")
+	OAuthErrorDescriptionKey       = attribute.Key("gram.oauth.error_description")
 	OAuthGrantKey                  = attribute.Key("gram.oauth.grant")
 	OAuthIssuerKey                 = attribute.Key("gram.oauth.issuer")
 	OAuthProviderKey               = attribute.Key("gram.oauth.provider")
@@ -302,8 +314,14 @@ const (
 	RemoteMCPServerIDKey               = attribute.Key("gram.remote_mcp_server.id")
 	RemoteMCPServerURLKey              = attribute.Key("gram.remote_mcp_server.url")
 
+	WorkOSEventIDKey             = attribute.Key("gram.workos_event.id")
+	WorkOSEventTypeKey           = attribute.Key("gram.workos_event.type")
+	WorkOSEventOrganizationIDKey = attribute.Key("gram.workos_event.organization_id")
+
 	StatsToolCallCountKey  = attribute.Key("gram.stats.tool_call_count")
 	StatsMCPServerCountKey = attribute.Key("gram.stats.mcp_server_count")
+
+	GitHubUsernameKey = attribute.Key("gram.github.username")
 )
 
 const (
@@ -749,6 +767,19 @@ func SlogOAuthAuthorizationEndpoint(v string) slog.Attr {
 
 func OAuthClientID(v string) attribute.KeyValue { return OAuthClientIDKey.String(v) }
 func SlogOAuthClientID(v string) slog.Attr      { return slog.String(string(OAuthClientIDKey), v) }
+
+func OAuthClientName(v string) attribute.KeyValue { return OAuthClientNameKey.String(v) }
+func SlogOAuthClientName(v string) slog.Attr      { return slog.String(string(OAuthClientNameKey), v) }
+
+func OAuthError(v string) attribute.KeyValue { return OAuthErrorKey.String(v) }
+func SlogOAuthError(v string) slog.Attr      { return slog.String(string(OAuthErrorKey), v) }
+
+func OAuthErrorDescription(v string) attribute.KeyValue {
+	return OAuthErrorDescriptionKey.String(v)
+}
+func SlogOAuthErrorDescription(v string) slog.Attr {
+	return slog.String(string(OAuthErrorDescriptionKey), v)
+}
 
 func OAuthGrant(v string) attribute.KeyValue { return OAuthGrantKey.String(v) }
 func SlogOAuthGrant(v string) slog.Attr      { return slog.String(string(OAuthGrantKey), v) }
@@ -1267,11 +1298,34 @@ func SlogLogSeverityText(v string) slog.Attr      { return slog.String(string(Lo
 func LogBody(v string) attribute.KeyValue { return LogBodyKey.String(v) }
 func SlogLogBody(v string) slog.Attr      { return slog.String(string(LogBodyKey), v) }
 
+func WorkOSEventID(v string) attribute.KeyValue { return WorkOSEventIDKey.String(v) }
+func SlogWorkOSEventID(v string) slog.Attr      { return slog.String(string(WorkOSEventIDKey), v) }
+
+func WorkOSEventType(v string) attribute.KeyValue { return WorkOSEventTypeKey.String(v) }
+func SlogWorkOSEventType(v string) slog.Attr      { return slog.String(string(WorkOSEventTypeKey), v) }
+
+func WorkOSEventOrganizationID(v string) attribute.KeyValue {
+	return WorkOSEventOrganizationIDKey.String(v)
+}
+func SlogWorkOSEventOrganizationID(v string) slog.Attr {
+	return slog.String(string(WorkOSEventOrganizationIDKey), v)
+}
+
 func StatsToolCallCount(v int) attribute.KeyValue { return StatsToolCallCountKey.Int(v) }
 func SlogStatsToolCallCount(v int) slog.Attr      { return slog.Int(string(StatsToolCallCountKey), v) }
 
 func StatsMCPServerCount(v int) attribute.KeyValue { return StatsMCPServerCountKey.Int(v) }
 func SlogStatsMCPServerCount(v int) slog.Attr      { return slog.Int(string(StatsMCPServerCountKey), v) }
+
+func AssistantID(v string) attribute.KeyValue { return AssistantIDKey.String(v) }
+func SlogAssistantID(v string) slog.Attr      { return slog.String(string(AssistantIDKey), v) }
+
+func AssistantRuntimeBackend(v string) attribute.KeyValue {
+	return AssistantRuntimeBackendKey.String(v)
+}
+func SlogAssistantRuntimeBackend(v string) slog.Attr {
+	return slog.String(string(AssistantRuntimeBackendKey), v)
+}
 
 func AssistantThreadID(v string) attribute.KeyValue { return AssistantThreadIDKey.String(v) }
 func SlogAssistantThreadID(v string) slog.Attr      { return slog.String(string(AssistantThreadIDKey), v) }
@@ -1288,6 +1342,26 @@ func SlogAssistantAttempt(v int) slog.Attr      { return slog.Int(string(Assista
 func AssistantServerIP(v string) attribute.KeyValue { return AssistantServerIPKey.String(v) }
 func SlogAssistantServerIP(v string) slog.Attr      { return slog.String(string(AssistantServerIPKey), v) }
 
+func AssistantColdStart(v bool) attribute.KeyValue { return AssistantColdStartKey.Bool(v) }
+
+func AssistantAppCreated(v bool) attribute.KeyValue { return AssistantAppCreatedKey.Bool(v) }
+
+func AssistantSetupFailureClass(v string) attribute.KeyValue {
+	return AssistantSetupFailureClassKey.String(v)
+}
+
+func AssistantImageRecycle(v bool) attribute.KeyValue { return AssistantImageRecycleKey.Bool(v) }
+
+func AssistantImageDesired(v string) attribute.KeyValue { return AssistantImageDesiredKey.String(v) }
+func SlogAssistantImageDesired(v string) slog.Attr {
+	return slog.String(string(AssistantImageDesiredKey), v)
+}
+
+func AssistantImageActual(v string) attribute.KeyValue { return AssistantImageActualKey.String(v) }
+func SlogAssistantImageActual(v string) slog.Attr {
+	return slog.String(string(AssistantImageActualKey), v)
+}
+
 func ChatModel(v string) attribute.KeyValue { return ChatModelKey.String(v) }
 func SlogChatModel(v string) slog.Attr      { return slog.String(string(ChatModelKey), v) }
 
@@ -1296,3 +1370,6 @@ func SlogChatToolCount(v int) slog.Attr      { return slog.Int(string(ChatToolCo
 
 func ChatToolNames(v any) attribute.KeyValue { return ChatToolNamesKey.String(fmt.Sprintf("%v", v)) }
 func SlogChatToolNames(v any) slog.Attr      { return slog.Any(string(ChatToolNamesKey), v) }
+
+func GitHubUsername(v string) attribute.KeyValue { return GitHubUsernameKey.String(v) }
+func SlogGitHubUsername(v string) slog.Attr      { return slog.String(string(GitHubUsernameKey), v) }

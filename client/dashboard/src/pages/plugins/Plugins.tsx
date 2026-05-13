@@ -4,6 +4,7 @@ import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/dialog";
 import { SearchBar } from "@/components/ui/search-bar";
 import { Type } from "@/components/ui/type";
+import { InstallInstructionsButton } from "./InstallInstructionsDialog";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useRoutes } from "@/routes";
 import { Plugin } from "@gram/client/models/components";
@@ -54,10 +55,12 @@ export default function Plugins() {
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
     useState(false);
   const [isDownloadingObservability, setIsDownloadingObservability] = useState<
-    "claude" | "cursor" | null
+    "claude" | "cursor" | "codex" | null
   >(null);
 
-  const handleObservabilityDownload = async (platform: "claude" | "cursor") => {
+  const handleObservabilityDownload = async (
+    platform: "claude" | "cursor" | "codex",
+  ) => {
     setIsObservabilityDownloadMenuOpen(false);
     setIsDownloadingObservability(platform);
     try {
@@ -163,11 +166,11 @@ export default function Plugins() {
   // effective and satisfies react-hooks/exhaustive-deps.
   const { mutate: publishMutate } = publishMutation;
   const handlePublish = useCallback(
-    (githubUsername?: string) => {
+    (githubUsernames: string[]) => {
       publishMutate({
         security: { sessionHeaderGramSession: "" },
         request: {
-          publishPluginsRequestBody: { githubUsername },
+          publishPluginsRequestBody: { githubUsernames },
         },
       });
     },
@@ -196,7 +199,7 @@ export default function Plugins() {
             Code, Cursor, and Codex marketplaces via GitHub.
           </Page.Section.Description>
           <Page.Section.CTA>
-            {hasPlugins && publishStatus?.configured && (
+            {publishStatus?.configured && (
               <Button
                 variant="secondary"
                 onClick={() => setIsPublishDialogOpen(true)}
@@ -221,19 +224,30 @@ export default function Plugins() {
           <Page.Section.Body>
             <Stack direction="vertical" gap={4}>
               {publishStatus?.connected && publishStatus.repoUrl && (
-                <span>
-                  Plugin marketplace:{" "}
-                  <a
-                    href={publishStatus.repoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-sky-500 hover:text-sky-600 hover:underline"
-                  >
-                    {publishStatus.repoOwner && publishStatus.repoName
-                      ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
-                      : publishStatus.repoUrl}
-                  </a>
-                </span>
+                <div className="bg-muted/30 border-border/60 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                      Marketplace
+                    </span>
+                    <a
+                      href={publishStatus.repoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-primary text-foreground font-mono text-sm hover:underline"
+                    >
+                      {publishStatus.repoOwner && publishStatus.repoName
+                        ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
+                        : publishStatus.repoUrl}
+                    </a>
+                  </div>
+                  {publishStatus.repoOwner && publishStatus.repoName && (
+                    <InstallInstructionsButton
+                      repoOwner={publishStatus.repoOwner}
+                      repoName={publishStatus.repoName}
+                      marketplaceUrl={publishStatus.marketplaceUrl}
+                    />
+                  )}
+                </div>
               )}
               {hasPlugins && (
                 <SearchBar
@@ -311,6 +325,11 @@ export default function Plugins() {
                     onClick={() => handleObservabilityDownload("cursor")}
                   >
                     Cursor
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => handleObservabilityDownload("codex")}
+                  >
+                    Codex
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

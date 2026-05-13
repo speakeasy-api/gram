@@ -6,29 +6,107 @@ import (
 	"maps"
 	"sync"
 	"time"
+
+	"github.com/workos/workos-go/v6/pkg/common"
+	"github.com/workos/workos-go/v6/pkg/events"
 )
 
 type StubClient struct {
-	mut   sync.Mutex
-	orgs  map[string]*stubOrgState
-	next  int
-	nowFn func() time.Time
+	mut         sync.Mutex
+	orgs        map[string]*stubOrgState
+	orgOrder    []string
+	globalRoles map[string]Role
+	globalOrder []string
+	eventPages  [][]events.Event
+	eventCalls  []events.ListEventsOpts
+	next        int
+	nowFn       func() time.Time
 }
 
 type stubOrgState struct {
-	roles       map[string]Role
-	roleOrder   []string
-	memberships map[string]Member
-	users       map[string]User
+	organization Organization
+	roles        map[string]Role
+	roleOrder    []string
+	memberships  map[string]Member
+	users        map[string]User
+	invites      map[string]Invitation
+	inviteOrder  []string
 }
 
 func NewStubClient() *StubClient {
 	return &StubClient{
-		mut:   sync.Mutex{},
-		orgs:  make(map[string]*stubOrgState),
-		next:  1,
-		nowFn: time.Now,
+		mut:         sync.Mutex{},
+		orgs:        make(map[string]*stubOrgState),
+		orgOrder:    make([]string, 0),
+		globalRoles: stubDefaultGlobalRoles(),
+		globalOrder: []string{"admin", "member"},
+		eventPages:  nil,
+		eventCalls:  make([]events.ListEventsOpts, 0),
+		next:        1,
+		nowFn:       time.Now,
 	}
+}
+
+func (s *StubClient) UpsertOrganization(org Organization) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	state := s.orgState(org.ID)
+	state.organization = org
+}
+
+func (s *StubClient) GetOrganization(_ context.Context, orgID string) (*Organization, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	state, ok := s.orgs[orgID]
+	if !ok {
+		return nil, &APIError{Method: "GET", Path: "/stub/organizations/" + orgID, StatusCode: 404, Body: "organization not found"}
+	}
+
+	org := state.organization
+	return &org, nil
+}
+
+func (s *StubClient) ListOrganizations(_ context.Context) ([]Organization, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	orgs := make([]Organization, 0, len(s.orgOrder))
+	for _, orgID := range s.orgOrder {
+		orgs = append(orgs, s.orgs[orgID].organization)
+	}
+
+	return orgs, nil
+}
+
+func (s *StubClient) SetEventPages(pages [][]events.Event) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	s.eventPages = append([][]events.Event(nil), pages...)
+	s.eventCalls = s.eventCalls[:0]
+}
+
+func (s *StubClient) EventCalls() []events.ListEventsOpts {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	return append([]events.ListEventsOpts(nil), s.eventCalls...)
+}
+
+func (s *StubClient) ListEvents(_ context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	s.eventCalls = append(s.eventCalls, opts)
+
+	idx := len(s.eventCalls) - 1
+	if idx >= len(s.eventPages) {
+		return events.ListEventsResponse{Data: nil, ListMetadata: common.ListMetadata{Before: "", After: ""}}, nil
+	}
+
+	return events.ListEventsResponse{Data: s.eventPages[idx], ListMetadata: common.ListMetadata{Before: "", After: ""}}, nil
 }
 
 func (s *StubClient) ListRoles(_ context.Context, orgID string) ([]Role, error) {
@@ -54,11 +132,23 @@ func (s *StubClient) CreateRole(_ context.Context, orgID string, opts CreateRole
 	}
 
 	now := s.nowFn().UTC().Format(time.RFC3339)
-	role := Role{ID: s.nextRoleID(), Name: opts.Name, Slug: opts.Slug, Description: opts.Description, CreatedAt: now, UpdatedAt: now}
+	role := Role{ID: s.nextRoleID(), Name: opts.Name, Slug: opts.Slug, Description: opts.Description, Type: "OrganizationRole", CreatedAt: now, UpdatedAt: now}
 	state.roles[role.Slug] = role
 	state.roleOrder = append(state.roleOrder, role.Slug)
 
 	return &role, nil
+}
+
+func (s *StubClient) ListGlobalRoles(_ context.Context) ([]Role, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	roles := make([]Role, 0, len(s.globalOrder))
+	for _, slug := range s.globalOrder {
+		roles = append(roles, s.globalRoles[slug])
+	}
+
+	return roles, nil
 }
 
 func (s *StubClient) UpdateRole(_ context.Context, orgID string, roleSlug string, opts UpdateRoleOpts) (*Role, error) {
@@ -118,6 +208,14 @@ func (s *StubClient) ListMembers(_ context.Context, orgID string) ([]Member, err
 	}
 
 	return members, nil
+}
+
+func (s *StubClient) UpsertOrganizationMembership(member Member) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	state := s.orgState(member.OrganizationID)
+	state.memberships[member.ID] = member
 }
 
 func (s *StubClient) UpdateMemberRole(_ context.Context, membershipID string, roleSlug string) (*Member, error) {
@@ -253,17 +351,26 @@ func (s *StubClient) orgState(orgID string) *stubOrgState {
 	}
 
 	state = &stubOrgState{
+		organization: Organization{ID: orgID, Name: orgID, ExternalID: "", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},
 		roles: map[string]Role{
-			"admin":  {ID: "role_admin", Name: "Admin", Slug: "admin", Description: "", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},
-			"member": {ID: "role_member", Name: "Member", Slug: "member", Description: "", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},
+			"admin":  {ID: "role_admin", Name: "Admin", Slug: "admin", Description: "", Type: "EnvironmentRole", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},
+			"member": {ID: "role_member", Name: "Member", Slug: "member", Description: "", Type: "EnvironmentRole", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},
 		},
 		roleOrder:   []string{"admin", "member"},
 		memberships: make(map[string]Member),
 		users:       make(map[string]User),
 	}
 	s.orgs[orgID] = state
+	s.orgOrder = append(s.orgOrder, orgID)
 
 	return state
+}
+
+func stubDefaultGlobalRoles() map[string]Role {
+	return map[string]Role{
+		"admin":  {ID: "role_admin", Name: "Admin", Slug: "admin", Description: "", Type: "EnvironmentRole", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},
+		"member": {ID: "role_member", Name: "Member", Slug: "member", Description: "", Type: "EnvironmentRole", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},
+	}
 }
 
 func (s *StubClient) nextRoleID() string {

@@ -115,9 +115,9 @@ export const ToolCollectionBadge = ({
   if (toolsWarnings) {
     tooltipContent = (
       <>
-        LLM tool-use performance typically degrades with toolset size. General
-        industry standards recommend keeping MCP servers at around 40 tools or
-        fewer
+        LLM tool-use performance typically degrades with MCP server size.
+        General industry standards recommend keeping MCP servers at around 40
+        tools or fewer
       </>
     );
   }

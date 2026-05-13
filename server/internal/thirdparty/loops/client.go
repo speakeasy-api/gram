@@ -1,3 +1,9 @@
+// Package loops is a thin transport wrapper around the Loops transactional
+// email API (https://loops.so).
+//
+// The package only knows how to ship a request payload — it has no knowledge
+// of which template ID maps to which feature. Use the email package to send
+// templated emails with strongly typed variables.
 package loops
 
 import (
@@ -9,65 +15,59 @@ import (
 	"log/slog"
 	"net/http"
 
-	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
-const baseURL = "https://app.loops.so/api/v1"
+const defaultBaseURL = "https://app.loops.so/api/v1"
 
-// Template is a key used to look up a Loops transactional email template ID.
-type Template string
-
-const (
-	TemplateTeamInvite Template = "team_invite"
-)
-
-// templates maps template keys to their Loops transactional IDs.
-var templates = map[Template]string{
-	TemplateTeamInvite: "cml3n1h2n27o50i2rakc30bwb",
+// Client sends transactional emails via Loops.
+type Client interface {
+	SendTransactional(ctx context.Context, input SendTransactionalInput) error
 }
 
-// TransactionalID returns the Loops transactional ID for the given template key.
-// Returns empty string if the template is not registered.
-func TransactionalID(t Template) string {
-	return templates[t]
+// SendTransactionalInput is the boundary type for sending a transactional
+// email. Higher level packages (e.g. email) translate their typed templates
+// into this shape.
+type SendTransactionalInput struct {
+	// TransactionalID is the Loops template identifier.
+	TransactionalID string
+	// Email is the recipient's email address.
+	Email string
+	// DataVariables are the template merge variables. May be nil.
+	DataVariables map[string]string
+	// AddToAudience instructs Loops to upsert a contact in the audience as a
+	// side effect of sending the email.
+	AddToAudience bool
 }
 
-// Client is a lightweight HTTP client for the Loops transactional email API.
-type Client struct {
-	logger     *slog.Logger
-	httpClient *http.Client
-	apiKey     string
-	enabled    bool
-}
+// New returns a Client that is always safe to call.
+//
+// When apiKey is empty or the placeholder value "unset", the returned client
+// is a no-op that logs at debug level and returns nil for every send. This
+// keeps configuration-gated behavior out of every call site.
+func New(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, apiKey string) Client {
+	logger = logger.With(attr.SlogComponent("loops"))
 
-// NewClient creates a new Loops client. If apiKey is empty or "unset", the client
-// is disabled and all send operations become no-ops.
-func NewClient(logger *slog.Logger, apiKey string) *Client {
-	enabled := apiKey != "" && apiKey != "unset"
-	return &Client{
-		logger:     logger.With(attr.SlogComponent("loops")),
-		httpClient: retryablehttp.NewClient().StandardClient(),
+	if apiKey == "" || apiKey == "unset" {
+		logger.InfoContext(ctx, "loops API key not configured, transactional emails will be dropped")
+		return &noopClient{logger: logger}
+	}
+
+	return &httpClient{
+		logger:     logger,
+		httpClient: guardianPolicy.PooledClient(),
+		baseURL:    defaultBaseURL,
 		apiKey:     apiKey,
-		enabled:    enabled,
 	}
 }
 
-// Enabled returns whether the client has a valid API key configured.
-func (c *Client) Enabled() bool {
-	return c.enabled
-}
-
-// SendTransactionalEmailInput contains the parameters for sending a transactional email.
-type SendTransactionalEmailInput struct {
-	// TransactionalID is the ID of the transactional email template in Loops.
-	TransactionalID string
-	// Email is the recipient email address.
-	Email string
-	// DataVariables are template variables passed to the email.
-	DataVariables map[string]string
-	// AddToAudience creates a contact in your Loops audience if true.
-	AddToAudience bool
+type httpClient struct {
+	logger     *slog.Logger
+	httpClient *guardian.HTTPClient
+	baseURL    string
+	apiKey     string
 }
 
 type transactionalRequest struct {
@@ -82,24 +82,15 @@ type transactionalResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
-// SendTransactionalEmail sends a transactional email via the Loops API.
-// If the client is disabled, this is a no-op and returns nil.
-func (c *Client) SendTransactionalEmail(ctx context.Context, input SendTransactionalEmailInput) error {
-	if !c.enabled {
-		c.logger.DebugContext(ctx, "loops client disabled, skipping transactional email")
-		return nil
+func (c *httpClient) SendTransactional(ctx context.Context, input SendTransactionalInput) error {
+	payload, err := json.Marshal(transactionalRequest(input))
+	if err != nil {
+		return fmt.Errorf("marshal transactional request: %w", err)
 	}
 
-	body := transactionalRequest(input)
-
-	payload, err := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/transactional", bytes.NewReader(payload))
 	if err != nil {
-		return fmt.Errorf("marshal request body: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/transactional", bytes.NewReader(payload))
-	if err != nil {
-		return fmt.Errorf("create request: %w", err)
+		return fmt.Errorf("build transactional request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
@@ -107,17 +98,13 @@ func (c *Client) SendTransactionalEmail(ctx context.Context, input SendTransacti
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("send request: %w", err)
+		return fmt.Errorf("send transactional request: %w", err)
 	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			c.logger.ErrorContext(ctx, "failed to close response body", attr.SlogError(closeErr))
-		}
-	}()
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("read response body: %w", err)
+		return fmt.Errorf("read transactional response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -126,12 +113,23 @@ func (c *Client) SendTransactionalEmail(ctx context.Context, input SendTransacti
 
 	var result transactionalResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		return fmt.Errorf("unmarshal response: %w", err)
+		return fmt.Errorf("decode transactional response: %w", err)
 	}
 
 	if !result.Success {
-		return fmt.Errorf("loops API error: %s", result.Message)
+		return fmt.Errorf("loops API rejected transactional email: %s", result.Message)
 	}
 
+	return nil
+}
+
+type noopClient struct {
+	logger *slog.Logger
+}
+
+func (c *noopClient) SendTransactional(ctx context.Context, input SendTransactionalInput) error {
+	c.logger.DebugContext(ctx, "loops disabled, dropping transactional email",
+		attr.SlogName(input.TransactionalID),
+	)
 	return nil
 }

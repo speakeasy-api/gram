@@ -17,15 +17,17 @@ import (
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 )
 
-func TestListIncludesSlackAndCron(t *testing.T) {
+func TestListIncludesAllDefinitions(t *testing.T) {
 	t.Parallel()
 
 	definitions := List()
-	require.Len(t, definitions, 2)
+	require.Len(t, definitions, 3)
 	require.Equal(t, "cron", definitions[0].Slug)
 	require.Equal(t, "slack", definitions[1].Slug)
-	require.NotEmpty(t, definitions[0].ConfigSchema)
-	require.NotEmpty(t, definitions[1].ConfigSchema)
+	require.Equal(t, "wake", definitions[2].Slug)
+	for _, d := range definitions {
+		require.NotEmpty(t, d.ConfigSchema, d.Slug)
+	}
 }
 
 func TestSlackConfigSchemaConstrainsEventTypeItems(t *testing.T) {

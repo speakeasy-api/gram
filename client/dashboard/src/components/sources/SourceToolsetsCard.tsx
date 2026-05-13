@@ -56,12 +56,12 @@ export function SourceToolsetsCard({
   return (
     <div className="bg-card rounded-lg border p-6">
       <Type as="h2" className="mb-4 text-lg font-semibold">
-        Used in Toolsets ({toolsetsUsingSource.length})
+        Used in MCP Servers ({toolsetsUsingSource.length})
       </Type>
       {toolsetsUsingSource.length === 0 ? (
         <div className="text-muted-foreground py-8 text-center">
           <Package className="mx-auto mb-3 h-12 w-12 opacity-50" />
-          <Type>This source is not currently used in any toolsets</Type>
+          <Type>This source is not currently used in any MCP servers</Type>
         </div>
       ) : (
         <div className="space-y-2">

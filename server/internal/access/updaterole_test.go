@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
+	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

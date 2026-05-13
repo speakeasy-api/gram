@@ -13,6 +13,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type GramProductFeatures = {
   /**
+   * Whether authz challenge logging to ClickHouse is enabled
+   */
+  authzChallengeLoggingEnabled: boolean;
+  /**
    * Whether logging is enabled
    */
   logsEnabled: boolean;
@@ -32,12 +36,14 @@ export const GramProductFeatures$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    authz_challenge_logging_enabled: z.boolean(),
     logs_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
     tool_io_logs_enabled: z.boolean(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "authz_challenge_logging_enabled": "authzChallengeLoggingEnabled",
       "logs_enabled": "logsEnabled",
       "session_capture_enabled": "sessionCaptureEnabled",
       "tool_io_logs_enabled": "toolIoLogsEnabled",

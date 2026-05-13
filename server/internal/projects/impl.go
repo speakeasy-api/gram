@@ -44,11 +44,19 @@ type Service struct {
 	sessions *sessions.Manager
 	auth     *auth.Auth
 	authz    *authz.Engine
+	audit    *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("projects"))
 
 	return &Service{
@@ -60,6 +68,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		sessions: sessions,
 		auth:     auth.New(logger, db, sessions, authzEngine),
 		authz:    authzEngine,
+		audit:    auditLogger,
 	}
 }
 
@@ -177,7 +186,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating default environment").Log(ctx, s.logger)
 	}
 
-	if err := audit.LogProjectCreate(ctx, dbtx, audit.LogProjectCreateEvent{
+	if err := s.audit.LogProjectCreate(ctx, dbtx, audit.LogProjectCreateEvent{
 		OrganizationID: payload.OrganizationID,
 		ProjectID:      prj.ID,
 
@@ -317,7 +326,7 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoPayload) (res
 
 	projectResponse := toProject(updatedProject)
 
-	if err := audit.LogProjectUpdate(ctx, dbtx, audit.LogProjectUpdateEvent{
+	if err := s.audit.LogProjectUpdate(ctx, dbtx, audit.LogProjectUpdateEvent{
 		OrganizationID: updatedProject.OrganizationID,
 		ProjectID:      updatedProject.ID,
 
@@ -461,7 +470,7 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 		return oops.E(oops.CodeUnexpected, err, "error deleting project").Log(ctx, s.logger, attr.SlogProjectID(payload.ID))
 	}
 
-	if err := audit.LogProjectDelete(ctx, dbtx, audit.LogProjectDeleteEvent{
+	if err := s.audit.LogProjectDelete(ctx, dbtx, audit.LogProjectDeleteEvent{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      projectID,
 

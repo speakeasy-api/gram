@@ -8,10 +8,13 @@ import { accessDisableRBAC } from "../funcs/accessDisableRBAC.js";
 import { accessEnableRBAC } from "../funcs/accessEnableRBAC.js";
 import { accessGetRBACStatus } from "../funcs/accessGetRBACStatus.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
+import { accessListChallengeBuckets } from "../funcs/accessListChallengeBuckets.js";
+import { accessListChallenges } from "../funcs/accessListChallenges.js";
 import { accessListGrants } from "../funcs/accessListGrants.js";
 import { accessListMembers } from "../funcs/accessListMembers.js";
 import { accessListRoles } from "../funcs/accessListRoles.js";
 import { accessListScopes } from "../funcs/accessListScopes.js";
+import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
 import { accessUpdateMemberRole } from "../funcs/accessUpdateMemberRole.js";
 import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -135,6 +138,44 @@ export class Access extends ClientSDK {
   }
 
   /**
+   * listChallengeBuckets access
+   *
+   * @remarks
+   * List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
+   */
+  async listChallengeBuckets(
+    request?: operations.ListChallengeBucketsRequest | undefined,
+    security?: operations.ListChallengeBucketsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListChallengeBucketsResult> {
+    return unwrapAsync(accessListChallengeBuckets(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listChallenges access
+   *
+   * @remarks
+   * List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
+   */
+  async listChallenges(
+    request?: operations.ListChallengesRequest | undefined,
+    security?: operations.ListChallengesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListChallengesResult> {
+    return unwrapAsync(accessListChallenges(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listGrants access
    *
    * @remarks
@@ -203,6 +244,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListScopesResult> {
     return unwrapAsync(accessListScopes(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * resolveChallenge access
+   *
+   * @remarks
+   * Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
+   */
+  async resolveChallenge(
+    request: operations.ResolveChallengeRequest,
+    security?: operations.ResolveChallengeSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ResolveChallengesResult> {
+    return unwrapAsync(accessResolveChallenge(
       this,
       request,
       security,

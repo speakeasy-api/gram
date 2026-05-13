@@ -30,7 +30,7 @@ INSERT INTO audit_logs (
   @after_snapshot,
   @metadata
 )
-RETURNING id;
+RETURNING id, organization_id;
 
 -- name: ListAuditLogs :many
 SELECT a.*, p.slug AS project_slug

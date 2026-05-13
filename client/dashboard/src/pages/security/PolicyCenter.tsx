@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
+import { TextArea } from "@/components/ui/textarea";
 import {
   Sheet,
   SheetContent,
@@ -76,6 +77,8 @@ const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
   "secrets",
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
+  "destructive_tool",
+  "prompt_injection",
 ]);
 
 /** All rule categories in display order */
@@ -83,6 +86,7 @@ const ALL_CATEGORIES: RuleCategory[] = [
   "secrets",
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
+  "destructive_tool",
   "prompt_attacks",
   "prompt_injection",
   "off_policy",
@@ -96,6 +100,8 @@ function policyToCategories(
   const cats = new Set<RuleCategory>();
   if (sources.includes("gitleaks")) cats.add("secrets");
   if (sources.includes("shadow_mcp")) cats.add("shadow_mcp");
+  if (sources.includes("destructive_tool")) cats.add("destructive_tool");
+  if (sources.includes("prompt_injection")) cats.add("prompt_injection");
   for (const cat of PRESIDIO_CATEGORIES) {
     const catEntityIds = DETECTION_RULES[cat].map((r) => r.id);
     if (catEntityIds.some((id) => presidioEntities?.includes(id))) {
@@ -111,6 +117,8 @@ function categoriesToPayload(cats: Set<RuleCategory>) {
   const presidioEntities: string[] = [];
   if (cats.has("secrets")) sources.push("gitleaks");
   if (cats.has("shadow_mcp")) sources.push("shadow_mcp");
+  if (cats.has("destructive_tool")) sources.push("destructive_tool");
+  if (cats.has("prompt_injection")) sources.push("prompt_injection");
   for (const cat of PRESIDIO_CATEGORIES) {
     if (cats.has(cat)) {
       for (const rule of DETECTION_RULES[cat]) {
@@ -152,6 +160,7 @@ function PolicyCenterContent() {
   >(new Set<RuleCategory>(["secrets", "pii"]));
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
   const [formAutoName, setFormAutoName] = useState(true);
+  const [formUserMessage, setFormUserMessage] = useState("");
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
@@ -189,6 +198,7 @@ function PolicyCenterContent() {
     setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
     setFormAction("flag");
     setFormAutoName(true);
+    setFormUserMessage("");
     setSheetOpen(true);
   };
 
@@ -201,12 +211,17 @@ function PolicyCenterContent() {
     );
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
+    setFormUserMessage(policy.userMessage ?? "");
     setSheetOpen(true);
   };
 
   const handleSave = () => {
     const { sources, presidioEntities } =
       categoriesToPayload(selectedCategories);
+    const action =
+      sources.includes("destructive_tool") && formAction === "block"
+        ? "flag"
+        : formAction;
     if (editingPolicy) {
       updateMutation.mutate({
         request: {
@@ -216,8 +231,9 @@ function PolicyCenterContent() {
             enabled: formEnabled,
             sources,
             presidioEntities,
-            action: formAction,
+            action,
             autoName: formAutoName,
+            userMessage: formUserMessage,
           },
         },
       });
@@ -229,8 +245,9 @@ function PolicyCenterContent() {
             enabled: formEnabled,
             sources,
             presidioEntities,
-            action: formAction,
+            action,
             autoName: formAutoName,
+            ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
           },
         },
       });
@@ -461,6 +478,8 @@ function PolicyCenterContent() {
                 setFormAction={setFormAction}
                 formAutoName={formAutoName}
                 setFormAutoName={setFormAutoName}
+                formUserMessage={formUserMessage}
+                setFormUserMessage={setFormUserMessage}
               />
             </div>
             <SheetFooter className="px-6 pb-6">
@@ -524,6 +543,8 @@ function PolicySheetBody({
   setFormAction,
   formAutoName,
   setFormAutoName,
+  formUserMessage,
+  setFormUserMessage,
 }: {
   formName: string;
   setFormName: (v: string) => void;
@@ -535,10 +556,15 @@ function PolicySheetBody({
   setFormAction: (v: PolicyAction) => void;
   formAutoName: boolean;
   setFormAutoName: (v: boolean) => void;
+  formUserMessage: string;
+  setFormUserMessage: (v: string) => void;
 }) {
   const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
     null,
   );
+  const destructiveToolsSelected = selectedCategories.has("destructive_tool");
+  const actionValue =
+    destructiveToolsSelected && formAction === "block" ? "flag" : formAction;
 
   return (
     <div className="space-y-6 py-4">
@@ -635,6 +661,13 @@ function PolicySheetBody({
                         next.delete(cat);
                       }
                       setSelectedCategories(next);
+                      if (
+                        checked &&
+                        cat === "destructive_tool" &&
+                        formAction === "block"
+                      ) {
+                        setFormAction("flag");
+                      }
                     }}
                     onClick={(e) => e.stopPropagation()}
                   />
@@ -675,33 +708,70 @@ function PolicySheetBody({
       <div className="space-y-2">
         <Label className="text-sm font-medium">Action</Label>
         <RadioGroup
-          value={formAction}
-          onValueChange={(v) => setFormAction(v as PolicyAction)}
+          value={actionValue}
+          onValueChange={(v) => {
+            if (destructiveToolsSelected && v === "block") {
+              return;
+            }
+            setFormAction(v as PolicyAction);
+          }}
         >
           <div className="border-border divide-border divide-y rounded-lg border">
-            {ACTION_OPTIONS.map((opt) => (
-              <label
-                key={opt.value}
-                htmlFor={`action-${opt.value}`}
-                className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 p-3"
-              >
-                <RadioGroupItem
-                  value={opt.value}
-                  id={`action-${opt.value}`}
-                  className="mt-0.5"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <ActionBadge action={opt.value} />
+            {ACTION_OPTIONS.map((opt) => {
+              const disabled =
+                destructiveToolsSelected && opt.value === "block";
+
+              return (
+                <label
+                  key={opt.value}
+                  htmlFor={`action-${opt.value}`}
+                  className={cn(
+                    "flex items-start gap-3 p-3",
+                    disabled
+                      ? "cursor-not-allowed opacity-60"
+                      : "hover:bg-muted/50 cursor-pointer",
+                  )}
+                >
+                  <RadioGroupItem
+                    value={opt.value}
+                    id={`action-${opt.value}`}
+                    className="mt-0.5"
+                    disabled={disabled}
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <ActionBadge action={opt.value} />
+                    </div>
+                    <div className="text-muted-foreground mt-1 text-xs">
+                      {opt.description}
+                    </div>
+                    {disabled && (
+                      <div className="text-destructive mt-1 text-xs font-medium">
+                        Destructive Tools supports flagging only.
+                      </div>
+                    )}
                   </div>
-                  <div className="text-muted-foreground mt-1 text-xs">
-                    {opt.description}
-                  </div>
-                </div>
-              </label>
-            ))}
+                </label>
+              );
+            })}
           </div>
         </RadioGroup>
+      </div>
+
+      {/* Custom message */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Custom Message</Label>
+        <p className="text-muted-foreground text-xs">
+          {formAction === "block"
+            ? "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message."
+            : "Shown alongside flagged findings in the dashboard. Leave blank to use the default message."}
+        </p>
+        <TextArea
+          value={formUserMessage}
+          onChange={setFormUserMessage}
+          placeholder="e.g. This action was blocked by your organization's security policy. Contact your admin for help."
+          rows={3}
+        />
       </div>
 
       {/* Enabled toggle */}

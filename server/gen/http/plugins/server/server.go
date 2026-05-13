@@ -32,6 +32,7 @@ type Server struct {
 	SetPluginAssignments        http.Handler
 	DownloadPluginPackage       http.Handler
 	DownloadObservabilityPlugin http.Handler
+	DownloadCodexInstallScript  http.Handler
 	GetPublishStatus            http.Handler
 	PublishPlugins              http.Handler
 }
@@ -74,6 +75,7 @@ func New(
 			{"SetPluginAssignments", "PUT", "/rpc/plugins.setPluginAssignments"},
 			{"DownloadPluginPackage", "GET", "/rpc/plugins.downloadPluginPackage"},
 			{"DownloadObservabilityPlugin", "GET", "/rpc/plugins.downloadObservabilityPlugin"},
+			{"DownloadCodexInstallScript", "GET", "/rpc/plugins.downloadCodexInstallScript"},
 			{"GetPublishStatus", "GET", "/rpc/plugins.getPublishStatus"},
 			{"PublishPlugins", "POST", "/rpc/plugins.publishPlugins"},
 		},
@@ -88,6 +90,7 @@ func New(
 		SetPluginAssignments:        NewSetPluginAssignmentsHandler(e.SetPluginAssignments, mux, decoder, encoder, errhandler, formatter),
 		DownloadPluginPackage:       NewDownloadPluginPackageHandler(e.DownloadPluginPackage, mux, decoder, encoder, errhandler, formatter),
 		DownloadObservabilityPlugin: NewDownloadObservabilityPluginHandler(e.DownloadObservabilityPlugin, mux, decoder, encoder, errhandler, formatter),
+		DownloadCodexInstallScript:  NewDownloadCodexInstallScriptHandler(e.DownloadCodexInstallScript, mux, decoder, encoder, errhandler, formatter),
 		GetPublishStatus:            NewGetPublishStatusHandler(e.GetPublishStatus, mux, decoder, encoder, errhandler, formatter),
 		PublishPlugins:              NewPublishPluginsHandler(e.PublishPlugins, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -109,6 +112,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.SetPluginAssignments = m(s.SetPluginAssignments)
 	s.DownloadPluginPackage = m(s.DownloadPluginPackage)
 	s.DownloadObservabilityPlugin = m(s.DownloadObservabilityPlugin)
+	s.DownloadCodexInstallScript = m(s.DownloadCodexInstallScript)
 	s.GetPublishStatus = m(s.GetPublishStatus)
 	s.PublishPlugins = m(s.PublishPlugins)
 }
@@ -129,6 +133,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountSetPluginAssignmentsHandler(mux, h.SetPluginAssignments)
 	MountDownloadPluginPackageHandler(mux, h.DownloadPluginPackage)
 	MountDownloadObservabilityPluginHandler(mux, h.DownloadObservabilityPlugin)
+	MountDownloadCodexInstallScriptHandler(mux, h.DownloadCodexInstallScript)
 	MountGetPublishStatusHandler(mux, h.GetPublishStatus)
 	MountPublishPluginsHandler(mux, h.PublishPlugins)
 }
@@ -750,6 +755,95 @@ func NewDownloadObservabilityPluginHandler(
 			return
 		}
 		o := res.(*plugins.DownloadObservabilityPluginResponseData)
+		defer o.Body.Close()
+		if wt, ok := o.Body.(io.WriterTo); ok {
+			if err := encodeResponse(ctx, w, o.Result); err != nil {
+				if errhandler != nil {
+					errhandler(ctx, w, err)
+				}
+				return
+			}
+			n, err := wt.WriteTo(w)
+			if err != nil {
+				if n == 0 {
+					if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+						errhandler(ctx, w, err)
+					}
+				} else {
+					http.NewResponseController(w).Flush()
+					panic(http.ErrAbortHandler) // too late to write an error
+				}
+			}
+			return
+		}
+		// handle immediate read error like a returned error
+		buf := bufio.NewReader(o.Body)
+		if _, err := buf.Peek(1); err != nil && err != io.EOF {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, o.Result); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if _, err := io.Copy(w, buf); err != nil {
+			http.NewResponseController(w).Flush()
+			panic(http.ErrAbortHandler) // too late to write an error
+		}
+	})
+}
+
+// MountDownloadCodexInstallScriptHandler configures the mux to serve the
+// "plugins" service "downloadCodexInstallScript" endpoint.
+func MountDownloadCodexInstallScriptHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/plugins.downloadCodexInstallScript", f)
+}
+
+// NewDownloadCodexInstallScriptHandler creates a HTTP handler which loads the
+// HTTP request and calls the "plugins" service "downloadCodexInstallScript"
+// endpoint.
+func NewDownloadCodexInstallScriptHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDownloadCodexInstallScriptRequest(mux, decoder)
+		encodeResponse = EncodeDownloadCodexInstallScriptResponse(encoder)
+		encodeError    = EncodeDownloadCodexInstallScriptError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "downloadCodexInstallScript")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "plugins")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		o := res.(*plugins.DownloadCodexInstallScriptResponseData)
 		defer o.Body.Close()
 		if wt, ok := o.Body.(io.WriterTo); ok {
 			if err := encodeResponse(ctx, w, o.Result); err != nil {

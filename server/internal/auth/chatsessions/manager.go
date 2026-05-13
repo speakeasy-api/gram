@@ -2,12 +2,15 @@ package chatsessions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -67,12 +70,15 @@ func (m *Manager) RevokeToken(ctx context.Context, jti string) error {
 	return nil
 }
 
-// IsTokenRevoked checks if a token JTI is in the revoked tokens cache
+// IsTokenRevoked checks if a token JTI is in the revoked tokens cache. A
+// cache miss (no entry under that JTI) means the token is not revoked.
+// Any other cache error is surfaced to the caller — never silently
+// treated as "not revoked", which would fail open on Redis outages.
 func (m *Manager) IsTokenRevoked(ctx context.Context, jti string) (bool, error) {
 	cacheKey := fmt.Sprintf("chat_session_revoked:%s", jti)
 	_, err := m.revokedTokensCache.Get(ctx, cacheKey)
 	if err != nil {
-		if err.Error() == "key is missing" {
+		if errors.Is(err, redisCache.ErrCacheMiss) {
 			return false, nil
 		}
 		return false, fmt.Errorf("get revoked token: %w", err)

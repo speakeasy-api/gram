@@ -5,8 +5,13 @@ import { Loader2Icon } from "lucide-react";
 import { useState } from "react";
 import { NamedAsset } from "./SourceCard";
 
+// Remote MCP delete is driven from the Remote MCP detail page Settings tab —
+// it needs to enumerate related mcp_servers and mcp_endpoints, which doesn't
+// fit this deployment-evolve flow.
+type RemovableAsset = Exclude<NamedAsset, { type: "remotemcp" }>;
+
 interface RemoveSourceDialogContentProps {
-  asset: NamedAsset;
+  asset: RemovableAsset;
   onConfirmRemoval: (
     assetIdOrSlug: string,
     type: "openapi" | "function" | "externalmcp",
@@ -77,7 +82,7 @@ export function RemoveSourceDialogContent({
         <Dialog.Title>Delete {sourceLabel}</Dialog.Title>
         <Dialog.Description>
           This will permanently delete the {sourceTypeDescription} source and
-          related resources such as tools within toolsets.
+          related resources such as tools within MCP servers.
         </Dialog.Description>
       </Dialog.Header>
       <div className="grid gap-2">

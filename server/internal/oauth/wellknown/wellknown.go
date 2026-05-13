@@ -33,6 +33,18 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
+// OAuthAuthorizationServerPath is the well-known URI path for OAuth 2.0
+// Authorization Server Metadata as defined by RFC 8414.
+//
+// https://datatracker.ietf.org/doc/html/rfc8414
+const OAuthAuthorizationServerPath = "/.well-known/oauth-authorization-server"
+
+// OAuthProtectedResourcePath is the well-known URI path for OAuth 2.0
+// Protected Resource Metadata as defined by RFC 9728.
+//
+// https://datatracker.ietf.org/doc/html/rfc9728
+const OAuthProtectedResourcePath = "/.well-known/oauth-protected-resource"
+
 // OAuthProtectedResourceMetadata represents OAuth 2.0 Protected Resource Metadata (RFC 9728).
 type OAuthProtectedResourceMetadata struct {
 	Resource             string   `json:"resource"`
@@ -72,6 +84,16 @@ type OAuthRepo interface {
 	ListOAuthProxyProvidersByServer(ctx context.Context, arg repo.ListOAuthProxyProvidersByServerParams) ([]repo.OauthProxyProvider, error)
 }
 
+// ResolveOAuthServerMetadataFromToolset returns OAuth Authorization Server
+// metadata for a toolset, or nil if the toolset is not OAuth-configured.
+//
+// oauthSlug is the slug used to address the Gram-hosted OAuth endpoints
+// (`/oauth/{oauthSlug}/...`). Today the OAuth machinery is keyed by
+// `toolsets.mcp_slug`, so callers should pass that value. The /x/mcp
+// experimental endpoint uses the same OAuth flow under the hood, so it
+// also passes `toolset.mcp_slug` here even though its protected-resource
+// URL uses an `mcp_endpoints.slug` instead — see the companion
+// resourceURL argument on [ResolveOAuthProtectedResourceFromToolset].
 func ResolveOAuthServerMetadataFromToolset(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -80,7 +102,7 @@ func ResolveOAuthServerMetadataFromToolset(
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	toolset *toolsets_repo.Toolset,
 	baseURL string,
-	mcpSlug string,
+	oauthSlug string,
 ) (*OAuthServerMetadataResult, error) {
 	if toolset.OauthProxyServerID.Valid {
 		providers, err := oauthRepo.ListOAuthProxyProvidersByServer(ctx, repo.ListOAuthProxyProvidersByServerParams{
@@ -114,10 +136,10 @@ func ResolveOAuthServerMetadataFromToolset(
 		return &OAuthServerMetadataResult{
 			Kind: OAuthServerMetadataResultKindStatic,
 			Static: &OAuthServerMetadata{
-				Issuer:                        baseURL + "/oauth/" + mcpSlug,
-				AuthorizationEndpoint:         baseURL + "/oauth/" + mcpSlug + "/authorize",
-				TokenEndpoint:                 baseURL + "/oauth/" + mcpSlug + "/token",
-				RegistrationEndpoint:          baseURL + "/oauth/" + mcpSlug + "/register",
+				Issuer:                        baseURL + "/oauth/" + oauthSlug,
+				AuthorizationEndpoint:         baseURL + "/oauth/" + oauthSlug + "/authorize",
+				TokenEndpoint:                 baseURL + "/oauth/" + oauthSlug + "/token",
+				RegistrationEndpoint:          baseURL + "/oauth/" + oauthSlug + "/register",
 				ScopesSupported:               scopes,
 				ResponseTypesSupported:        []string{"code"},
 				GrantTypesSupported:           []string{"authorization_code", "refresh_token"},
@@ -148,22 +170,28 @@ func ResolveOAuthServerMetadataFromToolset(
 	return nil, nil
 }
 
-// ResolveOAuthProtectedResourceFromToolset returns OAuth Protected Resource Metadata for a toolset,
-// or nil if the toolset is not OAuth-protected.
+// ResolveOAuthProtectedResourceFromToolset returns OAuth Protected Resource
+// Metadata for a toolset, or nil if the toolset is not OAuth-protected.
+//
+// resourceURL is the absolute URL of the protected resource (the runtime MCP
+// endpoint). For /mcp callers this is `<baseURL>/mcp/<toolset.mcp_slug>`; for
+// /x/mcp callers this is `<baseURL>/x/mcp/<mcp_endpoint.slug>`. It is used
+// verbatim for both `resource` and `authorization_servers` so that the
+// `/.well-known/...` discovery path on the protected resource resolves back
+// to the Gram-hosted authorization server metadata.
 func ResolveOAuthProtectedResourceFromToolset(
 	ctx context.Context,
 	logger *slog.Logger,
 	db mv.DBTX,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	toolset *toolsets_repo.Toolset,
-	baseURL string,
-	mcpSlug string,
+	resourceURL string,
 ) (*OAuthProtectedResourceMetadata, error) {
 	// Check for OAuth proxy server or external OAuth server configuration
 	if toolset.OauthProxyServerID.Valid || toolset.ExternalOauthServerID.Valid {
 		return &OAuthProtectedResourceMetadata{
-			Resource:             baseURL + "/mcp/" + mcpSlug,
-			AuthorizationServers: []string{baseURL + "/mcp/" + mcpSlug},
+			Resource:             resourceURL,
+			AuthorizationServers: []string{resourceURL},
 			ScopesSupported:      nil,
 		}, nil
 	}

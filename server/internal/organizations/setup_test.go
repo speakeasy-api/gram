@@ -24,7 +24,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 	}
@@ -69,8 +69,11 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 
 	orgs := newMockOrganizationProvider(t)
 
-	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, thirdpartyworkos.NewStubClient(), cache.NoopCache)
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, authzEngine, nil, "http://localhost:5173", "http://localhost:35291")
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient(), cache.NoopCache)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, nil, authzEngine, nil, "http://localhost:5173", "http://localhost:35291")
 
 	return ctx, &testInstance{
 		service: svc,

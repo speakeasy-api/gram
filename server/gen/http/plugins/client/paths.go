@@ -62,6 +62,11 @@ func DownloadObservabilityPluginPluginsPath() string {
 	return "/rpc/plugins.downloadObservabilityPlugin"
 }
 
+// DownloadCodexInstallScriptPluginsPath returns the URL path to the plugins service downloadCodexInstallScript HTTP endpoint.
+func DownloadCodexInstallScriptPluginsPath() string {
+	return "/rpc/plugins.downloadCodexInstallScript"
+}
+
 // GetPublishStatusPluginsPath returns the URL path to the plugins service getPublishStatus HTTP endpoint.
 func GetPublishStatusPluginsPath() string {
 	return "/rpc/plugins.getPublishStatus"

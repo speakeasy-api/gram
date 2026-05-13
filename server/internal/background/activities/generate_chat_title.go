@@ -44,10 +44,11 @@ const (
 	defaultChatTitle       = "New Chat"
 	DefaultClaudeChatTitle = "Claude Code Session"
 	DefaultCursorChatTitle = "Cursor Session"
+	DefaultCodexChatTitle  = "Codex Session"
 )
 
 func isDefaultChatTitle(title string) bool {
-	return title == defaultChatTitle || title == DefaultClaudeChatTitle || title == DefaultCursorChatTitle
+	return title == defaultChatTitle || title == DefaultClaudeChatTitle || title == DefaultCursorChatTitle || title == DefaultCodexChatTitle
 }
 
 func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) error {
@@ -69,8 +70,7 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 		return nil
 	}
 
-	// Build context from the first few user/assistant messages.
-	messages, err := g.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+	messages, err := g.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
 		ChatID:    chatID,
 		ProjectID: chat.ProjectID,
 	})

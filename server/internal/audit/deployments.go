@@ -29,7 +29,7 @@ type LogDeploymentCreateEvent struct {
 	DeploymentURN urn.Deployment
 }
 
-func LogDeploymentCreate(ctx context.Context, dbtx repo.DBTX, event LogDeploymentCreateEvent) error {
+func (l *Logger) LogDeploymentCreate(ctx context.Context, dbtx repo.DBTX, event LogDeploymentCreateEvent) error {
 	action := ActionDeploymentsCreate
 
 	entry := repo.InsertAuditLogParams{
@@ -53,11 +53,7 @@ func LogDeploymentCreate(ctx context.Context, dbtx repo.DBTX, event LogDeploymen
 		AfterSnapshot:  nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogDeploymentEvolveEvent struct {
@@ -74,7 +70,7 @@ type LogDeploymentEvolveEvent struct {
 	Current  *types.Deployment
 }
 
-func LogDeploymentEvolve(ctx context.Context, dbtx repo.DBTX, event LogDeploymentEvolveEvent) error {
+func (l *Logger) LogDeploymentEvolve(ctx context.Context, dbtx repo.DBTX, event LogDeploymentEvolveEvent) error {
 	action := ActionDeploymentsEvolve
 
 	var beforePayload any
@@ -112,11 +108,7 @@ func LogDeploymentEvolve(ctx context.Context, dbtx repo.DBTX, event LogDeploymen
 		AfterSnapshot:  afterSnapshot,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogDeploymentRedeployEvent struct {
@@ -132,7 +124,7 @@ type LogDeploymentRedeployEvent struct {
 	SourceDeploymentURN urn.Deployment
 }
 
-func LogDeploymentRedeploy(ctx context.Context, dbtx repo.DBTX, event LogDeploymentRedeployEvent) error {
+func (l *Logger) LogDeploymentRedeploy(ctx context.Context, dbtx repo.DBTX, event LogDeploymentRedeployEvent) error {
 	action := ActionDeploymentsRedeploy
 
 	metadata, err := marshalAuditPayload(map[string]any{
@@ -163,9 +155,5 @@ func LogDeploymentRedeploy(ctx context.Context, dbtx repo.DBTX, event LogDeploym
 		AfterSnapshot:  nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

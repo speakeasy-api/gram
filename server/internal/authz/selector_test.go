@@ -190,6 +190,68 @@ func TestSelector_Matches_dispositionGrantMatchesConnectionCheck(t *testing.T) {
 	require.True(t, grant.Matches(check))
 }
 
+func TestSelector_Matches_projectScopedGrantMatchesSameProject(t *testing.T) {
+	t.Parallel()
+
+	// A project-scoped MCP grant matches any server in that project.
+	grant := Selector{"resource_kind": "mcp", "resource_id": "*", "project_id": "proj_123"}
+	check := Selector{"resource_kind": "mcp", "resource_id": "server_456", "project_id": "proj_123"}
+	require.True(t, grant.Matches(check))
+}
+
+func TestSelector_Matches_projectScopedGrantDeniesDifferentProject(t *testing.T) {
+	t.Parallel()
+
+	grant := Selector{"resource_kind": "mcp", "resource_id": "*", "project_id": "proj_123"}
+	check := Selector{"resource_kind": "mcp", "resource_id": "server_456", "project_id": "proj_789"}
+	require.False(t, grant.Matches(check))
+}
+
+func TestSelector_Matches_projectScopedGrantMatchesConnectionWithoutProjectID(t *testing.T) {
+	t.Parallel()
+
+	// A project-scoped grant still matches checks that don't carry project_id
+	// (dimension skipped), matching the disposition behavior.
+	grant := Selector{"resource_kind": "mcp", "resource_id": "*", "project_id": "proj_123"}
+	check := Selector{"resource_kind": "mcp", "resource_id": "server_456"}
+	require.True(t, grant.Matches(check))
+}
+
+func TestSelector_Matches_serverGrantStillMatchesWithProjectDimension(t *testing.T) {
+	t.Parallel()
+
+	// Existing server-level grants remain backward-compatible when checks
+	// carry the new project_id dimension.
+	grant := Selector{"resource_kind": "mcp", "resource_id": "server_456"}
+	check := Selector{"resource_kind": "mcp", "resource_id": "server_456", "project_id": "proj_123"}
+	require.True(t, grant.Matches(check))
+}
+
+func TestValidateSelector_mcpProjectIDAllowed(t *testing.T) {
+	t.Parallel()
+
+	sel := Selector{"resource_kind": "mcp", "resource_id": "*", "project_id": "proj_123"}
+	require.NoError(t, ValidateSelector(ScopeMCPConnect, sel))
+	require.NoError(t, ValidateSelector(ScopeMCPRead, sel))
+	require.NoError(t, ValidateSelector(ScopeMCPWrite, sel))
+}
+
+func TestMCPCheck_injectsProjectID(t *testing.T) {
+	t.Parallel()
+
+	check := MCPCheck(ScopeMCPRead, "server_456", "proj_123")
+	require.Equal(t, ScopeMCPRead, check.Scope)
+	require.Equal(t, "server_456", check.ResourceID)
+	require.Equal(t, "proj_123", check.Dimensions["project_id"])
+}
+
+func TestMCPCheck_emptyProjectIDOmitsDimension(t *testing.T) {
+	t.Parallel()
+
+	check := MCPCheck(ScopeMCPRead, "server_456", "")
+	require.Nil(t, check.Dimensions)
+}
+
 func TestSelector_Matches_dispositionGrantDeniesWrongDisposition(t *testing.T) {
 	t.Parallel()
 

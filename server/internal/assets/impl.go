@@ -64,12 +64,24 @@ type Service struct {
 	chatSessions *chatsessions.Manager
 	projects     *projectsRepo.Queries
 	repo         *repo.Queries
+	audit        *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, sessions *sessions.Manager, chatSessions *chatsessions.Manager, storage BlobStore, jwtSecret string, authzEngine *authz.Engine) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	guardianPolicy *guardian.Policy,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	chatSessions *chatsessions.Manager,
+	storage BlobStore,
+	jwtSecret string,
+	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("assets"))
 
 	return &Service{
@@ -83,6 +95,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, guardi
 		chatSessions:   chatSessions,
 		projects:       projectsRepo.New(db),
 		repo:           repo.New(db),
+		audit:          auditLogger,
 	}
 }
 
@@ -256,7 +269,7 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").Log(ctx, logger)
 	}
 
-	if err := audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
+	if err := s.audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 
@@ -373,7 +386,7 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").Log(ctx, logger)
 	}
 
-	if err := audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
+	if err := s.audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 
@@ -486,7 +499,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").Log(ctx, logger)
 	}
 
-	if err := audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
+	if err := s.audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 
@@ -946,7 +959,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").Log(ctx, logger)
 	}
 
-	if err := audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
+	if err := s.audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 

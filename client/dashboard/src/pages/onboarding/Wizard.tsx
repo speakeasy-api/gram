@@ -39,6 +39,7 @@ import {
   FileCode,
   FileJson2,
   MessageSquare,
+  Network,
   RefreshCcw,
   ServerCog,
   SquareFunction,
@@ -280,7 +281,7 @@ const LHS = ({
             />
             <ChevronRight className="text-muted-foreground h-4 w-4" />
             <Step
-              text="Create Toolset"
+              text="Create MCP Server"
               icon={<Wrench className="h-4 w-4" />}
               active={currentStep === "toolset"}
               completed={currentStep === "mcp"}
@@ -392,11 +393,15 @@ export const InitialChoiceStep = ({
   const navigate = useNavigate();
   const telemetry = useTelemetry();
 
+  const isRemoteMcpEnabled =
+    telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
+
   const onChoiceSelected = (
     choice:
       | "connect_to_data"
       | "deploy_data_integrated_chat"
-      | "connect_to_popular_mcps",
+      | "connect_to_popular_mcps"
+      | "connect_to_custom_remote_mcp",
   ) => {
     telemetry.capture("onboarding_choice_selected", { choice });
     if (choice === "deploy_data_integrated_chat") {
@@ -448,6 +453,17 @@ export const InitialChoiceStep = ({
           title="Connect to Popular MCPs"
           description="Browse and connect to official and community-maintained MCP servers"
         />
+        {isRemoteMcpEnabled && (
+          <ChoiceCard
+            onClick={() => {
+              onChoiceSelected("connect_to_custom_remote_mcp");
+              routes.sources.addRemoteMcp.goTo();
+            }}
+            icon={Network}
+            title="Custom Remote MCP"
+            description="Connect to an existing MCP server by URL"
+          />
+        )}
         <ChoiceCard
           onClick={handleConnectToData}
           icon={Database}
@@ -772,7 +788,7 @@ const UploadStep = ({
   );
 
   const onContinue = async () => {
-    setToolsetName(slugify(apiName || "my-toolset"));
+    setToolsetName(slugify(apiName || "my-mcp-server"));
     const deployment = await createDeployment(undefined, true);
 
     if (
@@ -846,7 +862,7 @@ const ToolsetStep = ({
       const toolset = await client.toolsets.create({
         createToolsetRequestBody: {
           name: toolsetName,
-          description: `A toolset created from your OpenAPI document`,
+          description: `An MCP server created from your OpenAPI document`,
           toolUrns: tools?.tools.map((tool) => tool.toolUrn) ?? [],
         },
       });
@@ -855,9 +871,9 @@ const ToolsetStep = ({
       setCurrentStep("mcp");
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : "Failed to create toolset";
+        error instanceof Error ? error.message : "Failed to create MCP server";
       setCreateError(errorMessage);
-      handleAPIError(error, "Failed to create toolset");
+      handleAPIError(error, "Failed to create MCP server");
     }
   };
 
@@ -869,14 +885,14 @@ const ToolsetStep = ({
   return (
     <>
       <Stack gap={1}>
-        <span className="text-heading-md">Name Your Toolset</span>
+        <span className="text-heading-md">Name Your MCP Server</span>
         <span className="text-body-sm">
-          This toolset will hold the tools you've added to Gram. We'll make the
-          tools it contains available in an MCP Server in the next step.
+          This MCP server will hold the tools you've added to Gram. We'll make
+          it available in the next step.
         </span>
       </Stack>
       <InputField
-        placeholder="my-toolset"
+        placeholder="my-mcp-server"
         value={toolsetName}
         onChange={(e) => setToolsetName(e.target.value)}
         maxLength={30}
@@ -888,7 +904,7 @@ const ToolsetStep = ({
       {createError && (
         <ErrorAlert
           error={createError}
-          title="Failed to create toolset"
+          title="Failed to create MCP server"
           onDismiss={() => setCreateError(null)}
         />
       )}
@@ -929,7 +945,7 @@ const ToolsetStep = ({
       <ContinueButton
         disabled={!toolsetName}
         onClick={onContinue}
-        inProgressText="Creating toolset"
+        inProgressText="Creating MCP server"
       />
     </>
   );
@@ -1617,7 +1633,7 @@ const ToolsetAnimation = ({
         className="w-70 pl-1"
       >
         <h3 className="text-foreground mb-1 text-lg font-medium">
-          {toolsetName || "my-toolset"}
+          {toolsetName || "my-mcp-server"}
         </h3>
       </motion.div>
 
@@ -1703,7 +1719,7 @@ const ToolsetAnimation = ({
 const McpAnimation = ({ mcpSlug }: { mcpSlug: string | undefined }) => {
   const slug = mcpSlug
     ? `https://app.getgram.ai/mcp/${mcpSlug}`
-    : `https://app.getgram.ai/mcp/my-toolset`;
+    : `https://app.getgram.ai/mcp/my-mcp-server`;
 
   return (
     <div className="flex flex-col items-center gap-4">

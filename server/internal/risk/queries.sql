@@ -9,6 +9,7 @@ INSERT INTO risk_policies (
   , enabled
   , action
   , auto_name
+  , user_message
   , version
 )
 VALUES (
@@ -21,6 +22,7 @@ VALUES (
   , @enabled
   , @action
   , @auto_name
+  , @user_message
   , 1
 )
 RETURNING *;
@@ -54,6 +56,7 @@ SET name = @name
   , enabled = @enabled
   , action = @action
   , auto_name = @auto_name
+  , user_message = @user_message
   , version = CASE
       WHEN sources IS DISTINCT FROM @sources
         OR presidio_entities IS DISTINCT FROM @presidio_entities
@@ -120,8 +123,10 @@ WHERE cm.project_id = @project_id
     SELECT 1
     FROM risk_results rr
     WHERE rr.chat_message_id = cm.id
+      AND rr.project_id = @project_id
       AND rr.risk_policy_id = @risk_policy_id
       AND rr.risk_policy_version = @risk_policy_version
+    LIMIT 1
   )
 LIMIT @batch_limit;
 
@@ -245,3 +250,21 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
   AND 'shadow_mcp' = ANY(sources)
 ORDER BY id;
+
+-- name: ListEnabledToolIdentityPoliciesByProject :many
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND enabled IS TRUE
+  AND deleted IS FALSE
+  AND (
+    'shadow_mcp' = ANY(sources)
+    OR 'destructive_tool' = ANY(sources)
+  )
+ORDER BY id;
+
+-- name: HardDeleteRiskPoliciesByProject :exec
+-- Test-only helper: hard-deletes every risk policy for a project so tests can
+-- verify cache behavior without the soft-delete (DeleteRiskPolicy) leaving
+-- ghost rows that production lookups already filter out.
+DELETE FROM risk_policies WHERE project_id = @project_id;

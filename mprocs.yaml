@@ -1,4 +1,5 @@
 # mprocs configuration
+web_port: 35294
 procs:
   otel-collector:
     cmd: ["docker", "compose", "logs", "-f", "otel-collector"]
@@ -12,8 +13,11 @@ procs:
     cmd: ["docker", "compose", "logs", "-f", "prometheus"]
     stop:
       send-keys: ["<C-c>"]
-  mock-idp:
-    cmd: ["mise", "run", "start:mock-idp"]
+  dev-idp:
+    cmd: ["mise", "run", "start:dev-idp"]
+    stop: SIGTERM
+  dev-idp-dashboard:
+    cmd: ["mise", "run", "start:dev-idp-dashboard"]
     stop:
       send-keys: ["<C-c>"]
   server:

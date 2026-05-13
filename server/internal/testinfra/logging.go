@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/testcontainers/testcontainers-go/log"
 
@@ -18,10 +19,10 @@ func (t *testcontainersLogger) Printf(format string, v ...any) {
 	t.logger.Log(context.Background(), slog.LevelInfo, fmt.Sprintf(format, v...))
 }
 
-func NewTestcontainersLogger(rawLevel string) log.Logger {
+func NewTestcontainersLogger() log.Logger {
 	return &testcontainersLogger{
 		logger: slog.New(o11y.NewLogHandler(&o11y.LogHandlerOptions{
-			RawLevel:    rawLevel,
+			RawLevel:    os.Getenv("LOG_LEVEL"),
 			Pretty:      true,
 			DataDogAttr: false,
 		})),

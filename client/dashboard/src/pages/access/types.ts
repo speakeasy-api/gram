@@ -8,8 +8,22 @@ import type {
 export { Scope };
 export type { Selector, Disposition, ResourceKind };
 
+/** Derive role slug from name the same way the server does (conv.ToSlug + "org-" prefix). */
+export function toRoleSlug(name: string): string {
+  let slug = name
+    .replace(/_/g, " ")
+    .replace(/[^a-zA-Z0-9\s-]/g, "")
+    .toLowerCase()
+    .replace(/[-\s]+/g, "-")
+    .replace(/^-|-$/g, "");
+  if (!slug.startsWith("org-")) {
+    slug = "org-" + slug;
+  }
+  return slug;
+}
+
 /** What kind of resource a scope protects. */
-export type ResourceType = "org" | "project" | "mcp";
+export type ResourceType = "org" | "project" | "mcp" | "environment";
 
 /** The 4 MCP tool annotation hint keys. */
 export type AnnotationHint =
@@ -22,7 +36,12 @@ export type AnnotationHint =
 export type CustomTab = "select" | "auto-groups";
 
 /** Which panel the scope picker is displaying. Derived from selectors. */
-export type ActivePanel = "all" | "servers" | "tools" | "collection";
+export type ActivePanel =
+  | "all"
+  | "projects"
+  | "servers"
+  | "tools"
+  | "collection";
 
 /** A single grant within a role: a scope + optional selector constraints. */
 export interface RoleGrant {

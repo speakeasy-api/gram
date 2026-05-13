@@ -239,3 +239,65 @@ WHERE e.deployment_id = @deployment_id
   AND t.requires_oauth = TRUE
   AND t.deleted IS FALSE
   AND e.deleted IS FALSE;
+
+-- name: CreateMCPRegistry :one
+INSERT INTO mcp_registries (name, url)
+VALUES (@name, @url)
+RETURNING id;
+
+-- name: ListDirectExternalMCPToolDefinitions :many
+WITH latest_deployment AS (
+   SELECT d.id
+   FROM deployments d
+   JOIN deployment_statuses ds ON d.id = ds.deployment_id
+   WHERE d.project_id = @project_id
+     AND ds.status = 'completed'
+   ORDER BY d.seq DESC
+   LIMIT 1
+),
+target_deployment AS (
+   SELECT CASE
+            WHEN sqlc.narg(deployment_id)::uuid IS NULL
+              THEN (SELECT id FROM latest_deployment)
+            ELSE sqlc.narg(deployment_id)::uuid
+          END AS id
+)
+SELECT
+   t.id,
+   t.external_mcp_attachment_id,
+   t.tool_urn,
+   t.type,
+   t.name,
+   t.description,
+   t.schema,
+   t.remote_url,
+   t.transport_type,
+   t.requires_oauth,
+   t.oauth_version,
+   t.oauth_authorization_endpoint,
+   t.oauth_token_endpoint,
+   t.oauth_registration_endpoint,
+   t.oauth_scopes_supported,
+   t.header_definitions,
+   t.title,
+   t.read_only_hint,
+   t.destructive_hint,
+   t.idempotent_hint,
+   t.open_world_hint,
+   t.created_at,
+   t.updated_at,
+   e.deployment_id,
+   e.registry_id,
+   e.name AS registry_server_name,
+   e.slug,
+   e.registry_server_specifier
+FROM external_mcp_tool_definitions t
+JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
+WHERE e.deployment_id = (SELECT id FROM target_deployment)
+ AND t.type = 'direct'
+ AND (sqlc.narg(urn_prefix)::text IS NULL
+      OR t.tool_urn LIKE sqlc.narg(urn_prefix) || '%' ESCAPE '\')
+ AND t.deleted IS FALSE
+ AND e.deleted IS FALSE
+ORDER BY t.id DESC;
+

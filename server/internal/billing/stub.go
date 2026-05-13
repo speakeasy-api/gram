@@ -66,12 +66,40 @@ func (s *StubClient) CreateCheckout(ctx context.Context, orgID string, serverURL
 	return "", fmt.Errorf("not implemented")
 }
 
+func (s *StubClient) CreateTopUpCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error) {
+	_, span := s.tracer.Start(ctx, "stub_client.create_topup_checkout")
+	span.SetStatus(codes.Error, "not implemented")
+	defer span.End()
+
+	return "", fmt.Errorf("not implemented")
+}
+
+func (s *StubClient) IsTopUpProductID(productID string) bool {
+	return false
+}
+
 func (s *StubClient) CreateCustomerSession(ctx context.Context, orgID string) (string, error) {
 	_, span := s.tracer.Start(ctx, "stub_client.create_customer_session")
 	span.SetStatus(codes.Error, "not implemented")
 	defer span.End()
 
 	return "", fmt.Errorf("not implemented")
+}
+
+func (s *StubClient) AttachAssistantsBenefit(ctx context.Context, orgID string, email string) (string, error) {
+	_, span := s.tracer.Start(ctx, "stub_client.attach_assistants_benefit")
+	defer span.End()
+
+	s.logger.InfoContext(ctx, "stub: attach assistants benefit", attr.SlogOrganizationID(orgID))
+	return "", nil
+}
+
+func (s *StubClient) CancelSubscriptionAtPeriodEnd(ctx context.Context, subscriptionID string) error {
+	_, span := s.tracer.Start(ctx, "stub_client.cancel_subscription_at_period_end")
+	defer span.End()
+
+	s.logger.InfoContext(ctx, "stub: cancel subscription at period end")
+	return nil
 }
 
 // GetCustomer implements Repository.

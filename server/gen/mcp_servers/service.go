@@ -22,7 +22,9 @@ type Service interface {
 	CreateMcpServer(context.Context, *CreateMcpServerPayload) (res *types.McpServer, err error)
 	// Get an MCP server by ID
 	GetMcpServer(context.Context, *GetMcpServerPayload) (res *types.McpServer, err error)
-	// List all MCP servers for a project
+	// List MCP servers for a project. Accepts optional remote_mcp_server_id or
+	// toolset_id filters to scope the result to a single backend; at most one
+	// filter may be supplied since the two backends are mutually exclusive.
 	ListMcpServers(context.Context, *ListMcpServersPayload) (res *ListMcpServersResult, err error)
 	// Update an MCP server. This is a full-record replace: fields omitted from the
 	// request become null on the stored record. The id and visibility fields are
@@ -99,6 +101,10 @@ type GetMcpServerPayload struct {
 // ListMcpServersPayload is the payload type of the mcpServers service
 // listMcpServers method.
 type ListMcpServersPayload struct {
+	// Filter to MCP servers backed by this remote MCP server
+	RemoteMcpServerID *string
+	// Filter to MCP servers backed by this toolset
+	ToolsetID        *string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

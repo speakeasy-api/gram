@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@speakeasy-api/moonshine";
-import { getServerURL } from "@/lib/utils";
+import { buildLoginRedirectURL } from "@/lib/utils";
 import { useSearchParams } from "react-router";
 import { useState } from "react";
 import {
@@ -152,10 +152,7 @@ export function LoginSection(props: LoginSectionProps) {
   const { redirectTo } = props;
 
   const handleLogin = async () => {
-    let href = `${getServerURL()}/rpc/auth.login`;
-    if (redirectTo) href += `?redirect=${encodeURIComponent(redirectTo)}`;
-
-    window.location.href = href;
+    window.location.href = buildLoginRedirectURL(redirectTo);
   };
 
   return (

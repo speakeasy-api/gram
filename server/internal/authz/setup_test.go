@@ -18,19 +18,33 @@ import (
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-var cloneTestDatabase func(t *testing.T, name string) (*pgxpool.Pool, error)
+var (
+	cloneTestDatabase   testinfra.PostgresDBCloneFunc
+	newClickhouseClient testinfra.ClickhouseClientFunc
+)
 
 func TestMain(m *testing.M) {
-	container, cloneFunc, err := testinfra.NewTestPostgres(context.Background())
+	ctx := context.Background()
+
+	pgContainer, cloneFunc, err := testinfra.NewTestPostgres(ctx)
 	if err != nil {
-		log.Fatalf("Failed to launch test infrastructure: %v", err)
+		log.Fatalf("launch test postgres: %v", err)
 	}
 	cloneTestDatabase = cloneFunc
 
+	chContainer, chFactory, err := testinfra.NewTestClickhouse(ctx)
+	if err != nil {
+		log.Fatalf("launch test clickhouse: %v", err)
+	}
+	newClickhouseClient = chFactory
+
 	code := m.Run()
 
-	if err := container.Terminate(context.Background()); err != nil {
-		log.Fatalf("Failed to cleanup test infrastructure: %v", err)
+	if err := chContainer.Terminate(ctx); err != nil {
+		log.Fatalf("terminate clickhouse container: %v", err)
+	}
+	if err := pgContainer.Terminate(ctx); err != nil {
+		log.Fatalf("terminate postgres container: %v", err)
 	}
 
 	os.Exit(code)

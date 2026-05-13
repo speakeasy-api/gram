@@ -114,6 +114,33 @@ describe("computePanelState", () => {
     });
   });
 
+  describe("projects panel", () => {
+    it("project selectors → projects panel with IDs", () => {
+      const selectors: Selector[] = [
+        { resourceKind: "mcp", resourceId: "*", projectId: "proj-1" },
+        { resourceKind: "mcp", resourceId: "*", projectId: "proj-2" },
+      ];
+      const result = computePanelState(selectors, [], "mcp");
+      expect(result).toEqual({
+        activePanel: "projects",
+        selectedProjectIds: ["proj-1", "proj-2"],
+        label: "2 projects selected",
+      });
+    });
+
+    it("single project → singular label", () => {
+      const selectors: Selector[] = [
+        { resourceKind: "mcp", resourceId: "*", projectId: "proj-1" },
+      ];
+      const result = computePanelState(selectors, [], "mcp");
+      expect(result).toEqual({
+        activePanel: "projects",
+        selectedProjectIds: ["proj-1"],
+        label: "1 project selected",
+      });
+    });
+  });
+
   describe("tools panel — select tab", () => {
     it("tool selectors with no collection match → tools/select", () => {
       const result = computePanelState(

@@ -2,7 +2,13 @@ import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import { Switch } from "./ui/switch";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, GripVertical, Shield } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Crown,
+  GripVertical,
+  Shield,
+} from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -14,8 +20,9 @@ import { createPortal } from "react-dom";
 
 const STORAGE_KEY = "gram-rbac-dev-override";
 const HIDDEN_KEY = "gram-dev-toolbar-hidden";
+const SUPER_ADMIN_KEY = "gram-dev-super-admin";
 
-type ResourceType = "org" | "project" | "mcp";
+type ResourceType = "org" | "project" | "environment" | "mcp";
 
 const SCOPE_DEFS: {
   scope: string;
@@ -46,6 +53,18 @@ const SCOPE_DEFS: {
     label: "project:write",
     resourceType: "project",
     description: "Modify projects & build resources",
+  },
+  {
+    scope: "environment:read",
+    label: "environment:read",
+    resourceType: "environment",
+    description: "View environments & their entries",
+  },
+  {
+    scope: "environment:write",
+    label: "environment:write",
+    resourceType: "environment",
+    description: "Create, edit, clone & delete environments",
   },
   {
     scope: "mcp:read",
@@ -95,20 +114,39 @@ function loadState(): OverrideState {
       ) {
         return {
           enabled: parsed.enabled,
-          scopes: Object.fromEntries(
-            Object.entries(parsed.scopes).map(([scope, enabled]) => [
-              scope,
-              { enabled: enabled as boolean, resources: null },
-            ]),
+          scopes: mergeWithDefaults(
+            Object.fromEntries(
+              Object.entries(parsed.scopes).map(([scope, enabled]) => [
+                scope,
+                { enabled: enabled as boolean, resources: null },
+              ]),
+            ),
           ),
         };
       }
-      return parsed;
+      // Merge SCOPE_DEFS defaults so any newly added scopes (since the user last
+      // saved state) are materialized in localStorage. Without this, new entries
+      // render as visually "enabled" via the per-row fallback in the JSX, but
+      // getRBACScopeOverrideHeader only iterates keys that exist in state.scopes
+      // — so the override header omits them and the kebab is disabled despite
+      // looking checked.
+      return {
+        enabled: parsed.enabled ?? false,
+        scopes: mergeWithDefaults(parsed.scopes ?? {}),
+      };
     }
   } catch {
     // ignore malformed localStorage
   }
   return { enabled: false, scopes: defaultScopeState() };
+}
+
+// mergeWithDefaults overlays existing scope state on top of defaultScopeState
+// so every scope in SCOPE_DEFS is present, but explicit user toggles win.
+function mergeWithDefaults(
+  existing: Record<string, ScopeState>,
+): Record<string, ScopeState> {
+  return { ...defaultScopeState(), ...existing };
 }
 
 function saveState(state: OverrideState) {
@@ -157,6 +195,7 @@ function loadPosition(): { x: number; y: number } | null {
 const GROUP_ORDER: { key: ResourceType; label: string }[] = [
   { key: "org", label: "Organization" },
   { key: "project", label: "Project" },
+  { key: "environment", label: "Environments" },
   { key: "mcp", label: "MCP" },
 ];
 
@@ -209,6 +248,9 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
   const [collapsed, setCollapsed] = useState(true);
   const [activeTab, setActiveTab] = useState("rbac");
   const [pos, setPos] = useState<{ x: number; y: number } | null>(loadPosition);
+  const [superAdmin, setSuperAdmin] = useState(
+    () => localStorage.getItem(SUPER_ADMIN_KEY) === "1",
+  );
   const queryClient = useQueryClient();
   const organization = useOrganization();
   const liveProjects = (organization?.projects ?? []).map((project) => ({
@@ -326,6 +368,17 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
     };
   }, []);
 
+  // Collapse when clicking outside
+  useEffect(() => {
+    if (collapsed) return;
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current?.contains(e.target as Node)) return;
+      setCollapsed(true);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [collapsed]);
+
   const invalidate = useCallback(() => {
     setTimeout(() => {
       queryClient.invalidateQueries();
@@ -340,16 +393,19 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
 
   const toggleScope = useCallback(
     (scope: string) => {
-      setState((prev) => ({
-        ...prev,
-        scopes: {
-          ...prev.scopes,
-          [scope]: {
-            ...prev.scopes[scope],
-            enabled: !prev.scopes[scope]?.enabled,
+      setState((prev) => {
+        const existing = prev.scopes[scope] ?? {
+          enabled: true,
+          resources: null,
+        };
+        return {
+          ...prev,
+          scopes: {
+            ...prev.scopes,
+            [scope]: { ...existing, enabled: !existing.enabled },
           },
-        },
-      }));
+        };
+      });
       if (state.enabled) invalidate();
     },
     [state.enabled, invalidate],
@@ -357,13 +413,19 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
 
   const setScopeResources = useCallback(
     (scope: string, resources: string[] | null) => {
-      setState((prev) => ({
-        ...prev,
-        scopes: {
-          ...prev.scopes,
-          [scope]: { ...prev.scopes[scope], resources },
-        },
-      }));
+      setState((prev) => {
+        const existing = prev.scopes[scope] ?? {
+          enabled: true,
+          resources: null,
+        };
+        return {
+          ...prev,
+          scopes: {
+            ...prev.scopes,
+            [scope]: { ...existing, resources },
+          },
+        };
+      });
       if (state.enabled) invalidate();
     },
     [state.enabled, invalidate],
@@ -470,9 +532,45 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
                   </span>
                 )}
               </button>
+              {import.meta.env.DEV && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("superadmin")}
+                  className={`-mb-px flex items-center gap-1.5 border-b-2 px-2 py-2 text-[11px] font-medium transition-colors ${
+                    activeTab === "superadmin"
+                      ? "border-foreground text-foreground"
+                      : "text-muted-foreground hover:text-foreground border-transparent"
+                  }`}
+                >
+                  <Crown className="h-3 w-3" />
+                  Super Admin
+                </button>
+              )}
             </div>
 
             {/* RBAC tab */}
+            {activeTab === "superadmin" && (
+              <div className="flex items-center justify-between px-3.5 py-3">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`h-1.5 w-1.5 rounded-full ${superAdmin ? "animate-pulse bg-amber-500" : "bg-muted-foreground/30"}`}
+                  />
+                  <span className="text-foreground text-xs font-medium">
+                    {superAdmin ? "Super admin active" : "Super admin off"}
+                  </span>
+                </div>
+                <Switch
+                  checked={superAdmin}
+                  onCheckedChange={(checked) => {
+                    setSuperAdmin(checked);
+                    localStorage.setItem(SUPER_ADMIN_KEY, checked ? "1" : "0");
+                    invalidate();
+                  }}
+                  aria-label="Toggle super admin"
+                />
+              </div>
+            )}
+
             {activeTab === "rbac" && (
               <>
                 {/* Master toggle */}
@@ -512,8 +610,10 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
                             enabled: true,
                             resources: null,
                           };
+                          // Defensive: legacy localStorage may have entries without `resources`.
+                          // Use loose != null so both null and undefined skip the length read.
                           const isRestricted =
-                            scopeState.resources !== null &&
+                            scopeState.resources != null &&
                             scopeState.resources.length > 0;
                           let knownResources: { id: string; label: string }[] =
                             [];

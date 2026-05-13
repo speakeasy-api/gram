@@ -27,7 +27,7 @@ type LogAssetCreateEvent struct {
 	AssetName string
 }
 
-func LogAssetCreate(ctx context.Context, dbtx repo.DBTX, event LogAssetCreateEvent) error {
+func (l *Logger) LogAssetCreate(ctx context.Context, dbtx repo.DBTX, event LogAssetCreateEvent) error {
 	action := ActionAssetCreate
 
 	metadata, err := marshalAuditPayload(map[string]any{
@@ -57,9 +57,6 @@ func LogAssetCreate(ctx context.Context, dbtx repo.DBTX, event LogAssetCreateEve
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

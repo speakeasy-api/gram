@@ -33,11 +33,14 @@ func NewSegmentChat(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter
 }
 
 type SegmentChatArgs struct {
-	ChatID       uuid.UUID
-	ProjectID    uuid.UUID
-	OrgID        string
-	APIKeyID     string
-	UserFeedback []UserFeedback // Will be used to inform segmentation
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+	APIKeyID  string
+	// Generation pins the chat snapshot; must match the generation used to
+	// compute UserFeedback indices.
+	Generation   int32
+	UserFeedback []UserFeedback
 }
 
 type ChatSegment struct {
@@ -50,13 +53,9 @@ type SegmentChatOutput struct {
 }
 
 func (s *SegmentChat) Do(ctx context.Context, args SegmentChatArgs) (*SegmentChatOutput, error) {
-	// Get all messages for this chat
-	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
-		ChatID:    args.ChatID,
-		ProjectID: args.ProjectID,
-	})
+	messages, err := loadMessagesAtPinnedGeneration(ctx, s.repo, args.ChatID, args.ProjectID, args.Generation)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list chat messages: %w", err)
+		return nil, err
 	}
 
 	if len(messages) == 0 {
@@ -184,6 +183,7 @@ There are %d messages total (indices 0-%d).%s`, conversationText, numMessages, n
 			Model:          "anthropic/claude-haiku-4.5",
 			SystemPrompt:   systemPrompt,
 			Prompt:         userPrompt,
+			Temperature:    nil,
 			JSONSchema:     &jsonSchemaConfig,
 			UsageSource:    billing.ModelUsageSourceGram,
 			UserID:         "",

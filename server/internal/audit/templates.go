@@ -29,7 +29,7 @@ type LogTemplateCreateEvent struct {
 	TemplateName string
 }
 
-func LogTemplateCreate(ctx context.Context, dbtx repo.DBTX, event LogTemplateCreateEvent) error {
+func (l *Logger) LogTemplateCreate(ctx context.Context, dbtx repo.DBTX, event LogTemplateCreateEvent) error {
 	action := ActionTemplateCreate
 
 	metadata, err := marshalAuditPayload(map[string]any{
@@ -59,11 +59,8 @@ func LogTemplateCreate(ctx context.Context, dbtx repo.DBTX, event LogTemplateCre
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogTemplateUpdateEvent struct {
@@ -79,7 +76,7 @@ type LogTemplateUpdateEvent struct {
 	TemplateName string
 }
 
-func LogTemplateUpdate(ctx context.Context, dbtx repo.DBTX, event LogTemplateUpdateEvent) error {
+func (l *Logger) LogTemplateUpdate(ctx context.Context, dbtx repo.DBTX, event LogTemplateUpdateEvent) error {
 	action := ActionTemplateUpdate
 
 	metadata, err := marshalAuditPayload(map[string]any{
@@ -109,11 +106,8 @@ func LogTemplateUpdate(ctx context.Context, dbtx repo.DBTX, event LogTemplateUpd
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogTemplateDeleteEvent struct {
@@ -129,7 +123,7 @@ type LogTemplateDeleteEvent struct {
 	TemplateName string
 }
 
-func LogTemplateDelete(ctx context.Context, dbtx repo.DBTX, event LogTemplateDeleteEvent) error {
+func (l *Logger) LogTemplateDelete(ctx context.Context, dbtx repo.DBTX, event LogTemplateDeleteEvent) error {
 	action := ActionTemplateDelete
 
 	metadata, err := marshalAuditPayload(map[string]any{
@@ -159,9 +153,6 @@ func LogTemplateDelete(ctx context.Context, dbtx repo.DBTX, event LogTemplateDel
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

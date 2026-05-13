@@ -2,7 +2,7 @@ package access
 
 import (
 	"errors"
-	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
+	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"testing"
 
 	"github.com/stretchr/testify/mock"

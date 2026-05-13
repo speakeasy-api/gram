@@ -35,6 +35,7 @@ type Service struct {
 	auth           *auth.Auth
 	authz          *authz.Engine
 	temporalClient TemporalClient
+	audit          *audit.Logger
 }
 
 type TemporalClient interface {
@@ -45,7 +46,15 @@ type TemporalClient interface {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, temporal TemporalClient, authzEngine *authz.Engine) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	temporal TemporalClient,
+	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("custom_domains"))
 
 	return &Service{
@@ -55,6 +64,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		auth:           auth.New(logger, db, sessions, authzEngine),
 		authz:          authzEngine,
 		temporalClient: temporal,
+		audit:          auditLogger,
 	}
 }
 
@@ -168,7 +178,7 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 		return oops.E(oops.CodeUnexpected, err, "failed to delete custom domain").Log(ctx, s.logger)
 	}
 
-	if err := audit.LogCustomDomainDelete(ctx, dbtx, audit.LogCustomDomainDeleteEvent{
+	if err := s.audit.LogCustomDomainDelete(ctx, dbtx, audit.LogCustomDomainDeleteEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName: authCtx.Email,

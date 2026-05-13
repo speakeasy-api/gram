@@ -21,7 +21,7 @@ export type OTELScopeLog = {
   /**
    * Array of log records
    */
-  logRecords: Array<OTELLogRecord>;
+  logRecords?: Array<OTELLogRecord> | undefined;
   /**
    * OTEL instrumentation scope
    */
@@ -30,7 +30,7 @@ export type OTELScopeLog = {
 
 /** @internal */
 export type OTELScopeLog$Outbound = {
-  logRecords: Array<OTELLogRecord$Outbound>;
+  logRecords?: Array<OTELLogRecord$Outbound> | undefined;
   scope?: OTELScope$Outbound | undefined;
 };
 
@@ -39,7 +39,7 @@ export const OTELScopeLog$outboundSchema: z.ZodMiniType<
   OTELScopeLog$Outbound,
   OTELScopeLog
 > = z.object({
-  logRecords: z.array(OTELLogRecord$outboundSchema),
+  logRecords: z.optional(z.array(OTELLogRecord$outboundSchema)),
   scope: z.optional(OTELScope$outboundSchema),
 });
 

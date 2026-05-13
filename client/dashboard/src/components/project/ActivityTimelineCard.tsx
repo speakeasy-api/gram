@@ -34,7 +34,7 @@ export function ActivityTimelineCard({ logs, isPending, viewAllHref }: Props) {
   return (
     <DashboardCard
       title="Activity Timeline"
-      tooltip="Recent administrative activity in this project — deployments, toolset changes, API key rotations, environment edits, and access role updates. Grouped by day, most recent first."
+      tooltip="Recent administrative activity in this project — deployments, MCP server changes, API key rotations, environment edits, and access role updates. Grouped by day, most recent first."
       action={
         <Link
           to={viewAllHref}
@@ -232,8 +232,8 @@ const ACTION_LABELS: Record<string, string> = {
   "project:update": "updated project",
   "project:delete": "deleted project",
   "toolset:create": "added",
-  "toolset:update": "updated toolset",
-  "toolset:delete": "deleted toolset",
+  "toolset:update": "updated MCP server",
+  "toolset:delete": "deleted MCP server",
   "toolset:attach_external_oauth": "connected OAuth",
   "toolset:detach_external_oauth": "disconnected OAuth",
   "toolset:attach_oauth_proxy": "attached OAuth proxy",

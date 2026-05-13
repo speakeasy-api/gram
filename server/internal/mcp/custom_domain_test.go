@@ -196,7 +196,7 @@ func serveWellKnownHTTP(
 	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
-	if err := ti.service.HandleWellKnownOAuthServerMetadata(w, req); err != nil {
+	if err := ti.service.HandleGetAuthorizationServer(w, req); err != nil {
 		return w, fmt.Errorf("well-known oauth: %w", err)
 	}
 	return w, nil

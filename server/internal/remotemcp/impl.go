@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -42,12 +46,22 @@ type Service struct {
 	authz   *authz.Engine
 	headers *Headers
 	policy  *guardian.Policy
+	audit   *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client, authzEngine *authz.Engine, policy *guardian.Policy) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	enc *encryption.Client,
+	authzEngine *authz.Engine,
+	policy *guardian.Policy,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 
 	return &Service{
@@ -58,6 +72,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		authz:   authzEngine,
 		headers: NewHeaders(logger, db, enc),
 		policy:  policy,
+		audit:   auditLogger,
 	}
 }
 
@@ -94,6 +109,25 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		}
 	}
 
+	// Generate the server ID up front so the slug can include its suffix and
+	// the row can be inserted in a single statement (no insert-then-update).
+	serverID, err := uuid.NewV7()
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "generate server id").Log(ctx, logger)
+	}
+
+	slug, err := computeServerSlug(payload.URL, serverID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").Log(ctx, logger)
+	}
+
+	name := pgtype.Text{String: "", Valid: false}
+	if payload.Name != nil {
+		if trimmed := strings.TrimSpace(*payload.Name); trimmed != "" {
+			name = pgtype.Text{String: trimmed, Valid: true}
+		}
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
@@ -104,11 +138,18 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	headersRepo := NewHeaders(s.logger, dbtx, s.headers.enc)
 
 	server, err := txRepo.CreateServer(ctx, repo.CreateServerParams{
+		ID:            serverID,
 		ProjectID:     *authCtx.ProjectID,
+		Name:          name,
+		Slug:          conv.ToPGText(slug),
 		TransportType: payload.TransportType,
 		Url:           payload.URL,
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, err, "remote mcp server slug already in use").Log(ctx, logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote mcp server").Log(ctx, logger)
 	}
 
@@ -130,7 +171,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		headerRows = append(headerRows, row)
 	}
 
-	if err := audit.LogRemoteMcpServerCreate(ctx, dbtx, audit.LogRemoteMcpServerCreateEvent{
+	if err := s.audit.LogRemoteMcpServerCreate(ctx, dbtx, audit.LogRemoteMcpServerCreateEvent{
 		OrganizationID:     authCtx.ActiveOrganizationID,
 		ProjectID:          *authCtx.ProjectID,
 		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -201,9 +242,13 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 		return nil, err
 	}
 
-	serverID, err := uuid.Parse(payload.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").Log(ctx, s.logger)
+	idProvided := payload.ID != nil && *payload.ID != ""
+	slugProvided := payload.Slug != nil && *payload.Slug != ""
+	if !idProvided && !slugProvided {
+		return nil, oops.E(oops.CodeBadRequest, nil, "id or slug is required").Log(ctx, s.logger)
+	}
+	if idProvided && slugProvided {
+		return nil, oops.E(oops.CodeBadRequest, nil, "id and slug are mutually exclusive").Log(ctx, s.logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -215,10 +260,22 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 	txRepo := repo.New(dbtx)
 	headersRepo := NewHeaders(s.logger, dbtx, s.headers.enc)
 
-	server, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
-		ID:        serverID,
-		ProjectID: *authCtx.ProjectID,
-	})
+	var server repo.RemoteMcpServer
+	if idProvided {
+		serverID, parseErr := uuid.Parse(*payload.ID)
+		if parseErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid server id").Log(ctx, s.logger)
+		}
+		server, err = txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
+			ID:        serverID,
+			ProjectID: *authCtx.ProjectID,
+		})
+	} else {
+		server, err = txRepo.GetServerBySlug(ctx, repo.GetServerBySlugParams{
+			Slug:      conv.ToPGText(*payload.Slug),
+			ProjectID: *authCtx.ProjectID,
+		})
+	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote mcp server not found").Log(ctx, s.logger)
@@ -294,14 +351,35 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 
 	beforeView := mv.BuildRemoteMcpServerView(existingServer, beforeHeaders)
 
+	// Resolve name: nil = leave existing, "" = clear, value = trimmed value.
+	name := existingServer.Name
+	if payload.Name != nil {
+		trimmed := strings.TrimSpace(*payload.Name)
+		name = pgtype.Text{String: trimmed, Valid: trimmed != ""}
+	}
+
+	// Always recompute slug from the post-update URL so it tracks the URL
+	// even when the URL didn't change (idempotent).
+	finalURL := conv.PtrValOr(payload.URL, existingServer.Url)
+	slug, err := computeServerSlug(finalURL, existingServer.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").Log(ctx, logger)
+	}
+
 	// Update server fields
 	updatedServer, err := txRepo.UpdateServer(ctx, repo.UpdateServerParams{
 		ID:            serverID,
 		ProjectID:     *authCtx.ProjectID,
+		Name:          name,
+		Slug:          conv.ToPGText(slug),
 		TransportType: conv.PtrValOr(payload.TransportType, existingServer.TransportType),
-		Url:           conv.PtrValOr(payload.URL, existingServer.Url),
+		Url:           finalURL,
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, err, "remote mcp server slug already in use").Log(ctx, logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update remote mcp server").Log(ctx, logger)
 	}
 
@@ -385,7 +463,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 
 	afterView := mv.BuildRemoteMcpServerView(updatedServer, afterHeaders)
 
-	if err := audit.LogRemoteMcpServerUpdate(ctx, dbtx, audit.LogRemoteMcpServerUpdateEvent{
+	if err := s.audit.LogRemoteMcpServerUpdate(ctx, dbtx, audit.LogRemoteMcpServerUpdateEvent{
 		OrganizationID:     authCtx.ActiveOrganizationID,
 		ProjectID:          *authCtx.ProjectID,
 		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -404,6 +482,34 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	}
 
 	return afterView, nil
+}
+
+func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) (*gen.VerifyURLResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	if err := validateURL(ctx, s.policy, payload.URL); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").Log(ctx, logger)
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, verifyURLTimeout)
+	defer cancel()
+
+	verified, status, message := VerifyRemoteMcpURL(probeCtx, s.policy, payload.URL)
+
+	return &gen.VerifyURLResult{
+		Verified:   verified,
+		HTTPStatus: status,
+		Message:    message,
+	}, nil
 }
 
 func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPayload) error {
@@ -447,7 +553,7 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		return oops.E(oops.CodeUnexpected, err, "delete remote mcp server").Log(ctx, logger)
 	}
 
-	if err := audit.LogRemoteMcpServerDelete(ctx, dbtx, audit.LogRemoteMcpServerDeleteEvent{
+	if err := s.audit.LogRemoteMcpServerDelete(ctx, dbtx, audit.LogRemoteMcpServerDeleteEvent{
 		OrganizationID:     authCtx.ActiveOrganizationID,
 		ProjectID:          *authCtx.ProjectID,
 		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

@@ -30,11 +30,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -53,6 +54,10 @@ type OrganizationProvider interface {
 
 var _ OrganizationProvider = (*workos.Client)(nil)
 
+type orgFeatureChecker interface {
+	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
+}
+
 type Service struct {
 	logger      *slog.Logger
 	tracer      trace.Tracer
@@ -60,7 +65,8 @@ type Service struct {
 	auth        *auth.Auth
 	authz       *authz.Engine
 	orgs        OrganizationProvider
-	loops       *loops.Client
+	features    orgFeatureChecker
+	email       *email.Service
 	siteURL     string // dashboard URL; used for invite callback RedirectURI and post-callback redirect
 	registryURL string // registry (speakeasy server) URL; used to redirect invitees through OIDC login after accepting
 }
@@ -69,7 +75,7 @@ var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, orgs OrganizationProvider, authzEngine *authz.Engine, loopsClient *loops.Client, siteURL string, registryURL string) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, orgs OrganizationProvider, features orgFeatureChecker, authzEngine *authz.Engine, emailService *email.Service, siteURL string, registryURL string) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 
 	return &Service{
@@ -79,7 +85,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		auth:        auth.New(logger, db, sessions, authzEngine),
 		authz:       authzEngine,
 		orgs:        orgs,
-		loops:       loopsClient,
+		features:    features,
+		email:       emailService,
 		siteURL:     siteURL,
 		registryURL: registryURL,
 	}
@@ -159,7 +166,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		logger.WarnContext(ctx, "failed to create passwordless session; invite saved but email not sent",
 			attr.SlogError(pwlErr),
 		)
-	} else if s.loops != nil {
+	} else if s.email != nil {
 		// Look up inviter display name + email and org name for the email template.
 		inviterName, inviterEmail := ac.UserID, ""
 		if u, err := userrepo.New(s.db).GetUser(ctx, ac.UserID); err == nil {
@@ -171,17 +178,13 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 			orgName = org.Name
 		}
 
-		if err := s.loops.SendTransactionalEmail(ctx, loops.SendTransactionalEmailInput{
-			TransactionalID: loops.TransactionalID(loops.TemplateTeamInvite),
-			Email:           row.Email,
-			DataVariables: map[string]string{
-				"invite_link":       pwlSess.Link,
-				"organization_name": orgName,
-				"inviter_name":      inviterName,
-				"inviter_email":     inviterEmail,
-			},
+		if err := s.email.Send(ctx, row.Email, email.TeamInvite{
+			InviteLink:       pwlSess.Link,
+			OrganizationName: orgName,
+			InviterName:      inviterName,
+			InviterEmail:     inviterEmail,
 		}); err != nil {
-			logger.WarnContext(ctx, "failed to send invite email via Loops",
+			logger.WarnContext(ctx, "failed to send invite email",
 				attr.SlogError(err),
 			)
 		}

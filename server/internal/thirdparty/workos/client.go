@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/workos/workos-go/v6/pkg/events"
 	"github.com/workos/workos-go/v6/pkg/organizations"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 	"github.com/workos/workos-go/v6/pkg/workos_errors"
@@ -60,6 +61,7 @@ type Client struct {
 	httpClient       *guardian.HTTPClient
 	orgs             *organizations.Client
 	um               *usermanagement.Client
+	events           *events.Client
 }
 
 // ClientOpts configures optional overrides for New.
@@ -69,9 +71,13 @@ type ClientOpts struct {
 	Endpoint string
 	// HTTPClient overrides the default retryable HTTP client.
 	HTTPClient *guardian.HTTPClient
+	// ClientID is the WorkOS application client ID, needed for SSO code exchange.
+	ClientID string
+	// RegistryClientID is the registry (environment-level) WorkOS client ID.
+	RegistryClientID string
 }
 
-func NewClient(guardianPolicy *guardian.Policy, apiKey string, clientID string, registryClientID string, opts ...ClientOpts) *Client {
+func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpts) *Client {
 	var opt ClientOpts
 	if len(opts) > 0 {
 		opt = opts[0]
@@ -97,13 +103,22 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey string, clientID string, 
 
 	return &Client{
 		apiKey:           apiKey,
-		clientID:         clientID,
-		registryClientID: registryClientID,
+		clientID:         opt.ClientID,
+		registryClientID: opt.RegistryClientID,
 		endpoint:         endpoint,
 		httpClient:       httpClient,
 		orgs:             &organizations.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil},
 		um:               um,
+		events:           &events.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
 	}
+}
+
+func (wc *Client) ListEvents(ctx context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error) {
+	resp, err := wc.events.ListEvents(ctx, opts)
+	if err != nil {
+		return events.ListEventsResponse{}, wrapSDKError(err, "list events")
+	}
+	return resp, nil
 }
 
 // do performs a raw HTTP request against the WorkOS REST API.
@@ -158,7 +173,13 @@ func (wc *Client) newRequest(ctx context.Context, method, path string, body []by
 }
 
 func convertUser(u usermanagement.User) User {
-	return User{ID: u.ID, FirstName: u.FirstName, LastName: u.LastName, Email: u.Email}
+	return User{
+		ID:                u.ID,
+		FirstName:         u.FirstName,
+		LastName:          u.LastName,
+		Email:             u.Email,
+		ProfilePictureURL: u.ProfilePictureURL,
+	}
 }
 
 func convertMember(m usermanagement.OrganizationMembership) Member {
@@ -171,5 +192,22 @@ func convertMember(m usermanagement.OrganizationMembership) Member {
 		Status:         string(m.Status),
 		CreatedAt:      m.CreatedAt,
 		UpdatedAt:      m.UpdatedAt,
+	}
+}
+
+func convertInvitation(inv usermanagement.Invitation) Invitation {
+	return Invitation{
+		ID:                  inv.ID,
+		Email:               inv.Email,
+		State:               InvitationState(inv.State),
+		AcceptedAt:          inv.AcceptedAt,
+		RevokedAt:           inv.RevokedAt,
+		Token:               inv.Token,
+		AcceptInvitationURL: inv.AcceptInvitationUrl,
+		OrganizationID:      inv.OrganizationID,
+		InviterUserID:       inv.InviterUserID,
+		ExpiresAt:           inv.ExpiresAt,
+		CreatedAt:           inv.CreatedAt,
+		UpdatedAt:           inv.UpdatedAt,
 	}
 }
