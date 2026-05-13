@@ -419,9 +419,15 @@ export function ShowSlackAppGuideComponent({
   );
 }
 
-type ProposeIdentityArgs = {
+type ProposeNameArgs = {
   goal?: string;
   name_suggestions: string[];
+};
+
+type NameResult = {
+  success: boolean;
+  cancelled?: boolean;
+  name?: string;
 };
 
 type PersonalityChoice =
@@ -438,23 +444,22 @@ type PersonalityChoice =
   | { kind: "generate"; describe: string }
   | { kind: "random" };
 
-type IdentityResult = {
+type PersonalityResult = {
   success: boolean;
   cancelled?: boolean;
-  name?: string;
   personality?: PersonalityChoice;
 };
 
 type PersonalityMode = "prebuilt" | "generate" | "custom" | "random";
 
-export function ProposeIdentityComponent({
+export function ProposeNameComponent({
   args,
   status,
   result,
   toolCallId,
 }: ToolCallMessagePartProps) {
   const draft = useAssistantDraft();
-  const a = (args ?? {}) as Partial<ProposeIdentityArgs>;
+  const a = (args ?? {}) as Partial<ProposeNameArgs>;
   const suggestions = useMemo(
     () => (Array.isArray(a.name_suggestions) ? a.name_suggestions : []),
     [a.name_suggestions],
@@ -462,12 +467,6 @@ export function ProposeIdentityComponent({
   const goal = a.goal;
 
   const [name, setName] = useState<string>(suggestions[0] ?? "");
-  const [mode, setMode] = useState<PersonalityMode>("prebuilt");
-  const [prebuiltSlug, setPrebuiltSlug] = useState<string>(
-    PERSONALITIES[0]?.slug ?? "",
-  );
-  const [describeText, setDescribeText] = useState<string>("");
-  const [customText, setCustomText] = useState<string>("");
 
   const isPending = isExecuting(status);
   const settled = !isPending;
@@ -479,14 +478,14 @@ export function ProposeIdentityComponent({
       draft.resolvePending(toolCallId, {
         success: false,
         cancelled: true,
-      } satisfies IdentityResult);
+      } satisfies NameResult);
     };
   }, [draft, toolCallId, isPending]);
 
   if (settled && r?.ok) {
     return (
       <ToolCard
-        title="Identity set"
+        title="Name set"
         tone="success"
         icon={<Check className="text-emerald-600" size={16} />}
       >
@@ -499,60 +498,34 @@ export function ProposeIdentityComponent({
 
   if (settled) {
     return (
-      <ToolCard title="Identity — skipped">
+      <ToolCard title="Name — skipped">
         <Type small muted>
-          No identity selected. You can set one from the draft panel anytime.
+          No name selected. You can set one from the draft panel anytime.
         </Type>
       </ToolCard>
     );
   }
 
   const trimmedName = name.trim();
-  const canSubmit =
-    trimmedName.length > 0 &&
-    ((mode === "prebuilt" && prebuiltSlug.length > 0) ||
-      (mode === "generate" && describeText.trim().length > 0) ||
-      (mode === "custom" && customText.trim().length > 0) ||
-      mode === "random");
+  const canSubmit = trimmedName.length > 0;
 
   const submit = () => {
-    let personality: PersonalityChoice | undefined;
-    if (mode === "prebuilt") {
-      const p = getPersonality(prebuiltSlug);
-      if (!p) return;
-      personality = {
-        kind: "prebuilt",
-        prebuilt: {
-          slug: p.slug,
-          title: p.title,
-          summary: p.summary,
-          instructions: p.instructions,
-        },
-      };
-    } else if (mode === "generate") {
-      personality = { kind: "generate", describe: describeText.trim() };
-    } else if (mode === "custom") {
-      personality = { kind: "custom_text", custom_text: customText.trim() };
-    } else {
-      personality = { kind: "random" };
-    }
     draft.resolvePending(toolCallId, {
       success: true,
       name: trimmedName,
-      personality,
-    } satisfies IdentityResult);
+    } satisfies NameResult);
   };
 
   const cancel = () => {
     draft.resolvePending(toolCallId, {
       success: false,
       cancelled: true,
-    } satisfies IdentityResult);
+    } satisfies NameResult);
   };
 
   return (
     <ToolCard
-      title="Name and personality"
+      title="Pick a name"
       icon={<Sparkles className="text-muted-foreground h-4 w-4" />}
     >
       {goal && (
@@ -561,7 +534,7 @@ export function ProposeIdentityComponent({
         </Type>
       )}
 
-      <div className="mb-4">
+      <div>
         <Label className="mb-1 block text-xs font-medium">Name</Label>
         {suggestions.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1.5">
@@ -588,8 +561,123 @@ export function ProposeIdentityComponent({
         />
       </div>
 
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="ghost" onClick={cancel}>
+          Skip
+        </Button>
+        <Button onClick={submit} disabled={!canSubmit}>
+          Save
+        </Button>
+      </div>
+    </ToolCard>
+  );
+}
+
+export function ProposePersonalityComponent({
+  status,
+  result,
+  toolCallId,
+}: ToolCallMessagePartProps) {
+  const draft = useAssistantDraft();
+  const assistantName = draft.assistant?.name ?? "";
+
+  const [mode, setMode] = useState<PersonalityMode>("prebuilt");
+  const [prebuiltSlug, setPrebuiltSlug] = useState<string>(
+    PERSONALITIES[0]?.slug ?? "",
+  );
+  const [describeText, setDescribeText] = useState<string>("");
+  const [customText, setCustomText] = useState<string>("");
+
+  const isPending = isExecuting(status);
+  const settled = !isPending;
+  const r = result as { ok?: boolean } | undefined;
+
+  useEffect(() => {
+    if (!isPending) return;
+    return () => {
+      draft.resolvePending(toolCallId, {
+        success: false,
+        cancelled: true,
+      } satisfies PersonalityResult);
+    };
+  }, [draft, toolCallId, isPending]);
+
+  if (settled && r?.ok) {
+    return (
+      <ToolCard
+        title="Personality set"
+        tone="success"
+        icon={<Check className="text-emerald-600" size={16} />}
+      >
+        <Type small muted>
+          Personality saved.
+        </Type>
+      </ToolCard>
+    );
+  }
+
+  if (settled) {
+    return (
+      <ToolCard title="Personality — skipped">
+        <Type small muted>
+          No personality selected. You can set one from the draft panel anytime.
+        </Type>
+      </ToolCard>
+    );
+  }
+
+  const canSubmit =
+    (mode === "prebuilt" && prebuiltSlug.length > 0) ||
+    (mode === "generate" && describeText.trim().length > 0) ||
+    (mode === "custom" && customText.trim().length > 0) ||
+    mode === "random";
+
+  const submit = () => {
+    let personality: PersonalityChoice | undefined;
+    if (mode === "prebuilt") {
+      const p = getPersonality(prebuiltSlug);
+      if (!p) return;
+      personality = {
+        kind: "prebuilt",
+        prebuilt: {
+          slug: p.slug,
+          title: p.title,
+          summary: p.summary,
+          instructions: p.instructions,
+        },
+      };
+    } else if (mode === "generate") {
+      personality = { kind: "generate", describe: describeText.trim() };
+    } else if (mode === "custom") {
+      personality = { kind: "custom_text", custom_text: customText.trim() };
+    } else {
+      personality = { kind: "random" };
+    }
+    draft.resolvePending(toolCallId, {
+      success: true,
+      personality,
+    } satisfies PersonalityResult);
+  };
+
+  const cancel = () => {
+    draft.resolvePending(toolCallId, {
+      success: false,
+      cancelled: true,
+    } satisfies PersonalityResult);
+  };
+
+  return (
+    <ToolCard
+      title="Pick a personality"
+      icon={<Sparkles className="text-muted-foreground h-4 w-4" />}
+    >
+      {assistantName && (
+        <Type small muted className="mb-3">
+          For: {assistantName}
+        </Type>
+      )}
+
       <div>
-        <Label className="mb-2 block text-xs font-medium">Personality</Label>
         <RadioGroup
           value={mode}
           onValueChange={(v) => setMode(v as PersonalityMode)}
@@ -599,11 +687,11 @@ export function ProposeIdentityComponent({
             <div className="flex items-start gap-2">
               <RadioGroupItem
                 value="prebuilt"
-                id="identity-prebuilt"
+                id="personality-prebuilt"
                 className="mt-1"
               />
               <Label
-                htmlFor="identity-prebuilt"
+                htmlFor="personality-prebuilt"
                 className="flex-1 cursor-pointer flex-col items-start gap-0"
               >
                 <Type small className="font-medium">
@@ -639,11 +727,11 @@ export function ProposeIdentityComponent({
             <div className="flex items-start gap-2">
               <RadioGroupItem
                 value="generate"
-                id="identity-generate"
+                id="personality-generate"
                 className="mt-1"
               />
               <Label
-                htmlFor="identity-generate"
+                htmlFor="personality-generate"
                 className="flex-1 cursor-pointer flex-col items-start gap-0"
               >
                 <Type small className="font-medium">
@@ -669,11 +757,11 @@ export function ProposeIdentityComponent({
             <div className="flex items-start gap-2">
               <RadioGroupItem
                 value="custom"
-                id="identity-custom"
+                id="personality-custom"
                 className="mt-1"
               />
               <Label
-                htmlFor="identity-custom"
+                htmlFor="personality-custom"
                 className="flex-1 cursor-pointer flex-col items-start gap-0"
               >
                 <Type small className="font-medium">
@@ -699,11 +787,11 @@ export function ProposeIdentityComponent({
             <div className="flex items-start gap-2">
               <RadioGroupItem
                 value="random"
-                id="identity-random"
+                id="personality-random"
                 className="mt-1"
               />
               <Label
-                htmlFor="identity-random"
+                htmlFor="personality-random"
                 className="flex-1 cursor-pointer flex-col items-start gap-0"
               >
                 <Type small className="font-medium">

@@ -10,7 +10,8 @@ import { computeBehaviorSection } from "../behaviors";
 import { getIntegrationDoc, listIntegrationDocs } from "../docs";
 import { setSection } from "../sections";
 import {
-  ProposeIdentityComponent,
+  ProposeNameComponent,
+  ProposePersonalityComponent,
   RequestEnvironmentSecretsComponent,
   ShowSlackAppGuideComponent,
   ShowWebhookUrlComponent,
@@ -363,7 +364,7 @@ type ShowSlackGuideArgs = {
 type ListIntegrationsArgs = { keywords?: string[] };
 type ReadDocsArgs = { slug: string };
 type FinishArgs = { message?: string };
-type ProposeIdentityArgs = {
+type ProposeNameArgs = {
   goal?: string;
   name_suggestions: string[];
 };
@@ -396,10 +397,10 @@ function buildAssistantTools(deps: ToolDeps) {
 
   const triggerCreateInFlight = new Map<string, Promise<ToolResult>>();
 
-  const propose_identity = defineFrontendTool<ProposeIdentityArgs, ToolResult>(
+  const propose_name = defineFrontendTool<ProposeNameArgs, ToolResult>(
     {
       description:
-        "Present a name + personality picker to the user. Use this as the FIRST step of creation, before any toolsets or triggers. Generate 4-6 unique first-name suggestions that fit the user's stated goal. Treat the assistant like a coworker: pick real first names from a mix of cultures. Never use the phrasing '[Owner]'s assistant', role titles ('Support Bot'), product names, or generic words ('Helper', 'Assistant'). Distinct names only — no duplicates, no variants of the same name. User picks a name (yours or their own) and a personality source (preset, short description, pasted instructions, or random). The tool returns their choice; you then synthesize the final instructions and call update_assistant.",
+        "Present a name picker to the user. Generate 4-6 unique first-name suggestions that fit the user's stated goal. Treat the assistant like a coworker: pick real first names from a mix of cultures. Never use the phrasing '[Owner]'s assistant', role titles ('Support Bot'), product names, or generic words ('Helper', 'Assistant'). Distinct names only — no duplicates, no variants of the same name. The tool creates the assistant + its env when the user picks. See system prompt for when to call this vs. update_assistant directly.",
       parameters: z.object({
         goal: z
           .string()
@@ -417,52 +418,98 @@ function buildAssistantTools(deps: ToolDeps) {
       }),
       execute: async (_args, ctx) => {
         const toolCallId = ctx.toolCallId ?? "";
-        type IdentityResult = {
+        type NameResult = {
           success: boolean;
           cancelled?: boolean;
           name?: string;
+        };
+        const userInput: NameResult = await withTimeout(
+          new Promise<NameResult>((resolve) => {
+            draft.registerPending(toolCallId, (r) => resolve(r as NameResult));
+          }),
+          15 * 60 * 1000,
+          "propose_name",
+        ).catch((): NameResult => ({ success: false, cancelled: true }));
+
+        if (!userInput.success || !userInput.name) {
+          return okResult({
+            cancelled: true,
+            note: "User skipped the name picker. Ask them directly what to name the assistant, then call update_assistant({ name }) followed by propose_personality. Do not re-call propose_name unless they ask.",
+          });
+        }
+
+        const name = userInput.name;
+        return serialize(async () => {
+          try {
+            await ensureAssistant(deps, { name });
+            return okResult({
+              name,
+              note: `Saved name "${name}". Now call propose_personality to let the user pick their personality.`,
+            });
+          } catch (e) {
+            return errResult(e instanceof Error ? e.message : "save failed");
+          }
+        });
+      },
+    },
+    "propose_name",
+  );
+
+  const propose_personality = defineFrontendTool<
+    Record<string, never>,
+    ToolResult
+  >(
+    {
+      description:
+        "Present a personality picker to the user. Call this after the assistant has a name. The user picks one of: preset / short description / pasted instructions / random. For presets with bundled instructions and pasted text, this tool writes # Personality directly. For description-based and random, the result note tells you to call set_personality with synthesized content.",
+      parameters: z.object({}),
+      execute: async (_args, ctx) => {
+        const toolCallId = ctx.toolCallId ?? "";
+        if (!draft.assistant?.name) {
+          return errResult(
+            "propose_personality called before the assistant has a name. Call propose_name (or update_assistant with a name) first.",
+          );
+        }
+        type PersonalityPickResult = {
+          success: boolean;
+          cancelled?: boolean;
           personality?: PersonalityChoice;
         };
-        const userInput: IdentityResult = await withTimeout(
-          new Promise<IdentityResult>((resolve) => {
+        const userInput: PersonalityPickResult = await withTimeout(
+          new Promise<PersonalityPickResult>((resolve) => {
             draft.registerPending(toolCallId, (r) =>
-              resolve(r as IdentityResult),
+              resolve(r as PersonalityPickResult),
             );
           }),
           15 * 60 * 1000,
-          "propose_identity",
+          "propose_personality",
         ).catch(
-          (e): IdentityResult => ({
-            success: false,
-            cancelled: true,
-            name: e instanceof Error ? e.message : "timeout",
-          }),
+          (): PersonalityPickResult => ({ success: false, cancelled: true }),
         );
 
-        if (!userInput.success || !userInput.name || !userInput.personality) {
+        if (!userInput.success || !userInput.personality) {
           return okResult({
             cancelled: true,
-            note: "User skipped the identity picker. Ask them directly for a name and the gist of the personality they want, then call update_assistant with sensible defaults. Do not re-call propose_identity unless they ask.",
+            note: "User skipped the personality picker. Ask them in chat for the gist of the personality they want, then call set_personality with a reasonable expansion. Do not re-call propose_personality unless they ask.",
           });
         }
 
         const p = userInput.personality;
-        const name = userInput.name;
+        const name = draft.assistant.name;
         return serialize(async () => {
           try {
             if (p.kind === "prebuilt") {
               const hasInstructions = p.prebuilt.instructions.trim().length > 0;
-              const current = draft.assistant?.instructions ?? "";
-              const next = hasInstructions
-                ? setSection(current, "Personality", p.prebuilt.instructions)
-                : current;
-              const a = await ensureAssistant(
-                deps,
-                hasInstructions ? { name, instructions: next } : { name },
-              );
-              await recomputeBehaviorSection(deps, a);
+              if (hasInstructions) {
+                const current = draft.assistant?.instructions ?? "";
+                const next = setSection(
+                  current,
+                  "Personality",
+                  p.prebuilt.instructions,
+                );
+                await ensureAssistant(deps, { instructions: next });
+              }
               return okResult({
-                name,
                 personality: {
                   kind: "prebuilt" as const,
                   slug: p.prebuilt.slug,
@@ -471,42 +518,31 @@ function buildAssistantTools(deps: ToolDeps) {
                   body_set: hasInstructions,
                 },
                 note: hasInstructions
-                  ? `Saved name "${name}" and the "${p.prebuilt.title}" personality verbatim under # Personality. Now describe what this assistant does — call set_tasks with role-specific guidance derived from the user's stated goal. Do not call set_personality unless the user explicitly asks to change it.`
-                  : `Saved name "${name}". The "${p.prebuilt.title}" preset has no body — synthesize personality content (voice, tone, formatting habits, uncertainty handling) matching the title "${p.prebuilt.title}" and summary "${p.prebuilt.summary}", then call set_personality with the result. Then call set_tasks with role-specific guidance.`,
+                  ? `Saved the "${p.prebuilt.title}" personality verbatim under # Personality for "${name}". Now describe what this assistant does — call set_tasks with role-specific guidance derived from the user's stated goal. Do not call set_personality unless the user explicitly asks to change it.`
+                  : `The "${p.prebuilt.title}" preset has no body — synthesize personality content (voice, tone, formatting habits, uncertainty handling) matching the title "${p.prebuilt.title}" and summary "${p.prebuilt.summary}", then call set_personality with the result. Then call set_tasks with role-specific guidance.`,
               });
             }
             if (p.kind === "custom_text") {
               const current = draft.assistant?.instructions ?? "";
               const next = setSection(current, "Personality", p.custom_text);
-              const a = await ensureAssistant(deps, {
-                name,
-                instructions: next,
-              });
-              await recomputeBehaviorSection(deps, a);
+              await ensureAssistant(deps, { instructions: next });
               return okResult({
-                name,
                 personality: { kind: "custom_text" as const },
-                note: `Saved name "${name}" and the user's pasted personality verbatim under # Personality. Now call set_tasks with role-specific guidance. Do not modify # Personality.`,
+                note: `Saved the user's pasted personality verbatim under # Personality for "${name}". Now call set_tasks with role-specific guidance. Do not modify # Personality.`,
               });
             }
             if (p.kind === "generate") {
-              const a = await ensureAssistant(deps, { name });
-              await recomputeBehaviorSection(deps, a);
               return okResult({
-                name,
                 personality: {
                   kind: "generate" as const,
                   description: p.describe,
                 },
-                note: `Saved name "${name}". The user described their desired personality: "${p.describe}". Expand that into a full personality (voice, tone, formatting habits, uncertainty handling) and call set_personality with the expanded text. Then call set_tasks with role-specific guidance.`,
+                note: `The user described their desired personality: "${p.describe}". Expand that into a full personality (voice, tone, formatting habits, uncertainty handling) and call set_personality with the expanded text. Then call set_tasks with role-specific guidance.`,
               });
             }
-            const a = await ensureAssistant(deps, { name });
-            await recomputeBehaviorSection(deps, a);
             return okResult({
-              name,
               personality: { kind: "random" as const },
-              note: `Saved name "${name}". Invent a distinctive personality from scratch (voice, formatting habits, sign-off, uncertainty handling). Keep it professional-compatible. Call set_personality with the result, then set_tasks with role-specific guidance.`,
+              note: `Invent a distinctive personality from scratch (voice, formatting habits, sign-off, uncertainty handling). Keep it professional-compatible. Call set_personality with the result, then set_tasks with role-specific guidance.`,
             });
           } catch (e) {
             return errResult(e instanceof Error ? e.message : "save failed");
@@ -514,7 +550,7 @@ function buildAssistantTools(deps: ToolDeps) {
         });
       },
     },
-    "propose_identity",
+    "propose_personality",
   );
 
   const update_assistant = defineFrontendTool<UpdateAssistantArgs, ToolResult>(
@@ -1575,7 +1611,8 @@ function buildAssistantTools(deps: ToolDeps) {
   );
 
   return {
-    propose_identity,
+    propose_name,
+    propose_personality,
     update_assistant,
     set_personality,
     set_tasks,
@@ -1621,7 +1658,8 @@ export function useOnboardingTools(): {
 
   const components = useMemo<Record<string, ToolCallMessagePartComponent>>(
     () => ({
-      propose_identity: ProposeIdentityComponent,
+      propose_name: ProposeNameComponent,
+      propose_personality: ProposePersonalityComponent,
       request_environment_secrets: RequestEnvironmentSecretsComponent,
       show_webhook_url: ShowWebhookUrlComponent,
       show_slack_app_guide: ShowSlackAppGuideComponent,
