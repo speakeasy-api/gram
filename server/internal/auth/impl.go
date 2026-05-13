@@ -174,7 +174,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrInit, err)
 	}
 
-	userInfo, err := s.identity.BuildUserInfoFromDB(ctx, userID)
+	userInfo, _, err := s.identity.GetUserInfo(ctx, userID)
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}
@@ -517,8 +517,6 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeInvalid, errors.New("org name is required"), "org name is required")
 	}
 
-	// Only allow alphanumeric characters, spaces, hyphens, and underscores
-	validOrgNameRegex := regexp.MustCompile(`^[a-zA-Z0-9\s-_]+$`)
 	if !validOrgNameRegex.MatchString(payload.OrgName) {
 		return oops.E(oops.CodeInvalid, errors.New("organization name contains invalid characters"), "organization name contains invalid characters")
 	}
@@ -793,6 +791,9 @@ func (s *Service) buildCallbackURL(ctx context.Context) string {
 
 	return returnAddress + "/rpc/auth.callback"
 }
+
+// validOrgNameRegex allows alphanumeric characters, spaces, hyphens, and underscores.
+var validOrgNameRegex = regexp.MustCompile(`^[a-zA-Z0-9\s-_]+$`)
 
 var slugifyRe = regexp.MustCompile(`[^a-z0-9]+`)
 
