@@ -1,4 +1,4 @@
-h1:i4XVcP5wm9IgK/ZAg2a/4v4P3chZxqfm5qw5vEZ6UMU=
+h1:Fr2EzuEGUaao2MrJenXR95Mj/LoeZ/9ngf0b/pfpkr4=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -175,3 +175,4 @@ h1:i4XVcP5wm9IgK/ZAg2a/4v4P3chZxqfm5qw5vEZ6UMU=
 20260513113209_add_risk_results_dead_letter_reason.sql h1:BUudDtten6ipXzo+TKfESVxc2UUyCKykq0v4dKXwi+g=
 20260513120106_unique-org-workos-id.sql h1:whhKfMZ6Xf0zN4tOUbKxbyTmNU7mLmCtkZUOIG7HX2E=
 20260513143640_add-organization-invitations.sql h1:ullg5rI+Zo173EOQ56n2B6UFQB5mGLljO2FqLTeJXiQ=
+20260513152016_alter-user-id-membership-to-be-nullable.sql h1:WXg7B2CQFX4uuXTJYiaNkMtjDhSrBsZqNl4rWR09d5U=
