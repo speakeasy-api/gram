@@ -561,3 +561,13 @@ sql:
         out: "../internal/outbox/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/otelforwarding/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/otelforwarding/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true

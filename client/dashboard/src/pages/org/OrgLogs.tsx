@@ -9,6 +9,7 @@ import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Eye, FileText, Monitor } from "lucide-react";
 import { useState } from "react";
+import { OtelForwardingSection } from "./OtelForwardingSection";
 
 export default function OrgLogs() {
   return (
@@ -202,6 +203,10 @@ export function OrgLogsInner() {
             )}
           </Stack>
         </Stack>
+      </div>
+
+      <div className="mt-8">
+        <OtelForwardingSection />
       </div>
     </>
   );
