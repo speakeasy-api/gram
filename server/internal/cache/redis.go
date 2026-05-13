@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -31,6 +32,23 @@ func NewRedisCacheAdapter(client *redis.Client) *RedisCacheAdapter {
 func (r *RedisCacheAdapter) Get(ctx context.Context, key string, value any) error {
 	//nolint:wrapcheck // Wrapping happens in the typed cache implementation
 	return r.cache.Get(ctx, key, value)
+}
+
+// GetAndDelete uses Redis GETDEL to read + delete the key in a single
+// round-trip. The two ops execute server-side as one atomic command, so no
+// other client can read the same value between them.
+func (r *RedisCacheAdapter) GetAndDelete(ctx context.Context, key string, value any) error {
+	raw, err := r.client.GetDel(ctx, key).Bytes()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return redisCache.ErrCacheMiss
+		}
+		return fmt.Errorf("getdel %s: %w", key, err)
+	}
+	if err := r.cache.Unmarshal(raw, value); err != nil {
+		return fmt.Errorf("unmarshal %s: %w", key, err)
+	}
+	return nil
 }
 
 func (r *RedisCacheAdapter) Set(ctx context.Context, key string, value any, ttl time.Duration) error {

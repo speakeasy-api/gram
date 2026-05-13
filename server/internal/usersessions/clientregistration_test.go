@@ -43,19 +43,19 @@ func TestRegistrationRequest_Validate(t *testing.T) {
 		req := &RegistrationRequest{
 			RedirectURIs: []string{"https://app.acme.test/callback"},
 		}
-		assertRegistrationError(t, validateAfterDefaults(req), "invalid_client_metadata", "client_name")
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_client_metadata", "client_name")
 	})
 
 	t.Run("rejects missing redirect_uris", func(t *testing.T) {
 		t.Parallel()
 		req := &RegistrationRequest{ClientName: "named"}
-		assertRegistrationError(t, validateAfterDefaults(req), "invalid_redirect_uri", "redirect_uris")
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_redirect_uri", "redirect_uris")
 	})
 
 	t.Run("rejects empty redirect_uris slice", func(t *testing.T) {
 		t.Parallel()
 		req := &RegistrationRequest{ClientName: "named", RedirectURIs: []string{}}
-		assertRegistrationError(t, validateAfterDefaults(req), "invalid_redirect_uri", "redirect_uris")
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_redirect_uri", "redirect_uris")
 	})
 
 	t.Run("rejects relative redirect URI", func(t *testing.T) {
@@ -64,7 +64,7 @@ func TestRegistrationRequest_Validate(t *testing.T) {
 			ClientName:   "named",
 			RedirectURIs: []string{"/callback"},
 		}
-		assertRegistrationError(t, validateAfterDefaults(req), "invalid_redirect_uri", "absolute URL")
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_redirect_uri", "absolute URL")
 	})
 
 	t.Run("rejects URI missing scheme", func(t *testing.T) {
@@ -73,7 +73,7 @@ func TestRegistrationRequest_Validate(t *testing.T) {
 			ClientName:   "named",
 			RedirectURIs: []string{"app.acme.test/callback"},
 		}
-		assertRegistrationError(t, validateAfterDefaults(req), "invalid_redirect_uri", "absolute URL")
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_redirect_uri", "absolute URL")
 	})
 
 	t.Run("rejects URI missing host", func(t *testing.T) {
@@ -82,7 +82,79 @@ func TestRegistrationRequest_Validate(t *testing.T) {
 			ClientName:   "named",
 			RedirectURIs: []string{"https:///callback"},
 		}
-		assertRegistrationError(t, validateAfterDefaults(req), "invalid_redirect_uri", "absolute URL")
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_redirect_uri", "must include a host")
+	})
+
+	t.Run("rejects javascript: redirect URI", func(t *testing.T) {
+		t.Parallel()
+		req := &RegistrationRequest{
+			ClientName:   "named",
+			RedirectURIs: []string{"javascript://example.com/%0Aalert(document.domain)//"},
+		}
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_redirect_uri", `scheme "javascript" is not permitted`)
+	})
+
+	t.Run("rejects data: redirect URI", func(t *testing.T) {
+		t.Parallel()
+		req := &RegistrationRequest{
+			ClientName:   "named",
+			RedirectURIs: []string{"data://example.com/text/html,<script>alert(1)</script>"},
+		}
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_redirect_uri", `scheme "data" is not permitted`)
+	})
+
+	t.Run("rejects file: redirect URI", func(t *testing.T) {
+		t.Parallel()
+		req := &RegistrationRequest{
+			ClientName:   "named",
+			RedirectURIs: []string{"file://example.com/etc/passwd"},
+		}
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_redirect_uri", `scheme "file" is not permitted`)
+	})
+
+	t.Run("rejects http on non-loopback host", func(t *testing.T) {
+		t.Parallel()
+		req := &RegistrationRequest{
+			ClientName:   "named",
+			RedirectURIs: []string{"http://app.acme.test/callback"},
+		}
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_redirect_uri", "loopback")
+	})
+
+	t.Run("accepts http://127.0.0.1 loopback", func(t *testing.T) {
+		t.Parallel()
+		req := &RegistrationRequest{
+			ClientName:   "named",
+			RedirectURIs: []string{"http://127.0.0.1:8765/callback"},
+		}
+		require.NoError(t, validateAfterDefaults(req))
+	})
+
+	t.Run("accepts http://localhost loopback", func(t *testing.T) {
+		t.Parallel()
+		req := &RegistrationRequest{
+			ClientName:   "named",
+			RedirectURIs: []string{"http://localhost:8765/callback"},
+		}
+		require.NoError(t, validateAfterDefaults(req))
+	})
+
+	t.Run("accepts reverse-DNS native-app custom scheme", func(t *testing.T) {
+		t.Parallel()
+		req := &RegistrationRequest{
+			ClientName:   "named",
+			RedirectURIs: []string{"com.acme.app:/oauth/callback"},
+		}
+		require.NoError(t, validateAfterDefaults(req))
+	})
+
+	t.Run("rejects single-token custom scheme", func(t *testing.T) {
+		t.Parallel()
+		req := &RegistrationRequest{
+			ClientName:   "named",
+			RedirectURIs: []string{"myapp:/callback"},
+		}
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_redirect_uri", "reverse-DNS")
 	})
 
 	t.Run("rejects unsupported grant_type", func(t *testing.T) {
@@ -92,7 +164,7 @@ func TestRegistrationRequest_Validate(t *testing.T) {
 			RedirectURIs: []string{"https://app.acme.test/callback"},
 			GrantTypes:   []string{"password"},
 		}
-		assertRegistrationError(t, validateAfterDefaults(req), "invalid_client_metadata", `unsupported grant_type "password"`)
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_client_metadata", `unsupported grant_type "password"`)
 	})
 
 	t.Run("rejects unsupported response_type", func(t *testing.T) {
@@ -102,7 +174,7 @@ func TestRegistrationRequest_Validate(t *testing.T) {
 			RedirectURIs:  []string{"https://app.acme.test/callback"},
 			ResponseTypes: []string{"token"},
 		}
-		assertRegistrationError(t, validateAfterDefaults(req), "invalid_client_metadata", `unsupported response_type "token"`)
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_client_metadata", `unsupported response_type "token"`)
 	})
 
 	t.Run("rejects unsupported token_endpoint_auth_method", func(t *testing.T) {
@@ -112,7 +184,7 @@ func TestRegistrationRequest_Validate(t *testing.T) {
 			RedirectURIs:            []string{"https://app.acme.test/callback"},
 			TokenEndpointAuthMethod: "client_secret_jwt",
 		}
-		assertRegistrationError(t, validateAfterDefaults(req), "invalid_client_metadata", `unsupported token_endpoint_auth_method "client_secret_jwt"`)
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_client_metadata", `unsupported token_endpoint_auth_method "client_secret_jwt"`)
 	})
 
 	t.Run("accepts public client (none) auth method", func(t *testing.T) {
@@ -134,7 +206,7 @@ func TestRegistrationRequest_Validate(t *testing.T) {
 			GrantTypes:    []string{"refresh_token"},
 			ResponseTypes: []string{"code"},
 		}
-		assertRegistrationError(t, validateAfterDefaults(req), "invalid_client_metadata", `response_type "code" requires grant_type "authorization_code"`)
+		assertOAuthError(t, validateAfterDefaults(req), "invalid_client_metadata", `response_type "code" requires grant_type "authorization_code"`)
 	})
 
 	t.Run("accepts authorization_code with refresh_token", func(t *testing.T) {
@@ -192,14 +264,14 @@ func TestRegistrationRequest_SetDefaults(t *testing.T) {
 	})
 }
 
-// assertRegistrationError fails the test unless err unwraps to a
-// *RegistrationError with the expected code and a description containing
+// assertOAuthError fails the test unless err unwraps to a
+// *OAuthError with the expected code and a description containing
 // the expected substring.
-func assertRegistrationError(t *testing.T, err error, wantCode, wantDescriptionSubstr string) {
+func assertOAuthError(t *testing.T, err error, wantCode, wantDescriptionSubstr string) {
 	t.Helper()
 	require.Error(t, err)
-	var regErr *RegistrationError
-	require.ErrorAs(t, err, &regErr, "expected *RegistrationError, got %T (%v)", err, err)
-	assert.Equal(t, wantCode, regErr.Code)
-	assert.Contains(t, regErr.Description, wantDescriptionSubstr)
+	var oauthErr *OAuthError
+	require.ErrorAs(t, err, &oauthErr, "expected *OAuthError, got %T (%v)", err, err)
+	assert.Equal(t, wantCode, oauthErr.Code)
+	assert.Contains(t, oauthErr.Description, wantDescriptionSubstr)
 }

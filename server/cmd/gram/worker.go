@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
 func newWorkerCommand() *cli.Command {
@@ -273,7 +274,7 @@ func newWorkerCommand() *cli.Command {
 			Required: true,
 		},
 		&cli.StringFlag{
-			Name:     "jwt-signing-key",
+			Name:     usersessions.JWTSigningKeyFlag,
 			Usage:    "Key for JWT signing",
 			Required: true,
 			EnvVars:  []string{"GRAM_JWT_SIGNING_KEY"},
@@ -551,12 +552,12 @@ func newWorkerCommand() *cli.Command {
 			speakeasyIDPClient := speakeasyclient.NewClient(logger, tracerProvider, guardianPolicy, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), db, nil, posthogClient)
 			sessionManager := sessions.NewManager(logger, tracerProvider, guardianPolicy, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, billingRepo, speakeasyIDPClient)
 
-			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
+			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String(usersessions.JWTSigningKeyFlag))
 
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, guardianPolicy)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL)
 
-			assistantTokenManager := assistanttokens.New(c.String("jwt-signing-key"), db, authzEngine)
+			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
 
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient))
 
@@ -599,6 +600,8 @@ func newWorkerCommand() *cli.Command {
 				auditLogger,
 				memoryTools,
 				platformFeatureChecker,
+				speakeasyIDPClient,
+				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
 			)
 
 			chatClient := chat.NewAgenticChatClient(

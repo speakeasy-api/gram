@@ -884,6 +884,7 @@ type OutboxSvixRelay struct {
 	SvixMessageID pgtype.Text
 	Attempts      int32
 	LastError     pgtype.Text
+	RetryAfter    pgtype.Timestamptz
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
 }
