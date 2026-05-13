@@ -52,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
+	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -750,6 +751,7 @@ func newStartCommand() *cli.Command {
 				},
 				mcpRegistryClient,
 				externalmcprepo.New(db),
+				deploymentsrepo.New(db),
 			)
 			platformExtras := append([]platformtools.ExternalTool{}, memoryTools...)
 			platformExtras = append(platformExtras, catalogTools...)

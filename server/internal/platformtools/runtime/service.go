@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	externalmcprepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -63,10 +64,10 @@ func WithSlackHTTPClient(client *guardian.HTTPClient) Option {
 // where deployments + toolsets services are not constructed, e.g. the
 // background worker. The runtime catalogs them as platform tools by URN
 // either way.
-func CatalogExternalTools(installer platformcatalog.Installer, registryClient *externalmcp.RegistryClient, repo *externalmcprepo.Queries) []platformtools.ExternalTool {
+func CatalogExternalTools(installer platformcatalog.Installer, registryClient *externalmcp.RegistryClient, repo *externalmcprepo.Queries, deploymentsRepo *deploymentsrepo.Queries) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
 		{Executor: platformcatalog.NewSearchTool(registryClient, repo), RequiredFeature: ""},
-		{Executor: platformcatalog.NewInstallTool(installer, registryClient, repo), RequiredFeature: ""},
+		{Executor: platformcatalog.NewInstallTool(installer, registryClient, repo, deploymentsRepo), RequiredFeature: ""},
 	}
 }
 

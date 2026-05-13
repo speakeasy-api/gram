@@ -6,12 +6,16 @@ import (
 	"io"
 	"strings"
 
+	"errors"
+
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	deploymentsgen "github.com/speakeasy-api/gram/server/gen/deployments"
 	toolsetsgen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	externalmcprepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -40,22 +44,24 @@ type installResult struct {
 // + enable MCP) used by the dashboard's AddServerDialog so an assistant can
 // invoke it directly.
 type InstallTool struct {
-	descriptor     core.ToolDescriptor
-	registryClient *externalmcp.RegistryClient
-	repo           *externalmcprepo.Queries
-	installer      Installer
+	descriptor      core.ToolDescriptor
+	registryClient  *externalmcp.RegistryClient
+	repo            *externalmcprepo.Queries
+	deploymentsRepo *deploymentsrepo.Queries
+	installer       Installer
 }
 
-func NewInstallTool(installer Installer, registryClient *externalmcp.RegistryClient, repo *externalmcprepo.Queries) *InstallTool {
+func NewInstallTool(installer Installer, registryClient *externalmcp.RegistryClient, repo *externalmcprepo.Queries, deploymentsRepo *deploymentsrepo.Queries) *InstallTool {
 	readOnly := false
 	destructive := false
 	idempotent := false
 	openWorld := false
 
 	return &InstallTool{
-		installer:      installer,
-		registryClient: registryClient,
-		repo:           repo,
+		installer:       installer,
+		registryClient:  registryClient,
+		repo:            repo,
+		deploymentsRepo: deploymentsRepo,
 		descriptor: core.ToolDescriptor{
 			SourceSlug:  SourceCatalog,
 			HandlerName: handlerInstall,
@@ -78,7 +84,7 @@ func (t *InstallTool) Descriptor() core.ToolDescriptor {
 }
 
 func (t *InstallTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.installer == nil || t.registryClient == nil || t.repo == nil {
+	if t.installer == nil || t.registryClient == nil || t.repo == nil || t.deploymentsRepo == nil {
 		return oops.E(oops.CodeUnexpected, nil, "catalog tools are not configured")
 	}
 
@@ -125,6 +131,17 @@ func (t *InstallTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payloa
 	slug := slugFromName(displayName)
 	if slug == "" {
 		return oops.E(oops.CodeBadRequest, nil, "name does not produce a usable slug — pick a name with at least one alphanumeric character")
+	}
+
+	// Guard against silently clobbering an unrelated server. The deployments
+	// upsert is keyed by (deployment_id, slug) and updates registry/specifier
+	// on conflict, so installing "io.bar/server" when "io.foo/server" is
+	// already attached under the same trailing-segment slug would replace
+	// the existing attachment in the cloned deployment. The dashboard
+	// equivalent is the slug-collision check in
+	// useExternalMcpReleaseWorkflow.startDeployment.
+	if err := t.ensureNoConflictingSlug(ctx, *authCtx.ProjectID, slug, specifier); err != nil {
+		return err
 	}
 
 	regIDStr := registryID.String()
@@ -240,6 +257,42 @@ func defaultDisplayName(specifier string, fallback string) string {
 		return specifier[idx+1:]
 	}
 	return specifier
+}
+
+// ensureNoConflictingSlug returns a CodeConflict error when the project's
+// latest deployment already attaches an external MCP under the same slug but
+// for a different registry_server_specifier. Same specifier + same slug is
+// a legitimate idempotent re-install and proceeds silently.
+func (t *InstallTool) ensureNoConflictingSlug(ctx context.Context, projectID uuid.UUID, slug, specifier string) error {
+	latestID, err := t.deploymentsRepo.GetLatestDeploymentID(ctx, projectID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("get latest deployment for slug check: %w", err)
+	}
+	if latestID == uuid.Nil {
+		return nil
+	}
+
+	attachments, err := t.repo.ListExternalMCPAttachments(ctx, latestID)
+	if err != nil {
+		return fmt.Errorf("list external mcp attachments for slug check: %w", err)
+	}
+	for _, attachment := range attachments {
+		if attachment.Slug != slug {
+			continue
+		}
+		if attachment.RegistryServerSpecifier == specifier {
+			return nil
+		}
+		return oops.E(
+			oops.CodeConflict, nil,
+			"a different MCP server (%s) is already installed in this project as %q. Re-run with a name argument to disambiguate.",
+			attachment.RegistryServerSpecifier, slug,
+		)
+	}
+	return nil
 }
 
 // slugFromName mirrors the dashboard's generateSlug(name):
