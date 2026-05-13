@@ -260,6 +260,7 @@
     { "id": "invite-accept",      "x": 630, "y":  30, "tier": "auth",    "label": "/invite (accept)" },
     { "id": "cli",                "x": 830, "y":  30, "tier": "entry",   "label": "gram CLI" },
 
+    { "id": "speakeasy-platform", "x":  30, "y": 140, "tier": "auth",    "label": "Speakeasy platform" },
     { "id": "onboarding",         "x": 230, "y": 140, "tier": "nav",     "label": "/onboarding" },
     { "id": "workspace-home",     "x": 430, "y": 140, "tier": "nav",     "label": "Workspace home" },
     { "id": "settings",           "x": 630, "y": 140, "tier": "nav",     "label": "/settings (Members)" },
@@ -395,6 +396,20 @@
         { "from": "workspace-home","to": "logs",           "protocol": "Sidebar → Logs → Tools",                                              "payload": "Filters: toolset, date range, status" },
         { "from": "logs",          "to": "mcp-toolset",    "protocol": "Click a call → 'Open toolset'",                                       "note": "Jump to toolset details to inspect the tool definition" },
         { "from": "mcp-toolset",   "to": "environments",  "protocol": "Cross-check environment variables",                                   "payload": "Variation overrides per environment", "note": "Auth headers, base URLs etc. live here" }
+      ]
+    },
+    {
+      "id": "identity-flow",
+      "title": "Identity: WorkOS → Speakeasy → Gram",
+      "summary": "How one human becomes three linked records across WorkOS, Speakeasy, and Gram",
+      "steps": [
+        { "from": "login",              "to": "speakeasy-platform", "protocol": "Click 'Sign in' → redirect to Speakeasy",                                     "payload": "GET <speakeasy>/v1/speakeasy_provider/login?redirect_uri=…",                                                                  "note": "Gram delegates auth to Speakeasy — it never speaks to WorkOS directly during sign-in" },
+        { "from": "speakeasy-platform", "to": "workos",             "protocol": "Speakeasy redirects user to its own IdP",                                     "payload": "WorkOS OAuth /authorize",                                                                                                     "note": "Speakeasy is configured with WorkOS as its SSO provider; this hop is invisible in the URL bar for most users" },
+        { "from": "workos",             "to": "speakeasy-platform", "protocol": "User authenticates → WorkOS returns a code to Speakeasy",                     "payload": "Speakeasy now holds a WorkOS-authenticated session",                                                                          "note": "WorkOS is the authoritative identity store: email, MFA, org memberships" },
+        { "from": "speakeasy-platform", "to": "login",              "protocol": "Speakeasy redirects back to Gram's /auth/callback",                           "payload": "GET /auth/callback?code=<speakeasy_code>",                                                                                    "note": "Gram only ever sees Speakeasy's code, not the WorkOS one" },
+        { "from": "login",              "to": "speakeasy-platform", "protocol": "Gram exchanges the code for a Speakeasy ID token",                            "payload": "POST <speakeasy>/v1/speakeasy_provider/exchange { code }",                                                                    "note": "server/internal/auth/speakeasyclient.ExchangeCode" },
+        { "from": "login",              "to": "speakeasy-platform", "protocol": "Gram validates the ID token to read the user identity",                       "payload": "GET <speakeasy>/v1/speakeasy_provider/validate (Bearer <id_token>) → { UserID, Email, DisplayName, WorkosID }",               "note": "Speakeasy UserID becomes Gram users.id; WorkosID is stored to link back for membership sync" },
+        { "from": "login",              "to": "workspace-home",     "protocol": "Upsert the Gram user + sync WorkOS org memberships → set session cookie → /", "payload": "BootstrapUser → users { id = SpeakeasyUserID, workos_id, email } ; syncWorkOSMemberships pulls the WorkOS org list",          "note": "Three linked records: WorkOS user (auth) ↔ Speakeasy user (token issuer, == users.id) ↔ Gram users row (workos_id back-link). Watch the users.email UNIQUE collision when Speakeasy's user ID changes for an existing email — see auto-memory project_users_email_unique_violation" }
       ]
     }
   ]
