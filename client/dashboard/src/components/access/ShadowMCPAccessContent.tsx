@@ -87,28 +87,6 @@ const MATCH_BREADTH_OPTIONS: {
   { value: "server_identity", label: "Server identity" },
 ];
 
-function SectionHeader({
-  title,
-  description,
-  action,
-}: {
-  title: string;
-  description: string;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="mb-3 flex items-start justify-between gap-4">
-      <div>
-        <Heading variant="h4">{title}</Heading>
-        <Type muted small className="mt-1">
-          {description}
-        </Type>
-      </div>
-      {action}
-    </div>
-  );
-}
-
 function TableEmptyState({
   title,
   description,
@@ -815,7 +793,7 @@ export function ShadowMCPAccessContent() {
     {
       key: "server",
       header: "Server",
-      width: "minmax(240px, 1.4fr)",
+      width: "1.5fr",
       render: (request) => (
         <ServerCell
           name={getRequestDisplayName(request)}
@@ -826,7 +804,7 @@ export function ShadowMCPAccessContent() {
     {
       key: "requester",
       header: "Requester",
-      width: "minmax(180px, 1fr)",
+      width: "1.25fr",
       render: (request) => (
         <ServerCell
           name={getRequesterLabel(request)}
@@ -837,13 +815,13 @@ export function ShadowMCPAccessContent() {
     {
       key: "status",
       header: "Status",
-      width: "120px",
+      width: "0.5fr",
       render: (request) => <RequestStatusBadge status={request.status} />,
     },
     {
       key: "blocked",
       header: "Blocked",
-      width: "140px",
+      width: "0.5fr",
       render: (request) => (
         <Type variant="body">
           {request.blockedCount}{" "}
@@ -854,7 +832,7 @@ export function ShadowMCPAccessContent() {
     {
       key: "lastBlocked",
       header: "Last blocked",
-      width: "160px",
+      width: "0.75fr",
       render: (request) => (
         <Type variant="body">{formatShortDate(request.lastBlockedAt)}</Type>
       ),
@@ -862,7 +840,7 @@ export function ShadowMCPAccessContent() {
     {
       key: "actions",
       header: "",
-      width: "96px",
+      width: "0.5fr",
       render: (request) => (
         <RequireScope scope="org:admin" level="component">
           <Button
@@ -879,15 +857,9 @@ export function ShadowMCPAccessContent() {
 
   const ruleColumns: Column<ShadowMCPAccessRule>[] = [
     {
-      key: "disposition",
-      header: "",
-      width: "110px",
-      render: (rule) => <RuleDispositionBadge disposition={rule.disposition} />,
-    },
-    {
       key: "server",
       header: "Server",
-      width: "minmax(240px, 1.4fr)",
+      width: "1.5fr",
       render: (rule) => (
         <ServerCell
           name={getRuleDisplayName(rule)}
@@ -898,7 +870,7 @@ export function ShadowMCPAccessContent() {
     {
       key: "match",
       header: "Match",
-      width: "minmax(180px, 1fr)",
+      width: "1.25fr",
       render: (rule) => (
         <div className="min-w-0 space-y-1">
           <Type variant="body" className="font-medium">
@@ -914,9 +886,15 @@ export function ShadowMCPAccessContent() {
       ),
     },
     {
+      key: "disposition",
+      header: "Status",
+      width: "0.5fr",
+      render: (rule) => <RuleDispositionBadge disposition={rule.disposition} />,
+    },
+    {
       key: "roles",
       header: "Roles",
-      width: "minmax(160px, 1fr)",
+      width: "0.5fr",
       render: (rule) => (
         <RoleSummary
           roleIds={rule.roleIds}
@@ -927,7 +905,7 @@ export function ShadowMCPAccessContent() {
     {
       key: "updated",
       header: "Updated",
-      width: "140px",
+      width: "0.75fr",
       render: (rule) => (
         <Type variant="body">{formatShortDate(rule.updatedAt)}</Type>
       ),
@@ -935,7 +913,7 @@ export function ShadowMCPAccessContent() {
     {
       key: "actions",
       header: "",
-      width: "64px",
+      width: "0.5fr",
       render: (rule) => (
         <RuleActionsMenu
           onEdit={() => {
@@ -1087,12 +1065,15 @@ export function ShadowMCPAccessContent() {
         }}
       />
 
-      <section>
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <SectionHeader
-            title="Requests"
-            description="Review Shadow MCP servers users have requested after a policy block."
-          />
+      <section className="space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <Heading variant="h5">Requests</Heading>
+            <Type muted small className="mt-1">
+              Review Shadow MCP servers users have requested after a policy
+              block.
+            </Type>
+          </div>
           <Select
             value={requestStatusFilter}
             onValueChange={(value) =>
@@ -1128,16 +1109,37 @@ export function ShadowMCPAccessContent() {
             columns={requestColumns}
             data={requests}
             rowKey={(row) => row.id}
-            className="max-h-[520px] [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
+            className="[&_thead]:bg-background max-h-128 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
           />
         )}
       </section>
 
-      <section className="border-border border-t pt-8">
-        <SectionHeader
-          title="Access Rules"
-          description="Manage the Shadow MCP servers that are explicitly allowed or denied."
-          action={
+      <section className="space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <Heading variant="h5">Access Rules</Heading>
+            <Type muted small className="mt-1">
+              Manage the Shadow MCP servers that are explicitly allowed or
+              denied.
+            </Type>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            <Select
+              value={ruleDispositionFilter}
+              onValueChange={(value) =>
+                setRuleDispositionFilter(value as RuleDispositionFilter)
+              }
+            >
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All rules</SelectItem>
+                <SelectItem value="allowed">Allowed</SelectItem>
+                <SelectItem value="denied">Denied</SelectItem>
+              </SelectContent>
+            </Select>
             <RequireScope scope="org:admin" level="component">
               <Button
                 onClick={() => {
@@ -1151,25 +1153,7 @@ export function ShadowMCPAccessContent() {
                 <Button.Text>Add Rule</Button.Text>
               </Button>
             </RequireScope>
-          }
-        />
-
-        <div className="mb-4">
-          <Select
-            value={ruleDispositionFilter}
-            onValueChange={(value) =>
-              setRuleDispositionFilter(value as RuleDispositionFilter)
-            }
-          >
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All rules</SelectItem>
-              <SelectItem value="allowed">Allowed</SelectItem>
-              <SelectItem value="denied">Denied</SelectItem>
-            </SelectContent>
-          </Select>
+          </div>
         </div>
 
         {rulesLoading ? (
@@ -1189,7 +1173,7 @@ export function ShadowMCPAccessContent() {
             columns={ruleColumns}
             data={rules}
             rowKey={(row) => row.id}
-            className="max-h-[520px] [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
+            className="[&_thead]:bg-background max-h-128 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
           />
         )}
       </section>
