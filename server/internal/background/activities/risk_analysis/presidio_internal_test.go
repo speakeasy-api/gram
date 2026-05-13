@@ -53,6 +53,30 @@ func TestPresidioClientSingleAttemptPerCall(t *testing.T) {
 	assert.Equal(t, int64(1), calls.Load(), "presidio client must not retry internally")
 }
 
+// TestPresidioClientShortCircuitsOnAllEmptyTexts asserts the client skips the
+// HTTP round-trip (and the byte semaphore) when every input is the empty
+// string — Presidio would either 500 or return no findings, so the work is
+// wasted.
+func TestPresidioClientShortCircuitsOnAllEmptyTexts(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+	}))
+	t.Cleanup(srv.Close)
+
+	client := NewPresidioClient(srv.URL, otel.GetTracerProvider(), otel.GetMeterProvider(), testLogger(t))
+
+	results, err := client.AnalyzeBatch(t.Context(), []string{"", "", ""}, nil, nil)
+	require.NoError(t, err)
+	require.Len(t, results, 3)
+	for _, r := range results {
+		assert.Empty(t, r)
+	}
+	assert.Equal(t, int64(0), calls.Load(), "presidio /analyze must not be called when every input is empty")
+}
+
 // TestPresidioClientRequestPayload confirms the client emits a single
 // /analyze POST containing all texts in the input slice exactly as given.
 func TestPresidioClientRequestPayload(t *testing.T) {

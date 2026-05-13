@@ -182,6 +182,20 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 		return nil, nil
 	}
 
+	// Short-circuit when every input is empty: /analyze would either 500 on
+	// the empty array or return no findings, so we save the HTTP round-trip
+	// and avoid acquiring the byte semaphore.
+	allEmpty := true
+	for _, t := range texts {
+		if t != "" {
+			allEmpty = false
+			break
+		}
+	}
+	if allEmpty {
+		return make([][]Finding, n), nil
+	}
+
 	// Apply the entity blacklist at the lowest level so every caller (hook
 	// scanner + Temporal drain activity) inherits the same policy.
 	filtered := filterEntities(entities)
