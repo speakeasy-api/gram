@@ -226,8 +226,15 @@ export function InsightsAgentsContent() {
       "overview",
       from.toISOString(),
       to.toISOString(),
+      clientFilter,
     ],
-    queryFn: () => fetchOverview(client, from, to),
+    queryFn: () =>
+      fetchOverview(
+        client,
+        from,
+        to,
+        clientFilter !== "all" ? clientFilter : undefined,
+      ),
     throwOnError: false,
   });
 
@@ -555,11 +562,6 @@ export function InsightsAgentsContent() {
                 <TokenTimeSeriesChart
                   title={
                     valueMode === "cost" ? "Cost Over Time" : "Tokens Over Time"
-                  }
-                  subtitle={
-                    clientFilter !== "all"
-                      ? "Showing all agents (per-agent breakdown not available)"
-                      : undefined
                   }
                   chartId="tokens-over-time"
                   timeSeries={timeSeries}
@@ -1421,6 +1423,7 @@ async function fetchOverview(
   client: Parameters<typeof telemetryGetObservabilityOverview>[0],
   from: Date,
   to: Date,
+  hookSource?: string,
 ): Promise<GetObservabilityOverviewResult> {
   return unwrapAsync(
     telemetryGetObservabilityOverview(client, {
@@ -1429,6 +1432,7 @@ async function fetchOverview(
         to,
         includeTimeSeries: true,
         eventSource: "hook",
+        hookSource,
       },
     }),
   );
