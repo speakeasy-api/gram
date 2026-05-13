@@ -717,7 +717,8 @@ function TokenTimeSeriesChart({
         </div>
       ) : (
         <div style={{ height }}>
-          <Bar data={chartData} options={options} />
+          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- mixed bar+line chart requires type widening */}
+          <Bar data={chartData as any} options={options} />
         </div>
       )}
     </ChartCard>
