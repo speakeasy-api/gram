@@ -95,9 +95,6 @@ type SlackPostMessageInput struct {
 	ChannelID string
 	Message   string
 	ThreadTS  *string
-	// Blocks renders rich Block Kit content. Message is still sent as the
-	// accessibility fallback per Slack's recommendation.
-	Blocks []Block
 }
 
 type SlackConversationInput struct {
@@ -184,13 +181,6 @@ func (s *SlackClient) PostMessage(ctx context.Context, accessToken string, input
 	if input.ThreadTS != nil {
 		form.Set("thread_ts", *input.ThreadTS)
 	}
-	if len(input.Blocks) > 0 {
-		blocksJSON, err := json.Marshal(input.Blocks)
-		if err != nil {
-			return fmt.Errorf("marshal blocks: %w", err)
-		}
-		form.Set("blocks", string(blocksJSON))
-	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, urlStr, strings.NewReader(form.Encode()))
 	if err != nil {
@@ -240,9 +230,6 @@ type SlackPostEphemeralInput struct {
 	UserID    string
 	Message   string
 	ThreadTS  *string
-	// Blocks renders rich Block Kit content. Message is still sent as the
-	// accessibility fallback per Slack's recommendation.
-	Blocks []Block
 }
 
 func (s *SlackClient) PostEphemeralMessage(ctx context.Context, accessToken string, input SlackPostEphemeralInput) error {
@@ -254,13 +241,6 @@ func (s *SlackClient) PostEphemeralMessage(ctx context.Context, accessToken stri
 	form.Set("text", input.Message)
 	if input.ThreadTS != nil {
 		form.Set("thread_ts", *input.ThreadTS)
-	}
-	if len(input.Blocks) > 0 {
-		blocksJSON, err := json.Marshal(input.Blocks)
-		if err != nil {
-			return fmt.Errorf("marshal blocks: %w", err)
-		}
-		form.Set("blocks", string(blocksJSON))
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, urlStr, strings.NewReader(form.Encode()))
