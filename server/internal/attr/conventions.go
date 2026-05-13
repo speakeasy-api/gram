@@ -219,6 +219,10 @@ const (
 	RiskPolicyCountKey              = attribute.Key("gram.risk.policy_count")
 	RiskPolicyIDKey                 = attribute.Key("gram.risk.policy_id")
 	RiskRuleIDKey                   = attribute.Key("gram.risk.rule_id")
+	RiskScanAttemptKey              = attribute.Key("gram.risk.scan.attempt")
+	RiskScanMaxAttemptsKey          = attribute.Key("gram.risk.scan.max_attempts")
+	RiskScanBatchIndexKey           = attribute.Key("gram.risk.scan.batch_index")
+	RiskScanTextSizeKey             = attribute.Key("gram.risk.scan.text_size_bytes")
 	SecretNameKey                   = attribute.Key("gram.secret.name")
 	SecurityPlacementKey            = attribute.Key("gram.security.placement")
 	SecuritySchemeKey               = attribute.Key("gram.security.scheme")
@@ -969,6 +973,18 @@ func SlogRiskPolicyID(v string) slog.Attr      { return slog.String(string(RiskP
 
 func RiskRuleID(v string) attribute.KeyValue { return RiskRuleIDKey.String(v) }
 func SlogRiskRuleID(v string) slog.Attr      { return slog.String(string(RiskRuleIDKey), v) }
+
+func RiskScanAttempt(v int) attribute.KeyValue { return RiskScanAttemptKey.Int(v) }
+func SlogRiskScanAttempt(v int) slog.Attr      { return slog.Int(string(RiskScanAttemptKey), v) }
+
+func RiskScanMaxAttempts(v int) attribute.KeyValue { return RiskScanMaxAttemptsKey.Int(v) }
+func SlogRiskScanMaxAttempts(v int) slog.Attr      { return slog.Int(string(RiskScanMaxAttemptsKey), v) }
+
+func RiskScanBatchIndex(v int) attribute.KeyValue { return RiskScanBatchIndexKey.Int(v) }
+func SlogRiskScanBatchIndex(v int) slog.Attr      { return slog.Int(string(RiskScanBatchIndexKey), v) }
+
+func RiskScanTextSize(v int) attribute.KeyValue { return RiskScanTextSizeKey.Int(v) }
+func SlogRiskScanTextSize(v int) slog.Attr      { return slog.Int(string(RiskScanTextSizeKey), v) }
 
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }

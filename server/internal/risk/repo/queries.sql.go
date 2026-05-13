@@ -388,6 +388,7 @@ type InsertRiskResultsParams struct {
 	EndPos            pgtype.Int4
 	Confidence        pgtype.Float8
 	Tags              []string
+	DeadLetterReason  pgtype.Text
 }
 
 const listEnabledEnforcingPoliciesByProject = `-- name: ListEnabledEnforcingPoliciesByProject :many

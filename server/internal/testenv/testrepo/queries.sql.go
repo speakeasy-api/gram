@@ -225,6 +225,60 @@ func (q *Queries) ListDeploymentHTTPTools(ctx context.Context, deploymentID uuid
 	return items, nil
 }
 
+const listRiskResultsAll = `-- name: ListRiskResultsAll :many
+SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, dead_letter_reason, created_at
+FROM risk_results
+WHERE project_id = $1
+  AND risk_policy_id = $2
+ORDER BY id
+`
+
+type ListRiskResultsAllParams struct {
+	ProjectID    uuid.UUID
+	RiskPolicyID uuid.UUID
+}
+
+// Fixture query used by the risk-analysis activity tests that need to
+// inspect dead-letter and "no findings" rows the production queries filter
+// out via `found IS TRUE`.
+func (q *Queries) ListRiskResultsAll(ctx context.Context, arg ListRiskResultsAllParams) ([]RiskResult, error) {
+	rows, err := q.db.Query(ctx, listRiskResultsAll, arg.ProjectID, arg.RiskPolicyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskResult
+	for rows.Next() {
+		var i RiskResult
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.RiskPolicyID,
+			&i.RiskPolicyVersion,
+			&i.ChatMessageID,
+			&i.Source,
+			&i.Found,
+			&i.RuleID,
+			&i.Description,
+			&i.Match,
+			&i.StartPos,
+			&i.EndPos,
+			&i.Confidence,
+			&i.Tags,
+			&i.DeadLetterReason,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const scrubDeploymentFunctionMachineSpecs = `-- name: ScrubDeploymentFunctionMachineSpecs :exec
 UPDATE deployments_functions SET memory_mib = NULL, scale = NULL WHERE deployment_id = $1
 `

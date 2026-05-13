@@ -32,3 +32,13 @@ UPDATE deployments_functions SET memory_mib = NULL, scale = NULL WHERE deploymen
 SELECT COUNT(*)
 FROM outbox
 WHERE event_type = @event_type;
+
+-- name: ListRiskResultsAll :many
+-- Fixture query used by the risk-analysis activity tests that need to
+-- inspect dead-letter and "no findings" rows the production queries filter
+-- out via `found IS TRUE`.
+SELECT *
+FROM risk_results
+WHERE project_id = @project_id
+  AND risk_policy_id = @risk_policy_id
+ORDER BY id;
