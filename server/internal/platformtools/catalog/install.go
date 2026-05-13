@@ -176,6 +176,17 @@ func (t *InstallTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payloa
 	if evolveResult == nil || evolveResult.Deployment == nil {
 		return oops.E(oops.CodeUnexpected, nil, "evolve deployment returned no deployment")
 	}
+	// Evolve runs the workflow synchronously (NonBlocking is unset), so the
+	// status is terminal here. A "failed" deployment leaves the external MCP
+	// attachment unprocessed; creating a toolset against it would surface
+	// success with non-resolving tool URNs.
+	if evolveResult.Deployment.Status != "completed" {
+		return oops.E(
+			oops.CodeUnexpected, nil,
+			"catalog install deployment did not complete (status=%s); the toolset was not created",
+			evolveResult.Deployment.Status,
+		)
+	}
 
 	toolURNs := make([]string, 0, len(details.Tools))
 	for _, tool := range details.Tools {
