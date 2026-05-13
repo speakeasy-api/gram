@@ -204,7 +204,6 @@ var ToolEntry = Type("ToolEntry", func() {
 	Attribute("name", String, "The name of the tool")
 	Attribute("annotations", ToolAnnotations, "Tool annotations providing behavioral hints")
 	Attribute("http_method", String, "HTTP method for HTTP tools (GET, POST, PUT, PATCH, DELETE)")
-	Attribute("external_mcp_kind", String, "For external MCP tools, the underlying definition type ('direct' or 'proxy')")
 
 	Required("type", "id", "name", "tool_urn")
 

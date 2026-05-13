@@ -3582,12 +3582,11 @@ func marshalTypesToolsetEntryToToolsetEntryResponseBody(v *types.ToolsetEntry) *
 // *ToolEntryResponseBody from a value of type *types.ToolEntry.
 func marshalTypesToolEntryToToolEntryResponseBody(v *types.ToolEntry) *ToolEntryResponseBody {
 	res := &ToolEntryResponseBody{
-		Type:            string(v.Type),
-		ID:              v.ID,
-		ToolUrn:         v.ToolUrn,
-		Name:            v.Name,
-		HTTPMethod:      v.HTTPMethod,
-		ExternalMcpKind: v.ExternalMcpKind,
+		Type:       string(v.Type),
+		ID:         v.ID,
+		ToolUrn:    v.ToolUrn,
+		Name:       v.Name,
+		HTTPMethod: v.HTTPMethod,
 	}
 	if v.Annotations != nil {
 		res.Annotations = marshalTypesToolAnnotationsToToolAnnotationsResponseBody(v.Annotations)

@@ -3449,8 +3449,6 @@ type ToolEntryResponseBody struct {
 	Annotations *ToolAnnotationsResponseBody `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
 	// HTTP method for HTTP tools (GET, POST, PUT, PATCH, DELETE)
 	HTTPMethod *string `form:"http_method,omitempty" json:"http_method,omitempty" xml:"http_method,omitempty"`
-	// For external MCP tools, the underlying definition type ('direct' or 'proxy')
-	ExternalMcpKind *string `form:"external_mcp_kind,omitempty" json:"external_mcp_kind,omitempty" xml:"external_mcp_kind,omitempty"`
 }
 
 // ResourceEntryResponseBody is used to define fields on response body types.

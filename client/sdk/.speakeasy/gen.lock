@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: b504c83a09ec552e68a04fb4a2a70d02
+  docChecksum: 03eca0c02195cc37bdb6414afc7d9684
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -817,7 +817,7 @@ trackedFiles:
   docs/models/components/toolcallsummary.md:
     last_write_checksum: sha1:cdf37acd4c46e9be93f4131a7f13a64ed4c50a32
   docs/models/components/toolentry.md:
-    last_write_checksum: sha1:3069148257f60762c0e38049cbdf017102849ae6
+    last_write_checksum: sha1:d8f4322ad2e91005f95f7d913d3bb29a88cd9adc
   docs/models/components/toolentrytype.md:
     last_write_checksum: sha1:edb5fedc4eeb8b40f12295eab27d20afd07c2694
   docs/models/components/toolmetric.md:
@@ -4160,7 +4160,7 @@ trackedFiles:
     pristine_git_object: 228edbe83abf771d6a654e54a6212ddcce12c88b
   src/models/components/toolentry.ts:
     id: 82f49d8e8ee1
-    last_write_checksum: sha1:457506690e1cc4c3216a1546ed432743651e04bc
+    last_write_checksum: sha1:12ab1ee05f2983bee4cb8ef282f32941cd473fa3
     pristine_git_object: dbe7be3a944b5e248c5807473d505c3476ba7e52
   src/models/components/toolmetric.ts:
     last_write_checksum: sha1:ca1d07131744d819aab5576b42801d6764c38528

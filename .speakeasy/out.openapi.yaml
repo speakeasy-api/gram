@@ -32500,9 +32500,6 @@ components:
       properties:
         annotations:
           $ref: '#/components/schemas/ToolAnnotations'
-        external_mcp_kind:
-          type: string
-          description: For external MCP tools, the underlying definition type ('direct' or 'proxy')
         http_method:
           type: string
           description: HTTP method for HTTP tools (GET, POST, PUT, PATCH, DELETE)
