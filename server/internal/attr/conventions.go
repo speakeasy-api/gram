@@ -145,6 +145,9 @@ const (
 	AssistantAppCreatedKey         = attribute.Key("gram.assistant.app_created")
 	AssistantSetupFailureClassKey  = attribute.Key("gram.assistant.setup_failure_class")
 	AssistantServerIPKey           = attribute.Key("gram.assistant.server_ip")
+	AssistantImageRecycleKey       = attribute.Key("gram.assistant.image_recycle")
+	AssistantImageDesiredKey       = attribute.Key("gram.assistant.image_desired")
+	AssistantImageActualKey        = attribute.Key("gram.assistant.image_actual")
 	ChatModelKey                   = attribute.Key("gram.chat.model")
 	ChatToolCountKey               = attribute.Key("gram.chat.tool_count")
 	ChatToolNamesKey               = attribute.Key("gram.chat.tool_names")
@@ -168,6 +171,12 @@ const (
 	MimeTypeKey                    = attribute.Key("mime.type")
 	OAuthAuthorizationEndpointKey  = attribute.Key("gram.oauth.authorization_endpoint")
 	OAuthClientIDKey               = attribute.Key("gram.oauth.client_id")
+	OAuthClientNameKey             = attribute.Key("gram.oauth.client_name")
+	// OAuthErrorKey / OAuthErrorDescriptionKey carry the `error` /
+	// `error_description` parameters from RFC 6749 / RFC 7591 error responses
+	// — used across DCR registration, /authorize, /token, and /revoke.
+	OAuthErrorKey                  = attribute.Key("gram.oauth.error")
+	OAuthErrorDescriptionKey       = attribute.Key("gram.oauth.error_description")
 	OAuthGrantKey                  = attribute.Key("gram.oauth.grant")
 	OAuthIssuerKey                 = attribute.Key("gram.oauth.issuer")
 	OAuthProviderKey               = attribute.Key("gram.oauth.provider")
@@ -311,6 +320,8 @@ const (
 
 	StatsToolCallCountKey  = attribute.Key("gram.stats.tool_call_count")
 	StatsMCPServerCountKey = attribute.Key("gram.stats.mcp_server_count")
+
+	GitHubUsernameKey = attribute.Key("gram.github.username")
 )
 
 const (
@@ -756,6 +767,19 @@ func SlogOAuthAuthorizationEndpoint(v string) slog.Attr {
 
 func OAuthClientID(v string) attribute.KeyValue { return OAuthClientIDKey.String(v) }
 func SlogOAuthClientID(v string) slog.Attr      { return slog.String(string(OAuthClientIDKey), v) }
+
+func OAuthClientName(v string) attribute.KeyValue { return OAuthClientNameKey.String(v) }
+func SlogOAuthClientName(v string) slog.Attr      { return slog.String(string(OAuthClientNameKey), v) }
+
+func OAuthError(v string) attribute.KeyValue { return OAuthErrorKey.String(v) }
+func SlogOAuthError(v string) slog.Attr      { return slog.String(string(OAuthErrorKey), v) }
+
+func OAuthErrorDescription(v string) attribute.KeyValue {
+	return OAuthErrorDescriptionKey.String(v)
+}
+func SlogOAuthErrorDescription(v string) slog.Attr {
+	return slog.String(string(OAuthErrorDescriptionKey), v)
+}
 
 func OAuthGrant(v string) attribute.KeyValue { return OAuthGrantKey.String(v) }
 func SlogOAuthGrant(v string) slog.Attr      { return slog.String(string(OAuthGrantKey), v) }
@@ -1326,6 +1350,18 @@ func AssistantSetupFailureClass(v string) attribute.KeyValue {
 	return AssistantSetupFailureClassKey.String(v)
 }
 
+func AssistantImageRecycle(v bool) attribute.KeyValue { return AssistantImageRecycleKey.Bool(v) }
+
+func AssistantImageDesired(v string) attribute.KeyValue { return AssistantImageDesiredKey.String(v) }
+func SlogAssistantImageDesired(v string) slog.Attr {
+	return slog.String(string(AssistantImageDesiredKey), v)
+}
+
+func AssistantImageActual(v string) attribute.KeyValue { return AssistantImageActualKey.String(v) }
+func SlogAssistantImageActual(v string) slog.Attr {
+	return slog.String(string(AssistantImageActualKey), v)
+}
+
 func ChatModel(v string) attribute.KeyValue { return ChatModelKey.String(v) }
 func SlogChatModel(v string) slog.Attr      { return slog.String(string(ChatModelKey), v) }
 
@@ -1334,3 +1370,6 @@ func SlogChatToolCount(v int) slog.Attr      { return slog.Int(string(ChatToolCo
 
 func ChatToolNames(v any) attribute.KeyValue { return ChatToolNamesKey.String(fmt.Sprintf("%v", v)) }
 func SlogChatToolNames(v any) slog.Attr      { return slog.Any(string(ChatToolNamesKey), v) }
+
+func GitHubUsername(v string) attribute.KeyValue { return GitHubUsernameKey.String(v) }
+func SlogGitHubUsername(v string) slog.Attr      { return slog.String(string(GitHubUsernameKey), v) }

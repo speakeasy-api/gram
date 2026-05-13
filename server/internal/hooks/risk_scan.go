@@ -76,6 +76,35 @@ func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.Cur
 	return result
 }
 
+// scanCodexForEnforcement runs the risk scanner for a Codex hook payload.
+// Like Cursor, Codex hooks are authenticated so the project ID is known.
+func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.CodexPayload, orgID, projectID string) *risk.ScanResult {
+	if s.riskScanner == nil {
+		return nil
+	}
+
+	text := extractCodexText(payload)
+	if text == "" {
+		return nil
+	}
+
+	pid, err := uuid.Parse(projectID)
+	if err != nil {
+		return nil
+	}
+
+	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text)
+	if err != nil {
+		s.logger.WarnContext(ctx, "risk scan failed for Codex hook",
+			attr.SlogError(err),
+			attr.SlogEvent("risk_scan_error"),
+		)
+		return nil
+	}
+
+	return result
+}
+
 // renderUserBlockReason returns the message shown to the agent when a tool
 // call or prompt is denied. When the policy carries a non-empty user_message,
 // that overrides the default Speakeasy-branded format; otherwise the supplied
@@ -124,6 +153,25 @@ func extractCursorText(payload *gen.CursorPayload) string {
 			return *payload.Prompt
 		}
 	case "preToolUse", "beforeMCPExecution":
+		if payload.ToolInput != nil {
+			b, err := json.Marshal(payload.ToolInput)
+			if err != nil {
+				return ""
+			}
+			return string(b)
+		}
+	}
+	return ""
+}
+
+// extractCodexText returns the scannable text content from a Codex hook payload.
+func extractCodexText(payload *gen.CodexPayload) string {
+	switch payload.HookEventName {
+	case "UserPromptSubmit":
+		if payload.Prompt != nil {
+			return *payload.Prompt
+		}
+	case "PreToolUse", "PermissionRequest":
 		if payload.ToolInput != nil {
 			b, err := json.Marshal(payload.ToolInput)
 			if err != nil {

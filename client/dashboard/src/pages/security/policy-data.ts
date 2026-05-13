@@ -18,12 +18,13 @@ export type RuleCategory =
   | "off_policy"
   | "shadow_mcp"
   | "destructive_tool"
+  | "cli_destructive"
   | "custom";
 
 export type DetectionRule = {
   id: string;
   title: string;
-  source: "gitleaks" | "presidio";
+  source: "gitleaks" | "presidio" | "prompt_injection";
 };
 
 export type McpServerScope = {
@@ -105,6 +106,12 @@ export const RULE_CATEGORY_META: Record<
     description:
       "MCP tool calls whose Gram tool definition is annotated as destructive. Requires Speakeasy hooks and Gram-issued MCP tool metadata.",
     icon: "shield-alert",
+  },
+  cli_destructive: {
+    label: "Destructive CLI Commands",
+    description:
+      "Tool calls whose arguments match a curated set of destructive shell, git, database, or cloud CLI patterns (rm -rf, git push --force, DROP TABLE, kubectl delete ns, ...). Applies to native Bash / run_terminal_cmd as well as MCP-routed tools whose arguments carry destructive content.",
+    icon: "terminal",
   },
   custom: {
     label: "Custom Patterns",
@@ -1373,28 +1380,7 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
       source: "presidio",
     },
   ],
-  prompt_injection: [
-    {
-      id: "indirect-injection",
-      title: "Indirect prompt injection via external content",
-      source: "presidio",
-    },
-    {
-      id: "tool-output-injection",
-      title: "Malicious instructions embedded in tool responses",
-      source: "presidio",
-    },
-    {
-      id: "hidden-instruction",
-      title: "Hidden instructions in user-provided data",
-      source: "presidio",
-    },
-    {
-      id: "encoding-evasion",
-      title: "Encoded or obfuscated injection payloads",
-      source: "presidio",
-    },
-  ],
+  prompt_injection: [],
   off_policy: [
     {
       id: "harmful-content-request",
@@ -1419,6 +1405,7 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
   ],
   shadow_mcp: [],
   destructive_tool: [],
+  cli_destructive: [],
   custom: [],
 };
 

@@ -1896,8 +1896,10 @@ func NewGetMcpServerPayload(id string, sessionToken *string, apikeyToken *string
 
 // NewListMcpServersPayload builds a mcpServers service listMcpServers endpoint
 // payload.
-func NewListMcpServersPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.ListMcpServersPayload {
+func NewListMcpServersPayload(remoteMcpServerID *string, toolsetID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.ListMcpServersPayload {
 	v := &mcpservers.ListMcpServersPayload{}
+	v.RemoteMcpServerID = remoteMcpServerID
+	v.ToolsetID = toolsetID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

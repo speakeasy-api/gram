@@ -97,9 +97,3 @@ func TestAuthorizeRejectsBadPKCEMethod(t *testing.T) {
 	require.Equal(t, "invalid_request", body["error"])
 	require.Contains(t, body["error_description"], "S256")
 }
-
-// The oauth2-vs-oauth21 acceptance test for "no PKCE works" requires a
-// live database (the handler reaches resolveCurrentUserID before PKCE
-// would have been validated, and that path needs the current_users
-// row). It belongs in the integration test ticket — covered there
-// alongside the rest of the per-mode end-to-end coverage.

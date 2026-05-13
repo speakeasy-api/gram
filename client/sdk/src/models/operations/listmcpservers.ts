@@ -22,6 +22,14 @@ export type ListMcpServersSecurity = {
 
 export type ListMcpServersRequest = {
   /**
+   * Filter to MCP servers backed by this remote MCP server
+   */
+  remoteMcpServerId?: string | undefined;
+  /**
+   * Filter to MCP servers backed by this toolset
+   */
+  toolsetId?: string | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -138,6 +146,8 @@ export function listMcpServersSecurityToJSON(
 
 /** @internal */
 export type ListMcpServersRequest$Outbound = {
+  remote_mcp_server_id?: string | undefined;
+  toolset_id?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -149,12 +159,16 @@ export const ListMcpServersRequest$outboundSchema: z.ZodMiniType<
   ListMcpServersRequest
 > = z.pipe(
   z.object({
+    remoteMcpServerId: z.optional(z.string()),
+    toolsetId: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      remoteMcpServerId: "remote_mcp_server_id",
+      toolsetId: "toolset_id",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",

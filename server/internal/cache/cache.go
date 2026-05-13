@@ -20,6 +20,11 @@ const (
 // Implementations can use any underlying storage (Redis, in-memory, etc.)
 type Cache interface {
 	Get(ctx context.Context, key string, value any) error
+	// GetAndDelete atomically reads the value at key and deletes the key.
+	// Use this for single-use tokens (OAuth auth codes, in-flight challenge
+	// state) where a Get-then-Delete sequence would race two concurrent
+	// callers redeeming the same value.
+	GetAndDelete(ctx context.Context, key string, value any) error
 	Set(ctx context.Context, key string, value any, ttl time.Duration) error
 	Update(ctx context.Context, key string, value any) error
 	Delete(ctx context.Context, key string) error
@@ -113,6 +118,25 @@ func (d *TypedCacheObject[T]) Get(ctx context.Context, key string) (T, error) {
 	err := d.cache.Get(ctx, d.fullKey(key), &value)
 	if err != nil {
 		return *new(T), fmt.Errorf("%s: get: %w", d.fullKey(key), err)
+	}
+	return value, nil
+}
+
+// GetAndDelete atomically reads the value at key and removes the key from
+// the cache. Use this in place of a Get-then-Delete sequence on single-use
+// tokens (auth codes, in-flight challenge state) where the race window
+// would let two concurrent callers each redeem the same value.
+//
+// AdditionalCacheKeys on the returned object are NOT touched — callers that
+// rely on fan-out keys should Delete the returned object after.
+func (d *TypedCacheObject[T]) GetAndDelete(ctx context.Context, key string) (T, error) {
+	if d.cache == nil {
+		return *new(T), errors.New("cache is not configured")
+	}
+	var value T
+	err := d.cache.GetAndDelete(ctx, d.fullKey(key), &value)
+	if err != nil {
+		return *new(T), fmt.Errorf("%s: getdel: %w", d.fullKey(key), err)
 	}
 	return value, nil
 }

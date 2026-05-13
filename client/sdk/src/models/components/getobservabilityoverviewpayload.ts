@@ -14,6 +14,10 @@ export type GetObservabilityOverviewPayload = {
    */
   apiKeyId?: string | undefined;
   /**
+   * Optional event source filter (e.g. 'hook')
+   */
+  eventSource?: string | undefined;
+  /**
    * Optional external user ID filter
    */
   externalUserId?: string | undefined;
@@ -21,6 +25,10 @@ export type GetObservabilityOverviewPayload = {
    * Start time in ISO 8601 format
    */
   from: Date;
+  /**
+   * Optional hook source filter (e.g. 'cursor', 'claude-code')
+   */
+  hookSource?: string | undefined;
   /**
    * Whether to include time series data (default: true)
    */
@@ -33,16 +41,23 @@ export type GetObservabilityOverviewPayload = {
    * Optional toolset/MCP server slug filter
    */
   toolsetSlug?: string | undefined;
+  /**
+   * Optional internal user ID filter
+   */
+  userId?: string | undefined;
 };
 
 /** @internal */
 export type GetObservabilityOverviewPayload$Outbound = {
   api_key_id?: string | undefined;
+  event_source?: string | undefined;
   external_user_id?: string | undefined;
   from: string;
+  hook_source?: string | undefined;
   include_time_series: boolean;
   to: string;
   toolset_slug?: string | undefined;
+  user_id?: string | undefined;
 };
 
 /** @internal */
@@ -52,18 +67,24 @@ export const GetObservabilityOverviewPayload$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     apiKeyId: z.optional(z.string()),
+    eventSource: z.optional(z.string()),
     externalUserId: z.optional(z.string()),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    hookSource: z.optional(z.string()),
     includeTimeSeries: z._default(z.boolean(), true),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
     toolsetSlug: z.optional(z.string()),
+    userId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       apiKeyId: "api_key_id",
+      eventSource: "event_source",
       externalUserId: "external_user_id",
+      hookSource: "hook_source",
       includeTimeSeries: "include_time_series",
       toolsetSlug: "toolset_slug",
+      userId: "user_id",
     });
   }),
 );

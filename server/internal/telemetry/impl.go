@@ -378,7 +378,10 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 		TimeStart:        params.timeStart,
 		TimeEnd:          params.timeEnd,
 		GramDeploymentID: deploymentID,
+		EventSource:      conv.PtrValOr(payload.Filter.EventSource, ""),
+		HookSource:       conv.PtrValOr(payload.Filter.HookSource, ""),
 		GroupBy:          groupBy,
+		UserIDs:          payload.Filter.UserIds,
 		SortOrder:        params.sortOrder,
 		Cursor:           params.cursor,
 		Limit:            params.limit + 1,
@@ -406,6 +409,17 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 			})
 		}
 
+		hookSources := make([]*telem_gen.HookSourceUsage, 0, len(item.HookSourceCounts))
+		for hookSource, count := range item.HookSourceCounts {
+			hookSources = append(hookSources, &telem_gen.HookSourceUsage{
+				Source:     hookSource,
+				EventCount: int64(count), //nolint:gosec // Bounded count
+			})
+		}
+		sort.Slice(hookSources, func(i, j int) bool {
+			return hookSources[i].Source < hookSources[j].Source
+		})
+
 		//nolint:gosec // Values are bounded counts that won't overflow int64
 		users[i] = &telem_gen.UserSummary{
 			UserID:                   item.UserID,
@@ -424,6 +438,7 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 			ToolCallSuccess:          int64(item.ToolCallSuccess),
 			ToolCallFailure:          int64(item.ToolCallFailure),
 			Tools:                    tools,
+			HookSources:              hookSources,
 		}
 	}
 
@@ -567,6 +582,8 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 		TimeEnd:        timeEnd,
 		UserID:         userID,
 		ExternalUserID: externalUserID,
+		EventSource:    conv.PtrValOr(payload.EventSource, ""),
+		HookSource:     conv.PtrValOr(payload.HookSource, ""),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving user metrics")
@@ -815,9 +832,16 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	}
 
 	projectID := authCtx.ProjectID.String()
+	userID := conv.PtrValOr(payload.UserID, "")
 	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
 	apiKeyID := conv.PtrValOr(payload.APIKeyID, "")
 	toolsetSlug := conv.PtrValOr(payload.ToolsetSlug, "")
+	eventSource := conv.PtrValOr(payload.EventSource, "")
+	hookSource := conv.PtrValOr(payload.HookSource, "")
+
+	if userID != "" && externalUserID != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "only one of user_id or external_user_id can be provided")
+	}
 
 	// Auto-calculate interval based on time range
 	intervalSeconds := calculateInterval(timeStart, timeEnd)
@@ -832,9 +856,12 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		GramProjectID:  projectID,
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
+		UserID:         userID,
 		ExternalUserID: externalUserID,
 		APIKeyID:       apiKeyID,
 		ToolsetSlug:    toolsetSlug,
+		EventSource:    eventSource,
+		HookSource:     hookSource,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving overview summary")
@@ -844,9 +871,12 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		GramProjectID:  projectID,
 		TimeStart:      comparisonStart,
 		TimeEnd:        comparisonEnd,
+		UserID:         userID,
 		ExternalUserID: externalUserID,
 		APIKeyID:       apiKeyID,
 		ToolsetSlug:    toolsetSlug,
+		EventSource:    eventSource,
+		HookSource:     hookSource,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison summary")
@@ -859,9 +889,12 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			TimeStart:       timeStart,
 			TimeEnd:         timeEnd,
 			IntervalSeconds: intervalSeconds,
+			UserID:          userID,
 			ExternalUserID:  externalUserID,
 			APIKeyID:        apiKeyID,
 			ToolsetSlug:     toolsetSlug,
+			EventSource:     eventSource,
+			HookSource:      hookSource,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving time series")
@@ -872,9 +905,12 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		GramProjectID:  projectID,
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
+		UserID:         userID,
 		ExternalUserID: externalUserID,
 		APIKeyID:       apiKeyID,
 		ToolsetSlug:    toolsetSlug,
+		EventSource:    eventSource,
+		HookSource:     hookSource,
 		Limit:          10,
 		SortBy:         "count",
 	})
@@ -886,9 +922,12 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		GramProjectID:  projectID,
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
+		UserID:         userID,
 		ExternalUserID: externalUserID,
 		APIKeyID:       apiKeyID,
 		ToolsetSlug:    toolsetSlug,
+		EventSource:    eventSource,
+		HookSource:     hookSource,
 		Limit:          10,
 		SortBy:         "failure_rate",
 	})
@@ -973,9 +1012,12 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		GramProjectID:  projectID,
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
+		UserID:         "",
 		ExternalUserID: "",
 		APIKeyID:       "",
 		ToolsetSlug:    "",
+		EventSource:    "",
+		HookSource:     "",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tool call metrics")
@@ -996,9 +1038,12 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		GramProjectID:  projectID,
 		TimeStart:      comparisonStart,
 		TimeEnd:        comparisonEnd,
+		UserID:         "",
 		ExternalUserID: "",
 		APIKeyID:       "",
 		ToolsetSlug:    "",
+		EventSource:    "",
+		HookSource:     "",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison tool call metrics")
@@ -1413,6 +1458,7 @@ func (s *Service) ListFilterOptions(ctx context.Context, payload *telem_gen.List
 		TimeStart:     timeStart,
 		TimeEnd:       timeEnd,
 		FilterType:    payload.FilterType,
+		EventSource:   conv.PtrValOr(payload.EventSource, ""),
 		Limit:         100,
 	})
 	if err != nil {

@@ -1,10 +1,13 @@
 package hooks
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -22,15 +25,103 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
-// claudeRequestDecoder is a custom decoder that handles both JSON and form-urlencoded content types
-func claudeRequestDecoder(r *http.Request) goahttp.Decoder {
-	contentType := r.Header.Get("Content-Type")
+// decodeBodySampleLimit caps how many bytes of a failing request body get
+// logged, so we don't dump megabytes of OTLP into the logs on every bad
+// payload.
+const decodeBodySampleLimit = 1024
 
-	if strings.Contains(contentType, "application/x-www-form-urlencoded") {
-		return &formDecoder{r: r}
+// decoderFunc adapts a plain function to the goahttp.Decoder interface so we
+// can capture per-request context (logger, raw body, headers) in a closure
+// instead of via struct fields. This keeps containedctx happy and keeps the
+// decoder factory readable.
+type decoderFunc func(v any) error
+
+func (f decoderFunc) Decode(v any) error { return f(v) }
+
+// newHooksRequestDecoder returns a Goa request decoder factory that:
+//   - transparently decompresses gzip-encoded request bodies (the OTel
+//     Collector otlphttp exporter defaults to compression: gzip),
+//   - dispatches to formDecoder for x-www-form-urlencoded bodies,
+//   - falls through to the stock JSON decoder otherwise, and
+//   - on decode failure, logs the content headers and a body sample so the
+//     next opaque 400 is actually diagnosable.
+func newHooksRequestDecoder(logger *slog.Logger) func(r *http.Request) goahttp.Decoder {
+	return func(r *http.Request) goahttp.Decoder {
+		ctx := r.Context()
+		contentType := r.Header.Get("Content-Type")
+		contentEncoding := r.Header.Get("Content-Encoding")
+
+		raw, err := io.ReadAll(r.Body)
+		_ = r.Body.Close()
+		if err != nil {
+			wrapped := fmt.Errorf("read hooks request body: %w", err)
+			return decoderFunc(func(_ any) error {
+				logDecodeFailure(ctx, logger, wrapped, nil, contentType, contentEncoding)
+				return wrapped
+			})
+		}
+
+		body := raw
+		if strings.EqualFold(contentEncoding, "gzip") {
+			gz, gerr := gzip.NewReader(bytes.NewReader(raw))
+			if gerr != nil {
+				wrapped := fmt.Errorf("open gzip reader for hooks request: %w", gerr)
+				return decoderFunc(func(_ any) error {
+					logDecodeFailure(ctx, logger, wrapped, raw, contentType, contentEncoding)
+					return wrapped
+				})
+			}
+			decompressed, gerr := io.ReadAll(gz)
+			_ = gz.Close()
+			if gerr != nil {
+				wrapped := fmt.Errorf("decompress gzip hooks request body: %w", gerr)
+				return decoderFunc(func(_ any) error {
+					logDecodeFailure(ctx, logger, wrapped, raw, contentType, contentEncoding)
+					return wrapped
+				})
+			}
+			body = decompressed
+		}
+
+		// Hand the buffered body off to the inner decoder via a fresh reader.
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		r.ContentLength = int64(len(body))
+		r.Header.Del("Content-Encoding")
+
+		var inner goahttp.Decoder
+		if strings.Contains(contentType, "application/x-www-form-urlencoded") {
+			inner = &formDecoder{r: r}
+		} else {
+			inner = goahttp.RequestDecoder(r)
+		}
+
+		return decoderFunc(func(v any) error {
+			if derr := inner.Decode(v); derr != nil {
+				logDecodeFailure(ctx, logger, derr, body, contentType, contentEncoding)
+				return fmt.Errorf("decode hooks request body: %w", derr)
+			}
+			return nil
+		})
 	}
+}
 
-	return goahttp.RequestDecoder(r)
+func logDecodeFailure(ctx context.Context, logger *slog.Logger, err error, body []byte, contentType, contentEncoding string) {
+	if logger == nil {
+		return
+	}
+	sample := body
+	if len(sample) > decodeBodySampleLimit {
+		sample = sample[:decodeBodySampleLimit]
+	}
+	logger.WarnContext(ctx, "hooks request decode failed",
+		attr.SlogError(err),
+		attr.SlogValueAny(map[string]any{
+			"content_type":     contentType,
+			"content_encoding": contentEncoding,
+			"body_len":         len(body),
+			"body_sample":      string(sample),
+		}),
+	)
 }
 
 // formDecoder implements goahttp.Decoder for form-urlencoded data
@@ -89,10 +180,13 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		return nil
 	}
 
+	userID := s.resolveUserByEmail(ctx, claudeMetadata.UserEmail, authCtx.ActiveOrganizationID)
+
 	completeMetadata := SessionMetadata{
 		SessionID:   claudeMetadata.SessionID,
 		ServiceName: claudeMetadata.ServiceName,
 		UserEmail:   claudeMetadata.UserEmail,
+		UserID:      userID,
 		ClaudeOrgID: claudeMetadata.ClaudeOrgID,
 		GramOrgID:   authCtx.ActiveOrganizationID,
 		ProjectID:   authCtx.ProjectID.String(),
@@ -398,6 +492,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			SessionID:   sessionID,
 			ServiceName: "",
 			UserEmail:   "",
+			UserID:      "",
 			ClaudeOrgID: "",
 			GramOrgID:   authCtx.ActiveOrganizationID,
 			ProjectID:   authCtx.ProjectID.String(),
@@ -405,6 +500,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
 			metadata.ServiceName = cached.ServiceName
 			metadata.UserEmail = cached.UserEmail
+			metadata.UserID = cached.UserID
 			metadata.ClaudeOrgID = cached.ClaudeOrgID
 		}
 	} else {

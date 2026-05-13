@@ -256,7 +256,7 @@ func (s *Service) serveRemoteBackend(
 		return oops.E(oops.CodeUnexpected, err, "load remote mcp server headers").Log(ctx, logger)
 	}
 
-	p := s.buildProxy(logger, &server, headers, authorizationOverride)
+	p := s.buildProxy(logger, &server, headers, authorizationOverride, mcpServer.Visibility, endpoint.ProjectID.String())
 
 	r = r.WithContext(ctx)
 
@@ -287,8 +287,12 @@ func (s *Service) serveRemoteBackend(
 // expected by the remotemcp/proxy package. authorizationOverride is the
 // Bearer token to set on the outgoing upstream request — leave empty to
 // send no Authorization. The caller's incoming Authorization header is
-// always dropped by the proxy regardless of this value.
-func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMcpServer, headers []remotemcprepo.RemoteMcpServerHeader, authorizationOverride string) *proxy.Proxy {
+// always dropped by the proxy regardless of this value. visibility scopes
+// which interceptors are attached: per-tool RBAC fires on private servers
+// only, since public servers bypass server-level RBAC. projectID is the
+// owning project for the mcp_endpoint and is forwarded to the per-tool
+// authz interceptor as a dimension so project-scoped grants can match.
+func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMcpServer, headers []remotemcprepo.RemoteMcpServerHeader, authorizationOverride string, visibility string, projectID string) *proxy.Proxy {
 	configured := make([]proxy.ConfiguredHeader, 0, len(headers))
 	for _, h := range headers {
 		configured = append(configured, proxy.ConfiguredHeader{
@@ -299,27 +303,51 @@ func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMc
 		})
 	}
 
+	serverID := server.ID.String()
+
+	// Counter records every attempted tools/call, including those later
+	// rejected by limits or per-tool authz. This mirrors /mcp, where
+	// RecordMCPToolCall fires before the per-tool RBAC check in
+	// rpc_tools_call.go.
+	//
+	// The per-tool authz interceptor is only attached for private-visibility
+	// servers. Public servers bypass server-level RBAC by design (see
+	// serveRemoteBackend), so per-tool RBAC is also skipped — otherwise an
+	// unauthenticated public caller would be unable to invoke any tool.
+	toolsCallReqInterceptors := []proxy.ToolsCallRequestInterceptor{
+		NewToolsCallOTELCounterInterceptor(s.xmcpMetrics, serverID, logger),
+		s.toolsCallUsageLimitsInterceptor,
+	}
+	if visibility == visibilityPrivate {
+		toolsCallReqInterceptors = append(toolsCallReqInterceptors,
+			NewToolsCallAuthzInterceptor(s.authz, serverID, projectID, logger),
+		)
+	}
+
 	return &proxy.Proxy{
-		GuardianPolicy:            s.guardianPolicy,
-		Logger:                    logger,
-		Tracer:                    s.tracer,
-		NonStreamingTimeout:       proxy.DefaultNonStreamingTimeout,
-		StreamingTimeout:          proxy.DefaultStreamingTimeout,
-		Metrics:                   s.proxyMetrics,
-		MaxBufferedBodyBytes:      proxy.DefaultMaxBufferedBodyBytes,
-		ServerID:                  server.ID.String(),
-		RemoteURL:                 server.Url,
-		Headers:                   configured,
-		AuthorizationOverride:     authorizationOverride,
-		UserRequestInterceptors:   nil,
-		RemoteMessageInterceptors: nil,
-		ToolsCallRequestInterceptors: []proxy.ToolsCallRequestInterceptor{
-			s.toolUsageLimitsInterceptor,
+		GuardianPolicy:          s.guardianPolicy,
+		Logger:                  logger,
+		Tracer:                  s.tracer,
+		NonStreamingTimeout:     proxy.DefaultNonStreamingTimeout,
+		StreamingTimeout:        proxy.DefaultStreamingTimeout,
+		Metrics:                 s.proxyMetrics,
+		MaxBufferedBodyBytes:    proxy.DefaultMaxBufferedBodyBytes,
+		ServerID:                serverID,
+		RemoteURL:               server.Url,
+		Headers:                 configured,
+		AuthorizationOverride:   authorizationOverride,
+		UserRequestInterceptors: nil,
+		InitializeRequestInterceptors: []proxy.InitializeRequestInterceptor{
+			s.initializePostHogEventInterceptor,
 		},
+		RemoteMessageInterceptors:    nil,
+		ToolsCallRequestInterceptors: toolsCallReqInterceptors,
 		ToolsCallResponseInterceptors: []proxy.ToolsCallResponseInterceptor{
-			s.toolUsageTrackingInterceptor,
+			s.toolsCallUsageTrackingInterceptor,
 		},
-		ToolsListRequestInterceptors:  nil,
+		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
+			NewToolsListPostHogEventInterceptor(s.posthog, serverID, logger),
+		},
 		ToolsListResponseInterceptors: nil,
 	}
 }

@@ -1116,13 +1116,17 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
 
       {/* Group filter */}
       {!isExternalMcpProxy && groupFilterItems.length > 1 && (
-        <MultiSelect
-          options={groupFilterItems}
-          selectedValues={selectedGroups}
-          setSelectedValues={setSelectedGroups}
-          placeholder="Filter tools"
-          className="mb-4 w-fit capitalize"
-        />
+        <div className="relative mb-4 w-full">
+          <MultiSelect
+            options={groupFilterItems}
+            defaultValue={groupFilterItems.map((item) => item.value)}
+            onValueChange={setSelectedGroups}
+            placeholder="Filter tools"
+            className="capitalize"
+            hideSelectAll={true}
+            autoSize={true}
+          />
+        </div>
       )}
 
       {/* Tools list or empty state */}

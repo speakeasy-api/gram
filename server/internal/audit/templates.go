@@ -59,11 +59,8 @@ func (l *Logger) LogTemplateCreate(ctx context.Context, dbtx repo.DBTX, event Lo
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogTemplateUpdateEvent struct {
@@ -109,11 +106,8 @@ func (l *Logger) LogTemplateUpdate(ctx context.Context, dbtx repo.DBTX, event Lo
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogTemplateDeleteEvent struct {
@@ -159,9 +153,6 @@ func (l *Logger) LogTemplateDelete(ctx context.Context, dbtx repo.DBTX, event Lo
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

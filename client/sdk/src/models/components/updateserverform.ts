@@ -23,6 +23,10 @@ export type UpdateServerForm = {
    */
   id: string;
   /**
+   * Optional human-readable name. Pass an empty string to clear the existing name.
+   */
+  name?: string | undefined;
+  /**
    * The transport type for the remote MCP server
    */
   transportType?: string | undefined;
@@ -36,6 +40,7 @@ export type UpdateServerForm = {
 export type UpdateServerForm$Outbound = {
   headers?: Array<HeaderInput$Outbound> | undefined;
   id: string;
+  name?: string | undefined;
   transport_type?: string | undefined;
   url?: string | undefined;
 };
@@ -48,6 +53,7 @@ export const UpdateServerForm$outboundSchema: z.ZodMiniType<
   z.object({
     headers: z.optional(z.array(HeaderInput$outboundSchema)),
     id: z.string(),
+    name: z.optional(z.string()),
     transportType: z.optional(z.string()),
     url: z.optional(z.string()),
   }),

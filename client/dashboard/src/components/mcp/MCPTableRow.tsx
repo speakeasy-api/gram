@@ -15,7 +15,7 @@ import {
   useExternalMcpOAuthConfigStatus,
 } from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
-import { Badge } from "../ui/badge";
+import { Badge } from "@speakeasy-api/moonshine";
 
 export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
   const routes = useRoutes();
@@ -80,12 +80,11 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
             {toolset.name}
           </Type>
           {oauthStatus === "required-unconfigured" && (
-            <Badge
-              variant="outline"
-              className="border-warning-foreground bg-warning text-warning-foreground text-xs backdrop-blur-sm"
-            >
-              <AlertTriangleIcon />
-              OAuth Required
+            <Badge variant="warning">
+              <Badge.LeftIcon>
+                <AlertTriangleIcon />
+              </Badge.LeftIcon>
+              <Badge.Text>OAuth Required</Badge.Text>
             </Badge>
           )}
         </div>

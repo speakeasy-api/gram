@@ -406,6 +406,33 @@ func (q *Queries) DeleteAssistant(ctx context.Context, arg DeleteAssistantParams
 	return err
 }
 
+const enableMCPForToolsets = `-- name: EnableMCPForToolsets :exec
+UPDATE toolsets
+SET mcp_enabled = TRUE,
+    updated_at = clock_timestamp()
+WHERE id = ANY($1::UUID[])
+  AND project_id = $2
+  AND mcp_enabled IS FALSE
+  AND mcp_slug IS NOT NULL
+  AND deleted IS FALSE
+`
+
+type EnableMCPForToolsetsParams struct {
+	ToolsetIds []uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+// Flips mcp_enabled to TRUE for the listed toolsets in a project. Every
+// toolset attached to an assistant must be MCP-reachable for the runtime's
+// startup config to build; we enable on attach so users don't have to do it
+// separately. Bypasses the unpaid-plan public-server cap on purpose: an
+// assistant-attached toolset has no working alternative. mcp_slug is
+// required for an MCP-reachable toolset, so we skip rows that lack one.
+func (q *Queries) EnableMCPForToolsets(ctx context.Context, arg EnableMCPForToolsetsParams) error {
+	_, err := q.db.Exec(ctx, enableMCPForToolsets, arg.ToolsetIds, arg.ProjectID)
+	return err
+}
+
 const failAssistantThreadEvent = `-- name: FailAssistantThreadEvent :exec
 UPDATE assistant_thread_events
 SET
@@ -1544,6 +1571,32 @@ func (q *Queries) ResolveEnvironmentsForWrite(ctx context.Context, arg ResolveEn
 		return nil, err
 	}
 	return items, nil
+}
+
+const resolveThreadCorrelation = `-- name: ResolveThreadCorrelation :one
+SELECT id, project_id, assistant_id, correlation_id
+FROM assistant_threads
+WHERE id = $1
+  AND deleted IS FALSE
+`
+
+type ResolveThreadCorrelationRow struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	AssistantID   uuid.UUID
+	CorrelationID string
+}
+
+func (q *Queries) ResolveThreadCorrelation(ctx context.Context, threadID uuid.UUID) (ResolveThreadCorrelationRow, error) {
+	row := q.db.QueryRow(ctx, resolveThreadCorrelation, threadID)
+	var i ResolveThreadCorrelationRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.AssistantID,
+		&i.CorrelationID,
+	)
+	return i, err
 }
 
 const resolveThreadProjectID = `-- name: ResolveThreadProjectID :one

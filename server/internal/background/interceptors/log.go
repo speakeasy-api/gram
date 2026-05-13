@@ -6,6 +6,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/interceptor"
+	sdklog "go.temporal.io/sdk/log"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -43,11 +45,7 @@ func (w *workflowLogExecution) ExecuteWorkflow(ctx workflow.Context, in *interce
 	logger.Debug("workflow started")
 
 	result, err := w.Next.ExecuteWorkflow(ctx, in)
-	if err == nil {
-		logger.Info("workflow finished")
-	} else {
-		logger.Error("workflow failed", "error", err.Error())
-	}
+	logWorkflowResult(logger, err)
 
 	return result, err
 }
@@ -67,11 +65,35 @@ func (a *activityLogExecution) ExecuteActivity(ctx context.Context, in *intercep
 	logger.Debug("activity started")
 
 	result, err := a.Next.ExecuteActivity(ctx, in)
-	if err == nil {
-		logger.Info("activity finished")
-	} else {
-		logger.Error("activity failed", "error", err.Error())
-	}
+	logActivityResult(logger, err)
 
 	return result, err
+}
+
+// logWorkflowResult downgrades benign Temporal sentinels (ContinueAsNew,
+// Canceled) to Info so they stay out of failure alerts and log noise.
+func logWorkflowResult(logger sdklog.Logger, err error) {
+	switch {
+	case err == nil:
+		logger.Info("workflow finished")
+	case workflow.IsContinueAsNewError(err):
+		logger.Info("workflow continuing as new")
+	case temporal.IsCanceledError(err):
+		logger.Info("workflow canceled")
+	default:
+		logger.Error("workflow failed", "error", err.Error())
+	}
+}
+
+// logActivityResult downgrades the Canceled sentinel (worker shutdown,
+// workflow timeout, caller cancel) to Info so it stays out of failure alerts.
+func logActivityResult(logger sdklog.Logger, err error) {
+	switch {
+	case err == nil:
+		logger.Info("activity finished")
+	case temporal.IsCanceledError(err):
+		logger.Info("activity canceled")
+	default:
+		logger.Error("activity failed", "error", err.Error())
+	}
 }

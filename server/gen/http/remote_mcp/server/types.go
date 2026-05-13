@@ -16,6 +16,9 @@ import (
 // CreateServerRequestBody is the type of the "remoteMcp" service
 // "createServer" endpoint HTTP request body.
 type CreateServerRequestBody struct {
+	// Optional human-readable name for the remote MCP server. Empty values are
+	// stored as null.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The URL of the remote MCP server
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The transport type for the remote MCP server (e.g. streamable-http)
@@ -29,6 +32,9 @@ type CreateServerRequestBody struct {
 type UpdateServerRequestBody struct {
 	// The ID of the remote MCP server to update
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Optional human-readable name. Pass an empty string to clear the existing
+	// name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The URL of the remote MCP server
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The transport type for the remote MCP server
@@ -38,6 +44,15 @@ type UpdateServerRequestBody struct {
 	Headers []*HeaderInputRequestBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
 }
 
+// VerifyURLRequestBody is the type of the "remoteMcp" service "verifyURL"
+// endpoint HTTP request body.
+type VerifyURLRequestBody struct {
+	// The URL of the remote MCP server to probe
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// The transport type for the remote MCP server (e.g. streamable-http)
+	TransportType *string `form:"transport_type,omitempty" json:"transport_type,omitempty" xml:"transport_type,omitempty"`
+}
+
 // CreateServerResponseBody is the type of the "remoteMcp" service
 // "createServer" endpoint HTTP response body.
 type CreateServerResponseBody struct {
@@ -45,6 +60,10 @@ type CreateServerResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID this remote MCP server belongs to
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Optional human-readable name for the remote MCP server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// URL-friendly slug derived from the URL and ID.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The URL of the remote MCP server
 	URL string `form:"url" json:"url" xml:"url"`
 	// The transport type for the remote MCP server
@@ -70,6 +89,10 @@ type GetServerResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID this remote MCP server belongs to
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Optional human-readable name for the remote MCP server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// URL-friendly slug derived from the URL and ID.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The URL of the remote MCP server
 	URL string `form:"url" json:"url" xml:"url"`
 	// The transport type for the remote MCP server
@@ -89,6 +112,10 @@ type UpdateServerResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID this remote MCP server belongs to
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Optional human-readable name for the remote MCP server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// URL-friendly slug derived from the URL and ID.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The URL of the remote MCP server
 	URL string `form:"url" json:"url" xml:"url"`
 	// The transport type for the remote MCP server
@@ -99,6 +126,17 @@ type UpdateServerResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the remote MCP server was last updated
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// VerifyURLResponseBody is the type of the "remoteMcp" service "verifyURL"
+// endpoint HTTP response body.
+type VerifyURLResponseBody struct {
+	// Whether the URL responded in a way consistent with a remote MCP server
+	Verified bool `form:"verified" json:"verified" xml:"verified"`
+	// HTTP status code returned by the URL, if any
+	HTTPStatus *int `form:"http_status,omitempty" json:"http_status,omitempty" xml:"http_status,omitempty"`
+	// Human-readable summary of the verification outcome
+	Message string `form:"message" json:"message" xml:"message"`
 }
 
 // CreateServerUnauthorizedResponseBody is the type of the "remoteMcp" service
@@ -828,6 +866,187 @@ type UpdateServerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// VerifyURLUnauthorizedResponseBody is the type of the "remoteMcp" service
+// "verifyURL" endpoint HTTP response body for the "unauthorized" error.
+type VerifyURLUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLForbiddenResponseBody is the type of the "remoteMcp" service
+// "verifyURL" endpoint HTTP response body for the "forbidden" error.
+type VerifyURLForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLBadRequestResponseBody is the type of the "remoteMcp" service
+// "verifyURL" endpoint HTTP response body for the "bad_request" error.
+type VerifyURLBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLNotFoundResponseBody is the type of the "remoteMcp" service
+// "verifyURL" endpoint HTTP response body for the "not_found" error.
+type VerifyURLNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLConflictResponseBody is the type of the "remoteMcp" service
+// "verifyURL" endpoint HTTP response body for the "conflict" error.
+type VerifyURLConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLUnsupportedMediaResponseBody is the type of the "remoteMcp" service
+// "verifyURL" endpoint HTTP response body for the "unsupported_media" error.
+type VerifyURLUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLInvalidResponseBody is the type of the "remoteMcp" service
+// "verifyURL" endpoint HTTP response body for the "invalid" error.
+type VerifyURLInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLInvariantViolationResponseBody is the type of the "remoteMcp"
+// service "verifyURL" endpoint HTTP response body for the
+// "invariant_violation" error.
+type VerifyURLInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLUnexpectedResponseBody is the type of the "remoteMcp" service
+// "verifyURL" endpoint HTTP response body for the "unexpected" error.
+type VerifyURLUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyURLGatewayErrorResponseBody is the type of the "remoteMcp" service
+// "verifyURL" endpoint HTTP response body for the "gateway_error" error.
+type VerifyURLGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteServerUnauthorizedResponseBody is the type of the "remoteMcp" service
 // "deleteServer" endpoint HTTP response body for the "unauthorized" error.
 type DeleteServerUnauthorizedResponseBody struct {
@@ -1039,6 +1258,10 @@ type RemoteMcpServerResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID this remote MCP server belongs to
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Optional human-readable name for the remote MCP server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// URL-friendly slug derived from the URL and ID.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The URL of the remote MCP server
 	URL string `form:"url" json:"url" xml:"url"`
 	// The transport type for the remote MCP server
@@ -1074,6 +1297,8 @@ func NewCreateServerResponseBody(res *types.RemoteMcpServer) *CreateServerRespon
 	body := &CreateServerResponseBody{
 		ID:            res.ID,
 		ProjectID:     res.ProjectID,
+		Name:          res.Name,
+		Slug:          res.Slug,
 		URL:           res.URL,
 		TransportType: res.TransportType,
 		CreatedAt:     res.CreatedAt,
@@ -1119,6 +1344,8 @@ func NewGetServerResponseBody(res *types.RemoteMcpServer) *GetServerResponseBody
 	body := &GetServerResponseBody{
 		ID:            res.ID,
 		ProjectID:     res.ProjectID,
+		Name:          res.Name,
+		Slug:          res.Slug,
 		URL:           res.URL,
 		TransportType: res.TransportType,
 		CreatedAt:     res.CreatedAt,
@@ -1145,6 +1372,8 @@ func NewUpdateServerResponseBody(res *types.RemoteMcpServer) *UpdateServerRespon
 	body := &UpdateServerResponseBody{
 		ID:            res.ID,
 		ProjectID:     res.ProjectID,
+		Name:          res.Name,
+		Slug:          res.Slug,
 		URL:           res.URL,
 		TransportType: res.TransportType,
 		CreatedAt:     res.CreatedAt,
@@ -1161,6 +1390,17 @@ func NewUpdateServerResponseBody(res *types.RemoteMcpServer) *UpdateServerRespon
 		}
 	} else {
 		body.Headers = []*RemoteMcpServerHeaderResponseBody{}
+	}
+	return body
+}
+
+// NewVerifyURLResponseBody builds the HTTP response body from the result of
+// the "verifyURL" endpoint of the "remoteMcp" service.
+func NewVerifyURLResponseBody(res *remotemcp.VerifyURLResult) *VerifyURLResponseBody {
+	body := &VerifyURLResponseBody{
+		Verified:   res.Verified,
+		HTTPStatus: res.HTTPStatus,
+		Message:    res.Message,
 	}
 	return body
 }
@@ -1725,6 +1965,146 @@ func NewUpdateServerGatewayErrorResponseBody(res *goa.ServiceError) *UpdateServe
 	return body
 }
 
+// NewVerifyURLUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "verifyURL" endpoint of the "remoteMcp" service.
+func NewVerifyURLUnauthorizedResponseBody(res *goa.ServiceError) *VerifyURLUnauthorizedResponseBody {
+	body := &VerifyURLUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLForbiddenResponseBody builds the HTTP response body from the
+// result of the "verifyURL" endpoint of the "remoteMcp" service.
+func NewVerifyURLForbiddenResponseBody(res *goa.ServiceError) *VerifyURLForbiddenResponseBody {
+	body := &VerifyURLForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLBadRequestResponseBody builds the HTTP response body from the
+// result of the "verifyURL" endpoint of the "remoteMcp" service.
+func NewVerifyURLBadRequestResponseBody(res *goa.ServiceError) *VerifyURLBadRequestResponseBody {
+	body := &VerifyURLBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLNotFoundResponseBody builds the HTTP response body from the
+// result of the "verifyURL" endpoint of the "remoteMcp" service.
+func NewVerifyURLNotFoundResponseBody(res *goa.ServiceError) *VerifyURLNotFoundResponseBody {
+	body := &VerifyURLNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLConflictResponseBody builds the HTTP response body from the
+// result of the "verifyURL" endpoint of the "remoteMcp" service.
+func NewVerifyURLConflictResponseBody(res *goa.ServiceError) *VerifyURLConflictResponseBody {
+	body := &VerifyURLConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "verifyURL" endpoint of the "remoteMcp" service.
+func NewVerifyURLUnsupportedMediaResponseBody(res *goa.ServiceError) *VerifyURLUnsupportedMediaResponseBody {
+	body := &VerifyURLUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLInvalidResponseBody builds the HTTP response body from the
+// result of the "verifyURL" endpoint of the "remoteMcp" service.
+func NewVerifyURLInvalidResponseBody(res *goa.ServiceError) *VerifyURLInvalidResponseBody {
+	body := &VerifyURLInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "verifyURL" endpoint of the "remoteMcp" service.
+func NewVerifyURLInvariantViolationResponseBody(res *goa.ServiceError) *VerifyURLInvariantViolationResponseBody {
+	body := &VerifyURLInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLUnexpectedResponseBody builds the HTTP response body from the
+// result of the "verifyURL" endpoint of the "remoteMcp" service.
+func NewVerifyURLUnexpectedResponseBody(res *goa.ServiceError) *VerifyURLUnexpectedResponseBody {
+	body := &VerifyURLUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyURLGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "verifyURL" endpoint of the "remoteMcp" service.
+func NewVerifyURLGatewayErrorResponseBody(res *goa.ServiceError) *VerifyURLGatewayErrorResponseBody {
+	body := &VerifyURLGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteServerUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "deleteServer" endpoint of the "remoteMcp" service.
 func NewDeleteServerUnauthorizedResponseBody(res *goa.ServiceError) *DeleteServerUnauthorizedResponseBody {
@@ -1869,6 +2249,7 @@ func NewDeleteServerGatewayErrorResponseBody(res *goa.ServiceError) *DeleteServe
 // payload.
 func NewCreateServerPayload(body *CreateServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotemcp.CreateServerPayload {
 	v := &remotemcp.CreateServerPayload{
+		Name:          body.Name,
 		URL:           *body.URL,
 		TransportType: *body.TransportType,
 	}
@@ -1899,9 +2280,10 @@ func NewListServersPayload(sessionToken *string, apikeyToken *string, projectSlu
 }
 
 // NewGetServerPayload builds a remoteMcp service getServer endpoint payload.
-func NewGetServerPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotemcp.GetServerPayload {
+func NewGetServerPayload(id *string, slug *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotemcp.GetServerPayload {
 	v := &remotemcp.GetServerPayload{}
 	v.ID = id
+	v.Slug = slug
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1914,6 +2296,7 @@ func NewGetServerPayload(id string, sessionToken *string, apikeyToken *string, p
 func NewUpdateServerPayload(body *UpdateServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotemcp.UpdateServerPayload {
 	v := &remotemcp.UpdateServerPayload{
 		ID:            *body.ID,
+		Name:          body.Name,
 		URL:           body.URL,
 		TransportType: body.TransportType,
 	}
@@ -1926,6 +2309,19 @@ func NewUpdateServerPayload(body *UpdateServerRequestBody, sessionToken *string,
 			}
 			v.Headers[i] = unmarshalHeaderInputRequestBodyToRemotemcpHeaderInput(val)
 		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewVerifyURLPayload builds a remoteMcp service verifyURL endpoint payload.
+func NewVerifyURLPayload(body *VerifyURLRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotemcp.VerifyURLPayload {
+	v := &remotemcp.VerifyURLPayload{
+		URL:           *body.URL,
+		TransportType: *body.TransportType,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -1986,6 +2382,21 @@ func ValidateUpdateServerRequestBody(body *UpdateServerRequestBody) (err error) 
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateVerifyURLRequestBody runs the validations defined on
+// VerifyURLRequestBody
+func ValidateVerifyURLRequestBody(body *VerifyURLRequestBody) (err error) {
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	}
+	if body.TransportType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("transport_type", "body"))
+	}
+	if body.URL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", *body.URL, goa.FormatURI))
 	}
 	return
 }

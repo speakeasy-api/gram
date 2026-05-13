@@ -21,6 +21,9 @@ use serde_json::Value;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::{Mutex as AsyncMutex, Notify, oneshot};
 
+use agentkit_compaction::AgentBuilderCompactorExt;
+
+use crate::compaction::build_compactor;
 use crate::errors::RunnerError;
 use crate::http_layer::{McpRotatingClient, TokenRegistry, build_http};
 use crate::idempotency::IdempotencyCache;
@@ -29,6 +32,12 @@ use crate::wire::{McpServer, RunnerConfig, RunnerMessage, RunnerRequest};
 use crate::workdir::ASSISTANT_WORKDIR;
 
 const MCP_CMD_CAPACITY: usize = 32;
+
+/// Maximum time the agent loop waits for `connect_all` before serving its first
+/// turn. Bounded so a single slow server can't gate the whole runtime; servers
+/// still connecting after this deadline keep registering their tools as they
+/// come online via the catalog reader handed to the agent.
+const MCP_STARTUP_DEADLINE: Duration = Duration::from_secs(3);
 
 pub type AppState = Arc<AsyncMutex<RuntimeHost>>;
 
@@ -129,6 +138,10 @@ pub async fn build_runtime(
         http::HeaderValue::from_str(&config.chat_id)
             .map_err(|source| RunnerError::HeaderValue { source })?,
     );
+    default_headers.insert(
+        http::HeaderName::from_static("x-gram-source"),
+        http::HeaderValue::from_static("assistant"),
+    );
 
     let http_client = reqwest::Client::builder()
         .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))
@@ -136,16 +149,19 @@ pub async fn build_runtime(
         .build()?;
 
     let mut manager = McpServerManager::new();
+    let mut mcp_server_ids = Vec::with_capacity(config.mcp_servers.len());
     for server in &config.mcp_servers {
+        mcp_server_ids.push(server.id.clone());
         manager.register_server(build_mcp_server_config(server, &http_client, &tokens)?);
     }
     let mcp_source = manager.source();
 
     let (mcp_cmd_tx, mcp_cmd_rx) = mpsc::channel(MCP_CMD_CAPACITY);
-    let mcp_actor = tokio::spawn(run_mcp_actor(manager, mcp_cmd_rx));
+    let (mcp_ready_tx, mcp_ready_rx) = oneshot::channel::<()>();
+    let mcp_actor = tokio::spawn(run_mcp_actor(manager, mcp_cmd_rx, mcp_ready_tx));
 
     let native_tools = ToolRegistry::new().with(tools::bun_run::bun_run).with(
-        tools::mcp_force_reconnect::McpForceReconnectTool::new(mcp_cmd_tx.clone()),
+        tools::mcp_force_reconnect::McpForceReconnectTool::new(mcp_cmd_tx.clone(), mcp_server_ids),
     );
 
     // Sandbox helpers stay readable so user code can `import` them, but writes
@@ -170,8 +186,32 @@ pub async fn build_runtime(
     let openrouter_config =
         OpenRouterConfig::new(String::new(), config.model.clone()).with_base_url(base_url);
     let provider = OpenRouterProvider::from(openrouter_config);
+
     let completions_http = build_http(http_client.clone(), tokens.clone());
-    let adapter = CompletionsAdapter::with_client(provider, completions_http);
+    let adapter = CompletionsAdapter::with_client(provider.clone(), completions_http);
+
+    // Compactor calls reuse the model and bearer rotation but must omit the
+    // Gram-Chat-ID header so they bypass chat-message capture; otherwise gram
+    // treats the compactor's "summarise this transcript" turn as a divergence
+    // and the next replay loads the compactor's transcript instead of the
+    // user's.
+    let mut compactor_headers = http::HeaderMap::new();
+    compactor_headers.insert(
+        http::HeaderName::from_static("x-gram-source"),
+        http::HeaderValue::from_static("assistant"),
+    );
+    let compactor_http_client = reqwest::Client::builder()
+        .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))
+        .default_headers(compactor_headers)
+        .build()?;
+    let compactor_http = build_http(compactor_http_client, tokens.clone());
+    let compactor_adapter = CompletionsAdapter::with_client(provider, compactor_http);
+
+    let compactor = build_compactor(
+        &config.chat_id,
+        config.context_window.unwrap_or(0),
+        compactor_adapter,
+    )?;
 
     let mut transcript = Vec::new();
     if let Some(instructions) = &config.instructions {
@@ -179,7 +219,7 @@ pub async fn build_runtime(
     }
     transcript.extend(normalize_history(&config.history)?);
 
-    let agent = Agent::builder()
+    let mut builder = Agent::builder()
         .model(adapter)
         .add_tool_source(native_tools)
         .add_tool_source(agentkit_tool_fs::registry())
@@ -187,7 +227,13 @@ pub async fn build_runtime(
         .permissions(permissions)
         .resources(fs_resources)
         .observer(TracingReporter::new())
-        .transcript(transcript)
+        .transcript(transcript);
+
+    if let Some(compactor) = compactor {
+        builder = builder.compactor(compactor);
+    }
+
+    let agent = builder
         .build()
         .map_err(|e| RunnerError::AgentBuild(e.to_string()))?;
 
@@ -205,7 +251,7 @@ pub async fn build_runtime(
 
     let loop_idle_since = Arc::clone(&idle_since);
     let loop_handle = tokio::spawn(async move {
-        let outcome = run_loop(driver, inbox_rx, loop_idle_since).await;
+        let outcome = run_loop(driver, inbox_rx, loop_idle_since, mcp_ready_rx).await;
         match outcome {
             Ok(reason) => tracing::info!(reason = %reason, "loop exited"),
             Err(err) => tracing::error!(error = %err, "loop exited with error"),
@@ -262,7 +308,17 @@ fn build_mcp_server_config(
 /// Owns the [`McpServerManager`] for the lifetime of a runtime. Connects every
 /// registered server in the background — `/configure` does not wait — and
 /// processes [`McpCmd`]s serially so the manager never needs to be shared.
-async fn run_mcp_actor(mut manager: McpServerManager, mut cmd_rx: mpsc::Receiver<McpCmd>) {
+///
+/// `ready_tx` resolves once `connect_all` returns (success or aggregate error),
+/// letting the loop start its first turn with a fully-populated tool registry
+/// rather than racing the model against in-flight handshakes. Subsequent
+/// reconnects do not re-arm it — late tools register through the catalog
+/// reader the same way they do today.
+async fn run_mcp_actor(
+    mut manager: McpServerManager,
+    mut cmd_rx: mpsc::Receiver<McpCmd>,
+    ready_tx: oneshot::Sender<()>,
+) {
     match manager.connect_all().await {
         Ok(handles) => tracing::info!(servers = handles.len(), "mcp connect_all ok"),
         Err(e) => tracing::warn!(
@@ -270,6 +326,7 @@ async fn run_mcp_actor(mut manager: McpServerManager, mut cmd_rx: mpsc::Receiver
             "mcp connect_all failed; affected tools will surface errors and the model can call mcp_force_reconnect"
         ),
     }
+    let _ = ready_tx.send(());
 
     while let Some(cmd) = cmd_rx.recv().await {
         match cmd {
@@ -318,10 +375,14 @@ async fn run_loop<S>(
     mut driver: LoopDriver<S>,
     mut inbox: UnboundedReceiver<String>,
     idle_since: Arc<Mutex<Option<Instant>>>,
+    mcp_ready_rx: oneshot::Receiver<()>,
 ) -> Result<&'static str, RunnerError>
 where
     S: ModelSession,
 {
+    // Consumed before the first `req.submit` and never re-armed. Late servers
+    // surface their tools through the catalog reader without further blocking.
+    let mut mcp_ready: Option<oneshot::Receiver<()>> = Some(mcp_ready_rx);
     loop {
         match driver.next().await? {
             LoopStep::Finished(_turn) => {
@@ -329,18 +390,19 @@ where
             }
             LoopStep::Interrupt(LoopInterrupt::AwaitingInput(req)) => {
                 let drained = drain(&mut inbox);
-                if !drained.is_empty() {
-                    mark_busy(&idle_since);
-                    req.submit(&mut driver, drained_into_items(drained))?;
-                    continue;
-                }
-                match inbox.recv().await {
-                    Some(msg) => {
-                        mark_busy(&idle_since);
-                        req.submit(&mut driver, vec![Item::text(ItemKind::User, &msg)])?;
+                let items = if !drained.is_empty() {
+                    drained_into_items(drained)
+                } else {
+                    match inbox.recv().await {
+                        Some(msg) => vec![Item::text(ItemKind::User, &msg)],
+                        None => return Ok("inbox closed"),
                     }
-                    None => return Ok("inbox closed"),
+                };
+                if let Some(rx) = mcp_ready.take() {
+                    await_mcp_ready(rx).await;
                 }
+                mark_busy(&idle_since);
+                req.submit(&mut driver, items)?;
             }
             LoopStep::Interrupt(LoopInterrupt::AfterToolResult(info)) => {
                 let drained = drain(&mut inbox);
@@ -356,6 +418,20 @@ where
                 pending.approve(&mut driver)?;
             }
         }
+    }
+}
+
+/// Wait for the MCP actor's connect_all to finish, capped at
+/// `MCP_STARTUP_DEADLINE`. Logs which side won so an operator can correlate a
+/// thin first-turn registry with a slow upstream.
+async fn await_mcp_ready(rx: oneshot::Receiver<()>) {
+    match tokio::time::timeout(MCP_STARTUP_DEADLINE, rx).await {
+        Ok(Ok(())) => tracing::debug!("mcp ready before first turn"),
+        Ok(Err(_)) => tracing::debug!("mcp actor dropped ready signal; proceeding"),
+        Err(_) => tracing::warn!(
+            deadline_ms = MCP_STARTUP_DEADLINE.as_millis() as u64,
+            "mcp connect_all deadline hit; first turn proceeds with partial tool registry"
+        ),
     }
 }
 

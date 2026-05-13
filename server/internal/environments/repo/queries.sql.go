@@ -12,6 +12,59 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const cloneEnvironmentEntriesWithValues = `-- name: CloneEnvironmentEntriesWithValues :exec
+INSERT INTO environment_entries (environment_id, name, value)
+SELECT $1::uuid, ee.name, ee.value
+FROM environment_entries ee
+INNER JOIN environments e ON ee.environment_id = e.id
+WHERE ee.environment_id = $2::uuid
+  AND e.project_id = $3::uuid
+`
+
+type CloneEnvironmentEntriesWithValuesParams struct {
+	NewEnvironmentID    uuid.UUID
+	SourceEnvironmentID uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+// Copy (name, encrypted-value) pairs from a source environment to a new environment.
+// The encrypted value bytes flow row-to-row inside Postgres and are never decrypted by
+// the application during the clone. Same plaintext + same nonce + same key produces the
+// same ciphertext under AES-GCM, which is cryptographically permissible.
+func (q *Queries) CloneEnvironmentEntriesWithValues(ctx context.Context, arg CloneEnvironmentEntriesWithValuesParams) error {
+	_, err := q.db.Exec(ctx, cloneEnvironmentEntriesWithValues, arg.NewEnvironmentID, arg.SourceEnvironmentID, arg.ProjectID)
+	return err
+}
+
+const cloneEnvironmentEntryNames = `-- name: CloneEnvironmentEntryNames :exec
+INSERT INTO environment_entries (environment_id, name, value)
+SELECT $1::uuid, ee.name, $2::text
+FROM environment_entries ee
+INNER JOIN environments e ON ee.environment_id = e.id
+WHERE ee.environment_id = $3::uuid
+  AND e.project_id = $4::uuid
+`
+
+type CloneEnvironmentEntryNamesParams struct {
+	NewEnvironmentID    uuid.UUID
+	PlaceholderValue    string
+	SourceEnvironmentID uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+// Copy only the variable names from a source environment, using a caller-supplied
+// placeholder ciphertext as the value for every new entry. Used when the user wants
+// the structure of the source environment but not its secrets.
+func (q *Queries) CloneEnvironmentEntryNames(ctx context.Context, arg CloneEnvironmentEntryNamesParams) error {
+	_, err := q.db.Exec(ctx, cloneEnvironmentEntryNames,
+		arg.NewEnvironmentID,
+		arg.PlaceholderValue,
+		arg.SourceEnvironmentID,
+		arg.ProjectID,
+	)
+	return err
+}
+
 const createEnvironment = `-- name: CreateEnvironment :one
 INSERT INTO environments (
     organization_id,

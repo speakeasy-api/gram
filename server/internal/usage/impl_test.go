@@ -113,6 +113,14 @@ func (m *mockBillingRepo) InvalidateBillingCustomerCaches(ctx context.Context, o
 	return fmt.Errorf("not implemented")
 }
 
+func (m *mockBillingRepo) AttachAssistantsBenefit(ctx context.Context, orgID string, email string) (string, error) {
+	return "", fmt.Errorf("not implemented")
+}
+
+func (m *mockBillingRepo) CancelSubscriptionAtPeriodEnd(ctx context.Context, subscriptionID string) error {
+	return fmt.Errorf("not implemented")
+}
+
 var _ billing.Repository = (*mockBillingRepo)(nil)
 
 // --- test helpers ---

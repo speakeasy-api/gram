@@ -280,6 +280,22 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 					UserMessage: conv.FromPGText[string](policy.UserMessage),
 				}, nil
 			}
+		case ra.SourcePromptInjection:
+			findings, err := ra.DetectPromptInjection(ctx, text)
+			if err != nil {
+				return nil, fmt.Errorf("prompt injection scan: %w", err)
+			}
+			if len(findings) > 0 {
+				return &ScanResult{
+					Action:      policy.Action,
+					PolicyID:    policy.ID.String(),
+					PolicyName:  policy.Name,
+					Source:      ra.SourcePromptInjection,
+					RuleID:      findings[0].RuleID,
+					Description: findings[0].Description,
+					UserMessage: conv.FromPGText[string](policy.UserMessage),
+				}, nil
+			}
 		}
 	}
 	return nil, nil

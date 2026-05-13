@@ -70,9 +70,15 @@ var _ = Service("mcpServers", func() {
 	})
 
 	Method("listMcpServers", func() {
-		Description("List all MCP servers for a project")
+		Description("List MCP servers for a project. Accepts optional remote_mcp_server_id or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the two backends are mutually exclusive.")
 
 		Payload(func() {
+			Attribute("remote_mcp_server_id", String, "Filter to MCP servers backed by this remote MCP server", func() {
+				Format(FormatUUID)
+			})
+			Attribute("toolset_id", String, "Filter to MCP servers backed by this toolset", func() {
+				Format(FormatUUID)
+			})
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -82,6 +88,8 @@ var _ = Service("mcpServers", func() {
 
 		HTTP(func() {
 			GET("/rpc/mcpServers.list")
+			Param("remote_mcp_server_id")
+			Param("toolset_id")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()

@@ -225,10 +225,12 @@ infinite scrolling and "load more" user interfaces.
 > those hooks may be more suitable.
 
 ```tsx
-import { useAuditLogsInfinite } from "@gram/client/react-query/auditlogsList.js";
+import { useListAssistantMemoriesInfinite } from "@gram/client/react-query/assistantMemoriesList.js";
 
 export function Example() {
-  const { data, error, status, fetchNextPage, hasNextPage } = useAuditLogsInfinite();
+  const { data, error, status, fetchNextPage, hasNextPage } = useListAssistantMemoriesInfinite({
+    assistantId: "56bcc863-cc81-4d15-92ee-28eb89e8930f",
+  });
 
   return (
     <div>

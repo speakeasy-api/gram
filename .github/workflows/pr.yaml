@@ -36,10 +36,11 @@ jobs:
       plog: ${{ steps.gates.outputs.plog }}
       sdk: ${{ steps.gates.outputs.sdk }}
       sdk-gen: ${{ steps.gates.outputs.sdk-gen }}
+      risk_accuracy: ${{ steps.gates.outputs.risk_accuracy }}
       elements-examples: ${{ steps.list-elements-examples.outputs.examples }}
     steps:
       - name: Checkout source code
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         name: Check for changed packages
         id: filter
@@ -120,6 +121,13 @@ jobs:
           else
             echo "SDK generation check will be skipped."
           fi
+
+          if [[ "${{ steps.filter.outputs.risk_accuracy }}" == "true" ]]; then
+            echo "risk_accuracy=true" >> $GITHUB_OUTPUT
+            echo "Risk accuracy comment job will run."
+          else
+            echo "Risk accuracy comment job will be skipped."
+          fi
       - id: list-elements-examples
         name: List elements examples
         run: |
@@ -134,7 +142,7 @@ jobs:
       GOMAXPROCS: 4
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Download server build artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -193,7 +201,7 @@ jobs:
     if: needs.changes.outputs.server == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]')
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
@@ -327,7 +335,7 @@ jobs:
           --health-retries 5
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
         with:
           fetch-depth: 0
 
@@ -391,7 +399,7 @@ jobs:
           --health-retries 5
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
         with:
           fetch-depth: 0
 
@@ -449,7 +457,7 @@ jobs:
           - 5439:5432
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
@@ -536,7 +544,7 @@ jobs:
           - 5439:5432
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
@@ -590,7 +598,7 @@ jobs:
       GOMAXPROCS: 4
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
@@ -643,7 +651,7 @@ jobs:
       GOMAXPROCS: 8
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
@@ -675,6 +683,106 @@ jobs:
       - name: Test
         run: mise run test:server
 
+      - name: Upload risk accuracy metrics
+        if: always() && hashFiles('server/risk_accuracy_metrics.json') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: risk-accuracy-metrics
+          path: server/risk_accuracy_metrics.json
+          retention-days: 365
+
+  risk-accuracy-comment:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs: [changes, server-test]
+    if: |
+      !cancelled() &&
+      needs.changes.outputs.risk_accuracy == 'true' &&
+      github.event_name == 'pull_request' &&
+      (needs.server-test.result == 'success' || needs.server-test.result == 'failure')
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+
+      - name: Download PR metrics artifact
+        id: download-pr
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        continue-on-error: true
+        with:
+          name: risk-accuracy-metrics
+          path: ./pr-metrics
+
+      - name: Skip if PR artifact missing
+        id: gate
+        run: |
+          if [ ! -f ./pr-metrics/risk_accuracy_metrics.json ]; then
+            echo "no PR artifact (server-test likely failed before producing one); skipping comment"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download main baseline metrics
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          set -uo pipefail
+          mkdir -p ./main-metrics
+          MAIN_RUN_ID=$(gh run list \
+            --branch main \
+            --workflow pr.yaml \
+            --status success \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId // empty')
+          if [ -z "$MAIN_RUN_ID" ]; then
+            echo "no successful main run found; will report without baseline"
+            exit 0
+          fi
+          if ! gh run download "$MAIN_RUN_ID" -n risk-accuracy-metrics -D ./main-metrics 2>/dev/null; then
+            echo "main run $MAIN_RUN_ID has no risk-accuracy-metrics artifact (likely a run before this feature shipped); will report without baseline"
+            rm -rf ./main-metrics
+            mkdir -p ./main-metrics
+          fi
+
+      - name: Render comment body
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          MAIN_FILE=""
+          if [ -f ./main-metrics/risk_accuracy_metrics.json ]; then
+            MAIN_FILE=./main-metrics/risk_accuracy_metrics.json
+          fi
+          .github/scripts/risk-metrics-comment.sh \
+            ./pr-metrics/risk_accuracy_metrics.json \
+            "$MAIN_FILE" > body.md
+
+      - name: Post or update sticky comment
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          MARKER='<!-- risk-accuracy-metrics -->'
+          EXISTING=$(gh api -X GET \
+            "repos/$REPO/issues/$PR_NUMBER/comments" \
+            --paginate \
+            --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" \
+            | head -1 || true)
+          if [ -n "${EXISTING:-}" ]; then
+            echo "updating existing comment $EXISTING"
+            jq -Rs '{body: .}' body.md \
+              | gh api -X PATCH "repos/$REPO/issues/comments/$EXISTING" --input -
+          else
+            echo "creating new comment"
+            gh pr comment "$PR_NUMBER" --body-file body.md
+          fi
+
   docker-build-client:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes, sdk-gen-check]
@@ -687,7 +795,7 @@ jobs:
       GRAM_GIT_SHA: "${{ github.sha }}"
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
@@ -772,7 +880,7 @@ jobs:
       needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
@@ -822,7 +930,7 @@ jobs:
       SPEAKEASY_API_KEY: ${{ secrets.SPEAKEASY_API_KEY }}
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
@@ -873,7 +981,7 @@ jobs:
       needs.changes.outputs.sdk == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
@@ -919,7 +1027,7 @@ jobs:
     if: needs.changes.outputs.functions == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
@@ -1019,7 +1127,7 @@ jobs:
             apko-config: ./images/nodejs24-alpine3.23.yaml
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
@@ -1159,7 +1267,7 @@ jobs:
     if: needs.changes.outputs.tsframework == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
@@ -1202,7 +1310,7 @@ jobs:
       GRAM_GIT_SHA: "${{ github.sha }}"
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
@@ -1249,7 +1357,7 @@ jobs:
     if: needs.changes.outputs.elements == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
@@ -1292,7 +1400,7 @@ jobs:
         example: ${{ fromJSON(needs.changes.outputs.elements-examples) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
@@ -1382,6 +1490,25 @@ jobs:
           fi
 
           echo "✅ All CI checks passed or were skipped."
+
+  add-preview-label:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs: [changes, docker-build-server, docker-build-client]
+    if: |
+      github.event_name == 'pull_request' &&
+      !cancelled() &&
+      needs.docker-build-server.result == 'success' &&
+      needs.docker-build-client.result == 'success'
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Add preview label
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr edit ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --add-label preview
 
   dispatch-release:
     runs-on: blacksmith-4vcpu-ubuntu-2404

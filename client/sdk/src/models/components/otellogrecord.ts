@@ -21,11 +21,11 @@ export type OTELLogRecord = {
   /**
    * Log attributes
    */
-  attributes: Array<OTELAttribute>;
+  attributes?: Array<OTELAttribute> | undefined;
   /**
    * OTEL log body
    */
-  body: OTELLogBody;
+  body?: OTELLogBody | undefined;
   /**
    * Number of dropped attributes
    */
@@ -33,20 +33,20 @@ export type OTELLogRecord = {
   /**
    * Observed timestamp in nanoseconds
    */
-  observedTimeUnixNano: string;
+  observedTimeUnixNano?: string | undefined;
   /**
    * Timestamp in nanoseconds since Unix epoch
    */
-  timeUnixNano: string;
+  timeUnixNano?: string | undefined;
 };
 
 /** @internal */
 export type OTELLogRecord$Outbound = {
-  attributes: Array<OTELAttribute$Outbound>;
-  body: OTELLogBody$Outbound;
+  attributes?: Array<OTELAttribute$Outbound> | undefined;
+  body?: OTELLogBody$Outbound | undefined;
   droppedAttributesCount?: number | undefined;
-  observedTimeUnixNano: string;
-  timeUnixNano: string;
+  observedTimeUnixNano?: string | undefined;
+  timeUnixNano?: string | undefined;
 };
 
 /** @internal */
@@ -54,11 +54,11 @@ export const OTELLogRecord$outboundSchema: z.ZodMiniType<
   OTELLogRecord$Outbound,
   OTELLogRecord
 > = z.object({
-  attributes: z.array(OTELAttribute$outboundSchema),
-  body: OTELLogBody$outboundSchema,
+  attributes: z.optional(z.array(OTELAttribute$outboundSchema)),
+  body: z.optional(OTELLogBody$outboundSchema),
   droppedAttributesCount: z.optional(z.int()),
-  observedTimeUnixNano: z.string(),
-  timeUnixNano: z.string(),
+  observedTimeUnixNano: z.optional(z.string()),
+  timeUnixNano: z.optional(z.string()),
 });
 
 export function otelLogRecordToJSON(otelLogRecord: OTELLogRecord): string {

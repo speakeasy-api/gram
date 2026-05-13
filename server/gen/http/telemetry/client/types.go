@@ -106,6 +106,10 @@ type GetUserMetricsSummaryRequestBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// External user ID to get metrics for (mutually exclusive with user_id)
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+	// Optional event source filter (e.g. 'hook')
+	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
+	// Optional hook source filter (e.g. 'cursor', 'claude-code')
+	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
 }
 
 // GetObservabilityOverviewRequestBody is the type of the "telemetry" service
@@ -115,12 +119,18 @@ type GetObservabilityOverviewRequestBody struct {
 	From string `form:"from" json:"from" xml:"from"`
 	// End time in ISO 8601 format
 	To string `form:"to" json:"to" xml:"to"`
+	// Optional internal user ID filter
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// Optional external user ID filter
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
 	// Optional API key ID filter
 	APIKeyID *string `form:"api_key_id,omitempty" json:"api_key_id,omitempty" xml:"api_key_id,omitempty"`
 	// Optional toolset/MCP server slug filter
 	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
+	// Optional event source filter (e.g. 'hook')
+	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
+	// Optional hook source filter (e.g. 'cursor', 'claude-code')
+	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries bool `form:"include_time_series" json:"include_time_series" xml:"include_time_series"`
 }
@@ -143,6 +153,8 @@ type ListFilterOptionsRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Type of filter to list options for
 	FilterType string `form:"filter_type" json:"filter_type" xml:"filter_type"`
+	// Optional event source filter for the option list
+	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
 }
 
 // ListAttributeKeysRequestBody is the type of the "telemetry" service
@@ -2905,6 +2917,14 @@ type SearchUsersFilterRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Deployment ID filter
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// Optional list of user identifiers to include. Matches user_id for internal
+	// searches and external_user_id for external searches.
+	UserIds []string `form:"user_ids,omitempty" json:"user_ids,omitempty" xml:"user_ids,omitempty"`
+	// Optional event source filter (e.g. 'hook'). When set, only rows with a
+	// matching event_source are included.
+	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
+	// Optional hook source filter (e.g. 'cursor', 'claude-code').
+	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
 }
 
 // UserSummaryResponseBody is used to define fields on response body types.
@@ -2941,6 +2961,8 @@ type UserSummaryResponseBody struct {
 	ToolCallFailure *int64 `form:"tool_call_failure,omitempty" json:"tool_call_failure,omitempty" xml:"tool_call_failure,omitempty"`
 	// Per-tool usage breakdown
 	Tools []*ToolUsageResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// Per-hook-source usage breakdown
+	HookSources []*HookSourceUsageResponseBody `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
 }
 
 // ToolUsageResponseBody is used to define fields on response body types.
@@ -2953,6 +2975,14 @@ type ToolUsageResponseBody struct {
 	SuccessCount *int64 `form:"success_count,omitempty" json:"success_count,omitempty" xml:"success_count,omitempty"`
 	// Failed calls (4xx/5xx status)
 	FailureCount *int64 `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
+}
+
+// HookSourceUsageResponseBody is used to define fields on response body types.
+type HookSourceUsageResponseBody struct {
+	// Hook source (from attributes.gram.hook.source)
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Total hook events for this source
+	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
 }
 
 // ProjectSummaryResponseBody is used to define fields on response body types.
@@ -3447,6 +3477,8 @@ func NewGetUserMetricsSummaryRequestBody(p *telemetry.GetUserMetricsSummaryPaylo
 		To:             p.To,
 		UserID:         p.UserID,
 		ExternalUserID: p.ExternalUserID,
+		EventSource:    p.EventSource,
+		HookSource:     p.HookSource,
 	}
 	return body
 }
@@ -3458,9 +3490,12 @@ func NewGetObservabilityOverviewRequestBody(p *telemetry.GetObservabilityOvervie
 	body := &GetObservabilityOverviewRequestBody{
 		From:              p.From,
 		To:                p.To,
+		UserID:            p.UserID,
 		ExternalUserID:    p.ExternalUserID,
 		APIKeyID:          p.APIKeyID,
 		ToolsetSlug:       p.ToolsetSlug,
+		EventSource:       p.EventSource,
+		HookSource:        p.HookSource,
 		IncludeTimeSeries: p.IncludeTimeSeries,
 	}
 	{
@@ -3486,9 +3521,10 @@ func NewGetProjectOverviewRequestBody(p *telemetry.GetProjectOverviewPayload) *G
 // payload of the "listFilterOptions" endpoint of the "telemetry" service.
 func NewListFilterOptionsRequestBody(p *telemetry.ListFilterOptionsPayload) *ListFilterOptionsRequestBody {
 	body := &ListFilterOptionsRequestBody{
-		From:       p.From,
-		To:         p.To,
-		FilterType: p.FilterType,
+		From:        p.From,
+		To:          p.To,
+		FilterType:  p.FilterType,
+		EventSource: p.EventSource,
 	}
 	return body
 }
@@ -9469,9 +9505,19 @@ func ValidateUserSummaryResponseBody(body *UserSummaryResponseBody) (err error) 
 	if body.Tools == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
+	if body.HookSources == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hook_sources", "body"))
+	}
 	for _, e := range body.Tools {
 		if e != nil {
 			if err2 := ValidateToolUsageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.HookSources {
+		if e != nil {
+			if err2 := ValidateHookSourceUsageResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -9493,6 +9539,18 @@ func ValidateToolUsageResponseBody(body *ToolUsageResponseBody) (err error) {
 	}
 	if body.FailureCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("failure_count", "body"))
+	}
+	return
+}
+
+// ValidateHookSourceUsageResponseBody runs the validations defined on
+// HookSourceUsageResponseBody
+func ValidateHookSourceUsageResponseBody(body *HookSourceUsageResponseBody) (err error) {
+	if body.Source == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source", "body"))
+	}
+	if body.EventCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("event_count", "body"))
 	}
 	return
 }

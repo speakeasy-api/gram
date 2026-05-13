@@ -455,6 +455,231 @@ func EncodeCursorError(encoder func(context.Context, http.ResponseWriter) goahtt
 	}
 }
 
+// EncodeCodexResponse returns an encoder for responses returned by the hooks
+// codex endpoint.
+func EncodeCodexResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*hooks.CodexHookResult)
+		enc := encoder(ctx, w)
+		body := NewCodexResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeCodexRequest returns a decoder for requests sent to the hooks codex
+// endpoint.
+func DecodeCodexRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*hooks.CodexPayload, error) {
+	return func(r *http.Request) (*hooks.CodexPayload, error) {
+		var payload *hooks.CodexPayload
+		var (
+			body CodexRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateCodexRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken      *string
+			projectSlugInput *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewCodexPayload(&body, apikeyToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeCodexError returns an encoder for errors returned by the codex hooks
+// endpoint.
+func EncodeCodexError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCodexUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCodexForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCodexBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCodexNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCodexConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCodexUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCodexInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCodexInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCodexUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCodexGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeLogsResponse returns an encoder for responses returned by the hooks
 // logs endpoint.
 func EncodeLogsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -902,17 +1127,22 @@ func EncodeMetricsError(encoder func(context.Context, http.ResponseWriter) goaht
 // unmarshalOTELResourceLogRequestBodyToHooksOTELResourceLog builds a value of
 // type *hooks.OTELResourceLog from a value of type *OTELResourceLogRequestBody.
 func unmarshalOTELResourceLogRequestBodyToHooksOTELResourceLog(v *OTELResourceLogRequestBody) *hooks.OTELResourceLog {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELResourceLog{}
 	if v.Resource != nil {
 		res.Resource = unmarshalOTELResourceRequestBodyToHooksOTELResource(v.Resource)
 	}
-	res.ScopeLogs = make([]*hooks.OTELScopeLog, len(v.ScopeLogs))
-	for i, val := range v.ScopeLogs {
-		if val == nil {
-			res.ScopeLogs[i] = nil
-			continue
+	if v.ScopeLogs != nil {
+		res.ScopeLogs = make([]*hooks.OTELScopeLog, len(v.ScopeLogs))
+		for i, val := range v.ScopeLogs {
+			if val == nil {
+				res.ScopeLogs[i] = nil
+				continue
+			}
+			res.ScopeLogs[i] = unmarshalOTELScopeLogRequestBodyToHooksOTELScopeLog(val)
 		}
-		res.ScopeLogs[i] = unmarshalOTELScopeLogRequestBodyToHooksOTELScopeLog(val)
 	}
 
 	return res
@@ -951,7 +1181,9 @@ func unmarshalOTELResourceAttributeRequestBodyToHooksOTELResourceAttribute(v *OT
 	res := &hooks.OTELResourceAttribute{
 		Key: *v.Key,
 	}
-	res.Value = unmarshalOTELAttributeValueRequestBodyToHooksOTELAttributeValue(v.Value)
+	if v.Value != nil {
+		res.Value = unmarshalOTELAttributeValueRequestBodyToHooksOTELAttributeValue(v.Value)
+	}
 
 	return res
 }
@@ -960,9 +1192,17 @@ func unmarshalOTELResourceAttributeRequestBodyToHooksOTELResourceAttribute(v *OT
 // value of type *hooks.OTELAttributeValue from a value of type
 // *OTELAttributeValueRequestBody.
 func unmarshalOTELAttributeValueRequestBodyToHooksOTELAttributeValue(v *OTELAttributeValueRequestBody) *hooks.OTELAttributeValue {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELAttributeValue{
 		StringValue: v.StringValue,
 		IntValue:    v.IntValue,
+		BoolValue:   v.BoolValue,
+		DoubleValue: v.DoubleValue,
+		ArrayValue:  v.ArrayValue,
+		KvlistValue: v.KvlistValue,
+		BytesValue:  v.BytesValue,
 	}
 
 	return res
@@ -971,17 +1211,22 @@ func unmarshalOTELAttributeValueRequestBodyToHooksOTELAttributeValue(v *OTELAttr
 // unmarshalOTELScopeLogRequestBodyToHooksOTELScopeLog builds a value of type
 // *hooks.OTELScopeLog from a value of type *OTELScopeLogRequestBody.
 func unmarshalOTELScopeLogRequestBodyToHooksOTELScopeLog(v *OTELScopeLogRequestBody) *hooks.OTELScopeLog {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELScopeLog{}
 	if v.Scope != nil {
 		res.Scope = unmarshalOTELScopeRequestBodyToHooksOTELScope(v.Scope)
 	}
-	res.LogRecords = make([]*hooks.OTELLogRecord, len(v.LogRecords))
-	for i, val := range v.LogRecords {
-		if val == nil {
-			res.LogRecords[i] = nil
-			continue
+	if v.LogRecords != nil {
+		res.LogRecords = make([]*hooks.OTELLogRecord, len(v.LogRecords))
+		for i, val := range v.LogRecords {
+			if val == nil {
+				res.LogRecords[i] = nil
+				continue
+			}
+			res.LogRecords[i] = unmarshalOTELLogRecordRequestBodyToHooksOTELLogRecord(val)
 		}
-		res.LogRecords[i] = unmarshalOTELLogRecordRequestBodyToHooksOTELLogRecord(val)
 	}
 
 	return res
@@ -1004,19 +1249,26 @@ func unmarshalOTELScopeRequestBodyToHooksOTELScope(v *OTELScopeRequestBody) *hoo
 // unmarshalOTELLogRecordRequestBodyToHooksOTELLogRecord builds a value of type
 // *hooks.OTELLogRecord from a value of type *OTELLogRecordRequestBody.
 func unmarshalOTELLogRecordRequestBodyToHooksOTELLogRecord(v *OTELLogRecordRequestBody) *hooks.OTELLogRecord {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELLogRecord{
-		TimeUnixNano:           *v.TimeUnixNano,
-		ObservedTimeUnixNano:   *v.ObservedTimeUnixNano,
+		TimeUnixNano:           v.TimeUnixNano,
+		ObservedTimeUnixNano:   v.ObservedTimeUnixNano,
 		DroppedAttributesCount: v.DroppedAttributesCount,
 	}
-	res.Body = unmarshalOTELLogBodyRequestBodyToHooksOTELLogBody(v.Body)
-	res.Attributes = make([]*hooks.OTELAttribute, len(v.Attributes))
-	for i, val := range v.Attributes {
-		if val == nil {
-			res.Attributes[i] = nil
-			continue
+	if v.Body != nil {
+		res.Body = unmarshalOTELLogBodyRequestBodyToHooksOTELLogBody(v.Body)
+	}
+	if v.Attributes != nil {
+		res.Attributes = make([]*hooks.OTELAttribute, len(v.Attributes))
+		for i, val := range v.Attributes {
+			if val == nil {
+				res.Attributes[i] = nil
+				continue
+			}
+			res.Attributes[i] = unmarshalOTELAttributeRequestBodyToHooksOTELAttribute(val)
 		}
-		res.Attributes[i] = unmarshalOTELAttributeRequestBodyToHooksOTELAttribute(val)
 	}
 
 	return res
@@ -1025,6 +1277,9 @@ func unmarshalOTELLogRecordRequestBodyToHooksOTELLogRecord(v *OTELLogRecordReque
 // unmarshalOTELLogBodyRequestBodyToHooksOTELLogBody builds a value of type
 // *hooks.OTELLogBody from a value of type *OTELLogBodyRequestBody.
 func unmarshalOTELLogBodyRequestBodyToHooksOTELLogBody(v *OTELLogBodyRequestBody) *hooks.OTELLogBody {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELLogBody{
 		StringValue: v.StringValue,
 	}
@@ -1035,10 +1290,15 @@ func unmarshalOTELLogBodyRequestBodyToHooksOTELLogBody(v *OTELLogBodyRequestBody
 // unmarshalOTELAttributeRequestBodyToHooksOTELAttribute builds a value of type
 // *hooks.OTELAttribute from a value of type *OTELAttributeRequestBody.
 func unmarshalOTELAttributeRequestBodyToHooksOTELAttribute(v *OTELAttributeRequestBody) *hooks.OTELAttribute {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELAttribute{
 		Key: *v.Key,
 	}
-	res.Value = unmarshalOTELAttributeValueRequestBodyToHooksOTELAttributeValue(v.Value)
+	if v.Value != nil {
+		res.Value = unmarshalOTELAttributeValueRequestBodyToHooksOTELAttributeValue(v.Value)
+	}
 
 	return res
 }
@@ -1047,6 +1307,9 @@ func unmarshalOTELAttributeRequestBodyToHooksOTELAttribute(v *OTELAttributeReque
 // value of type *hooks.OTELResourceMetrics from a value of type
 // *OTELResourceMetricsRequestBody.
 func unmarshalOTELResourceMetricsRequestBodyToHooksOTELResourceMetrics(v *OTELResourceMetricsRequestBody) *hooks.OTELResourceMetrics {
+	if v == nil {
+		return nil
+	}
 	res := &hooks.OTELResourceMetrics{}
 	if v.Resource != nil {
 		res.Resource = unmarshalOTELResourceRequestBodyToHooksOTELResource(v.Resource)
@@ -1097,9 +1360,13 @@ func unmarshalOTELMetricRequestBodyToHooksOTELMetric(v *OTELMetricRequestBody) *
 		return nil
 	}
 	res := &hooks.OTELMetric{
-		Name:        v.Name,
-		Description: v.Description,
-		Unit:        v.Unit,
+		Name:                 v.Name,
+		Description:          v.Description,
+		Unit:                 v.Unit,
+		Gauge:                v.Gauge,
+		Histogram:            v.Histogram,
+		ExponentialHistogram: v.ExponentialHistogram,
+		Summary:              v.Summary,
 	}
 	if v.Sum != nil {
 		res.Sum = unmarshalOTELSumRequestBodyToHooksOTELSum(v.Sum)

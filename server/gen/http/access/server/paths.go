@@ -72,6 +72,11 @@ func ListChallengesAccessPath() string {
 	return "/rpc/access.listChallenges"
 }
 
+// ListChallengeBucketsAccessPath returns the URL path to the access service listChallengeBuckets HTTP endpoint.
+func ListChallengeBucketsAccessPath() string {
+	return "/rpc/access.listChallengeBuckets"
+}
+
 // ResolveChallengeAccessPath returns the URL path to the access service resolveChallenge HTTP endpoint.
 func ResolveChallengeAccessPath() string {
 	return "/rpc/access.resolveChallenge"

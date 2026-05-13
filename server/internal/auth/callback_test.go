@@ -153,6 +153,33 @@ func TestService_Callback(t *testing.T) {
 		require.Equal(t, "customer-org-123", authCtx.ActiveOrganizationID, "incorrect active organization id for admin override")
 	})
 
+	t.Run("user with no organizations and assistants disposition auto-provisions org", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.Organizations = []MockOrganizationEntry{}
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		stateData := map[string]string{
+			"final_destination_url": "/?disposition=assistants",
+		}
+		stateJSON, err := json.Marshal(stateData)
+		require.NoError(t, err)
+		stateParam := base64.RawURLEncoding.EncodeToString(stateJSON)
+
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+			Code:  "mock_code",
+			State: &stateParam,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		require.NotContains(t, result.Location, "signin_error=", "auto-provision should not surface a signin error")
+		require.Equal(t, "/new-org/projects/default/assistants/new?disposition=assistants", result.Location, "auto-provisioned redirect should target the assistants/new page on the new org with the disposition marker")
+		require.NotEmpty(t, result.SessionToken)
+		require.Equal(t, result.SessionToken, result.SessionCookie)
+	})
+
 	t.Run("user with no organizations returns successful redirect", func(t *testing.T) {
 		t.Parallel()
 

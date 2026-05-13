@@ -125,9 +125,10 @@ func (q *Queries) DisableOrganizationByWorkosID(ctx context.Context, arg Disable
 }
 
 const getOrganizationByWorkosID = `-- name: GetOrganizationByWorkosID :one
-SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE workos_id = $1
+ORDER BY id = $1, created_at ASC
 LIMIT 1
 `
 
@@ -143,6 +144,8 @@ func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID pgtype
 		&i.WorkosID,
 		&i.WorkosUpdatedAt,
 		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
 		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
 		&i.FreeTrialEndsAt,
@@ -154,7 +157,7 @@ func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID pgtype
 }
 
 const getOrganizationMetadata = `-- name: GetOrganizationMetadata :one
-SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 `
@@ -171,6 +174,8 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 		&i.WorkosID,
 		&i.WorkosUpdatedAt,
 		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
 		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
 		&i.FreeTrialEndsAt,
@@ -196,7 +201,7 @@ func (q *Queries) GetOrganizationNameByWorkosID(ctx context.Context, workosID pg
 }
 
 const getOrganizationRelationshipForUser = `-- name: GetOrganizationRelationshipForUser :one
-SELECT id, organization_id, user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, user_id, workos_user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
 FROM organization_user_relationships
 WHERE organization_id = $1
   AND user_id = $2
@@ -214,6 +219,7 @@ func (q *Queries) GetOrganizationRelationshipForUser(ctx context.Context, arg Ge
 		&i.ID,
 		&i.OrganizationID,
 		&i.UserID,
+		&i.WorkosUserID,
 		&i.WorkosMembershipID,
 		&i.WorkosUpdatedAt,
 		&i.WorkosLastEventID,
@@ -226,7 +232,7 @@ func (q *Queries) GetOrganizationRelationshipForUser(ctx context.Context, arg Ge
 }
 
 const getOrganizationUserRelationship = `-- name: GetOrganizationUserRelationship :one
-SELECT id, organization_id, user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, user_id, workos_user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
 FROM organization_user_relationships
 WHERE organization_id = $1
   AND user_id = $2
@@ -245,6 +251,7 @@ func (q *Queries) GetOrganizationUserRelationship(ctx context.Context, arg GetOr
 		&i.ID,
 		&i.OrganizationID,
 		&i.UserID,
+		&i.WorkosUserID,
 		&i.WorkosMembershipID,
 		&i.WorkosUpdatedAt,
 		&i.WorkosLastEventID,
@@ -324,7 +331,7 @@ func (q *Queries) ListOrganizationRoleAssignmentsByWorkOSUser(ctx context.Contex
 
 const listOrganizationUsers = `-- name: ListOrganizationUsers :many
 SELECT
-  our.id, our.organization_id, our.user_id, our.workos_membership_id, our.workos_updated_at, our.workos_last_event_id, our.created_at, our.updated_at, our.deleted_at, our.deleted,
+  our.id, our.organization_id, our.user_id, our.workos_user_id, our.workos_membership_id, our.workos_updated_at, our.workos_last_event_id, our.created_at, our.updated_at, our.deleted_at, our.deleted,
   u.email AS user_email,
   u.display_name AS user_display_name,
   u.photo_url AS user_photo_url
@@ -338,6 +345,7 @@ type ListOrganizationUsersRow struct {
 	ID                 int64
 	OrganizationID     string
 	UserID             string
+	WorkosUserID       pgtype.Text
 	WorkosMembershipID pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz
 	WorkosLastEventID  pgtype.Text
@@ -363,6 +371,7 @@ func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID stri
 			&i.ID,
 			&i.OrganizationID,
 			&i.UserID,
+			&i.WorkosUserID,
 			&i.WorkosMembershipID,
 			&i.WorkosUpdatedAt,
 			&i.WorkosLastEventID,
@@ -452,7 +461,7 @@ SET workos_id = $1,
     updated_at = clock_timestamp()
 WHERE id = $2 AND
     workos_id IS NULL
-RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
 `
 
 type SetOrgWorkosIDParams struct {
@@ -472,6 +481,8 @@ func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) 
 		&i.WorkosID,
 		&i.WorkosUpdatedAt,
 		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
 		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
 		&i.FreeTrialEndsAt,
@@ -629,7 +640,7 @@ ON CONFLICT (id) DO UPDATE SET
         ELSE organization_metadata.whitelisted
     END,
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
 `
 
 type UpsertOrganizationMetadataParams struct {
@@ -658,6 +669,8 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 		&i.WorkosID,
 		&i.WorkosUpdatedAt,
 		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
 		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
 		&i.FreeTrialEndsAt,
@@ -692,7 +705,7 @@ ON CONFLICT (id) DO UPDATE SET
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     disabled_at = NULL,
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
 `
 
 type UpsertOrganizationMetadataFromWorkOSParams struct {
@@ -727,6 +740,8 @@ func (q *Queries) UpsertOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		&i.WorkosID,
 		&i.WorkosUpdatedAt,
 		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
 		&i.Whitelisted,
 		&i.FreeTrialStartedAt,
 		&i.FreeTrialEndsAt,
@@ -747,7 +762,7 @@ INSERT INTO organization_user_relationships (
 )
 ON CONFLICT (organization_id, user_id) DO UPDATE SET
     updated_at = clock_timestamp()
-RETURNING id, organization_id, user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, user_id, workos_user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertOrganizationUserRelationshipParams struct {
@@ -762,6 +777,7 @@ func (q *Queries) UpsertOrganizationUserRelationship(ctx context.Context, arg Up
 		&i.ID,
 		&i.OrganizationID,
 		&i.UserID,
+		&i.WorkosUserID,
 		&i.WorkosMembershipID,
 		&i.WorkosUpdatedAt,
 		&i.WorkosLastEventID,

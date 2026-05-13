@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -42,6 +43,7 @@ import (
 	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -50,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
@@ -138,9 +141,11 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine)
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter)
 	auditLogger := audit.NewLogger()
-	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger)
+	idpClient := speakeasyclient.NewClient(logger, tracerProvider, guardianPolicy, "http://idp.test", "test-secret-key", conn, nil, posthogClient)
+	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
+	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, idpClient, userSessionSigner)
 
-	svc := xmcp.NewService(logger, tracerProvider, meterProvider, conn, enc, authzEngine, guardianPolicy, billingClient, billingClient, mcpService, serverURL)
+	svc := xmcp.NewService(logger, tracerProvider, meterProvider, conn, enc, authzEngine, guardianPolicy, posthogClient, billingClient, billingClient, mcpService, serverURL)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -192,12 +197,11 @@ func seedRemoteMCPServer(t *testing.T, ctx context.Context, ti *testInstance, pr
 	t.Helper()
 
 	r := remotemcprepo.New(ti.conn)
-	server, err := r.CreateServer(ctx, remotemcprepo.CreateServerParams{
+	server := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{
 		ProjectID:     projectID,
 		TransportType: "streamable-http",
 		Url:           url,
 	})
-	require.NoError(t, err)
 
 	for _, h := range headers {
 		params := h
@@ -209,7 +213,7 @@ func seedRemoteMCPServer(t *testing.T, ctx context.Context, ti *testInstance, pr
 			params.Value = pgtype.Text{String: encrypted, Valid: true}
 		}
 
-		_, err = r.CreateHeader(ctx, params)
+		_, err := r.CreateHeader(ctx, params)
 		require.NoError(t, err)
 	}
 

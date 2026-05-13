@@ -3447,6 +3447,14 @@ func marshalTelemetrySearchUsersFilterToSearchUsersFilterRequestBody(v *telemetr
 		From:         v.From,
 		To:           v.To,
 		DeploymentID: v.DeploymentID,
+		EventSource:  v.EventSource,
+		HookSource:   v.HookSource,
+	}
+	if v.UserIds != nil {
+		res.UserIds = make([]string, len(v.UserIds))
+		for i, val := range v.UserIds {
+			res.UserIds[i] = val
+		}
 	}
 
 	return res
@@ -3460,6 +3468,14 @@ func marshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(v *SearchUs
 		From:         v.From,
 		To:           v.To,
 		DeploymentID: v.DeploymentID,
+		EventSource:  v.EventSource,
+		HookSource:   v.HookSource,
+	}
+	if v.UserIds != nil {
+		res.UserIds = make([]string, len(v.UserIds))
+		for i, val := range v.UserIds {
+			res.UserIds[i] = val
+		}
 	}
 
 	return res
@@ -3493,6 +3509,14 @@ func unmarshalUserSummaryResponseBodyToTelemetryUserSummary(v *UserSummaryRespon
 		}
 		res.Tools[i] = unmarshalToolUsageResponseBodyToTelemetryToolUsage(val)
 	}
+	res.HookSources = make([]*telemetry.HookSourceUsage, len(v.HookSources))
+	for i, val := range v.HookSources {
+		if val == nil {
+			res.HookSources[i] = nil
+			continue
+		}
+		res.HookSources[i] = unmarshalHookSourceUsageResponseBodyToTelemetryHookSourceUsage(val)
+	}
 
 	return res
 }
@@ -3505,6 +3529,18 @@ func unmarshalToolUsageResponseBodyToTelemetryToolUsage(v *ToolUsageResponseBody
 		Count:        *v.Count,
 		SuccessCount: *v.SuccessCount,
 		FailureCount: *v.FailureCount,
+	}
+
+	return res
+}
+
+// unmarshalHookSourceUsageResponseBodyToTelemetryHookSourceUsage builds a
+// value of type *telemetry.HookSourceUsage from a value of type
+// *HookSourceUsageResponseBody.
+func unmarshalHookSourceUsageResponseBodyToTelemetryHookSourceUsage(v *HookSourceUsageResponseBody) *telemetry.HookSourceUsage {
+	res := &telemetry.HookSourceUsage{
+		Source:     *v.Source,
+		EventCount: *v.EventCount,
 	}
 
 	return res

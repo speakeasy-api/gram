@@ -169,10 +169,13 @@ func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) 
 	return messages, nil
 }
 
-// scan runs enabled scanners concurrently. Gitleaks is CPU-bound, presidio is
-// IO-bound, so they parallelize well and avoid exceeding the heartbeat timeout.
-// shadow_mcp scanning runs serially after the parallel scans because it makes
-// per-message DB calls.
+// scan runs enabled scanners concurrently. Gitleaks (CPU-bound), presidio
+// (IO-bound), and prompt-injection (CPU-bound, regex-only) all run in
+// parallel — folding the cheap prompt-injection pass under presidio's
+// network wait keeps it free. All tool-call scanners (shadow_mcp,
+// destructive_tool, cli_destructive) run serially after the parallel scans
+// — shadow_mcp/destructive_tool make per-message DB calls; cli_destructive
+// is purely in-memory regex but kept in the same lane for consistency.
 func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages []repo.GetMessageContentBatchRow) ([][]Finding, error) {
 	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 	defer scanSpan.End()
@@ -188,9 +191,12 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	presidioFindings := make([][]Finding, n)
 	shadowMCPFindings := make([][]Finding, n)
 	destructiveToolFindings := make([][]Finding, n)
+	cliDestructiveFindings := make([][]Finding, n)
+	promptInjectionFindings := make([][]Finding, n)
 
 	var wg sync.WaitGroup
 	var gitleaksErr error
+	var presidioErr error
 
 	if slices.Contains(args.Sources, "gitleaks") {
 		wg.Go(func() {
@@ -205,17 +211,36 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	if slices.Contains(args.Sources, "presidio") {
 		wg.Go(func() {
+			// PIIScanner may return partial results alongside an error;
+			// always consume results so successful per-text findings are
+			// preserved even when some HTTP calls failed.
 			results, err := a.piiScanner.AnalyzeBatch(ctx, contents, args.PresidioEntities, func() {
 				activity.RecordHeartbeat(ctx, "presidio")
 			})
+			if results != nil {
+				presidioFindings = results
+			}
 			if err != nil {
-				a.logger.WarnContext(ctx, "presidio scan failed, continuing with gitleaks only", attr.SlogError(err))
+				presidioErr = err
+				a.logger.WarnContext(ctx, "presidio scan returned errors, using partial results", attr.SlogError(err))
 				if a.metrics.presidioScanSkipped != nil {
 					a.metrics.presidioScanSkipped.Add(ctx, 1)
 				}
-				return
 			}
-			presidioFindings = results
+		})
+	}
+
+	if slices.Contains(args.Sources, SourcePromptInjection) {
+		wg.Go(func() {
+			for i, content := range contents {
+				f, err := DetectPromptInjection(ctx, content)
+				if err != nil {
+					a.logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
+					continue
+				}
+				promptInjectionFindings[i] = f
+			}
+			activity.RecordHeartbeat(ctx, "prompt_injection")
 		})
 	}
 
@@ -224,6 +249,26 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	if gitleaksErr != nil {
 		scanSpan.SetStatus(codes.Error, gitleaksErr.Error())
 		return nil, fmt.Errorf("gitleaks scan batch: %w", gitleaksErr)
+	}
+
+	// When the activity ctx was canceled (heartbeat timeout, parent
+	// workflow stop, etc.) report it as a scan-layer failure instead of
+	// letting control fall through to writeResults where db.Begin would
+	// surface a misleading "begin transaction: context canceled". Join
+	// the underlying Presidio error so the chain reflects the actual
+	// cause when Presidio degradation triggered the cancellation.
+	//
+	// Partial findings from gitleaks/promptInjection/presidio captured
+	// so far are intentionally discarded — Temporal will retry the
+	// activity (RetryPolicy.MaximumAttempts), and any partial write to
+	// the DB here would race the cancellation anyway.
+	if ctx.Err() != nil {
+		err := fmt.Errorf("scan canceled: %w", ctx.Err())
+		if presidioErr != nil {
+			err = errors.Join(err, fmt.Errorf("presidio: %w", presidioErr))
+		}
+		scanSpan.SetStatus(codes.Error, err.Error())
+		return nil, err
 	}
 
 	if slices.Contains(args.Sources, shadowmcp.SourceShadowMCP) {
@@ -236,12 +281,17 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 		activity.RecordHeartbeat(ctx, "destructive_tool")
 	}
 
+	if slices.Contains(args.Sources, SourceCLIDestructive) {
+		cliDestructiveFindings = a.scanDestructiveCLICommands(ctx, messages)
+		activity.RecordHeartbeat(ctx, "cli_destructive")
+	}
+
 	merged := make([][]Finding, n)
 	for i := range n {
 		// Gitleaks findings come first so they take priority over presidio
 		// when both scanners match the same text region. Tool-call findings are
 		// non-overlapping with content scanners, so they pass through dedup.
-		combined := slices.Concat(gitleaksFindings[i], presidioFindings[i], shadowMCPFindings[i], destructiveToolFindings[i])
+		combined := slices.Concat(gitleaksFindings[i], presidioFindings[i], shadowMCPFindings[i], destructiveToolFindings[i], cliDestructiveFindings[i], promptInjectionFindings[i])
 		merged[i] = dedup(combined)
 	}
 	return merged, nil
@@ -372,6 +422,61 @@ func (a *AnalyzeBatch) scanMessageDestructiveToolCalls(ctx context.Context, orgI
 			RuleID:      "destructive_tool.annotation",
 			Description: "Tool is annotated as destructive",
 			Match:       resolved.ToolName,
+			StartPos:    0,
+			EndPos:      0,
+			Tags:        nil,
+			Confidence:  1.0,
+		})
+	}
+	return findings
+}
+
+// scanDestructiveCLICommands flags recorded tool calls whose arguments contain
+// a curated destructive CLI pattern (rm -rf, git push --force, DROP TABLE,
+// ...). Unlike scanDestructiveToolAnnotations the trigger is content-driven,
+// so it applies to **every** tool call — native Bash / run_terminal_cmd as
+// well as MCP-routed calls whose args carry destructive content. The MCP
+// path can overlap with destructive_tool annotations; rule_id distinguishes
+// them and the dedup pass at the merge boundary is non-overlapping (start/end
+// positions are zero on tool-call findings).
+func (a *AnalyzeBatch) scanDestructiveCLICommands(ctx context.Context, messages []repo.GetMessageContentBatchRow) [][]Finding {
+	out := make([][]Finding, len(messages))
+	for i, msg := range messages {
+		if len(msg.ToolCalls) == 0 {
+			continue
+		}
+		out[i] = a.scanMessageDestructiveCLICalls(ctx, msg.ToolCalls)
+	}
+	return out
+}
+
+func (a *AnalyzeBatch) scanMessageDestructiveCLICalls(ctx context.Context, raw []byte) []Finding {
+	calls := a.parseRecordedToolCalls(ctx, SourceCLIDestructive, raw)
+
+	var findings []Finding
+	for _, call := range calls {
+		toolName := call.Function.Name
+		if toolName == "" {
+			continue
+		}
+
+		var toolInput any
+		if call.Function.Arguments != "" {
+			if err := json.Unmarshal([]byte(call.Function.Arguments), &toolInput); err != nil {
+				continue
+			}
+		}
+
+		matched, ok := scanForCLIDestructive(toolInput)
+		if !ok {
+			continue
+		}
+
+		findings = append(findings, Finding{
+			Source:      SourceCLIDestructive,
+			RuleID:      "cli_destructive." + matched.FullName(),
+			Description: "Tool input matched a destructive CLI pattern",
+			Match:       toolName,
 			StartPos:    0,
 			EndPos:      0,
 			Tags:        nil,

@@ -35,6 +35,12 @@ SELECT project_id
 FROM assistant_threads
 WHERE id = @thread_id;
 
+-- name: ResolveThreadCorrelation :one
+SELECT id, project_id, assistant_id, correlation_id
+FROM assistant_threads
+WHERE id = @thread_id
+  AND deleted IS FALSE;
+
 -- name: ResolveToolsetsForWrite :many
 SELECT id, slug
 FROM toolsets
@@ -83,6 +89,22 @@ INSERT INTO assistant_toolsets (
   @environment_id,
   @project_id
 );
+
+-- name: EnableMCPForToolsets :exec
+-- Flips mcp_enabled to TRUE for the listed toolsets in a project. Every
+-- toolset attached to an assistant must be MCP-reachable for the runtime's
+-- startup config to build; we enable on attach so users don't have to do it
+-- separately. Bypasses the unpaid-plan public-server cap on purpose: an
+-- assistant-attached toolset has no working alternative. mcp_slug is
+-- required for an MCP-reachable toolset, so we skip rows that lack one.
+UPDATE toolsets
+SET mcp_enabled = TRUE,
+    updated_at = clock_timestamp()
+WHERE id = ANY(@toolset_ids::UUID[])
+  AND project_id = @project_id
+  AND mcp_enabled IS FALSE
+  AND mcp_slug IS NOT NULL
+  AND deleted IS FALSE;
 
 -- name: CreateAssistant :one
 INSERT INTO assistants (

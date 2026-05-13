@@ -143,6 +143,11 @@ type Proxy struct {
 
 	UserRequestInterceptors []UserRequestInterceptor
 
+	// InitializeRequestInterceptors run for inbound "initialize" JSON-RPC
+	// requests only, after the generic UserRequestInterceptors chain has
+	// completed. Non-initialize requests skip this loop entirely.
+	InitializeRequestInterceptors []InitializeRequestInterceptor
+
 	// RemoteMessageInterceptors run for each JSON-RPC message arriving
 	// from the remote MCP server: once per application/json POST response,
 	// and once per parseable SSE event in a streamed response. Returning
@@ -337,12 +342,26 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 	// Typed per-RPC dispatch runs after the generic chain so generic
 	// observability (audit logs, request counters) covers every request
-	// even when a typed interceptor rejects it. toolsCallReq and
-	// toolsListReq are nil for any request whose method does not match —
-	// the corresponding typed loop is skipped in that case. At most one of
-	// the two is non-nil for a given request.
+	// even when a typed interceptor rejects it. The decoded views are nil
+	// for any request whose method does not match — the corresponding typed
+	// loop is skipped in that case. At most one of the three is non-nil for
+	// a given request.
+	initializeReq, _ := initializeRequestFromUserRequest(userReq)
+	if initializeReq != nil {
+		if err := p.runInitializeRequestInterceptors(ctx, initializeReq); err != nil {
+			n := p.writeRejection(ctx, w, span, userReqID, err)
+			responseBytes = n
+			return nil
+		}
+	}
+
 	toolsCallReq, _ := toolsCallRequestFromUserRequest(userReq)
 	if toolsCallReq != nil {
+		// Attach the tool name to the parent Post span so the existing
+		// `tool_name` materialized column on ClickHouse `telemetry_logs`
+		// populates for /x/mcp traffic without any further plumbing —
+		// matching how /mcp aggregations already work.
+		span.SetAttributes(attr.ToolName(toolsCallReq.Params.Name))
 		if err := p.runToolsCallRequestInterceptors(ctx, toolsCallReq); err != nil {
 			n := p.writeRejection(ctx, w, span, userReqID, err)
 			responseBytes = n
@@ -729,6 +748,24 @@ func (p *Proxy) runRemoteMessageInterceptors(ctx context.Context, msg *RemoteMes
 			span.RecordError(err, trace.WithStackTrace(true))
 			span.End()
 			return p.wrapInterceptorRejection(iterCtx, "remote message", interceptor.Name(), err)
+		}
+		span.End()
+	}
+	return nil
+}
+
+// runInitializeRequestInterceptors invokes each configured
+// InitializeRequestInterceptor in order, returning the first wrapped
+// rejection error or nil if all interceptors accept the request.
+func (p *Proxy) runInitializeRequestInterceptors(ctx context.Context, init *InitializeRequest) error {
+	for _, interceptor := range p.InitializeRequestInterceptors {
+		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.InitializeRequestInterceptor",
+			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
+		if err := interceptor.InterceptInitializeRequest(iterCtx, init); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err, trace.WithStackTrace(true))
+			span.End()
+			return p.wrapInterceptorRejection(iterCtx, "initialize request", interceptor.Name(), err)
 		}
 		span.End()
 	}

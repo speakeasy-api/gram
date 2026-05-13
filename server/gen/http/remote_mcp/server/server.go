@@ -23,6 +23,7 @@ type Server struct {
 	ListServers  http.Handler
 	GetServer    http.Handler
 	UpdateServer http.Handler
+	VerifyURL    http.Handler
 	DeleteServer http.Handler
 }
 
@@ -57,12 +58,14 @@ func New(
 			{"ListServers", "GET", "/rpc/remoteMcp.listServers"},
 			{"GetServer", "GET", "/rpc/remoteMcp.getServer"},
 			{"UpdateServer", "POST", "/rpc/remoteMcp.updateServer"},
+			{"VerifyURL", "POST", "/rpc/remoteMcp.verifyURL"},
 			{"DeleteServer", "DELETE", "/rpc/remoteMcp.deleteServer"},
 		},
 		CreateServer: NewCreateServerHandler(e.CreateServer, mux, decoder, encoder, errhandler, formatter),
 		ListServers:  NewListServersHandler(e.ListServers, mux, decoder, encoder, errhandler, formatter),
 		GetServer:    NewGetServerHandler(e.GetServer, mux, decoder, encoder, errhandler, formatter),
 		UpdateServer: NewUpdateServerHandler(e.UpdateServer, mux, decoder, encoder, errhandler, formatter),
+		VerifyURL:    NewVerifyURLHandler(e.VerifyURL, mux, decoder, encoder, errhandler, formatter),
 		DeleteServer: NewDeleteServerHandler(e.DeleteServer, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -76,6 +79,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListServers = m(s.ListServers)
 	s.GetServer = m(s.GetServer)
 	s.UpdateServer = m(s.UpdateServer)
+	s.VerifyURL = m(s.VerifyURL)
 	s.DeleteServer = m(s.DeleteServer)
 }
 
@@ -88,6 +92,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListServersHandler(mux, h.ListServers)
 	MountGetServerHandler(mux, h.GetServer)
 	MountUpdateServerHandler(mux, h.UpdateServer)
+	MountVerifyURLHandler(mux, h.VerifyURL)
 	MountDeleteServerHandler(mux, h.DeleteServer)
 }
 
@@ -285,6 +290,59 @@ func NewUpdateServerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateServer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteMcp")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountVerifyURLHandler configures the mux to serve the "remoteMcp" service
+// "verifyURL" endpoint.
+func MountVerifyURLHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteMcp.verifyURL", f)
+}
+
+// NewVerifyURLHandler creates a HTTP handler which loads the HTTP request and
+// calls the "remoteMcp" service "verifyURL" endpoint.
+func NewVerifyURLHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeVerifyURLRequest(mux, decoder)
+		encodeResponse = EncodeVerifyURLResponse(encoder)
+		encodeError    = EncodeVerifyURLError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "verifyURL")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteMcp")
 		payload, err := decodeRequest(r)
 		if err != nil {

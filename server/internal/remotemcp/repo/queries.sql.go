@@ -74,24 +74,36 @@ func (q *Queries) CreateHeader(ctx context.Context, arg CreateHeaderParams) (Rem
 
 const createServer = `-- name: CreateServer :one
 
-INSERT INTO remote_mcp_servers (project_id, transport_type, url)
-VALUES ($1, $2, $3)
-RETURNING id, project_id, transport_type, url, created_at, updated_at, deleted_at, deleted
+INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, project_id, name, slug, transport_type, url, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateServerParams struct {
+	ID            uuid.UUID
 	ProjectID     uuid.UUID
+	Name          pgtype.Text
+	Slug          pgtype.Text
 	TransportType string
 	Url           string
 }
 
 // Remote MCP Servers
 func (q *Queries) CreateServer(ctx context.Context, arg CreateServerParams) (RemoteMcpServer, error) {
-	row := q.db.QueryRow(ctx, createServer, arg.ProjectID, arg.TransportType, arg.Url)
+	row := q.db.QueryRow(ctx, createServer,
+		arg.ID,
+		arg.ProjectID,
+		arg.Name,
+		arg.Slug,
+		arg.TransportType,
+		arg.Url,
+	)
 	var i RemoteMcpServer
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
 		&i.TransportType,
 		&i.Url,
 		&i.CreatedAt,
@@ -133,7 +145,7 @@ const deleteServer = `-- name: DeleteServer :one
 UPDATE remote_mcp_servers
 SET deleted_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, transport_type, url, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, transport_type, url, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteServerParams struct {
@@ -147,6 +159,8 @@ func (q *Queries) DeleteServer(ctx context.Context, arg DeleteServerParams) (Rem
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
 		&i.TransportType,
 		&i.Url,
 		&i.CreatedAt,
@@ -158,7 +172,7 @@ func (q *Queries) DeleteServer(ctx context.Context, arg DeleteServerParams) (Rem
 }
 
 const getServerByID = `-- name: GetServerByID :one
-SELECT id, project_id, transport_type, url, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, transport_type, url, created_at, updated_at, deleted_at, deleted
 FROM remote_mcp_servers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -174,6 +188,37 @@ func (q *Queries) GetServerByID(ctx context.Context, arg GetServerByIDParams) (R
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.TransportType,
+		&i.Url,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getServerBySlug = `-- name: GetServerBySlug :one
+SELECT id, project_id, name, slug, transport_type, url, created_at, updated_at, deleted_at, deleted
+FROM remote_mcp_servers
+WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
+`
+
+type GetServerBySlugParams struct {
+	Slug      pgtype.Text
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetServerBySlug(ctx context.Context, arg GetServerBySlugParams) (RemoteMcpServer, error) {
+	row := q.db.QueryRow(ctx, getServerBySlug, arg.Slug, arg.ProjectID)
+	var i RemoteMcpServer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
 		&i.TransportType,
 		&i.Url,
 		&i.CreatedAt,
@@ -267,7 +312,7 @@ func (q *Queries) ListHeadersByServerIDs(ctx context.Context, remoteMcpServerIds
 }
 
 const listServersByProjectID = `-- name: ListServersByProjectID :many
-SELECT id, project_id, transport_type, url, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, transport_type, url, created_at, updated_at, deleted_at, deleted
 FROM remote_mcp_servers
 WHERE project_id = $1 AND deleted IS FALSE
 ORDER BY created_at DESC
@@ -285,6 +330,8 @@ func (q *Queries) ListServersByProjectID(ctx context.Context, projectID uuid.UUI
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
 			&i.TransportType,
 			&i.Url,
 			&i.CreatedAt,
@@ -305,14 +352,18 @@ func (q *Queries) ListServersByProjectID(ctx context.Context, projectID uuid.UUI
 const updateServer = `-- name: UpdateServer :one
 UPDATE remote_mcp_servers
 SET
-    transport_type = COALESCE($1, transport_type),
-    url = COALESCE($2, url),
+    name = $1,
+    slug = $2,
+    transport_type = COALESCE($3, transport_type),
+    url = COALESCE($4, url),
     updated_at = clock_timestamp()
-WHERE id = $3 AND project_id = $4 AND deleted IS FALSE
-RETURNING id, project_id, transport_type, url, created_at, updated_at, deleted_at, deleted
+WHERE id = $5 AND project_id = $6 AND deleted IS FALSE
+RETURNING id, project_id, name, slug, transport_type, url, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateServerParams struct {
+	Name          pgtype.Text
+	Slug          pgtype.Text
 	TransportType string
 	Url           string
 	ID            uuid.UUID
@@ -321,6 +372,8 @@ type UpdateServerParams struct {
 
 func (q *Queries) UpdateServer(ctx context.Context, arg UpdateServerParams) (RemoteMcpServer, error) {
 	row := q.db.QueryRow(ctx, updateServer,
+		arg.Name,
+		arg.Slug,
 		arg.TransportType,
 		arg.Url,
 		arg.ID,
@@ -330,6 +383,8 @@ func (q *Queries) UpdateServer(ctx context.Context, arg UpdateServerParams) (Rem
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
 		&i.TransportType,
 		&i.Url,
 		&i.CreatedAt,

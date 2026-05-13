@@ -12,6 +12,8 @@ import (
 type McpServer struct {
 	ID                    uuid.UUID
 	ProjectID             uuid.UUID
+	Name                  pgtype.Text
+	Slug                  pgtype.Text
 	EnvironmentID         uuid.NullUUID
 	ExternalOauthServerID uuid.NullUUID
 	OauthProxyServerID    uuid.NullUUID

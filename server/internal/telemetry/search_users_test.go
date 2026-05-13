@@ -1,6 +1,8 @@
 package telemetry_test
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -384,6 +386,138 @@ func TestSearchUsers_FilterByDeploymentID(t *testing.T) {
 	require.Equal(t, user1, result.Users[0].UserID)
 }
 
+func TestSearchUsers_FilterByInternalUserIDs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	includedUser := "internal-included-" + uuid.New().String()
+	excludedUser := "internal-excluded-" + uuid.New().String()
+	userIDAsExternalID := "external-matches-internal-filter-" + uuid.New().String()
+
+	insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), uuid.New().String(), 100, 50, 150, 1.0, "stop", "gpt-4", "openai", includedUser, "")
+	insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), uuid.New().String(), 200, 100, 300, 1.0, "stop", "gpt-4", "openai", excludedUser, "")
+	insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), uuid.New().String(), 300, 150, 450, 1.0, "stop", "gpt-4", "openai", userIDAsExternalID, includedUser)
+
+	time.Sleep(200 * time.Millisecond)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	result, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From:    from,
+			To:      to,
+			UserIds: []string{includedUser},
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+
+	require.NoError(t, err)
+	require.Len(t, result.Users, 1)
+	require.Equal(t, includedUser, result.Users[0].UserID)
+	require.Equal(t, int64(150), result.Users[0].TotalTokens)
+}
+
+func TestSearchUsers_FilterByExternalUserIDs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	includedExternalUser := "external-included-" + uuid.New().String()
+	excludedExternalUser := "external-excluded-" + uuid.New().String()
+
+	insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), uuid.New().String(), 100, 50, 150, 1.0, "stop", "gpt-4", "openai", "internal-a-"+uuid.New().String(), includedExternalUser)
+	insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), uuid.New().String(), 200, 100, 300, 1.0, "stop", "gpt-4", "openai", "internal-b-"+uuid.New().String(), excludedExternalUser)
+	insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), uuid.New().String(), 300, 150, 450, 1.0, "stop", "gpt-4", "openai", includedExternalUser, "external-c-"+uuid.New().String())
+
+	time.Sleep(200 * time.Millisecond)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	result, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From:    from,
+			To:      to,
+			UserIds: []string{includedExternalUser},
+		},
+		UserType: "external",
+		Limit:    100,
+		Sort:     "desc",
+	})
+
+	require.NoError(t, err)
+	require.Len(t, result.Users, 1)
+	require.Equal(t, includedExternalUser, result.Users[0].UserID)
+	require.Equal(t, int64(150), result.Users[0].TotalTokens)
+}
+
+func TestSearchUsers_HookSourceBreakdown(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	userID := "hook-user-" + uuid.New().String()
+	excludedUserID := "hook-excluded-" + uuid.New().String()
+
+	insertHookLogWithUser(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), userID, "", "cursor", true)
+	insertHookLogWithUser(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), userID, "", "cursor", true)
+	insertHookLogWithUser(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), userID, "", "claude-code", false)
+	insertHookLogWithUser(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), excludedUserID, "", "cursor", true)
+
+	time.Sleep(200 * time.Millisecond)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	result, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From:    from,
+			To:      to,
+			UserIds: []string{userID},
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+
+	require.NoError(t, err)
+	require.Len(t, result.Users, 1)
+	require.Equal(t, userID, result.Users[0].UserID)
+	require.Len(t, result.Users[0].HookSources, 2)
+
+	byHookSource := make(map[string]*gen.HookSourceUsage)
+	for _, source := range result.Users[0].HookSources {
+		byHookSource[source.Source] = source
+	}
+
+	cursor := byHookSource["cursor"]
+	require.NotNil(t, cursor)
+	require.Equal(t, int64(2), cursor.EventCount)
+
+	claudeCode := byHookSource["claude-code"]
+	require.NotNil(t, claudeCode)
+	require.Equal(t, int64(1), claudeCode.EventCount)
+}
+
 func TestSearchUsers_ToolsBreakdown(t *testing.T) {
 	t.Parallel()
 
@@ -490,4 +624,45 @@ func TestSearchUsers_ScopedByProject(t *testing.T) {
 	// Metrics should only reflect the current project's data
 	require.Equal(t, int64(100), result.Users[0].TotalInputTokens, "should not include tokens from other project")
 	require.Equal(t, int64(150), result.Users[0].TotalTokens, "should not include tokens from other project")
+}
+
+func insertHookLogWithUser(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, userID, externalUserID, hookSource string, success bool) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gram.event.source": "hook",
+		"gram.hook.source":  hookSource,
+		"gram.tool.name":    "Bash",
+	}
+	if success {
+		attributes["gen_ai.tool.call.result"] = "ok"
+	} else {
+		attributes["gram.hook.error"] = "failed"
+	}
+	if userID != "" {
+		attributes["user.id"] = userID
+	}
+	if externalUserID != "" {
+		attributes["gram.external_user.id"] = externalUserID
+	}
+
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_deployment_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "hook event",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, deploymentID, "hooks:Bash", "gram-hooks")
+	require.NoError(t, err)
 }

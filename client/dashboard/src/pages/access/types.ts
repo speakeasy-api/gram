@@ -23,7 +23,7 @@ export function toRoleSlug(name: string): string {
 }
 
 /** What kind of resource a scope protects. */
-export type ResourceType = "org" | "project" | "mcp";
+export type ResourceType = "org" | "project" | "mcp" | "environment";
 
 /** The 4 MCP tool annotation hint keys. */
 export type AnnotationHint =
@@ -36,7 +36,12 @@ export type AnnotationHint =
 export type CustomTab = "select" | "auto-groups";
 
 /** Which panel the scope picker is displaying. Derived from selectors. */
-export type ActivePanel = "all" | "servers" | "tools" | "collection";
+export type ActivePanel =
+  | "all"
+  | "projects"
+  | "servers"
+  | "tools"
+  | "collection";
 
 /** A single grant within a role: a scope + optional selector constraints. */
 export interface RoleGrant {

@@ -25,6 +25,8 @@ export const Scope = {
   McpRead: "mcp:read",
   McpWrite: "mcp:write",
   McpConnect: "mcp:connect",
+  EnvironmentRead: "environment:read",
+  EnvironmentWrite: "environment:write",
 } as const;
 /**
  * The scope slug this grant applies to.

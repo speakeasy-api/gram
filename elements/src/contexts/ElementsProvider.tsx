@@ -216,6 +216,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   const { data: mcpTools, mcpHeaders } = useMCPTools({
     auth,
     mcp: config.mcp,
+    mcps: config.mcps,
     environment: config.environment ?? {},
     toolsToInclude: config.tools?.toolsToInclude,
     gramEnvironment: config.gramEnvironment,
