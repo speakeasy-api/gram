@@ -108,7 +108,7 @@ export function OtelForwardingSection() {
   const handleSave = () => {
     upsert({
       request: {
-        upsertOtelForwardingConfigRequestBody: {
+        upsertConfigRequestBody: {
           endpointUrl: trimmedUrl,
           enabled,
           headers: headers
@@ -177,7 +177,7 @@ export function OtelForwardingSection() {
             id="otel-forwarding-url"
             placeholder="https://collector.example.com/v1/logs"
             value={url}
-            onChange={(e) => setUrl(e.target.value)}
+            onChange={setUrl}
             disabled={isLoading || isMutating}
           />
         </Stack>
@@ -270,14 +270,14 @@ function HeaderRow({
       <Input
         placeholder="Header name"
         value={header.name}
-        onChange={(e) => onChange({ ...header, name: e.target.value })}
+        onChange={(value) => onChange({ ...header, name: value })}
         disabled={disabled}
         className="flex-1"
       />
       <Input
         placeholder={header.hasStoredValue ? "•••••• (saved)" : "Header value"}
         value={header.value}
-        onChange={(e) => onChange({ ...header, value: e.target.value })}
+        onChange={(value) => onChange({ ...header, value })}
         type="password"
         disabled={disabled}
         className="flex-1"
