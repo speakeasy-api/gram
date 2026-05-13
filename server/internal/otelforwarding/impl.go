@@ -13,8 +13,8 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	srv "github.com/speakeasy-api/gram/server/gen/http/otel_forwarding/server"
 	gen "github.com/speakeasy-api/gram/server/gen/otel_forwarding"
+	srv "github.com/speakeasy-api/gram/server/gen/http/otel_forwarding/server"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"

@@ -84,7 +84,7 @@ func (f *Forwarder) Start(ctx context.Context) {
 	}
 	f.started = true
 
-	for range defaultWorkers {
+	for i := 0; i < defaultWorkers; i++ {
 		f.wg.Add(1)
 		go f.run(ctx)
 	}
