@@ -193,6 +193,8 @@ SELECT
   pd.project_id,
   t.id,
   t.tool_urn,
+  t.type,
+  t.name,
   e.slug,
   t.read_only_hint,
   t.destructive_hint,

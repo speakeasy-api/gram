@@ -807,10 +807,21 @@ func GetToolsetsSummary(
 		if _, exists := projTools[def.ToolUrn]; exists {
 			continue
 		}
+		// Naming convention doubles as the proxy-vs-direct signal: proxy entries
+		// always end in ":proxy"; direct entries end in ":<tool-name>". Surfaces
+		// like the RBAC scope picker rely on this suffix to filter out proxy
+		// tools (which aren't RBAC-compatible) without an extra API field.
+		var name string
+		switch {
+		case def.Type == "direct" && def.Name.Valid && def.Name.String != "":
+			name = def.Slug + ":" + def.Name.String
+		default:
+			name = def.Slug + ":proxy"
+		}
 		projTools[def.ToolUrn] = &types.ToolEntry{
 			Type:        types.ToolType(urn.ToolKindExternalMCP),
 			ID:          def.ID.String(),
-			Name:        def.Slug + ":proxy",
+			Name:        name,
 			ToolUrn:     def.ToolUrn,
 			Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
 			HTTPMethod:  nil,
