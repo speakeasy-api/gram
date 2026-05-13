@@ -7,6 +7,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/stretchr/testify/require"
@@ -22,7 +23,7 @@ func TestService_ListUsers(t *testing.T) {
 
 	_, err := orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		UserID:         authCtx.UserID,
+		UserID:         conv.ToPGText(authCtx.UserID),
 	})
 	require.NoError(t, err)
 
@@ -56,7 +57,7 @@ func TestService_ListUsers_AllowsOrgReadGrant(t *testing.T) {
 
 	_, err := orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		UserID:         authCtx.UserID,
+		UserID:         conv.ToPGText(authCtx.UserID),
 	})
 	require.NoError(t, err)
 
@@ -77,7 +78,7 @@ func TestService_ListUsers_AllowsOrgAdminGrantViaScopeHierarchy(t *testing.T) {
 
 	_, err := orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		UserID:         authCtx.UserID,
+		UserID:         conv.ToPGText(authCtx.UserID),
 	})
 	require.NoError(t, err)
 

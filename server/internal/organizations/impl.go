@@ -332,7 +332,7 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 
 	rel, err := qtx.GetOrganizationUserRelationship(ctx, orgrepo.GetOrganizationUserRelationshipParams{
 		OrganizationID: ac.ActiveOrganizationID,
-		UserID:         payload.UserID,
+		UserID:         conv.ToPGText(payload.UserID),
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -343,7 +343,7 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 
 	if err := qtx.DeleteOrganizationUserRelationship(ctx, orgrepo.DeleteOrganizationUserRelationshipParams{
 		OrganizationID: ac.ActiveOrganizationID,
-		UserID:         payload.UserID,
+		UserID:         conv.ToPGText(payload.UserID),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete organization user relationship").Log(ctx, logger)
 	}
@@ -556,7 +556,7 @@ func organizationUserToGen(row *orgrepo.ListOrganizationUsersRow) *gen.Organizat
 	return &gen.OrganizationUser{
 		ID:                 strconv.FormatInt(row.ID, 10),
 		OrganizationID:     row.OrganizationID,
-		UserID:             row.UserID,
+		UserID:             conv.FromPGTextOrEmpty[string](row.UserID),
 		Name:               row.UserDisplayName,
 		Email:              row.UserEmail,
 		PhotoURL:           conv.FromPGText[string](row.UserPhotoUrl),
