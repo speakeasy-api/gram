@@ -357,9 +357,37 @@ function CodexInstallContent({
   );
 }
 
-function CopilotInstallContent() {
+function CopilotInstallContent({
+  marketplaceUrl,
+  repoName,
+}: {
+  marketplaceUrl?: string;
+  repoName?: string;
+}) {
   const { fetch: authFetch } = useFetcher();
   const [downloading, setDownloading] = useState(false);
+
+  // chat.plugins.marketplaces accepts a key → URL map; we use repoName
+  // ("<org-slug>-gram") as the key so it lines up with the marketplace
+  // identifier users see in the @agentPlugins search UI.
+  const marketplaceKey = repoName ?? null;
+  const observabilityPluginName = repoName
+    ? repoName.replace(/-gram$/, "-observability-vscode")
+    : null;
+
+  const marketplaceSettings =
+    marketplaceUrl && marketplaceKey
+      ? JSON.stringify(
+          {
+            "chat.plugins.enabled": true,
+            "chat.plugins.marketplaces": {
+              [marketplaceKey]: marketplaceUrl,
+            },
+          },
+          null,
+          2,
+        )
+      : null;
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -392,139 +420,112 @@ function CopilotInstallContent() {
 
   return (
     <div className="space-y-6">
-      <div className="border-primary/30 bg-primary/5 space-y-2 rounded-lg border p-4">
-        <p className="text-muted-foreground text-sm">
-          VSCode Copilot's marketplace clones plugins via each user's local git
-          credentials, so Gram's published marketplace repo can't be used here.
-          Distribute the plugin ZIP directly — either per-user or fleet-wide via
-          MDM.
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">
+          1. Enable plugins and register the marketplace
+        </h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Add the following to VSCode user settings (
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            settings.json
+          </code>
+          ). Gram's marketplace proxy serves the repo over a token-bearing Smart
+          HTTP URL — no GitHub credentials required on each developer's machine.
         </p>
+        {marketplaceSettings ? (
+          <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+            <code className="whitespace-pre-wrap">{marketplaceSettings}</code>
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-sm italic">
+            Publish your plugins first to mint a marketplace URL.
+          </p>
+        )}
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">
+          2. Install the observability plugin
+        </h3>
         <p className="text-muted-foreground text-sm">
-          The plugin ZIP embeds a hooks-scoped Gram API key that attributes
-          every event to your org and project. No per-user email or env var
-          setup is required.
+          Open the Extensions view, filter with{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            @agentPlugins
+          </code>
+          , and install{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            {observabilityPluginName ?? "<org>-observability-vscode"}
+          </code>
+          . The embedded hooks-scoped API key attributes every event to your org
+          and project — no per-user setup required.
         </p>
       </div>
 
-      <Tabs defaultValue="local">
-        <TabsList>
-          <TabsTrigger value="local">Local install</TabsTrigger>
-          <TabsTrigger value="mdm">MDM rollout</TabsTrigger>
-        </TabsList>
+      <div className="space-y-3 border-t pt-4">
+        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+          Fleet rollout
+        </p>
+        <p className="text-muted-foreground text-sm">
+          VSCode's enterprise policy schema exposes{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            ChatPluginsEnabled
+          </code>{" "}
+          but no granular policy for{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            chat.plugins.marketplaces
+          </code>
+          . Push the snippet above to each developer's{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            settings.json
+          </code>{" "}
+          via your MDM (Intune, Jamf, Workspace ONE) and toggle the policy on
+          org-wide.
+        </p>
+      </div>
 
-        <TabsContent value="local" className="space-y-4">
-          <div>
-            <h3 className="mb-2 text-sm font-semibold">
-              1. Download the plugin
-            </h3>
-            <p className="text-muted-foreground mb-3 text-sm">
-              Each download mints a fresh hooks-scoped API key embedded in the
-              plugin's hook script. Audit and revoke from the API Keys page.
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDownload}
-              disabled={downloading}
-            >
-              {downloading ? "Downloading…" : "Download VSCode Copilot ZIP"}
-            </Button>
-          </div>
-
-          <div>
-            <h3 className="mb-2 text-sm font-semibold">
-              2. Unzip to a stable path
-            </h3>
-            <p className="text-muted-foreground mb-2 text-sm">
-              Extract the archive somewhere persistent — e.g.{" "}
-              <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                ~/.gram/vscode-copilot
-              </code>
-              . VSCode reads the plugin from disk on every session.
-            </p>
-          </div>
-
-          <div>
-            <h3 className="mb-2 text-sm font-semibold">
-              3. Register the path in VSCode settings
-            </h3>
-            <p className="text-muted-foreground mb-2 text-sm">
-              Add the unpacked directory to{" "}
-              <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                chat.pluginLocations
-              </code>{" "}
-              in your VSCode user settings:
-            </p>
-            <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
-              <code>
-                {`{
-  "chat.pluginLocations": {
-    "~/.gram/vscode-copilot": true
-  }
-}`}
-              </code>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="mdm" className="space-y-4">
-          <div>
-            <h3 className="mb-2 text-sm font-semibold">
-              1. Download the plugin once
-            </h3>
-            <p className="text-muted-foreground mb-3 text-sm">
-              Use the same ZIP as the local install path. Stage it in your
-              internal artifact registry or MDM payload. The embedded API key
-              applies to every machine that receives this ZIP.
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDownload}
-              disabled={downloading}
-            >
-              {downloading ? "Downloading…" : "Download VSCode Copilot ZIP"}
-            </Button>
-          </div>
-
-          <div>
-            <h3 className="mb-2 text-sm font-semibold">
-              2. Push the plugin path to every machine
-            </h3>
-            <p className="text-muted-foreground mb-3 text-sm">
-              Have your MDM (Intune, Jamf, Workspace ONE) extract the plugin to
-              a standard path on every developer's machine and push the
-              corresponding{" "}
-              <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                chat.pluginLocations
-              </code>{" "}
-              entry to VSCode user settings.
-            </p>
-          </div>
-        </TabsContent>
-      </Tabs>
+      <div className="space-y-3 border-t pt-4">
+        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+          Standalone ZIP (fallback)
+        </p>
+        <p className="text-muted-foreground text-sm">
+          For orgs that don't use the marketplace, download a self-contained ZIP
+          with the observability plugin and register it via{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            chat.pluginLocations
+          </code>
+          . Each download mints a fresh hooks-scoped API key.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleDownload}
+          disabled={downloading}
+        >
+          {downloading ? "Downloading…" : "Download VSCode Copilot ZIP"}
+        </Button>
+      </div>
 
       <div className="flex items-center gap-3">
         <Button variant="outline" size="sm" asChild>
           <a
-            href="https://code.visualstudio.com/docs/copilot/customization/hooks"
+            href="https://code.visualstudio.com/docs/copilot/customization/agent-plugins"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2"
           >
             <ExternalLink className="size-4" />
-            Hooks Docs
+            Plugin Docs
           </a>
         </Button>
         <Button variant="outline" size="sm" asChild>
           <a
-            href="https://code.visualstudio.com/docs/setup/enterprise"
+            href="https://code.visualstudio.com/docs/enterprise/policies"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2"
           >
             <ExternalLink className="size-4" />
-            VSCode Enterprise Setup
+            Enterprise Policies
           </a>
         </Button>
       </div>
@@ -677,7 +678,12 @@ export function HooksSetupDialog({
               repoName={publishStatus?.repoName ?? undefined}
             />
           )}
-          {selected === "copilot" && <CopilotInstallContent />}
+          {selected === "copilot" && (
+            <CopilotInstallContent
+              marketplaceUrl={publishStatus?.marketplaceUrl}
+              repoName={publishStatus?.repoName ?? undefined}
+            />
+          )}
         </div>
       </Dialog.Content>
     </Dialog>

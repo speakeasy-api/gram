@@ -448,14 +448,18 @@ function CursorInstallContent({
  * manual 3-step instructions as a fallback.
  */
 function CodexInstallContent({
-  repoOwner,
   repoName,
-}: Pick<ContentProps, "repoOwner" | "repoName">) {
+  marketplaceUrl,
+}: Pick<ContentProps, "repoName" | "marketplaceUrl">) {
   const { fetch: authFetch } = useFetcher();
   const [isDownloading, setIsDownloading] = useState(false);
 
-  const repoUrl = `https://github.com/${repoOwner}/${repoName}`;
-  const addCommand = `codex plugin marketplace add ${repoUrl}`;
+  // Gram's marketplace proxy serves the repo over Smart HTTP with a token
+  // baked into the URL — no per-user git credentials, no GitHub auth dance.
+  // Falls back to null when publish hasn't yet minted a marketplace token.
+  const addCommand = marketplaceUrl
+    ? `codex plugin marketplace add ${marketplaceUrl}`
+    : null;
 
   // repoName = "<org-slug>-gram"; derive plugin name by replacing the suffix.
   const pluginName = repoName.replace(/-gram$/, "-observability-codex");
@@ -530,16 +534,22 @@ function CodexInstallContent({
           <h4 className="mb-2 text-sm font-semibold">
             1. Register the marketplace
           </h4>
-          <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
-            <div className="flex items-center justify-between gap-2">
-              <code className="break-all">{addCommand}</code>
-              <CopyButton
-                size="inline"
-                text={addCommand}
-                tooltip="Copy marketplace add command"
-              />
+          {addCommand ? (
+            <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <code className="break-all">{addCommand}</code>
+                <CopyButton
+                  size="inline"
+                  text={addCommand}
+                  tooltip="Copy marketplace add command"
+                />
+              </div>
             </div>
-          </div>
+          ) : (
+            <p className="text-muted-foreground text-sm italic">
+              Publish your plugins first to mint a marketplace URL.
+            </p>
+          )}
         </div>
 
         <div>
@@ -615,114 +625,125 @@ function CodexInstallContent({
 }
 
 /**
- * VSCode Copilot install. The marketplace mechanism doesn't apply here:
- * VSCode clones plugin sources via each user's local git credentials, so
- * Gram's published marketplace repo can't be used directly. Users instead
- * download per-plugin ZIPs (from each plugin's detail page) and register
- * the unpacked directories in `chat.pluginLocations`.
+ * VSCode Copilot install. Uses the `chat.plugins.marketplaces` setting,
+ * which accepts a Git remote URL — Gram's marketplace proxy serves that URL
+ * over Smart HTTP without per-user GitHub credentials, so the fleet-wide
+ * "VSCode clones via each user's git config" problem doesn't apply here.
+ *
+ * Reference: https://code.visualstudio.com/docs/copilot/customization/agent-plugins
  */
-function CopilotInstallContent() {
-  const settingsExample = `{
-  "chat.pluginLocations": {
-    "~/.gram/<plugin-name>": true
-  }
-}`;
+function CopilotInstallContent({
+  repoName,
+  marketplaceUrl,
+}: Pick<ContentProps, "repoName" | "marketplaceUrl">) {
+  // chat.plugins.marketplaces accepts an object keyed by a stable
+  // identifier; we use repoName ("<org-slug>-gram") so the entry matches
+  // what users see in the @agentPlugins search UI.
+  const marketplaceSettings = marketplaceUrl
+    ? JSON.stringify(
+        {
+          "chat.plugins.enabled": true,
+          "chat.plugins.marketplaces": {
+            [repoName]: marketplaceUrl,
+          },
+        },
+        null,
+        2,
+      )
+    : null;
 
   return (
     <div className="min-w-0 space-y-6">
-      <div className="border-primary/30 bg-primary/5 space-y-2 rounded-lg border p-4">
-        <p className="text-muted-foreground text-sm">
-          VSCode Copilot's marketplace clones plugins via each user's local git
-          credentials, so Gram's published marketplace repo can't be used here.
-          Distribute each plugin ZIP directly — either per-user or fleet-wide
-          via MDM.
-        </p>
-      </div>
-
-      <div>
-        <h4 className="mb-2 text-sm font-semibold">1. Download a plugin ZIP</h4>
-        <p className="text-muted-foreground text-sm">
-          From any plugin's detail page, use{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
-            Download → VSCode Copilot
-          </code>
-          . Repeat for every plugin you want to ship.
-        </p>
-      </div>
-
       <div>
         <h4 className="mb-2 text-sm font-semibold">
-          2. Unzip to a stable path
+          1. Enable agent plugins and register the marketplace
         </h4>
-        <p className="text-muted-foreground text-sm">
-          Extract each plugin to a persistent directory under e.g.{" "}
+        <p className="text-muted-foreground mb-3 text-sm">
+          Add the following to VSCode user settings (
           <code className="bg-muted rounded px-1 py-0.5 text-xs">
-            ~/.gram/&lt;plugin-name&gt;
+            settings.json
           </code>
-          . VSCode reads the plugin from disk on every session.
+          ). Gram's marketplace proxy serves the repo over a token-bearing Smart
+          HTTP URL — no GitHub credentials required on each developer's machine.
         </p>
-      </div>
-
-      <div>
-        <h4 className="mb-2 text-sm font-semibold">
-          3. Register each path in VSCode settings
-        </h4>
-        <p className="text-muted-foreground mb-2 text-sm">
-          Add the unpacked directories to{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
-            chat.pluginLocations
-          </code>{" "}
-          in VSCode user settings:
-        </p>
-        <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
-          <div className="flex items-start justify-between gap-2">
-            <pre className="whitespace-pre-wrap">{settingsExample}</pre>
-            <CopyButton
-              size="inline"
-              text={settingsExample}
-              tooltip="Copy settings snippet"
-            />
+        {marketplaceSettings ? (
+          <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+            <div className="flex items-start justify-between gap-2">
+              <pre className="whitespace-pre-wrap">{marketplaceSettings}</pre>
+              <CopyButton
+                size="inline"
+                text={marketplaceSettings}
+                tooltip="Copy settings snippet"
+              />
+            </div>
           </div>
-        </div>
+        ) : (
+          <p className="text-muted-foreground text-sm italic">
+            Publish your plugins first to mint a marketplace URL.
+          </p>
+        )}
       </div>
 
       <div>
-        <h4 className="mb-2 text-sm font-semibold">
-          4. Enable observability hooks
-        </h4>
+        <h4 className="mb-2 text-sm font-semibold">2. Install plugins</h4>
         <p className="text-muted-foreground text-sm">
-          Download the observability plugin from the <strong>Plugins</strong>{" "}
-          overview page (
+          In VSCode, open the Extensions view and filter with{" "}
           <code className="bg-muted rounded px-1 py-0.5 text-xs">
-            Download Observability Plugin → VSCode Copilot
+            @agentPlugins
+          </code>{" "}
+          to browse plugins from the registered marketplace, or run{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            Chat: Install Plugin From Source
+          </code>{" "}
+          from the Command Palette.
+        </p>
+      </div>
+
+      <div className="border-t" />
+
+      <div className="space-y-3">
+        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+          Fleet rollout
+        </p>
+        <p className="text-muted-foreground text-sm">
+          VSCode's policy schema exposes{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            ChatPluginsEnabled
+          </code>{" "}
+          but no granular policy for{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            chat.plugins.marketplaces
           </code>
-          ) and install it the same way. The embedded hooks-scoped API key
-          attributes every event to your org and project — no per-user setup
-          required.
+          . Deploy the snippet above to every developer's{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            settings.json
+          </code>{" "}
+          via your MDM (Intune, Jamf, Workspace ONE) and toggle the policy on at
+          the org level.
         </p>
       </div>
 
       <div className="flex items-center gap-3">
         <Button variant="outline" size="sm" asChild>
           <a
-            href="https://code.visualstudio.com/docs/copilot/customization/hooks"
+            href="https://code.visualstudio.com/docs/copilot/customization/agent-plugins"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2"
           >
             <ExternalLink className="size-4" />
-            Hooks Docs
+            Plugin Docs
           </a>
         </Button>
         <Button variant="outline" size="sm" asChild>
           <a
-            href="https://code.visualstudio.com/docs/setup/enterprise"
+            href="https://code.visualstudio.com/docs/enterprise/policies"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2"
           >
             <ExternalLink className="size-4" />
-            VSCode Enterprise Setup
+            Enterprise Policies
           </a>
         </Button>
       </div>
@@ -811,11 +832,16 @@ export function InstallInstructionsDialog({
           )}
           {selected === "codex" && (
             <CodexInstallContent
-              repoOwner={content.repoOwner}
               repoName={content.repoName}
+              marketplaceUrl={content.marketplaceUrl}
             />
           )}
-          {selected === "copilot" && <CopilotInstallContent />}
+          {selected === "copilot" && (
+            <CopilotInstallContent
+              repoName={content.repoName}
+              marketplaceUrl={content.marketplaceUrl}
+            />
+          )}
         </div>
       </Dialog.Content>
     </Dialog>
