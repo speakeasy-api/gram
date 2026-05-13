@@ -231,7 +231,7 @@
     <ul id="flows-list"></ul>
   </aside>
   <section id="graph-panel">
-    <svg id="graph" viewBox="0 0 1010 560" preserveAspectRatio="xMidYMid meet">
+    <svg id="graph" viewBox="0 -90 1010 650" preserveAspectRatio="xMidYMid meet">
       <defs>
         <marker id="arrow-active" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" fill="#ff7849"/>
@@ -254,6 +254,8 @@
 <script id="workflow-data" type="application/json">
 {
   "nodes": [
+    { "id": "okta",               "x": 430, "y": -60, "tier": "entry",   "label": "Customer IdP (Okta / Azure AD / …)" },
+
     { "id": "email-inbox",        "x":  30, "y":  30, "tier": "entry",   "label": "Email inbox" },
     { "id": "login",              "x": 230, "y":  30, "tier": "auth",    "label": "/login" },
     { "id": "workos",             "x": 430, "y":  30, "tier": "auth",    "label": "WorkOS / IdP" },
@@ -280,6 +282,7 @@
     { "id": "slack-apps",         "x":  30, "y": 470, "tier": "surface", "label": "/slack/:appId" },
     { "id": "slack-oauth",        "x": 230, "y": 470, "tier": "entry",   "label": "Slack OAuth" },
     { "id": "embedded-elements",  "x": 430, "y": 470, "tier": "entry",   "label": "Customer's site (embed)" },
+    { "id": "worker",             "x": 630, "y": 470, "tier": "obs",     "label": "Temporal worker (sync)" },
     { "id": "logs",               "x": 830, "y": 470, "tier": "obs",     "label": "/logs (Tools/MCP/Agents)" }
   ],
   "flows": [
@@ -410,6 +413,34 @@
         { "from": "login",              "to": "speakeasy-platform", "protocol": "Gram exchanges the code for a Speakeasy ID token",                            "payload": "POST <speakeasy>/v1/speakeasy_provider/exchange { code }",                                                                    "note": "server/internal/auth/speakeasyclient.ExchangeCode" },
         { "from": "login",              "to": "speakeasy-platform", "protocol": "Gram validates the ID token to read the user identity",                       "payload": "GET <speakeasy>/v1/speakeasy_provider/validate (Bearer <id_token>) → { UserID, Email, DisplayName, WorkosID }",               "note": "Speakeasy UserID becomes Gram users.id; WorkosID is stored to link back for membership sync" },
         { "from": "login",              "to": "workspace-home",     "protocol": "Upsert the Gram user + sync WorkOS org memberships → set session cookie → /", "payload": "BootstrapUser → users { id = SpeakeasyUserID, workos_id, email } ; syncWorkOSMemberships pulls the WorkOS org list",          "note": "Three linked records: WorkOS user (auth) ↔ Speakeasy user (token issuer, == users.id) ↔ Gram users row (workos_id back-link). Watch the users.email UNIQUE collision when Speakeasy's user ID changes for an existing email — see auto-memory project_users_email_unique_violation" }
+      ]
+    },
+    {
+      "id": "federated-signin",
+      "title": "Federated sign-in (customer IdP)",
+      "summary": "Same chain as identity-flow, but the customer's Okta does the actual authentication — WorkOS turns into a broker",
+      "steps": [
+        { "from": "login",              "to": "speakeasy-platform", "protocol": "Click 'Sign in' → redirect to Speakeasy",                                       "payload": "GET <speakeasy>/v1/speakeasy_provider/login?redirect_uri=…" },
+        { "from": "speakeasy-platform", "to": "workos",             "protocol": "Speakeasy redirects to its identity broker",                                    "payload": "WorkOS OAuth /authorize" },
+        { "from": "workos",             "to": "okta",               "protocol": "WorkOS routes to the customer's federated connection",                          "payload": "SAML AuthnRequest or OIDC /authorize → Okta",                                                                                  "note": "Decided by email-domain matching or by the WorkOS organization configured on the request. The user now sees their own company's Okta login screen, not WorkOS's" },
+        { "from": "okta",               "to": "workos",             "protocol": "User signs in with Okta credentials → Okta posts assertion back",               "payload": "SAML Response (or OIDC code) — Okta's user id is preserved as the WorkOS user's idp_id",                                       "note": "MFA, device trust, conditional access all enforced by Okta, not WorkOS" },
+        { "from": "workos",             "to": "speakeasy-platform", "protocol": "WorkOS hands a code back to Speakeasy",                                          "note": "From here on, Speakeasy doesn't know (or care) which IdP authenticated the user — the rest of the chain is identical to identity-flow" },
+        { "from": "speakeasy-platform", "to": "login",              "protocol": "Speakeasy redirects to Gram's /auth/callback",                                  "payload": "GET /auth/callback?code=<speakeasy_code>" },
+        { "from": "login",              "to": "speakeasy-platform", "protocol": "Exchange + validate ID token",                                                  "payload": "→ { UserID, Email, DisplayName, WorkosID }",                                                                                  "note": "Same speakeasyclient.ExchangeCode + ValidateIDToken as the non-federated path" },
+        { "from": "login",              "to": "workspace-home",     "protocol": "BootstrapUser is usually a no-op upsert here → session cookie → /",             "payload": "The users row + memberships were pre-provisioned by the directory-sync flow",                                                  "note": "First-time-on-Gram users still create the row on this step if SCIM hasn't yet covered them. Once role mapping is reconciled, the user lands on the workspace with the correct grants already in place" }
+      ]
+    },
+    {
+      "id": "directory-sync",
+      "title": "Directory sync: Okta → WorkOS → Gram",
+      "summary": "Continuous SCIM pipeline keeping users, groups, and roles in lockstep — independent of any sign-in",
+      "steps": [
+        { "from": "okta",   "to": "workos",         "protocol": "Okta SCIM client pushes user/group changes",                              "payload": "POST /scim/v2/Users or /scim/v2/Groups (RFC 7643 shape)",                                                       "note": "Fires whenever an Okta admin adds/edits/removes a user or changes a group's membership. WorkOS records each under the customer's WorkOS organization with idp_id = Okta user id" },
+        { "from": "workos", "to": "worker",         "protocol": "Gram's Temporal worker polls WorkOS's events stream on a schedule",       "payload": "GET workos.com/events?after=<sinceEventID>&organization_id=<workos_org>",                                       "note": "ProcessWorkOSOrganizationEvents activity (server/internal/background/activities/process_workos_org_events.go) tracks the per-org sinceEventID cursor in the workos_organization_sync table" },
+        { "from": "worker", "to": "workspace-home", "protocol": "Worker applies dsync.user.* events to the users table in a transaction", "payload": "INSERT/UPDATE users { id, workos_id, email, display_name }; UPSERT memberships(user_id, org_id, role)",         "note": "workspace-home shown here as a proxy for the Gram users/orgs tables — what makes /workspace-home reachable for this user" },
+        { "from": "workos", "to": "worker",         "protocol": "Group membership events arrive in the same stream",                      "payload": "dsync.group.user_added / dsync.group.user_removed / dsync.group.updated",                                       "note": "Role-relevant events are routed to ProcessWorkOSGlobalRoleEvents in parallel" },
+        { "from": "worker", "to": "workspace-home", "protocol": "Worker maps WorkOS group → Gram role and writes role grants",             "payload": "INSERT/DELETE role_grants(principal_id, role, scope)",                                                          "note": "Okta group 'Admins' → Gram role 'workspace_admin', etc. See the gram-rbac skill for the scope model. Customer-visible effect: a user added to an Okta group gets the corresponding Gram permissions within ~30s, no admin click needed" },
+        { "from": "worker", "to": "workspace-home", "protocol": "Cursor advances in the same transaction as the writes",                   "payload": "UPDATE workos_organization_sync SET last_event_id = <latest>",                                                  "note": "Exactly-once semantics: if the worker crashes mid-batch, replay picks up from the last committed cursor" }
       ]
     }
   ]
