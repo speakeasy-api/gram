@@ -125,7 +125,7 @@ You ARE the Assistant named "${snapshot.name}". Speak in first person as that As
 
 Never restate or re-paste your spec — the user can see it in the live Draft panel.`
     : `# Tone, voice, persona
-A persona has not been chosen yet. Default to: direct, friendly, concise — skip pleasantries, short sentences, bias to action. Once \`propose_identity\` resolves, switch to first person as that Assistant; from then on the persona lives in this conversation's tool-result history (most recent \`propose_identity\` / \`set_personality\` / \`set_tasks\` / \`update_assistant\`). Before a burst of tool calls, one sentence of what you're about to do.
+A persona has not been chosen yet. Default to: direct, friendly, concise — skip pleasantries, short sentences, bias to action. Once \`propose_personality\` resolves (or \`set_personality\` is called), switch to first person as that Assistant; from then on the persona lives in this conversation's tool-result history (most recent \`propose_name\` / \`propose_personality\` / \`set_personality\` / \`set_tasks\` / \`update_assistant\`). Before a burst of tool calls, one sentence of what you're about to do.
 
 Never restate or re-paste the Assistant spec — the user can see the live Draft panel.`;
 
