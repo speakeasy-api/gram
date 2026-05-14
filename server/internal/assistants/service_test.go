@@ -1259,6 +1259,40 @@ func TestServiceCoreReapStoppedAssistantRuntimesIgnoresSiblingActivity(t *testin
 	require.Equal(t, runtimeStateReaped, stopped.State)
 }
 
+func TestServiceCoreReapStoppedAssistantRuntimesSkipsHistoricalRowWithFresherStoppedSibling(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_stopped_historical")
+	require.NoError(t, err)
+
+	// `ReserveAssistantRuntime` carries the prior row's `backend_metadata_json`
+	// forward, so an old stopped row can share `machine_id` with a much
+	// newer stopped row. Reaping the old one would destroy the machine the
+	// fresh sibling still references — well inside its own TTL.
+	projectID, assistantID, threadID := insertReapableProject(t, conn, "historical-shared-machine")
+	oldID := insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateStopped, "gram-asst-shared", time.Now().UTC().Add(-30*24*time.Hour))
+	freshID := insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateStopped, "gram-asst-shared", time.Now().UTC().Add(-time.Hour))
+
+	reapMachineCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapMachineCalls: reapMachineCalls}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	result, err := core.ReapStoppedAssistantRuntimes(t.Context(), ReapStoppedAssistantRuntimesParams{
+		StoppedTTL: 14 * 24 * time.Hour,
+		BatchSize:  10,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Reaped)
+	require.EqualValues(t, 0, reapMachineCalls.Load(), "historical rows must not trigger destroys while a fresher stopped sibling owns the machine")
+
+	old, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: oldID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateStopped, old.State)
+	fresh, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: freshID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateStopped, fresh.State)
+}
+
 func TestServiceCoreReapStoppedAssistantRuntimesSkipsThreadWithFresherStartingRow(t *testing.T) {
 	t.Parallel()
 

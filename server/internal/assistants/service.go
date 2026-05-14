@@ -1099,8 +1099,7 @@ func (s *ServiceCore) ReapStoppedAssistantRuntimes(ctx context.Context, params R
 		StoppedState:  runtimeStateStopped,
 		FailedState:   runtimeStateFailed,
 		StoppedBefore: conv.ToPGTimestamptz(time.Now().UTC().Add(-params.StoppedTTL)),
-		StartingState: runtimeStateStarting,
-		ActiveState:   runtimeStateActive,
+		ReapedState:   runtimeStateReaped,
 		LimitCount:    params.BatchSize,
 	})
 	if err != nil {

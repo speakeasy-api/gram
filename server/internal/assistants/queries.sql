@@ -528,9 +528,11 @@ WHERE id = @runtime_id
 -- Per-thread reap candidates: rows in stopped or failed whose own updated_at
 -- has aged past @stopped_before. No assistant-wide activity check so a single
 -- still-active thread on an assistant cannot pin every dead sibling's machine
--- indefinitely. The NOT EXISTS guard is per-thread: if admit raced ahead and
--- inserted a fresh starting/active row on the same thread (warm-resume path),
--- skip — that row may still be inheriting and restarting this row's machine.
+-- indefinitely. The NOT EXISTS guard restricts the candidate to the most
+-- recent non-reaped row per thread: ReserveAssistantRuntime copies the latest
+-- non-empty metadata into each new row, so a stale older sibling can share
+-- `machine_id` with the current owner — destroying it would yank the live
+-- machine out from under a fresher row that is still inside its own TTL.
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.backend_metadata_json <> '{}'::jsonb
@@ -542,7 +544,7 @@ WHERE r.backend_metadata_json <> '{}'::jsonb
     WHERE r2.assistant_thread_id = r.assistant_thread_id
       AND r2.project_id = r.project_id
       AND r2.created_at > r.created_at
-      AND r2.state IN (@starting_state, @active_state)
+      AND r2.state <> @reaped_state
   )
 ORDER BY r.updated_at ASC
 LIMIT @limit_count;
