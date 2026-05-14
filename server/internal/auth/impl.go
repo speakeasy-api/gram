@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -660,7 +661,7 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeInvalid, errors.New("organization name contains invalid characters"), "organization name contains invalid characters")
 	}
 
-	slug, err := s.findUniqueSlug(ctx, slugify(payload.OrgName))
+	slug, err := orgslug.FindUnique(ctx, s.orgRepo, orgslug.Slugify(payload.OrgName))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error finding unique slug").Log(ctx, s.logger)
 	}
@@ -710,7 +711,7 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sessions.CachedUserInfo, session *sessions.Session) (string, error) {
 	orgName := generateLegibleOrgName()
 
-	slug, err := s.findUniqueSlug(ctx, slugify(orgName))
+	slug, err := orgslug.FindUnique(ctx, s.orgRepo, orgslug.Slugify(orgName))
 	if err != nil {
 		return "", fmt.Errorf("find unique slug: %w", err)
 	}
@@ -953,46 +954,6 @@ func (s *Service) buildCallbackURL(ctx context.Context) string {
 
 // validOrgNameRegex allows alphanumeric characters, spaces, hyphens, and underscores.
 var validOrgNameRegex = regexp.MustCompile(`^[a-zA-Z0-9\s-_]+$`)
-
-var slugifyRe = regexp.MustCompile(`[^a-z0-9]+`)
-
-// slugify converts a name into a URL-safe slug.
-func slugify(name string) string {
-	s := strings.ToLower(strings.TrimSpace(name))
-	s = slugifyRe.ReplaceAllString(s, "-")
-	s = strings.Trim(s, "-")
-	return s
-}
-
-const maxSlugAttempts = 10
-
-// findUniqueSlug checks the DB for an existing org with the given slug and
-// appends a random 4-character suffix until a unique one is found.
-func (s *Service) findUniqueSlug(ctx context.Context, base string) (string, error) {
-	candidate := base
-	for range maxSlugAttempts {
-		_, err := s.orgRepo.GetOrganizationMetadataBySlug(ctx, candidate)
-		if err != nil {
-			// No row found — slug is available.
-			return candidate, nil
-		}
-		suffix, err := randomHexSuffix(4)
-		if err != nil {
-			return "", fmt.Errorf("generate slug suffix: %w", err)
-		}
-		candidate = base + "-" + suffix
-	}
-	return "", errors.New("unable to find unique slug after max attempts")
-}
-
-// randomHexSuffix returns n random lowercase hex characters.
-func randomHexSuffix(n int) (string, error) {
-	b := make([]byte, (n+1)/2)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("crypto/rand: %w", err)
-	}
-	return hex.EncodeToString(b)[:n], nil
-}
 
 // callbackRedirectURL determines the redirect location after authentication. It
 // only allows relative URLs to prevent open redirect attacks (see relativeURL).
