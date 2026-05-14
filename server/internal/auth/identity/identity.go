@@ -490,6 +490,9 @@ func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params sessions.Au
 	q.Set("state", params.State)
 	q.Set("scope", "openid email profile")
 	q.Set("provider", "authkit")
+	if params.OrganizationID != "" {
+		q.Set("organization_id", params.OrganizationID)
+	}
 
 	authorizeBase := workosAuthorizeEndpoint
 	if !strings.HasPrefix(r.idpClientID, "client_") {

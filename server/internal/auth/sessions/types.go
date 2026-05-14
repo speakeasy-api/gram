@@ -81,4 +81,5 @@ type AuthURLParams struct {
 	State           string
 	ClientID        string
 	ScopesSupported []string
+	OrganizationID  string // WorkOS org ID — when set, AuthKit skips the org selector
 }
