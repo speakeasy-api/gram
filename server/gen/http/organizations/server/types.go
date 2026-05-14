@@ -21,6 +21,27 @@ type SendInviteRequestBody struct {
 	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
 }
 
+// GetResponseBody is the type of the "organizations" service "get" endpoint
+// HTTP response body.
+type GetResponseBody struct {
+	// The ID of the organization
+	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the organization
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the organization
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// Whether webhooks support is initialized for the organization
+	WebhooksOnboarded bool `form:"webhooks_onboarded" json:"webhooks_onboarded" xml:"webhooks_onboarded"`
+	// Whether webhooks are enabled for the organization
+	WebhooksEnabled bool `form:"webhooks_enabled" json:"webhooks_enabled" xml:"webhooks_enabled"`
+	// The creation date of the organization.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the organization.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // SendInviteResponseBody is the type of the "organizations" service
 // "sendInvite" endpoint HTTP response body.
 type SendInviteResponseBody struct {
@@ -55,6 +76,195 @@ type ListInvitesResponseBody struct {
 type ListUsersResponseBody struct {
 	// Users linked to the organization in Gram.
 	Users []*OrganizationUserResponseBody `form:"users" json:"users" xml:"users"`
+}
+
+// CreatePortalSessionResponseBody is the type of the "organizations" service
+// "createPortalSession" endpoint HTTP response body.
+type CreatePortalSessionResponseBody struct {
+	// URL for the webhook portal session.
+	URL string `form:"url" json:"url" xml:"url"`
+	// Front-end token for the webhook portal session.
+	Token string `form:"token" json:"token" xml:"token"`
+}
+
+// GetUnauthorizedResponseBody is the type of the "organizations" service "get"
+// endpoint HTTP response body for the "unauthorized" error.
+type GetUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetForbiddenResponseBody is the type of the "organizations" service "get"
+// endpoint HTTP response body for the "forbidden" error.
+type GetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetBadRequestResponseBody is the type of the "organizations" service "get"
+// endpoint HTTP response body for the "bad_request" error.
+type GetBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNotFoundResponseBody is the type of the "organizations" service "get"
+// endpoint HTTP response body for the "not_found" error.
+type GetNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetConflictResponseBody is the type of the "organizations" service "get"
+// endpoint HTTP response body for the "conflict" error.
+type GetConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUnsupportedMediaResponseBody is the type of the "organizations" service
+// "get" endpoint HTTP response body for the "unsupported_media" error.
+type GetUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInvalidResponseBody is the type of the "organizations" service "get"
+// endpoint HTTP response body for the "invalid" error.
+type GetInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetInvariantViolationResponseBody is the type of the "organizations" service
+// "get" endpoint HTTP response body for the "invariant_violation" error.
+type GetInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUnexpectedResponseBody is the type of the "organizations" service "get"
+// endpoint HTTP response body for the "unexpected" error.
+type GetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayErrorResponseBody is the type of the "organizations" service "get"
+// endpoint HTTP response body for the "gateway_error" error.
+type GetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
 // SendInviteUnauthorizedResponseBody is the type of the "organizations"
@@ -977,6 +1187,575 @@ type RemoveUserGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// EnableWebhooksUnauthorizedResponseBody is the type of the "organizations"
+// service "enableWebhooks" endpoint HTTP response body for the "unauthorized"
+// error.
+type EnableWebhooksUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableWebhooksForbiddenResponseBody is the type of the "organizations"
+// service "enableWebhooks" endpoint HTTP response body for the "forbidden"
+// error.
+type EnableWebhooksForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableWebhooksBadRequestResponseBody is the type of the "organizations"
+// service "enableWebhooks" endpoint HTTP response body for the "bad_request"
+// error.
+type EnableWebhooksBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableWebhooksNotFoundResponseBody is the type of the "organizations"
+// service "enableWebhooks" endpoint HTTP response body for the "not_found"
+// error.
+type EnableWebhooksNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableWebhooksConflictResponseBody is the type of the "organizations"
+// service "enableWebhooks" endpoint HTTP response body for the "conflict"
+// error.
+type EnableWebhooksConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableWebhooksUnsupportedMediaResponseBody is the type of the
+// "organizations" service "enableWebhooks" endpoint HTTP response body for the
+// "unsupported_media" error.
+type EnableWebhooksUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableWebhooksInvalidResponseBody is the type of the "organizations" service
+// "enableWebhooks" endpoint HTTP response body for the "invalid" error.
+type EnableWebhooksInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableWebhooksInvariantViolationResponseBody is the type of the
+// "organizations" service "enableWebhooks" endpoint HTTP response body for the
+// "invariant_violation" error.
+type EnableWebhooksInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableWebhooksUnexpectedResponseBody is the type of the "organizations"
+// service "enableWebhooks" endpoint HTTP response body for the "unexpected"
+// error.
+type EnableWebhooksUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableWebhooksGatewayErrorResponseBody is the type of the "organizations"
+// service "enableWebhooks" endpoint HTTP response body for the "gateway_error"
+// error.
+type EnableWebhooksGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableWebhooksUnauthorizedResponseBody is the type of the "organizations"
+// service "disableWebhooks" endpoint HTTP response body for the "unauthorized"
+// error.
+type DisableWebhooksUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableWebhooksForbiddenResponseBody is the type of the "organizations"
+// service "disableWebhooks" endpoint HTTP response body for the "forbidden"
+// error.
+type DisableWebhooksForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableWebhooksBadRequestResponseBody is the type of the "organizations"
+// service "disableWebhooks" endpoint HTTP response body for the "bad_request"
+// error.
+type DisableWebhooksBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableWebhooksNotFoundResponseBody is the type of the "organizations"
+// service "disableWebhooks" endpoint HTTP response body for the "not_found"
+// error.
+type DisableWebhooksNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableWebhooksConflictResponseBody is the type of the "organizations"
+// service "disableWebhooks" endpoint HTTP response body for the "conflict"
+// error.
+type DisableWebhooksConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableWebhooksUnsupportedMediaResponseBody is the type of the
+// "organizations" service "disableWebhooks" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DisableWebhooksUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableWebhooksInvalidResponseBody is the type of the "organizations"
+// service "disableWebhooks" endpoint HTTP response body for the "invalid"
+// error.
+type DisableWebhooksInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableWebhooksInvariantViolationResponseBody is the type of the
+// "organizations" service "disableWebhooks" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DisableWebhooksInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableWebhooksUnexpectedResponseBody is the type of the "organizations"
+// service "disableWebhooks" endpoint HTTP response body for the "unexpected"
+// error.
+type DisableWebhooksUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableWebhooksGatewayErrorResponseBody is the type of the "organizations"
+// service "disableWebhooks" endpoint HTTP response body for the
+// "gateway_error" error.
+type DisableWebhooksGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePortalSessionUnauthorizedResponseBody is the type of the
+// "organizations" service "createPortalSession" endpoint HTTP response body
+// for the "unauthorized" error.
+type CreatePortalSessionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePortalSessionForbiddenResponseBody is the type of the "organizations"
+// service "createPortalSession" endpoint HTTP response body for the
+// "forbidden" error.
+type CreatePortalSessionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePortalSessionBadRequestResponseBody is the type of the "organizations"
+// service "createPortalSession" endpoint HTTP response body for the
+// "bad_request" error.
+type CreatePortalSessionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePortalSessionNotFoundResponseBody is the type of the "organizations"
+// service "createPortalSession" endpoint HTTP response body for the
+// "not_found" error.
+type CreatePortalSessionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePortalSessionConflictResponseBody is the type of the "organizations"
+// service "createPortalSession" endpoint HTTP response body for the "conflict"
+// error.
+type CreatePortalSessionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePortalSessionUnsupportedMediaResponseBody is the type of the
+// "organizations" service "createPortalSession" endpoint HTTP response body
+// for the "unsupported_media" error.
+type CreatePortalSessionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePortalSessionInvalidResponseBody is the type of the "organizations"
+// service "createPortalSession" endpoint HTTP response body for the "invalid"
+// error.
+type CreatePortalSessionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePortalSessionInvariantViolationResponseBody is the type of the
+// "organizations" service "createPortalSession" endpoint HTTP response body
+// for the "invariant_violation" error.
+type CreatePortalSessionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePortalSessionUnexpectedResponseBody is the type of the "organizations"
+// service "createPortalSession" endpoint HTTP response body for the
+// "unexpected" error.
+type CreatePortalSessionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePortalSessionGatewayErrorResponseBody is the type of the
+// "organizations" service "createPortalSession" endpoint HTTP response body
+// for the "gateway_error" error.
+type CreatePortalSessionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // OrganizationInvitationResponseBody is used to define fields on response body
 // types.
 type OrganizationInvitationResponseBody struct {
@@ -1016,6 +1795,22 @@ type OrganizationUserResponseBody struct {
 	WorkosMembershipID *string `form:"workos_membership_id,omitempty" json:"workos_membership_id,omitempty" xml:"workos_membership_id,omitempty"`
 	CreatedAt          string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt          string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// NewGetResponseBody builds the HTTP response body from the result of the
+// "get" endpoint of the "organizations" service.
+func NewGetResponseBody(res *organizations.Organization) *GetResponseBody {
+	body := &GetResponseBody{
+		ID:                res.ID,
+		Name:              res.Name,
+		Slug:              string(res.Slug),
+		AccountType:       res.AccountType,
+		WebhooksOnboarded: res.WebhooksOnboarded,
+		WebhooksEnabled:   res.WebhooksEnabled,
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
+	}
+	return body
 }
 
 // NewSendInviteResponseBody builds the HTTP response body from the result of
@@ -1069,6 +1864,156 @@ func NewListUsersResponseBody(res *organizations.ListUsersResult) *ListUsersResp
 		}
 	} else {
 		body.Users = []*OrganizationUserResponseBody{}
+	}
+	return body
+}
+
+// NewCreatePortalSessionResponseBody builds the HTTP response body from the
+// result of the "createPortalSession" endpoint of the "organizations" service.
+func NewCreatePortalSessionResponseBody(res *organizations.CreatePortalSessionResult) *CreatePortalSessionResponseBody {
+	body := &CreatePortalSessionResponseBody{
+		URL:   res.URL,
+		Token: res.Token,
+	}
+	return body
+}
+
+// NewGetUnauthorizedResponseBody builds the HTTP response body from the result
+// of the "get" endpoint of the "organizations" service.
+func NewGetUnauthorizedResponseBody(res *goa.ServiceError) *GetUnauthorizedResponseBody {
+	body := &GetUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetForbiddenResponseBody builds the HTTP response body from the result of
+// the "get" endpoint of the "organizations" service.
+func NewGetForbiddenResponseBody(res *goa.ServiceError) *GetForbiddenResponseBody {
+	body := &GetForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetBadRequestResponseBody builds the HTTP response body from the result
+// of the "get" endpoint of the "organizations" service.
+func NewGetBadRequestResponseBody(res *goa.ServiceError) *GetBadRequestResponseBody {
+	body := &GetBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNotFoundResponseBody builds the HTTP response body from the result of
+// the "get" endpoint of the "organizations" service.
+func NewGetNotFoundResponseBody(res *goa.ServiceError) *GetNotFoundResponseBody {
+	body := &GetNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetConflictResponseBody builds the HTTP response body from the result of
+// the "get" endpoint of the "organizations" service.
+func NewGetConflictResponseBody(res *goa.ServiceError) *GetConflictResponseBody {
+	body := &GetConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUnsupportedMediaResponseBody builds the HTTP response body from the
+// result of the "get" endpoint of the "organizations" service.
+func NewGetUnsupportedMediaResponseBody(res *goa.ServiceError) *GetUnsupportedMediaResponseBody {
+	body := &GetUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInvalidResponseBody builds the HTTP response body from the result of
+// the "get" endpoint of the "organizations" service.
+func NewGetInvalidResponseBody(res *goa.ServiceError) *GetInvalidResponseBody {
+	body := &GetInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetInvariantViolationResponseBody builds the HTTP response body from the
+// result of the "get" endpoint of the "organizations" service.
+func NewGetInvariantViolationResponseBody(res *goa.ServiceError) *GetInvariantViolationResponseBody {
+	body := &GetInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUnexpectedResponseBody builds the HTTP response body from the result
+// of the "get" endpoint of the "organizations" service.
+func NewGetUnexpectedResponseBody(res *goa.ServiceError) *GetUnexpectedResponseBody {
+	body := &GetUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayErrorResponseBody builds the HTTP response body from the result
+// of the "get" endpoint of the "organizations" service.
+func NewGetGatewayErrorResponseBody(res *goa.ServiceError) *GetGatewayErrorResponseBody {
+	body := &GetGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }
@@ -1775,6 +2720,450 @@ func NewRemoveUserGatewayErrorResponseBody(res *goa.ServiceError) *RemoveUserGat
 	return body
 }
 
+// NewEnableWebhooksUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "enableWebhooks" endpoint of the "organizations" service.
+func NewEnableWebhooksUnauthorizedResponseBody(res *goa.ServiceError) *EnableWebhooksUnauthorizedResponseBody {
+	body := &EnableWebhooksUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableWebhooksForbiddenResponseBody builds the HTTP response body from
+// the result of the "enableWebhooks" endpoint of the "organizations" service.
+func NewEnableWebhooksForbiddenResponseBody(res *goa.ServiceError) *EnableWebhooksForbiddenResponseBody {
+	body := &EnableWebhooksForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableWebhooksBadRequestResponseBody builds the HTTP response body from
+// the result of the "enableWebhooks" endpoint of the "organizations" service.
+func NewEnableWebhooksBadRequestResponseBody(res *goa.ServiceError) *EnableWebhooksBadRequestResponseBody {
+	body := &EnableWebhooksBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableWebhooksNotFoundResponseBody builds the HTTP response body from the
+// result of the "enableWebhooks" endpoint of the "organizations" service.
+func NewEnableWebhooksNotFoundResponseBody(res *goa.ServiceError) *EnableWebhooksNotFoundResponseBody {
+	body := &EnableWebhooksNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableWebhooksConflictResponseBody builds the HTTP response body from the
+// result of the "enableWebhooks" endpoint of the "organizations" service.
+func NewEnableWebhooksConflictResponseBody(res *goa.ServiceError) *EnableWebhooksConflictResponseBody {
+	body := &EnableWebhooksConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableWebhooksUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "enableWebhooks" endpoint of the "organizations"
+// service.
+func NewEnableWebhooksUnsupportedMediaResponseBody(res *goa.ServiceError) *EnableWebhooksUnsupportedMediaResponseBody {
+	body := &EnableWebhooksUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableWebhooksInvalidResponseBody builds the HTTP response body from the
+// result of the "enableWebhooks" endpoint of the "organizations" service.
+func NewEnableWebhooksInvalidResponseBody(res *goa.ServiceError) *EnableWebhooksInvalidResponseBody {
+	body := &EnableWebhooksInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableWebhooksInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "enableWebhooks" endpoint of the "organizations"
+// service.
+func NewEnableWebhooksInvariantViolationResponseBody(res *goa.ServiceError) *EnableWebhooksInvariantViolationResponseBody {
+	body := &EnableWebhooksInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableWebhooksUnexpectedResponseBody builds the HTTP response body from
+// the result of the "enableWebhooks" endpoint of the "organizations" service.
+func NewEnableWebhooksUnexpectedResponseBody(res *goa.ServiceError) *EnableWebhooksUnexpectedResponseBody {
+	body := &EnableWebhooksUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableWebhooksGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "enableWebhooks" endpoint of the "organizations" service.
+func NewEnableWebhooksGatewayErrorResponseBody(res *goa.ServiceError) *EnableWebhooksGatewayErrorResponseBody {
+	body := &EnableWebhooksGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableWebhooksUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "disableWebhooks" endpoint of the "organizations"
+// service.
+func NewDisableWebhooksUnauthorizedResponseBody(res *goa.ServiceError) *DisableWebhooksUnauthorizedResponseBody {
+	body := &DisableWebhooksUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableWebhooksForbiddenResponseBody builds the HTTP response body from
+// the result of the "disableWebhooks" endpoint of the "organizations" service.
+func NewDisableWebhooksForbiddenResponseBody(res *goa.ServiceError) *DisableWebhooksForbiddenResponseBody {
+	body := &DisableWebhooksForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableWebhooksBadRequestResponseBody builds the HTTP response body from
+// the result of the "disableWebhooks" endpoint of the "organizations" service.
+func NewDisableWebhooksBadRequestResponseBody(res *goa.ServiceError) *DisableWebhooksBadRequestResponseBody {
+	body := &DisableWebhooksBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableWebhooksNotFoundResponseBody builds the HTTP response body from
+// the result of the "disableWebhooks" endpoint of the "organizations" service.
+func NewDisableWebhooksNotFoundResponseBody(res *goa.ServiceError) *DisableWebhooksNotFoundResponseBody {
+	body := &DisableWebhooksNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableWebhooksConflictResponseBody builds the HTTP response body from
+// the result of the "disableWebhooks" endpoint of the "organizations" service.
+func NewDisableWebhooksConflictResponseBody(res *goa.ServiceError) *DisableWebhooksConflictResponseBody {
+	body := &DisableWebhooksConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableWebhooksUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "disableWebhooks" endpoint of the "organizations"
+// service.
+func NewDisableWebhooksUnsupportedMediaResponseBody(res *goa.ServiceError) *DisableWebhooksUnsupportedMediaResponseBody {
+	body := &DisableWebhooksUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableWebhooksInvalidResponseBody builds the HTTP response body from the
+// result of the "disableWebhooks" endpoint of the "organizations" service.
+func NewDisableWebhooksInvalidResponseBody(res *goa.ServiceError) *DisableWebhooksInvalidResponseBody {
+	body := &DisableWebhooksInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableWebhooksInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "disableWebhooks" endpoint of the
+// "organizations" service.
+func NewDisableWebhooksInvariantViolationResponseBody(res *goa.ServiceError) *DisableWebhooksInvariantViolationResponseBody {
+	body := &DisableWebhooksInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableWebhooksUnexpectedResponseBody builds the HTTP response body from
+// the result of the "disableWebhooks" endpoint of the "organizations" service.
+func NewDisableWebhooksUnexpectedResponseBody(res *goa.ServiceError) *DisableWebhooksUnexpectedResponseBody {
+	body := &DisableWebhooksUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableWebhooksGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "disableWebhooks" endpoint of the "organizations"
+// service.
+func NewDisableWebhooksGatewayErrorResponseBody(res *goa.ServiceError) *DisableWebhooksGatewayErrorResponseBody {
+	body := &DisableWebhooksGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePortalSessionUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "createPortalSession" endpoint of the "organizations"
+// service.
+func NewCreatePortalSessionUnauthorizedResponseBody(res *goa.ServiceError) *CreatePortalSessionUnauthorizedResponseBody {
+	body := &CreatePortalSessionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePortalSessionForbiddenResponseBody builds the HTTP response body
+// from the result of the "createPortalSession" endpoint of the "organizations"
+// service.
+func NewCreatePortalSessionForbiddenResponseBody(res *goa.ServiceError) *CreatePortalSessionForbiddenResponseBody {
+	body := &CreatePortalSessionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePortalSessionBadRequestResponseBody builds the HTTP response body
+// from the result of the "createPortalSession" endpoint of the "organizations"
+// service.
+func NewCreatePortalSessionBadRequestResponseBody(res *goa.ServiceError) *CreatePortalSessionBadRequestResponseBody {
+	body := &CreatePortalSessionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePortalSessionNotFoundResponseBody builds the HTTP response body
+// from the result of the "createPortalSession" endpoint of the "organizations"
+// service.
+func NewCreatePortalSessionNotFoundResponseBody(res *goa.ServiceError) *CreatePortalSessionNotFoundResponseBody {
+	body := &CreatePortalSessionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePortalSessionConflictResponseBody builds the HTTP response body
+// from the result of the "createPortalSession" endpoint of the "organizations"
+// service.
+func NewCreatePortalSessionConflictResponseBody(res *goa.ServiceError) *CreatePortalSessionConflictResponseBody {
+	body := &CreatePortalSessionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePortalSessionUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createPortalSession" endpoint of the
+// "organizations" service.
+func NewCreatePortalSessionUnsupportedMediaResponseBody(res *goa.ServiceError) *CreatePortalSessionUnsupportedMediaResponseBody {
+	body := &CreatePortalSessionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePortalSessionInvalidResponseBody builds the HTTP response body from
+// the result of the "createPortalSession" endpoint of the "organizations"
+// service.
+func NewCreatePortalSessionInvalidResponseBody(res *goa.ServiceError) *CreatePortalSessionInvalidResponseBody {
+	body := &CreatePortalSessionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePortalSessionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createPortalSession" endpoint of the
+// "organizations" service.
+func NewCreatePortalSessionInvariantViolationResponseBody(res *goa.ServiceError) *CreatePortalSessionInvariantViolationResponseBody {
+	body := &CreatePortalSessionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePortalSessionUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createPortalSession" endpoint of the "organizations"
+// service.
+func NewCreatePortalSessionUnexpectedResponseBody(res *goa.ServiceError) *CreatePortalSessionUnexpectedResponseBody {
+	body := &CreatePortalSessionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePortalSessionGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "createPortalSession" endpoint of the "organizations"
+// service.
+func NewCreatePortalSessionGatewayErrorResponseBody(res *goa.ServiceError) *CreatePortalSessionGatewayErrorResponseBody {
+	body := &CreatePortalSessionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPayload builds a organizations service get endpoint payload.
+func NewGetPayload(sessionToken *string) *organizations.GetPayload {
+	v := &organizations.GetPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewSendInvitePayload builds a organizations service sendInvite endpoint
 // payload.
 func NewSendInvitePayload(body *SendInviteRequestBody, sessionToken *string) *organizations.SendInvitePayload {
@@ -1820,6 +3209,33 @@ func NewListUsersPayload(sessionToken *string) *organizations.ListUsersPayload {
 func NewRemoveUserPayload(userID string, sessionToken *string) *organizations.RemoveUserPayload {
 	v := &organizations.RemoveUserPayload{}
 	v.UserID = userID
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewEnableWebhooksPayload builds a organizations service enableWebhooks
+// endpoint payload.
+func NewEnableWebhooksPayload(sessionToken *string) *organizations.EnableWebhooksPayload {
+	v := &organizations.EnableWebhooksPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewDisableWebhooksPayload builds a organizations service disableWebhooks
+// endpoint payload.
+func NewDisableWebhooksPayload(sessionToken *string) *organizations.DisableWebhooksPayload {
+	v := &organizations.DisableWebhooksPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewCreatePortalSessionPayload builds a organizations service
+// createPortalSession endpoint payload.
+func NewCreatePortalSessionPayload(sessionToken *string) *organizations.CreatePortalSessionPayload {
+	v := &organizations.CreatePortalSessionPayload{}
 	v.SessionToken = sessionToken
 
 	return v

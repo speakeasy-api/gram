@@ -9,11 +9,11 @@ import { FeatureName } from "@gram/client/models/components";
 import {
   useDisableRBACMutation,
   useEnableRBACMutation,
-  useFeaturesGet,
   useFeaturesSetMutation,
+  useProductFeatures,
   useRbacStatus,
 } from "@gram/client/react-query";
-import { invalidateAllFeaturesGet } from "@gram/client/react-query/featuresGet.js";
+import { invalidateAllProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { invalidateAllRbacStatus } from "@gram/client/react-query/rbacStatus.js";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
@@ -170,7 +170,7 @@ function RBACManagementSection() {
 
 function AuthzChallengeLoggingSection() {
   const queryClient = useQueryClient();
-  const { data: features, isLoading, error } = useFeaturesGet();
+  const { data: features, isLoading, error } = useProductFeatures();
 
   const {
     mutate,
@@ -178,7 +178,7 @@ function AuthzChallengeLoggingSection() {
     error: mutError,
   } = useFeaturesSetMutation({
     onSuccess: () => {
-      invalidateAllFeaturesGet(queryClient);
+      invalidateAllProductFeatures(queryClient);
     },
   });
 
@@ -364,8 +364,8 @@ export function OrgAdminSettingsInner() {
               return;
             }
 
-            document.cookie = `gram_admin_override=${val.trim()}; path=/; max-age=31536000;`;
             await client.auth.logout();
+            document.cookie = `gram_admin_override=${val.trim()}; path=/; max-age=31536000;`;
             window.location.href = "/login";
           }}
           className="ml-6 flex max-w-md gap-2"

@@ -21,6 +21,8 @@ type Service interface {
 	CreateRiskPolicy(context.Context, *CreateRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// List all risk analysis policies for the current project.
 	ListRiskPolicies(context.Context, *ListRiskPoliciesPayload) (res *ListRiskPoliciesResult, err error)
+	// Get server-side risk analysis capabilities for the current project.
+	GetRiskCapabilities(context.Context, *GetRiskCapabilitiesPayload) (res *RiskCapabilitiesResult, err error)
 	// Get a risk analysis policy by ID.
 	GetRiskPolicy(context.Context, *GetRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// Update a risk analysis policy.
@@ -59,7 +61,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskPolicyStatus", "triggerRiskAnalysis"}
+var MethodNames = [10]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskPolicyStatus", "triggerRiskAnalysis"}
 
 // CreateRiskPolicyPayload is the payload type of the risk service
 // createRiskPolicy method.
@@ -73,6 +75,9 @@ type CreateRiskPolicyPayload struct {
 	Sources []string
 	// Presidio entity types to detect.
 	PresidioEntities []string
+	// Prompt-injection detection rule ids to enable in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier').
+	PromptInjectionRules []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.
@@ -92,6 +97,14 @@ type DeleteRiskPolicyPayload struct {
 	ProjectSlugInput *string
 	// The policy ID.
 	ID string
+}
+
+// GetRiskCapabilitiesPayload is the payload type of the risk service
+// getRiskCapabilities method.
+type GetRiskCapabilitiesPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
 }
 
 // GetRiskPolicyPayload is the payload type of the risk service getRiskPolicy
@@ -177,6 +190,13 @@ type ListRiskResultsResult struct {
 	NextCursor *string
 }
 
+// RiskCapabilitiesResult is the result type of the risk service
+// getRiskCapabilities method.
+type RiskCapabilitiesResult struct {
+	// Whether the prompt-injection ML classifier is configured on this server.
+	PiClassifierEnabled bool
+}
+
 // TriggerRiskAnalysisPayload is the payload type of the risk service
 // triggerRiskAnalysis method.
 type TriggerRiskAnalysisPayload struct {
@@ -201,6 +221,9 @@ type UpdateRiskPolicyPayload struct {
 	Sources []string
 	// Presidio entity types to detect.
 	PresidioEntities []string
+	// Prompt-injection detection rule ids to enable in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier').
+	PromptInjectionRules []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.

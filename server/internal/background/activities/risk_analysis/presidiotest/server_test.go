@@ -203,7 +203,9 @@ func TestMockServer_AnalyzeRequestCount(t *testing.T) {
 	_, err := client.AnalyzeBatch(t.Context(), messages, nil, nil)
 	require.NoError(t, err)
 
-	require.Equal(t, int64(2), server.AnalyzeRequestCount())
+	// The Presidio client fans out one HTTP request per text — failures
+	// isolate to a single message and there is no internal sub-batching.
+	require.Equal(t, int64(len(messages)), server.AnalyzeRequestCount())
 }
 
 func TestMockServer_HealthEndpointReturnsOK(t *testing.T) {

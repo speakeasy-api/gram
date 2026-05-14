@@ -12,12 +12,13 @@ import (
 const toolNameSendMessage = "platform_slack_send_message"
 
 type sendMessageInput struct {
-	ChannelID      string  `json:"channel_id" jsonschema:"Slack conversation ID to post into."`
-	Text           string  `json:"text" jsonschema:"Message text to send."`
-	ThreadTS       *string `json:"thread_ts,omitempty" jsonschema:"Optional thread timestamp to reply in an existing thread."`
-	ReplyBroadcast *bool   `json:"reply_broadcast,omitempty" jsonschema:"Broadcast a threaded reply to the channel."`
-	UnfurlLinks    *bool   `json:"unfurl_links,omitempty" jsonschema:"Control Slack link unfurling for the message."`
-	UnfurlMedia    *bool   `json:"unfurl_media,omitempty" jsonschema:"Control Slack media unfurling for the message."`
+	ChannelID      string       `json:"channel_id" jsonschema:"Slack conversation ID to post into."`
+	Text           string       `json:"text" jsonschema:"Message text. When 'blocks' is set, this is the accessibility fallback Slack shows in notifications and clients that cannot render Block Kit."`
+	ThreadTS       *string      `json:"thread_ts,omitempty" jsonschema:"Optional thread timestamp to reply in an existing thread."`
+	ReplyBroadcast *bool        `json:"reply_broadcast,omitempty" jsonschema:"Broadcast a threaded reply to the channel."`
+	UnfurlLinks    *bool        `json:"unfurl_links,omitempty" jsonschema:"Control Slack link unfurling for the message."`
+	UnfurlMedia    *bool        `json:"unfurl_media,omitempty" jsonschema:"Control Slack media unfurling for the message."`
+	Blocks         []slackBlock `json:"blocks,omitempty" jsonschema:"Optional Block Kit blocks (https://docs.slack.dev/reference/block-kit/blocks). Buttons inside an actions block deliver block_actions interactions back to this assistant on the originating thread; pick a stable action_id and a value to recognise the click."`
 }
 
 func NewSendMessageTool(httpClient *guardian.HTTPClient) core.PlatformToolExecutor {
@@ -31,7 +32,7 @@ func NewSendMessageTool(httpClient *guardian.HTTPClient) core.PlatformToolExecut
 			SourceSlug:  sourceSlack,
 			HandlerName: "send_message",
 			Name:        toolNameSendMessage,
-			Description: "Send a Slack message using the server's Slack token from SLACK_BOT_TOKEN or SLACK_TOKEN.",
+			Description: "Send a Slack message using the server's Slack token from SLACK_BOT_TOKEN or SLACK_TOKEN. Supports plain text and Block Kit (sections, actions, context, divider, buttons) via the optional 'blocks' parameter.",
 			InputSchema: core.BuildInputSchema[sendMessageInput](),
 			Variables:   nil,
 			Annotations: slackToolAnnotations(readOnly, destructive, idempotent, openWorld),
@@ -67,6 +68,9 @@ func callSendMessage(ctx context.Context, client *apiClient, env toolconfig.Tool
 	setOptionalBool(request, "reply_broadcast", input.ReplyBroadcast)
 	setOptionalBool(request, "unfurl_links", input.UnfurlLinks)
 	setOptionalBool(request, "unfurl_media", input.UnfurlMedia)
+	if len(input.Blocks) > 0 {
+		request["blocks"] = input.Blocks
+	}
 
 	body, err := client.call(ctx, "chat.postMessage", request, tokenPreferBot, env)
 	if err != nil {

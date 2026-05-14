@@ -307,10 +307,9 @@ func EncodeRevokeUserSessionRequest(encoder func(*http.Request) goahttp.Encoder)
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		body := NewRevokeUserSessionRequestBody(p)
-		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("userSessions", "revokeUserSession", err)
-		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }

@@ -10,12 +10,15 @@ package organizations
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
 
 // Organization membership, invitations, and directory.
 type Service interface {
+	// Get the active organization from the session.
+	Get(context.Context, *GetPayload) (res *Organization, err error)
 	// Send a WorkOS invitation for the active organization.
 	SendInvite(context.Context, *SendInvitePayload) (res *OrganizationInvitation, err error)
 	// Revoke a pending WorkOS invitation.
@@ -28,6 +31,12 @@ type Service interface {
 	// Remove a user from the active organization in Gram and delete their WorkOS
 	// organization membership.
 	RemoveUser(context.Context, *RemoveUserPayload) (err error)
+	// Enable  webhooks for the active organization.
+	EnableWebhooks(context.Context, *EnableWebhooksPayload) (err error)
+	// Disable  webhooks for the active organization.
+	DisableWebhooks(context.Context, *DisableWebhooksPayload) (err error)
+	// Create a webhook portal session.
+	CreatePortalSession(context.Context, *CreatePortalSessionPayload) (res *CreatePortalSessionResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -50,7 +59,39 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"sendInvite", "revokeInvite", "listInvites", "listUsers", "removeUser"}
+var MethodNames = [9]string{"get", "sendInvite", "revokeInvite", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession"}
+
+// CreatePortalSessionPayload is the payload type of the organizations service
+// createPortalSession method.
+type CreatePortalSessionPayload struct {
+	SessionToken *string
+}
+
+// CreatePortalSessionResult is the result type of the organizations service
+// createPortalSession method.
+type CreatePortalSessionResult struct {
+	// URL for the webhook portal session.
+	URL string
+	// Front-end token for the webhook portal session.
+	Token string
+}
+
+// DisableWebhooksPayload is the payload type of the organizations service
+// disableWebhooks method.
+type DisableWebhooksPayload struct {
+	SessionToken *string
+}
+
+// EnableWebhooksPayload is the payload type of the organizations service
+// enableWebhooks method.
+type EnableWebhooksPayload struct {
+	SessionToken *string
+}
+
+// GetPayload is the payload type of the organizations service get method.
+type GetPayload struct {
+	SessionToken *string
+}
 
 // ListInvitesPayload is the payload type of the organizations service
 // listInvites method.
@@ -77,6 +118,26 @@ type ListUsersPayload struct {
 type ListUsersResult struct {
 	// Users linked to the organization in Gram.
 	Users []*OrganizationUser
+}
+
+// Organization is the result type of the organizations service get method.
+type Organization struct {
+	// The ID of the organization
+	ID string
+	// The name of the organization
+	Name string
+	// The slug of the organization
+	Slug types.Slug
+	// The account type of the organization
+	AccountType string
+	// Whether webhooks support is initialized for the organization
+	WebhooksOnboarded bool
+	// Whether webhooks are enabled for the organization
+	WebhooksEnabled bool
+	// The creation date of the organization.
+	CreatedAt string
+	// The last update date of the organization.
+	UpdatedAt string
 }
 
 // OrganizationInvitation is the result type of the organizations service

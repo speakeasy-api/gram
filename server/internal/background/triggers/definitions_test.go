@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -290,6 +291,96 @@ func TestDecodeSlackEventMemberJoinedChannel(t *testing.T) {
 	require.Equal(t, "W123ABC456", got.User)
 	require.Equal(t, "C0698JE0H", got.Channel)
 	require.Equal(t, "U123456789", got.Inviter)
+}
+
+func TestSlackHandleWebhookBlockActionsRoutesToThread(t *testing.T) {
+	t.Parallel()
+
+	definition, ok := GetDefinition("slack")
+	require.True(t, ok)
+
+	config, err := definition.DecodeConfig(nil)
+	require.NoError(t, err)
+
+	payload := `{"type":"block_actions","api_app_id":"A1","team":{"id":"T1"},"user":{"id":"U1"},"channel":{"id":"C1"},"message":{"ts":"1700000001.000200","thread_ts":"1700000000.000100"},"actions":[{"action_id":"approve","block_id":"b1","value":"approved","type":"button"}]}`
+	body := []byte("payload=" + url.QueryEscape(payload))
+	headers := signedSlackHeaders(t, body, "secret")
+	headers.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	require.NoError(t, definition.AuthenticateWebhook(body, headers, map[string]string{
+		"SLACK_SIGNING_SECRET": "secret",
+	}, config))
+
+	result, err := definition.HandleWebhook(body, headers, config)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Nil(t, result.Response)
+	require.NotNil(t, result.Event)
+
+	require.Equal(t, "C1:1700000000.000100", result.Event.CorrelationID)
+
+	normalized, ok := result.Event.Event.(slackTriggerEvent)
+	require.True(t, ok)
+	require.Equal(t, "interactive", normalized.EnvelopeType)
+	require.Equal(t, "block_actions", normalized.EventType)
+	require.Equal(t, "T1", normalized.TeamID)
+	require.Equal(t, "C1", normalized.ChannelID)
+	require.Equal(t, "1700000000.000100", normalized.ThreadID)
+	require.Equal(t, "U1", normalized.UserID)
+	require.Equal(t, "approve", normalized.ActionID)
+	require.Equal(t, "approved", normalized.ActionValue)
+	require.Equal(t, "b1", normalized.BlockID)
+	require.Equal(t, "approved", normalized.Text)
+}
+
+func TestSlackHandleWebhookBlockActionsTopLevelMessageStaysChannelOnly(t *testing.T) {
+	t.Parallel()
+
+	definition, ok := GetDefinition("slack")
+	require.True(t, ok)
+
+	config, err := definition.DecodeConfig(nil)
+	require.NoError(t, err)
+
+	// Click on a top-level (non-threaded) message: message.thread_ts is
+	// empty. The events path leaves threadID empty in this case so the
+	// correlation collapses to the channel, matching the assistant thread
+	// that the originating top-level Events API message opened.
+	payload := `{"type":"block_actions","team":{"id":"T1"},"user":{"id":"U1"},"channel":{"id":"C1"},"message":{"ts":"1700000001.000200"},"actions":[{"action_id":"x","block_id":"b","value":"v","type":"button"}]}`
+	body := []byte("payload=" + url.QueryEscape(payload))
+	headers := signedSlackHeaders(t, body, "secret")
+	headers.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	result, err := definition.HandleWebhook(body, headers, config)
+	require.NoError(t, err)
+	require.NotNil(t, result.Event)
+
+	require.Equal(t, "C1", result.Event.CorrelationID)
+	normalized, ok := result.Event.Event.(slackTriggerEvent)
+	require.True(t, ok)
+	require.Empty(t, normalized.ThreadID)
+	require.Equal(t, "1700000001.000200", normalized.Timestamp)
+}
+
+func TestSlackHandleWebhookIgnoresUnsupportedInteractionType(t *testing.T) {
+	t.Parallel()
+
+	definition, ok := GetDefinition("slack")
+	require.True(t, ok)
+
+	config, err := definition.DecodeConfig(nil)
+	require.NoError(t, err)
+
+	payload := `{"type":"view_submission","team":{"id":"T1"},"user":{"id":"U1"}}`
+	body := []byte("payload=" + url.QueryEscape(payload))
+	headers := signedSlackHeaders(t, body, "secret")
+	headers.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	result, err := definition.HandleWebhook(body, headers, config)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Nil(t, result.Event)
+	require.Nil(t, result.Response)
 }
 
 func TestCronFilterAlwaysReturnsTrue(t *testing.T) {

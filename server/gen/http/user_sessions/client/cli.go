@@ -8,7 +8,6 @@
 package client
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -90,15 +89,12 @@ func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string,
 
 // BuildRevokeUserSessionPayload builds the payload for the userSessions
 // revokeUserSession endpoint from CLI flags.
-func BuildRevokeUserSessionPayload(userSessionsRevokeUserSessionBody string, userSessionsRevokeUserSessionSessionToken string, userSessionsRevokeUserSessionApikeyToken string, userSessionsRevokeUserSessionProjectSlugInput string) (*usersessions.RevokeUserSessionPayload, error) {
+func BuildRevokeUserSessionPayload(userSessionsRevokeUserSessionID string, userSessionsRevokeUserSessionSessionToken string, userSessionsRevokeUserSessionApikeyToken string, userSessionsRevokeUserSessionProjectSlugInput string) (*usersessions.RevokeUserSessionPayload, error) {
 	var err error
-	var body RevokeUserSessionRequestBody
+	var id string
 	{
-		err = json.Unmarshal([]byte(userSessionsRevokeUserSessionBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		id = userSessionsRevokeUserSessionID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
 		if err != nil {
 			return nil, err
 		}
@@ -121,9 +117,8 @@ func BuildRevokeUserSessionPayload(userSessionsRevokeUserSessionBody string, use
 			projectSlugInput = &userSessionsRevokeUserSessionProjectSlugInput
 		}
 	}
-	v := &usersessions.RevokeUserSessionPayload{
-		ID: body.ID,
-	}
+	v := &usersessions.RevokeUserSessionPayload{}
+	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

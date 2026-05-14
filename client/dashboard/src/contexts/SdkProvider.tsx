@@ -54,6 +54,7 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
       datadogRum.stopSession();
       datadogRum.clearUser();
       telemetry.reset();
+      document.cookie = "gram_admin_override=; path=/; max-age=0;";
       if (typeof localStorage !== "undefined") {
         localStorage.clear();
       }

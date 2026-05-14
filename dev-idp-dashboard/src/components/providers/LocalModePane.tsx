@@ -118,7 +118,7 @@ export function LocalModePane({ mode }: { mode: LocalMode }) {
       </Card>
 
       {match(mode)
-        .with("local-speakeasy", () => null)
+        .with("mock-workos", () => null)
         .with("oauth2-1", () => <DiscoveryPane prefix="/oauth2-1" />)
         .with("oauth2", () => <DiscoveryPane prefix="/oauth2" />)
         .exhaustive()}

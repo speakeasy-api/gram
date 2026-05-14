@@ -34,6 +34,7 @@ import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import {
+  InsightsAgentsPage,
   InsightsEmployeeDetailPage,
   InsightsEmployeesLayout,
   InsightsEmployeesPage,
@@ -57,6 +58,7 @@ import OrgDomains from "./pages/org/OrgDomains";
 import OrgHome from "./pages/org/OrgHome";
 import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgLogs from "./pages/org/OrgLogs";
+import OrgWebhooks from "./pages/org/OrgWebhooks";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
@@ -359,6 +361,11 @@ const ROUTE_STRUCTURE = {
     component: InsightsRoot,
     indexComponent: RedirectToInsightsTools,
     subPages: {
+      costs: {
+        title: "Costs",
+        url: "costs",
+        component: InsightsAgentsPage,
+      },
       tools: {
         title: "Tools",
         url: "tools",
@@ -691,6 +698,12 @@ const ORG_ROUTE_STRUCTURE = {
     url: "logs",
     icon: "file-text",
     component: OrgLogs,
+  },
+  webhooks: {
+    title: "Webhooks",
+    url: "webhooks",
+    icon: "webhook",
+    component: OrgWebhooks,
   },
   auditLogs: {
     title: "Audit Logs",

@@ -16,11 +16,15 @@ import (
 
 // Endpoints wraps the "organizations" service endpoints.
 type Endpoints struct {
-	SendInvite   goa.Endpoint
-	RevokeInvite goa.Endpoint
-	ListInvites  goa.Endpoint
-	ListUsers    goa.Endpoint
-	RemoveUser   goa.Endpoint
+	Get                 goa.Endpoint
+	SendInvite          goa.Endpoint
+	RevokeInvite        goa.Endpoint
+	ListInvites         goa.Endpoint
+	ListUsers           goa.Endpoint
+	RemoveUser          goa.Endpoint
+	EnableWebhooks      goa.Endpoint
+	DisableWebhooks     goa.Endpoint
+	CreatePortalSession goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "organizations" service with endpoints.
@@ -28,22 +32,53 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		SendInvite:   NewSendInviteEndpoint(s, a.APIKeyAuth),
-		RevokeInvite: NewRevokeInviteEndpoint(s, a.APIKeyAuth),
-		ListInvites:  NewListInvitesEndpoint(s, a.APIKeyAuth),
-		ListUsers:    NewListUsersEndpoint(s, a.APIKeyAuth),
-		RemoveUser:   NewRemoveUserEndpoint(s, a.APIKeyAuth),
+		Get:                 NewGetEndpoint(s, a.APIKeyAuth),
+		SendInvite:          NewSendInviteEndpoint(s, a.APIKeyAuth),
+		RevokeInvite:        NewRevokeInviteEndpoint(s, a.APIKeyAuth),
+		ListInvites:         NewListInvitesEndpoint(s, a.APIKeyAuth),
+		ListUsers:           NewListUsersEndpoint(s, a.APIKeyAuth),
+		RemoveUser:          NewRemoveUserEndpoint(s, a.APIKeyAuth),
+		EnableWebhooks:      NewEnableWebhooksEndpoint(s, a.APIKeyAuth),
+		DisableWebhooks:     NewDisableWebhooksEndpoint(s, a.APIKeyAuth),
+		CreatePortalSession: NewCreatePortalSessionEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "organizations" service
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.Get = m(e.Get)
 	e.SendInvite = m(e.SendInvite)
 	e.RevokeInvite = m(e.RevokeInvite)
 	e.ListInvites = m(e.ListInvites)
 	e.ListUsers = m(e.ListUsers)
 	e.RemoveUser = m(e.RemoveUser)
+	e.EnableWebhooks = m(e.EnableWebhooks)
+	e.DisableWebhooks = m(e.DisableWebhooks)
+	e.CreatePortalSession = m(e.CreatePortalSession)
+}
+
+// NewGetEndpoint returns an endpoint function that calls the method "get" of
+// service "organizations".
+func NewGetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.Get(ctx, p)
+	}
 }
 
 // NewSendInviteEndpoint returns an endpoint function that calls the method
@@ -158,5 +193,74 @@ func NewRemoveUserEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return nil, s.RemoveUser(ctx, p)
+	}
+}
+
+// NewEnableWebhooksEndpoint returns an endpoint function that calls the method
+// "enableWebhooks" of service "organizations".
+func NewEnableWebhooksEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*EnableWebhooksPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.EnableWebhooks(ctx, p)
+	}
+}
+
+// NewDisableWebhooksEndpoint returns an endpoint function that calls the
+// method "disableWebhooks" of service "organizations".
+func NewDisableWebhooksEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DisableWebhooksPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DisableWebhooks(ctx, p)
+	}
+}
+
+// NewCreatePortalSessionEndpoint returns an endpoint function that calls the
+// method "createPortalSession" of service "organizations".
+func NewCreatePortalSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreatePortalSessionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreatePortalSession(ctx, p)
 	}
 }

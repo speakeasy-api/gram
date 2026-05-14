@@ -213,6 +213,13 @@ function renderSubject(log: AuditLog, orgSlug: string) {
     );
   }
 
+  if (
+    log.action === "organization:webhooks_enabled" ||
+    log.action === "organization:webhooks_disabled"
+  ) {
+    return null;
+  }
+
   if (log.subjectType === "otel_forwarding_config") {
     // The subject ID is a UUID with no human-meaningful slug or display name.
     // The verb text is self-contained (e.g., "enabled OpenTelemetry forwarding
@@ -391,6 +398,10 @@ function renderVerb(log: AuditLog): string {
       return "updated plugin access assignments";
     case "plugin:publish":
       return "published plugins";
+    case "organization:webhooks_enabled":
+      return "enabled webhooks delivery";
+    case "organization:webhooks_disabled":
+      return "disabled webhooks delivery";
     default: {
       const [resource = "activity", verb = "updated"] = log.action.split(":");
       return `${verb.replace(/_/g, " ")} ${getResourceLabel(resource)}`;

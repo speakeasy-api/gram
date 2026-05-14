@@ -7,6 +7,11 @@
 
 package client
 
+// GetOrganizationsPath returns the URL path to the organizations service get HTTP endpoint.
+func GetOrganizationsPath() string {
+	return "/rpc/organizations.get"
+}
+
 // SendInviteOrganizationsPath returns the URL path to the organizations service sendInvite HTTP endpoint.
 func SendInviteOrganizationsPath() string {
 	return "/rpc/organizations.sendInvite"
@@ -30,4 +35,19 @@ func ListUsersOrganizationsPath() string {
 // RemoveUserOrganizationsPath returns the URL path to the organizations service removeUser HTTP endpoint.
 func RemoveUserOrganizationsPath() string {
 	return "/rpc/organizations.removeUser"
+}
+
+// EnableWebhooksOrganizationsPath returns the URL path to the organizations service enableWebhooks HTTP endpoint.
+func EnableWebhooksOrganizationsPath() string {
+	return "/rpc/organizations.enableWebhooks"
+}
+
+// DisableWebhooksOrganizationsPath returns the URL path to the organizations service disableWebhooks HTTP endpoint.
+func DisableWebhooksOrganizationsPath() string {
+	return "/rpc/organizations.disableWebhooks"
+}
+
+// CreatePortalSessionOrganizationsPath returns the URL path to the organizations service createPortalSession HTTP endpoint.
+func CreatePortalSessionOrganizationsPath() string {
+	return "/rpc/organizations.createPortalSession"
 }

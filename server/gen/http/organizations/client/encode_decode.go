@@ -18,6 +18,236 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
+// BuildGetRequest instantiates a HTTP request object with method and path set
+// to call the "organizations" service "get" endpoint
+func (c *Client) BuildGetRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetOrganizationsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizations", "get", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetRequest returns an encoder for requests sent to the organizations
+// get server.
+func EncodeGetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizations.GetPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizations", "get", "*organizations.GetPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetResponse returns a decoder for responses returned by the
+// organizations get endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeGetResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "get", err)
+			}
+			err = ValidateGetResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "get", err)
+			}
+			res := NewGetOrganizationOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "get", err)
+			}
+			err = ValidateGetUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "get", err)
+			}
+			return nil, NewGetUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "get", err)
+			}
+			err = ValidateGetForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "get", err)
+			}
+			return nil, NewGetForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "get", err)
+			}
+			err = ValidateGetBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "get", err)
+			}
+			return nil, NewGetBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "get", err)
+			}
+			err = ValidateGetNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "get", err)
+			}
+			return nil, NewGetNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "get", err)
+			}
+			err = ValidateGetConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "get", err)
+			}
+			return nil, NewGetConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "get", err)
+			}
+			err = ValidateGetUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "get", err)
+			}
+			return nil, NewGetUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "get", err)
+			}
+			err = ValidateGetInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "get", err)
+			}
+			return nil, NewGetInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "get", err)
+				}
+				err = ValidateGetInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "get", err)
+				}
+				return nil, NewGetInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "get", err)
+				}
+				err = ValidateGetUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "get", err)
+				}
+				return nil, NewGetUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizations", "get", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "get", err)
+			}
+			err = ValidateGetGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "get", err)
+			}
+			return nil, NewGetGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizations", "get", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildSendInviteRequest instantiates a HTTP request object with method and
 // path set to call the "organizations" service "sendInvite" endpoint
 func (c *Client) BuildSendInviteRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1148,6 +1378,671 @@ func DecodeRemoveUserResponse(decoder func(*http.Response) goahttp.Decoder, rest
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("organizations", "removeUser", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildEnableWebhooksRequest instantiates a HTTP request object with method
+// and path set to call the "organizations" service "enableWebhooks" endpoint
+func (c *Client) BuildEnableWebhooksRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: EnableWebhooksOrganizationsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizations", "enableWebhooks", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeEnableWebhooksRequest returns an encoder for requests sent to the
+// organizations enableWebhooks server.
+func EncodeEnableWebhooksRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizations.EnableWebhooksPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizations", "enableWebhooks", "*organizations.EnableWebhooksPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeEnableWebhooksResponse returns a decoder for responses returned by the
+// organizations enableWebhooks endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeEnableWebhooksResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeEnableWebhooksResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body EnableWebhooksUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "enableWebhooks", err)
+			}
+			err = ValidateEnableWebhooksUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "enableWebhooks", err)
+			}
+			return nil, NewEnableWebhooksUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body EnableWebhooksForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "enableWebhooks", err)
+			}
+			err = ValidateEnableWebhooksForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "enableWebhooks", err)
+			}
+			return nil, NewEnableWebhooksForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body EnableWebhooksBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "enableWebhooks", err)
+			}
+			err = ValidateEnableWebhooksBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "enableWebhooks", err)
+			}
+			return nil, NewEnableWebhooksBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body EnableWebhooksNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "enableWebhooks", err)
+			}
+			err = ValidateEnableWebhooksNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "enableWebhooks", err)
+			}
+			return nil, NewEnableWebhooksNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body EnableWebhooksConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "enableWebhooks", err)
+			}
+			err = ValidateEnableWebhooksConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "enableWebhooks", err)
+			}
+			return nil, NewEnableWebhooksConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body EnableWebhooksUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "enableWebhooks", err)
+			}
+			err = ValidateEnableWebhooksUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "enableWebhooks", err)
+			}
+			return nil, NewEnableWebhooksUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body EnableWebhooksInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "enableWebhooks", err)
+			}
+			err = ValidateEnableWebhooksInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "enableWebhooks", err)
+			}
+			return nil, NewEnableWebhooksInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body EnableWebhooksInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "enableWebhooks", err)
+				}
+				err = ValidateEnableWebhooksInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "enableWebhooks", err)
+				}
+				return nil, NewEnableWebhooksInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body EnableWebhooksUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "enableWebhooks", err)
+				}
+				err = ValidateEnableWebhooksUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "enableWebhooks", err)
+				}
+				return nil, NewEnableWebhooksUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizations", "enableWebhooks", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body EnableWebhooksGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "enableWebhooks", err)
+			}
+			err = ValidateEnableWebhooksGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "enableWebhooks", err)
+			}
+			return nil, NewEnableWebhooksGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizations", "enableWebhooks", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDisableWebhooksRequest instantiates a HTTP request object with method
+// and path set to call the "organizations" service "disableWebhooks" endpoint
+func (c *Client) BuildDisableWebhooksRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DisableWebhooksOrganizationsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizations", "disableWebhooks", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDisableWebhooksRequest returns an encoder for requests sent to the
+// organizations disableWebhooks server.
+func EncodeDisableWebhooksRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizations.DisableWebhooksPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizations", "disableWebhooks", "*organizations.DisableWebhooksPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeDisableWebhooksResponse returns a decoder for responses returned by
+// the organizations disableWebhooks endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeDisableWebhooksResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDisableWebhooksResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DisableWebhooksUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "disableWebhooks", err)
+			}
+			err = ValidateDisableWebhooksUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "disableWebhooks", err)
+			}
+			return nil, NewDisableWebhooksUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DisableWebhooksForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "disableWebhooks", err)
+			}
+			err = ValidateDisableWebhooksForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "disableWebhooks", err)
+			}
+			return nil, NewDisableWebhooksForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DisableWebhooksBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "disableWebhooks", err)
+			}
+			err = ValidateDisableWebhooksBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "disableWebhooks", err)
+			}
+			return nil, NewDisableWebhooksBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DisableWebhooksNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "disableWebhooks", err)
+			}
+			err = ValidateDisableWebhooksNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "disableWebhooks", err)
+			}
+			return nil, NewDisableWebhooksNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DisableWebhooksConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "disableWebhooks", err)
+			}
+			err = ValidateDisableWebhooksConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "disableWebhooks", err)
+			}
+			return nil, NewDisableWebhooksConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DisableWebhooksUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "disableWebhooks", err)
+			}
+			err = ValidateDisableWebhooksUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "disableWebhooks", err)
+			}
+			return nil, NewDisableWebhooksUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DisableWebhooksInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "disableWebhooks", err)
+			}
+			err = ValidateDisableWebhooksInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "disableWebhooks", err)
+			}
+			return nil, NewDisableWebhooksInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DisableWebhooksInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "disableWebhooks", err)
+				}
+				err = ValidateDisableWebhooksInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "disableWebhooks", err)
+				}
+				return nil, NewDisableWebhooksInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DisableWebhooksUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "disableWebhooks", err)
+				}
+				err = ValidateDisableWebhooksUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "disableWebhooks", err)
+				}
+				return nil, NewDisableWebhooksUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizations", "disableWebhooks", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DisableWebhooksGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "disableWebhooks", err)
+			}
+			err = ValidateDisableWebhooksGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "disableWebhooks", err)
+			}
+			return nil, NewDisableWebhooksGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizations", "disableWebhooks", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCreatePortalSessionRequest instantiates a HTTP request object with
+// method and path set to call the "organizations" service
+// "createPortalSession" endpoint
+func (c *Client) BuildCreatePortalSessionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreatePortalSessionOrganizationsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizations", "createPortalSession", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreatePortalSessionRequest returns an encoder for requests sent to the
+// organizations createPortalSession server.
+func EncodeCreatePortalSessionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizations.CreatePortalSessionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizations", "createPortalSession", "*organizations.CreatePortalSessionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeCreatePortalSessionResponse returns a decoder for responses returned
+// by the organizations createPortalSession endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeCreatePortalSessionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreatePortalSessionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreatePortalSessionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "createPortalSession", err)
+			}
+			err = ValidateCreatePortalSessionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "createPortalSession", err)
+			}
+			res := NewCreatePortalSessionResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreatePortalSessionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "createPortalSession", err)
+			}
+			err = ValidateCreatePortalSessionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "createPortalSession", err)
+			}
+			return nil, NewCreatePortalSessionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreatePortalSessionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "createPortalSession", err)
+			}
+			err = ValidateCreatePortalSessionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "createPortalSession", err)
+			}
+			return nil, NewCreatePortalSessionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreatePortalSessionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "createPortalSession", err)
+			}
+			err = ValidateCreatePortalSessionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "createPortalSession", err)
+			}
+			return nil, NewCreatePortalSessionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreatePortalSessionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "createPortalSession", err)
+			}
+			err = ValidateCreatePortalSessionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "createPortalSession", err)
+			}
+			return nil, NewCreatePortalSessionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreatePortalSessionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "createPortalSession", err)
+			}
+			err = ValidateCreatePortalSessionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "createPortalSession", err)
+			}
+			return nil, NewCreatePortalSessionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreatePortalSessionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "createPortalSession", err)
+			}
+			err = ValidateCreatePortalSessionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "createPortalSession", err)
+			}
+			return nil, NewCreatePortalSessionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreatePortalSessionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "createPortalSession", err)
+			}
+			err = ValidateCreatePortalSessionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "createPortalSession", err)
+			}
+			return nil, NewCreatePortalSessionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreatePortalSessionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "createPortalSession", err)
+				}
+				err = ValidateCreatePortalSessionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "createPortalSession", err)
+				}
+				return nil, NewCreatePortalSessionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreatePortalSessionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "createPortalSession", err)
+				}
+				err = ValidateCreatePortalSessionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "createPortalSession", err)
+				}
+				return nil, NewCreatePortalSessionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizations", "createPortalSession", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreatePortalSessionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "createPortalSession", err)
+			}
+			err = ValidateCreatePortalSessionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "createPortalSession", err)
+			}
+			return nil, NewCreatePortalSessionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizations", "createPortalSession", resp.StatusCode, string(body))
 		}
 	}
 }

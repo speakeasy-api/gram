@@ -146,6 +146,16 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		return ctx, nil
 	}
 
+	// Admins impersonating a customer org have no WorkOS membership in that
+	// org, so the normal role-resolution path would yield zero grants and
+	// every Require() call would 403. Grant all scopes — matching the
+	// carve-out in access.ListGrants.
+	if authCtx.IsAdmin {
+		if _, ok := contextvalues.GetAdminOverrideFromContext(ctx); ok {
+			return GrantsToContext(ctx, allScopeGrants()), nil
+		}
+	}
+
 	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)}
 
 	roleSlug, err := e.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)

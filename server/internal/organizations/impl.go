@@ -24,7 +24,9 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/organizations/server"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -37,7 +39,10 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	svix "github.com/svix/svix-webhooks/go"
+	"github.com/svix/svix-webhooks/go/models"
 )
 
 const (
@@ -69,13 +74,15 @@ type Service struct {
 	email       *email.Service
 	siteURL     string // dashboard URL; used for invite callback RedirectURI and post-callback redirect
 	registryURL string // registry (speakeasy server) URL; used to redirect invitees through OIDC login after accepting
+	audit       *audit.Logger
+	svix        *svix.Svix
 }
 
 var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, orgs OrganizationProvider, features orgFeatureChecker, authzEngine *authz.Engine, emailService *email.Service, siteURL string, registryURL string) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, orgs OrganizationProvider, features orgFeatureChecker, authzEngine *authz.Engine, emailService *email.Service, siteURL string, registryURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 
 	return &Service{
@@ -89,6 +96,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		email:       emailService,
 		siteURL:     siteURL,
 		registryURL: registryURL,
+		audit:       auditLogger,
+		svix:        svix,
 	}
 }
 
@@ -110,6 +119,33 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+func (s *Service) Get(ctx context.Context, _ *gen.GetPayload) (res *gen.Organization, err error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").Log(ctx, s.logger)
+	}
+
+	return &gen.Organization{
+		ID:                org.ID,
+		Name:              org.Name,
+		Slug:              types.Slug(org.Slug),
+		AccountType:       org.GramAccountType,
+		WebhooksOnboarded: org.SvixAppID.String != "",
+		WebhooksEnabled:   org.WebhooksEnabled.Bool && org.SvixAppID.String != "",
+		CreatedAt:         org.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:         org.UpdatedAt.Time.Format(time.RFC3339),
+	}, nil
 }
 
 func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload) (*gen.OrganizationInvitation, error) {
@@ -367,6 +403,209 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 	return nil
 }
 
+func (s *Service) EnableWebhooks(ctx context.Context, payload *gen.EnableWebhooksPayload) (err error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return err
+	}
+
+	logger := s.logger
+	orgID := ac.ActiveOrganizationID
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to read organization details").Log(ctx, s.logger)
+	}
+
+	appID := conv.FromPGTextOrEmpty[string](org.SvixAppID)
+
+	if appID == "" {
+		app, err := s.svix.Application.GetOrCreate(ctx, models.ApplicationIn{
+			Name:         ac.OrganizationSlug,
+			Uid:          &orgID,
+			Metadata:     &map[string]string{},
+			RateLimit:    nil,
+			ThrottleRate: nil,
+		}, nil)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to create or get webhook connection").Log(ctx, logger)
+		}
+		appID = app.Id
+	}
+
+	if appID == "" {
+		return oops.E(oops.CodeUnexpected, nil, "malformed webhook connection details").Log(ctx, logger)
+	}
+
+	logger = logger.With(attr.SlogOrganizationID(orgID), attr.SlogSvixAppID(appID))
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to access organization details").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	var updated bool
+	row, err := orgrepo.New(s.db).UpsertSvixAppID(ctx, orgrepo.UpsertSvixAppIDParams{
+		ID:        orgID,
+		SvixAppID: conv.ToPGText(appID),
+	})
+	switch {
+	case err == nil:
+		if row.PreviousSvixAppID.String != "" && row.PreviousSvixAppID.String != appID {
+			logger.ErrorContext(ctx, "overwriting existing svix application id",
+				attr.SlogSvixPreviousAppID(row.PreviousSvixAppID.String),
+			)
+		}
+		updated = true
+	case errors.Is(err, pgx.ErrNoRows):
+		stored := conv.FromPGTextOrEmpty[string](row.SvixAppID)
+		if stored != appID {
+			return oops.E(oops.CodeUnexpected, nil, "failed to find organization details to update").Log(ctx, logger)
+		}
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to store webhook connection details").Log(ctx, logger)
+	}
+
+	if updated {
+		if err := s.audit.LogOrganizationWebhooksToggled(ctx, dbtx, audit.LogOrganizationWebhooksToggledEvent{
+			OrganizationID:   orgID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+			ActorDisplayName: ac.Email,
+			ActorSlug:        nil,
+			OrganizationName: org.Name,
+			OrganizationSlug: org.Slug,
+			WebhooksEnabled:  row.WebhooksEnabled.Bool,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to log webhook toggle event").Log(ctx, logger)
+		}
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to save webhook connection details").Log(ctx, logger)
+	}
+
+	return nil
+}
+
+func (s *Service) DisableWebhooks(ctx context.Context, payload *gen.DisableWebhooksPayload) (err error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return err
+	}
+
+	orgID := ac.ActiveOrganizationID
+	logger := s.logger.With(attr.SlogOrganizationID(orgID))
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to access organization details").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to read organization details").Log(ctx, logger)
+	}
+
+	var updated bool
+	row, err := orgrepo.New(s.db).SetWebhooksEnabled(ctx, orgrepo.SetWebhooksEnabledParams{
+		ID:      orgID,
+		Enabled: pgtype.Bool{Bool: false, Valid: true},
+	})
+	switch {
+	case err == nil:
+		updated = true
+	case errors.Is(err, pgx.ErrNoRows):
+		// Org didn't have svix app id to begin with, effectively a noop
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to store webhook connection details").Log(ctx, logger)
+	}
+
+	if updated {
+		if err := s.audit.LogOrganizationWebhooksToggled(ctx, dbtx, audit.LogOrganizationWebhooksToggledEvent{
+			OrganizationID:   orgID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+			ActorDisplayName: ac.Email,
+			ActorSlug:        nil,
+			OrganizationName: org.Name,
+			OrganizationSlug: org.Slug,
+			WebhooksEnabled:  row.WebhooksEnabled.Bool,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to log webhook toggle event").Log(ctx, logger)
+		}
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to save webhook connection details").Log(ctx, logger)
+	}
+
+	return nil
+}
+
+func (s *Service) CreatePortalSession(ctx context.Context, payload *gen.CreatePortalSessionPayload) (res *gen.CreatePortalSessionResult, err error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+	}
+
+	// See note below on why we use this pointer to a slice. It's also partly
+	// because we want to get around false-positive from ineffassign linter.
+	// The empty/zero-value of this slice is harmful because it grants all
+	// capabilities in svix.
+	var caps *[]models.AppPortalCapability
+	readCheckErr := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		caps = new(fullSvixAppPortalCapabilities())
+	} else if readCheckErr == nil {
+		caps = new(minimumSvixAppPortalCapabilities())
+	} else {
+		return nil, readCheckErr
+	}
+
+	logger := s.logger
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").Log(ctx, logger)
+	}
+
+	appID := conv.FromPGTextOrEmpty[string](org.SvixAppID)
+	enabled := org.WebhooksEnabled.Bool
+
+	if appID == "" || !enabled {
+		return nil, oops.E(oops.CodeBadRequest, nil, "webhooks not enabled for this organization")
+	}
+
+	session, err := s.svix.Authentication.AppPortalAccess(ctx, appID, models.AppPortalAccessIn{
+		// Safeguard because an empty slice grants all capabilties and so we
+		// need to use a pointer to slice to mark the absence of capabilities
+		// and then default to minimum capabilities in that case.
+		Capabilities: conv.PtrValOr(caps, minimumSvixAppPortalCapabilities()),
+		Expiry:       new(uint64(24 * 60 * 60)),
+		Application:  nil,
+		FeatureFlags: nil,
+		ReadOnly:     nil,
+		SessionId:    nil,
+	}, nil)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create webhook portal session").Log(ctx, logger)
+	}
+
+	return &gen.CreatePortalSessionResult{
+		URL:   session.Url,
+		Token: session.Token,
+	}, nil
+}
+
 func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || ac == nil {
@@ -564,4 +803,11 @@ func organizationUserToGen(row *orgrepo.ListOrganizationUsersRow) *gen.Organizat
 		CreatedAt:          createdAt,
 		UpdatedAt:          updatedAt,
 	}
+}
+
+func fullSvixAppPortalCapabilities() []models.AppPortalCapability {
+	return []models.AppPortalCapability{}
+}
+func minimumSvixAppPortalCapabilities() []models.AppPortalCapability {
+	return []models.AppPortalCapability{models.APPPORTALCAPABILITY_VIEW_BASE}
 }

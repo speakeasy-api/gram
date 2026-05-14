@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countFunctionsAccess = `-- name: CountFunctionsAccess :one
@@ -42,6 +43,56 @@ func (q *Queries) CountOutboxEntriesByEventType(ctx context.Context, eventType s
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const getOutboxEntry = `-- name: GetOutboxEntry :one
+SELECT id FROM outbox WHERE id = $1
+`
+
+// Returns the ID of an outbox row; errors with pgx.ErrNoRows if deleted.
+func (q *Queries) GetOutboxEntry(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRow(ctx, getOutboxEntry, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
+const getOutboxRelayState = `-- name: GetOutboxRelayState :one
+SELECT
+    outbox_id,
+    processed_at,
+    noop,
+    dead_lettered,
+    svix_message_id,
+    attempts,
+    last_error
+FROM outbox_relays
+WHERE outbox_id = $1
+`
+
+type GetOutboxRelayStateRow struct {
+	OutboxID      int64
+	ProcessedAt   pgtype.Timestamptz
+	Noop          bool
+	DeadLettered  bool
+	SvixMessageID pgtype.Text
+	Attempts      int32
+	LastError     pgtype.Text
+}
+
+// Reads the relay tracking state for a single outbox row.
+func (q *Queries) GetOutboxRelayState(ctx context.Context, outboxID int64) (GetOutboxRelayStateRow, error) {
+	row := q.db.QueryRow(ctx, getOutboxRelayState, outboxID)
+	var i GetOutboxRelayStateRow
+	err := row.Scan(
+		&i.OutboxID,
+		&i.ProcessedAt,
+		&i.Noop,
+		&i.DeadLettered,
+		&i.SvixMessageID,
+		&i.Attempts,
+		&i.LastError,
+	)
+	return i, err
 }
 
 const insertChatMessage = `-- name: InsertChatMessage :one
@@ -225,6 +276,60 @@ func (q *Queries) ListDeploymentHTTPTools(ctx context.Context, deploymentID uuid
 	return items, nil
 }
 
+const listRiskResultsAll = `-- name: ListRiskResultsAll :many
+SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, dead_letter_reason, created_at
+FROM risk_results
+WHERE project_id = $1
+  AND risk_policy_id = $2
+ORDER BY id
+`
+
+type ListRiskResultsAllParams struct {
+	ProjectID    uuid.UUID
+	RiskPolicyID uuid.UUID
+}
+
+// Fixture query used by the risk-analysis activity tests that need to
+// inspect dead-letter and "no findings" rows the production queries filter
+// out via `found IS TRUE`.
+func (q *Queries) ListRiskResultsAll(ctx context.Context, arg ListRiskResultsAllParams) ([]RiskResult, error) {
+	rows, err := q.db.Query(ctx, listRiskResultsAll, arg.ProjectID, arg.RiskPolicyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskResult
+	for rows.Next() {
+		var i RiskResult
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.RiskPolicyID,
+			&i.RiskPolicyVersion,
+			&i.ChatMessageID,
+			&i.Source,
+			&i.Found,
+			&i.RuleID,
+			&i.Description,
+			&i.Match,
+			&i.StartPos,
+			&i.EndPos,
+			&i.Confidence,
+			&i.Tags,
+			&i.DeadLetterReason,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const scrubDeploymentFunctionMachineSpecs = `-- name: ScrubDeploymentFunctionMachineSpecs :exec
 UPDATE deployments_functions SET memory_mib = NULL, scale = NULL WHERE deployment_id = $1
 `
@@ -232,5 +337,25 @@ UPDATE deployments_functions SET memory_mib = NULL, scale = NULL WHERE deploymen
 // Simulates a legacy deployment by NULLing out memory_mib and scale, as if the row was inserted before these columns existed.
 func (q *Queries) ScrubDeploymentFunctionMachineSpecs(ctx context.Context, deploymentID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, scrubDeploymentFunctionMachineSpecs, deploymentID)
+	return err
+}
+
+const setOrgWebhookConfig = `-- name: SetOrgWebhookConfig :exec
+UPDATE organization_metadata
+SET svix_app_id = $1,
+    webhooks_enabled = $2,
+    updated_at = clock_timestamp()
+WHERE id = $3
+`
+
+type SetOrgWebhookConfigParams struct {
+	SvixAppID       pgtype.Text
+	WebhooksEnabled pgtype.Bool
+	OrganizationID  string
+}
+
+// Sets the Svix app ID and webhooks_enabled flag on an organization.
+func (q *Queries) SetOrgWebhookConfig(ctx context.Context, arg SetOrgWebhookConfigParams) error {
+	_, err := q.db.Exec(ctx, setOrgWebhookConfig, arg.SvixAppID, arg.WebhooksEnabled, arg.OrganizationID)
 	return err
 }

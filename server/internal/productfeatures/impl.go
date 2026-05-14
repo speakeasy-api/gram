@@ -122,7 +122,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	return nil
 }
 
-func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProductFeaturesPayload) (*gen.GramProductFeatures, error) {
+func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProductFeaturesPayload) (*gen.GetProductFeaturesResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -174,11 +174,12 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		return enabled
 	}
 
-	return &gen.GramProductFeatures{
+	return &gen.GetProductFeaturesResult{
 		LogsEnabled:                  isEnabled(FeatureLogs),
 		ToolIoLogsEnabled:            isEnabled(FeatureToolIOLogs),
 		SessionCaptureEnabled:        isEnabled(FeatureSessionCapture),
 		AuthzChallengeLoggingEnabled: isEnabled(FeatureAuthzChallengeLogging),
+		Webhooks:                     isEnabled(FeatureWebhooks),
 	}, nil
 }
 

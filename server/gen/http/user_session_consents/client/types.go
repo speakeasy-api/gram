@@ -13,13 +13,6 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// RevokeUserSessionConsentRequestBody is the type of the "userSessionConsents"
-// service "revokeUserSessionConsent" endpoint HTTP request body.
-type RevokeUserSessionConsentRequestBody struct {
-	// The user_session_consent id.
-	ID string `form:"id" json:"id" xml:"id"`
-}
-
 // ListUserSessionConsentsResponseBody is the type of the "userSessionConsents"
 // service "listUserSessionConsents" endpoint HTTP response body.
 type ListUserSessionConsentsResponseBody struct {
@@ -424,16 +417,6 @@ type UserSessionConsentResponseBody struct {
 	ConsentedAt   *string `form:"consented_at,omitempty" json:"consented_at,omitempty" xml:"consented_at,omitempty"`
 	CreatedAt     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-}
-
-// NewRevokeUserSessionConsentRequestBody builds the HTTP request body from the
-// payload of the "revokeUserSessionConsent" endpoint of the
-// "userSessionConsents" service.
-func NewRevokeUserSessionConsentRequestBody(p *usersessionconsents.RevokeUserSessionConsentPayload) *RevokeUserSessionConsentRequestBody {
-	body := &RevokeUserSessionConsentRequestBody{
-		ID: p.ID,
-	}
-	return body
 }
 
 // NewListUserSessionConsentsResultOK builds a "userSessionConsents" service

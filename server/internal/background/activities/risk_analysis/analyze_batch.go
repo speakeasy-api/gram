@@ -38,12 +38,16 @@ type AnalyzeBatch struct {
 	db              *pgxpool.Pool
 	scanner         *Scanner
 	piiScanner      PIIScanner
+	piScanner       *PromptInjectionScanner
 	shadowMCPClient *shadowmcp.Client
 }
 
-func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner PIIScanner, shadowMCPClient *shadowmcp.Client) *AnalyzeBatch {
+func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner PIIScanner, piScanner *PromptInjectionScanner, shadowMCPClient *shadowmcp.Client) *AnalyzeBatch {
 	if piiScanner == nil {
 		piiScanner = &StubPIIScanner{}
+	}
+	if piScanner == nil {
+		piScanner = NewPromptInjectionScanner(logger, StubClassifier{})
 	}
 	return &AnalyzeBatch{
 		logger:          logger,
@@ -52,18 +56,20 @@ func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, m
 		db:              db,
 		scanner:         NewScanner(),
 		piiScanner:      piiScanner,
+		piScanner:       piScanner,
 		shadowMCPClient: shadowMCPClient,
 	}
 }
 
 type AnalyzeBatchArgs struct {
-	ProjectID        uuid.UUID
-	OrganizationID   string
-	RiskPolicyID     uuid.UUID
-	PolicyVersion    int64
-	MessageIDs       []uuid.UUID
-	Sources          []string
-	PresidioEntities []string
+	ProjectID            uuid.UUID
+	OrganizationID       string
+	RiskPolicyID         uuid.UUID
+	PolicyVersion        int64
+	MessageIDs           []uuid.UUID
+	Sources              []string
+	PresidioEntities     []string
+	PromptInjectionRules []string
 }
 
 type AnalyzeBatchResult struct {
@@ -232,14 +238,12 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	if slices.Contains(args.Sources, SourcePromptInjection) {
 		wg.Go(func() {
-			for i, content := range contents {
-				f, err := DetectPromptInjection(ctx, content)
-				if err != nil {
-					a.logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
-					continue
-				}
-				promptInjectionFindings[i] = f
+			results, err := a.piScanner.ScanBatch(ctx, contents, args.PromptInjectionRules)
+			if err != nil {
+				a.logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
+				return
 			}
+			promptInjectionFindings = results
 			activity.RecordHeartbeat(ctx, "prompt_injection")
 		})
 	}
@@ -364,14 +368,15 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 			continue
 		}
 		findings = append(findings, Finding{
-			Source:      shadowmcp.SourceShadowMCP,
-			RuleID:      "shadow_mcp.unverified_call",
-			Description: detail,
-			Match:       toolName,
-			StartPos:    0,
-			EndPos:      0,
-			Tags:        nil,
-			Confidence:  1.0,
+			Source:           shadowmcp.SourceShadowMCP,
+			RuleID:           "shadow_mcp.unverified_call",
+			Description:      detail,
+			Match:            toolName,
+			StartPos:         0,
+			EndPos:           0,
+			Tags:             nil,
+			Confidence:       1.0,
+			DeadLetterReason: "",
 		})
 	}
 	return findings
@@ -418,14 +423,15 @@ func (a *AnalyzeBatch) scanMessageDestructiveToolCalls(ctx context.Context, orgI
 		}
 
 		findings = append(findings, Finding{
-			Source:      shadowmcp.SourceDestructiveTool,
-			RuleID:      "destructive_tool.annotation",
-			Description: "Tool is annotated as destructive",
-			Match:       resolved.ToolName,
-			StartPos:    0,
-			EndPos:      0,
-			Tags:        nil,
-			Confidence:  1.0,
+			Source:           shadowmcp.SourceDestructiveTool,
+			RuleID:           "destructive_tool.annotation",
+			Description:      "Tool is annotated as destructive",
+			Match:            resolved.ToolName,
+			StartPos:         0,
+			EndPos:           0,
+			Tags:             nil,
+			Confidence:       1.0,
+			DeadLetterReason: "",
 		})
 	}
 	return findings
@@ -473,14 +479,15 @@ func (a *AnalyzeBatch) scanMessageDestructiveCLICalls(ctx context.Context, raw [
 		}
 
 		findings = append(findings, Finding{
-			Source:      SourceCLIDestructive,
-			RuleID:      "cli_destructive." + matched.FullName(),
-			Description: "Tool input matched a destructive CLI pattern",
-			Match:       toolName,
-			StartPos:    0,
-			EndPos:      0,
-			Tags:        nil,
-			Confidence:  1.0,
+			Source:           SourceCLIDestructive,
+			RuleID:           "cli_destructive." + matched.FullName(),
+			Description:      "Tool input matched a destructive CLI pattern",
+			Match:            toolName,
+			StartPos:         0,
+			EndPos:           0,
+			Tags:             nil,
+			Confidence:       1.0,
+			DeadLetterReason: "",
 		})
 	}
 	return findings
@@ -551,13 +558,29 @@ func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, mes
 	for i, msg := range messages {
 		findings := batchFindings[i]
 
-		if len(findings) == 0 {
+		// Split dead-letter sentinels from real findings: DL markers do not
+		// contribute to findingsCount, do not feed the confidence histogram,
+		// and are stored with found=false + dead_letter_reason populated.
+		// They coexist with the per-message empty row so the existing
+		// "any row => analyzed" semantics in FetchUnanalyzedMessageIDs
+		// keep working until we add per-source dedup.
+		realFindings := findings[:0:0]
+		for _, f := range findings {
+			if f.DeadLetterReason != "" {
+				resultID, _ := uuid.NewV7()
+				rows = append(rows, deadLetterRow(resultID, args, msg.ID, f))
+				continue
+			}
+			realFindings = append(realFindings, f)
+		}
+
+		if len(realFindings) == 0 {
 			resultID, _ := uuid.NewV7()
 			rows = append(rows, emptyResultRow(resultID, args, msg.ID))
 			continue
 		}
 
-		for _, f := range findings {
+		for _, f := range realFindings {
 			findingsCount++
 			a.metrics.RecordFindingConfidence(ctx, args.OrganizationID, f.RuleID, f.Confidence)
 			resultID, _ := uuid.NewV7()
@@ -577,6 +600,7 @@ func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, mes
 				EndPos:            pgtype.Int4{Int32: conv.SafeInt32(f.EndPos), Valid: true},
 				Confidence:        pgtype.Float8{Float64: f.Confidence, Valid: true},
 				Tags:              f.Tags,
+				DeadLetterReason:  pgtype.Text{String: "", Valid: false},
 			})
 		}
 	}
@@ -636,5 +660,31 @@ func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID) re
 		EndPos:            pgtype.Int4{Int32: 0, Valid: false},
 		Confidence:        pgtype.Float8{Float64: 0, Valid: false},
 		Tags:              nil,
+		DeadLetterReason:  pgtype.Text{String: "", Valid: false},
+	}
+}
+
+// deadLetterRow materializes a Finding flagged with DeadLetterReason as a
+// risk_results row. found=false so the row never shows up in finding counts;
+// the rule_id/description carry the orchestrator's sentinel labels and
+// dead_letter_reason carries the underlying scanner error.
+func deadLetterRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID, f Finding) repo.InsertRiskResultsParams {
+	return repo.InsertRiskResultsParams{
+		ID:                id,
+		ProjectID:         args.ProjectID,
+		OrganizationID:    args.OrganizationID,
+		RiskPolicyID:      args.RiskPolicyID,
+		RiskPolicyVersion: args.PolicyVersion,
+		ChatMessageID:     messageID,
+		Source:            f.Source,
+		Found:             false,
+		RuleID:            pgtype.Text{String: f.RuleID, Valid: f.RuleID != ""},
+		Description:       pgtype.Text{String: f.Description, Valid: f.Description != ""},
+		Match:             pgtype.Text{String: "", Valid: false},
+		StartPos:          pgtype.Int4{Int32: 0, Valid: false},
+		EndPos:            pgtype.Int4{Int32: 0, Valid: false},
+		Confidence:        pgtype.Float8{Float64: 0, Valid: false},
+		Tags:              nil,
+		DeadLetterReason:  pgtype.Text{String: f.DeadLetterReason, Valid: true},
 	}
 }
