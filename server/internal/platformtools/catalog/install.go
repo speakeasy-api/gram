@@ -246,6 +246,13 @@ func resolveRemoteURL(rawURL string, declared map[string]*types.ExternalMCPRemot
 // buildHeaderInputs maps the catalog-declared headers to remoteMcp header
 // inputs using the supplied static values. Required headers without a value
 // fail the call. is_secret/is_required are preserved from the catalog.
+//
+// Secret headers are refused outright: the platform MCP path records raw
+// tool-call arguments (serve_platform.go RecordRequestBodyContent) so any
+// secret routed through the supplied headers map would be written to
+// telemetry/log storage in plaintext even though remoteMcp encrypts at
+// rest. Catalog servers that require secret headers must be installed
+// through the dashboard's "Add remote MCP" flow instead.
 func buildHeaderInputs(declared []*types.ExternalMCPRemoteHeader, supplied map[string]string) ([]*remotemcpgen.HeaderInput, error) {
 	if len(declared) == 0 {
 		return nil, nil
@@ -256,6 +263,9 @@ func buildHeaderInputs(declared []*types.ExternalMCPRemoteHeader, supplied map[s
 		if header == nil || header.Name == "" {
 			continue
 		}
+		if header.IsSecret != nil && *header.IsSecret {
+			return nil, oops.E(oops.CodeBadRequest, nil, "header %q is declared as secret; assistants cannot install catalog servers that require secret headers — ask the user to add this server through the dashboard's 'Add remote MCP' flow", header.Name)
+		}
 		value := supplied[header.Name]
 		required := header.IsRequired != nil && *header.IsRequired
 		if value == "" {
@@ -264,15 +274,11 @@ func buildHeaderInputs(declared []*types.ExternalMCPRemoteHeader, supplied map[s
 			}
 			continue
 		}
-		isSecret := false
-		if header.IsSecret != nil {
-			isSecret = *header.IsSecret
-		}
 		out = append(out, &remotemcpgen.HeaderInput{
 			Name:                   header.Name,
 			Description:            header.Description,
 			IsRequired:             new(required),
-			IsSecret:               new(isSecret),
+			IsSecret:               new(false),
 			Value:                  new(value),
 			ValueFromRequestHeader: nil,
 		})

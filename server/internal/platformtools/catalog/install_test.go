@@ -136,3 +136,15 @@ func TestBuildHeaderInputs_MissingRequiredErrors(t *testing.T) {
 	_, err := buildHeaderInputs(declared, nil)
 	require.Error(t, err)
 }
+
+func TestBuildHeaderInputs_RejectsSecretHeader(t *testing.T) {
+	t.Parallel()
+
+	secret := true
+	declared := []*types.ExternalMCPRemoteHeader{
+		{Name: "Authorization", Description: nil, IsSecret: &secret, IsRequired: nil, Placeholder: nil},
+	}
+
+	_, err := buildHeaderInputs(declared, map[string]string{"Authorization": "Bearer xyz"})
+	require.Error(t, err)
+}
