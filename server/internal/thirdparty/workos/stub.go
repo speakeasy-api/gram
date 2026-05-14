@@ -35,8 +35,8 @@ type stubOrgState struct {
 	roleOrder    []string
 	memberships  map[string]Member
 	users        map[string]User
-	invites      map[string]Invitation
-	inviteOrder  []string
+	invites      map[string]Invitation //nolint:unused // reserved for invite stub tests
+	inviteOrder  []string              //nolint:unused // reserved for invite stub tests
 }
 
 func NewStubClient() *StubClient {

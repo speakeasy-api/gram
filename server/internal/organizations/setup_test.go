@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	svix "github.com/svix/svix-webhooks/go"
 
-	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -23,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/svix/svixtest"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -180,16 +178,4 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 		orgs:    orgs,
 		svixSrv: svixSrv,
 	}
-}
-
-// expectWorkOSOrgAdminRole stubs a successful WorkOS admin membership check for the session user.
-func expectWorkOSOrgAdminRole(t *testing.T, orgs *MockOrganizationProvider) {
-	t.Helper()
-	orgs.On("GetOrgMembership", mock.Anything, testAuthUserWorkOSID, mockidp.MockOrgID).Return(&thirdpartyworkos.Member{RoleSlug: "admin"}, nil).Once()
-}
-
-// expectWorkOSOrgNonAdminRole stubs WorkOS membership with a non-admin role.
-func expectWorkOSOrgNonAdminRole(t *testing.T, orgs *MockOrganizationProvider) {
-	t.Helper()
-	orgs.On("GetOrgMembership", mock.Anything, testAuthUserWorkOSID, mockidp.MockOrgID).Return(&thirdpartyworkos.Member{RoleSlug: "member"}, nil).Once()
 }

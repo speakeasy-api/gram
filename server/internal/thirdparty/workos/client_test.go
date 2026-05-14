@@ -32,9 +32,7 @@ type fakeWorkOS struct {
 	users          map[string]common.User                // userID → user
 	orgs           map[string]organizations.Organization // orgID → org
 	orgUsers       map[string][]string                   // orgID → []userID
-	invitations    []usermanagement.Invitation
-	memberPageSize int // if > 0, paginates ListMembers responses
-	invitePageSize int // if > 0, paginates ListInvitations responses
+	memberPageSize int                                   // if > 0, paginates ListMembers responses
 	nextRoleID     int
 }
 
