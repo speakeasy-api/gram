@@ -51,7 +51,6 @@ pub enum RunnerError {
 
     #[error("submit input: {0}")]
     SubmitInput(String),
-
 }
 
 impl From<agentkit_loop::LoopError> for RunnerError {
@@ -59,4 +58,3 @@ impl From<agentkit_loop::LoopError> for RunnerError {
         RunnerError::Loop(err.to_string())
     }
 }
-

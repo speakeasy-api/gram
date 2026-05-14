@@ -501,10 +501,10 @@ func warmRemainingSeconds(idleSeconds *uint64, ttlSeconds int) int {
 	if ttlSeconds <= 0 {
 		return 0
 	}
-	if idleSeconds == nil {
-		return ttlSeconds
-	}
-	if *idleSeconds >= uint64(ttlSeconds) {
+	// nil signals the runner reported no live threads — VM is fully idle, so
+	// no warm window remains. A non-nil min-idle bigger than the TTL also
+	// returns 0, matching the "expired" boundary.
+	if idleSeconds == nil || *idleSeconds >= uint64(ttlSeconds) {
 		return 0
 	}
 	return ttlSeconds - int(*idleSeconds) //nolint:gosec // bounded above by ttlSeconds (int)

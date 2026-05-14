@@ -64,15 +64,13 @@ impl GramBootstrapClient {
     ) -> Result<ThreadBootstrap, GramClientError> {
         let url = format!("{}{}", self.base_url.trim_end_matches('/'), BOOTSTRAP_PATH);
         let bearer = self.tokens.current().map_err(|_| GramClientError::Token)?;
-        let body = serde_json::to_vec(&BootstrapRequest { thread_id })?;
 
         let resp = self
             .http
             .post(&url)
             .timeout(BOOTSTRAP_TIMEOUT)
             .bearer_auth(&bearer)
-            .header(http::header::CONTENT_TYPE, "application/json")
-            .body(body)
+            .json(&BootstrapRequest { thread_id })
             .send()
             .await?;
 

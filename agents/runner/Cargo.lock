@@ -1843,6 +1843,7 @@ dependencies = [
  "async-trait",
  "http",
  "reqwest",
+ "serde",
  "thiserror 2.0.18",
  "tower-service",
 ]

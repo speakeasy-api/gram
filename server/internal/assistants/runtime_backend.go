@@ -36,10 +36,12 @@ type RuntimeBackendEnsureResult struct {
 	BackendMetadataJSON []byte
 }
 
-// RuntimeBackendStatus mirrors the runner's `/state` response. IdleSeconds is
-// `&0` while a turn is in flight (the runner clears its idle clock
-// synchronously on /turn enqueue so this signal does not lag the request that
-// started work) and `nil` only when the runner has never been /configured.
+// RuntimeBackendStatus collapses the runner's per-thread state to the single
+// idle signal the manager polls. IdleSeconds is `&0` while any thread has a
+// turn in flight (the runner clears that thread's idle clock synchronously
+// on /turn enqueue), the minimum idle_seconds across threads when all are
+// idle, and `nil` when the runner reports no threads — fully idle, safe to
+// recycle or expire.
 type RuntimeBackendStatus struct {
 	Configured  bool
 	IdleSeconds *uint64

@@ -106,8 +106,8 @@ pub fn build_bootstrap_client(client: reqwest::Client) -> ClientWithMiddleware {
     let policy = ExponentialBackoff::builder()
         .retry_bounds(BOOTSTRAP_RETRY_MIN, BOOTSTRAP_RETRY_MAX)
         .build_with_max_retries(BOOTSTRAP_MAX_RETRIES);
-    let retry =
-        RetryTransientMiddleware::new_with_policy(policy).with_retry_log_level(tracing::Level::INFO);
+    let retry = RetryTransientMiddleware::new_with_policy(policy)
+        .with_retry_log_level(tracing::Level::INFO);
     ClientBuilder::new(client).with(retry).build()
 }
 

@@ -62,12 +62,36 @@ type flyRuntimeAppIdentity struct {
 }
 
 // runnerStateResponse mirrors agents/runner/src/wire.rs::RunnerStateResponse.
-// IdleSeconds is `0` while a turn is in flight (the runner clears its idle
-// clock on /turn enqueue) and absent only when the runner has never been
-// /configured. Both shapes are the source the manager polls to gate expiry.
+// One VM serves every thread under an assistant, so the runner reports per-
+// thread idle clocks rather than a single VM-wide value. Threads is empty
+// when the VM has booted but is not yet driving any thread.
 type runnerStateResponse struct {
-	Configured  bool    `json:"configured"`
-	IdleSeconds *uint64 `json:"idle_seconds,omitempty"`
+	AssistantID   string              `json:"assistant_id"`
+	UptimeSeconds uint64              `json:"uptime_seconds"`
+	Threads       []runnerThreadState `json:"threads"`
+}
+
+type runnerThreadState struct {
+	ThreadID    string `json:"thread_id"`
+	ChatID      string `json:"chat_id"`
+	IdleSeconds uint64 `json:"idle_seconds"`
+}
+
+// minThreadIdle returns the minimum idle_seconds across the runner's threads,
+// or nil when no threads exist. A nil signal means "no per-thread activity to
+// gate on" — callers treat that as fully idle (safe to recycle, no warm
+// remaining).
+func (r runnerStateResponse) minThreadIdle() *uint64 {
+	if len(r.Threads) == 0 {
+		return nil
+	}
+	min := r.Threads[0].IdleSeconds
+	for _, t := range r.Threads[1:] {
+		if t.IdleSeconds < min {
+			min = t.IdleSeconds
+		}
+	}
+	return &min
 }
 
 type flyRuntimeAPIClient interface {
@@ -555,13 +579,14 @@ func (f *FlyRuntimeBackend) maybeRecycleImage(
 	target := flyRuntimeTarget{URL: appURL, IP: appIP, MachineID: machine.ID}
 	if machine.State == fly.MachineStateStarted {
 		state, stateErr := f.runtimeState(ctx, target)
-		// /state probe success + idle_seconds==0 means a turn is in flight
-		// (runner clears the idle clock synchronously on /turn enqueue).
-		// Skip recycling so we don't reboot mid-turn; a later admission with
-		// an idle runner picks the upgrade up. Probe errors fall through to
-		// recycle — the runner is unreachable on the stale image anyway and
-		// waitForRuntimeHealth would just fail next.
-		if stateErr == nil && state.IdleSeconds != nil && *state.IdleSeconds == 0 {
+		// A turn in flight reads as min(idle_seconds) == 0 across the
+		// runner's threads (the runner clears a thread's idle clock
+		// synchronously on /turn enqueue). Skip recycling so we don't reboot
+		// mid-turn; a later admission with idle threads picks the upgrade
+		// up. Probe errors fall through to recycle — the runner is
+		// unreachable on the stale image anyway and waitForRuntimeHealth
+		// would just fail next.
+		if idle := state.minThreadIdle(); stateErr == nil && idle != nil && *idle == 0 {
 			f.logger.InfoContext(ctx,
 				"assistant fly runtime image recycle skipped: turn in flight",
 				attr.SlogFlyAppName(appName),
@@ -790,7 +815,10 @@ func (f *FlyRuntimeBackend) Status(ctx context.Context, runtime assistantRuntime
 	if err != nil {
 		return RuntimeBackendStatus{}, fmt.Errorf("load assistant fly runtime state: %w", err)
 	}
-	return RuntimeBackendStatus(state), nil
+	return RuntimeBackendStatus{
+		Configured:  true,
+		IdleSeconds: state.minThreadIdle(),
+	}, nil
 }
 
 // Stop pauses the machine but preserves the app, allocated IP, and backend
@@ -974,7 +1002,11 @@ func (f *FlyRuntimeBackend) waitForRuntimeHealth(ctx context.Context, target fly
 		}); err == nil {
 			return nil
 		}
-		time.Sleep(500 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("wait for runtime health: %w", ctx.Err())
+		case <-time.After(500 * time.Millisecond):
+		}
 	}
 }
 
@@ -997,12 +1029,9 @@ func (f *FlyRuntimeBackend) runtimeState(ctx context.Context, target flyRuntimeT
 	return state, nil
 }
 
-// clientForTarget used to dial target.IP directly to bypass public DNS
-// propagation on fresh apps. Doesn't work on shared Fly IPs: the edge
-// accepts TLS but drops the backend with EOF until the SNI→app mapping
-// finishes registering — same propagation window as DNS. Kept as a hook
-// point; a future dedicated-IP or single-app-many-machines design (see
-// plan B) can flip the pinning back on.
+// clientForTarget is a hook point for per-target dialing. The runner is
+// reachable via the app's hostname today; a future dedicated-IP design can
+// swap this to pin a request to a specific IP without changing callers.
 func (f *FlyRuntimeBackend) clientForTarget(_ flyRuntimeTarget) flyRuntimeHTTPDoer {
 	return f.httpClient
 }

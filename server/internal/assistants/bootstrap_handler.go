@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/time/rate"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -30,25 +31,25 @@ type bootstrapRequest struct {
 }
 
 type assistantRateLimiter struct {
-	mu       sync.Mutex
-	state    map[uuid.UUID]*rateBucket
-	burst    float64
-	refill   float64
-	lastSwep time.Time
+	mu        sync.Mutex
+	state     map[uuid.UUID]*rateLimiterEntry
+	limit     rate.Limit
+	burst     int
+	lastSweep time.Time
 }
 
-type rateBucket struct {
-	tokens     float64
-	lastRefill time.Time
+type rateLimiterEntry struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
 }
 
 func newAssistantRateLimiter() *assistantRateLimiter {
 	return &assistantRateLimiter{
-		mu:       sync.Mutex{},
-		state:    map[uuid.UUID]*rateBucket{},
-		burst:    float64(bootstrapRateBurst),
-		refill:   float64(bootstrapRatePerMin) / 60.0,
-		lastSwep: time.Now(),
+		mu:        sync.Mutex{},
+		state:     map[uuid.UUID]*rateLimiterEntry{},
+		limit:     rate.Limit(float64(bootstrapRatePerMin) / 60.0),
+		burst:     bootstrapRateBurst,
+		lastSweep: time.Now(),
 	}
 }
 
@@ -56,36 +57,25 @@ func (l *assistantRateLimiter) allow(id uuid.UUID, now time.Time) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	// Lazy GC: every 5 minutes, drop buckets that have been idle long enough
+	// Lazy GC: every 5 minutes, drop limiters that have been idle long enough
 	// to have refilled to full. Bounded memory across many short-lived
 	// assistants without paying a goroutine.
-	if now.Sub(l.lastSwep) > 5*time.Minute {
-		for k, b := range l.state {
-			if now.Sub(b.lastRefill) > time.Minute*5 {
+	if now.Sub(l.lastSweep) > 5*time.Minute {
+		for k, e := range l.state {
+			if now.Sub(e.lastSeen) > 5*time.Minute {
 				delete(l.state, k)
 			}
 		}
-		l.lastSwep = now
+		l.lastSweep = now
 	}
 
-	b, ok := l.state[id]
+	e, ok := l.state[id]
 	if !ok {
-		b = &rateBucket{tokens: l.burst, lastRefill: now}
-		l.state[id] = b
+		e = &rateLimiterEntry{limiter: rate.NewLimiter(l.limit, l.burst), lastSeen: now}
+		l.state[id] = e
 	}
-	elapsed := now.Sub(b.lastRefill).Seconds()
-	if elapsed > 0 {
-		b.tokens += elapsed * l.refill
-		if b.tokens > l.burst {
-			b.tokens = l.burst
-		}
-		b.lastRefill = now
-	}
-	if b.tokens < 1 {
-		return false
-	}
-	b.tokens--
-	return true
+	e.lastSeen = now
+	return e.limiter.AllowN(now, 1)
 }
 
 func (s *Service) handleGetThreadBootstrap(w http.ResponseWriter, r *http.Request) error {

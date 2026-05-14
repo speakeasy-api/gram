@@ -23,7 +23,7 @@ const phaseSpanPrefix = "assistants.runtime."
 func TestFlyRuntimeBackendEmitsPhaseSpansOnColdCreate(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, false)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 	recorder := installRecordingTracer(t, backend)
 
@@ -71,7 +71,7 @@ func TestFlyRuntimeBackendEmitsPhaseSpansOnColdCreate(t *testing.T) {
 func TestFlyRuntimeBackendEmitsPhaseSpansOnWarmReuse(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 	recorder := installRecordingTracer(t, backend)
 
@@ -122,7 +122,7 @@ func TestFlyRuntimeBackendEmitsPhaseSpansOnWarmReuse(t *testing.T) {
 func TestFlyRuntimeBackendInstanceIDDriftMarksColdStartOnWaitAndStateSpans(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 	recorder := installRecordingTracer(t, backend)
 
@@ -167,7 +167,7 @@ func TestFlyRuntimeBackendInstanceIDDriftMarksColdStartOnWaitAndStateSpans(t *te
 func TestFlyRuntimeBackendPhaseSpanOnLaunchFailureCarriesErrorAndClass(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, false)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 	recorder := installRecordingTracer(t, backend)
 

@@ -233,6 +233,11 @@ async fn sweep_idle(host: &Arc<RuntimeHost>) {
                 handle.abort();
             }
         }
+        // Idempotency keys are scoped per thread (`{thread_id}:{event_id}`),
+        // so an evicted thread's keys can never match a future /turn. Drop
+        // them so `seen` does not grow without bound over the VM lifetime.
+        let prefix = format!("{thread_id}:");
+        host.seen.retain(|key| !key.starts_with(&prefix));
     }
 }
 
@@ -296,9 +301,8 @@ async fn spawn_thread(
         .default_headers(chat_headers)
         .build()?;
 
-    let openrouter_config =
-        OpenRouterConfig::new(String::new(), bootstrap.model.clone())
-            .with_base_url(bootstrap.completions_url.clone());
+    let openrouter_config = OpenRouterConfig::new(String::new(), bootstrap.model.clone())
+        .with_base_url(bootstrap.completions_url.clone());
     let provider = OpenRouterProvider::from(openrouter_config);
 
     let completions_http = build_http(thread_http_client.clone(), host.tokens.clone());
@@ -353,11 +357,7 @@ async fn spawn_thread(
     let fs_resources = FileSystemToolResources::new()
         .with_policy(FileSystemToolPolicy::new().require_read_before_write(true));
 
-    let mcp_server_ids: Vec<String> = bootstrap
-        .mcp_servers
-        .iter()
-        .map(|s| s.id.clone())
-        .collect();
+    let mcp_server_ids: Vec<String> = bootstrap.mcp_servers.iter().map(|s| s.id.clone()).collect();
     let native_tools = ToolRegistry::new().with(tools::bun_run::bun_run).with(
         tools::mcp_force_reconnect::McpForceReconnectTool::new(
             host.mcp_cmd_tx.clone(),
@@ -403,17 +403,17 @@ async fn spawn_thread(
             .catch_unwind()
             .await;
         match outcome {
-            Ok(Ok(reason)) => tracing::info!(thread_id = %log_thread_id, reason = %reason, "thread loop exited"),
-            Ok(Err(err)) => tracing::error!(thread_id = %log_thread_id, error = %err, "thread loop exited with error"),
+            Ok(Ok(reason)) => {
+                tracing::info!(thread_id = %log_thread_id, reason = %reason, "thread loop exited")
+            }
+            Ok(Err(err)) => {
+                tracing::error!(thread_id = %log_thread_id, error = %err, "thread loop exited with error")
+            }
             Err(panic_payload) => {
                 let msg = panic_payload
                     .downcast_ref::<&'static str>()
                     .map(|s| (*s).to_string())
-                    .or_else(|| {
-                        panic_payload
-                            .downcast_ref::<String>()
-                            .cloned()
-                    })
+                    .or_else(|| panic_payload.downcast_ref::<String>().cloned())
                     .unwrap_or_else(|| "<panic payload>".to_string());
                 tracing::error!(thread_id = %log_thread_id, panic = %msg, "thread loop panicked");
             }
@@ -465,7 +465,9 @@ async fn register_missing_servers(
         }
         match reply_rx.await {
             Ok(Ok(())) => state.registered.push(server.clone()),
-            Ok(Err(e)) => tracing::warn!(server_id = %server.id, error = %e, "register mcp server failed"),
+            Ok(Err(e)) => {
+                tracing::warn!(server_id = %server.id, error = %e, "register mcp server failed")
+            }
             Err(_) => return Err(RunnerError::Loop("mcp actor reply dropped".into())),
         }
     }
@@ -506,10 +508,7 @@ fn build_mcp_server_config(
     ))
 }
 
-async fn run_mcp_actor(
-    mut manager: McpServerManager,
-    mut cmd_rx: mpsc::Receiver<McpCmd>,
-) {
+async fn run_mcp_actor(mut manager: McpServerManager, mut cmd_rx: mpsc::Receiver<McpCmd>) {
     while let Some(cmd) = cmd_rx.recv().await {
         match cmd {
             McpCmd::Register { config, reply } => {

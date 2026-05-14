@@ -22,7 +22,7 @@ import (
 func TestFlyRuntimeBackendEnsureColdCreate(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, false)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
 	apiClient.getAppErr = errors.New("not found")
@@ -56,7 +56,7 @@ func TestFlyRuntimeBackendEnsureColdCreate(t *testing.T) {
 func TestFlyRuntimeBackendEnsureWarmReuse(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
 	threadID := uuid.New()
@@ -97,7 +97,7 @@ func TestFlyRuntimeBackendEnsureWarmReuse(t *testing.T) {
 func TestFlyRuntimeBackendEnsureFlapsNotFoundEstablishedTearsDown(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
 	// ensureApp succeeds (GraphQL says app exists) but flaps Get + List both
@@ -131,7 +131,7 @@ func TestFlyRuntimeBackendEnsureFlapsNotFoundEstablishedTearsDown(t *testing.T) 
 func TestFlyRuntimeBackendEnsureFlapsNotFoundFreshAppPropagates(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
 	// Fresh app — no prior boot recorded. flaps List 404 here is the
@@ -166,7 +166,7 @@ func TestFlyRuntimeBackendEnsureFlapsNotFoundFreshAppPropagates(t *testing.T) {
 func TestFlyRuntimeBackendEnsureFreshlyRecreatedAppClearsPriorBootMetadata(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
 	// Metadata can be copied from a failed prior runtime row. If the app was
@@ -203,7 +203,7 @@ func TestFlyRuntimeBackendEnsureFreshlyRecreatedAppClearsPriorBootMetadata(t *te
 func TestFlyRuntimeBackendEnsureExistingAppWithLegacyMetadataDoesNotTreatPropagationAsCorruption(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
 	apiClient.app = &fly.App{ID: "app-1", Name: "gram-asst-test"}
@@ -236,7 +236,7 @@ func TestFlyRuntimeBackendEnsureExistingAppWithLegacyMetadataDoesNotTreatPropaga
 func TestFlyRuntimeBackendEnsureExistingAppAfterPartialCreateFailureClearsStaleMetadata(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
 	apiClient.getAppErr = errors.New("not found")
@@ -282,7 +282,7 @@ func TestFlyRuntimeBackendEnsureExistingAppAfterPartialCreateFailureClearsStaleM
 func TestFlyRuntimeBackendStopWithoutMachineMetadataIsNoop(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
 	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
@@ -308,7 +308,7 @@ func TestFlyRuntimeBackendStopWithoutMachineMetadataIsNoop(t *testing.T) {
 func TestFlyRuntimeBackendStopStopsMachineKeepsApp(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
 	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
@@ -334,7 +334,7 @@ func TestFlyRuntimeBackendStopStopsMachineKeepsApp(t *testing.T) {
 func TestFlyRuntimeBackendStopToleratesMissingMachine(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
 	flapsClient.stopErr = errors.New("not found")
@@ -360,7 +360,7 @@ func TestFlyRuntimeBackendStopToleratesMissingMachine(t *testing.T) {
 func TestFlyRuntimeBackendReapDeletesAppByMetadataName(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, _ := newTestFlyRuntimeBackend(t, server)
 
 	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
@@ -385,7 +385,7 @@ func TestFlyRuntimeBackendReapDeletesAppByMetadataName(t *testing.T) {
 func TestFlyRuntimeBackendReapWithoutMetadataIsNoop(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, _ := newTestFlyRuntimeBackend(t, server)
 
 	err := backend.Reap(context.Background(), assistantRuntimeRecord{
@@ -399,7 +399,7 @@ func TestFlyRuntimeBackendReapWithoutMetadataIsNoop(t *testing.T) {
 func TestFlyRuntimeBackendReapDestroysMachineThenDeletesEmptyApp(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
 	flapsClient.listMachines = []*fly.Machine{
@@ -426,7 +426,7 @@ func TestFlyRuntimeBackendReapDestroysMachineThenDeletesEmptyApp(t *testing.T) {
 func TestFlyRuntimeBackendReapKeepsAppWhenSiblingMachineActive(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
 	flapsClient.listMachines = []*fly.Machine{
@@ -452,7 +452,7 @@ func TestFlyRuntimeBackendReapKeepsAppWhenSiblingMachineActive(t *testing.T) {
 func TestFlyRuntimeBackendReapToleratesMissingMachine(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
 	flapsClient.destroyErr = errors.New("not found")
@@ -474,7 +474,7 @@ func TestFlyRuntimeBackendReapToleratesMissingMachine(t *testing.T) {
 func TestFlyRuntimeBackendReapTreatsAppNotFoundAsSuccess(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, _ := newTestFlyRuntimeBackend(t, server)
 
 	apiClient.deleteErr = errors.New("not found")
@@ -499,7 +499,7 @@ func TestFlyRuntimeBackendReapTreatsAppNotFoundAsSuccess(t *testing.T) {
 func TestFlyRuntimeBackendEnsureSkipsRecycleWhenImageMatches(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
 	threadID := uuid.New()
@@ -545,10 +545,12 @@ func TestFlyRuntimeBackendEnsureSkipsRecycleWhenImageMatches(t *testing.T) {
 func TestFlyRuntimeBackendEnsureRecyclesStaleImageWhenIdle(t *testing.T) {
 	t.Parallel()
 
-	idle := uint64(10)
 	server := newTestAssistantRuntimeServerWithState(t, runnerStateResponse{
-		Configured:  true,
-		IdleSeconds: &idle,
+		AssistantID:   uuid.NewString(),
+		UptimeSeconds: 600,
+		Threads: []runnerThreadState{
+			{ThreadID: uuid.NewString(), ChatID: uuid.NewString(), IdleSeconds: 10},
+		},
 	})
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
@@ -613,10 +615,12 @@ func TestFlyRuntimeBackendEnsureRecyclesStaleImageWhenIdle(t *testing.T) {
 func TestFlyRuntimeBackendEnsureSkipsRecycleWhileTurnInFlight(t *testing.T) {
 	t.Parallel()
 
-	busy := uint64(0)
 	server := newTestAssistantRuntimeServerWithState(t, runnerStateResponse{
-		Configured:  true,
-		IdleSeconds: &busy,
+		AssistantID:   uuid.NewString(),
+		UptimeSeconds: 600,
+		Threads: []runnerThreadState{
+			{ThreadID: uuid.NewString(), ChatID: uuid.NewString(), IdleSeconds: 0},
+		},
 	})
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
@@ -663,7 +667,7 @@ func TestFlyRuntimeBackendEnsureSkipsRecycleWhileTurnInFlight(t *testing.T) {
 func TestFlyRuntimeBackendEnsureRecyclesStaleImageOnStoppedMachine(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, false)
+	server := newTestAssistantRuntimeServer(t)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
 	threadID := uuid.New()
@@ -767,7 +771,7 @@ func TestFlyRuntimeBackendRunTurnHitsThreadScopedRoute(t *testing.T) {
 func TestFlyRuntimeBackendServerURLRejectsLoopback(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t, true)
+	server := newTestAssistantRuntimeServer(t)
 	backend, _, _ := newTestFlyRuntimeBackend(t, server)
 	backend.config.ServerURLOverride = nil
 
@@ -933,9 +937,13 @@ func (f *testFlyRuntimeFlapsFactory) New(context.Context) (flyRuntimeFlapsClient
 	return f.client, nil
 }
 
-func newTestAssistantRuntimeServer(t *testing.T, configured bool) *httptest.Server {
+func newTestAssistantRuntimeServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	return newTestAssistantRuntimeServerWithState(t, runnerStateResponse{Configured: configured})
+	return newTestAssistantRuntimeServerWithState(t, runnerStateResponse{
+		AssistantID:   uuid.NewString(),
+		UptimeSeconds: 0,
+		Threads:       nil,
+	})
 }
 
 func newTestAssistantRuntimeServerWithState(t *testing.T, state runnerStateResponse) *httptest.Server {

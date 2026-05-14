@@ -13,9 +13,7 @@ use crate::runtime::{
 };
 
 const IDEMPOTENCY_HEADER: &str = "x-idempotency-key";
-use crate::wire::{
-    RunnerStateResponse, ThreadStateView, ThreadTurnRequest, ThreadTurnResponse,
-};
+use crate::wire::{RunnerStateResponse, ThreadStateView, ThreadTurnRequest, ThreadTurnResponse};
 
 pub struct ServeConfig {
     pub addr: SocketAddr,

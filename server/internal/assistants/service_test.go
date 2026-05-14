@@ -68,15 +68,13 @@ func TestServiceCoreAdmitPendingThreadsUsesFlyBackend(t *testing.T) {
 func TestWarmRemainingSecondsKeepsBusyRunnerAlive(t *testing.T) {
 	t.Parallel()
 
-	// The runner sends idle_seconds=0 while a turn is in flight (see
-	// agents/runner/src/wire.rs::RunnerStateResponse) and omits the field
-	// entirely only when never /configured. ExpireThreadRuntime must treat
-	// both shapes as "do not stop": the &0 case covers the production race,
-	// and the nil case is a defensive guard against an unconfigured backend
-	// row sneaking past the CAS.
+	// Idle is derived from min(threads.idle_seconds) — &0 marks any thread
+	// with a turn in flight, in which case ExpireThreadRuntime must revert
+	// to active. A nil idle means the runner reported zero live threads
+	// (fully idle VM) so Stop is correct.
 	zero := uint64(0)
 	require.Positive(t, warmRemainingSeconds(&zero, 300), "busy runner (idle=&0) must keep a positive warm window")
-	require.Positive(t, warmRemainingSeconds(nil, 300), "missing idle (never configured) must not collapse to a Stop decision")
+	require.Zero(t, warmRemainingSeconds(nil, 300), "no live threads must collapse to a Stop decision")
 }
 
 func TestServiceCoreExpireThreadRuntimeRevertsWhenTurnInFlight(t *testing.T) {
