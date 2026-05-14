@@ -7,16 +7,17 @@
 
 ## Goal
 
-Make Shadow MCP access production-ready by expanding existing Risk Policy and Roles systems instead of creating a separate control plane.
+Make Shadow MCP access production-ready by expanding existing Risk Policy and Access systems without making role grants the runtime source of truth.
 
-Risk Policy decides whether Shadow MCP usage is blocked or flagged. Roles and dedicated `shadow_mcp:connect` grants decide whether a role may use a managed Shadow MCP server when a blocking policy applies. Admin changes are audited.
+Risk Policy decides whether Shadow MCP usage is blocked or flagged. Shadow MCP Access Rules decide whether a matching server is explicitly allowed or denied when a blocking policy applies. Admin changes are gated by RBAC and audited.
 
 ## Non-goals
 
 - Do not replace Risk Policy as the Shadow MCP block/flag source of truth.
 - Do not auto-allow a Shadow MCP server when an admin creates a Gram-hosted MCP server.
-- Do not create a second role/permission model outside existing access grants.
+- Do not use role grants or per-user grants for the initial Shadow MCP allow audience.
 - Do not surface detailed block data to admins until the blocked user requests access.
+- Do not model Shadow MCP runtime access with hosted MCP `mcp:connect` grants.
 
 ## Product model
 
@@ -36,13 +37,18 @@ Requests are historical. Admins should be able to list all states, not only pend
 
 An Access Rule is a managed Shadow MCP server entry. It can be `allowed` or `denied`.
 
-Allowed rules are selectable by admins when granting role access. Denied rules are global enforcement entries and take precedence over allowed rules and role grants.
+Allowed rules apply to an audience of all users in the organization or all users in one project. Denied rules are enforcement entries and take precedence over allowed rules.
 
 Match breadth:
 
 - `full_url` — default when a URL is available.
 - `url_host` — broader match for all endpoints on the host.
 - `server_identity` — fallback for local, command-based, or non-URL MCP servers.
+
+Audience:
+
+- `organization` — all users in the organization.
+- `project` — all users acting in the selected project.
 
 ## Data model
 
@@ -86,12 +92,14 @@ Request creation should be idempotent for the same requester, project, and obser
 
 ### `shadow_mcp_access_rules`
 
-Org-scoped managed server list.
+Org-owned managed server list with an explicit audience scope.
 
 Suggested fields:
 
 - `id uuid primary key`
 - `organization_id text not null`
+- `project_id uuid references projects(id) on delete cascade`
+- `access_scope text not null default 'organization' check in ('organization', 'project')`
 - `disposition text not null check in ('allowed', 'denied')`
 - `match_breadth text not null check in ('full_url', 'url_host', 'server_identity')`
 - `match_value text not null`
@@ -108,34 +116,34 @@ Suggested fields:
 - `deleted_at timestamptz`
 - `deleted boolean not null generated always as (deleted_at is not null) stored`
 
-Use a partial uniqueness guard for active rules by organization, match breadth, and match value. If a future use case needs both allow and deny at the exact same match, require an explicit product decision because deny precedence will make the allow ineffective.
+Use a check constraint so organization-scoped rules have `project_id is null` and project-scoped rules have `project_id is not null`.
 
-### Role grants
+Use partial uniqueness guards for active rules:
+
+- organization-scoped uniqueness by organization, match breadth, and match value
+- project-scoped uniqueness by organization, project, match breadth, and match value
+
+If a future use case needs both allow and deny at the exact same match and audience, require an explicit product decision because deny precedence will make the allow ineffective.
+
+### Runtime audience
 
 Do not add a separate role-to-rule join table for v1.
 
-Use existing `principal_grants` rows, but keep Shadow MCP in its own scope/resource family:
+Do not use `principal_grants` to authorize runtime Shadow MCP access in the initial implementation. Runtime audience is stored directly on the Access Rule:
 
-- `scope = 'shadow_mcp:connect'`
-- `principal_urn = role principal`
-- selector `resource_kind = 'shadow_mcp'`
-- selector `resource_id = <shadow_mcp_access_rules.id>`
+- `access_scope = 'organization'` means any user in the organization may use the matching server when the rule is allowed.
+- `access_scope = 'project'` means any user acting in that project may use the matching server when the rule is allowed.
 
-Access Rule approval and manual Access Rule assignment must only assign editable/custom roles. Built-in system roles (`admin`, `member`) are seeded from `SystemRoleGrants` and are not editable through the normal role editor, so Shadow MCP approval must not mutate those grants as a side effect. If admins need broad access, they can assign `shadow_mcp:connect` with a wildcard selector to an editable role through the normal permission picker; do not seed that wildcard grant by default.
+RBAC still gates the management API:
 
-At runtime, a matching allowed Access Rule becomes the Shadow MCP resource checked through RBAC:
+- `org:admin` can review requests and mutate rules.
+- `org:read` can list managed rules.
 
-```text
-authz.ShadowMCPConnectCheck(access_rule.id, project_id)
-```
-
-Do not model this with hosted MCP `mcp:connect`. Current built-in roles can carry broad hosted-MCP grants, and those grants must not satisfy Shadow MCP approval checks. `shadow_mcp:connect` should not be seeded into built-in admin/member role grants by default; access comes from explicit rule approval or manual Access Rule assignment.
-
-If we later need project-specific Shadow MCP grants, keep the `shadow_mcp:connect` scope and use a `project_id` selector dimension under the `shadow_mcp` resource kind rather than falling back to hosted MCP selectors.
+If a later product version needs granular user or role audiences, add that as a separate audience model after the org/project audience is proven. Do not keep unused `shadow_mcp:connect` plumbing in v1, because role grants will look like they control access even though the runtime decision is rule-policy based.
 
 ## Management API
 
-Add methods to the existing `access` service because the admin surface is Roles & Permissions and the operations mutate role access.
+Add methods to the existing `access` service because the admin surface belongs under Access and the operations are org-admin access-policy management.
 
 Proposed route group:
 
@@ -152,7 +160,7 @@ Proposed route group:
 
 `listShadowMCPApprovalRequests`
 
-- Auth: session/by-key, require `org:read` or `org:admin`.
+- Auth: session/by-key, require `org:admin` because requests include requester and block details.
 - Filters: `status`, `project_id`, `cursor`, `limit`.
 - Returns all states.
 
@@ -166,9 +174,10 @@ Proposed route group:
 `approveShadowMCPApprovalRequest`
 
 - Auth: require `org:admin`.
-- Inputs: request id, match breadth, optional edited match value, role ids, admin note.
+- Inputs: request id, access scope, match breadth, optional edited match value, admin note.
 - Creates an `allowed` Access Rule when needed.
-- Adds `shadow_mcp:connect` grants for selected roles to the allowed rule.
+- For `access_scope = 'project'`, uses the request project as the rule project.
+- For `access_scope = 'organization'`, creates an org-wide allow rule.
 - Marks request `approved`.
 - Runs in one transaction.
 
@@ -177,7 +186,7 @@ Proposed route group:
 - Auth: require `org:admin`.
 - Inputs: request id, admin note, `create_deny_rule` boolean, match breadth, optional edited match value.
 - Marks request `denied`.
-- If `create_deny_rule` is true, creates a `denied` Access Rule.
+- If `create_deny_rule` is true, creates a project-scoped `denied` Access Rule for the request project.
 - Runs in one transaction.
 
 ### Rule APIs
@@ -185,27 +194,27 @@ Proposed route group:
 `listShadowMCPAccessRules`
 
 - Auth: require `org:read` or `org:admin`.
-- Filters: `disposition`, `cursor`, `limit`.
-- Include role grants for allowed rules so the UI can show which roles have access.
+- Filters: `disposition`, `access_scope`, `project_id`, `cursor`, `limit`.
+- Returns the rule audience fields so the UI can show organization/project scope.
 
 `createShadowMCPAccessRule`
 
 - Auth: require `org:admin`.
-- Inputs: disposition, evidence fields, match breadth, match value, role ids for allowed rules, reason.
-- Creates rule and role grants in one transaction.
+- Inputs: disposition, access scope, optional project id for project-scoped rules, evidence fields, match breadth, match value, reason.
+- Creates the rule in one transaction.
 
 `updateShadowMCPAccessRule`
 
 - Auth: require `org:admin`.
-- Inputs: rule id, disposition, evidence fields, match breadth, match value, role ids, reason.
+- Inputs: rule id, disposition, access scope, optional project id for project-scoped rules, evidence fields, match breadth, match value, reason.
 - Audits before/after snapshots.
-- If disposition changes from allowed to denied, remove role grants to that rule in the same transaction.
+- Clears any stale role grants to that rule while migrating away from the earlier role-grant design.
 
 `deleteShadowMCPAccessRule`
 
 - Auth: require `org:admin`.
 - Soft-deletes the rule.
-- Removes role grants to the rule in the same transaction.
+- Clears any stale role grants to the rule in the same transaction.
 
 ## Runtime enforcement
 
@@ -220,11 +229,11 @@ When a Shadow MCP connection/tool call is detected:
 4. Match active denied Access Rules first.
 5. If any deny rule matches, block.
 6. Match active allowed Access Rules.
-7. For each matching allowed rule, require `shadow_mcp:connect` on that rule id.
-8. If the user has a matching role grant, allow.
+7. A matching organization-scoped allow rule permits the call for any user in the organization.
+8. A matching project-scoped allow rule permits the call only when the active project matches the rule project.
 9. Otherwise block with the configured Risk Policy message plus request-access guidance when enabled.
 
-Deny rule precedence applies across match breadth. For example, a denied `url_host` rule blocks even if a narrower `full_url` allow rule exists for a role.
+Deny rule precedence applies across match breadth and audience. For example, a denied `url_host` project rule blocks that project even if a narrower `full_url` organization allow rule exists.
 
 ## Request-access link
 
@@ -249,15 +258,15 @@ Use the current prototype branch for layout reference, but port intentionally.
 
 Production frontend should:
 
-- Add a Shadow MCP tab in Roles & Permissions.
+- Add a Shadow MCP tab under Access.
 - Show Requests with filters for all states.
 - Show Access Rules with allow/deny filtering.
 - Use side sheets for review, manual create, and edit.
 - Include `server_identity` as a match option.
 - Make deny-rule creation optional when denying a request.
-- Default approval role selection from requester context when available.
-- Show role impact, such as member counts.
-- Integrate allowed Shadow MCP rules into the existing permission picker as an external/shadow server section backed by `shadow_mcp:connect`, not hosted MCP `mcp:connect`.
+- Let admins choose whether an allow rule applies to the request project or the entire organization.
+- Let admins create manual rules scoped to all users in the organization or all users in a selected project.
+- Do not expose Shadow MCP runtime access through the role permission picker.
 - Continue to separate hosted Gram MCP servers from external/shadow entries.
 
 ## Audit logging
@@ -276,14 +285,12 @@ Audit actions:
 - access rule update
 - access rule delete
 
-For v1, role assignment changes caused by request approval or Access Rule mutation are captured as part of the `shadow_mcp_access_rule` before/after snapshots and audit metadata. Do not add separate role grant add/remove audit actions unless the audit product later needs role-grant lifecycle events as independently filterable subjects.
-
 Audit entries should include before/after snapshots for updates and metadata for:
 
 - match breadth changes
 - match value changes
 - source request id
-- affected role ids or role slugs
+- access scope and project id
 - requester user id/email where applicable
 
 All audited mutations must run in the same transaction as the data changes.
@@ -304,10 +311,11 @@ Backend:
 
 - Approval request creation is idempotent.
 - List requests includes `requested`, `approved`, and `denied`.
-- Approve creates or reuses allowed rule and grants selected roles.
+- Approve creates or reuses an allowed rule with organization or project scope.
 - Deny marks the request denied and only creates a deny rule when requested.
 - Deny rules override allowed rules.
-- Role without `shadow_mcp:connect` to a matching allow rule remains blocked.
+- Project-scoped allow rules only allow the matching project.
+- Organization-scoped allow rules allow every project in the organization.
 - Soft-deleted rules do not enforce.
 - Mutations require `org:admin`.
 - Audit events are emitted for every mutation.
@@ -315,15 +323,15 @@ Backend:
 Frontend:
 
 - Requests table renders all states and filters correctly.
-- Approval sheet creates an allow rule and role grants.
+- Approval sheet creates an allow rule with the selected audience.
 - Deny sheet supports optional deny-rule creation.
 - Access Rules table filters allow/deny.
 - Rule edit/delete flows update local/server state.
-- MCP permission picker can select hosted and external/shadow servers separately.
+- Role editor does not expose Shadow MCP runtime access as a role grant.
 
 ## Open questions
 
-1. Should Access Rules be purely org-scoped in v1, or should the API expose an optional project selector immediately?
-2. What exact block event identifier already exists and can safely power the request-access link?
-3. Should exact allow/deny conflicts be prevented at write time, or allowed with a UI warning because deny wins?
-4. Should approval request creation be available to API-key actors, or only authenticated dashboard users?
+1. What exact block event identifier already exists and can safely power the request-access link?
+2. Should exact allow/deny conflicts be prevented at write time, or allowed with a UI warning because deny wins?
+3. Should approval request creation be available to API-key actors, or only authenticated dashboard users?
+4. If granular audiences are needed later, should they attach to users, custom roles, groups, or a separate audience table?
