@@ -129,12 +129,14 @@ func run() error {
 		ks, logger, tp, db,
 	)
 	outer.Handle(oauth21.Prefix+"/", http.StripPrefix(oauth21.Prefix, oauth21Handler.Handler()))
+	oauth21Handler.RegisterRootRoutes(outer)
 
 	oauth2Handler := oauth2.NewHandler(
 		oauth2.Config{ExternalURL: pubURL},
 		ks, logger, tp, db,
 	)
 	outer.Handle(oauth2.Prefix+"/", http.StripPrefix(oauth2.Prefix, oauth2Handler.Handler()))
+	oauth2Handler.RegisterRootRoutes(outer)
 
 	if *idpMode == "workos" {
 		if *workosKey == "" {

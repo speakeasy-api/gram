@@ -45,6 +45,9 @@ import (
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
 	remotemcpc "github.com/speakeasy-api/gram/server/gen/http/remote_mcp/client"
+	remotesessionclientsc "github.com/speakeasy-api/gram/server/gen/http/remote_session_clients/client"
+	remotesessionissuersc "github.com/speakeasy-api/gram/server/gen/http/remote_session_issuers/client"
+	remotesessionsc "github.com/speakeasy-api/gram/server/gen/http/remote_sessions/client"
 	resourcesc "github.com/speakeasy-api/gram/server/gen/http/resources/client"
 	riskc "github.com/speakeasy-api/gram/server/gen/http/risk/client"
 	slackc "github.com/speakeasy-api/gram/server/gen/http/slack/client"
@@ -100,6 +103,9 @@ func UsageCommands() []string {
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|verify-url|delete-server)",
+		"remote-session-clients (create-remote-session-client|update-remote-session-client|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
+		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|register-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
+		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-by-chat|get-risk-policy-status|trigger-risk-analysis)",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
@@ -1061,6 +1067,104 @@ func ParseEndpoint(
 		remoteMcpDeleteServerApikeyTokenFlag      = remoteMcpDeleteServerFlags.String("apikey-token", "", "")
 		remoteMcpDeleteServerProjectSlugInputFlag = remoteMcpDeleteServerFlags.String("project-slug-input", "", "")
 
+		remoteSessionClientsFlags = flag.NewFlagSet("remote-session-clients", flag.ContinueOnError)
+
+		remoteSessionClientsCreateRemoteSessionClientFlags                = flag.NewFlagSet("create-remote-session-client", flag.ExitOnError)
+		remoteSessionClientsCreateRemoteSessionClientBodyFlag             = remoteSessionClientsCreateRemoteSessionClientFlags.String("body", "REQUIRED", "")
+		remoteSessionClientsCreateRemoteSessionClientSessionTokenFlag     = remoteSessionClientsCreateRemoteSessionClientFlags.String("session-token", "", "")
+		remoteSessionClientsCreateRemoteSessionClientApikeyTokenFlag      = remoteSessionClientsCreateRemoteSessionClientFlags.String("apikey-token", "", "")
+		remoteSessionClientsCreateRemoteSessionClientProjectSlugInputFlag = remoteSessionClientsCreateRemoteSessionClientFlags.String("project-slug-input", "", "")
+
+		remoteSessionClientsUpdateRemoteSessionClientFlags                = flag.NewFlagSet("update-remote-session-client", flag.ExitOnError)
+		remoteSessionClientsUpdateRemoteSessionClientBodyFlag             = remoteSessionClientsUpdateRemoteSessionClientFlags.String("body", "REQUIRED", "")
+		remoteSessionClientsUpdateRemoteSessionClientSessionTokenFlag     = remoteSessionClientsUpdateRemoteSessionClientFlags.String("session-token", "", "")
+		remoteSessionClientsUpdateRemoteSessionClientApikeyTokenFlag      = remoteSessionClientsUpdateRemoteSessionClientFlags.String("apikey-token", "", "")
+		remoteSessionClientsUpdateRemoteSessionClientProjectSlugInputFlag = remoteSessionClientsUpdateRemoteSessionClientFlags.String("project-slug-input", "", "")
+
+		remoteSessionClientsListRemoteSessionClientsFlags                     = flag.NewFlagSet("list-remote-session-clients", flag.ExitOnError)
+		remoteSessionClientsListRemoteSessionClientsRemoteSessionIssuerIDFlag = remoteSessionClientsListRemoteSessionClientsFlags.String("remote-session-issuer-id", "", "")
+		remoteSessionClientsListRemoteSessionClientsUserSessionIssuerIDFlag   = remoteSessionClientsListRemoteSessionClientsFlags.String("user-session-issuer-id", "", "")
+		remoteSessionClientsListRemoteSessionClientsCursorFlag                = remoteSessionClientsListRemoteSessionClientsFlags.String("cursor", "", "")
+		remoteSessionClientsListRemoteSessionClientsLimitFlag                 = remoteSessionClientsListRemoteSessionClientsFlags.String("limit", "", "")
+		remoteSessionClientsListRemoteSessionClientsSessionTokenFlag          = remoteSessionClientsListRemoteSessionClientsFlags.String("session-token", "", "")
+		remoteSessionClientsListRemoteSessionClientsApikeyTokenFlag           = remoteSessionClientsListRemoteSessionClientsFlags.String("apikey-token", "", "")
+		remoteSessionClientsListRemoteSessionClientsProjectSlugInputFlag      = remoteSessionClientsListRemoteSessionClientsFlags.String("project-slug-input", "", "")
+
+		remoteSessionClientsGetRemoteSessionClientFlags                = flag.NewFlagSet("get-remote-session-client", flag.ExitOnError)
+		remoteSessionClientsGetRemoteSessionClientIDFlag               = remoteSessionClientsGetRemoteSessionClientFlags.String("id", "REQUIRED", "")
+		remoteSessionClientsGetRemoteSessionClientSessionTokenFlag     = remoteSessionClientsGetRemoteSessionClientFlags.String("session-token", "", "")
+		remoteSessionClientsGetRemoteSessionClientApikeyTokenFlag      = remoteSessionClientsGetRemoteSessionClientFlags.String("apikey-token", "", "")
+		remoteSessionClientsGetRemoteSessionClientProjectSlugInputFlag = remoteSessionClientsGetRemoteSessionClientFlags.String("project-slug-input", "", "")
+
+		remoteSessionClientsDeleteRemoteSessionClientFlags                = flag.NewFlagSet("delete-remote-session-client", flag.ExitOnError)
+		remoteSessionClientsDeleteRemoteSessionClientIDFlag               = remoteSessionClientsDeleteRemoteSessionClientFlags.String("id", "REQUIRED", "")
+		remoteSessionClientsDeleteRemoteSessionClientSessionTokenFlag     = remoteSessionClientsDeleteRemoteSessionClientFlags.String("session-token", "", "")
+		remoteSessionClientsDeleteRemoteSessionClientApikeyTokenFlag      = remoteSessionClientsDeleteRemoteSessionClientFlags.String("apikey-token", "", "")
+		remoteSessionClientsDeleteRemoteSessionClientProjectSlugInputFlag = remoteSessionClientsDeleteRemoteSessionClientFlags.String("project-slug-input", "", "")
+
+		remoteSessionIssuersFlags = flag.NewFlagSet("remote-session-issuers", flag.ContinueOnError)
+
+		remoteSessionIssuersDiscoverRemoteSessionIssuerFlags                = flag.NewFlagSet("discover-remote-session-issuer", flag.ExitOnError)
+		remoteSessionIssuersDiscoverRemoteSessionIssuerBodyFlag             = remoteSessionIssuersDiscoverRemoteSessionIssuerFlags.String("body", "REQUIRED", "")
+		remoteSessionIssuersDiscoverRemoteSessionIssuerSessionTokenFlag     = remoteSessionIssuersDiscoverRemoteSessionIssuerFlags.String("session-token", "", "")
+		remoteSessionIssuersDiscoverRemoteSessionIssuerApikeyTokenFlag      = remoteSessionIssuersDiscoverRemoteSessionIssuerFlags.String("apikey-token", "", "")
+		remoteSessionIssuersDiscoverRemoteSessionIssuerProjectSlugInputFlag = remoteSessionIssuersDiscoverRemoteSessionIssuerFlags.String("project-slug-input", "", "")
+
+		remoteSessionIssuersCreateRemoteSessionIssuerFlags                = flag.NewFlagSet("create-remote-session-issuer", flag.ExitOnError)
+		remoteSessionIssuersCreateRemoteSessionIssuerBodyFlag             = remoteSessionIssuersCreateRemoteSessionIssuerFlags.String("body", "REQUIRED", "")
+		remoteSessionIssuersCreateRemoteSessionIssuerSessionTokenFlag     = remoteSessionIssuersCreateRemoteSessionIssuerFlags.String("session-token", "", "")
+		remoteSessionIssuersCreateRemoteSessionIssuerApikeyTokenFlag      = remoteSessionIssuersCreateRemoteSessionIssuerFlags.String("apikey-token", "", "")
+		remoteSessionIssuersCreateRemoteSessionIssuerProjectSlugInputFlag = remoteSessionIssuersCreateRemoteSessionIssuerFlags.String("project-slug-input", "", "")
+
+		remoteSessionIssuersRegisterRemoteSessionIssuerFlags                = flag.NewFlagSet("register-remote-session-issuer", flag.ExitOnError)
+		remoteSessionIssuersRegisterRemoteSessionIssuerBodyFlag             = remoteSessionIssuersRegisterRemoteSessionIssuerFlags.String("body", "REQUIRED", "")
+		remoteSessionIssuersRegisterRemoteSessionIssuerSessionTokenFlag     = remoteSessionIssuersRegisterRemoteSessionIssuerFlags.String("session-token", "", "")
+		remoteSessionIssuersRegisterRemoteSessionIssuerApikeyTokenFlag      = remoteSessionIssuersRegisterRemoteSessionIssuerFlags.String("apikey-token", "", "")
+		remoteSessionIssuersRegisterRemoteSessionIssuerProjectSlugInputFlag = remoteSessionIssuersRegisterRemoteSessionIssuerFlags.String("project-slug-input", "", "")
+
+		remoteSessionIssuersUpdateRemoteSessionIssuerFlags                = flag.NewFlagSet("update-remote-session-issuer", flag.ExitOnError)
+		remoteSessionIssuersUpdateRemoteSessionIssuerBodyFlag             = remoteSessionIssuersUpdateRemoteSessionIssuerFlags.String("body", "REQUIRED", "")
+		remoteSessionIssuersUpdateRemoteSessionIssuerSessionTokenFlag     = remoteSessionIssuersUpdateRemoteSessionIssuerFlags.String("session-token", "", "")
+		remoteSessionIssuersUpdateRemoteSessionIssuerApikeyTokenFlag      = remoteSessionIssuersUpdateRemoteSessionIssuerFlags.String("apikey-token", "", "")
+		remoteSessionIssuersUpdateRemoteSessionIssuerProjectSlugInputFlag = remoteSessionIssuersUpdateRemoteSessionIssuerFlags.String("project-slug-input", "", "")
+
+		remoteSessionIssuersListRemoteSessionIssuersFlags                = flag.NewFlagSet("list-remote-session-issuers", flag.ExitOnError)
+		remoteSessionIssuersListRemoteSessionIssuersCursorFlag           = remoteSessionIssuersListRemoteSessionIssuersFlags.String("cursor", "", "")
+		remoteSessionIssuersListRemoteSessionIssuersLimitFlag            = remoteSessionIssuersListRemoteSessionIssuersFlags.String("limit", "", "")
+		remoteSessionIssuersListRemoteSessionIssuersSessionTokenFlag     = remoteSessionIssuersListRemoteSessionIssuersFlags.String("session-token", "", "")
+		remoteSessionIssuersListRemoteSessionIssuersApikeyTokenFlag      = remoteSessionIssuersListRemoteSessionIssuersFlags.String("apikey-token", "", "")
+		remoteSessionIssuersListRemoteSessionIssuersProjectSlugInputFlag = remoteSessionIssuersListRemoteSessionIssuersFlags.String("project-slug-input", "", "")
+
+		remoteSessionIssuersGetRemoteSessionIssuerFlags                = flag.NewFlagSet("get-remote-session-issuer", flag.ExitOnError)
+		remoteSessionIssuersGetRemoteSessionIssuerIDFlag               = remoteSessionIssuersGetRemoteSessionIssuerFlags.String("id", "", "")
+		remoteSessionIssuersGetRemoteSessionIssuerSlugFlag             = remoteSessionIssuersGetRemoteSessionIssuerFlags.String("slug", "", "")
+		remoteSessionIssuersGetRemoteSessionIssuerSessionTokenFlag     = remoteSessionIssuersGetRemoteSessionIssuerFlags.String("session-token", "", "")
+		remoteSessionIssuersGetRemoteSessionIssuerApikeyTokenFlag      = remoteSessionIssuersGetRemoteSessionIssuerFlags.String("apikey-token", "", "")
+		remoteSessionIssuersGetRemoteSessionIssuerProjectSlugInputFlag = remoteSessionIssuersGetRemoteSessionIssuerFlags.String("project-slug-input", "", "")
+
+		remoteSessionIssuersDeleteRemoteSessionIssuerFlags                = flag.NewFlagSet("delete-remote-session-issuer", flag.ExitOnError)
+		remoteSessionIssuersDeleteRemoteSessionIssuerIDFlag               = remoteSessionIssuersDeleteRemoteSessionIssuerFlags.String("id", "REQUIRED", "")
+		remoteSessionIssuersDeleteRemoteSessionIssuerSessionTokenFlag     = remoteSessionIssuersDeleteRemoteSessionIssuerFlags.String("session-token", "", "")
+		remoteSessionIssuersDeleteRemoteSessionIssuerApikeyTokenFlag      = remoteSessionIssuersDeleteRemoteSessionIssuerFlags.String("apikey-token", "", "")
+		remoteSessionIssuersDeleteRemoteSessionIssuerProjectSlugInputFlag = remoteSessionIssuersDeleteRemoteSessionIssuerFlags.String("project-slug-input", "", "")
+
+		remoteSessionsFlags = flag.NewFlagSet("remote-sessions", flag.ContinueOnError)
+
+		remoteSessionsListRemoteSessionsFlags                     = flag.NewFlagSet("list-remote-sessions", flag.ExitOnError)
+		remoteSessionsListRemoteSessionsSubjectUrnFlag            = remoteSessionsListRemoteSessionsFlags.String("subject-urn", "", "")
+		remoteSessionsListRemoteSessionsRemoteSessionClientIDFlag = remoteSessionsListRemoteSessionsFlags.String("remote-session-client-id", "", "")
+		remoteSessionsListRemoteSessionsCursorFlag                = remoteSessionsListRemoteSessionsFlags.String("cursor", "", "")
+		remoteSessionsListRemoteSessionsLimitFlag                 = remoteSessionsListRemoteSessionsFlags.String("limit", "", "")
+		remoteSessionsListRemoteSessionsSessionTokenFlag          = remoteSessionsListRemoteSessionsFlags.String("session-token", "", "")
+		remoteSessionsListRemoteSessionsApikeyTokenFlag           = remoteSessionsListRemoteSessionsFlags.String("apikey-token", "", "")
+		remoteSessionsListRemoteSessionsProjectSlugInputFlag      = remoteSessionsListRemoteSessionsFlags.String("project-slug-input", "", "")
+
+		remoteSessionsRevokeRemoteSessionFlags                = flag.NewFlagSet("revoke-remote-session", flag.ExitOnError)
+		remoteSessionsRevokeRemoteSessionIDFlag               = remoteSessionsRevokeRemoteSessionFlags.String("id", "REQUIRED", "")
+		remoteSessionsRevokeRemoteSessionSessionTokenFlag     = remoteSessionsRevokeRemoteSessionFlags.String("session-token", "", "")
+		remoteSessionsRevokeRemoteSessionApikeyTokenFlag      = remoteSessionsRevokeRemoteSessionFlags.String("apikey-token", "", "")
+		remoteSessionsRevokeRemoteSessionProjectSlugInputFlag = remoteSessionsRevokeRemoteSessionFlags.String("project-slug-input", "", "")
+
 		resourcesFlags = flag.NewFlagSet("resources", flag.ContinueOnError)
 
 		resourcesListResourcesFlags                = flag.NewFlagSet("list-resources", flag.ExitOnError)
@@ -1451,7 +1555,7 @@ func ParseEndpoint(
 		userSessionClientsGetUserSessionClientProjectSlugInputFlag = userSessionClientsGetUserSessionClientFlags.String("project-slug-input", "", "")
 
 		userSessionClientsRevokeUserSessionClientFlags                = flag.NewFlagSet("revoke-user-session-client", flag.ExitOnError)
-		userSessionClientsRevokeUserSessionClientBodyFlag             = userSessionClientsRevokeUserSessionClientFlags.String("body", "REQUIRED", "")
+		userSessionClientsRevokeUserSessionClientIDFlag               = userSessionClientsRevokeUserSessionClientFlags.String("id", "REQUIRED", "")
 		userSessionClientsRevokeUserSessionClientSessionTokenFlag     = userSessionClientsRevokeUserSessionClientFlags.String("session-token", "", "")
 		userSessionClientsRevokeUserSessionClientApikeyTokenFlag      = userSessionClientsRevokeUserSessionClientFlags.String("apikey-token", "", "")
 		userSessionClientsRevokeUserSessionClientProjectSlugInputFlag = userSessionClientsRevokeUserSessionClientFlags.String("project-slug-input", "", "")
@@ -1469,7 +1573,7 @@ func ParseEndpoint(
 		userSessionConsentsListUserSessionConsentsProjectSlugInputFlag    = userSessionConsentsListUserSessionConsentsFlags.String("project-slug-input", "", "")
 
 		userSessionConsentsRevokeUserSessionConsentFlags                = flag.NewFlagSet("revoke-user-session-consent", flag.ExitOnError)
-		userSessionConsentsRevokeUserSessionConsentBodyFlag             = userSessionConsentsRevokeUserSessionConsentFlags.String("body", "REQUIRED", "")
+		userSessionConsentsRevokeUserSessionConsentIDFlag               = userSessionConsentsRevokeUserSessionConsentFlags.String("id", "REQUIRED", "")
 		userSessionConsentsRevokeUserSessionConsentSessionTokenFlag     = userSessionConsentsRevokeUserSessionConsentFlags.String("session-token", "", "")
 		userSessionConsentsRevokeUserSessionConsentApikeyTokenFlag      = userSessionConsentsRevokeUserSessionConsentFlags.String("apikey-token", "", "")
 		userSessionConsentsRevokeUserSessionConsentProjectSlugInputFlag = userSessionConsentsRevokeUserSessionConsentFlags.String("project-slug-input", "", "")
@@ -1520,7 +1624,7 @@ func ParseEndpoint(
 		userSessionsListUserSessionsProjectSlugInputFlag    = userSessionsListUserSessionsFlags.String("project-slug-input", "", "")
 
 		userSessionsRevokeUserSessionFlags                = flag.NewFlagSet("revoke-user-session", flag.ExitOnError)
-		userSessionsRevokeUserSessionBodyFlag             = userSessionsRevokeUserSessionFlags.String("body", "REQUIRED", "")
+		userSessionsRevokeUserSessionIDFlag               = userSessionsRevokeUserSessionFlags.String("id", "REQUIRED", "")
 		userSessionsRevokeUserSessionSessionTokenFlag     = userSessionsRevokeUserSessionFlags.String("session-token", "", "")
 		userSessionsRevokeUserSessionApikeyTokenFlag      = userSessionsRevokeUserSessionFlags.String("apikey-token", "", "")
 		userSessionsRevokeUserSessionProjectSlugInputFlag = userSessionsRevokeUserSessionFlags.String("project-slug-input", "", "")
@@ -1773,6 +1877,26 @@ func ParseEndpoint(
 	remoteMcpVerifyURLFlags.Usage = remoteMcpVerifyURLUsage
 	remoteMcpDeleteServerFlags.Usage = remoteMcpDeleteServerUsage
 
+	remoteSessionClientsFlags.Usage = remoteSessionClientsUsage
+	remoteSessionClientsCreateRemoteSessionClientFlags.Usage = remoteSessionClientsCreateRemoteSessionClientUsage
+	remoteSessionClientsUpdateRemoteSessionClientFlags.Usage = remoteSessionClientsUpdateRemoteSessionClientUsage
+	remoteSessionClientsListRemoteSessionClientsFlags.Usage = remoteSessionClientsListRemoteSessionClientsUsage
+	remoteSessionClientsGetRemoteSessionClientFlags.Usage = remoteSessionClientsGetRemoteSessionClientUsage
+	remoteSessionClientsDeleteRemoteSessionClientFlags.Usage = remoteSessionClientsDeleteRemoteSessionClientUsage
+
+	remoteSessionIssuersFlags.Usage = remoteSessionIssuersUsage
+	remoteSessionIssuersDiscoverRemoteSessionIssuerFlags.Usage = remoteSessionIssuersDiscoverRemoteSessionIssuerUsage
+	remoteSessionIssuersCreateRemoteSessionIssuerFlags.Usage = remoteSessionIssuersCreateRemoteSessionIssuerUsage
+	remoteSessionIssuersRegisterRemoteSessionIssuerFlags.Usage = remoteSessionIssuersRegisterRemoteSessionIssuerUsage
+	remoteSessionIssuersUpdateRemoteSessionIssuerFlags.Usage = remoteSessionIssuersUpdateRemoteSessionIssuerUsage
+	remoteSessionIssuersListRemoteSessionIssuersFlags.Usage = remoteSessionIssuersListRemoteSessionIssuersUsage
+	remoteSessionIssuersGetRemoteSessionIssuerFlags.Usage = remoteSessionIssuersGetRemoteSessionIssuerUsage
+	remoteSessionIssuersDeleteRemoteSessionIssuerFlags.Usage = remoteSessionIssuersDeleteRemoteSessionIssuerUsage
+
+	remoteSessionsFlags.Usage = remoteSessionsUsage
+	remoteSessionsListRemoteSessionsFlags.Usage = remoteSessionsListRemoteSessionsUsage
+	remoteSessionsRevokeRemoteSessionFlags.Usage = remoteSessionsRevokeRemoteSessionUsage
+
 	resourcesFlags.Usage = resourcesUsage
 	resourcesListResourcesFlags.Usage = resourcesListResourcesUsage
 
@@ -1958,6 +2082,12 @@ func ParseEndpoint(
 			svcf = projectsFlags
 		case "remote-mcp":
 			svcf = remoteMcpFlags
+		case "remote-session-clients":
+			svcf = remoteSessionClientsFlags
+		case "remote-session-issuers":
+			svcf = remoteSessionIssuersFlags
+		case "remote-sessions":
+			svcf = remoteSessionsFlags
 		case "resources":
 			svcf = resourcesFlags
 		case "risk":
@@ -2621,6 +2751,60 @@ func ParseEndpoint(
 
 			case "delete-server":
 				epf = remoteMcpDeleteServerFlags
+
+			}
+
+		case "remote-session-clients":
+			switch epn {
+			case "create-remote-session-client":
+				epf = remoteSessionClientsCreateRemoteSessionClientFlags
+
+			case "update-remote-session-client":
+				epf = remoteSessionClientsUpdateRemoteSessionClientFlags
+
+			case "list-remote-session-clients":
+				epf = remoteSessionClientsListRemoteSessionClientsFlags
+
+			case "get-remote-session-client":
+				epf = remoteSessionClientsGetRemoteSessionClientFlags
+
+			case "delete-remote-session-client":
+				epf = remoteSessionClientsDeleteRemoteSessionClientFlags
+
+			}
+
+		case "remote-session-issuers":
+			switch epn {
+			case "discover-remote-session-issuer":
+				epf = remoteSessionIssuersDiscoverRemoteSessionIssuerFlags
+
+			case "create-remote-session-issuer":
+				epf = remoteSessionIssuersCreateRemoteSessionIssuerFlags
+
+			case "register-remote-session-issuer":
+				epf = remoteSessionIssuersRegisterRemoteSessionIssuerFlags
+
+			case "update-remote-session-issuer":
+				epf = remoteSessionIssuersUpdateRemoteSessionIssuerFlags
+
+			case "list-remote-session-issuers":
+				epf = remoteSessionIssuersListRemoteSessionIssuersFlags
+
+			case "get-remote-session-issuer":
+				epf = remoteSessionIssuersGetRemoteSessionIssuerFlags
+
+			case "delete-remote-session-issuer":
+				epf = remoteSessionIssuersDeleteRemoteSessionIssuerFlags
+
+			}
+
+		case "remote-sessions":
+			switch epn {
+			case "list-remote-sessions":
+				epf = remoteSessionsListRemoteSessionsFlags
+
+			case "revoke-remote-session":
+				epf = remoteSessionsRevokeRemoteSessionFlags
 
 			}
 
@@ -3570,6 +3754,60 @@ func ParseEndpoint(
 				endpoint = c.DeleteServer()
 				data, err = remotemcpc.BuildDeleteServerPayload(*remoteMcpDeleteServerIDFlag, *remoteMcpDeleteServerSessionTokenFlag, *remoteMcpDeleteServerApikeyTokenFlag, *remoteMcpDeleteServerProjectSlugInputFlag)
 			}
+		case "remote-session-clients":
+			c := remotesessionclientsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-remote-session-client":
+				endpoint = c.CreateRemoteSessionClient()
+				data, err = remotesessionclientsc.BuildCreateRemoteSessionClientPayload(*remoteSessionClientsCreateRemoteSessionClientBodyFlag, *remoteSessionClientsCreateRemoteSessionClientSessionTokenFlag, *remoteSessionClientsCreateRemoteSessionClientApikeyTokenFlag, *remoteSessionClientsCreateRemoteSessionClientProjectSlugInputFlag)
+			case "update-remote-session-client":
+				endpoint = c.UpdateRemoteSessionClient()
+				data, err = remotesessionclientsc.BuildUpdateRemoteSessionClientPayload(*remoteSessionClientsUpdateRemoteSessionClientBodyFlag, *remoteSessionClientsUpdateRemoteSessionClientSessionTokenFlag, *remoteSessionClientsUpdateRemoteSessionClientApikeyTokenFlag, *remoteSessionClientsUpdateRemoteSessionClientProjectSlugInputFlag)
+			case "list-remote-session-clients":
+				endpoint = c.ListRemoteSessionClients()
+				data, err = remotesessionclientsc.BuildListRemoteSessionClientsPayload(*remoteSessionClientsListRemoteSessionClientsRemoteSessionIssuerIDFlag, *remoteSessionClientsListRemoteSessionClientsUserSessionIssuerIDFlag, *remoteSessionClientsListRemoteSessionClientsCursorFlag, *remoteSessionClientsListRemoteSessionClientsLimitFlag, *remoteSessionClientsListRemoteSessionClientsSessionTokenFlag, *remoteSessionClientsListRemoteSessionClientsApikeyTokenFlag, *remoteSessionClientsListRemoteSessionClientsProjectSlugInputFlag)
+			case "get-remote-session-client":
+				endpoint = c.GetRemoteSessionClient()
+				data, err = remotesessionclientsc.BuildGetRemoteSessionClientPayload(*remoteSessionClientsGetRemoteSessionClientIDFlag, *remoteSessionClientsGetRemoteSessionClientSessionTokenFlag, *remoteSessionClientsGetRemoteSessionClientApikeyTokenFlag, *remoteSessionClientsGetRemoteSessionClientProjectSlugInputFlag)
+			case "delete-remote-session-client":
+				endpoint = c.DeleteRemoteSessionClient()
+				data, err = remotesessionclientsc.BuildDeleteRemoteSessionClientPayload(*remoteSessionClientsDeleteRemoteSessionClientIDFlag, *remoteSessionClientsDeleteRemoteSessionClientSessionTokenFlag, *remoteSessionClientsDeleteRemoteSessionClientApikeyTokenFlag, *remoteSessionClientsDeleteRemoteSessionClientProjectSlugInputFlag)
+			}
+		case "remote-session-issuers":
+			c := remotesessionissuersc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "discover-remote-session-issuer":
+				endpoint = c.DiscoverRemoteSessionIssuer()
+				data, err = remotesessionissuersc.BuildDiscoverRemoteSessionIssuerPayload(*remoteSessionIssuersDiscoverRemoteSessionIssuerBodyFlag, *remoteSessionIssuersDiscoverRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersDiscoverRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersDiscoverRemoteSessionIssuerProjectSlugInputFlag)
+			case "create-remote-session-issuer":
+				endpoint = c.CreateRemoteSessionIssuer()
+				data, err = remotesessionissuersc.BuildCreateRemoteSessionIssuerPayload(*remoteSessionIssuersCreateRemoteSessionIssuerBodyFlag, *remoteSessionIssuersCreateRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersCreateRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersCreateRemoteSessionIssuerProjectSlugInputFlag)
+			case "register-remote-session-issuer":
+				endpoint = c.RegisterRemoteSessionIssuer()
+				data, err = remotesessionissuersc.BuildRegisterRemoteSessionIssuerPayload(*remoteSessionIssuersRegisterRemoteSessionIssuerBodyFlag, *remoteSessionIssuersRegisterRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersRegisterRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersRegisterRemoteSessionIssuerProjectSlugInputFlag)
+			case "update-remote-session-issuer":
+				endpoint = c.UpdateRemoteSessionIssuer()
+				data, err = remotesessionissuersc.BuildUpdateRemoteSessionIssuerPayload(*remoteSessionIssuersUpdateRemoteSessionIssuerBodyFlag, *remoteSessionIssuersUpdateRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersUpdateRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersUpdateRemoteSessionIssuerProjectSlugInputFlag)
+			case "list-remote-session-issuers":
+				endpoint = c.ListRemoteSessionIssuers()
+				data, err = remotesessionissuersc.BuildListRemoteSessionIssuersPayload(*remoteSessionIssuersListRemoteSessionIssuersCursorFlag, *remoteSessionIssuersListRemoteSessionIssuersLimitFlag, *remoteSessionIssuersListRemoteSessionIssuersSessionTokenFlag, *remoteSessionIssuersListRemoteSessionIssuersApikeyTokenFlag, *remoteSessionIssuersListRemoteSessionIssuersProjectSlugInputFlag)
+			case "get-remote-session-issuer":
+				endpoint = c.GetRemoteSessionIssuer()
+				data, err = remotesessionissuersc.BuildGetRemoteSessionIssuerPayload(*remoteSessionIssuersGetRemoteSessionIssuerIDFlag, *remoteSessionIssuersGetRemoteSessionIssuerSlugFlag, *remoteSessionIssuersGetRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersGetRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersGetRemoteSessionIssuerProjectSlugInputFlag)
+			case "delete-remote-session-issuer":
+				endpoint = c.DeleteRemoteSessionIssuer()
+				data, err = remotesessionissuersc.BuildDeleteRemoteSessionIssuerPayload(*remoteSessionIssuersDeleteRemoteSessionIssuerIDFlag, *remoteSessionIssuersDeleteRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersDeleteRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersDeleteRemoteSessionIssuerProjectSlugInputFlag)
+			}
+		case "remote-sessions":
+			c := remotesessionsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-remote-sessions":
+				endpoint = c.ListRemoteSessions()
+				data, err = remotesessionsc.BuildListRemoteSessionsPayload(*remoteSessionsListRemoteSessionsSubjectUrnFlag, *remoteSessionsListRemoteSessionsRemoteSessionClientIDFlag, *remoteSessionsListRemoteSessionsCursorFlag, *remoteSessionsListRemoteSessionsLimitFlag, *remoteSessionsListRemoteSessionsSessionTokenFlag, *remoteSessionsListRemoteSessionsApikeyTokenFlag, *remoteSessionsListRemoteSessionsProjectSlugInputFlag)
+			case "revoke-remote-session":
+				endpoint = c.RevokeRemoteSession()
+				data, err = remotesessionsc.BuildRevokeRemoteSessionPayload(*remoteSessionsRevokeRemoteSessionIDFlag, *remoteSessionsRevokeRemoteSessionSessionTokenFlag, *remoteSessionsRevokeRemoteSessionApikeyTokenFlag, *remoteSessionsRevokeRemoteSessionProjectSlugInputFlag)
+			}
 		case "resources":
 			c := resourcesc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -3805,7 +4043,7 @@ func ParseEndpoint(
 				data, err = usersessionclientsc.BuildGetUserSessionClientPayload(*userSessionClientsGetUserSessionClientIDFlag, *userSessionClientsGetUserSessionClientSessionTokenFlag, *userSessionClientsGetUserSessionClientApikeyTokenFlag, *userSessionClientsGetUserSessionClientProjectSlugInputFlag)
 			case "revoke-user-session-client":
 				endpoint = c.RevokeUserSessionClient()
-				data, err = usersessionclientsc.BuildRevokeUserSessionClientPayload(*userSessionClientsRevokeUserSessionClientBodyFlag, *userSessionClientsRevokeUserSessionClientSessionTokenFlag, *userSessionClientsRevokeUserSessionClientApikeyTokenFlag, *userSessionClientsRevokeUserSessionClientProjectSlugInputFlag)
+				data, err = usersessionclientsc.BuildRevokeUserSessionClientPayload(*userSessionClientsRevokeUserSessionClientIDFlag, *userSessionClientsRevokeUserSessionClientSessionTokenFlag, *userSessionClientsRevokeUserSessionClientApikeyTokenFlag, *userSessionClientsRevokeUserSessionClientProjectSlugInputFlag)
 			}
 		case "user-session-consents":
 			c := usersessionconsentsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -3815,7 +4053,7 @@ func ParseEndpoint(
 				data, err = usersessionconsentsc.BuildListUserSessionConsentsPayload(*userSessionConsentsListUserSessionConsentsSubjectUrnFlag, *userSessionConsentsListUserSessionConsentsUserSessionClientIDFlag, *userSessionConsentsListUserSessionConsentsUserSessionIssuerIDFlag, *userSessionConsentsListUserSessionConsentsCursorFlag, *userSessionConsentsListUserSessionConsentsLimitFlag, *userSessionConsentsListUserSessionConsentsSessionTokenFlag, *userSessionConsentsListUserSessionConsentsApikeyTokenFlag, *userSessionConsentsListUserSessionConsentsProjectSlugInputFlag)
 			case "revoke-user-session-consent":
 				endpoint = c.RevokeUserSessionConsent()
-				data, err = usersessionconsentsc.BuildRevokeUserSessionConsentPayload(*userSessionConsentsRevokeUserSessionConsentBodyFlag, *userSessionConsentsRevokeUserSessionConsentSessionTokenFlag, *userSessionConsentsRevokeUserSessionConsentApikeyTokenFlag, *userSessionConsentsRevokeUserSessionConsentProjectSlugInputFlag)
+				data, err = usersessionconsentsc.BuildRevokeUserSessionConsentPayload(*userSessionConsentsRevokeUserSessionConsentIDFlag, *userSessionConsentsRevokeUserSessionConsentSessionTokenFlag, *userSessionConsentsRevokeUserSessionConsentApikeyTokenFlag, *userSessionConsentsRevokeUserSessionConsentProjectSlugInputFlag)
 			}
 		case "user-session-issuers":
 			c := usersessionissuersc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -3844,7 +4082,7 @@ func ParseEndpoint(
 				data, err = usersessionsc.BuildListUserSessionsPayload(*userSessionsListUserSessionsSubjectUrnFlag, *userSessionsListUserSessionsUserSessionIssuerIDFlag, *userSessionsListUserSessionsCursorFlag, *userSessionsListUserSessionsLimitFlag, *userSessionsListUserSessionsSessionTokenFlag, *userSessionsListUserSessionsApikeyTokenFlag, *userSessionsListUserSessionsProjectSlugInputFlag)
 			case "revoke-user-session":
 				endpoint = c.RevokeUserSession()
-				data, err = usersessionsc.BuildRevokeUserSessionPayload(*userSessionsRevokeUserSessionBodyFlag, *userSessionsRevokeUserSessionSessionTokenFlag, *userSessionsRevokeUserSessionApikeyTokenFlag, *userSessionsRevokeUserSessionProjectSlugInputFlag)
+				data, err = usersessionsc.BuildRevokeUserSessionPayload(*userSessionsRevokeUserSessionIDFlag, *userSessionsRevokeUserSessionSessionTokenFlag, *userSessionsRevokeUserSessionApikeyTokenFlag, *userSessionsRevokeUserSessionProjectSlugInputFlag)
 			}
 		case "variations":
 			c := variationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -8039,6 +8277,402 @@ func remoteMcpDeleteServerUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp delete-server --id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+// remoteSessionClientsUsage displays the usage of the remote-session-clients
+// command and its subcommands.
+func remoteSessionClientsUsage() {
+	fmt.Fprintln(os.Stderr, `Manage remote_session_client records — credentials Gram uses when acting as an OAuth client of a remote_session_issuer. client_secret_encrypted is never returned.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] remote-session-clients COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-remote-session-client: Register a remote_session_client. Two paths: manual (caller supplies client_id and optionally client_secret) or auto-DCR (auto_register=true triggers an outbound RFC 7591 registration against the issuer's registration_endpoint).`)
+	fmt.Fprintln(os.Stderr, `    update-remote-session-client: Rotate the client_secret or change the user_session_issuer_id linkage on an existing remote_session_client.`)
+	fmt.Fprintln(os.Stderr, `    list-remote-session-clients: List remote_session_clients in the caller's project.`)
+	fmt.Fprintln(os.Stderr, `    get-remote-session-client: Get a remote_session_client by id.`)
+	fmt.Fprintln(os.Stderr, `    delete-remote-session-client: Soft-delete a remote_session_client. Cascades to remote_sessions rows pointing at this client; affected principals are forced to re-authenticate.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s remote-session-clients COMMAND --help\n", os.Args[0])
+}
+func remoteSessionClientsCreateRemoteSessionClientUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-clients create-remote-session-client", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Register a remote_session_client. Two paths: manual (caller supplies client_id and optionally client_secret) or auto-DCR (auto_register=true triggers an outbound RFC 7591 registration against the issuer's registration_endpoint).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients create-remote-session-client --body '{\n      \"auto_register\": false,\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionClientsUpdateRemoteSessionClientUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-clients update-remote-session-client", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Rotate the client_secret or change the user_session_issuer_id linkage on an existing remote_session_client.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients update-remote-session-client --body '{\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionClientsListRemoteSessionClientsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-clients list-remote-session-clients", os.Args[0])
+	fmt.Fprint(os.Stderr, " -remote-session-issuer-id STRING")
+	fmt.Fprint(os.Stderr, " -user-session-issuer-id STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List remote_session_clients in the caller's project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -remote-session-issuer-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-session-issuer-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients list-remote-session-clients --remote-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionClientsGetRemoteSessionClientUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-clients get-remote-session-client", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a remote_session_client by id.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients get-remote-session-client --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionClientsDeleteRemoteSessionClientUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-clients delete-remote-session-client", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete a remote_session_client. Cascades to remote_sessions rows pointing at this client; affected principals are forced to re-authenticate.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients delete-remote-session-client --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// remoteSessionIssuersUsage displays the usage of the remote-session-issuers
+// command and its subcommands.
+func remoteSessionIssuersUsage() {
+	fmt.Fprintln(os.Stderr, `Manage remote_session_issuer records — upstream Authorization Server identity records that Gram talks to as an OAuth client.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] remote-session-issuers COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    discover-remote-session-issuer: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. No persistence.`)
+	fmt.Fprintln(os.Stderr, `    create-remote-session-issuer: Create a new remote_session_issuer.`)
+	fmt.Fprintln(os.Stderr, `    register-remote-session-issuer: Perform an RFC 7591 Dynamic Client Registration call against an existing issuer's registration_endpoint and persist the issued credentials as a new remote_session_client. The issuer must already have a registration_endpoint configured.`)
+	fmt.Fprintln(os.Stderr, `    update-remote-session-issuer: Update fields on an existing remote_session_issuer.`)
+	fmt.Fprintln(os.Stderr, `    list-remote-session-issuers: List remote_session_issuers in the caller's project.`)
+	fmt.Fprintln(os.Stderr, `    get-remote-session-issuer: Get a remote_session_issuer by id or by slug. Provide exactly one.`)
+	fmt.Fprintln(os.Stderr, `    delete-remote-session-issuer: Soft-delete a remote_session_issuer. Blocked if any remote_session_clients still reference it.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s remote-session-issuers COMMAND --help\n", os.Args[0])
+}
+func remoteSessionIssuersDiscoverRemoteSessionIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers discover-remote-session-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. No persistence.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers discover-remote-session-issuer --body '{\n      \"issuer\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionIssuersCreateRemoteSessionIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers create-remote-session-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a new remote_session_issuer.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers create-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionIssuersRegisterRemoteSessionIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers register-remote-session-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Perform an RFC 7591 Dynamic Client Registration call against an existing issuer's registration_endpoint and persist the issued credentials as a new remote_session_client. The issuer must already have a registration_endpoint configured.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers register-remote-session-issuer --body '{\n      \"client_name\": \"abc123\",\n      \"redirect_uris\": [\n         \"abc123\"\n      ],\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionIssuersUpdateRemoteSessionIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers update-remote-session-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update fields on an existing remote_session_issuer.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers update-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionIssuersListRemoteSessionIssuersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers list-remote-session-issuers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List remote_session_issuers in the caller's project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers list-remote-session-issuers --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionIssuersGetRemoteSessionIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers get-remote-session-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -slug STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a remote_session_issuer by id or by slug. Provide exactly one.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers get-remote-session-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --slug \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionIssuersDeleteRemoteSessionIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers delete-remote-session-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete a remote_session_issuer. Blocked if any remote_session_clients still reference it.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers delete-remote-session-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// remoteSessionsUsage displays the usage of the remote-sessions command and
+// its subcommands.
+func remoteSessionsUsage() {
+	fmt.Fprintln(os.Stderr, `Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] remote-sessions COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-remote-sessions: List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).`)
+	fmt.Fprintln(os.Stderr, `    revoke-remote-session: Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s remote-sessions COMMAND --help\n", os.Args[0])
+}
+func remoteSessionsListRemoteSessionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-sessions list-remote-sessions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -subject-urn STRING")
+	fmt.Fprint(os.Stderr, " -remote-session-client-id STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -subject-urn STRING: `)
+	fmt.Fprintln(os.Stderr, `    -remote-session-client-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions list-remote-sessions --subject-urn \"abc123\" --remote-session-client-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionsRevokeRemoteSessionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-sessions revoke-remote-session", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions revoke-remote-session --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 // resourcesUsage displays the usage of the resources command and its
 // subcommands.
 func resourcesUsage() {
@@ -9720,7 +10354,7 @@ func userSessionClientsGetUserSessionClientUsage() {
 func userSessionClientsRevokeUserSessionClientUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] user-session-clients revoke-user-session-client", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -id STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -9731,14 +10365,14 @@ func userSessionClientsRevokeUserSessionClientUsage() {
 	fmt.Fprintln(os.Stderr, `Soft-delete a user_session_client. Future tokens minted for this client_id are rejected; existing live user_sessions keep working until they hit expires_at.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-clients revoke-user-session-client --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-clients revoke-user-session-client --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // userSessionConsentsUsage displays the usage of the user-session-consents
@@ -9788,7 +10422,7 @@ func userSessionConsentsListUserSessionConsentsUsage() {
 func userSessionConsentsRevokeUserSessionConsentUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] user-session-consents revoke-user-session-consent", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -id STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -9799,14 +10433,14 @@ func userSessionConsentsRevokeUserSessionConsentUsage() {
 	fmt.Fprintln(os.Stderr, `Withdraw consent. Subsequent authorization requests for matching (subject, user_session_client) pairs re-prompt.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-consents revoke-user-session-consent --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-consents revoke-user-session-consent --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // userSessionIssuersUsage displays the usage of the user-session-issuers
@@ -9993,7 +10627,7 @@ func userSessionsListUserSessionsUsage() {
 func userSessionsRevokeUserSessionUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] user-sessions revoke-user-session", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -id STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -10004,14 +10638,14 @@ func userSessionsRevokeUserSessionUsage() {
 	fmt.Fprintln(os.Stderr, `Push the session's jti into the revocation cache and soft-delete the row.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions revoke-user-session --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions revoke-user-session --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // variationsUsage displays the usage of the variations command and its
