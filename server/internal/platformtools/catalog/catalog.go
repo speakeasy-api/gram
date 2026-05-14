@@ -1,6 +1,6 @@
 // Package catalog implements the platform_search_catalog and
 // platform_install_catalog_server tools that expose the MCP catalog to
-// assistants so they can discover and install external MCP servers on the
+// assistants so they can discover and register external MCP servers on the
 // caller's behalf.
 package catalog
 
@@ -10,9 +10,8 @@ import (
 	"fmt"
 	"io"
 
-	deploymentsgen "github.com/speakeasy-api/gram/server/gen/deployments"
 	registriesgen "github.com/speakeasy-api/gram/server/gen/mcp_registries"
-	toolsetsgen "github.com/speakeasy-api/gram/server/gen/toolsets"
+	remotemcpgen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
 
@@ -22,41 +21,29 @@ const (
 	ToolNameInstallCatalogTool = "platform_install_catalog_server"
 )
 
-// Installer is the subset of deployments + toolsets + external MCP behavior
-// the install tool depends on. The live wiring constructs an adapter that
-// forwards to the running services; tests substitute a fake.
-type Installer interface {
-	Evolve(ctx context.Context, payload *deploymentsgen.EvolvePayload) (*deploymentsgen.EvolveResult, error)
-	CreateToolset(ctx context.Context, payload *toolsetsgen.CreateToolsetPayload) (*types.Toolset, error)
-	UpdateToolset(ctx context.Context, payload *toolsetsgen.UpdateToolsetPayload) (*types.Toolset, error)
-	GetCatalogServerDetails(ctx context.Context, payload *registriesgen.GetServerDetailsPayload) (*types.ExternalMCPServer, error)
+// Catalog is the subset of mcp_registries + remote_mcp behavior the install
+// tool depends on. The live wiring constructs an adapter that forwards to the
+// running services; tests substitute a fake.
+type Catalog interface {
+	GetServerDetails(ctx context.Context, payload *registriesgen.GetServerDetailsPayload) (*types.ExternalMCPServer, error)
+	CreateRemoteServer(ctx context.Context, payload *remotemcpgen.CreateServerPayload) (*types.RemoteMcpServer, error)
 }
 
-// FuncInstaller adapts the deployments.Service, toolsets.Service, and
-// externalmcp.Service method values to the Installer interface without
-// forcing catalog to depend on the concrete service packages (some of them
-// pull platformtools, which would form a cycle).
-type FuncInstaller struct {
-	EvolveFn                  func(ctx context.Context, payload *deploymentsgen.EvolvePayload) (*deploymentsgen.EvolveResult, error)
-	CreateToolsetFn           func(ctx context.Context, payload *toolsetsgen.CreateToolsetPayload) (*types.Toolset, error)
-	UpdateToolsetFn           func(ctx context.Context, payload *toolsetsgen.UpdateToolsetPayload) (*types.Toolset, error)
-	GetCatalogServerDetailsFn func(ctx context.Context, payload *registriesgen.GetServerDetailsPayload) (*types.ExternalMCPServer, error)
+// FuncCatalog adapts mcp_registries.Service.GetServerDetails and
+// remote_mcp.Service.CreateServer method values to the Catalog interface
+// without forcing this package to depend on the concrete service packages
+// (some of them transitively pull platformtools, which would form a cycle).
+type FuncCatalog struct {
+	GetServerDetailsFn   func(ctx context.Context, payload *registriesgen.GetServerDetailsPayload) (*types.ExternalMCPServer, error)
+	CreateRemoteServerFn func(ctx context.Context, payload *remotemcpgen.CreateServerPayload) (*types.RemoteMcpServer, error)
 }
 
-func (f *FuncInstaller) Evolve(ctx context.Context, payload *deploymentsgen.EvolvePayload) (*deploymentsgen.EvolveResult, error) {
-	return f.EvolveFn(ctx, payload)
+func (f *FuncCatalog) GetServerDetails(ctx context.Context, payload *registriesgen.GetServerDetailsPayload) (*types.ExternalMCPServer, error) {
+	return f.GetServerDetailsFn(ctx, payload)
 }
 
-func (f *FuncInstaller) CreateToolset(ctx context.Context, payload *toolsetsgen.CreateToolsetPayload) (*types.Toolset, error) {
-	return f.CreateToolsetFn(ctx, payload)
-}
-
-func (f *FuncInstaller) UpdateToolset(ctx context.Context, payload *toolsetsgen.UpdateToolsetPayload) (*types.Toolset, error) {
-	return f.UpdateToolsetFn(ctx, payload)
-}
-
-func (f *FuncInstaller) GetCatalogServerDetails(ctx context.Context, payload *registriesgen.GetServerDetailsPayload) (*types.ExternalMCPServer, error) {
-	return f.GetCatalogServerDetailsFn(ctx, payload)
+func (f *FuncCatalog) CreateRemoteServer(ctx context.Context, payload *remotemcpgen.CreateServerPayload) (*types.RemoteMcpServer, error) {
+	return f.CreateRemoteServerFn(ctx, payload)
 }
 
 func decodePayload(payload io.Reader, target any) error {

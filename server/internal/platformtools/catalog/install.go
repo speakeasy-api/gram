@@ -4,20 +4,15 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
-	"errors"
-
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	deploymentsgen "github.com/speakeasy-api/gram/server/gen/deployments"
 	registriesgen "github.com/speakeasy-api/gram/server/gen/mcp_registries"
-	toolsetsgen "github.com/speakeasy-api/gram/server/gen/toolsets"
+	remotemcpgen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
-	externalmcprepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -26,45 +21,44 @@ import (
 const handlerInstall = "install_catalog_server"
 
 type installInput struct {
-	RegistryID        string  `json:"registry_id" jsonschema:"ID of the registry returned by platform_search_catalog."`
-	RegistrySpecifier string  `json:"registry_specifier" jsonschema:"The server's registry_specifier returned by platform_search_catalog (e.g. 'io.github.user/server')."`
-	Name              *string `json:"name,omitempty" jsonschema:"Optional human-readable name for the resulting toolset. Defaults to the server's title or specifier."`
+	RegistryID        string            `json:"registry_id" jsonschema:"ID of the registry returned by platform_search_catalog."`
+	RegistrySpecifier string            `json:"registry_specifier" jsonschema:"The server's registry_specifier returned by platform_search_catalog (e.g. 'io.github.user/server')."`
+	Name              *string           `json:"name,omitempty" jsonschema:"Optional human-readable name for the resulting remote MCP server. Defaults to the catalog title or specifier tail."`
+	RemoteURL         *string           `json:"remote_url,omitempty" jsonschema:"Optional exact URL of the remotes[] entry to install. Omit to let the tool pick: streamable-http first, then sse."`
+	TransportType     *string           `json:"transport_type,omitempty" jsonschema:"Optional transport filter applied when remote_url is not set. One of 'streamable-http' or 'sse'."`
+	Variables         map[string]string `json:"variables,omitempty" jsonschema:"Values for URL template variables declared by the selected remote. Required variables without a default must be supplied here."`
+	Headers           map[string]string `json:"headers,omitempty" jsonschema:"Static values for the headers declared by the selected remote (keyed by header name). Required headers must be supplied here. Secret values are stored encrypted."`
 }
 
 type installResult struct {
-	ToolsetID    string `json:"toolset_id"`
-	ToolsetSlug  string `json:"toolset_slug"`
-	ToolsetName  string `json:"toolset_name"`
-	MCPSlug      string `json:"mcp_slug,omitempty"`
-	DeploymentID string `json:"deployment_id"`
-	Status       string `json:"status"`
+	ServerID      string `json:"server_id"`
+	ServerSlug    string `json:"server_slug,omitempty"`
+	Name          string `json:"name,omitempty"`
+	URL           string `json:"url"`
+	TransportType string `json:"transport_type"`
 }
 
-// InstallTool wraps the catalog install flow (evolveDeployment + createToolset
-// + enable MCP) used by the dashboard's AddServerDialog so an assistant can
-// invoke it directly.
+// InstallTool registers a catalog server as a remote MCP server. It resolves
+// the upstream URL, transport, and required headers/variables from the
+// catalog entry and forwards a single remoteMcp.createServer call.
 type InstallTool struct {
-	descriptor      core.ToolDescriptor
-	repo            *externalmcprepo.Queries
-	deploymentsRepo *deploymentsrepo.Queries
-	installer       Installer
+	descriptor core.ToolDescriptor
+	catalog    Catalog
 }
 
-func NewInstallTool(installer Installer, repo *externalmcprepo.Queries, deploymentsRepo *deploymentsrepo.Queries) *InstallTool {
+func NewInstallTool(catalog Catalog) *InstallTool {
 	readOnly := false
 	destructive := false
 	idempotent := false
 	openWorld := false
 
 	return &InstallTool{
-		installer:       installer,
-		repo:            repo,
-		deploymentsRepo: deploymentsRepo,
+		catalog: catalog,
 		descriptor: core.ToolDescriptor{
 			SourceSlug:  SourceCatalog,
 			HandlerName: handlerInstall,
 			Name:        ToolNameInstallCatalogTool,
-			Description: "Install an MCP catalog server into the caller's project. Creates a new toolset wired to the server's tools and enables the toolset for MCP. Use platform_search_catalog first to discover the registry_id and registry_specifier.",
+			Description: "Register an MCP catalog server as a remote MCP server in the caller's project. Resolves the upstream URL, transport, and required user inputs (URL variables, headers) from the catalog entry. Use platform_search_catalog first to discover the registry_id and registry_specifier.",
 			InputSchema: core.BuildInputSchema[installInput](
 				core.WithPropertyFormat("registry_id", "uuid"),
 			),
@@ -82,7 +76,7 @@ func (t *InstallTool) Descriptor() core.ToolDescriptor {
 }
 
 func (t *InstallTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.installer == nil || t.repo == nil || t.deploymentsRepo == nil {
+	if t.catalog == nil {
 		return oops.E(oops.CodeUnexpected, nil, "catalog tools are not configured")
 	}
 
@@ -108,11 +102,7 @@ func (t *InstallTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payloa
 		return oops.E(oops.CodeBadRequest, nil, "registry_specifier is required")
 	}
 
-	// Fetch full server details (tools + every remote) via the catalog
-	// service. The Goa method runs project-read authz and returns the
-	// full *types.ExternalMCPServer, which is what the dashboard uses to
-	// drive the install dialog.
-	details, err := t.installer.GetCatalogServerDetails(ctx, &registriesgen.GetServerDetailsPayload{
+	details, err := t.catalog.GetServerDetails(ctx, &registriesgen.GetServerDetailsPayload{
 		RegistryID:       registryID.String(),
 		ServerSpecifier:  specifier,
 		SessionToken:     nil,
@@ -126,150 +116,161 @@ func (t *InstallTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payloa
 		return oops.E(oops.CodeUnexpected, nil, "catalog server details returned no server")
 	}
 
-	displayName := strings.TrimSpace(conv.PtrValOrEmpty(input.Name, ""))
-	if displayName == "" {
-		fallback := ""
-		if details.Title != nil {
-			fallback = *details.Title
-		}
-		displayName = defaultDisplayName(specifier, fallback)
-	}
-
-	slug := slugFromName(displayName)
-	if slug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "name does not produce a usable slug — pick a name with at least one alphanumeric character")
-	}
-
-	// Guard against silently clobbering an unrelated server. The deployments
-	// upsert is keyed by (deployment_id, slug) and updates registry/specifier
-	// on conflict, so installing "io.bar/server" when "io.foo/server" is
-	// already attached under the same trailing-segment slug would replace
-	// the existing attachment in the cloned deployment. The dashboard
-	// equivalent is the slug-collision check in
-	// useExternalMcpReleaseWorkflow.startDeployment.
-	if err := t.ensureNoConflictingSlug(ctx, *authCtx.ProjectID, slug, specifier); err != nil {
+	remote, err := selectRemote(details.Remotes, input.RemoteURL, input.TransportType)
+	if err != nil {
 		return err
 	}
 
-	// Pass every streamable-http remote (the dashboard's "Select all"
-	// default after filterToHttpRemotes). When the registry only exposes
-	// SSE remotes, fall back to those; nil leaves the backend to auto-pick
-	// a single remote, which is not "all".
-	selectedRemotes := remoteURLsForInstall(details.Remotes)
-
-	regIDStr := registryID.String()
-	registrySpecifier := specifier
-	evolvePayload := &deploymentsgen.EvolvePayload{
-		ApikeyToken:           nil,
-		SessionToken:          nil,
-		ProjectSlugInput:      nil,
-		DeploymentID:          nil,
-		NonBlocking:           nil,
-		UpsertOpenapiv3Assets: nil,
-		UpsertPackages:        nil,
-		UpsertFunctions:       nil,
-		UpsertExternalMcps: []*deploymentsgen.AddExternalMCPForm{{
-			RegistryID:                          &regIDStr,
-			OrganizationMcpCollectionRegistryID: nil,
-			Name:                                displayName,
-			Slug:                                types.Slug(slug),
-			RegistryServerSpecifier:             registrySpecifier,
-			SelectedRemotes:                     selectedRemotes,
-		}},
-		ExcludeOpenapiv3Assets: nil,
-		ExcludePackages:        nil,
-		ExcludeFunctions:       nil,
-		ExcludeExternalMcps:    nil,
-	}
-
-	evolveResult, err := t.installer.Evolve(ctx, evolvePayload)
+	resolvedURL, err := resolveRemoteURL(remote.URL, remote.Variables, input.Variables)
 	if err != nil {
-		return fmt.Errorf("evolve deployment with catalog server: %w", err)
-	}
-	if evolveResult == nil || evolveResult.Deployment == nil {
-		return oops.E(oops.CodeUnexpected, nil, "evolve deployment returned no deployment")
-	}
-	// Evolve runs the workflow synchronously (NonBlocking is unset), so the
-	// status is terminal here. A "failed" deployment leaves the external MCP
-	// attachment unprocessed; creating a toolset against it would surface
-	// success with non-resolving tool URNs.
-	if evolveResult.Deployment.Status != "completed" {
-		return oops.E(
-			oops.CodeUnexpected, nil,
-			"catalog install deployment did not complete (status=%s); the toolset was not created",
-			evolveResult.Deployment.Status,
-		)
+		return err
 	}
 
-	toolURNs := make([]string, 0, len(details.Tools))
-	for _, tool := range details.Tools {
-		if tool == nil || tool.Name == nil || *tool.Name == "" {
-			continue
-		}
-		toolURNs = append(toolURNs, fmt.Sprintf("tools:externalmcp:%s:%s", slug, *tool.Name))
-	}
-	if len(toolURNs) == 0 {
-		toolURNs = []string{fmt.Sprintf("tools:externalmcp:%s:proxy", slug)}
-	}
-	description := details.Description
-	if description == "" {
-		description = fmt.Sprintf("MCP server: %s", specifier)
+	headerInputs, err := buildHeaderInputs(remote.Headers, input.Headers)
+	if err != nil {
+		return err
 	}
 
-	created, err := t.installer.CreateToolset(ctx, &toolsetsgen.CreateToolsetPayload{
-		SessionToken:           nil,
-		ApikeyToken:            nil,
-		Name:                   displayName,
-		Description:            &description,
-		ToolUrns:               toolURNs,
-		ResourceUrns:           nil,
-		DefaultEnvironmentSlug: nil,
-		Origin:                 &types.ToolsetOrigin{RegistrySpecifier: specifier},
-		ProjectSlugInput:       nil,
+	displayName := strings.TrimSpace(conv.PtrValOrEmpty(input.Name, ""))
+	if displayName == "" {
+		displayName = defaultDisplayName(specifier, conv.PtrValOrEmpty(details.Title, ""))
+	}
+
+	created, err := t.catalog.CreateRemoteServer(ctx, &remotemcpgen.CreateServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             conv.PtrEmpty(displayName),
+		URL:              resolvedURL,
+		TransportType:    remote.TransportType,
+		Headers:          headerInputs,
 	})
 	if err != nil {
-		return fmt.Errorf("create toolset for catalog server: %w", err)
+		return fmt.Errorf("create remote mcp server: %w", err)
 	}
 	if created == nil {
-		return oops.E(oops.CodeUnexpected, nil, "create toolset returned no toolset")
-	}
-
-	mcpEnabled := true
-	mcpPublic := true
-	updated, err := t.installer.UpdateToolset(ctx, &toolsetsgen.UpdateToolsetPayload{
-		SessionToken:           nil,
-		ApikeyToken:            nil,
-		Slug:                   created.Slug,
-		Name:                   nil,
-		Description:            nil,
-		DefaultEnvironmentSlug: nil,
-		PromptTemplateNames:    nil,
-		ToolUrns:               nil,
-		ResourceUrns:           nil,
-		McpEnabled:             &mcpEnabled,
-		McpSlug:                nil,
-		McpIsPublic:            &mcpPublic,
-		CustomDomainID:         nil,
-		ToolSelectionMode:      nil,
-		ProjectSlugInput:       nil,
-	})
-	if err != nil {
-		return fmt.Errorf("enable mcp on toolset: %w", err)
-	}
-
-	mcpSlug := ""
-	if updated != nil && updated.McpSlug != nil {
-		mcpSlug = string(*updated.McpSlug)
+		return oops.E(oops.CodeUnexpected, nil, "create remote mcp server returned no server")
 	}
 
 	return writeJSON(wr, installResult{
-		ToolsetID:    created.ID,
-		ToolsetSlug:  string(created.Slug),
-		ToolsetName:  created.Name,
-		MCPSlug:      mcpSlug,
-		DeploymentID: evolveResult.Deployment.ID,
-		Status:       evolveResult.Deployment.Status,
+		ServerID:      created.ID,
+		ServerSlug:    conv.PtrValOrEmpty(created.Slug, ""),
+		Name:          conv.PtrValOrEmpty(created.Name, ""),
+		URL:           created.URL,
+		TransportType: created.TransportType,
 	})
+}
+
+// selectRemote picks one entry from remotes following: explicit remote_url
+// match, then explicit transport_type filter (first match), then implicit
+// streamable-http preference, then sse fallback.
+func selectRemote(remotes []*types.ExternalMCPRemote, remoteURL *string, transportType *string) (*types.ExternalMCPRemote, error) {
+	if len(remotes) == 0 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "catalog server exposes no remotes")
+	}
+
+	if remoteURL != nil && strings.TrimSpace(*remoteURL) != "" {
+		want := strings.TrimSpace(*remoteURL)
+		for _, r := range remotes {
+			if r != nil && r.URL == want {
+				return r, nil
+			}
+		}
+		return nil, oops.E(oops.CodeBadRequest, nil, "no remote with url %q on this catalog server", want)
+	}
+
+	if transportType != nil && strings.TrimSpace(*transportType) != "" {
+		want := strings.TrimSpace(*transportType)
+		for _, r := range remotes {
+			if r != nil && r.TransportType == want && r.URL != "" {
+				return r, nil
+			}
+		}
+		return nil, oops.E(oops.CodeBadRequest, nil, "no %s remote on this catalog server", want)
+	}
+
+	for _, transport := range []string{"streamable-http", "sse"} {
+		for _, r := range remotes {
+			if r != nil && r.TransportType == transport && r.URL != "" {
+				return r, nil
+			}
+		}
+	}
+	return nil, oops.E(oops.CodeBadRequest, nil, "catalog server has no streamable-http or sse remote")
+}
+
+// resolveRemoteURL substitutes `{name}` placeholders in rawURL using the
+// supplied variable values (falling back to declared defaults). Returns an
+// error when a required variable has no value, when a supplied value is not
+// in the variable's choices, or when the URL still contains an unresolved
+// placeholder after substitution.
+func resolveRemoteURL(rawURL string, declared map[string]*types.ExternalMCPRemoteVariable, supplied map[string]string) (string, error) {
+	resolved := rawURL
+	for name, variable := range declared {
+		value, ok := supplied[name]
+		if !ok || value == "" {
+			if variable != nil && variable.Default != nil {
+				value = *variable.Default
+			}
+		}
+		if value == "" {
+			required := variable != nil && variable.IsRequired != nil && *variable.IsRequired
+			if required {
+				return "", oops.E(oops.CodeBadRequest, nil, "missing required url variable %q", name)
+			}
+			continue
+		}
+		if variable != nil && len(variable.Choices) > 0 {
+			allowed := slices.Contains(variable.Choices, value)
+			if !allowed {
+				return "", oops.E(oops.CodeBadRequest, nil, "url variable %q value %q is not one of the declared choices", name, value)
+			}
+		}
+		resolved = strings.ReplaceAll(resolved, "{"+name+"}", value)
+	}
+
+	if strings.Contains(resolved, "{") && strings.Contains(resolved, "}") {
+		return "", oops.E(oops.CodeBadRequest, nil, "remote url still contains unresolved placeholders after variable substitution: %s", resolved)
+	}
+
+	return resolved, nil
+}
+
+// buildHeaderInputs maps the catalog-declared headers to remoteMcp header
+// inputs using the supplied static values. Required headers without a value
+// fail the call. is_secret/is_required are preserved from the catalog.
+func buildHeaderInputs(declared []*types.ExternalMCPRemoteHeader, supplied map[string]string) ([]*remotemcpgen.HeaderInput, error) {
+	if len(declared) == 0 {
+		return nil, nil
+	}
+
+	out := make([]*remotemcpgen.HeaderInput, 0, len(declared))
+	for _, header := range declared {
+		if header == nil || header.Name == "" {
+			continue
+		}
+		value := supplied[header.Name]
+		required := header.IsRequired != nil && *header.IsRequired
+		if value == "" {
+			if required {
+				return nil, oops.E(oops.CodeBadRequest, nil, "missing required header %q", header.Name)
+			}
+			continue
+		}
+		isSecret := false
+		if header.IsSecret != nil {
+			isSecret = *header.IsSecret
+		}
+		out = append(out, &remotemcpgen.HeaderInput{
+			Name:                   header.Name,
+			Description:            header.Description,
+			IsRequired:             new(required),
+			IsSecret:               new(isSecret),
+			Value:                  new(value),
+			ValueFromRequestHeader: nil,
+		})
+	}
+	return out, nil
 }
 
 func defaultDisplayName(specifier string, fallback string) string {
@@ -281,84 +282,4 @@ func defaultDisplayName(specifier string, fallback string) string {
 		return specifier[idx+1:]
 	}
 	return specifier
-}
-
-// ensureNoConflictingSlug returns a CodeConflict error when the project's
-// latest deployment already attaches an external MCP under the same slug but
-// for a different registry_server_specifier. Same specifier + same slug is
-// a legitimate idempotent re-install and proceeds silently.
-func (t *InstallTool) ensureNoConflictingSlug(ctx context.Context, projectID uuid.UUID, slug, specifier string) error {
-	latestID, err := t.deploymentsRepo.GetLatestDeploymentID(ctx, projectID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
-		}
-		return fmt.Errorf("get latest deployment for slug check: %w", err)
-	}
-	if latestID == uuid.Nil {
-		return nil
-	}
-
-	attachments, err := t.repo.ListExternalMCPAttachments(ctx, latestID)
-	if err != nil {
-		return fmt.Errorf("list external mcp attachments for slug check: %w", err)
-	}
-	for _, attachment := range attachments {
-		if attachment.Slug != slug {
-			continue
-		}
-		if attachment.RegistryServerSpecifier == specifier {
-			return nil
-		}
-		return oops.E(
-			oops.CodeConflict, nil,
-			"a different MCP server (%s) is already installed in this project as %q. Re-run with a name argument to disambiguate.",
-			attachment.RegistryServerSpecifier, slug,
-		)
-	}
-	return nil
-}
-
-// remoteURLsForInstall returns every streamable-http remote URL, falling back
-// to sse URLs only if no streamable-http remote exists. Mirrors the dashboard
-// "filterToHttpRemotes + Select all" path: assistants don't pick a remote, so
-// the install always wires up every endpoint the catalog server offers.
-func remoteURLsForInstall(remotes []*types.ExternalMCPRemote) []string {
-	if len(remotes) == 0 {
-		return nil
-	}
-	streamable := make([]string, 0, len(remotes))
-	sse := make([]string, 0, len(remotes))
-	for _, remote := range remotes {
-		if remote == nil || remote.URL == "" {
-			continue
-		}
-		switch remote.TransportType {
-		case "streamable-http":
-			streamable = append(streamable, remote.URL)
-		case "sse":
-			sse = append(sse, remote.URL)
-		}
-	}
-	if len(streamable) > 0 {
-		return streamable
-	}
-	if len(sse) > 0 {
-		return sse
-	}
-	return nil
-}
-
-// slugFromName mirrors the dashboard's generateSlug(name):
-// take the last "/" segment, lowercase, replace non-alphanumeric runs with a
-// single hyphen, trim hyphens. Kept in sync with
-// client/dashboard/src/pages/catalog/useExternalMcpReleaseWorkflow.ts so the
-// attachment row created here resolves the same tool URNs the UI would have
-// produced.
-func slugFromName(name string) string {
-	lastPart := name
-	if idx := strings.LastIndex(name, "/"); idx >= 0 && idx < len(name)-1 {
-		lastPart = name[idx+1:]
-	}
-	return conv.URLToSlug(lastPart)
 }

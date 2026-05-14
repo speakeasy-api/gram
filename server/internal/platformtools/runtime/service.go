@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	externalmcprepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -57,17 +56,16 @@ func WithSlackHTTPClient(client *guardian.HTTPClient) Option {
 
 // CatalogExternalTools wires the platform_search_catalog and
 // platform_install_catalog_server tools using the live registry client +
-// repo + installer adapter. Pass the result through WithExternalTools.
+// repo + catalog adapter. Pass the result through WithExternalTools.
 //
 // We surface these as ExternalTools (rather than rolling them into the
 // default registry struct) so callers can choose to omit them in contexts
-// where deployments + toolsets services are not constructed, e.g. the
-// background worker. The runtime catalogs them as platform tools by URN
-// either way.
-func CatalogExternalTools(installer platformcatalog.Installer, registryClient *externalmcp.RegistryClient, repo *externalmcprepo.Queries, deploymentsRepo *deploymentsrepo.Queries) []platformtools.ExternalTool {
+// where the remoteMcp service is not constructed, e.g. the background
+// worker. The runtime catalogs them as platform tools by URN either way.
+func CatalogExternalTools(catalog platformcatalog.Catalog, registryClient *externalmcp.RegistryClient, repo *externalmcprepo.Queries) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
 		{Executor: platformcatalog.NewSearchTool(registryClient, repo), RequiredFeature: ""},
-		{Executor: platformcatalog.NewInstallTool(installer, repo, deploymentsRepo), RequiredFeature: ""},
+		{Executor: platformcatalog.NewInstallTool(catalog), RequiredFeature: ""},
 	}
 }
 
