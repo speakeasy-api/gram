@@ -1,14 +1,10 @@
 package assistants
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/url"
-	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/superfly/fly-go/tokens"
 	"go.opentelemetry.io/otel/trace"
 
@@ -38,7 +34,7 @@ type FlyRuntimeConfig struct {
 	OCIImage           string
 	ImageVersion       string
 	AppNamePrefix      string
-	ServerURLOverride  *url.URL
+	ServerURL          *url.URL
 }
 
 func (c FlyRuntimeConfig) Validate() error {
@@ -54,6 +50,12 @@ func (c FlyRuntimeConfig) Validate() error {
 	if c.ImageVersion == "" {
 		return fmt.Errorf("--assistant-runtime-image-version is required")
 	}
+	if c.ServerURL == nil {
+		return fmt.Errorf("assistant fly runtime server URL is not configured")
+	}
+	if host := c.ServerURL.Hostname(); host == "" || isLoopbackHost(host) {
+		return fmt.Errorf("assistant fly runtime requires a public --assistant-runtime-server-url or --server-url; got %q", c.ServerURL.String())
+	}
 	return nil
 }
 
@@ -64,28 +66,4 @@ func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider,
 	default:
 		panic(fmt.Sprintf("assistants.NewRuntimeBackend: unsupported provider %q (CLI validation should have rejected this)", config.Provider))
 	}
-}
-
-func ValidateRuntimeBackendServerURL(ctx context.Context, runtime RuntimeBackend, serverURL *url.URL) error {
-	if runtime == nil || runtime.Backend() != runtimeBackendFlyIO {
-		return nil
-	}
-	_, err := runtime.ServerURL(ctx, assistantRuntimeRecord{
-		ID:                  uuid.Nil,
-		AssistantThreadID:   uuid.Nil,
-		AssistantID:         uuid.Nil,
-		ProjectID:           uuid.Nil,
-		Backend:             runtime.Backend(),
-		BackendMetadataJSON: nil,
-		State:               "",
-		WarmUntil: pgtype.Timestamptz{
-			Time:             time.Time{},
-			InfinityModifier: pgtype.Finite,
-			Valid:            false,
-		},
-	}, serverURL)
-	if err != nil {
-		return fmt.Errorf("validate assistant runtime server url: %w", err)
-	}
-	return nil
 }

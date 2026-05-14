@@ -95,6 +95,10 @@ func (t *telemetryRuntimeBackend) SupportsBackend(backend string) bool {
 	return t.inner.SupportsBackend(backend)
 }
 
+func (t *telemetryRuntimeBackend) ServerURL() *url.URL {
+	return t.inner.ServerURL()
+}
+
 func (t *telemetryRuntimeBackend) Ensure(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendEnsureResult, error) {
 	result, err := t.inner.Ensure(ctx, runtime)
 	if err != nil {
@@ -124,14 +128,6 @@ func (t *telemetryRuntimeBackend) RunTurn(
 	}
 	t.emit(ctx, runtime, "runtime_turn", "runtime turn ok", "INFO", nil)
 	return nil
-}
-
-func (t *telemetryRuntimeBackend) ServerURL(ctx context.Context, runtime assistantRuntimeRecord, raw *url.URL) (*url.URL, error) {
-	u, err := t.inner.ServerURL(ctx, runtime, raw)
-	if err != nil {
-		return nil, fmt.Errorf("runtime server url: %w", err)
-	}
-	return u, nil
 }
 
 func (t *telemetryRuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {

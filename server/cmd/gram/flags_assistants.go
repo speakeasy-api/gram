@@ -67,14 +67,14 @@ var assistantRuntimeFlags = []cli.Flag{
 	},
 }
 
-func assistantRuntimeConfigFromCLI(c *cli.Context) (assistants.RuntimeBackendConfig, error) {
-	var override *url.URL
+func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistants.RuntimeBackendConfig, error) {
+	resolvedServerURL := serverURL
 	if raw := c.String("assistant-runtime-server-url"); raw != "" {
 		parsed, err := url.Parse(raw)
 		if err != nil {
 			return assistants.RuntimeBackendConfig{}, fmt.Errorf("parse --assistant-runtime-server-url: %w", err)
 		}
-		override = parsed
+		resolvedServerURL = parsed
 	}
 
 	provider := c.String("assistant-runtime-provider")
@@ -98,14 +98,14 @@ func assistantRuntimeConfigFromCLI(c *cli.Context) (assistants.RuntimeBackendCon
 			OCIImage:           c.String("assistant-runtime-oci-image"),
 			ImageVersion:       c.String("assistant-runtime-image-version"),
 			AppNamePrefix:      c.String("assistant-runtime-flyio-app-name-prefix"),
-			ServerURLOverride:  override,
+			ServerURL:          resolvedServerURL,
 		},
 	}, nil
 }
 
 // newAssistantRuntime resolves CLI flags into an assistant RuntimeBackend.
 func newAssistantRuntime(
-	ctx context.Context,
+	_ context.Context,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	c *cli.Context,
@@ -113,16 +113,12 @@ func newAssistantRuntime(
 	_ *pgxpool.Pool,
 	serverURL *url.URL,
 ) (assistants.RuntimeBackend, error) {
-	cfg, err := assistantRuntimeConfigFromCLI(c)
+	cfg, err := assistantRuntimeConfigFromCLI(c, serverURL)
 	if err != nil {
 		return nil, err
 	}
 	if err := cfg.Fly.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid fly assistant runtime config: %w", err)
 	}
-	rb := assistants.NewRuntimeBackend(logger, tracerProvider, guardianPolicy, cfg)
-	if err := assistants.ValidateRuntimeBackendServerURL(ctx, rb, serverURL); err != nil {
-		return nil, fmt.Errorf("validate assistant runtime server url: %w", err)
-	}
-	return rb, nil
+	return assistants.NewRuntimeBackend(logger, tracerProvider, guardianPolicy, cfg), nil
 }

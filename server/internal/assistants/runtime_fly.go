@@ -85,13 +85,13 @@ func (r runnerStateResponse) minThreadIdle() *uint64 {
 	if len(r.Threads) == 0 {
 		return nil
 	}
-	min := r.Threads[0].IdleSeconds
+	minIdle := r.Threads[0].IdleSeconds
 	for _, t := range r.Threads[1:] {
-		if t.IdleSeconds < min {
-			min = t.IdleSeconds
+		if t.IdleSeconds < minIdle {
+			minIdle = t.IdleSeconds
 		}
 	}
-	return &min
+	return &minIdle
 }
 
 type flyRuntimeAPIClient interface {
@@ -211,6 +211,10 @@ func (f *FlyRuntimeBackend) Backend() string {
 
 func (f *FlyRuntimeBackend) SupportsBackend(backend string) bool {
 	return backend == runtimeBackendFlyIO
+}
+
+func (f *FlyRuntimeBackend) ServerURL() *url.URL {
+	return f.config.ServerURL
 }
 
 // Ensure does not auto-recreate the app on ensureExisting errors. Health and
@@ -780,26 +784,6 @@ func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 	return nil
 }
 
-func (f *FlyRuntimeBackend) ServerURL(_ context.Context, runtime assistantRuntimeRecord, raw *url.URL) (*url.URL, error) {
-	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
-		return nil, err
-	}
-
-	candidate := raw
-	if f.config.ServerURLOverride != nil {
-		candidate = f.config.ServerURLOverride
-	}
-	if candidate == nil {
-		return nil, fmt.Errorf("assistant runtime server URL is not configured")
-	}
-	if host := candidate.Hostname(); host == "" || isLoopbackHost(host) {
-		return nil, fmt.Errorf("assistant fly runtime requires a public --assistant-runtime-server-url or --server-url; got %q", candidate.String())
-	}
-
-	cloned := *candidate
-	return &cloned, nil
-}
-
 func (f *FlyRuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {
 	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
 		return RuntimeBackendStatus{}, err
@@ -912,6 +896,7 @@ func (f *FlyRuntimeBackend) machineConfig(runtime assistantRuntimeRecord) *fly.M
 	env := map[string]string{
 		"GRAM_ASSISTANT_ID":         runtime.AssistantID.String(),
 		"GRAM_ASSISTANT_PROJECT_ID": runtime.ProjectID.String(),
+		"GRAM_SERVER_URL":           f.config.ServerURL.String(),
 	}
 	metadata := map[string]string{
 		fly.MachineConfigMetadataKeyFlyPlatformVersion: "v2",
@@ -919,9 +904,6 @@ func (f *FlyRuntimeBackend) machineConfig(runtime assistantRuntimeRecord) *fly.M
 		flyMachineMetadataAssistantID:                  runtime.AssistantID.String(),
 		flyMachineMetadataProjectID:                    runtime.ProjectID.String(),
 		flyMachineMetadataRole:                         flyMachineMetadataRoleAssistant,
-	}
-	if f.config.ServerURLOverride != nil {
-		env["GRAM_SERVER_URL"] = f.config.ServerURLOverride.String()
 	}
 	return &fly.MachineConfig{
 		Image: fmt.Sprintf("%s:%s", f.config.OCIImage, f.config.ImageVersion),

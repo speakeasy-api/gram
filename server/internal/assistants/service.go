@@ -1685,7 +1685,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	}
 	assistant.Toolsets = toolsets[assistant.ID]
 
-	runtimeServerURL := s.serverURL
+	runtimeServerURL := s.runtime.ServerURL()
 	if runtimeServerURL == nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, nil, "assistant runtime server url not configured")
 	}

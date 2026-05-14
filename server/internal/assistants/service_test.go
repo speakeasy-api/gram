@@ -1131,6 +1131,10 @@ func (t testRuntimeBackend) SupportsBackend(backend string) bool {
 	return backend == t.backend
 }
 
+func (t testRuntimeBackend) ServerURL() *url.URL {
+	return &url.URL{Scheme: "https", Host: "gram.example.com"}
+}
+
 func (t testRuntimeBackend) Ensure(context.Context, assistantRuntimeRecord) (RuntimeBackendEnsureResult, error) {
 	if t.ensureErr != nil {
 		return RuntimeBackendEnsureResult{}, t.ensureErr
@@ -1140,14 +1144,6 @@ func (t testRuntimeBackend) Ensure(context.Context, assistantRuntimeRecord) (Run
 
 func (t testRuntimeBackend) RunTurn(context.Context, assistantRuntimeRecord, uuid.UUID, string, string, string) error {
 	return t.runTurnErr
-}
-
-func (t testRuntimeBackend) ServerURL(context.Context, assistantRuntimeRecord, *url.URL) (*url.URL, error) {
-	parsed, err := url.Parse("https://gram.example.com")
-	if err != nil {
-		return nil, fmt.Errorf("parse test server url: %w", err)
-	}
-	return parsed, nil
 }
 
 func (t testRuntimeBackend) Status(context.Context, assistantRuntimeRecord) (RuntimeBackendStatus, error) {

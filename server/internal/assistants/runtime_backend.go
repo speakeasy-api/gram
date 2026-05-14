@@ -15,12 +15,17 @@ const (
 type RuntimeBackend interface {
 	Backend() string
 	SupportsBackend(backend string) bool
+	// ServerURL returns the public base URL the runner uses to reach the
+	// management API. The bootstrap response embeds it in MCP and
+	// completions URLs handed to the runner, so it must be reachable from
+	// the runtime VM (not the host-facing --server-url, which may be
+	// loopback during local development).
+	ServerURL() *url.URL
 	Ensure(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendEnsureResult, error)
 	// RunTurn delivers a turn for `threadID` to the runner backing
 	// `runtime`. The call lands on /threads/{threadID}/turn so the
 	// runner can dispatch to the right per-thread tokio task.
 	RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string) error
-	ServerURL(ctx context.Context, runtime assistantRuntimeRecord, raw *url.URL) (*url.URL, error)
 	Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error)
 	// Stop halts the active runtime so it can be re-admitted later. Backends
 	// may keep persisted state (e.g. Fly app + IP) intact for warm reuse.

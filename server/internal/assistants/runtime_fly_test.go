@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/superfly/fly-go"
+	"github.com/superfly/fly-go/tokens"
 
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -768,18 +769,35 @@ func TestFlyRuntimeBackendRunTurnHitsThreadScopedRoute(t *testing.T) {
 	require.Equal(t, fmt.Sprintf("/threads/%s/turn", turnThreadID), observedPath)
 }
 
-func TestFlyRuntimeBackendServerURLRejectsLoopback(t *testing.T) {
+func TestFlyRuntimeConfigValidateRejectsLoopbackServerURL(t *testing.T) {
 	t.Parallel()
 
-	server := newTestAssistantRuntimeServer(t)
-	backend, _, _ := newTestFlyRuntimeBackend(t, server)
-	backend.config.ServerURLOverride = nil
-
-	_, err := backend.ServerURL(context.Background(), assistantRuntimeRecord{
-		Backend: runtimeBackendFlyIO,
-	}, &url.URL{Scheme: "https", Host: "127.0.0.1:8080"})
+	cfg := FlyRuntimeConfig{
+		FlyTokens:        tokens.Parse("test"),
+		DefaultFlyOrg:    "speakeasy-lab",
+		DefaultFlyRegion: "iad",
+		OCIImage:         "registry.fly.io/assistant-runtime",
+		ImageVersion:     "dev",
+		ServerURL:        &url.URL{Scheme: "https", Host: "127.0.0.1:8080"},
+	}
+	err := cfg.Validate()
 	require.Error(t, err)
 	require.ErrorContains(t, err, "public")
+}
+
+func TestFlyRuntimeConfigValidateRequiresServerURL(t *testing.T) {
+	t.Parallel()
+
+	cfg := FlyRuntimeConfig{
+		FlyTokens:        tokens.Parse("test"),
+		DefaultFlyOrg:    "speakeasy-lab",
+		DefaultFlyRegion: "iad",
+		OCIImage:         "registry.fly.io/assistant-runtime",
+		ImageVersion:     "dev",
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	require.ErrorContains(t, err, "server URL")
 }
 
 type testFlyRuntimeAPIClient struct {
@@ -981,12 +999,12 @@ func newTestFlyRuntimeBackend(t *testing.T, server *httptest.Server) (*FlyRuntim
 		logger: testenv.NewLogger(t),
 		tracer: testenv.NewTracerProvider(t).Tracer("test"),
 		config: FlyRuntimeConfig{
-			DefaultFlyOrg:     "speakeasy-lab",
-			DefaultFlyRegion:  "iad",
-			OCIImage:          "registry.fly.io/assistant-runtime",
-			ImageVersion:      "dev",
-			AppNamePrefix:     "gram-asst",
-			ServerURLOverride: mustParseURL(t, "https://gram.example.com"),
+			DefaultFlyOrg:    "speakeasy-lab",
+			DefaultFlyRegion: "iad",
+			OCIImage:         "registry.fly.io/assistant-runtime",
+			ImageVersion:     "dev",
+			AppNamePrefix:    "gram-asst",
+			ServerURL:        mustParseURL(t, "https://gram.example.com"),
 		},
 		client:       apiClient,
 		flapsFactory: &testFlyRuntimeFlapsFactory{client: flapsClient},
