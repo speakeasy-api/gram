@@ -304,19 +304,25 @@ async fn spawn_thread(
     let completions_http = build_http(thread_http_client.clone(), host.tokens.clone());
     let adapter = CompletionsAdapter::with_client(provider.clone(), completions_http);
 
-    // Compactor outbound calls send a `gram-chat-id` of the form
-    // `compaction:<chat id>` so the server's chat capture pipeline can
-    // recognise the compactor's "summarise this transcript" turn instead of
-    // mistaking it for divergence on the user's chat.
+    // Compactor outbound headers carry the same gram-chat-id as the main
+    // adapter so the server's assistant-scope guard (which rejects any
+    // assistant-runtime request without a chat id) lets the call through,
+    // plus gram-skip-capture: 1 so the capture pipeline drops the
+    // compactor's "summarise this transcript" turn instead of persisting
+    // it as divergence on the user's chat.
     let mut compactor_headers = http::HeaderMap::new();
+    compactor_headers.insert(
+        http::HeaderName::from_static("gram-chat-id"),
+        http::HeaderValue::from_str(&chat_id)
+            .map_err(|source| RunnerError::HeaderValue { source })?,
+    );
+    compactor_headers.insert(
+        http::HeaderName::from_static("gram-skip-capture"),
+        http::HeaderValue::from_static("1"),
+    );
     compactor_headers.insert(
         http::HeaderName::from_static("x-gram-source"),
         http::HeaderValue::from_static("assistant"),
-    );
-    compactor_headers.insert(
-        http::HeaderName::from_static("gram-chat-id"),
-        http::HeaderValue::from_str(&format!("compaction:{}", bootstrap.chat_id))
-            .map_err(|source| RunnerError::HeaderValue { source })?,
     );
     let compactor_http_client = reqwest::Client::builder()
         .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))

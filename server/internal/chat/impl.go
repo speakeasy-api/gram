@@ -796,7 +796,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// Assistant-scoped runner tokens carry no ThreadID claim, so the chat
 	// header is the only signal binding a completion to the right thread.
 	// Reject the request if the header is missing or the chat does not
-	// belong to a thread under the principal's assistant.
+	// belong to a thread under the principal's assistant. The runner's
+	// compactor sends the same chat id with `Gram-Skip-Capture: 1` so the
+	// ownership check still runs but the capture pipeline does not
+	// persist its "summarise this transcript" turn into the user's chat.
+	skipCapture := false
 	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
 		if chatID == uuid.Nil || authCtx.ProjectID == nil {
 			return oops.E(oops.CodeForbidden, nil, "assistant runtime token requires a chat ID").Log(ctx, s.logger)
@@ -810,6 +814,9 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		}
 		if chatAssistantID != principal.AssistantID {
 			return oops.E(oops.CodeForbidden, nil, "chat does not belong to assistant").Log(ctx, s.logger)
+		}
+		if r.Header.Get("Gram-Skip-Capture") == "1" {
+			skipCapture = true
 		}
 	}
 
@@ -836,6 +843,14 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		attr.SlogChatToolNames(toolNames),
 	)
 
+	// skipCapture zeroes the ChatID propagated to the completion pipeline
+	// so the capture strategy (which keys off ChatID) treats the request
+	// as anonymous. The ownership check above has already run against the
+	// real chat id, so the bypass cannot be used to escape verification.
+	completionChatID := chatID
+	if skipCapture {
+		completionChatID = uuid.Nil
+	}
 	completionReq := openrouter.CompletionRequest{
 		OrgID:          orgID,
 		ProjectID:      authCtx.ProjectID.String(),
@@ -845,7 +860,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		Model:          chatRequest.Model,
 		Stream:         false,
 		UsageSource:    source,
-		ChatID:         chatID,
+		ChatID:         completionChatID,
 		UserID:         userID,
 		ExternalUserID: authCtx.ExternalUserID,
 		UserEmail:      conv.PtrValOr(authCtx.Email, ""),
