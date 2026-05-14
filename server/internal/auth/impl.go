@@ -407,33 +407,33 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 // /login with no context), which leaves the organization_id param unset and
 // lets AuthKit show the org selector as normal.
 func (s *Service) resolveWorkOSOrgIDForLogin(ctx context.Context, payload *gen.LoginPayload) string {
-	var slug string
-
 	// Admin override header takes priority.
 	if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
-		slug = adminOverride
+		return s.workosOrgIDFromSlug(ctx, adminOverride)
 	}
 
 	// Fall back to the org slug embedded in the redirect URL.
-	if slug == "" && payload != nil && payload.Redirect != nil {
-		slug = organizationSlugFromDestinationURL(*payload.Redirect)
+	if payload != nil && payload.Redirect != nil {
+		if slug := organizationSlugFromDestinationURL(*payload.Redirect); slug != "" {
+			return s.workosOrgIDFromSlug(ctx, slug)
+		}
 	}
 
 	// Default: no admin override and no org slug in the redirect URL.
 	// Return "" so AuthKit shows the org selector as normal.
-	if slug == "" {
-		return ""
-	}
+	return ""
+}
 
+// workosOrgIDFromSlug looks up an org by slug and returns its WorkOS ID.
+// Returns "" if the org doesn't exist or has no WorkOS ID.
+func (s *Service) workosOrgIDFromSlug(ctx context.Context, slug string) string {
 	orgMeta, err := s.orgRepo.GetOrganizationMetadataBySlug(ctx, slug)
 	if err != nil {
 		return ""
 	}
-
 	if !orgMeta.WorkosID.Valid {
 		return ""
 	}
-
 	return orgMeta.WorkosID.String
 }
 
