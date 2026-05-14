@@ -74,6 +74,7 @@ type ReviewAction = "approve" | "deny";
 const SHADOW_MCP_PAGE_SIZE = 100;
 const SHADOW_MCP_REQUESTS_QUERY_KEY = ["shadow-mcp", "approval-requests"];
 const SHADOW_MCP_RULES_QUERY_KEY = ["shadow-mcp", "access-rules"];
+const ALL_PROJECTS_VALUE = "__all_projects__";
 
 const MATCH_BREADTH_OPTIONS: {
   value: ShadowMCPMatchBreadth;
@@ -182,6 +183,16 @@ function projectName(
   );
 }
 
+function selectedProjectIds(
+  projectSelection: string,
+  projects: { id: string; name: string }[],
+) {
+  if (projectSelection === ALL_PROJECTS_VALUE) {
+    return projects.map((project) => project.id);
+  }
+  return projectSelection ? [projectSelection] : [];
+}
+
 function ReviewRequestSheet({
   request,
   projects,
@@ -199,12 +210,14 @@ function ReviewRequestSheet({
   onApprove: (input: {
     displayName: string;
     accessScope: ShadowMCPAccessScope;
+    projectIds: string[];
     matchBreadth: ShadowMCPMatchBreadth;
     matchValue: string;
     reason?: string;
   }) => Promise<void>;
   onDeny: (input: {
     createDenyRule: boolean;
+    projectIds: string[];
     displayName?: string;
     matchBreadth?: ShadowMCPMatchBreadth;
     matchValue?: string;
@@ -216,6 +229,7 @@ function ReviewRequestSheet({
   const [matchBreadth, setMatchBreadth] =
     useState<ShadowMCPMatchBreadth>("full_url");
   const [matchValue, setMatchValue] = useState("");
+  const [projectSelection, setProjectSelection] = useState("");
   const [reason, setReason] = useState("");
 
   useEffect(() => {
@@ -226,13 +240,19 @@ function ReviewRequestSheet({
     setDisplayName(getRequestDisplayName(request));
     setMatchBreadth(nextMatchBreadth);
     setMatchValue(getMatchValue(request, nextMatchBreadth));
+    setProjectSelection(request.projectId || projects?.[0]?.id || "");
     setReason("");
-  }, [request, open]);
+  }, [projects, request, open]);
 
   if (!request) return null;
 
+  const projectList = projects ?? [];
+  const projectIds = selectedProjectIds(projectSelection, projectList);
+  const showAllProjectsOption = projectList.length > 1;
   const canSubmit =
-    displayName.trim().length > 0 && matchValue.trim().length > 0;
+    displayName.trim().length > 0 &&
+    matchValue.trim().length > 0 &&
+    projectIds.length > 0;
   const submitLabel =
     action === "approve" ? "Approve and create rule" : "Deny and create rule";
 
@@ -244,6 +264,7 @@ function ReviewRequestSheet({
         await onApprove({
           displayName: displayName.trim(),
           accessScope: "project",
+          projectIds,
           matchBreadth,
           matchValue: matchValue.trim(),
           reason: trimmedReason,
@@ -251,6 +272,7 @@ function ReviewRequestSheet({
       } else {
         await onDeny({
           createDenyRule: true,
+          projectIds,
           displayName: displayName.trim(),
           matchBreadth,
           matchValue: matchValue.trim(),
@@ -376,15 +398,25 @@ function ReviewRequestSheet({
               />
             </Field>
 
-            <Field label="Scope">
-              <Select value={request.projectId}>
+            <Field label="Project">
+              <Select
+                value={projectSelection}
+                onValueChange={setProjectSelection}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={request.projectId}>
-                    {projectName(projects, request.projectId)}
-                  </SelectItem>
+                  {showAllProjectsOption && (
+                    <SelectItem value={ALL_PROJECTS_VALUE}>
+                      All projects
+                    </SelectItem>
+                  )}
+                  {projectList.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </Field>
@@ -459,6 +491,7 @@ function AccessRuleSheet({
     disposition: ShadowMCPDisposition;
     accessScope: ShadowMCPAccessScope;
     projectId?: string;
+    projectIds: string[];
     matchBreadth: ShadowMCPMatchBreadth;
     matchValue: string;
     reason?: string;
@@ -470,7 +503,7 @@ function AccessRuleSheet({
   const [matchBreadth, setMatchBreadth] =
     useState<ShadowMCPMatchBreadth>("full_url");
   const [matchValue, setMatchValue] = useState("");
-  const [projectId, setProjectId] = useState("");
+  const [projectSelection, setProjectSelection] = useState("");
   const [reason, setReason] = useState("");
   const defaultProjectId = projects[0]?.id ?? "";
 
@@ -480,7 +513,7 @@ function AccessRuleSheet({
     if (rule) {
       setDisposition(rule.disposition);
       setDisplayName(rule.displayName);
-      setProjectId(rule.projectId ?? "");
+      setProjectSelection(rule.projectId ?? "");
       setMatchBreadth(rule.matchBreadth);
       setMatchValue(rule.matchValue);
       setReason(rule.reason ?? "");
@@ -489,16 +522,18 @@ function AccessRuleSheet({
 
     setDisposition("allowed");
     setDisplayName("");
-    setProjectId(defaultProjectId);
+    setProjectSelection(defaultProjectId);
     setMatchBreadth("full_url");
     setMatchValue("");
     setReason("");
   }, [defaultProjectId, rule, open]);
 
+  const projectIds = selectedProjectIds(projectSelection, projects);
+  const showAllProjectsOption = !rule && projects.length > 1;
   const canSubmit =
     displayName.trim().length > 0 &&
     matchValue.trim().length > 0 &&
-    projectId !== "";
+    projectIds.length > 0;
 
   const submit = async () => {
     try {
@@ -506,7 +541,11 @@ function AccessRuleSheet({
         displayName: displayName.trim(),
         disposition,
         accessScope: "project",
-        projectId,
+        projectId:
+          projectSelection === ALL_PROJECTS_VALUE
+            ? undefined
+            : projectSelection,
+        projectIds,
         matchBreadth,
         matchValue: matchValue.trim(),
         reason: reason.trim() || undefined,
@@ -592,23 +631,20 @@ function AccessRuleSheet({
               />
             </Field>
 
-            <Field label="Scope">
-              <Select value="project">
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="project">Project</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-
             <Field label="Project">
-              <Select value={projectId} onValueChange={setProjectId}>
+              <Select
+                value={projectSelection}
+                onValueChange={setProjectSelection}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select project" />
                 </SelectTrigger>
                 <SelectContent>
+                  {showAllProjectsOption && (
+                    <SelectItem value={ALL_PROJECTS_VALUE}>
+                      All projects
+                    </SelectItem>
+                  )}
                   {projects.map((project) => (
                     <SelectItem key={project.id} value={project.id}>
                       {project.name}
@@ -979,6 +1015,7 @@ export function ShadowMCPAccessContent() {
     <div className="space-y-8">
       <ReviewRequestSheet
         request={reviewRequest}
+        projects={organization.projects}
         open={!!reviewRequest}
         isSubmitting={isReviewSubmitting}
         onOpenChange={(open) => {
@@ -993,6 +1030,7 @@ export function ShadowMCPAccessContent() {
                 id: reviewRequest.id,
                 displayName: input.displayName,
                 accessScope: input.accessScope,
+                projectIds: input.projectIds,
                 matchBreadth: input.matchBreadth,
                 matchValue: input.matchValue,
                 observedFullUrl: reviewRequest.observedFullUrl,
@@ -1014,6 +1052,7 @@ export function ShadowMCPAccessContent() {
               denyShadowMCPApprovalRequestForm: {
                 id: reviewRequest.id,
                 createDenyRule: input.createDenyRule,
+                projectIds: input.projectIds,
                 displayName: input.displayName,
                 matchBreadth: input.matchBreadth,
                 matchValue: input.matchValue,
@@ -1071,11 +1110,11 @@ export function ShadowMCPAccessContent() {
           } else {
             await createRule.mutateAsync({
               request: {
-                shadowMCPAccessRuleForm: {
+                createShadowMCPAccessRuleForm: {
                   displayName: input.displayName,
                   disposition: input.disposition,
                   accessScope: input.accessScope,
-                  projectId: input.projectId,
+                  projectIds: input.projectIds,
                   matchBreadth: input.matchBreadth,
                   matchValue: input.matchValue,
                   observedFullUrl:
