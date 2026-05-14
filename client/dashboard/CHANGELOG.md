@@ -1,28 +1,5 @@
 # dashboard
 
-## 0.53.0
-
-### Minor Changes
-
-- ff01624: Onboarding now asks for the assistant's name and personality as two separate steps instead of one combined card. When the user has already named the assistant in chat ("call it X"), the agent skips the name picker and goes straight to the personality step.
-- 3517705: add search bar to MCP servers listing page
-- fa5ef43: Add Codex (OpenAI) hooks support. A new `/rpc/hooks.codex` endpoint accepts all six Codex hook events (SessionStart, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, Stop), enforces org-level risk policies on blocking events, and records telemetry to ClickHouse. The plugin generator now produces a downloadable Codex observability plugin (ZIP and install script) that registers the hooks with a Gram marketplace entry in `~/.codex/config.toml`. The install instructions dialog gains a Codex tab alongside Claude Code and Cursor.
-- d807fe6: Rename the org "Security" tab to "Identity" and refresh the SSO / Directory Sync cards: drop the SAML-specific branding (Single Sign-On / SSO instead of SAML SSO), replace the hover popover with a tooltip on a fully clickable Configure button, and capture an `identity_provider_interest` PostHog event on click so the team is pinged in Slack when a customer expresses interest. Clicking now confirms with a success toast.
-- bbfecc5: Allow adding multiple GitHub collaborators when publishing plugins to a marketplace. The publish dialog accepts a list of usernames as chips, and the `publishPlugins` API now takes `github_usernames` (array) instead of `github_username` (string).
-- 1057ea9: Add OTEL forwarding: customers can configure a URL and headers on the Org Logs page, and a body-tee middleware mirrors every payload received on `/rpc/hooks.otel/v1/*` to that endpoint. Forwarding is org-wide, async (bounded worker pool, fire-and-forget on failure), capped at 4 MiB per request, and gated behind `org:admin` for writes / `org:read` for reads. Header values are encrypted at rest and never returned by the API.
-- db033c9: Make the Project Overview page date range configurable via a `TimeRangePicker` in the header, matching the Insights and Logs pages. The selected range is URL-backed (`range`, `from`, `to`, `label`), the default is still the last 7 days, and the "Explore with AI" suggestions reflect the active range.
-- a5e0990: Added support for configuring webhooks to deliver audit log events to external destinations.
-
-### Patch Changes
-
-- 491f3b8: add an opt-in L1 ML prompt-injection classifier (deberta-v3) that runs alongside the heuristic baseline. enable the new "ML classifier (deberta-v3)" rule under the Prompt Injection category in the policy editor to layer the classifier on top of L0 heuristics. detection runs in a sidecar service; configure with `PI_CLASSIFIER_URL` and `PI_CLASSIFIER_THRESHOLD` (default `0.9`)
-- 055d650: Onboarding now asks for Slack credentials in the order users encounter them in Slack's UI: Signing Secret first (Basic Information), then Bot User OAuth Token, then User OAuth Token (both on the Install App / OAuth & Permissions page). No more pasting `xoxb-` into the signing-secret field.
-- 7290607: Removed the 1-public-MCP-server cap on accounts without an active subscription. Users can now enable as many public MCP servers as they want on any plan.
-- 86023a0: Prevent a transient "toolset not found" error from appearing immediately after deleting an MCP server's toolset.
-- 476e7d2: Disable Create Assistant buttons in the dashboard when the user lacks the permissions needed to create one, with a tooltip explaining why.
-- Updated dependencies [4069ffd]
-  - @gram-ai/elements@1.32.1
-
 ## 0.52.0
 
 ### Minor Changes
