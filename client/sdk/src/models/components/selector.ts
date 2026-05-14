@@ -29,7 +29,6 @@ export type Disposition = ClosedEnum<typeof Disposition>;
 export const ResourceKind = {
   Project: "project",
   Mcp: "mcp",
-  ShadowMcp: "shadow_mcp",
   Org: "org",
   Environment: "environment",
   Wildcard: "*",

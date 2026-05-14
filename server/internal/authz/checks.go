@@ -32,12 +32,3 @@ func MCPCheck(scope Scope, resourceID, projectID string) Check {
 	}
 	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions}
 }
-
-// ShadowMCPConnectCheck builds a check for an approved Shadow MCP access rule.
-func ShadowMCPConnectCheck(ruleID, projectID string) Check {
-	var dimensions map[string]string
-	if projectID != "" {
-		dimensions = map[string]string{"project_id": projectID}
-	}
-	return Check{Scope: ScopeShadowMCPConnect, ResourceKind: "", ResourceID: ruleID, Dimensions: dimensions}
-}

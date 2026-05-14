@@ -423,12 +423,12 @@ func BuildApproveShadowMCPApprovalRequestPayload(accessApproveShadowMCPApprovalR
 	{
 		err = json.Unmarshal([]byte(accessApproveShadowMCPApprovalRequestBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"display_name\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"role_ids\": [\n         \"abc123\"\n      ]\n   }'")
-		}
-		if body.RoleIds == nil {
-			err = goa.MergeErrors(err, goa.MissingFieldError("role_ids", "body"))
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"access_scope\": \"project\",\n      \"display_name\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"reason\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if !(body.AccessScope == "organization" || body.AccessScope == "project") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access_scope", body.AccessScope, []any{"organization", "project"}))
+		}
 		if !(body.MatchBreadth == "full_url" || body.MatchBreadth == "url_host" || body.MatchBreadth == "server_identity") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", body.MatchBreadth, []any{"full_url", "url_host", "server_identity"}))
 		}
@@ -450,6 +450,7 @@ func BuildApproveShadowMCPApprovalRequestPayload(accessApproveShadowMCPApprovalR
 	}
 	v := &access.ApproveShadowMCPApprovalRequestPayload{
 		ID:                     body.ID,
+		AccessScope:            body.AccessScope,
 		MatchBreadth:           body.MatchBreadth,
 		MatchValue:             body.MatchValue,
 		DisplayName:            body.DisplayName,
@@ -457,14 +458,6 @@ func BuildApproveShadowMCPApprovalRequestPayload(accessApproveShadowMCPApprovalR
 		ObservedURLHost:        body.ObservedURLHost,
 		ObservedServerIdentity: body.ObservedServerIdentity,
 		Reason:                 body.Reason,
-	}
-	if body.RoleIds != nil {
-		v.RoleIds = make([]string, len(body.RoleIds))
-		for i, val := range body.RoleIds {
-			v.RoleIds[i] = val
-		}
-	} else {
-		v.RoleIds = []string{}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -593,10 +586,16 @@ func BuildCreateShadowMCPAccessRulePayload(accessCreateShadowMCPAccessRuleBody s
 	{
 		err = json.Unmarshal([]byte(accessCreateShadowMCPAccessRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"display_name\": \"abc123\",\n      \"disposition\": \"denied\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"role_ids\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"access_scope\": \"project\",\n      \"display_name\": \"abc123\",\n      \"disposition\": \"denied\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"reason\": \"abc123\"\n   }'")
 		}
 		if !(body.Disposition == "allowed" || body.Disposition == "denied") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", body.Disposition, []any{"allowed", "denied"}))
+		}
+		if !(body.AccessScope == "organization" || body.AccessScope == "project") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access_scope", body.AccessScope, []any{"organization", "project"}))
+		}
+		if body.ProjectID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 		}
 		if !(body.MatchBreadth == "full_url" || body.MatchBreadth == "url_host" || body.MatchBreadth == "server_identity") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", body.MatchBreadth, []any{"full_url", "url_host", "server_identity"}))
@@ -619,6 +618,8 @@ func BuildCreateShadowMCPAccessRulePayload(accessCreateShadowMCPAccessRuleBody s
 	}
 	v := &access.CreateShadowMCPAccessRulePayload{
 		Disposition:            body.Disposition,
+		AccessScope:            body.AccessScope,
+		ProjectID:              body.ProjectID,
 		MatchBreadth:           body.MatchBreadth,
 		MatchValue:             body.MatchValue,
 		DisplayName:            body.DisplayName,
@@ -626,12 +627,6 @@ func BuildCreateShadowMCPAccessRulePayload(accessCreateShadowMCPAccessRuleBody s
 		ObservedURLHost:        body.ObservedURLHost,
 		ObservedServerIdentity: body.ObservedServerIdentity,
 		Reason:                 body.Reason,
-	}
-	if body.RoleIds != nil {
-		v.RoleIds = make([]string, len(body.RoleIds))
-		for i, val := range body.RoleIds {
-			v.RoleIds[i] = val
-		}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -647,11 +642,17 @@ func BuildUpdateShadowMCPAccessRulePayload(accessUpdateShadowMCPAccessRuleBody s
 	{
 		err = json.Unmarshal([]byte(accessUpdateShadowMCPAccessRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"display_name\": \"abc123\",\n      \"disposition\": \"denied\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"role_ids\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"access_scope\": \"project\",\n      \"display_name\": \"abc123\",\n      \"disposition\": \"denied\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"reason\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if !(body.Disposition == "allowed" || body.Disposition == "denied") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", body.Disposition, []any{"allowed", "denied"}))
+		}
+		if !(body.AccessScope == "organization" || body.AccessScope == "project") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access_scope", body.AccessScope, []any{"organization", "project"}))
+		}
+		if body.ProjectID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 		}
 		if !(body.MatchBreadth == "full_url" || body.MatchBreadth == "url_host" || body.MatchBreadth == "server_identity") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", body.MatchBreadth, []any{"full_url", "url_host", "server_identity"}))
@@ -675,6 +676,8 @@ func BuildUpdateShadowMCPAccessRulePayload(accessUpdateShadowMCPAccessRuleBody s
 	v := &access.UpdateShadowMCPAccessRulePayload{
 		ID:                     body.ID,
 		Disposition:            body.Disposition,
+		AccessScope:            body.AccessScope,
+		ProjectID:              body.ProjectID,
 		MatchBreadth:           body.MatchBreadth,
 		MatchValue:             body.MatchValue,
 		DisplayName:            body.DisplayName,
@@ -682,12 +685,6 @@ func BuildUpdateShadowMCPAccessRulePayload(accessUpdateShadowMCPAccessRuleBody s
 		ObservedURLHost:        body.ObservedURLHost,
 		ObservedServerIdentity: body.ObservedServerIdentity,
 		Reason:                 body.Reason,
-	}
-	if body.RoleIds != nil {
-		v.RoleIds = make([]string, len(body.RoleIds))
-		for i, val := range body.RoleIds {
-			v.RoleIds[i] = val
-		}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

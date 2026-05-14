@@ -5685,6 +5685,8 @@ func unmarshalShadowMCPAccessRuleResponseBodyToAccessShadowMCPAccessRule(v *Shad
 	res := &access.ShadowMCPAccessRule{
 		ID:                     *v.ID,
 		OrganizationID:         *v.OrganizationID,
+		ProjectID:              v.ProjectID,
+		AccessScope:            *v.AccessScope,
 		Disposition:            *v.Disposition,
 		MatchBreadth:           *v.MatchBreadth,
 		MatchValue:             *v.MatchValue,
@@ -5698,10 +5700,6 @@ func unmarshalShadowMCPAccessRuleResponseBodyToAccessShadowMCPAccessRule(v *Shad
 		Reason:                 v.Reason,
 		CreatedAt:              *v.CreatedAt,
 		UpdatedAt:              *v.UpdatedAt,
-	}
-	res.RoleIds = make([]string, len(v.RoleIds))
-	for i, val := range v.RoleIds {
-		res.RoleIds[i] = val
 	}
 
 	return res

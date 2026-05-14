@@ -35,6 +35,11 @@ const (
 
 	shadowMCPRuleAllowed = "allowed"
 	shadowMCPRuleDenied  = "denied"
+
+	shadowMCPAccessScopeOrganization = "organization"
+	shadowMCPAccessScopeProject      = "project"
+
+	shadowMCPMaxPageLimit = 1000
 )
 
 func (s *Service) ListShadowMCPApprovalRequests(ctx context.Context, payload *gen.ListShadowMCPApprovalRequestsPayload) (*gen.ListShadowMCPApprovalRequestsResult, error) {
@@ -171,7 +176,7 @@ func (s *Service) CreateShadowMCPApprovalRequest(ctx context.Context, payload *g
 }
 
 func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *gen.ApproveShadowMCPApprovalRequestPayload) (*gen.ShadowMCPApprovalDecisionResult, error) {
-	ac, workosOrgID, err := s.requireOrgAdminWithWorkOS(ctx)
+	ac, err := s.requireOrgAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -180,14 +185,6 @@ func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid request id").Log(ctx, s.logger)
 	}
 	matchValue, err := normalizeShadowMCPMatchValue(payload.MatchBreadth, payload.MatchValue)
-	if err != nil {
-		return nil, err
-	}
-	if err := validateShadowMCPAllowedRoleIDs(shadowMCPRuleAllowed, payload.RoleIds); err != nil {
-		return nil, err
-	}
-
-	roleSlugs, roleIDBySlug, err := s.shadowMCPRoleMappings(ctx, workosOrgID, payload.RoleIds)
 	if err != nil {
 		return nil, err
 	}
@@ -209,9 +206,15 @@ func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *
 	if request.Status != shadowMCPRequestStatusRequested {
 		return nil, oops.E(oops.CodeBadRequest, nil, "shadow mcp approval request has already been decided").Log(ctx, s.logger)
 	}
+	ruleProjectID, err := s.shadowMCPRuleProjectID(ctx, ac.ActiveOrganizationID, payload.AccessScope, nil, request.ProjectID)
+	if err != nil {
+		return nil, err
+	}
 
 	requestBefore := buildShadowMCPApprovalRequest(request)
 	rule, createdRule, err := s.getOrCreateShadowMCPAccessRule(ctx, queries, ac, shadowMCPAccessRuleInput{
+		ProjectID:              ruleProjectID,
+		AccessScope:            payload.AccessScope,
 		Disposition:            shadowMCPRuleAllowed,
 		MatchBreadth:           payload.MatchBreadth,
 		MatchValue:             matchValue,
@@ -225,15 +228,7 @@ func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *
 	if err != nil {
 		return nil, err
 	}
-	ruleBefore := buildShadowMCPAccessRule(rule, nil)
-	existingRoleSlugs, err := shadowMCPRoleSlugsForRule(ctx, queries, ac.ActiveOrganizationID, rule.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list existing shadow mcp access rule role grants").Log(ctx, s.logger)
-	}
-	mergedRoleSlugs := mergeRoleSlugs(existingRoleSlugs, roleSlugs)
-	if err := syncShadowMCPAccessRuleRoleGrants(ctx, queries, ac.ActiveOrganizationID, rule.ID, mergedRoleSlugs); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "sync shadow mcp access rule role grants").Log(ctx, s.logger)
-	}
+	ruleBefore := buildShadowMCPAccessRule(rule)
 
 	request, err = queries.DecideShadowMCPApprovalRequest(ctx, repo.DecideShadowMCPApprovalRequestParams{
 		Status:         shadowMCPRequestStatusApproved,
@@ -246,7 +241,7 @@ func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *
 		return nil, oops.E(oops.CodeUnexpected, err, "approve shadow mcp approval request").Log(ctx, s.logger)
 	}
 	requestAfter := buildShadowMCPApprovalRequest(request)
-	ruleAfter := buildShadowMCPAccessRule(rule, roleIDsForSlugs(mergedRoleSlugs, roleIDBySlug))
+	ruleAfter := buildShadowMCPAccessRule(rule)
 	if createdRule {
 		if err := s.audit.LogShadowMCPAccessRuleCreate(ctx, dbtx, audit.LogShadowMCPAccessRuleEvent{
 			OrganizationID:           ac.ActiveOrganizationID,
@@ -258,12 +253,11 @@ func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *
 			MatchValue:               rule.MatchValue,
 			AccessRuleSnapshotBefore: nil,
 			AccessRuleSnapshotAfter:  ruleAfter,
-			Metadata:                 &audit.ShadowMCPAuditMetadata{RoleSlugs: mergedRoleSlugs, Reason: payload.Reason},
+			Metadata:                 &audit.ShadowMCPAuditMetadata{RoleSlugs: nil, Reason: payload.Reason},
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "log shadow mcp access rule create").Log(ctx, s.logger)
 		}
 	} else {
-		ruleBefore.RoleIds = roleIDsForSlugs(existingRoleSlugs, roleIDBySlug)
 		if err := s.audit.LogShadowMCPAccessRuleUpdate(ctx, dbtx, audit.LogShadowMCPAccessRuleEvent{
 			OrganizationID:           ac.ActiveOrganizationID,
 			Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
@@ -274,7 +268,7 @@ func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *
 			MatchValue:               rule.MatchValue,
 			AccessRuleSnapshotBefore: ruleBefore,
 			AccessRuleSnapshotAfter:  ruleAfter,
-			Metadata:                 &audit.ShadowMCPAuditMetadata{RoleSlugs: mergedRoleSlugs, Reason: payload.Reason},
+			Metadata:                 &audit.ShadowMCPAuditMetadata{RoleSlugs: nil, Reason: payload.Reason},
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "log shadow mcp access rule update").Log(ctx, s.logger)
 		}
@@ -289,7 +283,7 @@ func (s *Service) ApproveShadowMCPApprovalRequest(ctx context.Context, payload *
 		DisplayName:                   shadowMCPApprovalRequestDisplayName(request),
 		ApprovalRequestSnapshotBefore: requestBefore,
 		ApprovalRequestSnapshotAfter:  requestAfter,
-		Metadata:                      &audit.ShadowMCPAuditMetadata{RoleSlugs: mergedRoleSlugs, Reason: payload.Reason},
+		Metadata:                      &audit.ShadowMCPAuditMetadata{RoleSlugs: nil, Reason: payload.Reason},
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log shadow mcp approval request approve").Log(ctx, s.logger)
 	}
@@ -347,6 +341,8 @@ func (s *Service) DenyShadowMCPApprovalRequest(ctx context.Context, payload *gen
 			return nil, err
 		}
 		created, createdRule, err := s.getOrCreateShadowMCPAccessRule(ctx, queries, ac, shadowMCPAccessRuleInput{
+			ProjectID:              uuid.NullUUID{UUID: request.ProjectID, Valid: true},
+			AccessScope:            shadowMCPAccessScopeProject,
 			Disposition:            shadowMCPRuleDenied,
 			MatchBreadth:           *payload.MatchBreadth,
 			MatchValue:             matchValue,
@@ -359,9 +355,6 @@ func (s *Service) DenyShadowMCPApprovalRequest(ctx context.Context, payload *gen
 		})
 		if err != nil {
 			return nil, err
-		}
-		if err := syncShadowMCPAccessRuleRoleGrants(ctx, queries, ac.ActiveOrganizationID, created.ID, nil); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "clear deny rule role grants").Log(ctx, s.logger)
 		}
 		rule = &created
 		ruleCreated = createdRule
@@ -380,7 +373,7 @@ func (s *Service) DenyShadowMCPApprovalRequest(ctx context.Context, payload *gen
 	}
 	requestAfter := buildShadowMCPApprovalRequest(request)
 	if rule != nil && ruleCreated {
-		ruleAfter := buildShadowMCPAccessRule(*rule, nil)
+		ruleAfter := buildShadowMCPAccessRule(*rule)
 		if err := s.audit.LogShadowMCPAccessRuleCreate(ctx, dbtx, audit.LogShadowMCPAccessRuleEvent{
 			OrganizationID:           ac.ActiveOrganizationID,
 			Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
@@ -416,7 +409,7 @@ func (s *Service) DenyShadowMCPApprovalRequest(ctx context.Context, payload *gen
 
 	var ruleView *gen.ShadowMCPAccessRule
 	if rule != nil {
-		ruleView = buildShadowMCPAccessRule(*rule, nil)
+		ruleView = buildShadowMCPAccessRule(*rule)
 	}
 	return &gen.ShadowMCPApprovalDecisionResult{
 		Request: requestAfter,
@@ -425,7 +418,7 @@ func (s *Service) DenyShadowMCPApprovalRequest(ctx context.Context, payload *gen
 }
 
 func (s *Service) ListShadowMCPAccessRules(ctx context.Context, payload *gen.ListShadowMCPAccessRulesPayload) (*gen.ListShadowMCPAccessRulesResult, error) {
-	ac, workosOrgID, err := s.requireOrgReadWithWorkOS(ctx)
+	ac, err := s.requireOrgRead(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -443,6 +436,8 @@ func (s *Service) ListShadowMCPAccessRules(ctx context.Context, payload *gen.Lis
 	rows, err := queries.ListShadowMCPAccessRules(ctx, repo.ListShadowMCPAccessRulesParams{
 		OrganizationID:  ac.ActiveOrganizationID,
 		Disposition:     disposition,
+		AccessScope:     "",
+		ProjectID:       "",
 		CursorCreatedAt: cursorCreatedAt,
 		CursorID:        cursorID,
 		LimitCount:      limit + 1,
@@ -459,13 +454,9 @@ func (s *Service) ListShadowMCPAccessRules(ctx context.Context, payload *gen.Lis
 		rows = rows[:pageSize]
 	}
 
-	roleIDsByRule, err := s.shadowMCPRoleIDsByRule(ctx, queries, ac.ActiveOrganizationID, workosOrgID, rows)
-	if err != nil {
-		return nil, err
-	}
 	rules := make([]*gen.ShadowMCPAccessRule, 0, len(rows))
 	for _, row := range rows {
-		rules = append(rules, buildShadowMCPAccessRule(row, roleIDsByRule[row.ID.String()]))
+		rules = append(rules, buildShadowMCPAccessRule(row))
 	}
 
 	return &gen.ListShadowMCPAccessRulesResult{
@@ -475,7 +466,7 @@ func (s *Service) ListShadowMCPAccessRules(ctx context.Context, payload *gen.Lis
 }
 
 func (s *Service) CreateShadowMCPAccessRule(ctx context.Context, payload *gen.CreateShadowMCPAccessRulePayload) (*gen.ShadowMCPAccessRule, error) {
-	ac, workosOrgID, err := s.requireOrgAdminWithWorkOS(ctx)
+	ac, err := s.requireOrgAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -486,10 +477,7 @@ func (s *Service) CreateShadowMCPAccessRule(ctx context.Context, payload *gen.Cr
 	if err := validateShadowMCPDisposition(payload.Disposition); err != nil {
 		return nil, err
 	}
-	if err := validateShadowMCPAllowedRoleIDs(payload.Disposition, payload.RoleIds); err != nil {
-		return nil, err
-	}
-	roleSlugs, roleIDBySlug, err := s.shadowMCPRoleMappings(ctx, workosOrgID, payload.RoleIds)
+	ruleProjectID, err := s.shadowMCPRuleProjectID(ctx, ac.ActiveOrganizationID, payload.AccessScope, payload.ProjectID, uuid.Nil)
 	if err != nil {
 		return nil, err
 	}
@@ -503,6 +491,8 @@ func (s *Service) CreateShadowMCPAccessRule(ctx context.Context, payload *gen.Cr
 	queries := repo.New(dbtx)
 	rule, err := queries.CreateShadowMCPAccessRule(ctx, repo.CreateShadowMCPAccessRuleParams{
 		OrganizationID:         ac.ActiveOrganizationID,
+		ProjectID:              ruleProjectID,
+		AccessScope:            payload.AccessScope,
 		Disposition:            payload.Disposition,
 		MatchBreadth:           payload.MatchBreadth,
 		MatchValue:             matchValue,
@@ -518,11 +508,7 @@ func (s *Service) CreateShadowMCPAccessRule(ctx context.Context, payload *gen.Cr
 	if err != nil {
 		return nil, shadowMCPCreateRuleErr(ctx, s, err)
 	}
-	if err := syncShadowMCPAccessRuleRoleGrants(ctx, queries, ac.ActiveOrganizationID, rule.ID, roleSlugsForDisposition(payload.Disposition, roleSlugs)); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "sync shadow mcp access rule role grants").Log(ctx, s.logger)
-	}
-	syncedSlugs := roleSlugsForDisposition(payload.Disposition, roleSlugs)
-	ruleView := buildShadowMCPAccessRule(rule, roleIDsForSlugs(syncedSlugs, roleIDBySlug))
+	ruleView := buildShadowMCPAccessRule(rule)
 	if err := s.audit.LogShadowMCPAccessRuleCreate(ctx, dbtx, audit.LogShadowMCPAccessRuleEvent{
 		OrganizationID:           ac.ActiveOrganizationID,
 		Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
@@ -533,7 +519,7 @@ func (s *Service) CreateShadowMCPAccessRule(ctx context.Context, payload *gen.Cr
 		MatchValue:               rule.MatchValue,
 		AccessRuleSnapshotBefore: nil,
 		AccessRuleSnapshotAfter:  ruleView,
-		Metadata:                 &audit.ShadowMCPAuditMetadata{RoleSlugs: syncedSlugs, Reason: payload.Reason},
+		Metadata:                 &audit.ShadowMCPAuditMetadata{RoleSlugs: nil, Reason: payload.Reason},
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log shadow mcp access rule create").Log(ctx, s.logger)
 	}
@@ -545,7 +531,7 @@ func (s *Service) CreateShadowMCPAccessRule(ctx context.Context, payload *gen.Cr
 }
 
 func (s *Service) UpdateShadowMCPAccessRule(ctx context.Context, payload *gen.UpdateShadowMCPAccessRulePayload) (*gen.ShadowMCPAccessRule, error) {
-	ac, workosOrgID, err := s.requireOrgAdminWithWorkOS(ctx)
+	ac, err := s.requireOrgAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -560,10 +546,7 @@ func (s *Service) UpdateShadowMCPAccessRule(ctx context.Context, payload *gen.Up
 	if err := validateShadowMCPDisposition(payload.Disposition); err != nil {
 		return nil, err
 	}
-	if err := validateShadowMCPAllowedRoleIDs(payload.Disposition, payload.RoleIds); err != nil {
-		return nil, err
-	}
-	roleSlugs, roleIDBySlug, err := s.shadowMCPRoleMappings(ctx, workosOrgID, payload.RoleIds)
+	ruleProjectID, err := s.shadowMCPRuleProjectID(ctx, ac.ActiveOrganizationID, payload.AccessScope, payload.ProjectID, uuid.Nil)
 	if err != nil {
 		return nil, err
 	}
@@ -582,12 +565,10 @@ func (s *Service) UpdateShadowMCPAccessRule(ctx context.Context, payload *gen.Up
 	if err != nil {
 		return nil, shadowMCPRepoErr(ctx, s, err, "get shadow mcp access rule")
 	}
-	existingRoleSlugs, err := shadowMCPRoleSlugsForRule(ctx, queries, ac.ActiveOrganizationID, ruleID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list existing shadow mcp access rule role grants").Log(ctx, s.logger)
-	}
 	rule, err := queries.UpdateShadowMCPAccessRule(ctx, repo.UpdateShadowMCPAccessRuleParams{
 		Disposition:            payload.Disposition,
+		ProjectID:              ruleProjectID,
+		AccessScope:            payload.AccessScope,
 		MatchBreadth:           payload.MatchBreadth,
 		MatchValue:             matchValue,
 		DisplayName:            payload.DisplayName,
@@ -602,12 +583,8 @@ func (s *Service) UpdateShadowMCPAccessRule(ctx context.Context, payload *gen.Up
 	if err != nil {
 		return nil, shadowMCPRepoErr(ctx, s, err, "update shadow mcp access rule")
 	}
-	syncedSlugs := roleSlugsForDisposition(payload.Disposition, roleSlugs)
-	if err := syncShadowMCPAccessRuleRoleGrants(ctx, queries, ac.ActiveOrganizationID, rule.ID, syncedSlugs); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "sync shadow mcp access rule role grants").Log(ctx, s.logger)
-	}
-	ruleBefore := buildShadowMCPAccessRule(existingRule, roleIDsForSlugs(existingRoleSlugs, roleIDBySlug))
-	ruleAfter := buildShadowMCPAccessRule(rule, roleIDsForSlugs(syncedSlugs, roleIDBySlug))
+	ruleBefore := buildShadowMCPAccessRule(existingRule)
+	ruleAfter := buildShadowMCPAccessRule(rule)
 	if err := s.audit.LogShadowMCPAccessRuleUpdate(ctx, dbtx, audit.LogShadowMCPAccessRuleEvent{
 		OrganizationID:           ac.ActiveOrganizationID,
 		Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
@@ -618,7 +595,7 @@ func (s *Service) UpdateShadowMCPAccessRule(ctx context.Context, payload *gen.Up
 		MatchValue:               rule.MatchValue,
 		AccessRuleSnapshotBefore: ruleBefore,
 		AccessRuleSnapshotAfter:  ruleAfter,
-		Metadata:                 &audit.ShadowMCPAuditMetadata{RoleSlugs: syncedSlugs, Reason: payload.Reason},
+		Metadata:                 &audit.ShadowMCPAuditMetadata{RoleSlugs: nil, Reason: payload.Reason},
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log shadow mcp access rule update").Log(ctx, s.logger)
 	}
@@ -654,9 +631,6 @@ func (s *Service) DeleteShadowMCPAccessRule(ctx context.Context, payload *gen.De
 	if err != nil {
 		return shadowMCPRepoErr(ctx, s, err, "delete shadow mcp access rule")
 	}
-	if err := syncShadowMCPAccessRuleRoleGrants(ctx, queries, ac.ActiveOrganizationID, ruleID, nil); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete shadow mcp access rule role grants").Log(ctx, s.logger)
-	}
 	if err := s.audit.LogShadowMCPAccessRuleDelete(ctx, dbtx, audit.LogShadowMCPAccessRuleEvent{
 		OrganizationID:           ac.ActiveOrganizationID,
 		Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
@@ -665,7 +639,7 @@ func (s *Service) DeleteShadowMCPAccessRule(ctx context.Context, payload *gen.De
 		AccessRuleURN:            urn.NewShadowMCPAccessRule(rule.ID),
 		DisplayName:              rule.DisplayName,
 		MatchValue:               rule.MatchValue,
-		AccessRuleSnapshotBefore: buildShadowMCPAccessRule(rule, nil),
+		AccessRuleSnapshotBefore: buildShadowMCPAccessRule(rule),
 		AccessRuleSnapshotAfter:  nil,
 		Metadata:                 nil,
 	}); err != nil {
@@ -679,6 +653,8 @@ func (s *Service) DeleteShadowMCPAccessRule(ctx context.Context, payload *gen.De
 }
 
 type shadowMCPAccessRuleInput struct {
+	ProjectID              uuid.NullUUID
+	AccessScope            string
 	Disposition            string
 	MatchBreadth           string
 	MatchValue             string
@@ -693,6 +669,8 @@ type shadowMCPAccessRuleInput struct {
 func (s *Service) getOrCreateShadowMCPAccessRule(ctx context.Context, queries *repo.Queries, ac *contextvalues.AuthContext, input shadowMCPAccessRuleInput) (repo.ShadowMcpAccessRule, bool, error) {
 	existing, err := queries.GetShadowMCPAccessRuleByMatch(ctx, repo.GetShadowMCPAccessRuleByMatchParams{
 		OrganizationID: ac.ActiveOrganizationID,
+		AccessScope:    input.AccessScope,
+		ProjectID:      input.ProjectID,
 		MatchBreadth:   input.MatchBreadth,
 		MatchValue:     input.MatchValue,
 	})
@@ -709,6 +687,8 @@ func (s *Service) getOrCreateShadowMCPAccessRule(ctx context.Context, queries *r
 
 	rule, err := queries.CreateShadowMCPAccessRule(ctx, repo.CreateShadowMCPAccessRuleParams{
 		OrganizationID:         ac.ActiveOrganizationID,
+		ProjectID:              input.ProjectID,
+		AccessScope:            input.AccessScope,
 		Disposition:            input.Disposition,
 		MatchBreadth:           input.MatchBreadth,
 		MatchValue:             input.MatchValue,
@@ -738,26 +718,15 @@ func (s *Service) requireOrgAdmin(ctx context.Context) (*contextvalues.AuthConte
 	return ac, nil
 }
 
-func (s *Service) requireOrgReadWithWorkOS(ctx context.Context) (*contextvalues.AuthContext, string, error) {
-	ac, workosOrgID, err := s.roleOrgContext(ctx)
+func (s *Service) requireOrgRead(ctx context.Context) (*contextvalues.AuthContext, error) {
+	ac, err := s.authContext(ctx)
 	if err != nil {
-		return nil, "", err
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	return ac, workosOrgID, nil
-}
-
-func (s *Service) requireOrgAdminWithWorkOS(ctx context.Context) (*contextvalues.AuthContext, string, error) {
-	ac, workosOrgID, err := s.roleOrgContext(ctx)
-	if err != nil {
-		return nil, "", err
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, "", err
-	}
-	return ac, workosOrgID, nil
+	return ac, nil
 }
 
 func (s *Service) requireProjectInOrganization(ctx context.Context, organizationID string, projectID uuid.UUID) error {
@@ -772,123 +741,6 @@ func (s *Service) requireProjectInOrganization(ctx context.Context, organization
 	default:
 		return nil
 	}
-}
-
-func (s *Service) shadowMCPRoleMappings(ctx context.Context, workosOrgID string, roleIDs []string) ([]string, map[string]string, error) {
-	roles, err := s.roles.ListRoles(ctx, workosOrgID)
-	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "list roles from workos").Log(ctx, s.logger)
-	}
-	slugByID := make(map[string]string, len(roles))
-	idBySlug := make(map[string]string, len(roles))
-	for _, role := range roles {
-		slugByID[role.ID] = role.Slug
-		idBySlug[role.Slug] = role.ID
-	}
-
-	roleSlugs := make([]string, 0, len(roleIDs))
-	seen := make(map[string]struct{}, len(roleIDs))
-	for _, roleID := range roleIDs {
-		slug, ok := slugByID[roleID]
-		if !ok {
-			return nil, nil, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, s.logger)
-		}
-		if isSystemRole(slug) {
-			return nil, nil, oops.E(oops.CodeBadRequest, nil, "system roles cannot be assigned shadow mcp access rules").Log(ctx, s.logger)
-		}
-		if _, ok := seen[slug]; ok {
-			continue
-		}
-		seen[slug] = struct{}{}
-		roleSlugs = append(roleSlugs, slug)
-	}
-	return roleSlugs, idBySlug, nil
-}
-
-func (s *Service) shadowMCPRoleIDsByRule(ctx context.Context, queries *repo.Queries, organizationID string, workosOrgID string, rules []repo.ShadowMcpAccessRule) (map[string][]string, error) {
-	out := make(map[string][]string, len(rules))
-	if len(rules) == 0 {
-		return out, nil
-	}
-
-	roleSlugs := make(map[string]struct{})
-	ruleIDs := make([]string, 0, len(rules))
-	for _, rule := range rules {
-		ruleIDs = append(ruleIDs, rule.ID.String())
-	}
-	rows, err := queries.ListShadowMCPAccessRuleRoleGrants(ctx, repo.ListShadowMCPAccessRuleRoleGrantsParams{
-		OrganizationID: organizationID,
-		RuleIds:        ruleIDs,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp access rule role grants").Log(ctx, s.logger)
-	}
-	for _, row := range rows {
-		if row.PrincipalUrn.Type != urn.PrincipalTypeRole {
-			continue
-		}
-		roleSlugs[row.PrincipalUrn.ID] = struct{}{}
-	}
-
-	_, idBySlug, err := s.shadowMCPRoleMappings(ctx, workosOrgID, nil)
-	if err != nil {
-		return nil, err
-	}
-	for _, row := range rows {
-		if _, ok := roleSlugs[row.PrincipalUrn.ID]; !ok {
-			continue
-		}
-		roleID, ok := idBySlug[row.PrincipalUrn.ID]
-		if !ok {
-			continue
-		}
-		out[row.RuleID] = append(out[row.RuleID], roleID)
-	}
-	return out, nil
-}
-
-func shadowMCPRoleSlugsForRule(ctx context.Context, queries *repo.Queries, organizationID string, ruleID uuid.UUID) ([]string, error) {
-	rows, err := queries.ListShadowMCPAccessRuleRoleGrants(ctx, repo.ListShadowMCPAccessRuleRoleGrantsParams{
-		OrganizationID: organizationID,
-		RuleIds:        []string{ruleID.String()},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list shadow mcp access rule role grants: %w", err)
-	}
-	roleSlugs := make([]string, 0, len(rows))
-	for _, row := range rows {
-		if row.PrincipalUrn.Type != urn.PrincipalTypeRole {
-			continue
-		}
-		roleSlugs = append(roleSlugs, row.PrincipalUrn.ID)
-	}
-	return roleSlugs, nil
-}
-
-func syncShadowMCPAccessRuleRoleGrants(ctx context.Context, queries *repo.Queries, organizationID string, ruleID uuid.UUID, roleSlugs []string) error {
-	if _, err := queries.DeleteShadowMCPAccessRuleRoleGrants(ctx, repo.DeleteShadowMCPAccessRuleRoleGrantsParams{
-		OrganizationID: organizationID,
-		RuleID:         ruleID.String(),
-	}); err != nil {
-		return fmt.Errorf("delete existing role grants: %w", err)
-	}
-
-	selectors, err := authz.NewSelector(authz.ScopeShadowMCPConnect, ruleID.String()).MarshalJSON()
-	if err != nil {
-		return fmt.Errorf("marshal selector: %w", err)
-	}
-	for _, roleSlug := range roleSlugs {
-		if _, err := queries.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
-			OrganizationID: organizationID,
-			PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug),
-			Scope:          string(authz.ScopeShadowMCPConnect),
-			Selectors:      selectors,
-		}); err != nil {
-			return fmt.Errorf("upsert role grant for %q: %w", roleSlug, err)
-		}
-	}
-
-	return nil
 }
 
 func buildShadowMCPApprovalRequest(row repo.ShadowMcpApprovalRequest) *gen.ShadowMCPApprovalRequest {
@@ -937,10 +789,12 @@ func shadowMCPApprovalRequestDisplayName(row repo.ShadowMcpApprovalRequest) stri
 	return row.ID.String()
 }
 
-func buildShadowMCPAccessRule(row repo.ShadowMcpAccessRule, roleIDs []string) *gen.ShadowMCPAccessRule {
+func buildShadowMCPAccessRule(row repo.ShadowMcpAccessRule) *gen.ShadowMCPAccessRule {
 	return &gen.ShadowMCPAccessRule{
 		ID:                     row.ID.String(),
 		OrganizationID:         row.OrganizationID,
+		ProjectID:              conv.FromNullableUUID(row.ProjectID),
+		AccessScope:            row.AccessScope,
 		Disposition:            row.Disposition,
 		MatchBreadth:           row.MatchBreadth,
 		MatchValue:             row.MatchValue,
@@ -952,7 +806,6 @@ func buildShadowMCPAccessRule(row repo.ShadowMcpAccessRule, roleIDs []string) *g
 		CreatedBy:              conv.FromPGText[string](row.CreatedBy),
 		UpdatedBy:              conv.FromPGText[string](row.UpdatedBy),
 		Reason:                 conv.FromPGText[string](row.Reason),
-		RoleIds:                roleIDs,
 		CreatedAt:              formatPGTimestampValue(row.CreatedAt),
 		UpdatedAt:              formatPGTimestampValue(row.UpdatedAt),
 	}
@@ -982,11 +835,29 @@ func validateShadowMCPDisposition(disposition string) error {
 	}
 }
 
-func validateShadowMCPAllowedRoleIDs(disposition string, roleIDs []string) error {
-	if disposition == shadowMCPRuleAllowed && len(roleIDs) == 0 {
-		return oops.E(oops.CodeBadRequest, nil, "role_ids is required for allowed shadow mcp access rules")
+func (s *Service) shadowMCPRuleProjectID(ctx context.Context, organizationID string, accessScope string, projectID *string, fallbackProjectID uuid.UUID) (uuid.NullUUID, error) {
+	switch accessScope {
+	case shadowMCPAccessScopeOrganization:
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	case shadowMCPAccessScopeProject:
+		id := fallbackProjectID
+		if projectID != nil && *projectID != "" {
+			parsed, err := uuid.Parse(*projectID)
+			if err != nil {
+				return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, err, "invalid project id").Log(ctx, s.logger)
+			}
+			id = parsed
+		}
+		if id == uuid.Nil {
+			return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, nil, "project_id is required for project-scoped shadow mcp access rules").Log(ctx, s.logger)
+		}
+		if err := s.requireProjectInOrganization(ctx, organizationID, id); err != nil {
+			return uuid.NullUUID{}, err
+		}
+		return uuid.NullUUID{UUID: id, Valid: true}, nil
+	default:
+		return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, nil, "invalid access_scope").Log(ctx, s.logger)
 	}
-	return nil
 }
 
 func shadowMCPRepoErr(ctx context.Context, s *Service, err error, message string) error {
@@ -1022,6 +893,9 @@ func formatPGTimestampValue(ts pgtype.Timestamptz) string {
 func shadowMCPLimit(limit int) (int32, error) {
 	if limit < 1 {
 		return 0, oops.E(oops.CodeBadRequest, nil, "limit must be greater than or equal to 1")
+	}
+	if limit > shadowMCPMaxPageLimit {
+		return 0, oops.E(oops.CodeBadRequest, nil, "limit must be less than or equal to 1000")
 	}
 	return conv.SafeInt32(limit), nil
 }
@@ -1061,41 +935,4 @@ func coalesceString(primary *string, fallback *string) *string {
 		return primary
 	}
 	return fallback
-}
-
-func roleSlugsForDisposition(disposition string, roleSlugs []string) []string {
-	if disposition != shadowMCPRuleAllowed {
-		return nil
-	}
-	return roleSlugs
-}
-
-func roleIDsForSlugs(roleSlugs []string, roleIDBySlug map[string]string) []string {
-	roleIDs := make([]string, 0, len(roleSlugs))
-	for _, slug := range roleSlugs {
-		if id, ok := roleIDBySlug[slug]; ok {
-			roleIDs = append(roleIDs, id)
-		}
-	}
-	return roleIDs
-}
-
-func mergeRoleSlugs(existingRoleSlugs []string, newRoleSlugs []string) []string {
-	merged := make([]string, 0, len(existingRoleSlugs)+len(newRoleSlugs))
-	seen := make(map[string]struct{}, len(existingRoleSlugs)+len(newRoleSlugs))
-	for _, roleSlug := range existingRoleSlugs {
-		if _, ok := seen[roleSlug]; ok {
-			continue
-		}
-		seen[roleSlug] = struct{}{}
-		merged = append(merged, roleSlug)
-	}
-	for _, roleSlug := range newRoleSlugs {
-		if _, ok := seen[roleSlug]; ok {
-			continue
-		}
-		seen[roleSlug] = struct{}{}
-		merged = append(merged, roleSlug)
-	}
-	return merged
 }

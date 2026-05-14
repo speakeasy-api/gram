@@ -16,7 +16,6 @@ export const ResourceType = {
   Org: "org",
   Project: "project",
   Mcp: "mcp",
-  ShadowMcp: "shadow_mcp",
   Environment: "environment",
 } as const;
 /**
@@ -35,7 +34,6 @@ export const Slug = {
   McpRead: "mcp:read",
   McpWrite: "mcp:write",
   McpConnect: "mcp:connect",
-  ShadowMcpConnect: "shadow_mcp:connect",
   EnvironmentRead: "environment:read",
   EnvironmentWrite: "environment:write",
 } as const;

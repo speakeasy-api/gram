@@ -262,6 +262,8 @@ FROM shadow_mcp_access_rules
 WHERE organization_id = @organization_id
   AND deleted IS FALSE
   AND (@disposition::text = '' OR disposition = @disposition)
+  AND (@access_scope::text = '' OR access_scope = @access_scope)
+  AND (@project_id::text = '' OR project_id::text = @project_id)
   AND (
     sqlc.narg(cursor_created_at)::timestamptz IS NULL
     OR (created_at, id) < (sqlc.narg(cursor_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
@@ -280,13 +282,39 @@ WHERE organization_id = @organization_id
 SELECT *
 FROM shadow_mcp_access_rules
 WHERE organization_id = @organization_id
+  AND access_scope = @access_scope
+  AND (
+    (@access_scope::text = 'organization' AND project_id IS NULL)
+    OR (@access_scope::text = 'project' AND project_id = @project_id)
+  )
   AND match_breadth = @match_breadth
   AND match_value = @match_value
   AND deleted IS FALSE;
 
+-- name: ListMatchingShadowMCPAccessRules :many
+SELECT *
+FROM shadow_mcp_access_rules
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND (
+    access_scope = 'organization'
+    OR (access_scope = 'project' AND project_id = @project_id)
+  )
+  AND (
+    (match_breadth = 'full_url' AND match_value = ANY(@full_urls::text[]))
+    OR (match_breadth = 'url_host' AND match_value = ANY(@url_hosts::text[]))
+    OR (match_breadth = 'server_identity' AND match_value = ANY(@server_identities::text[]))
+  )
+ORDER BY
+  CASE WHEN disposition = 'denied' THEN 0 ELSE 1 END,
+  created_at DESC,
+  id DESC;
+
 -- name: CreateShadowMCPAccessRule :one
 INSERT INTO shadow_mcp_access_rules (
   organization_id,
+  project_id,
+  access_scope,
   disposition,
   match_breadth,
   match_value,
@@ -300,6 +328,8 @@ INSERT INTO shadow_mcp_access_rules (
   reason
 ) VALUES (
   @organization_id,
+  @project_id,
+  @access_scope,
   @disposition,
   @match_breadth,
   @match_value,
@@ -317,6 +347,8 @@ RETURNING *;
 -- name: UpdateShadowMCPAccessRule :one
 UPDATE shadow_mcp_access_rules
 SET disposition = @disposition,
+    project_id = @project_id,
+    access_scope = @access_scope,
     match_breadth = @match_breadth,
     match_value = @match_value,
     display_name = @display_name,
@@ -340,20 +372,3 @@ WHERE organization_id = @organization_id
   AND id = @id
   AND deleted IS FALSE
 RETURNING *;
-
--- name: ListShadowMCPAccessRuleRoleGrants :many
-SELECT principal_urn, (selectors->>'resource_id')::text AS rule_id
-FROM principal_grants
-WHERE organization_id = @organization_id
-  AND principal_type = 'role'
-  AND scope = 'shadow_mcp:connect'
-  AND selectors->>'resource_kind' = 'shadow_mcp'
-  AND selectors->>'resource_id' = ANY(@rule_ids::text[]);
-
--- name: DeleteShadowMCPAccessRuleRoleGrants :execrows
-DELETE FROM principal_grants
-WHERE organization_id = @organization_id
-  AND principal_type = 'role'
-  AND scope = 'shadow_mcp:connect'
-  AND selectors->>'resource_kind' = 'shadow_mcp'
-  AND selectors->>'resource_id' = @rule_id::text;

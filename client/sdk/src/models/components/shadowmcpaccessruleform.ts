@@ -6,6 +6,14 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
+export const ShadowMCPAccessRuleFormAccessScope = {
+  Organization: "organization",
+  Project: "project",
+} as const;
+export type ShadowMCPAccessRuleFormAccessScope = ClosedEnum<
+  typeof ShadowMCPAccessRuleFormAccessScope
+>;
+
 export const ShadowMCPAccessRuleFormDisposition = {
   Allowed: "allowed",
   Denied: "denied",
@@ -24,6 +32,7 @@ export type ShadowMCPAccessRuleFormMatchBreadth = ClosedEnum<
 >;
 
 export type ShadowMCPAccessRuleForm = {
+  accessScope: ShadowMCPAccessRuleFormAccessScope;
   displayName: string;
   disposition: ShadowMCPAccessRuleFormDisposition;
   matchBreadth: ShadowMCPAccessRuleFormMatchBreadth;
@@ -31,9 +40,14 @@ export type ShadowMCPAccessRuleForm = {
   observedFullUrl?: string | undefined;
   observedServerIdentity?: string | undefined;
   observedUrlHost?: string | undefined;
+  projectId?: string | undefined;
   reason?: string | undefined;
-  roleIds?: Array<string> | undefined;
 };
+
+/** @internal */
+export const ShadowMCPAccessRuleFormAccessScope$outboundSchema: z.ZodMiniEnum<
+  typeof ShadowMCPAccessRuleFormAccessScope
+> = z.enum(ShadowMCPAccessRuleFormAccessScope);
 
 /** @internal */
 export const ShadowMCPAccessRuleFormDisposition$outboundSchema: z.ZodMiniEnum<
@@ -47,6 +61,7 @@ export const ShadowMCPAccessRuleFormMatchBreadth$outboundSchema: z.ZodMiniEnum<
 
 /** @internal */
 export type ShadowMCPAccessRuleForm$Outbound = {
+  access_scope: string;
   display_name: string;
   disposition: string;
   match_breadth: string;
@@ -54,8 +69,8 @@ export type ShadowMCPAccessRuleForm$Outbound = {
   observed_full_url?: string | undefined;
   observed_server_identity?: string | undefined;
   observed_url_host?: string | undefined;
+  project_id?: string | undefined;
   reason?: string | undefined;
-  role_ids?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -64,6 +79,7 @@ export const ShadowMCPAccessRuleForm$outboundSchema: z.ZodMiniType<
   ShadowMCPAccessRuleForm
 > = z.pipe(
   z.object({
+    accessScope: ShadowMCPAccessRuleFormAccessScope$outboundSchema,
     displayName: z.string(),
     disposition: ShadowMCPAccessRuleFormDisposition$outboundSchema,
     matchBreadth: ShadowMCPAccessRuleFormMatchBreadth$outboundSchema,
@@ -71,18 +87,19 @@ export const ShadowMCPAccessRuleForm$outboundSchema: z.ZodMiniType<
     observedFullUrl: z.optional(z.string()),
     observedServerIdentity: z.optional(z.string()),
     observedUrlHost: z.optional(z.string()),
+    projectId: z.optional(z.string()),
     reason: z.optional(z.string()),
-    roleIds: z.optional(z.array(z.string())),
   }),
   z.transform((v) => {
     return remap$(v, {
+      accessScope: "access_scope",
       displayName: "display_name",
       matchBreadth: "match_breadth",
       matchValue: "match_value",
       observedFullUrl: "observed_full_url",
       observedServerIdentity: "observed_server_identity",
       observedUrlHost: "observed_url_host",
-      roleIds: "role_ids",
+      projectId: "project_id",
     });
   }),
 );

@@ -1351,7 +1351,7 @@ paths:
                 name: ResolveChallenge
     /rpc/access.shadowMcp.requests.approve:
         post:
-            description: Approve a Shadow MCP request, creating an allow rule and role grants.
+            description: Approve a Shadow MCP request, creating an allow rule scoped to the organization or project.
             operationId: approveShadowMCPApprovalRequest
             parameters:
                 - allowEmptyValue: true
@@ -26654,6 +26654,11 @@ components:
         ApproveShadowMCPApprovalRequestForm:
             type: object
             properties:
+                access_scope:
+                    type: string
+                    enum:
+                        - organization
+                        - project
                 display_name:
                     type: string
                 id:
@@ -26675,16 +26680,12 @@ components:
                     type: string
                 reason:
                     type: string
-                role_ids:
-                    type: array
-                    items:
-                        type: string
             required:
                 - id
+                - access_scope
                 - match_breadth
                 - match_value
                 - display_name
-                - role_ids
         Asset:
             type: object
             properties:
@@ -31559,7 +31560,6 @@ components:
                         - mcp:read
                         - mcp:write
                         - mcp:connect
-                        - shadow_mcp:connect
                         - environment:read
                         - environment:write
                 selectors:
@@ -31579,7 +31579,6 @@ components:
                             - mcp:read
                             - mcp:write
                             - mcp:connect
-                            - shadow_mcp:connect
                             - environment:read
                             - environment:write
                     description: The inherited scopes the primary scope grants.
@@ -34408,7 +34407,6 @@ components:
                         - mcp:read
                         - mcp:write
                         - mcp:connect
-                        - shadow_mcp:connect
                         - environment:read
                         - environment:write
                 selectors:
@@ -34431,7 +34429,6 @@ components:
                         - org
                         - project
                         - mcp
-                        - shadow_mcp
                         - environment
                 slug:
                     type: string
@@ -34444,7 +34441,6 @@ components:
                         - mcp:read
                         - mcp:write
                         - mcp:connect
-                        - shadow_mcp:connect
                         - environment:read
                         - environment:write
             required:
@@ -34853,7 +34849,6 @@ components:
                     enum:
                         - project
                         - mcp
-                        - shadow_mcp
                         - org
                         - environment
                         - '*'
@@ -35199,6 +35194,11 @@ components:
         ShadowMCPAccessRule:
             type: object
             properties:
+                access_scope:
+                    type: string
+                    enum:
+                        - organization
+                        - project
                 created_at:
                     type: string
                     format: date-time
@@ -35230,12 +35230,11 @@ components:
                     type: string
                 organization_id:
                     type: string
+                project_id:
+                    type: string
+                    format: uuid
                 reason:
                     type: string
-                role_ids:
-                    type: array
-                    items:
-                        type: string
                 source_request_id:
                     type: string
                     format: uuid
@@ -35247,16 +35246,21 @@ components:
             required:
                 - id
                 - organization_id
+                - access_scope
                 - disposition
                 - match_breadth
                 - match_value
                 - display_name
-                - role_ids
                 - created_at
                 - updated_at
         ShadowMCPAccessRuleForm:
             type: object
             properties:
+                access_scope:
+                    type: string
+                    enum:
+                        - organization
+                        - project
                 display_name:
                     type: string
                 disposition:
@@ -35278,14 +35282,14 @@ components:
                     type: string
                 observed_url_host:
                     type: string
+                project_id:
+                    type: string
+                    format: uuid
                 reason:
                     type: string
-                role_ids:
-                    type: array
-                    items:
-                        type: string
             required:
                 - disposition
+                - access_scope
                 - match_breadth
                 - match_value
                 - display_name
@@ -36957,6 +36961,11 @@ components:
         UpdateShadowMCPAccessRuleForm:
             type: object
             properties:
+                access_scope:
+                    type: string
+                    enum:
+                        - organization
+                        - project
                 display_name:
                     type: string
                 disposition:
@@ -36981,18 +36990,18 @@ components:
                     type: string
                 observed_url_host:
                     type: string
+                project_id:
+                    type: string
+                    format: uuid
                 reason:
                     type: string
-                role_ids:
-                    type: array
-                    items:
-                        type: string
             required:
                 - id
                 - disposition
                 - match_breadth
                 - match_value
                 - display_name
+                - access_scope
         UpdateSlackAppRequestBody:
             type: object
             properties:

@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 4d3c6ec1ed41cd6cd2bcd6bea51d9f98
+  docChecksum: 12bf3d49e3c9e2d2c4ad3e29f6bc9fe2
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -74,6 +74,8 @@ trackedFiles:
     last_write_checksum: sha1:bc4454e196fcd219f5a78da690375a884f5ed07b
   docs/models/components/accessmember.md:
     last_write_checksum: sha1:3054da106d66228a7be03e78be7f69086768e701
+  docs/models/components/accessscope.md:
+    last_write_checksum: sha1:d54d8a99ae755fffe1dcbf9318351407184fc74d
   docs/models/components/action.md:
     last_write_checksum: sha1:66ce1fb4ea555bc6494786b035454529d311d883
   docs/models/components/adddeploymentpackageform.md:
@@ -97,7 +99,7 @@ trackedFiles:
   docs/models/components/allowedoriginstatus.md:
     last_write_checksum: sha1:42d4748288a2bfed0a1ca365006851a85d31d2ee
   docs/models/components/approveshadowmcpapprovalrequestform.md:
-    last_write_checksum: sha1:63963ee9d98c327805ea4e2f3b7f3bdd61c809f5
+    last_write_checksum: sha1:c13ddad1ea4dafb6e9403577cfdd6ef6e944238e
   docs/models/components/asset.md:
     last_write_checksum: sha1:3da48f7c0a6c8e83a69059b082816228dd56dc70
   docs/models/components/assistant.md:
@@ -485,7 +487,7 @@ trackedFiles:
   docs/models/components/listrolegrant.md:
     last_write_checksum: sha1:f75b13247be2ea6208563bc63a331c3f39a6b92a
   docs/models/components/listrolegrantscope.md:
-    last_write_checksum: sha1:e6d77e047cc88e58bfba1e261e66c4fb9e7704ff
+    last_write_checksum: sha1:3304778c1d65e8ad74f4e12200e5e2159660d8a8
   docs/models/components/listrolesresult.md:
     last_write_checksum: sha1:14ff1382940a172ae438e8ac14cfd9be967e3078
   docs/models/components/listscopesresult.md:
@@ -729,9 +731,9 @@ trackedFiles:
   docs/models/components/resourceentry.md:
     last_write_checksum: sha1:1fd4caa06e03fef506b201ec27e04238a238450d
   docs/models/components/resourcekind.md:
-    last_write_checksum: sha1:116f7597842bc148a96a1ad6b9ed1a1031e10ddb
+    last_write_checksum: sha1:a15475d93aa0c4724801301ad0ad2b49f9fa0f4d
   docs/models/components/resourcetype.md:
-    last_write_checksum: sha1:0c6c4c5c70a10ead56206ca819d252f60c0773ae
+    last_write_checksum: sha1:0c3aebf7064806c4523d65c7aa80f031bdee6586
   docs/models/components/responsefilter.md:
     last_write_checksum: sha1:0c3d3b8bffe28ce8638776c1291b8b322baea905
   docs/models/components/riskcapabilitiesresult.md:
@@ -751,9 +753,9 @@ trackedFiles:
   docs/models/components/rolegrant.md:
     last_write_checksum: sha1:0e55c143e91dfe83dec0ee60050ca7b0ffe42218
   docs/models/components/scope.md:
-    last_write_checksum: sha1:afa9838f4a8318159ee54d471cfb96af208d807a
+    last_write_checksum: sha1:18e20f25619d17dd879be5fd900115967511eebe
   docs/models/components/scopedefinition.md:
-    last_write_checksum: sha1:9e997acb2d9b9fc2fba4c498a77fcbce8fce34f2
+    last_write_checksum: sha1:0e4ed0bdd5f85b4b56b60cdf5e6b152826f48df9
   docs/models/components/searchchatsfilter.md:
     last_write_checksum: sha1:6030d1eef228e96402dce043397ceb548383a655
   docs/models/components/searchchatspayload.md:
@@ -821,11 +823,15 @@ trackedFiles:
   docs/models/components/severitytext.md:
     last_write_checksum: sha1:15969d4a62e02ba012c6724258259371a0a81bbb
   docs/models/components/shadowmcpaccessrule.md:
-    last_write_checksum: sha1:aa18174fbd0710f8792dffce8d78e7d52444db4d
+    last_write_checksum: sha1:bc7c2fb790a1256dc49f41f851ce7e64ee4960a2
+  docs/models/components/shadowmcpaccessruleaccessscope.md:
+    last_write_checksum: sha1:4df9ba762a2e251b5ca31d9e2f41d314e4d7c96d
   docs/models/components/shadowmcpaccessruledisposition.md:
     last_write_checksum: sha1:12b9b0e55570ce35f08d53d6603606b13dcb7ca5
   docs/models/components/shadowmcpaccessruleform.md:
-    last_write_checksum: sha1:adc66e261eb9643b39479db40c395d4bca37bc87
+    last_write_checksum: sha1:6b3af0e904a82194456dba81be16045bf7e39f0f
+  docs/models/components/shadowmcpaccessruleformaccessscope.md:
+    last_write_checksum: sha1:b43540a8973b25f82e5ec4dfabfdf24ae3e1bd61
   docs/models/components/shadowmcpaccessruleformdisposition.md:
     last_write_checksum: sha1:9fabb4fea63fe3c47900c78823865965faddc251
   docs/models/components/shadowmcpaccessruleformmatchbreadth.md:
@@ -845,7 +851,7 @@ trackedFiles:
   docs/models/components/slackappresult.md:
     last_write_checksum: sha1:62f9ec605a9bb2193261e13b1790eb9cf957c7c1
   docs/models/components/slug.md:
-    last_write_checksum: sha1:8037532e036fbe01876f70ec22226d1ca020e978
+    last_write_checksum: sha1:cb8fcfdd75582327e63a5746faf22e19d0ca6a93
   docs/models/components/sort.md:
     last_write_checksum: sha1:2f0a7e8e1494777fc9390e1ed8affca76b06ebca
   docs/models/components/sourceenvironmentlink.md:
@@ -861,7 +867,7 @@ trackedFiles:
   docs/models/components/submitfeedbackrequestbody.md:
     last_write_checksum: sha1:4fc79535eaf97ea3ba6530166786c6a0033623e5
   docs/models/components/subscopes.md:
-    last_write_checksum: sha1:cd63c0d0bc36f7dd421ffcef7b7b2c7c62d066e8
+    last_write_checksum: sha1:8aae5c5713c7d7a2bf7e1f426de3a5104d2ac50f
   docs/models/components/targetkind.md:
     last_write_checksum: sha1:5d600cc8329b5cabff595ac87ddc5c95b49e96b3
   docs/models/components/telemetrylogrecord.md:
@@ -969,7 +975,9 @@ trackedFiles:
   docs/models/components/updateserverform.md:
     last_write_checksum: sha1:f743c7ef4cffc425214eea771f6ff65e0d2f2ce9
   docs/models/components/updateshadowmcpaccessruleform.md:
-    last_write_checksum: sha1:c6d2d85256d400a10cb95f68443f2a3eb1dc15c1
+    last_write_checksum: sha1:a264b4a770cf9f73c1928aeb1050fa442733d922
+  docs/models/components/updateshadowmcpaccessruleformaccessscope.md:
+    last_write_checksum: sha1:9b4ef75c314b06b838b2924eafd8626730f42016
   docs/models/components/updateshadowmcpaccessruleformdisposition.md:
     last_write_checksum: sha1:622390776d9340e648451cd6bda358543070458e
   docs/models/components/updateshadowmcpaccessruleformmatchbreadth.md:
@@ -1061,7 +1069,7 @@ trackedFiles:
   docs/models/operations/addpluginserversecurity.md:
     last_write_checksum: sha1:5dc9e273ba9eab30b9edbb75fdeccd3fd4ec59ec
   docs/models/operations/approveshadowmcpapprovalrequestrequest.md:
-    last_write_checksum: sha1:f285abd144da63dc6c7d86199ed3c576642b377c
+    last_write_checksum: sha1:2c223dc58b72dd87773a56188636dfaa015a5020
   docs/models/operations/approveshadowmcpapprovalrequestsecurity.md:
     last_write_checksum: sha1:aa35578a4f090911d5bfb70dc9ddde65600490e3
   docs/models/operations/attachservertocollectionrequest.md:
@@ -1231,7 +1239,7 @@ trackedFiles:
   docs/models/operations/createrolesecurity.md:
     last_write_checksum: sha1:6c8d5c2f385a38401d2bed7a7eb437ba706aee59
   docs/models/operations/createshadowmcpaccessrulerequest.md:
-    last_write_checksum: sha1:ea5b6ac532957f1ae299c374e3403ab005a89dea
+    last_write_checksum: sha1:6d171eb68004b4e184a4733cae27c6bb776551b6
   docs/models/operations/createshadowmcpaccessrulesecurity.md:
     last_write_checksum: sha1:e5eef9b5d3939d10fd346308eb87cf0bcddbdb7b
   docs/models/operations/createshadowmcpapprovalrequestrequest.md:
@@ -2553,7 +2561,7 @@ trackedFiles:
   docs/models/operations/updaterolesecurity.md:
     last_write_checksum: sha1:c1b2c8fbdb7c09879f200fc4838d54346c9b9451
   docs/models/operations/updateshadowmcpaccessrulerequest.md:
-    last_write_checksum: sha1:74bb8c203bb3b1d93e007e25d730dc61a4f349fe
+    last_write_checksum: sha1:b5eee2009b20b2519aa68b4431a5f70ea19a71f2
   docs/models/operations/updateshadowmcpaccessrulesecurity.md:
     last_write_checksum: sha1:a43e2f90aed1550d69190d22f13c4fcd8a77af1d
   docs/models/operations/updateslackapprequest.md:
@@ -2663,7 +2671,7 @@ trackedFiles:
   docs/models/operations/verifyremotemcpurlsecurityoption2.md:
     last_write_checksum: sha1:d7327bb7bc7d90ea3fb3593531e041e6c9fc4f9e
   docs/sdks/access/README.md:
-    last_write_checksum: sha1:9b3c456b9f14f2d461b79c95842c756f3939579c
+    last_write_checksum: sha1:1547a27bea27da69563e29523529f2d24c22fe5c
   docs/sdks/assets/README.md:
     last_write_checksum: sha1:e1884c390454dd09faad4702a812833f9fdf068a
   docs/sdks/assistantmemories/README.md:
@@ -2789,7 +2797,7 @@ trackedFiles:
     last_write_checksum: sha1:a753021efd93bddd574dea18c6bded2cd8f55aad
     pristine_git_object: a0ab28c6fceba8cd55703c01ec1d9a2f98b3442a
   src/funcs/accessApproveShadowMCPApprovalRequest.ts:
-    last_write_checksum: sha1:cef038696936a31640d13ee3a5dda15fb85ac56f
+    last_write_checksum: sha1:48dda4e3c8a5d7ca7809888655fe0aae6bc3f694
   src/funcs/accessCreateRole.ts:
     last_write_checksum: sha1:58c02d9b8748fc48ca47749335143eb7fbe4fe4b
   src/funcs/accessCreateShadowMCPAccessRule.ts:
@@ -3623,7 +3631,7 @@ trackedFiles:
     last_write_checksum: sha1:09b19b8524236e2c90452d0539edff8f12f26872
     pristine_git_object: 11ca116616d2f9bdcb90e69b02ef5cded3218aa2
   src/models/components/approveshadowmcpapprovalrequestform.ts:
-    last_write_checksum: sha1:c3a6886177f03b73fd2a32b678a9c946c17111be
+    last_write_checksum: sha1:4abadda30cd87fcd9cdd26dcd165d6c34e6b1d35
   src/models/components/asset.ts:
     id: e5eeb706d6aa
     last_write_checksum: sha1:8acb541aa089a73038818ff795e737d854dd4060
@@ -4105,7 +4113,7 @@ trackedFiles:
   src/models/components/listriskresultsresult.ts:
     last_write_checksum: sha1:d16223e7b7bc4d6f6ee25b9876b4746553baff8c
   src/models/components/listrolegrant.ts:
-    last_write_checksum: sha1:92dbc6a22070609347dd45a8fcff80018b9d29fa
+    last_write_checksum: sha1:4c55cc42bd70382afbbca4d1e032c250009bdb5b
   src/models/components/listrolesresult.ts:
     last_write_checksum: sha1:c6334302437232f7d088e953ea4b0360f1e6c8c2
   src/models/components/listscopesresult.ts:
@@ -4385,9 +4393,9 @@ trackedFiles:
   src/models/components/role.ts:
     last_write_checksum: sha1:0471a9177cc9f7a8494dfa8d834808500d1b05a7
   src/models/components/rolegrant.ts:
-    last_write_checksum: sha1:076196ed8fde9d93ff7e219aee4c1c028f99e452
+    last_write_checksum: sha1:ae1432effc5ffeeb9113c6d143bfe44240ee71e4
   src/models/components/scopedefinition.ts:
-    last_write_checksum: sha1:1e8f1ff71c1237af5296c2e4afb983bcc6dc3ced
+    last_write_checksum: sha1:d4fee06648f12ec4dfe9540f1768aa455d396b0b
   src/models/components/searchchatsfilter.ts:
     last_write_checksum: sha1:d32819c682e8b5987f9f1f1513c4d31392e03dc9
   src/models/components/searchchatspayload.ts:
@@ -4429,7 +4437,7 @@ trackedFiles:
     last_write_checksum: sha1:b6435b1d385bc4ce89a1a172f494119f689414cb
     pristine_git_object: 3f1430d434bf71f00ca1101ef800ddac5e4d1a59
   src/models/components/selector.ts:
-    last_write_checksum: sha1:986275072c00959e69e3fc1752f18d6de693f6c0
+    last_write_checksum: sha1:6121febd6ff326d1b1431cb8f8fbeb6c690212ef
   src/models/components/sendinviterequestbody.ts:
     last_write_checksum: sha1:7f8b96e7dbb98bd5d702627bb6ee08d3e4df36c3
   src/models/components/serveimageform.ts:
@@ -4473,9 +4481,9 @@ trackedFiles:
     last_write_checksum: sha1:d263fbc867d12c688e6cf05a8a69083ca43aece1
     pristine_git_object: df1eaccb023d9e93f54b641c8791f902963df99a
   src/models/components/shadowmcpaccessrule.ts:
-    last_write_checksum: sha1:dc973d296a281bfb58a572f2bcffa943df2d8979
+    last_write_checksum: sha1:410c19fca0dd2919599bdcb645ae8cd8969f49f0
   src/models/components/shadowmcpaccessruleform.ts:
-    last_write_checksum: sha1:8cbd40af8016838e4ea5f6bb0010fb5f362b982e
+    last_write_checksum: sha1:581f31dce8e297200239ab81d66d5e8c6b89dba6
   src/models/components/shadowmcpapprovaldecisionresult.ts:
     last_write_checksum: sha1:c078806ab2fe6dc7e0a312f2ac08b042bc714bf0
   src/models/components/shadowmcpapprovalrequest.ts:
@@ -4601,7 +4609,7 @@ trackedFiles:
   src/models/components/updateserverform.ts:
     last_write_checksum: sha1:53dffc73708126ca2a78c9e2e1ca5b2e898907f8
   src/models/components/updateshadowmcpaccessruleform.ts:
-    last_write_checksum: sha1:4b39967d2da09b71a7b3b774159b417c15bca027
+    last_write_checksum: sha1:da17800decbb0e5f7555015af090bae276233dee
   src/models/components/updateslackapprequestbody.ts:
     last_write_checksum: sha1:e14d54c11f206f273fb529912d6684e14135aec7
   src/models/components/updatetoolsetrequestbody.ts:
@@ -5451,7 +5459,7 @@ trackedFiles:
   src/react-query/addPluginServer.ts:
     last_write_checksum: sha1:2e4aa5ad010f25fdf16b1de1c7a8a6ee060bd643
   src/react-query/approveShadowMCPApprovalRequest.ts:
-    last_write_checksum: sha1:823244c1f97dfd3dd502acfe06f65644cb472989
+    last_write_checksum: sha1:f041ee97a8fa6b3390d82e2edb1ac72d21fbd408
   src/react-query/assistantMemoriesDelete.ts:
     last_write_checksum: sha1:5e124634109c90b0d8cd289d8f4ce4a21bdb5edf
   src/react-query/assistantsCreate.ts:
@@ -6463,7 +6471,7 @@ trackedFiles:
   src/react-query/verifyRemoteMcpURL.ts:
     last_write_checksum: sha1:7a8b3ee3d721701d3b98ec26f6b6f3b1b1a27bd9
   src/sdk/access.ts:
-    last_write_checksum: sha1:babd1e7152df2032f060c21a14fdbb04e892480f
+    last_write_checksum: sha1:b7335fcb78887672dc75ea6a89ba505a319878b2
   src/sdk/assets.ts:
     id: 43fd5a73edb9
     last_write_checksum: sha1:60ccd4abcd9e1b51f7f5542c97336b5a5847b570
@@ -9729,7 +9737,7 @@ examples:
   approveShadowMCPApprovalRequest:
     speakeasy-default-approve-shadow-MCP-approval-request:
       requestBody:
-        application/json: {"display_name": "Dexter.Ziemann", "id": "cb07e968-7ff0-41e3-bf5a-110ddd8f277a", "match_breadth": "full_url", "match_value": "<value>", "role_ids": ["<value 1>"]}
+        application/json: {"access_scope": "organization", "display_name": "Dexter.Ziemann", "id": "cb07e968-7ff0-41e3-bf5a-110ddd8f277a", "match_breadth": "full_url", "match_value": "<value>"}
       responses:
         "200":
           application/json: {"request": {"blocked_count": 95284, "created_at": "2026-01-15T12:10:32.928Z", "id": "893aa289-3caa-4b0e-8b9a-3ed7a02422b4", "organization_id": "<id>", "project_id": "76bb2bf6-1709-4446-8d63-6eb666b7bc26", "requested_at": "2024-03-24T06:24:45.079Z", "status": "requested", "updated_at": "2025-03-19T20:10:31.892Z"}}
@@ -9775,10 +9783,10 @@ examples:
   createShadowMCPAccessRule:
     speakeasy-default-create-shadow-MCP-access-rule:
       requestBody:
-        application/json: {"display_name": "Domenic_Wunsch58", "disposition": "allowed", "match_breadth": "server_identity", "match_value": "<value>"}
+        application/json: {"access_scope": "organization", "display_name": "Domenic_Wunsch58", "disposition": "allowed", "match_breadth": "server_identity", "match_value": "<value>"}
       responses:
         "201":
-          application/json: {"created_at": "2025-01-11T10:19:54.613Z", "display_name": "Celestino_Boyle12", "disposition": "allowed", "id": "445c3863-95a5-4466-aee1-2e8b9d474c3b", "match_breadth": "url_host", "match_value": "<value>", "organization_id": "<id>", "role_ids": ["<value 1>", "<value 2>"], "updated_at": "2026-08-15T16:39:01.386Z"}
+          application/json: {"access_scope": "organization", "created_at": "2025-01-11T10:19:54.613Z", "display_name": "Celestino_Boyle12", "disposition": "allowed", "id": "445c3863-95a5-4466-aee1-2e8b9d474c3b", "match_breadth": "url_host", "match_value": "<value>", "organization_id": "<id>", "updated_at": "2026-08-15T16:39:01.386Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -9809,10 +9817,10 @@ examples:
   updateShadowMCPAccessRule:
     speakeasy-default-update-shadow-MCP-access-rule:
       requestBody:
-        application/json: {"display_name": "Mateo89", "disposition": "allowed", "id": "d013dc83-7fd7-4a50-a0c0-ec11de541d77", "match_breadth": "server_identity", "match_value": "<value>"}
+        application/json: {"access_scope": "project", "display_name": "Mateo89", "disposition": "allowed", "id": "d013dc83-7fd7-4a50-a0c0-ec11de541d77", "match_breadth": "server_identity", "match_value": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2024-12-28T21:53:08.223Z", "display_name": "Alberto_Thiel", "disposition": "denied", "id": "4dce1a95-e1fa-4d15-9e72-93f445839774", "match_breadth": "server_identity", "match_value": "<value>", "organization_id": "<id>", "role_ids": ["<value 1>", "<value 2>"], "updated_at": "2026-10-01T06:52:25.195Z"}
+          application/json: {"access_scope": "organization", "created_at": "2024-12-28T21:53:08.223Z", "display_name": "Alberto_Thiel", "disposition": "denied", "id": "4dce1a95-e1fa-4d15-9e72-93f445839774", "match_breadth": "server_identity", "match_value": "<value>", "organization_id": "<id>", "updated_at": "2026-10-01T06:52:25.195Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

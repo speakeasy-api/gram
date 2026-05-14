@@ -9,6 +9,14 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+export const ShadowMCPAccessRuleAccessScope = {
+  Organization: "organization",
+  Project: "project",
+} as const;
+export type ShadowMCPAccessRuleAccessScope = ClosedEnum<
+  typeof ShadowMCPAccessRuleAccessScope
+>;
+
 export const ShadowMCPAccessRuleDisposition = {
   Allowed: "allowed",
   Denied: "denied",
@@ -27,6 +35,7 @@ export type ShadowMCPAccessRuleMatchBreadth = ClosedEnum<
 >;
 
 export type ShadowMCPAccessRule = {
+  accessScope: ShadowMCPAccessRuleAccessScope;
   createdAt: Date;
   createdBy?: string | undefined;
   displayName: string;
@@ -38,12 +47,17 @@ export type ShadowMCPAccessRule = {
   observedServerIdentity?: string | undefined;
   observedUrlHost?: string | undefined;
   organizationId: string;
+  projectId?: string | undefined;
   reason?: string | undefined;
-  roleIds: Array<string>;
   sourceRequestId?: string | undefined;
   updatedAt: Date;
   updatedBy?: string | undefined;
 };
+
+/** @internal */
+export const ShadowMCPAccessRuleAccessScope$inboundSchema: z.ZodMiniEnum<
+  typeof ShadowMCPAccessRuleAccessScope
+> = z.enum(ShadowMCPAccessRuleAccessScope);
 
 /** @internal */
 export const ShadowMCPAccessRuleDisposition$inboundSchema: z.ZodMiniEnum<
@@ -61,6 +75,7 @@ export const ShadowMCPAccessRule$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    access_scope: ShadowMCPAccessRuleAccessScope$inboundSchema,
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -75,8 +90,8 @@ export const ShadowMCPAccessRule$inboundSchema: z.ZodMiniType<
     observed_server_identity: z.optional(z.string()),
     observed_url_host: z.optional(z.string()),
     organization_id: z.string(),
+    project_id: z.optional(z.string()),
     reason: z.optional(z.string()),
-    role_ids: z.array(z.string()),
     source_request_id: z.optional(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -86,6 +101,7 @@ export const ShadowMCPAccessRule$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "access_scope": "accessScope",
       "created_at": "createdAt",
       "created_by": "createdBy",
       "display_name": "displayName",
@@ -95,7 +111,7 @@ export const ShadowMCPAccessRule$inboundSchema: z.ZodMiniType<
       "observed_server_identity": "observedServerIdentity",
       "observed_url_host": "observedUrlHost",
       "organization_id": "organizationId",
-      "role_ids": "roleIds",
+      "project_id": "projectId",
       "source_request_id": "sourceRequestId",
       "updated_at": "updatedAt",
       "updated_by": "updatedBy",

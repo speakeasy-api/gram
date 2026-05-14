@@ -40,7 +40,8 @@ type Service interface {
 	ListShadowMCPApprovalRequests(context.Context, *ListShadowMCPApprovalRequestsPayload) (res *ListShadowMCPApprovalRequestsResult, err error)
 	// Create or return an active Shadow MCP approval request.
 	CreateShadowMCPApprovalRequest(context.Context, *CreateShadowMCPApprovalRequestPayload) (res *ShadowMCPApprovalRequest, err error)
-	// Approve a Shadow MCP request, creating an allow rule and role grants.
+	// Approve a Shadow MCP request, creating an allow rule scoped to the
+	// organization or project.
 	ApproveShadowMCPApprovalRequest(context.Context, *ApproveShadowMCPApprovalRequestPayload) (res *ShadowMCPApprovalDecisionResult, err error)
 	// Deny a Shadow MCP request and optionally create a deny rule.
 	DenyShadowMCPApprovalRequest(context.Context, *DenyShadowMCPApprovalRequestPayload) (res *ShadowMCPApprovalDecisionResult, err error)
@@ -116,13 +117,13 @@ type ApproveShadowMCPApprovalRequestPayload struct {
 	ApikeyToken            *string
 	SessionToken           *string
 	ID                     string
+	AccessScope            string
 	MatchBreadth           string
 	MatchValue             string
 	DisplayName            string
 	ObservedFullURL        *string
 	ObservedURLHost        *string
 	ObservedServerIdentity *string
-	RoleIds                []string
 	Reason                 *string
 }
 
@@ -262,13 +263,14 @@ type CreateShadowMCPAccessRulePayload struct {
 	ApikeyToken            *string
 	SessionToken           *string
 	Disposition            string
+	AccessScope            string
+	ProjectID              *string
 	MatchBreadth           string
 	MatchValue             string
 	DisplayName            string
 	ObservedFullURL        *string
 	ObservedURLHost        *string
 	ObservedServerIdentity *string
-	RoleIds                []string
 	Reason                 *string
 }
 
@@ -591,6 +593,8 @@ type Selector struct {
 type ShadowMCPAccessRule struct {
 	ID                     string
 	OrganizationID         string
+	ProjectID              *string
+	AccessScope            string
 	Disposition            string
 	MatchBreadth           string
 	MatchValue             string
@@ -602,7 +606,6 @@ type ShadowMCPAccessRule struct {
 	CreatedBy              *string
 	UpdatedBy              *string
 	Reason                 *string
-	RoleIds                []string
 	CreatedAt              string
 	UpdatedAt              string
 }
@@ -680,13 +683,14 @@ type UpdateShadowMCPAccessRulePayload struct {
 	SessionToken           *string
 	ID                     string
 	Disposition            string
+	AccessScope            string
+	ProjectID              *string
 	MatchBreadth           string
 	MatchValue             string
 	DisplayName            string
 	ObservedFullURL        *string
 	ObservedURLHost        *string
 	ObservedServerIdentity *string
-	RoleIds                []string
 	Reason                 *string
 }
 

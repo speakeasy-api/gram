@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
@@ -17,8 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
-	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestService_CreateShadowMCPApprovalRequest_Idempotent(t *testing.T) {
@@ -74,7 +70,7 @@ func TestService_CreateShadowMCPApprovalRequest_RejectsInvalidToken(t *testing.T
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
-func TestService_ApproveShadowMCPApprovalRequest_CreatesAllowRuleAndRoleGrant(t *testing.T) {
+func TestService_ApproveShadowMCPApprovalRequest_CreatesProjectScopedAllowRule(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -93,16 +89,13 @@ func TestService_ApproveShadowMCPApprovalRequest_CreatesAllowRuleAndRoleGrant(t 
 	require.NoError(t, err)
 
 	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockRole("role_ai", "AI Platform", "ai-platform", ""),
-	}, nil).Once()
 
 	result, err := ti.service.ApproveShadowMCPApprovalRequest(ctx, &gen.ApproveShadowMCPApprovalRequestPayload{
 		ID:           request.ID,
+		AccessScope:  shadowMCPAccessScopeProject,
 		MatchBreadth: "full_url",
 		MatchValue:   fullURL,
 		DisplayName:  "GitHub Shadow MCP",
-		RoleIds:      []string{"role_ai"},
 		Reason:       conv.PtrEmpty("Approved for AI platform operators"),
 	})
 	require.NoError(t, err)
@@ -111,20 +104,12 @@ func TestService_ApproveShadowMCPApprovalRequest_CreatesAllowRuleAndRoleGrant(t 
 	require.Equal(t, shadowMCPRuleAllowed, result.Rule.Disposition)
 	require.Equal(t, "full_url", result.Rule.MatchBreadth)
 	require.Equal(t, fullURL, result.Rule.MatchValue)
-	require.Equal(t, []string{"role_ai"}, result.Rule.RoleIds)
+	require.Equal(t, shadowMCPAccessScopeProject, result.Rule.AccessScope)
+	require.Equal(t, project.ID.String(), *result.Rule.ProjectID)
 	require.Equal(t, request.ID, *result.Rule.SourceRequestID)
-
-	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "ai-platform"))
-	require.Len(t, grants, 1)
-	require.Equal(t, string(authz.ScopeShadowMCPConnect), grants[0].Scope)
-
-	selector, err := authz.SelectorFromRow(grants[0].Selectors)
-	require.NoError(t, err)
-	require.Equal(t, "shadow_mcp", selector["resource_kind"])
-	require.Equal(t, result.Rule.ID, selector.ResourceID())
 }
 
-func TestService_ApproveShadowMCPApprovalRequest_RequiresRoleIDs(t *testing.T) {
+func TestService_ApproveShadowMCPApprovalRequest_CreatesOrganizationScopedAllowRule(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -141,96 +126,17 @@ func TestService_ApproveShadowMCPApprovalRequest_RequiresRoleIDs(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
-	_, err = ti.service.ApproveShadowMCPApprovalRequest(ctx, &gen.ApproveShadowMCPApprovalRequestPayload{
-		ID:           request.ID,
-		MatchBreadth: "full_url",
-		MatchValue:   fullURL,
-		DisplayName:  "GitHub Shadow MCP",
-		RoleIds:      nil,
-	})
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
-}
-
-func TestService_ApproveShadowMCPApprovalRequest_RejectsSystemRoles(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestAccessService(t)
-	authCtx := testAccessAuthContext(t, ctx)
-	project := createShadowMCPProject(t, ctx, ti, authCtx.ActiveOrganizationID)
-	fullURL := "https://github.example.com/org/repo/mcp"
-
-	request, err := ti.service.CreateShadowMCPApprovalRequest(ctx, &gen.CreateShadowMCPApprovalRequestPayload{
-		RequestToken: shadowMCPRequestToken(t, authCtx.ActiveOrganizationID, authCtx.UserID, project.ID.String(), ShadowMCPApprovalRequestTokenInput{
-			ObservedName:    conv.PtrEmpty("GitHub"),
-			ObservedFullURL: &fullURL,
-		}),
-	})
-	require.NoError(t, err)
-
-	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockSystemRole("role_member", "Member", authz.SystemRoleMember),
-	}, nil).Once()
-
-	_, err = ti.service.ApproveShadowMCPApprovalRequest(ctx, &gen.ApproveShadowMCPApprovalRequestPayload{
-		ID:           request.ID,
-		MatchBreadth: "full_url",
-		MatchValue:   fullURL,
-		DisplayName:  "GitHub Shadow MCP",
-		RoleIds:      []string{"role_member"},
-	})
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
-}
-
-func TestService_ApproveShadowMCPApprovalRequest_MergesExistingRuleRoleGrants(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestAccessService(t)
-	authCtx := testAccessAuthContext(t, ctx)
-	project := createShadowMCPProject(t, ctx, ti, authCtx.ActiveOrganizationID)
-	fullURL := "https://github.example.com/org/repo/mcp"
-	roles := []thirdpartyworkos.Role{
-		mockRole("role_ops", "Operations", "operations", ""),
-		mockRole("role_ai", "AI Platform", "ai-platform", ""),
-	}
-
-	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return(roles, nil).Once()
-	existingRule, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
-		Disposition:  shadowMCPRuleAllowed,
-		MatchBreadth: "full_url",
-		MatchValue:   fullURL,
-		DisplayName:  "GitHub Shadow MCP",
-		RoleIds:      []string{"role_ops"},
-	})
-	require.NoError(t, err)
-
-	request, err := ti.service.CreateShadowMCPApprovalRequest(ctx, &gen.CreateShadowMCPApprovalRequestPayload{
-		RequestToken: shadowMCPRequestToken(t, authCtx.ActiveOrganizationID, authCtx.UserID, project.ID.String(), ShadowMCPApprovalRequestTokenInput{
-			ObservedName:    conv.PtrEmpty("GitHub"),
-			ObservedFullURL: &fullURL,
-		}),
-	})
-	require.NoError(t, err)
-
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return(roles, nil).Once()
 	result, err := ti.service.ApproveShadowMCPApprovalRequest(ctx, &gen.ApproveShadowMCPApprovalRequestPayload{
 		ID:           request.ID,
+		AccessScope:  shadowMCPAccessScopeOrganization,
 		MatchBreadth: "full_url",
 		MatchValue:   fullURL,
 		DisplayName:  "GitHub Shadow MCP",
-		RoleIds:      []string{"role_ai"},
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, existingRule.ID, result.Rule.ID)
-	require.ElementsMatch(t, []string{"role_ops", "role_ai"}, result.Rule.RoleIds)
-	require.Len(t, listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "operations")), 1)
-	require.Len(t, listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "ai-platform")), 1)
+	require.Equal(t, shadowMCPAccessScopeOrganization, result.Rule.AccessScope)
+	require.Nil(t, result.Rule.ProjectID)
 }
 
 func TestService_DenyShadowMCPApprovalRequest_CanSkipDenyRule(t *testing.T) {
@@ -323,6 +229,15 @@ func TestShadowMCPLimit_RequiresPositiveLimit(t *testing.T) {
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
+func TestShadowMCPLimit_RejectsExcessiveLimit(t *testing.T) {
+	t.Parallel()
+
+	_, err := shadowMCPLimit(shadowMCPMaxPageLimit + 1)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
 func TestService_ShadowMCPAccessRule_ManualLifecycle(t *testing.T) {
 	t.Parallel()
 
@@ -332,40 +247,31 @@ func TestService_ShadowMCPAccessRule_ManualLifecycle(t *testing.T) {
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 		authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)},
 	)
-	roles := []thirdpartyworkos.Role{
-		mockRole("role_ops", "Operations", "operations", ""),
-		mockRole("role_security", "Security", "security", ""),
-	}
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return(roles, nil).Once()
 
 	rule, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
 		Disposition:  shadowMCPRuleAllowed,
+		AccessScope:  shadowMCPAccessScopeOrganization,
 		MatchBreadth: "url_host",
 		MatchValue:   "notion.example.com",
 		DisplayName:  "Notion Shadow MCP",
-		RoleIds:      []string{"role_ops"},
 		Reason:       conv.PtrEmpty("Manual approval"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, shadowMCPRuleAllowed, rule.Disposition)
-	require.Equal(t, []string{"role_ops"}, rule.RoleIds)
+	require.Equal(t, shadowMCPAccessScopeOrganization, rule.AccessScope)
+	require.Nil(t, rule.ProjectID)
 
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return(roles, nil).Once()
 	updated, err := ti.service.UpdateShadowMCPAccessRule(ctx, &gen.UpdateShadowMCPAccessRulePayload{
 		ID:           rule.ID,
 		Disposition:  shadowMCPRuleDenied,
+		AccessScope:  shadowMCPAccessScopeOrganization,
 		MatchBreadth: "url_host",
 		MatchValue:   "notion.example.com",
 		DisplayName:  "Notion Shadow MCP",
-		RoleIds:      []string{"role_security"},
 		Reason:       conv.PtrEmpty("Denied after review"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, shadowMCPRuleDenied, updated.Disposition)
-	require.Empty(t, updated.RoleIds)
-
-	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "operations"))
-	require.Empty(t, grants)
 
 	err = ti.service.DeleteShadowMCPAccessRule(ctx, &gen.DeleteShadowMCPAccessRulePayload{ID: rule.ID})
 	require.NoError(t, err)
@@ -385,11 +291,11 @@ func TestService_ListShadowMCPAccessRules_CursorPagination(t *testing.T) {
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 		authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)},
 	)
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{}, nil).Times(5)
 
 	for _, host := range []string{"one.example.com", "two.example.com", "three.example.com"} {
 		_, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
 			Disposition:  shadowMCPRuleDenied,
+			AccessScope:  shadowMCPAccessScopeOrganization,
 			MatchBreadth: "url_host",
 			MatchValue:   host,
 			DisplayName:  host,
@@ -417,10 +323,10 @@ func TestService_CreateShadowMCPAccessRule_NormalizesMatchValue(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
 	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{}, nil).Once()
 
 	rule, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
 		Disposition:  shadowMCPRuleDenied,
+		AccessScope:  shadowMCPAccessScopeOrganization,
 		MatchBreadth: "url_host",
 		MatchValue:   "HTTPS://Example.COM:443/path",
 		DisplayName:  "Example Shadow MCP",
@@ -428,9 +334,9 @@ func TestService_CreateShadowMCPAccessRule_NormalizesMatchValue(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "example.com", rule.MatchValue)
 
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{}, nil).Once()
 	_, err = ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
 		Disposition:  shadowMCPRuleDenied,
+		AccessScope:  shadowMCPAccessScopeOrganization,
 		MatchBreadth: "url_host",
 		MatchValue:   "example.com",
 		DisplayName:  "Duplicate Example Shadow MCP",
@@ -440,7 +346,7 @@ func TestService_CreateShadowMCPAccessRule_NormalizesMatchValue(t *testing.T) {
 	require.Equal(t, oops.CodeConflict, oopsErr.Code)
 }
 
-func TestService_CreateShadowMCPAccessRule_RequiresRoleIDsForAllowedRule(t *testing.T) {
+func TestService_CreateShadowMCPAccessRule_RequiresProjectIDForProjectScope(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -449,61 +355,61 @@ func TestService_CreateShadowMCPAccessRule_RequiresRoleIDsForAllowedRule(t *test
 
 	_, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
 		Disposition:  shadowMCPRuleAllowed,
+		AccessScope:  shadowMCPAccessScopeProject,
 		MatchBreadth: "url_host",
-		MatchValue:   "empty-roles.example.com",
-		DisplayName:  "Empty Roles",
-		RoleIds:      nil,
+		MatchValue:   "missing-project.example.com",
+		DisplayName:  "Missing Project",
 	})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
-func TestService_CreateShadowMCPAccessRule_RejectsSystemRoles(t *testing.T) {
+func TestService_CreateShadowMCPAccessRule_CreatesProjectScopedRule(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
+	project := createShadowMCPProject(t, ctx, ti, authCtx.ActiveOrganizationID)
+	projectID := project.ID.String()
 	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockSystemRole("role_admin", "Admin", authz.SystemRoleAdmin),
-	}, nil).Once()
 
-	_, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
+	rule, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
 		Disposition:  shadowMCPRuleAllowed,
+		AccessScope:  shadowMCPAccessScopeProject,
+		ProjectID:    &projectID,
 		MatchBreadth: "url_host",
-		MatchValue:   "system-role.example.com",
-		DisplayName:  "System Role",
-		RoleIds:      []string{"role_admin"},
+		MatchValue:   "project.example.com",
+		DisplayName:  "Project Rule",
 	})
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPAccessScopeProject, rule.AccessScope)
+	require.Equal(t, project.ID.String(), *rule.ProjectID)
 }
 
-func TestService_UpdateShadowMCPAccessRule_RequiresRoleIDsForAllowedRule(t *testing.T) {
+func TestService_UpdateShadowMCPAccessRule_RequiresProjectIDForProjectScope(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
 	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{}, nil).Once()
 
 	rule, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
 		Disposition:  shadowMCPRuleDenied,
+		AccessScope:  shadowMCPAccessScopeOrganization,
 		MatchBreadth: "url_host",
-		MatchValue:   "update-empty-roles.example.com",
-		DisplayName:  "Update Empty Roles",
+		MatchValue:   "update-missing-project.example.com",
+		DisplayName:  "Update Missing Project",
 	})
 	require.NoError(t, err)
 
 	_, err = ti.service.UpdateShadowMCPAccessRule(ctx, &gen.UpdateShadowMCPAccessRulePayload{
 		ID:           rule.ID,
 		Disposition:  shadowMCPRuleAllowed,
+		AccessScope:  shadowMCPAccessScopeProject,
 		MatchBreadth: "url_host",
-		MatchValue:   "update-empty-roles.example.com",
-		DisplayName:  "Update Empty Roles",
-		RoleIds:      nil,
+		MatchValue:   "update-missing-project.example.com",
+		DisplayName:  "Update Missing Project",
 	})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -519,9 +425,9 @@ func TestService_CreateShadowMCPAccessRule_AuditLog(t *testing.T) {
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionShadowMCPAccessRuleCreate)
 	require.NoError(t, err)
 
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{}, nil).Once()
 	rule, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
 		Disposition:  shadowMCPRuleDenied,
+		AccessScope:  shadowMCPAccessScopeOrganization,
 		MatchBreadth: "url_host",
 		MatchValue:   "audit.example.com",
 		DisplayName:  "Audit Shadow MCP",
@@ -551,6 +457,7 @@ func TestService_CreateShadowMCPAccessRule_ForbiddenWithoutOrgAdminGrant(t *test
 
 	_, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
 		Disposition:  shadowMCPRuleAllowed,
+		AccessScope:  shadowMCPAccessScopeOrganization,
 		MatchBreadth: "full_url",
 		MatchValue:   "https://blocked.example.com/mcp",
 		DisplayName:  "Blocked",

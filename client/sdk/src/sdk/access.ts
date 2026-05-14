@@ -282,7 +282,7 @@ export class Access extends ClientSDK {
    * approveShadowMCPApprovalRequest access
    *
    * @remarks
-   * Approve a Shadow MCP request, creating an allow rule and role grants.
+   * Approve a Shadow MCP request, creating an allow rule scoped to the organization or project.
    */
   async approveShadowMCPApprovalRequest(
     request: operations.ApproveShadowMCPApprovalRequestRequest,

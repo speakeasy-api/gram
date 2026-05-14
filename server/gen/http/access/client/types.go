@@ -60,15 +60,15 @@ type CreateShadowMCPApprovalRequestRequestBody struct {
 // ApproveShadowMCPApprovalRequestRequestBody is the type of the "access"
 // service "approveShadowMCPApprovalRequest" endpoint HTTP request body.
 type ApproveShadowMCPApprovalRequestRequestBody struct {
-	ID                     string   `form:"id" json:"id" xml:"id"`
-	MatchBreadth           string   `form:"match_breadth" json:"match_breadth" xml:"match_breadth"`
-	MatchValue             string   `form:"match_value" json:"match_value" xml:"match_value"`
-	DisplayName            string   `form:"display_name" json:"display_name" xml:"display_name"`
-	ObservedFullURL        *string  `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
-	ObservedURLHost        *string  `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
-	ObservedServerIdentity *string  `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
-	RoleIds                []string `form:"role_ids" json:"role_ids" xml:"role_ids"`
-	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	ID                     string  `form:"id" json:"id" xml:"id"`
+	AccessScope            string  `form:"access_scope" json:"access_scope" xml:"access_scope"`
+	MatchBreadth           string  `form:"match_breadth" json:"match_breadth" xml:"match_breadth"`
+	MatchValue             string  `form:"match_value" json:"match_value" xml:"match_value"`
+	DisplayName            string  `form:"display_name" json:"display_name" xml:"display_name"`
+	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
 // DenyShadowMCPApprovalRequestRequestBody is the type of the "access" service
@@ -88,30 +88,32 @@ type DenyShadowMCPApprovalRequestRequestBody struct {
 // CreateShadowMCPAccessRuleRequestBody is the type of the "access" service
 // "createShadowMCPAccessRule" endpoint HTTP request body.
 type CreateShadowMCPAccessRuleRequestBody struct {
-	Disposition            string   `form:"disposition" json:"disposition" xml:"disposition"`
-	MatchBreadth           string   `form:"match_breadth" json:"match_breadth" xml:"match_breadth"`
-	MatchValue             string   `form:"match_value" json:"match_value" xml:"match_value"`
-	DisplayName            string   `form:"display_name" json:"display_name" xml:"display_name"`
-	ObservedFullURL        *string  `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
-	ObservedURLHost        *string  `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
-	ObservedServerIdentity *string  `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
-	RoleIds                []string `form:"role_ids,omitempty" json:"role_ids,omitempty" xml:"role_ids,omitempty"`
-	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Disposition            string  `form:"disposition" json:"disposition" xml:"disposition"`
+	AccessScope            string  `form:"access_scope" json:"access_scope" xml:"access_scope"`
+	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	MatchBreadth           string  `form:"match_breadth" json:"match_breadth" xml:"match_breadth"`
+	MatchValue             string  `form:"match_value" json:"match_value" xml:"match_value"`
+	DisplayName            string  `form:"display_name" json:"display_name" xml:"display_name"`
+	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
 // UpdateShadowMCPAccessRuleRequestBody is the type of the "access" service
 // "updateShadowMCPAccessRule" endpoint HTTP request body.
 type UpdateShadowMCPAccessRuleRequestBody struct {
-	ID                     string   `form:"id" json:"id" xml:"id"`
-	Disposition            string   `form:"disposition" json:"disposition" xml:"disposition"`
-	MatchBreadth           string   `form:"match_breadth" json:"match_breadth" xml:"match_breadth"`
-	MatchValue             string   `form:"match_value" json:"match_value" xml:"match_value"`
-	DisplayName            string   `form:"display_name" json:"display_name" xml:"display_name"`
-	ObservedFullURL        *string  `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
-	ObservedURLHost        *string  `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
-	ObservedServerIdentity *string  `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
-	RoleIds                []string `form:"role_ids,omitempty" json:"role_ids,omitempty" xml:"role_ids,omitempty"`
-	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	ID                     string  `form:"id" json:"id" xml:"id"`
+	Disposition            string  `form:"disposition" json:"disposition" xml:"disposition"`
+	AccessScope            string  `form:"access_scope" json:"access_scope" xml:"access_scope"`
+	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	MatchBreadth           string  `form:"match_breadth" json:"match_breadth" xml:"match_breadth"`
+	MatchValue             string  `form:"match_value" json:"match_value" xml:"match_value"`
+	DisplayName            string  `form:"display_name" json:"display_name" xml:"display_name"`
+	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
 // ResolveChallengeRequestBody is the type of the "access" service
@@ -298,43 +300,45 @@ type ListShadowMCPAccessRulesResponseBody struct {
 // CreateShadowMCPAccessRuleResponseBody is the type of the "access" service
 // "createShadowMCPAccessRule" endpoint HTTP response body.
 type CreateShadowMCPAccessRuleResponseBody struct {
-	ID                     *string  `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OrganizationID         *string  `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	Disposition            *string  `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
-	MatchBreadth           *string  `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
-	MatchValue             *string  `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
-	DisplayName            *string  `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
-	ObservedFullURL        *string  `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
-	ObservedURLHost        *string  `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
-	ObservedServerIdentity *string  `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
-	SourceRequestID        *string  `form:"source_request_id,omitempty" json:"source_request_id,omitempty" xml:"source_request_id,omitempty"`
-	CreatedBy              *string  `form:"created_by,omitempty" json:"created_by,omitempty" xml:"created_by,omitempty"`
-	UpdatedBy              *string  `form:"updated_by,omitempty" json:"updated_by,omitempty" xml:"updated_by,omitempty"`
-	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	RoleIds                []string `form:"role_ids,omitempty" json:"role_ids,omitempty" xml:"role_ids,omitempty"`
-	CreatedAt              *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt              *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ID                     *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID         *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	AccessScope            *string `form:"access_scope,omitempty" json:"access_scope,omitempty" xml:"access_scope,omitempty"`
+	Disposition            *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
+	MatchBreadth           *string `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
+	MatchValue             *string `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
+	DisplayName            *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	SourceRequestID        *string `form:"source_request_id,omitempty" json:"source_request_id,omitempty" xml:"source_request_id,omitempty"`
+	CreatedBy              *string `form:"created_by,omitempty" json:"created_by,omitempty" xml:"created_by,omitempty"`
+	UpdatedBy              *string `form:"updated_by,omitempty" json:"updated_by,omitempty" xml:"updated_by,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	CreatedAt              *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt              *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateShadowMCPAccessRuleResponseBody is the type of the "access" service
 // "updateShadowMCPAccessRule" endpoint HTTP response body.
 type UpdateShadowMCPAccessRuleResponseBody struct {
-	ID                     *string  `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OrganizationID         *string  `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	Disposition            *string  `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
-	MatchBreadth           *string  `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
-	MatchValue             *string  `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
-	DisplayName            *string  `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
-	ObservedFullURL        *string  `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
-	ObservedURLHost        *string  `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
-	ObservedServerIdentity *string  `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
-	SourceRequestID        *string  `form:"source_request_id,omitempty" json:"source_request_id,omitempty" xml:"source_request_id,omitempty"`
-	CreatedBy              *string  `form:"created_by,omitempty" json:"created_by,omitempty" xml:"created_by,omitempty"`
-	UpdatedBy              *string  `form:"updated_by,omitempty" json:"updated_by,omitempty" xml:"updated_by,omitempty"`
-	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	RoleIds                []string `form:"role_ids,omitempty" json:"role_ids,omitempty" xml:"role_ids,omitempty"`
-	CreatedAt              *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt              *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ID                     *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID         *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	AccessScope            *string `form:"access_scope,omitempty" json:"access_scope,omitempty" xml:"access_scope,omitempty"`
+	Disposition            *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
+	MatchBreadth           *string `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
+	MatchValue             *string `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
+	DisplayName            *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	SourceRequestID        *string `form:"source_request_id,omitempty" json:"source_request_id,omitempty" xml:"source_request_id,omitempty"`
+	CreatedBy              *string `form:"created_by,omitempty" json:"created_by,omitempty" xml:"created_by,omitempty"`
+	UpdatedBy              *string `form:"updated_by,omitempty" json:"updated_by,omitempty" xml:"updated_by,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	CreatedAt              *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt              *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // GetRBACStatusResponseBody is the type of the "access" service
@@ -4739,22 +4743,23 @@ type ShadowMCPApprovalRequestResponseBody struct {
 // ShadowMCPAccessRuleResponseBody is used to define fields on response body
 // types.
 type ShadowMCPAccessRuleResponseBody struct {
-	ID                     *string  `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OrganizationID         *string  `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	Disposition            *string  `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
-	MatchBreadth           *string  `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
-	MatchValue             *string  `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
-	DisplayName            *string  `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
-	ObservedFullURL        *string  `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
-	ObservedURLHost        *string  `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
-	ObservedServerIdentity *string  `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
-	SourceRequestID        *string  `form:"source_request_id,omitempty" json:"source_request_id,omitempty" xml:"source_request_id,omitempty"`
-	CreatedBy              *string  `form:"created_by,omitempty" json:"created_by,omitempty" xml:"created_by,omitempty"`
-	UpdatedBy              *string  `form:"updated_by,omitempty" json:"updated_by,omitempty" xml:"updated_by,omitempty"`
-	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	RoleIds                []string `form:"role_ids,omitempty" json:"role_ids,omitempty" xml:"role_ids,omitempty"`
-	CreatedAt              *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt              *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ID                     *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID         *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	AccessScope            *string `form:"access_scope,omitempty" json:"access_scope,omitempty" xml:"access_scope,omitempty"`
+	Disposition            *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
+	MatchBreadth           *string `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
+	MatchValue             *string `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
+	DisplayName            *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	SourceRequestID        *string `form:"source_request_id,omitempty" json:"source_request_id,omitempty" xml:"source_request_id,omitempty"`
+	CreatedBy              *string `form:"created_by,omitempty" json:"created_by,omitempty" xml:"created_by,omitempty"`
+	UpdatedBy              *string `form:"updated_by,omitempty" json:"updated_by,omitempty" xml:"updated_by,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	CreatedAt              *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt              *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // AuthzChallengeResponseBody is used to define fields on response body types.
@@ -4955,6 +4960,7 @@ func NewCreateShadowMCPApprovalRequestRequestBody(p *access.CreateShadowMCPAppro
 func NewApproveShadowMCPApprovalRequestRequestBody(p *access.ApproveShadowMCPApprovalRequestPayload) *ApproveShadowMCPApprovalRequestRequestBody {
 	body := &ApproveShadowMCPApprovalRequestRequestBody{
 		ID:                     p.ID,
+		AccessScope:            p.AccessScope,
 		MatchBreadth:           p.MatchBreadth,
 		MatchValue:             p.MatchValue,
 		DisplayName:            p.DisplayName,
@@ -4962,14 +4968,6 @@ func NewApproveShadowMCPApprovalRequestRequestBody(p *access.ApproveShadowMCPApp
 		ObservedURLHost:        p.ObservedURLHost,
 		ObservedServerIdentity: p.ObservedServerIdentity,
 		Reason:                 p.Reason,
-	}
-	if p.RoleIds != nil {
-		body.RoleIds = make([]string, len(p.RoleIds))
-		for i, val := range p.RoleIds {
-			body.RoleIds[i] = val
-		}
-	} else {
-		body.RoleIds = []string{}
 	}
 	return body
 }
@@ -4998,6 +4996,8 @@ func NewDenyShadowMCPApprovalRequestRequestBody(p *access.DenyShadowMCPApprovalR
 func NewCreateShadowMCPAccessRuleRequestBody(p *access.CreateShadowMCPAccessRulePayload) *CreateShadowMCPAccessRuleRequestBody {
 	body := &CreateShadowMCPAccessRuleRequestBody{
 		Disposition:            p.Disposition,
+		AccessScope:            p.AccessScope,
+		ProjectID:              p.ProjectID,
 		MatchBreadth:           p.MatchBreadth,
 		MatchValue:             p.MatchValue,
 		DisplayName:            p.DisplayName,
@@ -5005,12 +5005,6 @@ func NewCreateShadowMCPAccessRuleRequestBody(p *access.CreateShadowMCPAccessRule
 		ObservedURLHost:        p.ObservedURLHost,
 		ObservedServerIdentity: p.ObservedServerIdentity,
 		Reason:                 p.Reason,
-	}
-	if p.RoleIds != nil {
-		body.RoleIds = make([]string, len(p.RoleIds))
-		for i, val := range p.RoleIds {
-			body.RoleIds[i] = val
-		}
 	}
 	return body
 }
@@ -5022,6 +5016,8 @@ func NewUpdateShadowMCPAccessRuleRequestBody(p *access.UpdateShadowMCPAccessRule
 	body := &UpdateShadowMCPAccessRuleRequestBody{
 		ID:                     p.ID,
 		Disposition:            p.Disposition,
+		AccessScope:            p.AccessScope,
+		ProjectID:              p.ProjectID,
 		MatchBreadth:           p.MatchBreadth,
 		MatchValue:             p.MatchValue,
 		DisplayName:            p.DisplayName,
@@ -5029,12 +5025,6 @@ func NewUpdateShadowMCPAccessRuleRequestBody(p *access.UpdateShadowMCPAccessRule
 		ObservedURLHost:        p.ObservedURLHost,
 		ObservedServerIdentity: p.ObservedServerIdentity,
 		Reason:                 p.Reason,
-	}
-	if p.RoleIds != nil {
-		body.RoleIds = make([]string, len(p.RoleIds))
-		for i, val := range p.RoleIds {
-			body.RoleIds[i] = val
-		}
 	}
 	return body
 }
@@ -7411,6 +7401,8 @@ func NewCreateShadowMCPAccessRuleShadowMCPAccessRuleCreated(body *CreateShadowMC
 	v := &access.ShadowMCPAccessRule{
 		ID:                     *body.ID,
 		OrganizationID:         *body.OrganizationID,
+		ProjectID:              body.ProjectID,
+		AccessScope:            *body.AccessScope,
 		Disposition:            *body.Disposition,
 		MatchBreadth:           *body.MatchBreadth,
 		MatchValue:             *body.MatchValue,
@@ -7424,10 +7416,6 @@ func NewCreateShadowMCPAccessRuleShadowMCPAccessRuleCreated(body *CreateShadowMC
 		Reason:                 body.Reason,
 		CreatedAt:              *body.CreatedAt,
 		UpdatedAt:              *body.UpdatedAt,
-	}
-	v.RoleIds = make([]string, len(body.RoleIds))
-	for i, val := range body.RoleIds {
-		v.RoleIds[i] = val
 	}
 
 	return v
@@ -7589,6 +7577,8 @@ func NewUpdateShadowMCPAccessRuleShadowMCPAccessRuleOK(body *UpdateShadowMCPAcce
 	v := &access.ShadowMCPAccessRule{
 		ID:                     *body.ID,
 		OrganizationID:         *body.OrganizationID,
+		ProjectID:              body.ProjectID,
+		AccessScope:            *body.AccessScope,
 		Disposition:            *body.Disposition,
 		MatchBreadth:           *body.MatchBreadth,
 		MatchValue:             *body.MatchValue,
@@ -7602,10 +7592,6 @@ func NewUpdateShadowMCPAccessRuleShadowMCPAccessRuleOK(body *UpdateShadowMCPAcce
 		Reason:                 body.Reason,
 		CreatedAt:              *body.CreatedAt,
 		UpdatedAt:              *body.UpdatedAt,
-	}
-	v.RoleIds = make([]string, len(body.RoleIds))
-	for i, val := range body.RoleIds {
-		v.RoleIds[i] = val
 	}
 
 	return v
@@ -9234,6 +9220,9 @@ func ValidateCreateShadowMCPAccessRuleResponseBody(body *CreateShadowMCPAccessRu
 	if body.OrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}
+	if body.AccessScope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("access_scope", "body"))
+	}
 	if body.Disposition == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("disposition", "body"))
 	}
@@ -9246,9 +9235,6 @@ func ValidateCreateShadowMCPAccessRuleResponseBody(body *CreateShadowMCPAccessRu
 	if body.DisplayName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
 	}
-	if body.RoleIds == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("role_ids", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -9257,6 +9243,14 @@ func ValidateCreateShadowMCPAccessRuleResponseBody(body *CreateShadowMCPAccessRu
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.AccessScope != nil {
+		if !(*body.AccessScope == "organization" || *body.AccessScope == "project") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access_scope", *body.AccessScope, []any{"organization", "project"}))
+		}
 	}
 	if body.Disposition != nil {
 		if !(*body.Disposition == "allowed" || *body.Disposition == "denied") {
@@ -9289,6 +9283,9 @@ func ValidateUpdateShadowMCPAccessRuleResponseBody(body *UpdateShadowMCPAccessRu
 	if body.OrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}
+	if body.AccessScope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("access_scope", "body"))
+	}
 	if body.Disposition == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("disposition", "body"))
 	}
@@ -9301,9 +9298,6 @@ func ValidateUpdateShadowMCPAccessRuleResponseBody(body *UpdateShadowMCPAccessRu
 	if body.DisplayName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
 	}
-	if body.RoleIds == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("role_ids", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -9312,6 +9306,14 @@ func ValidateUpdateShadowMCPAccessRuleResponseBody(body *UpdateShadowMCPAccessRu
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.AccessScope != nil {
+		if !(*body.AccessScope == "organization" || *body.AccessScope == "project") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access_scope", *body.AccessScope, []any{"organization", "project"}))
+		}
 	}
 	if body.Disposition != nil {
 		if !(*body.Disposition == "allowed" || *body.Disposition == "denied") {
@@ -14998,8 +15000,8 @@ func ValidateRoleGrantResponseBody(body *RoleGrantResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "shadow_mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "shadow_mcp:connect", "environment:read", "environment:write"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write"}))
 		}
 	}
 	for _, e := range body.Selectors {
@@ -15022,8 +15024,8 @@ func ValidateSelectorResponseBody(body *SelectorResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
 	}
 	if body.ResourceKind != nil {
-		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "shadow_mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "shadow_mcp", "org", "environment", "*"}))
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "*"}))
 		}
 	}
 	if body.Disposition != nil {
@@ -15037,8 +15039,8 @@ func ValidateSelectorResponseBody(body *SelectorResponseBody) (err error) {
 // ValidateRoleGrantRequestBody runs the validations defined on
 // RoleGrantRequestBody
 func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
-	if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "shadow_mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "shadow_mcp:connect", "environment:read", "environment:write"}))
+	if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write"}))
 	}
 	for _, e := range body.Selectors {
 		if e != nil {
@@ -15053,8 +15055,8 @@ func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
 // ValidateSelectorRequestBody runs the validations defined on
 // SelectorRequestBody
 func ValidateSelectorRequestBody(body *SelectorRequestBody) (err error) {
-	if !(body.ResourceKind == "project" || body.ResourceKind == "mcp" || body.ResourceKind == "shadow_mcp" || body.ResourceKind == "org" || body.ResourceKind == "environment" || body.ResourceKind == "*") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", body.ResourceKind, []any{"project", "mcp", "shadow_mcp", "org", "environment", "*"}))
+	if !(body.ResourceKind == "project" || body.ResourceKind == "mcp" || body.ResourceKind == "org" || body.ResourceKind == "environment" || body.ResourceKind == "*") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", body.ResourceKind, []any{"project", "mcp", "org", "environment", "*"}))
 	}
 	if body.Disposition != nil {
 		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
@@ -15077,13 +15079,13 @@ func ValidateScopeDefinitionResponseBody(body *ScopeDefinitionResponseBody) (err
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_type", "body"))
 	}
 	if body.Slug != nil {
-		if !(*body.Slug == "org:read" || *body.Slug == "org:admin" || *body.Slug == "project:read" || *body.Slug == "project:write" || *body.Slug == "mcp:read" || *body.Slug == "mcp:write" || *body.Slug == "mcp:connect" || *body.Slug == "shadow_mcp:connect" || *body.Slug == "environment:read" || *body.Slug == "environment:write") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.slug", *body.Slug, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "shadow_mcp:connect", "environment:read", "environment:write"}))
+		if !(*body.Slug == "org:read" || *body.Slug == "org:admin" || *body.Slug == "project:read" || *body.Slug == "project:write" || *body.Slug == "mcp:read" || *body.Slug == "mcp:write" || *body.Slug == "mcp:connect" || *body.Slug == "environment:read" || *body.Slug == "environment:write") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.slug", *body.Slug, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write"}))
 		}
 	}
 	if body.ResourceType != nil {
-		if !(*body.ResourceType == "org" || *body.ResourceType == "project" || *body.ResourceType == "mcp" || *body.ResourceType == "shadow_mcp" || *body.ResourceType == "environment") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_type", *body.ResourceType, []any{"org", "project", "mcp", "shadow_mcp", "environment"}))
+		if !(*body.ResourceType == "org" || *body.ResourceType == "project" || *body.ResourceType == "mcp" || *body.ResourceType == "environment") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_type", *body.ResourceType, []any{"org", "project", "mcp", "environment"}))
 		}
 	}
 	return
@@ -15120,13 +15122,13 @@ func ValidateListRoleGrantResponseBody(body *ListRoleGrantResponseBody) (err err
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "shadow_mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "shadow_mcp:connect", "environment:read", "environment:write"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write"}))
 		}
 	}
 	for _, e := range body.SubScopes {
-		if !(e == "org:read" || e == "org:admin" || e == "project:read" || e == "project:write" || e == "mcp:read" || e == "mcp:write" || e == "mcp:connect" || e == "shadow_mcp:connect" || e == "environment:read" || e == "environment:write") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sub_scopes[*]", e, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "shadow_mcp:connect", "environment:read", "environment:write"}))
+		if !(e == "org:read" || e == "org:admin" || e == "project:read" || e == "project:write" || e == "mcp:read" || e == "mcp:write" || e == "mcp:connect" || e == "environment:read" || e == "environment:write") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sub_scopes[*]", e, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write"}))
 		}
 	}
 	for _, e := range body.Selectors {
@@ -15213,6 +15215,9 @@ func ValidateShadowMCPAccessRuleResponseBody(body *ShadowMCPAccessRuleResponseBo
 	if body.OrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}
+	if body.AccessScope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("access_scope", "body"))
+	}
 	if body.Disposition == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("disposition", "body"))
 	}
@@ -15225,9 +15230,6 @@ func ValidateShadowMCPAccessRuleResponseBody(body *ShadowMCPAccessRuleResponseBo
 	if body.DisplayName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
 	}
-	if body.RoleIds == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("role_ids", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -15236,6 +15238,14 @@ func ValidateShadowMCPAccessRuleResponseBody(body *ShadowMCPAccessRuleResponseBo
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.AccessScope != nil {
+		if !(*body.AccessScope == "organization" || *body.AccessScope == "project") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access_scope", *body.AccessScope, []any{"organization", "project"}))
+		}
 	}
 	if body.Disposition != nil {
 		if !(*body.Disposition == "allowed" || *body.Disposition == "denied") {

@@ -318,7 +318,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("approveShadowMCPApprovalRequest", func() {
-		Description("Approve a Shadow MCP request, creating an allow rule and role grants.")
+		Description("Approve a Shadow MCP request, creating an allow rule scoped to the organization or project.")
 		Security(security.ByKey, func() {
 			Scope("producer")
 		})
@@ -692,7 +692,7 @@ var SelectorModel = Type("Selector", func() {
 
 	Attribute("resource_kind", String, func() {
 		Description("The kind of resource this selector targets.")
-		Enum("project", "mcp", "shadow_mcp", "org", "environment", "*")
+		Enum("project", "mcp", "org", "environment", "*")
 	})
 	Attribute("resource_id", String, func() {
 		Description("The resource identifier, or '*' for all resources of this kind.")
@@ -714,7 +714,7 @@ var RoleGrantModel = Type("RoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "shadow_mcp:connect", "environment:read", "environment:write")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write")
 	})
 
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
@@ -728,12 +728,12 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "shadow_mcp:connect", "environment:read", "environment:write")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write")
 	})
 	Attribute("sub_scopes", ArrayOf(String), func() {
 		Description("The inherited scopes the primary scope grants.")
 		Elem(func() {
-			Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "shadow_mcp:connect", "environment:read", "environment:write")
+			Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write")
 		})
 	})
 
@@ -769,12 +769,12 @@ var ScopeModel = Type("ScopeDefinition", func() {
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "shadow_mcp:connect", "environment:read", "environment:write")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write")
 	})
 	Attribute("description", String, "What this scope protects.")
 	Attribute("resource_type", String, func() {
 		Description("The type of resource this scope applies to.")
-		Enum("org", "project", "mcp", "shadow_mcp", "environment")
+		Enum("org", "project", "mcp", "environment")
 	})
 })
 
@@ -892,12 +892,18 @@ var ListShadowMCPApprovalRequestsResult = Type("ListShadowMCPApprovalRequestsRes
 })
 
 var ShadowMCPAccessRuleModel = Type("ShadowMCPAccessRule", func() {
-	Required("id", "organization_id", "disposition", "match_breadth", "match_value", "display_name", "role_ids", "created_at", "updated_at")
+	Required("id", "organization_id", "access_scope", "disposition", "match_breadth", "match_value", "display_name", "created_at", "updated_at")
 
 	Attribute("id", String, func() {
 		Format(FormatUUID)
 	})
 	Attribute("organization_id", String)
+	Attribute("project_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("access_scope", String, func() {
+		Enum("organization", "project")
+	})
 	Attribute("disposition", String, func() {
 		Enum("allowed", "denied")
 	})
@@ -915,7 +921,6 @@ var ShadowMCPAccessRuleModel = Type("ShadowMCPAccessRule", func() {
 	Attribute("created_by", String)
 	Attribute("updated_by", String)
 	Attribute("reason", String)
-	Attribute("role_ids", ArrayOf(String))
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -943,10 +948,13 @@ var CreateShadowMCPApprovalRequestForm = Type("CreateShadowMCPApprovalRequestFor
 })
 
 var ApproveShadowMCPApprovalRequestForm = Type("ApproveShadowMCPApprovalRequestForm", func() {
-	Required("id", "match_breadth", "match_value", "display_name", "role_ids")
+	Required("id", "access_scope", "match_breadth", "match_value", "display_name")
 
 	Attribute("id", String, func() {
 		Format(FormatUUID)
+	})
+	Attribute("access_scope", String, func() {
+		Enum("organization", "project")
 	})
 	Attribute("match_breadth", String, func() {
 		Enum("full_url", "url_host", "server_identity")
@@ -956,7 +964,6 @@ var ApproveShadowMCPApprovalRequestForm = Type("ApproveShadowMCPApprovalRequestF
 	Attribute("observed_full_url", String)
 	Attribute("observed_url_host", String)
 	Attribute("observed_server_identity", String)
-	Attribute("role_ids", ArrayOf(String))
 	Attribute("reason", String)
 })
 
@@ -979,10 +986,16 @@ var DenyShadowMCPApprovalRequestForm = Type("DenyShadowMCPApprovalRequestForm", 
 })
 
 var ShadowMCPAccessRuleForm = Type("ShadowMCPAccessRuleForm", func() {
-	Required("disposition", "match_breadth", "match_value", "display_name")
+	Required("disposition", "access_scope", "match_breadth", "match_value", "display_name")
 
 	Attribute("disposition", String, func() {
 		Enum("allowed", "denied")
+	})
+	Attribute("access_scope", String, func() {
+		Enum("organization", "project")
+	})
+	Attribute("project_id", String, func() {
+		Format(FormatUUID)
 	})
 	Attribute("match_breadth", String, func() {
 		Enum("full_url", "url_host", "server_identity")
@@ -992,7 +1005,6 @@ var ShadowMCPAccessRuleForm = Type("ShadowMCPAccessRuleForm", func() {
 	Attribute("observed_full_url", String)
 	Attribute("observed_url_host", String)
 	Attribute("observed_server_identity", String)
-	Attribute("role_ids", ArrayOf(String))
 	Attribute("reason", String)
 })
 

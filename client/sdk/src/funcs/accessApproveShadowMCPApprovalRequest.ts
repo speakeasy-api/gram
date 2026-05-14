@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * approveShadowMCPApprovalRequest access
  *
  * @remarks
- * Approve a Shadow MCP request, creating an allow rule and role grants.
+ * Approve a Shadow MCP request, creating an allow rule scoped to the organization or project.
  */
 export function accessApproveShadowMCPApprovalRequest(
   client: GramCore,

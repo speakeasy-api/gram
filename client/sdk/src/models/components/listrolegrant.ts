@@ -21,7 +21,6 @@ export const ListRoleGrantScope = {
   McpRead: "mcp:read",
   McpWrite: "mcp:write",
   McpConnect: "mcp:connect",
-  ShadowMcpConnect: "shadow_mcp:connect",
   EnvironmentRead: "environment:read",
   EnvironmentWrite: "environment:write",
 } as const;
@@ -38,7 +37,6 @@ export const SubScopes = {
   McpRead: "mcp:read",
   McpWrite: "mcp:write",
   McpConnect: "mcp:connect",
-  ShadowMcpConnect: "shadow_mcp:connect",
   EnvironmentRead: "environment:read",
   EnvironmentWrite: "environment:write",
 } as const;

@@ -5320,6 +5320,8 @@ func marshalAccessShadowMCPAccessRuleToShadowMCPAccessRuleResponseBody(v *access
 	res := &ShadowMCPAccessRuleResponseBody{
 		ID:                     v.ID,
 		OrganizationID:         v.OrganizationID,
+		ProjectID:              v.ProjectID,
+		AccessScope:            v.AccessScope,
 		Disposition:            v.Disposition,
 		MatchBreadth:           v.MatchBreadth,
 		MatchValue:             v.MatchValue,
@@ -5333,14 +5335,6 @@ func marshalAccessShadowMCPAccessRuleToShadowMCPAccessRuleResponseBody(v *access
 		Reason:                 v.Reason,
 		CreatedAt:              v.CreatedAt,
 		UpdatedAt:              v.UpdatedAt,
-	}
-	if v.RoleIds != nil {
-		res.RoleIds = make([]string, len(v.RoleIds))
-		for i, val := range v.RoleIds {
-			res.RoleIds[i] = val
-		}
-	} else {
-		res.RoleIds = []string{}
 	}
 
 	return res

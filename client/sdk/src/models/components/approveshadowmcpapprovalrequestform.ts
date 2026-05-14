@@ -6,6 +6,12 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
+export const AccessScope = {
+  Organization: "organization",
+  Project: "project",
+} as const;
+export type AccessScope = ClosedEnum<typeof AccessScope>;
+
 export const MatchBreadth = {
   FullUrl: "full_url",
   UrlHost: "url_host",
@@ -14,6 +20,7 @@ export const MatchBreadth = {
 export type MatchBreadth = ClosedEnum<typeof MatchBreadth>;
 
 export type ApproveShadowMCPApprovalRequestForm = {
+  accessScope: AccessScope;
   displayName: string;
   id: string;
   matchBreadth: MatchBreadth;
@@ -22,8 +29,11 @@ export type ApproveShadowMCPApprovalRequestForm = {
   observedServerIdentity?: string | undefined;
   observedUrlHost?: string | undefined;
   reason?: string | undefined;
-  roleIds: Array<string>;
 };
+
+/** @internal */
+export const AccessScope$outboundSchema: z.ZodMiniEnum<typeof AccessScope> = z
+  .enum(AccessScope);
 
 /** @internal */
 export const MatchBreadth$outboundSchema: z.ZodMiniEnum<typeof MatchBreadth> = z
@@ -31,6 +41,7 @@ export const MatchBreadth$outboundSchema: z.ZodMiniEnum<typeof MatchBreadth> = z
 
 /** @internal */
 export type ApproveShadowMCPApprovalRequestForm$Outbound = {
+  access_scope: string;
   display_name: string;
   id: string;
   match_breadth: string;
@@ -39,7 +50,6 @@ export type ApproveShadowMCPApprovalRequestForm$Outbound = {
   observed_server_identity?: string | undefined;
   observed_url_host?: string | undefined;
   reason?: string | undefined;
-  role_ids: Array<string>;
 };
 
 /** @internal */
@@ -48,6 +58,7 @@ export const ApproveShadowMCPApprovalRequestForm$outboundSchema: z.ZodMiniType<
   ApproveShadowMCPApprovalRequestForm
 > = z.pipe(
   z.object({
+    accessScope: AccessScope$outboundSchema,
     displayName: z.string(),
     id: z.string(),
     matchBreadth: MatchBreadth$outboundSchema,
@@ -56,17 +67,16 @@ export const ApproveShadowMCPApprovalRequestForm$outboundSchema: z.ZodMiniType<
     observedServerIdentity: z.optional(z.string()),
     observedUrlHost: z.optional(z.string()),
     reason: z.optional(z.string()),
-    roleIds: z.array(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      accessScope: "access_scope",
       displayName: "display_name",
       matchBreadth: "match_breadth",
       matchValue: "match_value",
       observedFullUrl: "observed_full_url",
       observedServerIdentity: "observed_server_identity",
       observedUrlHost: "observed_url_host",
-      roleIds: "role_ids",
     });
   }),
 );
