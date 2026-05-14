@@ -60,6 +60,13 @@ func TestService_RevokeInvite_WrongOrganization(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
+	// Create a different org so the FK constraint is satisfied.
+	require.NoError(t, orgrepo.New(ti.conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   "org-other-id",
+		Name: "Other Org",
+		Slug: "other-org",
+	}))
+
 	// Insert an invitation for a different org directly in DB.
 	row, err := orgrepo.New(ti.conn).CreateInvitation(ctx, orgrepo.CreateInvitationParams{
 		OrganizationID: "org-other-id",

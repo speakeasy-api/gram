@@ -129,7 +129,7 @@ export function TeamInner() {
         request: {
           sendInviteRequestBody: {
             email: submittedEmail,
-            roleSlug: inviteRoleId || undefined,
+            roleId: inviteRoleId || undefined,
           },
         },
       },
@@ -526,7 +526,7 @@ export function TeamInner() {
             {roles.length > 0 && (
               <AnyField
                 label="Role"
-                optionality="optional"
+                optionality="visible"
                 render={() => (
                   <Select value={inviteRoleId} onValueChange={setInviteRoleId}>
                     <SelectTrigger>
