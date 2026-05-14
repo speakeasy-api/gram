@@ -1139,7 +1139,7 @@ WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS assistant_runtimes (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  assistant_thread_id uuid NOT NULL,
+  assistant_thread_id uuid,
   assistant_id uuid NOT NULL,
   project_id uuid NOT NULL,
   backend TEXT NOT NULL CHECK (backend <> '' AND CHAR_LENGTH(backend) <= 50),
@@ -1149,6 +1149,7 @@ CREATE TABLE IF NOT EXISTS assistant_runtimes (
   last_heartbeat_at timestamptz,
   backend_metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   ended_at timestamptz,
+  runtime_version smallint NOT NULL DEFAULT 1,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1164,7 +1165,11 @@ CREATE TABLE IF NOT EXISTS assistant_runtimes (
 
 CREATE UNIQUE INDEX IF NOT EXISTS assistant_runtimes_assistant_thread_id_active_key
 ON assistant_runtimes (assistant_thread_id)
-WHERE deleted IS FALSE AND ended IS FALSE;
+WHERE deleted IS FALSE AND ended IS FALSE AND runtime_version = 1;
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_runtimes_v2_one_per_assistant
+ON assistant_runtimes (project_id, assistant_id)
+WHERE runtime_version = 2 AND deleted IS FALSE AND ended IS FALSE;
 
 CREATE INDEX IF NOT EXISTS assistant_runtimes_project_id_assistant_id_state_idx
 ON assistant_runtimes (project_id, assistant_id, state)

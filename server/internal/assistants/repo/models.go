@@ -11,7 +11,7 @@ import (
 
 type AssistantRuntime struct {
 	ID                  uuid.UUID
-	AssistantThreadID   uuid.UUID
+	AssistantThreadID   uuid.NullUUID
 	AssistantID         uuid.UUID
 	ProjectID           uuid.UUID
 	Backend             string
@@ -21,6 +21,7 @@ type AssistantRuntime struct {
 	LastHeartbeatAt     pgtype.Timestamptz
 	BackendMetadataJson []byte
 	EndedAt             pgtype.Timestamptz
+	RuntimeVersion      int16
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz

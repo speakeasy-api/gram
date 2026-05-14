@@ -28,7 +28,7 @@ WHERE assistant_thread_id = $2
 
 type BackdateAssistantRuntimeUpdatedAtParams struct {
 	UpdatedAt         pgtype.Timestamptz
-	AssistantThreadID uuid.UUID
+	AssistantThreadID uuid.NullUUID
 	State             string
 }
 
@@ -55,13 +55,13 @@ RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_me
 type BeginExpireAssistantRuntimeParams struct {
 	ExpiringState string
 	ProjectID     uuid.UUID
-	ThreadID      uuid.UUID
+	ThreadID      uuid.NullUUID
 	ActiveState   string
 }
 
 type BeginExpireAssistantRuntimeRow struct {
 	ID                  uuid.UUID
-	AssistantThreadID   uuid.UUID
+	AssistantThreadID   uuid.NullUUID
 	AssistantID         uuid.UUID
 	ProjectID           uuid.UUID
 	Backend             string
@@ -350,7 +350,7 @@ INSERT INTO assistant_runtimes (
 
 type CreateAssistantRuntimeParams struct {
 	ID                  uuid.UUID
-	AssistantThreadID   uuid.UUID
+	AssistantThreadID   uuid.NullUUID
 	AssistantID         uuid.UUID
 	ProjectID           uuid.UUID
 	Backend             string
@@ -460,7 +460,7 @@ func (q *Queries) FailAssistantThreadEvent(ctx context.Context, arg FailAssistan
 }
 
 const getActiveAssistantRuntimeByThreadID = `-- name: GetActiveAssistantRuntimeByThreadID :one
-SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE assistant_thread_id = $1
   AND project_id = $2
   AND deleted IS FALSE
@@ -469,7 +469,7 @@ LIMIT 1
 `
 
 type GetActiveAssistantRuntimeByThreadIDParams struct {
-	AssistantThreadID uuid.UUID
+	AssistantThreadID uuid.NullUUID
 	ProjectID         uuid.UUID
 }
 
@@ -488,6 +488,7 @@ func (q *Queries) GetActiveAssistantRuntimeByThreadID(ctx context.Context, arg G
 		&i.LastHeartbeatAt,
 		&i.BackendMetadataJson,
 		&i.EndedAt,
+		&i.RuntimeVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -641,7 +642,7 @@ func (q *Queries) GetAssistantIgnoringDeleted(ctx context.Context, arg GetAssist
 }
 
 const getAssistantRuntime = `-- name: GetAssistantRuntime :one
-SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE id = $1
   AND project_id = $2
 `
@@ -666,6 +667,7 @@ func (q *Queries) GetAssistantRuntime(ctx context.Context, arg GetAssistantRunti
 		&i.LastHeartbeatAt,
 		&i.BackendMetadataJson,
 		&i.EndedAt,
+		&i.RuntimeVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -676,7 +678,7 @@ func (q *Queries) GetAssistantRuntime(ctx context.Context, arg GetAssistantRunti
 }
 
 const getLatestAssistantRuntimeByThreadID = `-- name: GetLatestAssistantRuntimeByThreadID :one
-SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE assistant_thread_id = $1
   AND project_id = $2
 ORDER BY created_at DESC
@@ -684,7 +686,7 @@ LIMIT 1
 `
 
 type GetLatestAssistantRuntimeByThreadIDParams struct {
-	AssistantThreadID uuid.UUID
+	AssistantThreadID uuid.NullUUID
 	ProjectID         uuid.UUID
 }
 
@@ -705,6 +707,7 @@ func (q *Queries) GetLatestAssistantRuntimeByThreadID(ctx context.Context, arg G
 		&i.LastHeartbeatAt,
 		&i.BackendMetadataJson,
 		&i.EndedAt,
+		&i.RuntimeVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -822,7 +825,7 @@ type ListAssistantRuntimesForReapParams struct {
 
 type ListAssistantRuntimesForReapRow struct {
 	ID                  uuid.UUID
-	AssistantThreadID   uuid.UUID
+	AssistantThreadID   uuid.NullUUID
 	AssistantID         uuid.UUID
 	ProjectID           uuid.UUID
 	Backend             string
@@ -1044,7 +1047,7 @@ type ListInactiveAssistantRuntimesForReapParams struct {
 
 type ListInactiveAssistantRuntimesForReapRow struct {
 	ID                  uuid.UUID
-	AssistantThreadID   uuid.UUID
+	AssistantThreadID   uuid.NullUUID
 	AssistantID         uuid.UUID
 	ProjectID           uuid.UUID
 	Backend             string
@@ -1284,7 +1287,7 @@ type LoadThreadContextRow struct {
 	UpdatedAt                pgtype.Timestamptz
 	DeletedAt                pgtype.Timestamptz
 	RuntimeID                uuid.UUID
-	AssistantThreadID        uuid.UUID
+	AssistantThreadID        uuid.NullUUID
 	RuntimeAssistantID       uuid.UUID
 	RuntimeProjectID         uuid.UUID
 	Backend                  string
@@ -1489,7 +1492,7 @@ ON CONFLICT DO NOTHING
 `
 
 type ReserveAssistantRuntimeParams struct {
-	AssistantThreadID uuid.UUID
+	AssistantThreadID uuid.NullUUID
 	AssistantID       uuid.UUID
 	ProjectID         uuid.UUID
 	Backend           string
@@ -1777,7 +1780,7 @@ WHERE project_id = $2
 type StopAssistantRuntimeParams struct {
 	State         string
 	ProjectID     uuid.UUID
-	ThreadID      uuid.UUID
+	ThreadID      uuid.NullUUID
 	StartingState string
 	ActiveState   string
 	ExpiringState string
