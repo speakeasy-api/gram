@@ -283,7 +283,7 @@ async fn spawn_thread(
     // model can still call them but they go unused. A future pass can
     // disconnect them; for now, last-writer-wins additive avoids a
     // destructive race when two threads bootstrap with different sets.
-    register_missing_servers(host, &bootstrap.mcp_servers).await?;
+    reconcile_mcp_servers(host, &bootstrap.mcp_servers).await?;
 
     let chat_id = bootstrap.chat_id.clone();
 
@@ -437,7 +437,7 @@ async fn spawn_thread(
     Ok(configured)
 }
 
-async fn register_missing_servers(
+async fn reconcile_mcp_servers(
     host: &Arc<RuntimeHost>,
     incoming: &[McpServer],
 ) -> Result<(), RunnerError> {
@@ -445,15 +445,24 @@ async fn register_missing_servers(
         return Ok(());
     }
     let mut state = host.mcp.lock().await;
-    let known: std::collections::HashSet<&str> =
-        state.registered.iter().map(|s| s.id.as_str()).collect();
-    let new_servers: Vec<McpServer> = incoming
+    // A warm VM serves multiple threads under one assistant; a later thread's
+    // bootstrap may carry the same MCP server id with a different URL or
+    // header set (e.g. environment switch). Re-register on drift so the actor
+    // disconnects the stale connection and reconnects under the new config —
+    // matching by id alone would freeze every later thread on the first
+    // thread's MCP wiring until the VM is recycled.
+    let pending: Vec<McpServer> = incoming
         .iter()
-        .filter(|s| !known.contains(s.id.as_str()))
+        .filter(|s| {
+            state
+                .registered
+                .iter()
+                .find(|prev| prev.id == s.id)
+                .is_none_or(|prev| prev != *s)
+        })
         .cloned()
         .collect();
-    drop(known);
-    for server in &new_servers {
+    for server in &pending {
         let config = build_mcp_server_config(server, &host.http_client, &host.tokens)?;
         let (reply_tx, reply_rx) = oneshot::channel();
         if host
@@ -468,7 +477,10 @@ async fn register_missing_servers(
             return Err(RunnerError::Loop("mcp actor channel closed".into()));
         }
         match reply_rx.await {
-            Ok(Ok(())) => state.registered.push(server.clone()),
+            Ok(Ok(())) => {
+                state.registered.retain(|s| s.id != server.id);
+                state.registered.push(server.clone());
+            }
             Ok(Err(e)) => {
                 tracing::warn!(server_id = %server.id, error = %e, "register mcp server failed")
             }
@@ -517,6 +529,15 @@ async fn run_mcp_actor(mut manager: McpServerManager, mut cmd_rx: mpsc::Receiver
         match cmd {
             McpCmd::Register { config, reply } => {
                 let server_id = config.id.clone();
+                // Drop the existing connection before re-registering so the
+                // new config (URL or headers) actually takes effect; the
+                // manager itself just overwrites the configs entry without
+                // tearing the live transport down.
+                if manager.connected_server(&server_id).is_some()
+                    && let Err(e) = manager.disconnect_server(&server_id).await
+                {
+                    tracing::debug!(server_id = %server_id, error = %e, "disconnect before re-register");
+                }
                 manager.register_server(config);
                 let result = match manager.connect_server(&server_id).await {
                     Ok(handle) => {

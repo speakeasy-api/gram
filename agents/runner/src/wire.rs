@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize, Clone, Hash)]
+#[derive(Debug, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
 pub struct McpServer {
     pub id: String,
     pub url: String,
