@@ -21,20 +21,20 @@ For event_types on the default slack trigger: \`["app_mention", "message"]\` cov
 
 The assistant owns one shared environment. Extend it with \`add_environment_keys\`; populate values with \`request_environment_secrets\`. Do not create a separate env per integration.
 
-Required keys for the default flow:
+Required keys for the default flow (listed in the order the user encounters them in Slack's UI — Signing Secret on Basic Information, then bot/user tokens on the Install App / OAuth & Permissions page):
+- \`SLACK_SIGNING_SECRET\` — verifies inbound webhooks from the slack trigger.
 - \`SLACK_BOT_TOKEN\` (xoxb-) — bot Web API auth.
 - \`SLACK_USER_TOKEN\` (xoxp-) — user-token Web API auth. The manifest always pre-fills the full user-scope superset so Slack issues xoxp- in the same install as xoxb-.
-- \`SLACK_SIGNING_SECRET\` — verifies inbound webhooks from the slack trigger.
 
 ## Recommended flow (slack trigger + any extras)
 
 1. **Attach a Slack toolset.** \`list_integrations\` (\`"slack"\`) → \`create_toolset\` if needed → \`attach_toolset\`. After attach, default-add the reaction platform tools (\`tools:platform:slack:add_reaction\`, \`tools:platform:slack:remove_reaction\`, \`tools:platform:slack:get_reactions\`, \`tools:platform:slack:list_reactions\`, \`tools:platform:slack:list_emoji\`) via \`add_tools_to_toolset\` — skip only if the user has explicitly said they don't want reaction tooling.
-2. **Declare keys.** \`add_environment_keys({ keys: ["SLACK_BOT_TOKEN", "SLACK_USER_TOKEN", "SLACK_SIGNING_SECRET"] })\`.
+2. **Declare keys.** \`add_environment_keys({ keys: ["SLACK_SIGNING_SECRET", "SLACK_BOT_TOKEN", "SLACK_USER_TOKEN"] })\` — Slack-UI order so the later \`request_environment_secrets\` card matches what the user sees.
 3. **Create the slack trigger.** \`create_trigger\` with \`definition_slug: "slack"\` and the relevant \`event_types\` (default \`["app_mention", "message"]\`). The response includes a \`webhook_url\` that already responds to Slack's \`url_verification\` challenge. Remember the trigger \`id\` for step 8d.
 4. **Create any additional triggers the user asked for** (e.g. \`cron\` for a scheduled digest). These are additive.
 5. **Show the install card.** Skip if \`SLACK_BOT_TOKEN\` is already populated (check \`list_environments\` → \`populated_entry_names\`). Otherwise \`show_slack_app_guide\` with the slack trigger's \`webhook_url\`. The manifest always grants the full bot- and user-scope supersets; do not pass scope overrides. The card walks the user through install + Event Subscriptions Retry — it does NOT collect any tokens. **This tool BLOCKS** until the user clicks "I'm done" — do not call other tools in parallel with it.
 6. **User installs the connection.** Slack mints both \`xoxb-\` (bot) and \`xoxp-\` (user) tokens at install + approval.
-7. **Show the tokens card.** Once the install card resolves with \`installed: true\`, call \`request_environment_secrets\` for \`SLACK_BOT_TOKEN\` (OAuth & Permissions → Bot User OAuth Token), \`SLACK_USER_TOKEN\` (OAuth & Permissions → User OAuth Token), and \`SLACK_SIGNING_SECRET\` (Basic Information → App Credentials). This is a separate card, not part of the install card. If the install card resolved with \`cancelled: true\`, do not call \`request_environment_secrets\` — they have nothing to paste.
+7. **Show the tokens card.** Once the install card resolves with \`installed: true\`, call \`request_environment_secrets\` in the order the user will read them in Slack's UI: \`SLACK_SIGNING_SECRET\` (Basic Information → App Credentials), then \`SLACK_BOT_TOKEN\` (OAuth & Permissions → Bot User OAuth Token), then \`SLACK_USER_TOKEN\` (OAuth & Permissions → User OAuth Token). This is a separate card, not part of the install card. If the install card resolved with \`cancelled: true\`, do not call \`request_environment_secrets\` — they have nothing to paste.
 8. **Self-handshake.** Single short burst, no confirmation:
    - **a.** Ask for the user's Slack handle.
    - **b.** DM the user a greeting in the assistant's voice (the persona picked via \`propose_identity\`). Do not template.
@@ -72,9 +72,9 @@ If for some reason the webhook URL isn't available at step 5 (e.g. trigger creat
 
 ## Tokens
 
-- **Bot User OAuth Token** (\`xoxb-\`) → \`SLACK_BOT_TOKEN\`. Bot-token Web API auth (acts as the bot).
-- **User OAuth Token** (\`xoxp-\`) → \`SLACK_USER_TOKEN\`. User-token Web API auth (acts as the installing user — required for reading the user's own DMs, groups, etc.).
-- **Signing Secret** → \`SLACK_SIGNING_SECRET\`. HMAC-SHA256 key for verifying \`x-slack-signature\` on the slack trigger's webhook.
+- **Signing Secret** → \`SLACK_SIGNING_SECRET\`. HMAC-SHA256 key for verifying \`x-slack-signature\` on the slack trigger's webhook. Found on Basic Information → App Credentials.
+- **Bot User OAuth Token** (\`xoxb-\`) → \`SLACK_BOT_TOKEN\`. Bot-token Web API auth (acts as the bot). Found on OAuth & Permissions after install.
+- **User OAuth Token** (\`xoxp-\`) → \`SLACK_USER_TOKEN\`. User-token Web API auth (acts as the installing user — required for reading the user's own DMs, groups, etc.). Same page as the bot token.
 - Client Secret and Verification Token are not used here.
 
 ## Gotchas
