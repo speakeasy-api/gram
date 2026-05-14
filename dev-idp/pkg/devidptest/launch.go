@@ -159,11 +159,9 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 
 	oauth21H := oauth21.NewHandler(oauth21.Config{ExternalURL: pubURL}, ks, logger, tp, db)
 	outer.Handle(oauth21.Prefix+"/", http.StripPrefix(oauth21.Prefix, oauth21H.Handler()))
-	oauth21H.RegisterRootRoutes(outer)
 
 	oauth2H := oauth2.NewHandler(oauth2.Config{ExternalURL: pubURL}, ks, logger, tp, db)
 	outer.Handle(oauth2.Prefix+"/", http.StripPrefix(oauth2.Prefix, oauth2H.Handler()))
-	oauth2H.RegisterRootRoutes(outer)
 
 	var mockWorkosURL string
 	if opts.EnableMockWorkos {
@@ -219,24 +217,21 @@ func (i *Instance) SigningKey() *rsa.PrivateKey { return i.rsaKey }
 // Gram-side external_oauth_server_metadata table.
 func (i *Instance) OAuth21Metadata(t *testing.T) []byte {
 	t.Helper()
-	return fetchMetadata(t, i.Issuer, oauth21.Prefix)
+	return fetchMetadata(t, i.OAuth21URL)
 }
 
 // OAuth20Metadata fetches the dev-idp's RFC 8414 authorization-server
 // metadata for the oauth2 mode.
 func (i *Instance) OAuth20Metadata(t *testing.T) []byte {
 	t.Helper()
-	return fetchMetadata(t, i.Issuer, oauth2.Prefix)
+	return fetchMetadata(t, i.OAuth20URL)
 }
 
-// fetchMetadata reads the RFC 8414 authorization-server metadata for an
-// issuer whose URL is host + path. Per RFC 8414 §3, the well-known suffix is
-// appended to the host and the issuer path is appended after that.
-func fetchMetadata(t *testing.T, host, issuerPath string) []byte {
+func fetchMetadata(t *testing.T, modeURL string) []byte {
 	t.Helper()
 
-	url := strings.TrimRight(host, "/") + "/.well-known/oauth-authorization-server" + issuerPath
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
+		strings.TrimRight(modeURL, "/")+"/.well-known/oauth-authorization-server", nil)
 	require.NoError(t, err, "build metadata request")
 
 	resp, err := http.DefaultClient.Do(req)

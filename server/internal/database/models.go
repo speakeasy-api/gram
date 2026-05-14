@@ -1083,7 +1083,7 @@ type RemoteMcpServerHeader struct {
 
 type RemoteSession struct {
 	ID                    uuid.UUID
-	SubjectUrn            urn.SessionSubject
+	SubjectUrn            string
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionClientID uuid.UUID
 	AccessTokenEncrypted  string

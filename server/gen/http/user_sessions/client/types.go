@@ -13,6 +13,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// RevokeUserSessionRequestBody is the type of the "userSessions" service
+// "revokeUserSession" endpoint HTTP request body.
+type RevokeUserSessionRequestBody struct {
+	// The user_session id.
+	ID string `form:"id" json:"id" xml:"id"`
+}
+
 // ListUserSessionsResponseBody is the type of the "userSessions" service
 // "listUserSessions" endpoint HTTP response body.
 type ListUserSessionsResponseBody struct {
@@ -418,6 +425,15 @@ type UserSessionResponseBody struct {
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// NewRevokeUserSessionRequestBody builds the HTTP request body from the
+// payload of the "revokeUserSession" endpoint of the "userSessions" service.
+func NewRevokeUserSessionRequestBody(p *usersessions.RevokeUserSessionPayload) *RevokeUserSessionRequestBody {
+	body := &RevokeUserSessionRequestBody{
+		ID: p.ID,
+	}
+	return body
 }
 
 // NewListUserSessionsResultOK builds a "userSessions" service

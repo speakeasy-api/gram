@@ -13,6 +13,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// RevokeUserSessionClientRequestBody is the type of the "userSessionClients"
+// service "revokeUserSessionClient" endpoint HTTP request body.
+type RevokeUserSessionClientRequestBody struct {
+	// The user_session_client id.
+	ID string `form:"id" json:"id" xml:"id"`
+}
+
 // ListUserSessionClientsResponseBody is the type of the "userSessionClients"
 // service "listUserSessionClients" endpoint HTTP response body.
 type ListUserSessionClientsResponseBody struct {
@@ -629,6 +636,16 @@ type UserSessionClientResponseBody struct {
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// NewRevokeUserSessionClientRequestBody builds the HTTP request body from the
+// payload of the "revokeUserSessionClient" endpoint of the
+// "userSessionClients" service.
+func NewRevokeUserSessionClientRequestBody(p *usersessionclients.RevokeUserSessionClientPayload) *RevokeUserSessionClientRequestBody {
+	body := &RevokeUserSessionClientRequestBody{
+		ID: p.ID,
+	}
+	return body
 }
 
 // NewListUserSessionClientsResultOK builds a "userSessionClients" service

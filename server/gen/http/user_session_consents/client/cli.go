@@ -8,6 +8,7 @@
 package client
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -100,12 +101,15 @@ func BuildListUserSessionConsentsPayload(userSessionConsentsListUserSessionConse
 
 // BuildRevokeUserSessionConsentPayload builds the payload for the
 // userSessionConsents revokeUserSessionConsent endpoint from CLI flags.
-func BuildRevokeUserSessionConsentPayload(userSessionConsentsRevokeUserSessionConsentID string, userSessionConsentsRevokeUserSessionConsentSessionToken string, userSessionConsentsRevokeUserSessionConsentApikeyToken string, userSessionConsentsRevokeUserSessionConsentProjectSlugInput string) (*usersessionconsents.RevokeUserSessionConsentPayload, error) {
+func BuildRevokeUserSessionConsentPayload(userSessionConsentsRevokeUserSessionConsentBody string, userSessionConsentsRevokeUserSessionConsentSessionToken string, userSessionConsentsRevokeUserSessionConsentApikeyToken string, userSessionConsentsRevokeUserSessionConsentProjectSlugInput string) (*usersessionconsents.RevokeUserSessionConsentPayload, error) {
 	var err error
-	var id string
+	var body RevokeUserSessionConsentRequestBody
 	{
-		id = userSessionConsentsRevokeUserSessionConsentID
-		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		err = json.Unmarshal([]byte(userSessionConsentsRevokeUserSessionConsentBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {
 			return nil, err
 		}
@@ -128,8 +132,9 @@ func BuildRevokeUserSessionConsentPayload(userSessionConsentsRevokeUserSessionCo
 			projectSlugInput = &userSessionConsentsRevokeUserSessionConsentProjectSlugInput
 		}
 	}
-	v := &usersessionconsents.RevokeUserSessionConsentPayload{}
-	v.ID = id
+	v := &usersessionconsents.RevokeUserSessionConsentPayload{
+		ID: body.ID,
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

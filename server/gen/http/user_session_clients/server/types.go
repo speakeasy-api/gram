@@ -13,6 +13,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// RevokeUserSessionClientRequestBody is the type of the "userSessionClients"
+// service "revokeUserSessionClient" endpoint HTTP request body.
+type RevokeUserSessionClientRequestBody struct {
+	// The user_session_client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
 // ListUserSessionClientsResponseBody is the type of the "userSessionClients"
 // service "listUserSessionClients" endpoint HTTP response body.
 type ListUserSessionClientsResponseBody struct {
@@ -1156,12 +1163,25 @@ func NewGetUserSessionClientPayload(id string, sessionToken *string, apikeyToken
 
 // NewRevokeUserSessionClientPayload builds a userSessionClients service
 // revokeUserSessionClient endpoint payload.
-func NewRevokeUserSessionClientPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionclients.RevokeUserSessionClientPayload {
-	v := &usersessionclients.RevokeUserSessionClientPayload{}
-	v.ID = id
+func NewRevokeUserSessionClientPayload(body *RevokeUserSessionClientRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionclients.RevokeUserSessionClientPayload {
+	v := &usersessionclients.RevokeUserSessionClientPayload{
+		ID: *body.ID,
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
+}
+
+// ValidateRevokeUserSessionClientRequestBody runs the validations defined on
+// RevokeUserSessionClientRequestBody
+func ValidateRevokeUserSessionClientRequestBody(body *RevokeUserSessionClientRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
 }

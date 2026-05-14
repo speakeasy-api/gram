@@ -8,6 +8,7 @@
 package client
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -121,12 +122,15 @@ func BuildGetUserSessionClientPayload(userSessionClientsGetUserSessionClientID s
 
 // BuildRevokeUserSessionClientPayload builds the payload for the
 // userSessionClients revokeUserSessionClient endpoint from CLI flags.
-func BuildRevokeUserSessionClientPayload(userSessionClientsRevokeUserSessionClientID string, userSessionClientsRevokeUserSessionClientSessionToken string, userSessionClientsRevokeUserSessionClientApikeyToken string, userSessionClientsRevokeUserSessionClientProjectSlugInput string) (*usersessionclients.RevokeUserSessionClientPayload, error) {
+func BuildRevokeUserSessionClientPayload(userSessionClientsRevokeUserSessionClientBody string, userSessionClientsRevokeUserSessionClientSessionToken string, userSessionClientsRevokeUserSessionClientApikeyToken string, userSessionClientsRevokeUserSessionClientProjectSlugInput string) (*usersessionclients.RevokeUserSessionClientPayload, error) {
 	var err error
-	var id string
+	var body RevokeUserSessionClientRequestBody
 	{
-		id = userSessionClientsRevokeUserSessionClientID
-		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		err = json.Unmarshal([]byte(userSessionClientsRevokeUserSessionClientBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {
 			return nil, err
 		}
@@ -149,8 +153,9 @@ func BuildRevokeUserSessionClientPayload(userSessionClientsRevokeUserSessionClie
 			projectSlugInput = &userSessionClientsRevokeUserSessionClientProjectSlugInput
 		}
 	}
-	v := &usersessionclients.RevokeUserSessionClientPayload{}
-	v.ID = id
+	v := &usersessionclients.RevokeUserSessionClientPayload{
+		ID: body.ID,
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

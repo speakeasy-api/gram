@@ -94,7 +94,6 @@ var _ = Service("userSessionClients", func() {
 
 		HTTP(func() {
 			POST("/rpc/userSessionClients.revoke")
-			Param("id")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()

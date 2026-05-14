@@ -10,6 +10,7 @@ package server
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -298,17 +299,30 @@ func DecodeRevokeUserSessionConsentRequest(mux goahttp.Muxer, decoder func(*http
 	return func(r *http.Request) (*usersessionconsents.RevokeUserSessionConsentPayload, error) {
 		var payload *usersessionconsents.RevokeUserSessionConsentPayload
 		var (
-			id               string
+			body RevokeUserSessionConsentRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateRevokeUserSessionConsentRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
 			sessionToken     *string
 			apikeyToken      *string
 			projectSlugInput *string
-			err              error
 		)
-		id = r.URL.Query().Get("id")
-		if id == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -321,10 +335,7 @@ func DecodeRevokeUserSessionConsentRequest(mux goahttp.Muxer, decoder func(*http
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		if err != nil {
-			return payload, err
-		}
-		payload = NewRevokeUserSessionConsentPayload(id, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewRevokeUserSessionConsentPayload(&body, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
