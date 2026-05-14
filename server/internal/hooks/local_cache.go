@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	organizationsRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
@@ -152,7 +153,7 @@ func (c *localSessionCache) localFallbackUser(ctx context.Context, orgID string)
 		return "", localFallbackEmail
 	}
 
-	return users[0].UserID, users[0].UserEmail
+	return conv.FromPGTextOrEmpty[string](users[0].UserID), users[0].UserEmail
 }
 
 // Set always delegates to the underlying cache so explicitly seeded sessions
