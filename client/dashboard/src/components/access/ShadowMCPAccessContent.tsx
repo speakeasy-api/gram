@@ -21,8 +21,9 @@ import {
 import { Type } from "@/components/ui/type";
 import { Input } from "@/components/moon/input";
 import { Textarea } from "@/components/moon/textarea";
-import { cn } from "@/lib/utils";
 import { useRBAC } from "@/hooks/useRBAC";
+import { cn } from "@/lib/utils";
+import { useSdkClient } from "@/contexts/Sdk";
 import type { ShadowMCPAccessRule } from "@gram/client/models/components/shadowmcpaccessrule.js";
 import type { ShadowMCPApprovalRequest } from "@gram/client/models/components/shadowmcpapprovalrequest.js";
 import {
@@ -33,14 +34,8 @@ import { useApproveShadowMCPApprovalRequestMutation } from "@gram/client/react-q
 import { useCreateShadowMCPAccessRuleMutation } from "@gram/client/react-query/createShadowMCPAccessRule.js";
 import { useDeleteShadowMCPAccessRuleMutation } from "@gram/client/react-query/deleteShadowMCPAccessRule.js";
 import { useDenyShadowMCPApprovalRequestMutation } from "@gram/client/react-query/denyShadowMCPApprovalRequest.js";
-import {
-  invalidateAllShadowMCPAccessRules,
-  useShadowMCPAccessRules,
-} from "@gram/client/react-query/shadowMCPAccessRules.js";
-import {
-  invalidateAllShadowMCPApprovalRequests,
-  useShadowMCPApprovalRequests,
-} from "@gram/client/react-query/shadowMCPApprovalRequests.js";
+import { invalidateAllShadowMCPAccessRules } from "@gram/client/react-query/shadowMCPAccessRules.js";
+import { invalidateAllShadowMCPApprovalRequests } from "@gram/client/react-query/shadowMCPApprovalRequests.js";
 import { useUpdateShadowMCPAccessRuleMutation } from "@gram/client/react-query/updateShadowMCPAccessRule.js";
 import {
   Badge,
@@ -52,7 +47,7 @@ import {
   DropdownMenuTrigger,
   Table,
 } from "@speakeasy-api/moonshine";
-import { useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Ellipsis, Plus } from "lucide-react";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -78,6 +73,10 @@ import {
 type RequestStatusFilter = "requested" | "approved" | "denied" | "all";
 type RuleDispositionFilter = "allowed" | "denied" | "all";
 type ReviewAction = "approve" | "deny";
+
+const SHADOW_MCP_PAGE_SIZE = 100;
+const SHADOW_MCP_REQUESTS_QUERY_KEY = ["shadow-mcp", "approval-requests"];
+const SHADOW_MCP_RULES_QUERY_KEY = ["shadow-mcp", "access-rules"];
 
 const MATCH_BREADTH_OPTIONS: {
   value: ShadowMCPMatchBreadth;
@@ -737,6 +736,7 @@ function RuleActionsMenu({
 
 export function ShadowMCPAccessContent() {
   const queryClient = useQueryClient();
+  const client = useSdkClient();
   const { hasScope } = useRBAC();
   const canAdmin = hasScope("org:admin");
   const [requestStatusFilter, setRequestStatusFilter] =
@@ -755,30 +755,88 @@ export function ShadowMCPAccessContent() {
     () => roleOptionsFromRoles(rolesData?.roles ?? []),
     [rolesData],
   );
-  const {
-    data: requestsData,
-    isLoading: requestsLoading,
-    error: requestsError,
-  } = useShadowMCPApprovalRequests(
-    {
-      limit: 100,
-      status: requestStatusFilter === "all" ? undefined : requestStatusFilter,
-    },
-    undefined,
-    { enabled: canAdmin },
-  );
-  const {
-    data: rulesData,
-    isLoading: rulesLoading,
-    error: rulesError,
-  } = useShadowMCPAccessRules({
-    limit: 100,
-    disposition:
-      ruleDispositionFilter === "all" ? undefined : ruleDispositionFilter,
+  const requestStatus =
+    requestStatusFilter === "all" ? undefined : requestStatusFilter;
+  const ruleDisposition =
+    ruleDispositionFilter === "all" ? undefined : ruleDispositionFilter;
+
+  const requestsQuery = useInfiniteQuery({
+    queryKey: [...SHADOW_MCP_REQUESTS_QUERY_KEY, requestStatus],
+    queryFn: ({ pageParam }) =>
+      client.access.listShadowMCPApprovalRequests({
+        limit: SHADOW_MCP_PAGE_SIZE,
+        status: requestStatus,
+        cursor: pageParam,
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: canAdmin,
+  });
+  const rulesQuery = useInfiniteQuery({
+    queryKey: [...SHADOW_MCP_RULES_QUERY_KEY, ruleDisposition],
+    queryFn: ({ pageParam }) =>
+      client.access.listShadowMCPAccessRules({
+        limit: SHADOW_MCP_PAGE_SIZE,
+        disposition: ruleDisposition,
+        cursor: pageParam,
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
 
-  const requests = requestsData?.requests ?? [];
-  const rules = rulesData?.rules ?? [];
+  const requests = useMemo(
+    () => requestsQuery.data?.pages.flatMap((page) => page.requests) ?? [],
+    [requestsQuery.data?.pages],
+  );
+  const rules = useMemo(
+    () => rulesQuery.data?.pages.flatMap((page) => page.rules) ?? [],
+    [rulesQuery.data?.pages],
+  );
+  const requestsLoading = requestsQuery.isLoading;
+  const requestsError = requestsQuery.error;
+  const rulesLoading = rulesQuery.isLoading;
+  const rulesError = rulesQuery.error;
+
+  const renderPaginationFooter = ({
+    count,
+    hasNextPage,
+    isFetching,
+    isFetchingNextPage,
+    noun,
+    onLoadMore,
+  }: {
+    count: number;
+    hasNextPage: boolean;
+    isFetching: boolean;
+    isFetchingNextPage: boolean;
+    noun: string;
+    onLoadMore: () => void;
+  }) => (
+    <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
+      <Type muted small>
+        {count.toLocaleString()} {noun}
+        {count === 1 ? "" : "s"}
+      </Type>
+
+      {hasNextPage ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onLoadMore}
+          disabled={isFetchingNextPage}
+        >
+          <Button.Text>
+            {isFetchingNextPage ? "Loading..." : "Load more"}
+          </Button.Text>
+        </Button>
+      ) : (
+        <Type muted small>
+          {isFetching ? "Refreshing..." : `End of ${noun} list`}
+        </Type>
+      )}
+    </div>
+  );
+
   const approveRequest = useApproveShadowMCPApprovalRequestMutation();
   const denyRequest = useDenyShadowMCPApprovalRequestMutation();
   const createRule = useCreateShadowMCPAccessRuleMutation();
@@ -793,6 +851,12 @@ export function ShadowMCPAccessContent() {
       invalidateAllShadowMCPApprovalRequests(queryClient),
       invalidateAllShadowMCPAccessRules(queryClient),
       invalidateAllRoles(queryClient),
+      queryClient.invalidateQueries({
+        queryKey: SHADOW_MCP_REQUESTS_QUERY_KEY,
+      }),
+      queryClient.invalidateQueries({
+        queryKey: SHADOW_MCP_RULES_QUERY_KEY,
+      }),
     ]);
   };
 
@@ -1113,12 +1177,24 @@ export function ShadowMCPAccessContent() {
               description="Blocked Shadow MCP servers will appear here after a user requests access."
             />
           ) : (
-            <Table
-              columns={requestColumns}
-              data={requests}
-              rowKey={(row) => row.id}
-              className="[&_thead]:bg-background max-h-128 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
-            />
+            <div>
+              <Table
+                columns={requestColumns}
+                data={requests}
+                rowKey={(row) => row.id}
+                className="[&_thead]:bg-background max-h-128 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
+              />
+              {renderPaginationFooter({
+                count: requests.length,
+                hasNextPage: requestsQuery.hasNextPage,
+                isFetching: requestsQuery.isFetching,
+                isFetchingNextPage: requestsQuery.isFetchingNextPage,
+                noun: "request",
+                onLoadMore: () => {
+                  void requestsQuery.fetchNextPage();
+                },
+              })}
+            </div>
           )}
         </section>
       )}
@@ -1178,12 +1254,24 @@ export function ShadowMCPAccessContent() {
             description="Create a rule manually or approve a request to make a Shadow MCP decision available for enforcement."
           />
         ) : (
-          <Table
-            columns={ruleColumns}
-            data={rules}
-            rowKey={(row) => row.id}
-            className="[&_thead]:bg-background max-h-128 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
-          />
+          <div>
+            <Table
+              columns={ruleColumns}
+              data={rules}
+              rowKey={(row) => row.id}
+              className="[&_thead]:bg-background max-h-128 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
+            />
+            {renderPaginationFooter({
+              count: rules.length,
+              hasNextPage: rulesQuery.hasNextPage,
+              isFetching: rulesQuery.isFetching,
+              isFetchingNextPage: rulesQuery.isFetchingNextPage,
+              noun: "rule",
+              onLoadMore: () => {
+                void rulesQuery.fetchNextPage();
+              },
+            })}
+          </div>
         )}
       </section>
     </div>

@@ -14,7 +14,6 @@ import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { useListCollections } from "@gram/client/react-query/listCollections.js";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
-import { useShadowMCPAccessRules } from "@gram/client/react-query/shadowMCPAccessRules.js";
 import {
   AlertTriangle,
   Check,
@@ -32,7 +31,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQueries } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueries } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type {
   ActivePanel,
@@ -43,6 +42,8 @@ import type {
 } from "./types";
 import { ANNOTATION_TO_DISPOSITION } from "./types";
 import { computePanelState, type CollectionGroup } from "./computePanelState";
+
+const SHADOW_MCP_PICKER_PAGE_SIZE = 100;
 
 interface ScopePickerPopoverProps {
   /** The resource type determines which resource list to show */
@@ -148,17 +149,58 @@ export function ScopePickerPopover({
   onCustomTabChange,
 }: ScopePickerPopoverProps) {
   const organization = useOrganization();
+  const client = useSdkClient();
   const mcpServers = useMCPServers(resourceType === "mcp");
   const isShadowMCPConnect = scope === "shadow_mcp:connect";
-  const { data: shadowMCPRulesData } = useShadowMCPAccessRules(
-    { disposition: "allowed", limit: 100 },
-    undefined,
-    { enabled: isShadowMCPConnect },
-  );
+  const shadowMCPRulesQuery = useInfiniteQuery({
+    queryKey: ["shadow-mcp", "access-rules", "allowed", "scope-picker"],
+    queryFn: ({ pageParam }) =>
+      client.access.listShadowMCPAccessRules({
+        disposition: "allowed",
+        limit: SHADOW_MCP_PICKER_PAGE_SIZE,
+        cursor: pageParam,
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: isShadowMCPConnect,
+  });
+  const {
+    data: shadowMCPRulesData,
+    fetchNextPage: fetchNextShadowMCPRulesPage,
+    hasNextPage: hasNextShadowMCPRulesPage,
+    isError: isShadowMCPRulesError,
+    isFetching: isFetchingShadowMCPRules,
+    isFetchingNextPage: isFetchingNextShadowMCPRulesPage,
+    isLoading: isLoadingShadowMCPRules,
+  } = shadowMCPRulesQuery;
+
+  useEffect(() => {
+    if (
+      !isShadowMCPConnect ||
+      isShadowMCPRulesError ||
+      !hasNextShadowMCPRulesPage ||
+      isFetchingShadowMCPRules
+    ) {
+      return;
+    }
+
+    void fetchNextShadowMCPRulesPage();
+  }, [
+    fetchNextShadowMCPRulesPage,
+    hasNextShadowMCPRulesPage,
+    isShadowMCPConnect,
+    isShadowMCPRulesError,
+    isFetchingShadowMCPRules,
+  ]);
+
   const shadowMCPRules = useMemo(
-    () => shadowMCPRulesData?.rules ?? [],
-    [shadowMCPRulesData?.rules],
+    () => shadowMCPRulesData?.pages.flatMap((page) => page.rules) ?? [],
+    [shadowMCPRulesData?.pages],
   );
+  const shadowMCPRulesLoading =
+    isLoadingShadowMCPRules ||
+    (!isShadowMCPRulesError && hasNextShadowMCPRulesPage) ||
+    isFetchingNextShadowMCPRulesPage;
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   // Override for when user clicks a mode but selectors are still empty
@@ -399,7 +441,15 @@ export function ScopePickerPopover({
         onWheel={handleResourceWheel}
         className="h-[250px] overflow-y-auto"
       >
-        {isShadowMCPConnect ? (
+        {isShadowMCPConnect && isShadowMCPRulesError ? (
+          <div className="text-muted-foreground px-3 py-3 text-sm">
+            Shadow MCP rules could not be loaded
+          </div>
+        ) : isShadowMCPConnect && shadowMCPRulesLoading ? (
+          <div className="text-muted-foreground px-3 py-3 text-sm">
+            Loading rules...
+          </div>
+        ) : isShadowMCPConnect ? (
           filteredShadowMCPRules.length === 0 ? (
             <div className="text-muted-foreground px-3 py-3 text-sm">
               {shadowMCPRules.length === 0

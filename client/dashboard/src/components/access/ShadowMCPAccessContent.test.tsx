@@ -1,13 +1,21 @@
-import { render, screen } from "@testing-library/react";
+import {
+  fireEvent,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   useRBAC: vi.fn(),
   useRoles: vi.fn(),
   useApprovalRequests: vi.fn(),
   useAccessRules: vi.fn(),
+  useSdkClient: vi.fn(),
   mutation: vi.fn(),
   invalidate: vi.fn(),
 }));
@@ -36,6 +44,10 @@ vi.mock("@/components/require-scope", () => ({
       </>
     );
   },
+}));
+
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: mocks.useSdkClient,
 }));
 
 vi.mock("@gram/client/react-query/roles.js", () => ({
@@ -211,6 +223,16 @@ function renderContent() {
 
 beforeEach(() => {
   mocks.useRBAC.mockReset();
+  mocks.useSdkClient.mockReturnValue({
+    access: {
+      listShadowMCPApprovalRequests: vi.fn().mockResolvedValue({
+        requests: [],
+      }),
+      listShadowMCPAccessRules: vi.fn().mockResolvedValue({
+        rules: [],
+      }),
+    },
+  });
   mocks.useRoles.mockReturnValue({ data: { roles: [] } });
   mocks.useApprovalRequests.mockReturnValue({
     data: { requests: [] },
@@ -228,6 +250,10 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => {
+  cleanup();
+});
+
 describe("ShadowMCPAccessContent", () => {
   it("does not load or render approval requests for non-admin org readers", () => {
     mocks.useRBAC.mockReturnValue({
@@ -239,15 +265,162 @@ describe("ShadowMCPAccessContent", () => {
 
     renderContent();
 
-    expect(mocks.useApprovalRequests).toHaveBeenCalledWith(
-      {
-        limit: 100,
-        status: "requested",
-      },
-      undefined,
-      { enabled: false },
-    );
+    expect(
+      mocks.useSdkClient().access.listShadowMCPApprovalRequests,
+    ).not.toHaveBeenCalled();
     expect(screen.queryByRole("heading", { name: "Requests" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Access Rules" })).toBeTruthy();
+  });
+
+  it("loads additional approval request pages with the next cursor", async () => {
+    const listShadowMCPApprovalRequests = vi
+      .fn()
+      .mockImplementation(({ cursor }: { cursor?: string }) => {
+        if (cursor === "next-requests") {
+          return Promise.resolve({
+            requests: [
+              {
+                id: "request-2",
+                observedName: "Second request",
+                requesterEmail: "second@example.com",
+                status: "requested",
+                blockedCount: 1,
+                lastBlockedAt: new Date("2026-01-02"),
+              },
+            ],
+          });
+        }
+
+        return Promise.resolve({
+          nextCursor: "next-requests",
+          requests: [
+            {
+              id: "request-1",
+              observedName: "First request",
+              requesterEmail: "first@example.com",
+              status: "requested",
+              blockedCount: 1,
+              lastBlockedAt: new Date("2026-01-01"),
+            },
+          ],
+        });
+      });
+    const listShadowMCPAccessRules = vi.fn().mockResolvedValue({
+      rules: [],
+    });
+    mocks.useSdkClient.mockReturnValue({
+      access: {
+        listShadowMCPApprovalRequests,
+        listShadowMCPAccessRules,
+      },
+    });
+    mocks.useRBAC.mockReturnValue({
+      hasScope: (scope: string) => scope === "org:admin",
+      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+      hasAllScopes: () => true,
+      isLoading: false,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getAllByText("First request").length).toBeGreaterThan(0);
+    });
+    const requestsSection = screen
+      .getByRole("heading", { name: "Requests" })
+      .closest("section");
+    if (!requestsSection) throw new Error("Requests section not found");
+    fireEvent.click(
+      within(requestsSection).getByRole("button", { name: "Load more" }),
+    );
+    await waitFor(() => {
+      expect(screen.getAllByText("Second request").length).toBeGreaterThan(0);
+    });
+
+    await waitFor(() => {
+      expect(listShadowMCPApprovalRequests).toHaveBeenCalledWith({
+        limit: 100,
+        status: "requested",
+        cursor: "next-requests",
+      });
+    });
+  });
+
+  it("loads additional access rule pages with the next cursor", async () => {
+    const listShadowMCPApprovalRequests = vi.fn().mockResolvedValue({
+      requests: [],
+    });
+    const listShadowMCPAccessRules = vi
+      .fn()
+      .mockImplementation(({ cursor }: { cursor?: string }) => {
+        if (cursor === "next-rules") {
+          return Promise.resolve({
+            rules: [
+              {
+                id: "rule-2",
+                displayName: "Second rule",
+                disposition: "allowed",
+                matchBreadth: "url_host",
+                matchValue: "second.example.com",
+                roleIds: [],
+                updatedAt: new Date("2026-01-02"),
+              },
+            ],
+          });
+        }
+
+        return Promise.resolve({
+          nextCursor: "next-rules",
+          rules: [
+            {
+              id: "rule-1",
+              displayName: "First rule",
+              disposition: "allowed",
+              matchBreadth: "url_host",
+              matchValue: "first.example.com",
+              roleIds: [],
+              updatedAt: new Date("2026-01-01"),
+            },
+          ],
+        });
+      });
+    mocks.useSdkClient.mockReturnValue({
+      access: {
+        listShadowMCPApprovalRequests,
+        listShadowMCPAccessRules,
+      },
+    });
+    mocks.useRBAC.mockReturnValue({
+      hasScope: (scope: string) => scope === "org:admin",
+      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+      hasAllScopes: () => true,
+      isLoading: false,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getAllByText("First rule").length).toBeGreaterThan(0);
+    });
+    const accessRuleHeadings = screen.getAllByRole("heading", {
+      name: "Access Rules",
+    });
+    const accessRulesSection =
+      accessRuleHeadings[accessRuleHeadings.length - 1]?.closest("section");
+    if (!accessRulesSection) throw new Error("Access Rules section not found");
+    fireEvent.click(
+      within(accessRulesSection).getByRole("button", { name: "Load more" }),
+    );
+    await waitFor(() => {
+      expect(screen.getAllByText("Second rule").length).toBeGreaterThan(0);
+    });
+
+    await waitFor(() => {
+      expect(listShadowMCPAccessRules).toHaveBeenCalledWith({
+        limit: 100,
+        disposition: undefined,
+        cursor: "next-rules",
+      });
+    });
   });
 });
