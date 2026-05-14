@@ -974,7 +974,7 @@ func (s *Service) findUniqueSlug(ctx context.Context, base string) (string, erro
 func randomHexSuffix(n int) (string, error) {
 	b := make([]byte, (n+1)/2)
 	if _, err := rand.Read(b); err != nil {
-		return "", err
+		return "", fmt.Errorf("crypto/rand: %w", err)
 	}
 	return hex.EncodeToString(b)[:n], nil
 }
