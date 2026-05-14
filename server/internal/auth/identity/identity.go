@@ -2,14 +2,18 @@ package identity
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
 	"regexp"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -350,6 +354,18 @@ func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 		if slug == "" {
 			slug = m.OrganizationID
 		}
+		existingOrg, err := r.orgRepo.GetOrganizationMetadata(ctx, gramOrgID)
+		switch {
+		case err == nil:
+			slug = existingOrg.Slug
+		case errors.Is(err, pgx.ErrNoRows):
+			slug, err = r.findUniqueOrgSlug(ctx, slug)
+			if err != nil {
+				return nil, fmt.Errorf("find unique slug for workos organization %q: %w", m.OrganizationID, err)
+			}
+		default:
+			return nil, fmt.Errorf("get org metadata for workos organization %q: %w", m.OrganizationID, err)
+		}
 
 		if _, err := r.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
 			ID:          gramOrgID,
@@ -389,6 +405,36 @@ func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 		return nil, fmt.Errorf("re-read organizations after workos sync: %w", err)
 	}
 	return rows, nil
+}
+
+const maxSlugAttempts = 10
+
+func (r *Resolver) findUniqueOrgSlug(ctx context.Context, base string) (string, error) {
+	candidate := base
+	for range maxSlugAttempts {
+		_, err := r.orgRepo.GetOrganizationMetadataBySlug(ctx, candidate)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return candidate, nil
+		case err != nil:
+			return "", fmt.Errorf("get organization metadata by slug %q: %w", candidate, err)
+		}
+
+		suffix, err := randomHexSuffix(4)
+		if err != nil {
+			return "", fmt.Errorf("generate slug suffix: %w", err)
+		}
+		candidate = base + "-" + suffix
+	}
+	return "", errors.New("unable to find unique slug after max attempts")
+}
+
+func randomHexSuffix(n int) (string, error) {
+	b := make([]byte, (n+1)/2)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("crypto/rand: %w", err)
+	}
+	return hex.EncodeToString(b)[:n], nil
 }
 
 func (r *Resolver) resolveGramOrgID(ctx context.Context, workosOrgID, externalID string) string {
