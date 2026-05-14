@@ -1,5 +1,29 @@
 # server
 
+## 0.52.0
+
+### Minor Changes
+
+- 512a432: assistants now self-heal when the inference provider rejects a chat as malformed: the runtime trims history to the last 5 user messages, prepends a recovery notice that nudges the agent to recover lost context via its tools, and retries — instead of leaving the thread stuck.
+- 6cf658b: Every assistant now exposes a platform toolset to its runtime alongside its user-attached toolsets, with no user-facing toolset row and no setup required. Removes the `assistant_memory` product feature flag in the process: `GET /rpc/productFeatures.get` no longer returns `assistant_memory_enabled`, and `POST /rpc/productFeatures.set` no longer accepts `"assistant_memory"` as a `feature_name` — the assistant memory tools are always-on.
+- 707bc98: Outbound Slack messages can now render rich Block Kit content. `chat.postMessage` and `chat.postEphemeral` accept an optional typed `Blocks` field (section, actions+button, context, divider) alongside the existing text fallback. Button clicks come back as `block_actions` interactions on the existing Slack trigger webhook, are correlated to the originating thread, and reach the assistant as a new turn carrying `action_id`, `action_value`, and `block_id` — so assistants can present options and receive the user's choice in the same conversation.
+- fa5ef43: Add Codex (OpenAI) hooks support. A new `/rpc/hooks.codex` endpoint accepts all six Codex hook events (SessionStart, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, Stop), enforces org-level risk policies on blocking events, and records telemetry to ClickHouse. The plugin generator now produces a downloadable Codex observability plugin (ZIP and install script) that registers the hooks with a Gram marketplace entry in `~/.codex/config.toml`. The install instructions dialog gains a Codex tab alongside Claude Code and Cursor.
+- eb65287: Remove the legacy Speakeasy IDP authentication layer and migrate to WorkOS-native auth. Authorization, token exchange, and session management now go directly through the WorkOS SDK instead of the intermediate Speakeasy IDP proxy. Deterministic UUIDv5 user/org IDs bridge cross-system identity without runtime lookups. Adds OAuth CSRF nonce validation and browser-binding cookie to the login flow.
+- bbfecc5: Allow adding multiple GitHub collaborators when publishing plugins to a marketplace. The publish dialog accepts a list of usernames as chips, and the `publishPlugins` API now takes `github_usernames` (array) instead of `github_username` (string).
+- 1057ea9: Add OTEL forwarding: customers can configure a URL and headers on the Org Logs page, and a body-tee middleware mirrors every payload received on `/rpc/hooks.otel/v1/*` to that endpoint. Forwarding is org-wide, async (bounded worker pool, fire-and-forget on failure), capped at 4 MiB per request, and gated behind `org:admin` for writes / `org:read` for reads. Header values are encrypted at rest and never returned by the API.
+- a5e0990: Added support for configuring webhooks to deliver audit log events to external destinations.
+
+### Patch Changes
+
+- 491f3b8: add an opt-in L1 ML prompt-injection classifier (deberta-v3) that runs alongside the heuristic baseline. enable the new "ML classifier (deberta-v3)" rule under the Prompt Injection category in the policy editor to layer the classifier on top of L0 heuristics. detection runs in a sidecar service; configure with `PI_CLASSIFIER_URL` and `PI_CLASSIFIER_THRESHOLD` (default `0.9`)
+- 7290607: Removed the 1-public-MCP-server cap on accounts without an active subscription. Users can now enable as many public MCP servers as they want on any plan.
+- ad3c963: `/rpc/tools.list` now accepts a `tool_types` filter and can return direct external MCP tools, unblocking the toolset editor's "Add Tools" picker for tools from already-attached external MCP servers.
+- ec37cf7: quiet false-positive Temporal workflow failure alerts: benign `ContinueAsNewError` and `CanceledError` log at Info, and `VerifyCustomDomain` is non-retryable on NXDOMAIN.
+- 6305bd6: harden AnalyzeBatch against Presidio degradation
+- 44ccc02: The assistant runtime now spills oversized MCP tool results to a file inside the assistant workdir instead of letting them 413 the provider. The in-band tool result is replaced with a pointer (`{ truncated, saved_to, original_bytes }`) so the model can read or grep the full output via the filesystem tools — no information loss, no provider error.
+- f872cc2: Drop trigger dispatches whose target assistant has been deleted instead of failing the activity; retrying can't recover a missing row.
+- 44be24a: Fix plugin re-publish so Claude Code, Cursor, and Codex marketplace clients refresh installed copies. Every plugin manifest now ships with a per-publish version (`0.1.<unix_ts>`) instead of a hardcoded `0.1.0`, so platform clients see a newer version on republish and pull the updated content.
+
 ## 0.51.2
 
 ### Patch Changes
