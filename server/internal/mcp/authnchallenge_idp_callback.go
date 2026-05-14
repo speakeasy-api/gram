@@ -1,8 +1,8 @@
-// IDP callback handler for the issuer-gated authn-challenge surface.
-// Pairs with the to-be-implemented remote_login_callback — the other
-// callback on this surface, used for upstream OAuth resource providers
-// (Linear, Notion, etc.). Reading the two side-by-side: IDP returns user
-// identity; remote returns resource-access tokens.
+// Speakeasy IDP callback handler for the issuer-gated authn-challenge
+// surface. Pairs with the to-be-implemented remote_login_callback — the
+// other callback on this surface, used for upstream OAuth resource
+// providers (Linear, Notion, etc.). Reading the two side-by-side: IDP
+// returns user identity; remote returns resource-access tokens.
 
 package mcp
 
@@ -20,16 +20,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// HandleIDPCallback is the GET endpoint the IDP redirects back to after the
-// user authenticates on the private-toolset path. Mounted at
+// HandleIDPCallback is the GET endpoint Speakeasy IDP redirects back to
+// after the user authenticates on the private-toolset path. Mounted at
 // `GET /mcp/{mcpSlug}/idp_callback`.
 //
-// It drives the IDP wire calls through s.identityResolver (WorkOS-backed)
-// and runs the standard user bootstrap (UpsertUser, posthog signup, WorkOS
-// membership sync).
+// It is independent of the chat-session manager: we drive the IDP wire calls
+// directly through s.idpClient (see speakeasyclient.go) and skip everything
+// the chat-session path bundles in (userInfoCache writes, posthog, pylon,
+// WorkOS sync, admin override, cookie issuance). We DO upsert the Gram user
+// row -- otherwise we have no Gram user_id to put in the URN.
 //
 // Side effects on success: UpsertUser, AuthnChallengeState rewrite (subject
-// stamped). The IDP tokens are consumed and discarded; no chat session
+// stamped). The IDP idToken is consumed and discarded; no chat session
 // persists.
 func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -95,31 +97,46 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeBadRequest, nil, "code is required").Log(ctx, logger)
 	}
 
-	// Exchange the authorization code for user identity via WorkOS.
-	idpUser, err := s.identityResolver.ExchangeCodeForTokens(ctx, code)
+	idToken, err := s.idpClient.ExchangeCode(ctx, code)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "failed to exchange IDP code").Log(ctx, logger)
 	}
 
-	// Run the standard post-IDP user bootstrap: UpsertUser + posthog
-	// signup event + WorkOS membership sync. Same side effects the
-	// session manager runs on dashboard logins.
-	gramUserID, err := s.identityResolver.UpsertUserFromIDP(ctx, idpUser)
+	validated, err := s.idpClient.ValidateIDToken(ctx, idToken)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to bootstrap user").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, err, "failed to validate IDP id token").Log(ctx, logger)
 	}
 
-	// Validate the user belongs to the toolset's organization before
-	// issuing a token. The mcp:connect RBAC policy operates at org level;
-	// this is the first gate.
-	if _, _, ok := s.identityResolver.HasAccessToOrganization(ctx, toolset.OrganizationID, gramUserID); !ok {
+	// Here we validate that the owner belongs to the toolset Org before proceeding
+	// We don't want to mess around with issuing tokens to non-org users
+	// Why not the project? Well the mcp:connect RBAC policy operates at
+	// an organization level. This policy will be enforced in the MCP endpoint
+	// but we defer the check to be more general here
+	authorized := false
+	for _, org := range validated.Organizations {
+		if org.ID == toolset.OrganizationID {
+			authorized = true
+			break
+		}
+	}
+	if !authorized {
 		return oops.E(oops.CodeForbidden, nil, "user is not a member of this MCP server's organization").Log(ctx, logger)
+	}
+
+	// Run the shared post-IDP user bootstrap: UpsertUser + posthog signup
+	// event + WorkOS membership sync. Same side effects the chat-session
+	// manager runs on dashboard logins, identical ordering. WorkOS sync in
+	// particular is required so downstream RBAC has the right org-membership
+	// records for an MCP-only user authenticating for the first time.
+	user, err := s.idpClient.BootstrapUser(ctx, validated)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to bootstrap user").Log(ctx, logger)
 	}
 
 	// Mint a fresh state ID so the /connect URL we redirect to is NOT the
 	// same value that just bounced through the IDP. The IDP-returned state
 	// is consumed; the new ID is what /connect's GetAndDelete will burn.
-	subject := urn.NewUserSubject(gramUserID)
+	subject := urn.NewUserSubject(user.ID)
 	challengeState.ID = uuid.NewString()
 	challengeState.Subject = &subject
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {

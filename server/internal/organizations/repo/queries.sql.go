@@ -129,6 +129,8 @@ const getOrganizationByWorkosID = `-- name: GetOrganizationByWorkosID :one
 SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE workos_id = $1
+ORDER BY id = $1, created_at ASC
+LIMIT 1
 `
 
 func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID pgtype.Text) (OrganizationMetadatum, error) {
@@ -425,47 +427,6 @@ func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID stri
 			&i.UserEmail,
 			&i.UserDisplayName,
 			&i.UserPhotoUrl,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listOrganizationsForUser = `-- name: ListOrganizationsForUser :many
-SELECT om.id, om.name, om.slug, om.workos_id
-FROM organization_user_relationships our
-JOIN organization_metadata om ON om.id = our.organization_id
-WHERE our.user_id = $1
-  AND our.deleted_at IS NULL
-  AND om.disabled_at IS NULL
-`
-
-type ListOrganizationsForUserRow struct {
-	ID       string
-	Name     string
-	Slug     string
-	WorkosID pgtype.Text
-}
-
-func (q *Queries) ListOrganizationsForUser(ctx context.Context, userID pgtype.Text) ([]ListOrganizationsForUserRow, error) {
-	rows, err := q.db.Query(ctx, listOrganizationsForUser, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListOrganizationsForUserRow
-	for rows.Next() {
-		var i ListOrganizationsForUserRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Slug,
-			&i.WorkosID,
 		); err != nil {
 			return nil, err
 		}

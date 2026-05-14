@@ -1,4 +1,4 @@
-// WorkOS-shaped REST surface served by the mock-workos mode. Wire
+// WorkOS-shaped REST surface served by the local-speakeasy mode. Wire
 // shapes match workos-go/v6 SDK types (see workos_types.go) so Gram-side's
 // `*workos.Client` decodes our responses identically to api.workos.com.
 //
@@ -21,12 +21,10 @@
 //	POST   /authorization/organizations/{id}/roles
 //	PATCH  /authorization/organizations/{id}/roles/{slug}
 //	DELETE /authorization/organizations/{id}/roles/{slug}
-package mockworkos
+package localspeakeasy
 
 import (
-	"context"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -60,8 +58,6 @@ const (
 // =============================================================================
 
 func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /user_management/authenticate", h.handleWorkosAuthenticate)
-	mux.HandleFunc("POST /user_management/sessions/revoke", h.handleWorkosRevokeSession)
 	mux.HandleFunc("GET /user_management/users/{id}", h.handleWorkosGetUser)
 	mux.HandleFunc("GET /user_management/users", h.handleWorkosListUsers)
 
@@ -83,83 +79,6 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /authorization/organizations/{id}/roles", h.handleWorkosCreateRole)
 	mux.HandleFunc("PATCH /authorization/organizations/{id}/roles/{slug}", h.handleWorkosUpdateRole)
 	mux.HandleFunc("DELETE /authorization/organizations/{id}/roles/{slug}", h.handleWorkosDeleteRole)
-}
-
-// =============================================================================
-// Authenticate (code → user + access_token)
-// =============================================================================
-
-// handleWorkosAuthenticate implements the WorkOS SDK's AuthenticateWithCode
-// endpoint. Consumes an auth code issued by the oauth2 mode's /authorize
-// and returns a response matching the workos-go AuthenticateResponse shape.
-func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	var body struct {
-		ClientID     string `json:"client_id"`
-		Code         string `json:"code"`
-		ClientSecret string `json:"client_secret"`
-		GrantType    string `json:"grant_type"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeWorkosError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-	if body.Code == "" || body.GrantType != "authorization_code" {
-		writeWorkosError(w, http.StatusBadRequest, "code and grant_type=authorization_code required")
-		return
-	}
-
-	queries := repo.New(h.db)
-
-	// Consume the auth code — issued by oauth2 mode's /authorize handler.
-	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{
-		Code: body.Code,
-		Mode: "oauth2",
-		Ts:   time.Now(),
-	})
-	if err != nil {
-		writeWorkosError(w, http.StatusBadRequest, "auth code is unknown, consumed, or expired")
-		return
-	}
-
-	user, err := queries.GetUser(ctx, stored.UserID)
-	if err != nil {
-		h.logger.ErrorContext(ctx, "authenticate: load user", slog.Any("error", err))
-		writeWorkosError(w, http.StatusInternalServerError, "failed to load user")
-		return
-	}
-
-	first, last := splitName(user.DisplayName)
-	sessionID := "mock_session_" + randomToken()
-	writeJSON(w, http.StatusOK, map[string]any{
-		"user": map[string]any{
-			"id":                  user.ID.String(),
-			"first_name":          first,
-			"last_name":           last,
-			"email":               user.Email,
-			"email_verified":      true,
-			"profile_picture_url": pgTextOrEmpty(user.PhotoUrl),
-			"created_at":          user.CreatedAt.UTC().Format(time.RFC3339),
-			"updated_at":          user.UpdatedAt.UTC().Format(time.RFC3339),
-			"external_id":         "",
-		},
-		"access_token":  mockJWT(sessionID),
-		"refresh_token": randomToken(),
-	})
-}
-
-// handleWorkosRevokeSession is a no-op mock of POST /user_management/sessions/revoke.
-func (h *Handler) handleWorkosRevokeSession(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(http.StatusOK)
-}
-
-// mockJWT builds a minimal unsigned JWT with a "sid" claim so that
-// extractSessionIDFromJWT in the sessions package can parse it.
-func mockJWT(sessionID string) string {
-	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
-	payload, _ := json.Marshal(map[string]string{"sid": sessionID})
-	payloadEnc := base64.RawURLEncoding.EncodeToString(payload)
-	return header + "." + payloadEnc + "."
 }
 
 // =============================================================================
@@ -200,7 +119,7 @@ func (h *Handler) handleWorkosListUsers(w http.ResponseWriter, r *http.Request) 
 	if email := q.Get("email"); email != "" {
 		emailNarg = sql.NullString{String: email, Valid: true}
 	}
-	orgFilter, err := h.optionalQueryOrgID(ctx, q, "organization_id")
+	orgFilter, err := optionalQueryUUID(q, "organization_id")
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, err.Error())
 		return
@@ -272,7 +191,7 @@ func (h *Handler) handleWorkosListMemberships(w http.ResponseWriter, r *http.Req
 		writeWorkosError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	orgFilter, err := h.optionalQueryOrgID(ctx, q, "organization_id")
+	orgFilter, err := optionalQueryUUID(q, "organization_id")
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, err.Error())
 		return
@@ -589,62 +508,9 @@ func (h *Handler) handleWorkosAcceptInvitation(w http.ResponseWriter, r *http.Re
 // Roles
 // =============================================================================
 
-// resolveOrgID maps an external organization ID (which may be a UUID or an
-// opaque string like a Gram KSUID "org_01KMD...") to the dev-idp's internal
-// UUID. Resolution order:
-//  1. Try UUID parse → direct lookup by organizations.id
-//  2. Lookup by organizations.workos_id (text match)
-//  3. Auto-associate: stamp workos_id on the first org without one (the
-//     default "Speakeasy" org seeded by bootstrap) so subsequent requests
-//     resolve instantly.
-func (h *Handler) resolveOrgID(ctx context.Context, raw string) (uuid.UUID, error) {
-	queries := repo.New(h.db)
-
-	// Fast path: raw is already a UUID matching an org's primary key.
-	if parsed, err := uuid.Parse(raw); err == nil {
-		if _, err := queries.GetOrganization(ctx, parsed); err == nil {
-			return parsed, nil
-		}
-	}
-
-	// Lookup by workos_id text.
-	narg := sql.NullString{String: raw, Valid: true}
-	if org, err := queries.GetOrganizationByWorkosID(ctx, narg); err == nil {
-		return org.ID, nil
-	}
-
-	// Auto-associate: stamp workos_id on the default org.
-	org, err := queries.SetOrganizationWorkosID(ctx, repo.SetOrganizationWorkosIDParams{
-		WorkosID: narg,
-		Ts:       time.Now(),
-	})
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("resolve org %q: no org available to associate: %w", raw, err)
-	}
-	h.logger.InfoContext(ctx, "auto-associated external org ID with dev-idp org",
-		slog.String("external_id", raw),
-		slog.String("dev_idp_org_id", org.ID.String()),
-	)
-	return org.ID, nil
-}
-
-// optionalQueryOrgID is like optionalQueryUUID but routes non-UUID org IDs
-// through resolveOrgID so that Gram KSUIDs work transparently.
-func (h *Handler) optionalQueryOrgID(ctx context.Context, q map[string][]string, key string) (uuid.NullUUID, error) {
-	raw := firstQuery(q, key)
-	if raw == "" {
-		return uuid.NullUUID{}, nil
-	}
-	resolved, err := h.resolveOrgID(ctx, raw)
-	if err != nil {
-		return uuid.NullUUID{}, fmt.Errorf("invalid %s", key)
-	}
-	return uuid.NullUUID{UUID: resolved, Valid: true}, nil
-}
-
 func (h *Handler) handleWorkosListRoles(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	orgID, err := h.resolveOrgID(ctx, r.PathValue("id"))
+	orgID, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, "invalid organization id")
 		return
@@ -667,7 +533,7 @@ func (h *Handler) handleWorkosListRoles(w http.ResponseWriter, r *http.Request) 
 
 func (h *Handler) handleWorkosCreateRole(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	orgID, err := h.resolveOrgID(ctx, r.PathValue("id"))
+	orgID, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, "invalid organization id")
 		return
@@ -702,7 +568,7 @@ func (h *Handler) handleWorkosCreateRole(w http.ResponseWriter, r *http.Request)
 
 func (h *Handler) handleWorkosUpdateRole(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	orgID, err := h.resolveOrgID(ctx, r.PathValue("id"))
+	orgID, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, "invalid organization id")
 		return
@@ -737,7 +603,7 @@ func (h *Handler) handleWorkosUpdateRole(w http.ResponseWriter, r *http.Request)
 
 func (h *Handler) handleWorkosDeleteRole(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	orgID, err := h.resolveOrgID(ctx, r.PathValue("id"))
+	orgID, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, "invalid organization id")
 		return

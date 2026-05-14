@@ -13,8 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -104,15 +102,7 @@ func TestService_ListGrants_NotConnected(t *testing.T) {
 	authCtx.AccountType = "enterprise"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	// Remove the org-user relationship created by InitAuthContext so the user
-	// is "not connected" from the DB perspective.
-	err := orgrepo.New(ti.conn).DeleteOrganizationUserRelationship(ctx, orgrepo.DeleteOrganizationUserRelationshipParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		UserID:         conv.ToPGText(authCtx.UserID),
-	})
-	require.NoError(t, err)
-
-	_, err = ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
+	_, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "current user has not joined this organization")
 }

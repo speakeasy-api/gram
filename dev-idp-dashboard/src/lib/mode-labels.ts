@@ -1,15 +1,15 @@
 import type { Mode } from "@/lib/devidp";
 
 export const MODE_LABELS: Record<Mode, string> = {
-  "mock-workos": "mock-workos",
+  "local-speakeasy": "local-speakeasy",
   "oauth2-1": "oauth2.1",
   oauth2: "oauth2.0",
   workos: "workos",
 };
 
 export const MODE_SUBTITLES: Record<Mode, string> = {
-  "mock-workos":
-    "Mock WorkOS REST surface — fully offline user/org/membership lookups.",
+  "local-speakeasy":
+    "Speakeasy provider exchange — backs Gram management-API login.",
   "oauth2-1": "OAuth 2.1 AS — PKCE required, DCR, OIDC.",
   oauth2: "OAuth 2.0 AS — PKCE optional, no DCR, OIDC.",
   workos: "Live WorkOS REST proxy (mounted only when WORKOS_API_KEY is set).",
@@ -20,6 +20,6 @@ export const MODE_GROUPS: ReadonlyArray<{
   title: string;
   modes: ReadonlyArray<Mode>;
 }> = [
-  { title: "WorkOS API", modes: ["mock-workos", "workos"] },
+  { title: "Gram Login Providers", modes: ["local-speakeasy", "workos"] },
   { title: "OAuth Providers", modes: ["oauth2-1", "oauth2"] },
 ];

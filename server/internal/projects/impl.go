@@ -139,7 +139,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, err
 	}
 
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("get session user info: %w", err)
 	}
@@ -229,7 +229,7 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 		return nil, oops.E(oops.CodeForbidden, nil, "organization does not match active organization context")
 	}
 
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("get session user info: %w", err)
 	}

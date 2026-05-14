@@ -28,7 +28,6 @@ import (
 	_ "embed"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -89,7 +88,6 @@ type Service struct {
 	oauthRepo                 *repo.Queries
 	enc                       *encryption.Client
 	sessions                  *sessions.Manager
-	identity                  *identity.Resolver
 	gramProvider              *providers.GramProvider
 	customProvider            *providers.CustomProvider
 	upstreamPKCEStorage       cache.TypedCacheObject[UpstreamPKCEVerifier]
@@ -100,7 +98,7 @@ type Service struct {
 	oauthStatusPageScriptData []byte
 }
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, serverURL *url.URL, cacheImpl cache.Cache, enc *encryption.Client, env *environments.EnvironmentEntries, sessions *sessions.Manager, identityResolver *identity.Resolver, guardianPolicy *guardian.Policy) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, serverURL *url.URL, cacheImpl cache.Cache, enc *encryption.Client, env *environments.EnvironmentEntries, sessions *sessions.Manager, guardianPolicy *guardian.Policy) *Service {
 	logger = logger.With(attr.SlogComponent("oauth"))
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/oauth")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/oauth")
@@ -111,7 +109,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 	tokenService := NewTokenService(cacheImpl, clientRegistration, grantManager, pkceService, logger, enc)
 
 	// Initialize OAuth providers
-	gramProvider := providers.NewGramProvider(logger, sessions, identityResolver)
+	gramProvider := providers.NewGramProvider(logger, sessions)
 	customProvider := providers.NewCustomProvider(logger, env)
 
 	// Parse templates once during initialization
@@ -140,7 +138,6 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		oauthRepo:          repo.New(db),
 		enc:                enc,
 		sessions:           sessions,
-		identity:           identityResolver,
 
 		// OAuth providers
 		gramProvider:        gramProvider,
@@ -379,7 +376,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 
 	switch provider.ProviderType {
 	case string(OAuthProxyProviderTypeGram):
-		authURL, err = s.identity.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
+		authURL, err = s.sessions.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
 			CallbackURL:     callbackURL,
 			Scope:           req.Scope,
 			State:           string(oauthReqInfoJSON),

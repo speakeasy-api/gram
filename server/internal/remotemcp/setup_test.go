@@ -75,9 +75,15 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	// Two guardian policies are required because the test setup has two
 	// conflicting needs:
 	//
-	// servicePolicy blocks loopback / private ranges so validateURL
-	// exercises the real production CIDR set, and uses a mock resolver so
-	// hostname-based test cases are deterministic.
+	//   - sessionsPolicy permits loopback so the session manager can dial the
+	//     in-process mock IDP httptest.Server (which listens on 127.0.0.1).
+	//
+	//   - servicePolicy blocks loopback / private ranges so validateURL
+	//     exercises the real production CIDR set, and uses a mock resolver so
+	//     hostname-based test cases are deterministic.
+	sessionsPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
 	servicePolicy := guardian.NewDefaultPolicy(
 		tracerProvider,
 		guardian.WithResolver(newRemoteMCPMockResolver()),
@@ -90,7 +96,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, sessionsPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 

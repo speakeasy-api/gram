@@ -2,7 +2,6 @@ package auth_test
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,28 +9,26 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
-	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth"
-	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 var (
@@ -64,55 +61,223 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service          *auth.Service
-	conn             *pgxpool.Pool
-	sessionManager   *sessions.Manager
-	identityResolver *identity.Resolver
-	mockAuthServer   *httptest.Server
-	authConfigs      auth.AuthConfigurations
-	nonceStore       cache.Cache
+	service        *auth.Service
+	conn           *pgxpool.Pool
+	sessionManager *sessions.Manager
+	mockAuthServer *httptest.Server
+	authConfigs    auth.AuthConfigurations
 }
 
-// MockUserInfo represents the user info used by the mock OIDC server
+// MockUserInfo represents the user info returned by the mock auth server
 type MockUserInfo struct {
-	UserID         string
-	Email          string
-	ExternalID     string // WorkOS external_id — simulates a backfilled user
-	OrganizationID string // WorkOS org ID returned by AuthenticateWithCode
-	Admin          bool
-	Organizations  []MockOrganizationEntry
+	UserID          string                  `json:"user_id"`
+	Email           string                  `json:"email"`
+	Admin           bool                    `json:"admin"`
+	UserWhitelisted bool                    `json:"user_whitelisted"`
+	Organizations   []MockOrganizationEntry `json:"organizations"`
 }
 
 type MockOrganizationEntry struct {
-	ID                 string
-	Name               string
-	Slug               string
-	WorkosID           *string
-	UserWorkspaceSlugs []string
+	ID                 string   `json:"id"`
+	Name               string   `json:"name"`
+	Slug               string   `json:"slug"`
+	WorkosID           *string  `json:"workos_id"`
+	UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
 }
 
-// createMockWorkOSServer creates an httptest.Server that serves the WorkOS
-// /user_management/authenticate endpoint. The WorkOS Go SDK sends requests here,
-// so this mock allows the sessions.Manager's single code path to work in tests.
-func createMockWorkOSServer(userInfo *MockUserInfo) *httptest.Server {
+// createMockAuthServer creates an httptest.Server that serves mock auth responses
+func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 	mux := http.NewServeMux()
+	idToken := fmt.Sprintf("mock_id_token_%p", userInfo)
 
-	mux.HandleFunc("POST /user_management/authenticate", func(w http.ResponseWriter, r *http.Request) {
+	// Mock the validate endpoint that sessions.GetUserInfoFromSpeakeasy calls
+	mux.HandleFunc("/v1/speakeasy_provider/validate", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		resp := map[string]any{
-			"access_token":    fmt.Sprintf("mock_access_token_%p", userInfo),
-			"refresh_token":   "",
-			"organization_id": userInfo.OrganizationID,
-			"user": map[string]string{
-				"id":                  userInfo.UserID,
-				"first_name":          userInfo.Email,
-				"last_name":           "",
-				"email":               userInfo.Email,
-				"profile_picture_url": "",
-				"external_id":         userInfo.ExternalID,
+
+		// Convert our mock user info to the expected format
+		validateResp := struct {
+			User struct {
+				ID          string `json:"id"`
+				Email       string `json:"email"`
+				DisplayName string `json:"display_name"`
+				Admin       bool   `json:"admin"`
+				Whitelisted bool   `json:"whitelisted"`
+			} `json:"user"`
+			Organizations []struct {
+				ID                 string   `json:"id"`
+				Name               string   `json:"name"`
+				Slug               string   `json:"slug"`
+				AccountType        string   `json:"account_type"`
+				WorkOSID           *string  `json:"workos_id,omitempty"`
+				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
+			} `json:"organizations"`
+		}{
+			User: struct {
+				ID          string `json:"id"`
+				Email       string `json:"email"`
+				DisplayName string `json:"display_name"`
+				Admin       bool   `json:"admin"`
+				Whitelisted bool   `json:"whitelisted"`
+			}{
+				ID:          "",
+				Email:       "",
+				DisplayName: "",
+				Admin:       false,
+				Whitelisted: false,
 			},
+			Organizations: []struct {
+				ID                 string   `json:"id"`
+				Name               string   `json:"name"`
+				Slug               string   `json:"slug"`
+				AccountType        string   `json:"account_type"`
+				WorkOSID           *string  `json:"workos_id,omitempty"`
+				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
+			}{},
 		}
-		_ = json.NewEncoder(w).Encode(resp)
+
+		validateResp.User.ID = userInfo.UserID
+		validateResp.User.Email = userInfo.Email
+		validateResp.User.DisplayName = userInfo.Email
+		validateResp.User.Admin = userInfo.Admin
+		validateResp.User.Whitelisted = userInfo.UserWhitelisted
+
+		validateResp.Organizations = make([]struct {
+			ID                 string   `json:"id"`
+			Name               string   `json:"name"`
+			Slug               string   `json:"slug"`
+			AccountType        string   `json:"account_type"`
+			WorkOSID           *string  `json:"workos_id,omitempty"`
+			UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
+		}, len(userInfo.Organizations))
+
+		for i, org := range userInfo.Organizations {
+			validateResp.Organizations[i].ID = org.ID
+			validateResp.Organizations[i].Name = org.Name
+			validateResp.Organizations[i].Slug = org.Slug
+			validateResp.Organizations[i].AccountType = "scale-up"
+			validateResp.Organizations[i].WorkOSID = org.WorkosID
+			validateResp.Organizations[i].UserWorkspaceSlugs = org.UserWorkspaceSlugs
+		}
+
+		if err := json.NewEncoder(w).Encode(validateResp); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	})
+
+	// Mock the register endpoint that CreateOrgFromSpeakeasy calls
+	mux.HandleFunc("/v1/speakeasy_provider/register", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Create a new organization and return updated user info
+		newOrg := MockOrganizationEntry{
+			ID:                 "new-org-123",
+			Name:               "New Organization",
+			Slug:               "new-org",
+			UserWorkspaceSlugs: []string{"new-workspace"},
+		}
+
+		// Add the new organization to the existing user info
+		updatedUserInfo := *userInfo
+		updatedUserInfo.Organizations = append(updatedUserInfo.Organizations, newOrg)
+
+		// Convert to validate response format
+		validateResp := struct {
+			User struct {
+				ID          string `json:"id"`
+				Email       string `json:"email"`
+				DisplayName string `json:"display_name"`
+				Admin       bool   `json:"admin"`
+				Whitelisted bool   `json:"whitelisted"`
+			} `json:"user"`
+			Organizations []struct {
+				ID                 string   `json:"id"`
+				Name               string   `json:"name"`
+				Slug               string   `json:"slug"`
+				AccountType        string   `json:"account_type"`
+				WorkOSID           *string  `json:"workos_id,omitempty"`
+				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
+			} `json:"organizations"`
+		}{
+			User: struct {
+				ID          string `json:"id"`
+				Email       string `json:"email"`
+				DisplayName string `json:"display_name"`
+				Admin       bool   `json:"admin"`
+				Whitelisted bool   `json:"whitelisted"`
+			}{
+				ID:          "",
+				Email:       "",
+				DisplayName: "",
+				Admin:       false,
+				Whitelisted: false,
+			},
+			Organizations: []struct {
+				ID                 string   `json:"id"`
+				Name               string   `json:"name"`
+				Slug               string   `json:"slug"`
+				AccountType        string   `json:"account_type"`
+				WorkOSID           *string  `json:"workos_id,omitempty"`
+				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
+			}{},
+		}
+
+		validateResp.User.ID = updatedUserInfo.UserID
+		validateResp.User.Email = updatedUserInfo.Email
+		validateResp.User.DisplayName = updatedUserInfo.Email
+		validateResp.User.Admin = updatedUserInfo.Admin
+		validateResp.User.Whitelisted = updatedUserInfo.UserWhitelisted
+
+		validateResp.Organizations = make([]struct {
+			ID                 string   `json:"id"`
+			Name               string   `json:"name"`
+			Slug               string   `json:"slug"`
+			AccountType        string   `json:"account_type"`
+			WorkOSID           *string  `json:"workos_id,omitempty"`
+			UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
+		}, len(updatedUserInfo.Organizations))
+
+		for i, org := range updatedUserInfo.Organizations {
+			validateResp.Organizations[i].ID = org.ID
+			validateResp.Organizations[i].Name = org.Name
+			validateResp.Organizations[i].Slug = org.Slug
+			validateResp.Organizations[i].AccountType = "free"
+			validateResp.Organizations[i].WorkOSID = org.WorkosID
+			validateResp.Organizations[i].UserWorkspaceSlugs = org.UserWorkspaceSlugs
+		}
+
+		if err := json.NewEncoder(w).Encode(validateResp); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	})
+
+	// Mock the exchange endpoint for code to token exchange
+	mux.HandleFunc("/v1/speakeasy_provider/exchange", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Return a mock token response
+		tokenResp := struct {
+			IDToken string `json:"id_token"`
+		}{
+			IDToken: idToken,
+		}
+
+		if err := json.NewEncoder(w).Encode(tokenResp); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	})
+
+	// Mock the login endpoint
+	mux.HandleFunc("/v1/speakeasy_provider/login", func(w http.ResponseWriter, r *http.Request) {
+		returnURL := r.URL.Query().Get("return_url")
+		if returnURL == "" {
+			http.Error(w, "missing return_url", http.StatusBadRequest)
+			return
+		}
+		// Simulate redirect to callback with mock auth code
+		http.Redirect(w, r, returnURL+"?code=mock_code", http.StatusFound)
 	})
 
 	return httptest.NewServer(mux)
@@ -124,6 +289,8 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
 
 	conn, err := infra.CloneTestDatabase(t, "authtest")
 	require.NoError(t, err)
@@ -131,13 +298,9 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	mockServer := createMockWorkOSServer(userInfo)
+	// Create mock auth server
+	mockServer := createMockAuthServer(userInfo)
 	t.Cleanup(mockServer.Close)
-
-	umClient := usermanagement.NewClient("test-api-key")
-	umClient.Endpoint = mockServer.URL
-	umClient.HTTPClient = mockServer.Client()
-	idpClient := identity.NewWorkOSAdapter(umClient)
 
 	pylon, err := pylon.NewPylon(logger, "")
 	require.NoError(t, err)
@@ -146,24 +309,23 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, nil, orgRepo.New(conn), userRepo.New(conn), pylon, posthog)
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), idpClient, billingClient, resolver)
+	speakeasyIDPClient := speakeasyclient.NewClient(logger, testenv.NewTracerProvider(t), guardianPolicy, mockServer.URL, "test-secret-key", conn, nil, posthog)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, billingClient, speakeasyIDPClient)
 
 	authConfigs := auth.AuthConfigurations{
-		IDPBaseURL:        mockServer.URL,
-		GramServerURL:     "http://localhost:8080",
-		SignInRedirectURL: "http://localhost:3000/dashboard",
-		Environment:       "test",
+		SpeakeasyServerAddress: mockServer.URL,
+		GramServerURL:          "http://localhost:8080",
+		SignInRedirectURL:      "http://localhost:3000/dashboard",
+		Environment:            "test",
 	}
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog)
 
-	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
+	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, mockServer, authConfigs)
 }
 
 func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.Context, *testInstance) {
@@ -172,6 +334,8 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
 
 	conn, err := infra.CloneTestDatabase(t, "authtest")
 	require.NoError(t, err)
@@ -179,13 +343,8 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	mockServer := createMockWorkOSServer(userInfo)
+	mockServer := createMockAuthServer(userInfo)
 	t.Cleanup(mockServer.Close)
-
-	umClient := usermanagement.NewClient("test-api-key")
-	umClient.Endpoint = mockServer.URL
-	umClient.HTTPClient = mockServer.Client()
-	idpClient := identity.NewWorkOSAdapter(umClient)
 
 	pylon, err := pylon.NewPylon(logger, "")
 	require.NoError(t, err)
@@ -194,86 +353,42 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, nil, orgRepo.New(conn), userRepo.New(conn), pylon, posthog)
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), idpClient, billingClient, resolver)
+	speakeasyIDPClient := speakeasyclient.NewClient(logger, testenv.NewTracerProvider(t), guardianPolicy, mockServer.URL, "test-secret-key", conn, nil, posthog)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, billingClient, speakeasyIDPClient)
 
 	authConfigs := auth.AuthConfigurations{
-		IDPBaseURL:        mockServer.URL,
-		GramServerURL:     "http://localhost:8080",
-		SignInRedirectURL: "http://localhost:3000/dashboard",
-		Environment:       "test",
+		SpeakeasyServerAddress: mockServer.URL,
+		GramServerURL:          "http://localhost:8080",
+		SignInRedirectURL:      "http://localhost:3000/dashboard",
+		Environment:            "test",
 	}
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog)
 
-	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
+	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, mockServer, authConfigs)
 }
 
-func newTestAuthServiceResult(_ *testing.T, svc *auth.Service, conn *pgxpool.Pool, sessionManager *sessions.Manager, resolver *identity.Resolver, mockServer *httptest.Server, authConfigs auth.AuthConfigurations, nonceStore cache.Cache) *testInstance {
+func newTestAuthServiceResult(_ *testing.T, svc *auth.Service, conn *pgxpool.Pool, sessionManager *sessions.Manager, mockServer *httptest.Server, authConfigs auth.AuthConfigurations) *testInstance {
 	return &testInstance{
-		service:          svc,
-		conn:             conn,
-		sessionManager:   sessionManager,
-		identityResolver: resolver,
-		mockAuthServer:   mockServer,
-		authConfigs:      authConfigs,
-		nonceStore:       nonceStore,
+		service:        svc,
+		conn:           conn,
+		sessionManager: sessionManager,
+		mockAuthServer: mockServer,
+		authConfigs:    authConfigs,
 	}
-}
-
-// testNonceBinding is the fixed binding value used in tests to simulate the
-// cookie set during Login. Tests must inject this into the context via
-// auth.TestNonceBindingContext so that validateAuthNonce can verify it.
-const testNonceBinding = "test-nonce-binding"
-
-// seedNonce stores a nonce in Redis so hand-crafted state params pass validation in tests.
-// The stored value is the nonce binding (simulating the cookie set during Login).
-func (ti *testInstance) seedNonce(ctx context.Context, t *testing.T, nonce string) {
-	t.Helper()
-	require.NoError(t, ti.nonceStore.Set(ctx, "auth:login_nonce:"+nonce, testNonceBinding, 10*time.Minute))
-}
-
-// stateWithNonce builds a base64-encoded state param with the given redirect and a seeded nonce.
-// The returned context includes the nonce binding so validateAuthNonce passes.
-func (ti *testInstance) stateWithNonce(ctx context.Context, t *testing.T, redirectURL string) (context.Context, string) {
-	t.Helper()
-	nonce := fmt.Sprintf("test-nonce-%d", time.Now().UnixNano())
-	ti.seedNonce(ctx, t, nonce)
-	state := map[string]string{
-		"final_destination_url": redirectURL,
-		"nonce":                 nonce,
-	}
-	stateJSON, err := json.Marshal(state)
-	require.NoError(t, err)
-	return auth.TestNonceBindingContext(ctx, testNonceBinding), base64.RawURLEncoding.EncodeToString(stateJSON)
-}
-
-// callbackWithNonce creates a CallbackPayload with a valid nonce and calls Callback.
-// Shorthand for the common pattern in e2e tests.
-func (ti *testInstance) callbackWithNonce(ctx context.Context, t *testing.T) (*gen.CallbackResult, error) {
-	t.Helper()
-	ctx, stateParam := ti.stateWithNonce(ctx, t, "")
-	res, err := ti.service.Callback(ctx, &gen.CallbackPayload{
-		Code:  "mock_code",
-		State: &stateParam,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("callback with nonce: %w", err)
-	}
-	return res, nil
 }
 
 // Helper function to create a default mock user info
 func defaultMockUserInfo() *MockUserInfo {
 	return &MockUserInfo{
-		UserID: "test-user-123",
-		Email:  "test@example.com",
-		Admin:  false,
+		UserID:          "test-user-123",
+		Email:           "test@example.com",
+		Admin:           false,
+		UserWhitelisted: true,
 		Organizations: []MockOrganizationEntry{
 			{
 				ID:                 "org-123",
@@ -288,9 +403,10 @@ func defaultMockUserInfo() *MockUserInfo {
 // Helper function to create a speakeasy user mock info
 func speakeasyMockUserInfo() *MockUserInfo {
 	return &MockUserInfo{
-		UserID: "speakeasy-user-123",
-		Email:  "test@speakeasy.com",
-		Admin:  false,
+		UserID:          "speakeasy-user-123",
+		Email:           "test@speakeasy.com",
+		Admin:           false,
+		UserWhitelisted: true,
 		Organizations: []MockOrganizationEntry{
 			{
 				ID:                 "speakeasy-team-123",
@@ -311,9 +427,10 @@ func speakeasyMockUserInfo() *MockUserInfo {
 // Helper function to create an admin user mock info
 func adminMockUserInfo() *MockUserInfo {
 	return &MockUserInfo{
-		UserID: "admin-user-123",
-		Email:  "admin@speakeasyapi.dev",
-		Admin:  true,
+		UserID:          "admin-user-123",
+		Email:           "admin@speakeasyapi.dev",
+		Admin:           true,
+		UserWhitelisted: true,
 		Organizations: []MockOrganizationEntry{
 			{
 				ID:                 "admin-org-123",
@@ -327,8 +444,8 @@ func adminMockUserInfo() *MockUserInfo {
 
 // createTestUser creates a user record in the database for testing
 func (ti *testInstance) createTestUser(ctx context.Context, userInfo *MockUserInfo) error {
-	usersQueries := userRepo.New(ti.conn)
-	_, err := usersQueries.UpsertUser(ctx, userRepo.UpsertUserParams{
+	usersQueries := usersRepo.New(ti.conn)
+	_, err := usersQueries.UpsertUser(ctx, usersRepo.UpsertUserParams{
 		ID:          userInfo.UserID,
 		Email:       userInfo.Email,
 		DisplayName: userInfo.Email,
@@ -341,8 +458,8 @@ func (ti *testInstance) createTestUser(ctx context.Context, userInfo *MockUserIn
 	return nil
 }
 
-// createTestOrganization creates an organization record and org-user membership in the database for testing.
-func (ti *testInstance) createTestOrganization(ctx context.Context, org MockOrganizationEntry, userID string) error {
+// createTestOrganization creates an organization record in the database for testing
+func (ti *testInstance) createTestOrganization(ctx context.Context, org MockOrganizationEntry) error {
 	orgQueries := orgRepo.New(ti.conn)
 	_, err := orgQueries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:       org.ID,
@@ -352,15 +469,6 @@ func (ti *testInstance) createTestOrganization(ctx context.Context, org MockOrga
 	})
 	if err != nil {
 		return fmt.Errorf("failed to upsert organization metadata: %w", err)
-	}
-	if userID != "" {
-		_, err = orgQueries.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
-			OrganizationID: org.ID,
-			UserID:         conv.ToPGText(userID),
-		})
-		if err != nil {
-			return fmt.Errorf("failed to upsert organization user relationship: %w", err)
-		}
 	}
 	return nil
 }

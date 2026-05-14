@@ -79,7 +79,7 @@ func (s *Service) ClearCache(ctx context.Context, payload *gen.ClearCachePayload
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
 	}
@@ -118,7 +118,7 @@ func (s *Service) ListRegistries(ctx context.Context, payload *gen.ListRegistrie
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
 	}

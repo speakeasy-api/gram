@@ -13,8 +13,8 @@ var User = Type("User", func() {
 	Attribute("display_name", String, "Display name.")
 	Attribute("photo_url", String, "Optional photo URL.")
 	Attribute("github_handle", String, "Optional GitHub handle.")
-	Attribute("admin", Boolean, "Admin flag.")
-	Attribute("whitelisted", Boolean, "Whitelist flag.")
+	Attribute("admin", Boolean, "Admin flag echoed by local-speakeasy validate.")
+	Attribute("whitelisted", Boolean, "Whitelist flag echoed by local-speakeasy validate.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -33,7 +33,7 @@ var Organization = Type("Organization", func() {
 	Attribute("name", String, "Display name.")
 	Attribute("slug", String, "URL slug (unique).")
 	Attribute("account_type", String, "Plan tier (`free`, etc.).")
-	Attribute("workos_id", String, "Optional WorkOS organization id.")
+	Attribute("workos_id", String, "Optional WorkOS organization id echoed by local-speakeasy validate.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -46,7 +46,7 @@ var Organization = Type("Organization", func() {
 
 // OrganizationRole mirrors the dev-idp `organization_roles` table.
 // Surfaced from /rpc/organizationRoles.* and the WorkOS-emulation
-// surface under /mock-workos/authorization/organizations/{id}/roles
+// surface under /local-speakeasy/authorization/organizations/{id}/roles
 // (idp-design.md §7.1, "WorkOS emulation").
 var OrganizationRole = Type("OrganizationRole", func() {
 	Attribute("id", String, "Role UUID.", func() {
@@ -70,7 +70,7 @@ var OrganizationRole = Type("OrganizationRole", func() {
 
 // Invitation mirrors the dev-idp `invitations` table. Backs the
 // /rpc/invitations.* surface and the WorkOS-emulation surface under
-// /mock-workos/user_management/invitations*.
+// /local-speakeasy/user_management/invitations*.
 var Invitation = Type("Invitation", func() {
 	Attribute("id", String, "Invitation UUID.", func() {
 		Format(FormatUUID)

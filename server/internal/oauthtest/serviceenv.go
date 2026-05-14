@@ -36,7 +36,7 @@ func NewOAuthServiceEnv(t *testing.T, cacheAdapter cache.Cache, enc *encryption.
 	serverURL, err := url.Parse("http://0.0.0.0")
 	require.NoError(t, err)
 
-	svc := oauth.NewService(logger, tracerProvider, meterProvider, nil, serverURL, cacheAdapter, enc, nil, nil, nil, nil)
+	svc := oauth.NewService(logger, tracerProvider, meterProvider, nil, serverURL, cacheAdapter, enc, nil, nil, nil)
 
 	return &OAuthServiceEnv{
 		TokenIssuer: NewTokenIssuer(t, cacheAdapter, enc),

@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
-	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
@@ -20,18 +19,12 @@ func TestService_Callback(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		ctx, instance := newTestAuthService(t, userInfo)
-
-		// Seed user + orgs in DB so BuildUserInfoFromDB can find them
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
-		for _, org := range userInfo.Organizations {
-			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+		code := "mock_code"
+		payload := &gen.CallbackPayload{
+			Code: code,
 		}
 
-		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
-			State: &stateParam,
-		})
+		result, err := instance.service.Callback(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
@@ -41,22 +34,43 @@ func TestService_Callback(t *testing.T) {
 		require.Equal(t, result.SessionToken, result.SessionCookie)
 	})
 
-	// Default org selection (fallback to first org) is covered by
-	// TestE2E_Callback_MultipleOrgs and TestE2E_Callback_IDPOrgSelection.
+	t.Run("speakeasy user without state uses first returned organization", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := speakeasyMockUserInfo()
+		userInfo.Organizations[0], userInfo.Organizations[1] = userInfo.Organizations[1], userInfo.Organizations[0]
+		ctx, instance := newTestAuthService(t, userInfo)
+		code := "mock_code"
+		payload := &gen.CallbackPayload{
+			Code: code,
+		}
+
+		result, err := instance.service.Callback(ctx, payload)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		require.Equal(t, instance.authConfigs.SignInRedirectURL, result.Location)
+		require.NotEmpty(t, result.SessionToken)
+
+		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
+		require.NoError(t, err, "load session after callback")
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok, "auth context should be set after callback")
+		require.Equal(t, "other-org-123", authCtx.ActiveOrganizationID, "speakeasy user without state should use first returned org")
+	})
 
 	t.Run("callback final destination selects active organization", func(t *testing.T) {
 		t.Parallel()
 
 		userInfo := speakeasyMockUserInfo()
 		ctx, instance := newTestAuthService(t, userInfo)
-
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
-		for _, org := range userInfo.Organizations {
-			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
-		}
-
 		redirectURL := "https://dev.getgram.ai/other-org/projects/default"
-		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
+
+		stateJSON, err := json.Marshal(map[string]string{
+			"final_destination_url": redirectURL,
+		})
+		require.NoError(t, err)
+		stateParam := base64.RawURLEncoding.EncodeToString(stateJSON)
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
 			Code:  "mock_code",
@@ -90,19 +104,9 @@ func TestService_Callback(t *testing.T) {
 		})
 
 		ctx, instance := newTestAuthService(t, userInfo)
-
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
-		for _, org := range userInfo.Organizations {
-			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
-		}
-
 		ctx = contextvalues.SetAdminOverrideInContext(ctx, "override-org")
 
-		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
-			State: &stateParam,
-		})
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.NotEmpty(t, result.SessionToken)
@@ -128,18 +132,14 @@ func TestService_Callback(t *testing.T) {
 		})
 		ctx, instance := newTestAuthService(t, userInfo)
 
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
-		for _, org := range userInfo.Organizations {
-			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+		// Set admin override in context
+		ctx = contextvalues.SetAdminOverrideInContext(ctx, "customer-org")
+		code := "mock_code"
+		payload := &gen.CallbackPayload{
+			Code: code,
 		}
 
-		ctx = contextvalues.SetAdminOverrideInContext(ctx, "customer-org")
-
-		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
-			State: &stateParam,
-		})
+		result, err := instance.service.Callback(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
@@ -160,7 +160,12 @@ func TestService_Callback(t *testing.T) {
 		userInfo.Organizations = []MockOrganizationEntry{}
 		ctx, instance := newTestAuthService(t, userInfo)
 
-		ctx, stateParam := instance.stateWithNonce(ctx, t, "/?disposition=assistants")
+		stateData := map[string]string{
+			"final_destination_url": "/?disposition=assistants",
+		}
+		stateJSON, err := json.Marshal(stateData)
+		require.NoError(t, err)
+		stateParam := base64.RawURLEncoding.EncodeToString(stateJSON)
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
 			Code:  "mock_code",
@@ -170,7 +175,7 @@ func TestService_Callback(t *testing.T) {
 		require.NotNil(t, result)
 
 		require.NotContains(t, result.Location, "signin_error=", "auto-provision should not surface a signin error")
-		require.Contains(t, result.Location, "/projects/default/assistants/new?disposition=assistants", "auto-provisioned redirect should target the assistants/new page on the new org with the disposition marker")
+		require.Equal(t, "/new-org/projects/default/assistants/new?disposition=assistants", result.Location, "auto-provisioned redirect should target the assistants/new page on the new org with the disposition marker")
 		require.NotEmpty(t, result.SessionToken)
 		require.Equal(t, result.SessionToken, result.SessionCookie)
 	})
@@ -179,14 +184,14 @@ func TestService_Callback(t *testing.T) {
 		t.Parallel()
 
 		userInfo := defaultMockUserInfo()
-		userInfo.Organizations = []MockOrganizationEntry{}
+		userInfo.Organizations = []MockOrganizationEntry{} // No organizations
 		ctx, instance := newTestAuthService(t, userInfo)
+		code := "mock_code"
+		payload := &gen.CallbackPayload{
+			Code: code,
+		}
 
-		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
-			State: &stateParam,
-		})
+		result, err := instance.service.Callback(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
@@ -201,135 +206,15 @@ func TestService_Callback(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		ctx, instance := newTestAuthService(t, userInfo)
-		_ = ctx
-
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+		payload := &gen.CallbackPayload{
 			Code: "",
-		})
+		}
+
+		result, err := instance.service.Callback(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
 		require.Contains(t, result.Location, "signin_error=")
-		require.Empty(t, result.SessionToken)
-	})
-
-	t.Run("missing nonce returns error", func(t *testing.T) {
-		t.Parallel()
-
-		userInfo := defaultMockUserInfo()
-		ctx, instance := newTestAuthService(t, userInfo)
-		_ = instance
-
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code: "mock_code",
-		})
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		require.Contains(t, result.Location, "signin_error=")
-		require.Empty(t, result.SessionToken)
-	})
-
-	t.Run("forged nonce returns error", func(t *testing.T) {
-		t.Parallel()
-
-		userInfo := defaultMockUserInfo()
-		ctx, instance := newTestAuthService(t, userInfo)
-
-		// Craft state with a nonce that was never stored in Redis
-		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
-		// Delete the nonce to simulate a forged/expired one
-		require.NoError(t, instance.nonceStore.Delete(ctx, "auth:login_nonce:"+extractNonceFromState(t, stateParam)))
-
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
-			State: &stateParam,
-		})
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		require.Contains(t, result.Location, "signin_error=")
-		require.Empty(t, result.SessionToken)
-	})
-
-	t.Run("nonce replay returns error", func(t *testing.T) {
-		t.Parallel()
-
-		userInfo := defaultMockUserInfo()
-		ctx, instance := newTestAuthService(t, userInfo)
-
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
-		for _, org := range userInfo.Organizations {
-			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
-		}
-
-		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
-
-		// First callback succeeds
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
-			State: &stateParam,
-		})
-		require.NoError(t, err)
-		require.NotEmpty(t, result.SessionToken, "first callback should succeed")
-
-		// Replaying the same state should fail — nonce was consumed
-		result, err = instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
-			State: &stateParam,
-		})
-		require.NoError(t, err)
-		require.Contains(t, result.Location, "signin_error=", "replayed nonce should be rejected")
-		require.Empty(t, result.SessionToken)
-	})
-
-	t.Run("mismatched nonce binding cookie returns error", func(t *testing.T) {
-		t.Parallel()
-
-		userInfo := defaultMockUserInfo()
-		ctx, instance := newTestAuthService(t, userInfo)
-
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
-		for _, org := range userInfo.Organizations {
-			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
-		}
-
-		// Seed nonce with one binding but inject a different binding into
-		// the context (simulating a cookie from a different browser).
-		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
-		ctx = auth.TestNonceBindingContext(ctx, "wrong-binding-value")
-
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
-			State: &stateParam,
-		})
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		require.Contains(t, result.Location, "signin_error=", "mismatched cookie should be rejected")
-		require.Empty(t, result.SessionToken)
-	})
-
-	t.Run("missing nonce binding cookie returns error", func(t *testing.T) {
-		t.Parallel()
-
-		userInfo := defaultMockUserInfo()
-		ctx, instance := newTestAuthService(t, userInfo)
-
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
-		for _, org := range userInfo.Organizations {
-			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
-		}
-
-		// Seed nonce normally but strip the binding from context
-		// (simulating no cookie sent by the browser).
-		_, stateParam := instance.stateWithNonce(ctx, t, "")
-		// ctx has no nonce binding — simulates missing cookie
-
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
-			State: &stateParam,
-		})
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		require.Contains(t, result.Location, "signin_error=", "missing cookie should be rejected")
 		require.Empty(t, result.SessionToken)
 	})
 
@@ -341,12 +226,12 @@ func TestService_Callback(t *testing.T) {
 
 		// Override the mock server to return an error for this test
 		instance.mockAuthServer.Config.Handler = nil
+		code := "invalid_code"
+		payload := &gen.CallbackPayload{
+			Code: code,
+		}
 
-		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "invalid_code",
-			State: &stateParam,
-		})
+		result, err := instance.service.Callback(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
@@ -354,18 +239,74 @@ func TestService_Callback(t *testing.T) {
 		require.Empty(t, result.SessionToken)
 	})
 
+	t.Run("callback without state redirects to default URL", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+		code := "mock_code"
+		payload := &gen.CallbackPayload{
+			Code: code,
+		}
+
+		result, err := instance.service.Callback(ctx, payload)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		require.Equal(t, instance.authConfigs.SignInRedirectURL, result.Location)
+		require.NotEmpty(t, result.SessionToken)
+	})
+
+	t.Run("callback with empty state redirects to default URL", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+		code := "mock_code"
+
+		// Create state with empty final_destination_url
+		stateData := map[string]string{
+			"final_destination_url": "",
+		}
+		stateJSON, err := json.Marshal(stateData)
+		require.NoError(t, err)
+		stateParam := base64.RawURLEncoding.EncodeToString(stateJSON)
+
+		payload := &gen.CallbackPayload{
+			Code:  code,
+			State: &stateParam,
+		}
+
+		result, err := instance.service.Callback(ctx, payload)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		require.Equal(t, instance.authConfigs.SignInRedirectURL, result.Location)
+		require.NotEmpty(t, result.SessionToken)
+	})
+
 	t.Run("callback with state redirects to specified URL", func(t *testing.T) {
 		t.Parallel()
 
 		userInfo := defaultMockUserInfo()
 		ctx, instance := newTestAuthService(t, userInfo)
+		code := "mock_code"
 		redirectURL := "http://localhost:3000/dashboard/projects/my-project"
 
-		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+		// Create state with redirect URL
+		stateData := map[string]string{
+			"final_destination_url": redirectURL,
+		}
+		stateJSON, err := json.Marshal(stateData)
+		require.NoError(t, err)
+		stateParam := base64.RawURLEncoding.EncodeToString(stateJSON)
+
+		payload := &gen.CallbackPayload{
+			Code:  code,
 			State: &stateParam,
-		})
+		}
+
+		result, err := instance.service.Callback(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
@@ -378,17 +319,50 @@ func TestService_Callback(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		ctx, instance := newTestAuthService(t, userInfo)
+		code := "mock_code"
 		redirectURL := "http://localhost:3000/dashboard/projects/my-project?tab=settings&view=details"
 
-		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+		// Create state with complex redirect URL
+		stateData := map[string]string{
+			"final_destination_url": redirectURL,
+		}
+		stateJSON, err := json.Marshal(stateData)
+		require.NoError(t, err)
+		stateParam := base64.RawURLEncoding.EncodeToString(stateJSON)
+
+		payload := &gen.CallbackPayload{
+			Code:  code,
 			State: &stateParam,
-		})
+		}
+
+		result, err := instance.service.Callback(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
 		require.Equal(t, "/dashboard/projects/my-project?tab=settings&view=details", result.Location)
+		require.NotEmpty(t, result.SessionToken)
+	})
+
+	t.Run("callback with invalid state redirects to default URL", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+		code := "mock_code"
+
+		// Create invalid state (not valid base64 JSON)
+		invalidState := "not-valid-base64-json!!!"
+
+		payload := &gen.CallbackPayload{
+			Code:  code,
+			State: &invalidState,
+		}
+
+		result, err := instance.service.Callback(ctx, payload)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		require.Equal(t, instance.authConfigs.SignInRedirectURL, result.Location)
 		require.NotEmpty(t, result.SessionToken)
 	})
 
@@ -400,9 +374,7 @@ func TestService_Callback(t *testing.T) {
 		redirectURL := "http://localhost:3000/dashboard/environments/prod"
 
 		// Simulate the full flow: Login -> Callback
-		// Inject a nonce binding into context (normally set by middleware cookie).
-		ctx = auth.TestNonceBindingContext(ctx, testNonceBinding)
-
+		// Step 1: Call Login with redirect
 		loginPayload := &gen.LoginPayload{
 			Redirect: &redirectURL,
 		}
@@ -410,25 +382,30 @@ func TestService_Callback(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, loginResult)
 
+		// Step 2: Extract state parameter from login redirect URL
 		stateFromLogin := extractStateFromURL(t, loginResult.Location)
 		require.NotEmpty(t, stateFromLogin)
 
-		callbackResult, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+		// Step 3: Call Callback with the state
+		callbackPayload := &gen.CallbackPayload{
 			Code:  "mock_code",
 			State: &stateFromLogin,
-		})
+		}
+		callbackResult, err := instance.service.Callback(ctx, callbackPayload)
 		require.NoError(t, err)
 		require.NotNil(t, callbackResult)
 
+		// Step 4: Verify the callback redirects to the original redirect URL
 		require.Equal(t, "/dashboard/environments/prod", callbackResult.Location)
 		require.NotEmpty(t, callbackResult.SessionToken)
 	})
 }
 
-// extractStateFromURL extracts the state query parameter from a URL string.
+// Helper function to extract state parameter from a URL string
 func extractStateFromURL(t *testing.T, urlStr string) string {
 	t.Helper()
 
+	// Find the position of "state=" in the URL
 	stateStart := 0
 	for i := 0; i < len(urlStr); i++ {
 		if i+6 <= len(urlStr) && urlStr[i:i+6] == "state=" {
@@ -441,6 +418,7 @@ func extractStateFromURL(t *testing.T, urlStr string) string {
 		return ""
 	}
 
+	// Find the end of the state parameter (next & or end of string)
 	stateEnd := len(urlStr)
 	for i := stateStart; i < len(urlStr); i++ {
 		if urlStr[i] == '&' {
@@ -450,18 +428,4 @@ func extractStateFromURL(t *testing.T, urlStr string) string {
 	}
 
 	return urlStr[stateStart:stateEnd]
-}
-
-// extractNonceFromState decodes a base64 state param and returns the nonce field.
-func extractNonceFromState(t *testing.T, stateParam string) string {
-	t.Helper()
-
-	raw, err := base64.RawURLEncoding.DecodeString(stateParam)
-	require.NoError(t, err)
-
-	var state struct {
-		Nonce string `json:"nonce"`
-	}
-	require.NoError(t, json.Unmarshal(raw, &state))
-	return state.Nonce
 }

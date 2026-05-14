@@ -689,28 +689,6 @@ func (q *Queries) GetOrganization(ctx context.Context, id uuid.UUID) (Organizati
 	return i, err
 }
 
-const getOrganizationByWorkosID = `-- name: GetOrganizationByWorkosID :one
-SELECT id, name, slug, account_type, workos_id, created_at, updated_at FROM organizations WHERE workos_id = ?1
-`
-
-// GetOrganizationByWorkosID looks up an organization by its workos_id
-// text field. Used by mock-workos handlers to resolve external org IDs
-// (e.g. Gram KSUIDs like "org_01KMD...") to the internal dev-idp org.
-func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID sql.NullString) (Organization, error) {
-	row := q.db.QueryRowContext(ctx, getOrganizationByWorkosID, workosID)
-	var i Organization
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Slug,
-		&i.AccountType,
-		&i.WorkosID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const getOrganizationRoleBySlug = `-- name: GetOrganizationRoleBySlug :one
 SELECT id, organization_id, slug, name, description, created_at, updated_at FROM organization_roles
 WHERE organization_id = ?1 AND slug = ?2
@@ -1222,38 +1200,6 @@ type RevokeTokenParams struct {
 func (q *Queries) RevokeToken(ctx context.Context, arg RevokeTokenParams) error {
 	_, err := q.db.ExecContext(ctx, revokeToken, arg.Ts, arg.Token, arg.Mode)
 	return err
-}
-
-const setOrganizationWorkosID = `-- name: SetOrganizationWorkosID :one
-UPDATE organizations
-SET workos_id = ?1, updated_at = ?2
-WHERE id = (
-  SELECT id FROM organizations WHERE workos_id IS NULL ORDER BY created_at ASC LIMIT 1
-)
-RETURNING id, name, slug, account_type, workos_id, created_at, updated_at
-`
-
-type SetOrganizationWorkosIDParams struct {
-	WorkosID sql.NullString
-	Ts       time.Time
-}
-
-// SetOrganizationWorkosID stamps the workos_id on the first org that
-// doesn't already have one. Used by mock-workos to auto-associate an
-// external org ID with the default dev-idp org on first request.
-func (q *Queries) SetOrganizationWorkosID(ctx context.Context, arg SetOrganizationWorkosIDParams) (Organization, error) {
-	row := q.db.QueryRowContext(ctx, setOrganizationWorkosID, arg.WorkosID, arg.Ts)
-	var i Organization
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Slug,
-		&i.AccountType,
-		&i.WorkosID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
 
 const touchInvitation = `-- name: TouchInvitation :one
