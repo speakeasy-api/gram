@@ -207,6 +207,13 @@ func selectRemote(remotes []*types.ExternalMCPRemote, remoteURL *string, transpo
 func resolveRemoteURL(rawURL string, declared map[string]*types.ExternalMCPRemoteVariable, supplied map[string]string) (string, error) {
 	resolved := rawURL
 	for name, variable := range declared {
+		// Secret URL variables can't be safely installed via this tool: the
+		// substituted value would be persisted in the plaintext url column
+		// and surfaced in the install response. Catalog authors should
+		// declare secrets as headers, not URL placeholders.
+		if variable != nil && variable.IsSecret != nil && *variable.IsSecret {
+			return "", oops.E(oops.CodeBadRequest, nil, "url variable %q is declared as secret; secrets in the URL path are not supported — ask the catalog author to declare it as a header instead", name)
+		}
 		value, ok := supplied[name]
 		if !ok || value == "" {
 			if variable != nil && variable.Default != nil {

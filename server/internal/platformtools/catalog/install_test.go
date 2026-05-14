@@ -87,6 +87,18 @@ func TestResolveRemoteURL_MissingRequired(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestResolveRemoteURL_RejectsSecretVariable(t *testing.T) {
+	t.Parallel()
+
+	secret := true
+	declared := map[string]*types.ExternalMCPRemoteVariable{
+		"token": {Description: nil, IsRequired: nil, IsSecret: &secret, Default: nil, Choices: nil},
+	}
+
+	_, err := resolveRemoteURL("https://example/{token}/mcp", declared, map[string]string{"token": "shh"})
+	require.Error(t, err)
+}
+
 func TestResolveRemoteURL_RejectsUnknownChoice(t *testing.T) {
 	t.Parallel()
 
