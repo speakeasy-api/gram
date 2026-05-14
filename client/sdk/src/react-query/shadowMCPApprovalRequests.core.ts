@@ -51,7 +51,6 @@ export function buildShadowMCPApprovalRequestsQuery(
       projectId: request?.projectId,
       limit: request?.limit,
       cursor: request?.cursor,
-      gramKey: request?.gramKey,
       gramSession: request?.gramSession,
     }),
     queryFn: async function shadowMCPApprovalRequestsQueryFn(
@@ -84,7 +83,6 @@ export function queryKeyShadowMCPApprovalRequests(
     projectId?: string | undefined;
     limit?: number | undefined;
     cursor?: string | undefined;
-    gramKey?: string | undefined;
     gramSession?: string | undefined;
   },
 ): QueryKey {

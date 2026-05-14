@@ -6,16 +6,11 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 export type DeleteShadowMCPAccessRuleSecurity = {
-  apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
 export type DeleteShadowMCPAccessRuleRequest = {
   id: string;
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
   /**
    * Session header
    */
@@ -24,7 +19,6 @@ export type DeleteShadowMCPAccessRuleRequest = {
 
 /** @internal */
 export type DeleteShadowMCPAccessRuleSecurity$Outbound = {
-  "apikey_header_Gram-Key"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -34,12 +28,10 @@ export const DeleteShadowMCPAccessRuleSecurity$outboundSchema: z.ZodMiniType<
   DeleteShadowMCPAccessRuleSecurity
 > = z.pipe(
   z.object({
-    apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      apikeyHeaderGramKey: "apikey_header_Gram-Key",
       sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
@@ -58,7 +50,6 @@ export function deleteShadowMCPAccessRuleSecurityToJSON(
 /** @internal */
 export type DeleteShadowMCPAccessRuleRequest$Outbound = {
   id: string;
-  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
 
@@ -69,12 +60,10 @@ export const DeleteShadowMCPAccessRuleRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     id: z.string(),
-    gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      gramKey: "Gram-Key",
       gramSession: "Gram-Session",
     });
   }),

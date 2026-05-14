@@ -7,15 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
 export type DenyShadowMCPApprovalRequestSecurity = {
-  apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
 export type DenyShadowMCPApprovalRequestRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
   /**
    * Session header
    */
@@ -25,7 +20,6 @@ export type DenyShadowMCPApprovalRequestRequest = {
 
 /** @internal */
 export type DenyShadowMCPApprovalRequestSecurity$Outbound = {
-  "apikey_header_Gram-Key"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -35,12 +29,10 @@ export const DenyShadowMCPApprovalRequestSecurity$outboundSchema: z.ZodMiniType<
   DenyShadowMCPApprovalRequestSecurity
 > = z.pipe(
   z.object({
-    apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      apikeyHeaderGramKey: "apikey_header_Gram-Key",
       sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
@@ -58,7 +50,6 @@ export function denyShadowMCPApprovalRequestSecurityToJSON(
 
 /** @internal */
 export type DenyShadowMCPApprovalRequestRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   DenyShadowMCPApprovalRequestForm:
     components.DenyShadowMCPApprovalRequestForm$Outbound;
@@ -70,14 +61,12 @@ export const DenyShadowMCPApprovalRequestRequest$outboundSchema: z.ZodMiniType<
   DenyShadowMCPApprovalRequestRequest
 > = z.pipe(
   z.object({
-    gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     denyShadowMCPApprovalRequestForm:
       components.DenyShadowMCPApprovalRequestForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
-      gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       denyShadowMCPApprovalRequestForm: "DenyShadowMCPApprovalRequestForm",
     });

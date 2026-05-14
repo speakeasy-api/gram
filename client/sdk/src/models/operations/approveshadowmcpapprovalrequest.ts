@@ -7,15 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
 export type ApproveShadowMCPApprovalRequestSecurity = {
-  apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
 export type ApproveShadowMCPApprovalRequestRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
   /**
    * Session header
    */
@@ -26,7 +21,6 @@ export type ApproveShadowMCPApprovalRequestRequest = {
 
 /** @internal */
 export type ApproveShadowMCPApprovalRequestSecurity$Outbound = {
-  "apikey_header_Gram-Key"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -37,12 +31,10 @@ export const ApproveShadowMCPApprovalRequestSecurity$outboundSchema:
     ApproveShadowMCPApprovalRequestSecurity
   > = z.pipe(
     z.object({
-      apikeyHeaderGramKey: z.optional(z.string()),
       sessionHeaderGramSession: z.optional(z.string()),
     }),
     z.transform((v) => {
       return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
         sessionHeaderGramSession: "session_header_Gram-Session",
       });
     }),
@@ -61,7 +53,6 @@ export function approveShadowMCPApprovalRequestSecurityToJSON(
 
 /** @internal */
 export type ApproveShadowMCPApprovalRequestRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   ApproveShadowMCPApprovalRequestForm:
     components.ApproveShadowMCPApprovalRequestForm$Outbound;
@@ -74,14 +65,12 @@ export const ApproveShadowMCPApprovalRequestRequest$outboundSchema:
     ApproveShadowMCPApprovalRequestRequest
   > = z.pipe(
     z.object({
-      gramKey: z.optional(z.string()),
       gramSession: z.optional(z.string()),
       approveShadowMCPApprovalRequestForm:
         components.ApproveShadowMCPApprovalRequestForm$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {
-        gramKey: "Gram-Key",
         gramSession: "Gram-Session",
         approveShadowMCPApprovalRequestForm:
           "ApproveShadowMCPApprovalRequestForm",

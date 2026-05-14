@@ -395,6 +395,43 @@ func TestService_CreateShadowMCPAccessRule_NormalizesMatchValue(t *testing.T) {
 	require.Equal(t, oops.CodeConflict, oopsErr.Code)
 }
 
+func TestService_UpdateShadowMCPAccessRule_ConflictsOnDuplicateMatch(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	first, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
+		Disposition:  shadowMCPRuleAllowed,
+		AccessScope:  shadowMCPAccessScopeOrganization,
+		MatchBreadth: "url_host",
+		MatchValue:   "first.example.com",
+		DisplayName:  "First",
+	})
+	require.NoError(t, err)
+	_, err = ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
+		Disposition:  shadowMCPRuleAllowed,
+		AccessScope:  shadowMCPAccessScopeOrganization,
+		MatchBreadth: "url_host",
+		MatchValue:   "second.example.com",
+		DisplayName:  "Second",
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateShadowMCPAccessRule(ctx, &gen.UpdateShadowMCPAccessRulePayload{
+		ID:           first.ID,
+		Disposition:  shadowMCPRuleAllowed,
+		AccessScope:  shadowMCPAccessScopeOrganization,
+		MatchBreadth: "url_host",
+		MatchValue:   "second.example.com",
+		DisplayName:  "Duplicate",
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+}
+
 func TestService_CreateShadowMCPAccessRule_RequiresProjectIDForProjectScope(t *testing.T) {
 	t.Parallel()
 

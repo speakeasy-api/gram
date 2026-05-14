@@ -8719,13 +8719,12 @@ func NewUpdateMemberRolePayload(body *UpdateMemberRoleRequestBody, apikeyToken *
 
 // NewListShadowMCPApprovalRequestsPayload builds a access service
 // listShadowMCPApprovalRequests endpoint payload.
-func NewListShadowMCPApprovalRequestsPayload(status *string, projectID *string, limit int, cursor *string, apikeyToken *string, sessionToken *string) *access.ListShadowMCPApprovalRequestsPayload {
+func NewListShadowMCPApprovalRequestsPayload(status *string, projectID *string, limit int, cursor *string, sessionToken *string) *access.ListShadowMCPApprovalRequestsPayload {
 	v := &access.ListShadowMCPApprovalRequestsPayload{}
 	v.Status = status
 	v.ProjectID = projectID
 	v.Limit = limit
 	v.Cursor = cursor
-	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
@@ -8744,7 +8743,7 @@ func NewCreateShadowMCPApprovalRequestPayload(body *CreateShadowMCPApprovalReque
 
 // NewApproveShadowMCPApprovalRequestPayload builds a access service
 // approveShadowMCPApprovalRequest endpoint payload.
-func NewApproveShadowMCPApprovalRequestPayload(body *ApproveShadowMCPApprovalRequestRequestBody, apikeyToken *string, sessionToken *string) *access.ApproveShadowMCPApprovalRequestPayload {
+func NewApproveShadowMCPApprovalRequestPayload(body *ApproveShadowMCPApprovalRequestRequestBody, sessionToken *string) *access.ApproveShadowMCPApprovalRequestPayload {
 	v := &access.ApproveShadowMCPApprovalRequestPayload{
 		ID:                     *body.ID,
 		AccessScope:            *body.AccessScope,
@@ -8756,7 +8755,6 @@ func NewApproveShadowMCPApprovalRequestPayload(body *ApproveShadowMCPApprovalReq
 		ObservedServerIdentity: body.ObservedServerIdentity,
 		Reason:                 body.Reason,
 	}
-	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
@@ -8764,7 +8762,7 @@ func NewApproveShadowMCPApprovalRequestPayload(body *ApproveShadowMCPApprovalReq
 
 // NewDenyShadowMCPApprovalRequestPayload builds a access service
 // denyShadowMCPApprovalRequest endpoint payload.
-func NewDenyShadowMCPApprovalRequestPayload(body *DenyShadowMCPApprovalRequestRequestBody, apikeyToken *string, sessionToken *string) *access.DenyShadowMCPApprovalRequestPayload {
+func NewDenyShadowMCPApprovalRequestPayload(body *DenyShadowMCPApprovalRequestRequestBody, sessionToken *string) *access.DenyShadowMCPApprovalRequestPayload {
 	v := &access.DenyShadowMCPApprovalRequestPayload{
 		ID:                     *body.ID,
 		CreateDenyRule:         *body.CreateDenyRule,
@@ -8776,7 +8774,6 @@ func NewDenyShadowMCPApprovalRequestPayload(body *DenyShadowMCPApprovalRequestRe
 		ObservedServerIdentity: body.ObservedServerIdentity,
 		Reason:                 body.Reason,
 	}
-	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
@@ -8784,14 +8781,13 @@ func NewDenyShadowMCPApprovalRequestPayload(body *DenyShadowMCPApprovalRequestRe
 
 // NewListShadowMCPAccessRulesPayload builds a access service
 // listShadowMCPAccessRules endpoint payload.
-func NewListShadowMCPAccessRulesPayload(disposition *string, accessScope *string, projectID *string, limit int, cursor *string, apikeyToken *string, sessionToken *string) *access.ListShadowMCPAccessRulesPayload {
+func NewListShadowMCPAccessRulesPayload(disposition *string, accessScope *string, projectID *string, limit int, cursor *string, sessionToken *string) *access.ListShadowMCPAccessRulesPayload {
 	v := &access.ListShadowMCPAccessRulesPayload{}
 	v.Disposition = disposition
 	v.AccessScope = accessScope
 	v.ProjectID = projectID
 	v.Limit = limit
 	v.Cursor = cursor
-	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
@@ -8799,7 +8795,7 @@ func NewListShadowMCPAccessRulesPayload(disposition *string, accessScope *string
 
 // NewCreateShadowMCPAccessRulePayload builds a access service
 // createShadowMCPAccessRule endpoint payload.
-func NewCreateShadowMCPAccessRulePayload(body *CreateShadowMCPAccessRuleRequestBody, apikeyToken *string, sessionToken *string) *access.CreateShadowMCPAccessRulePayload {
+func NewCreateShadowMCPAccessRulePayload(body *CreateShadowMCPAccessRuleRequestBody, sessionToken *string) *access.CreateShadowMCPAccessRulePayload {
 	v := &access.CreateShadowMCPAccessRulePayload{
 		Disposition:            *body.Disposition,
 		AccessScope:            *body.AccessScope,
@@ -8812,7 +8808,6 @@ func NewCreateShadowMCPAccessRulePayload(body *CreateShadowMCPAccessRuleRequestB
 		ObservedServerIdentity: body.ObservedServerIdentity,
 		Reason:                 body.Reason,
 	}
-	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
@@ -8820,7 +8815,7 @@ func NewCreateShadowMCPAccessRulePayload(body *CreateShadowMCPAccessRuleRequestB
 
 // NewUpdateShadowMCPAccessRulePayload builds a access service
 // updateShadowMCPAccessRule endpoint payload.
-func NewUpdateShadowMCPAccessRulePayload(body *UpdateShadowMCPAccessRuleRequestBody, apikeyToken *string, sessionToken *string) *access.UpdateShadowMCPAccessRulePayload {
+func NewUpdateShadowMCPAccessRulePayload(body *UpdateShadowMCPAccessRuleRequestBody, sessionToken *string) *access.UpdateShadowMCPAccessRulePayload {
 	v := &access.UpdateShadowMCPAccessRulePayload{
 		ID:                     *body.ID,
 		Disposition:            *body.Disposition,
@@ -8834,7 +8829,6 @@ func NewUpdateShadowMCPAccessRulePayload(body *UpdateShadowMCPAccessRuleRequestB
 		ObservedServerIdentity: body.ObservedServerIdentity,
 		Reason:                 body.Reason,
 	}
-	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
@@ -8842,10 +8836,9 @@ func NewUpdateShadowMCPAccessRulePayload(body *UpdateShadowMCPAccessRuleRequestB
 
 // NewDeleteShadowMCPAccessRulePayload builds a access service
 // deleteShadowMCPAccessRule endpoint payload.
-func NewDeleteShadowMCPAccessRulePayload(id string, apikeyToken *string, sessionToken *string) *access.DeleteShadowMCPAccessRulePayload {
+func NewDeleteShadowMCPAccessRulePayload(id string, sessionToken *string) *access.DeleteShadowMCPAccessRulePayload {
 	v := &access.DeleteShadowMCPAccessRulePayload{}
 	v.ID = id
-	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v

@@ -118,7 +118,6 @@ export function setShadowMCPApprovalRequestsData(
       projectId?: string | undefined;
       limit?: number | undefined;
       cursor?: string | undefined;
-      gramKey?: string | undefined;
       gramSession?: string | undefined;
     },
   ],
@@ -137,7 +136,6 @@ export function invalidateShadowMCPApprovalRequests(
       projectId?: string | undefined;
       limit?: number | undefined;
       cursor?: string | undefined;
-      gramKey?: string | undefined;
       gramSession?: string | undefined;
     }]
   >,

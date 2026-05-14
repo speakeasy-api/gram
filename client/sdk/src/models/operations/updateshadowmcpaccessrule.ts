@@ -7,15 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import * as components from "../components/index.js";
 
 export type UpdateShadowMCPAccessRuleSecurity = {
-  apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
 export type UpdateShadowMCPAccessRuleRequest = {
-  /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
   /**
    * Session header
    */
@@ -25,7 +20,6 @@ export type UpdateShadowMCPAccessRuleRequest = {
 
 /** @internal */
 export type UpdateShadowMCPAccessRuleSecurity$Outbound = {
-  "apikey_header_Gram-Key"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -35,12 +29,10 @@ export const UpdateShadowMCPAccessRuleSecurity$outboundSchema: z.ZodMiniType<
   UpdateShadowMCPAccessRuleSecurity
 > = z.pipe(
   z.object({
-    apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      apikeyHeaderGramKey: "apikey_header_Gram-Key",
       sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
@@ -58,7 +50,6 @@ export function updateShadowMCPAccessRuleSecurityToJSON(
 
 /** @internal */
 export type UpdateShadowMCPAccessRuleRequest$Outbound = {
-  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   UpdateShadowMCPAccessRuleForm:
     components.UpdateShadowMCPAccessRuleForm$Outbound;
@@ -70,14 +61,12 @@ export const UpdateShadowMCPAccessRuleRequest$outboundSchema: z.ZodMiniType<
   UpdateShadowMCPAccessRuleRequest
 > = z.pipe(
   z.object({
-    gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     updateShadowMCPAccessRuleForm:
       components.UpdateShadowMCPAccessRuleForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
-      gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       updateShadowMCPAccessRuleForm: "UpdateShadowMCPAccessRuleForm",
     });

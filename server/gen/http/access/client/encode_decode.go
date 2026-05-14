@@ -2154,10 +2154,6 @@ func EncodeListShadowMCPApprovalRequestsRequest(encoder func(*http.Request) goah
 		if !ok {
 			return goahttp.ErrInvalidType("access", "listShadowMCPApprovalRequests", "*access.ListShadowMCPApprovalRequestsPayload", v)
 		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -2636,10 +2632,6 @@ func EncodeApproveShadowMCPApprovalRequestRequest(encoder func(*http.Request) go
 		if !ok {
 			return goahttp.ErrInvalidType("access", "approveShadowMCPApprovalRequest", "*access.ApproveShadowMCPApprovalRequestPayload", v)
 		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -2877,10 +2869,6 @@ func EncodeDenyShadowMCPApprovalRequestRequest(encoder func(*http.Request) goaht
 		if !ok {
 			return goahttp.ErrInvalidType("access", "denyShadowMCPApprovalRequest", "*access.DenyShadowMCPApprovalRequestPayload", v)
 		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -3115,10 +3103,6 @@ func EncodeListShadowMCPAccessRulesRequest(encoder func(*http.Request) goahttp.E
 		p, ok := v.(*access.ListShadowMCPAccessRulesPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("access", "listShadowMCPAccessRules", "*access.ListShadowMCPAccessRulesPayload", v)
-		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -3366,10 +3350,6 @@ func EncodeCreateShadowMCPAccessRuleRequest(encoder func(*http.Request) goahttp.
 		if !ok {
 			return goahttp.ErrInvalidType("access", "createShadowMCPAccessRule", "*access.CreateShadowMCPAccessRulePayload", v)
 		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -3605,10 +3585,6 @@ func EncodeUpdateShadowMCPAccessRuleRequest(encoder func(*http.Request) goahttp.
 		if !ok {
 			return goahttp.ErrInvalidType("access", "updateShadowMCPAccessRule", "*access.UpdateShadowMCPAccessRulePayload", v)
 		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
@@ -3843,10 +3819,6 @@ func EncodeDeleteShadowMCPAccessRuleRequest(encoder func(*http.Request) goahttp.
 		p, ok := v.(*access.DeleteShadowMCPAccessRulePayload)
 		if !ok {
 			return goahttp.ErrInvalidType("access", "deleteShadowMCPAccessRule", "*access.DeleteShadowMCPAccessRulePayload", v)
-		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken

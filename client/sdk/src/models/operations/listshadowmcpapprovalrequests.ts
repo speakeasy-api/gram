@@ -7,7 +7,6 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 export type ListShadowMCPApprovalRequestsSecurity = {
-  apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
@@ -27,10 +26,6 @@ export type ListShadowMCPApprovalRequestsRequest = {
    */
   cursor?: string | undefined;
   /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -38,7 +33,6 @@ export type ListShadowMCPApprovalRequestsRequest = {
 
 /** @internal */
 export type ListShadowMCPApprovalRequestsSecurity$Outbound = {
-  "apikey_header_Gram-Key"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -49,12 +43,10 @@ export const ListShadowMCPApprovalRequestsSecurity$outboundSchema:
     ListShadowMCPApprovalRequestsSecurity
   > = z.pipe(
     z.object({
-      apikeyHeaderGramKey: z.optional(z.string()),
       sessionHeaderGramSession: z.optional(z.string()),
     }),
     z.transform((v) => {
       return remap$(v, {
-        apikeyHeaderGramKey: "apikey_header_Gram-Key",
         sessionHeaderGramSession: "session_header_Gram-Session",
       });
     }),
@@ -81,7 +73,6 @@ export type ListShadowMCPApprovalRequestsRequest$Outbound = {
   project_id?: string | undefined;
   limit: number;
   cursor?: string | undefined;
-  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
 
@@ -95,13 +86,11 @@ export const ListShadowMCPApprovalRequestsRequest$outboundSchema: z.ZodMiniType<
     projectId: z.optional(z.string()),
     limit: z._default(z.int(), 50),
     cursor: z.optional(z.string()),
-    gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       projectId: "project_id",
-      gramKey: "Gram-Key",
       gramSession: "Gram-Session",
     });
   }),

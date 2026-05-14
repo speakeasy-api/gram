@@ -1355,13 +1355,6 @@ paths:
             operationId: approveShadowMCPApprovalRequest
             parameters:
                 - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -1436,7 +1429,6 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: approveShadowMCPApprovalRequest access
             tags:
@@ -1539,13 +1531,6 @@ paths:
             operationId: denyShadowMCPApprovalRequest
             parameters:
                 - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -1620,7 +1605,6 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: denyShadowMCPApprovalRequest access
             tags:
@@ -1664,13 +1648,6 @@ paths:
                   name: cursor
                   schema:
                     description: Cursor for the next page of results.
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -1741,7 +1718,6 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: listShadowMCPApprovalRequests access
             tags:
@@ -1754,13 +1730,6 @@ paths:
             description: Create a managed Shadow MCP access rule.
             operationId: createShadowMCPAccessRule
             parameters:
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -1836,7 +1805,6 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: createShadowMCPAccessRule access
             tags:
@@ -1856,13 +1824,6 @@ paths:
                   required: true
                   schema:
                     format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -1929,7 +1890,6 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: deleteShadowMCPAccessRule access
             tags:
@@ -1980,13 +1940,6 @@ paths:
                   name: cursor
                   schema:
                     description: Cursor for the next page of results.
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -2057,7 +2010,6 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: listShadowMCPAccessRules access
             tags:
@@ -2070,13 +2022,6 @@ paths:
             description: Update a managed Shadow MCP access rule.
             operationId: updateShadowMCPAccessRule
             parameters:
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -2152,7 +2097,6 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: updateShadowMCPAccessRule access
             tags:

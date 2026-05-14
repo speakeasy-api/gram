@@ -114,7 +114,6 @@ type AccessMember struct {
 // ApproveShadowMCPApprovalRequestPayload is the payload type of the access
 // service approveShadowMCPApprovalRequest method.
 type ApproveShadowMCPApprovalRequestPayload struct {
-	ApikeyToken            *string
 	SessionToken           *string
 	ID                     string
 	AccessScope            string
@@ -260,7 +259,6 @@ type CreateRolePayload struct {
 // CreateShadowMCPAccessRulePayload is the payload type of the access service
 // createShadowMCPAccessRule method.
 type CreateShadowMCPAccessRulePayload struct {
-	ApikeyToken            *string
 	SessionToken           *string
 	Disposition            string
 	AccessScope            string
@@ -295,14 +293,12 @@ type DeleteRolePayload struct {
 // deleteShadowMCPAccessRule method.
 type DeleteShadowMCPAccessRulePayload struct {
 	ID           string
-	ApikeyToken  *string
 	SessionToken *string
 }
 
 // DenyShadowMCPApprovalRequestPayload is the payload type of the access
 // service denyShadowMCPApprovalRequest method.
 type DenyShadowMCPApprovalRequestPayload struct {
-	ApikeyToken            *string
 	SessionToken           *string
 	ID                     string
 	CreateDenyRule         bool
@@ -468,7 +464,6 @@ type ListShadowMCPAccessRulesPayload struct {
 	Limit       int
 	// Cursor for the next page of results.
 	Cursor       *string
-	ApikeyToken  *string
 	SessionToken *string
 }
 
@@ -488,7 +483,6 @@ type ListShadowMCPApprovalRequestsPayload struct {
 	Limit     int
 	// Cursor for the next page of results.
 	Cursor       *string
-	ApikeyToken  *string
 	SessionToken *string
 }
 
@@ -681,7 +675,6 @@ type UpdateRolePayload struct {
 // UpdateShadowMCPAccessRulePayload is the payload type of the access service
 // updateShadowMCPAccessRule method.
 type UpdateShadowMCPAccessRulePayload struct {
-	ApikeyToken            *string
 	SessionToken           *string
 	ID                     string
 	Disposition            string

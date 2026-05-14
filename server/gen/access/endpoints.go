@@ -421,27 +421,15 @@ func NewListShadowMCPApprovalRequestsEndpoint(s Service, authAPIKeyFn security.A
 		p := req.(*ListShadowMCPApprovalRequestsPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
-			RequiredScopes: []string{"producer"},
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
 		}
 		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
+		if p.SessionToken != nil {
+			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "session",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.SessionToken != nil {
-				key = *p.SessionToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
 		if err != nil {
 			return nil, err
 		}
@@ -479,27 +467,15 @@ func NewApproveShadowMCPApprovalRequestEndpoint(s Service, authAPIKeyFn security
 		p := req.(*ApproveShadowMCPApprovalRequestPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
-			RequiredScopes: []string{"producer"},
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
 		}
 		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
+		if p.SessionToken != nil {
+			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "session",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.SessionToken != nil {
-				key = *p.SessionToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
 		if err != nil {
 			return nil, err
 		}
@@ -514,27 +490,15 @@ func NewDenyShadowMCPApprovalRequestEndpoint(s Service, authAPIKeyFn security.Au
 		p := req.(*DenyShadowMCPApprovalRequestPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
-			RequiredScopes: []string{"producer"},
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
 		}
 		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
+		if p.SessionToken != nil {
+			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "session",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.SessionToken != nil {
-				key = *p.SessionToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
 		if err != nil {
 			return nil, err
 		}
@@ -549,27 +513,15 @@ func NewListShadowMCPAccessRulesEndpoint(s Service, authAPIKeyFn security.AuthAP
 		p := req.(*ListShadowMCPAccessRulesPayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
-			RequiredScopes: []string{"consumer"},
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
 		}
 		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
+		if p.SessionToken != nil {
+			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "session",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.SessionToken != nil {
-				key = *p.SessionToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
 		if err != nil {
 			return nil, err
 		}
@@ -584,27 +536,15 @@ func NewCreateShadowMCPAccessRuleEndpoint(s Service, authAPIKeyFn security.AuthA
 		p := req.(*CreateShadowMCPAccessRulePayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
-			RequiredScopes: []string{"producer"},
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
 		}
 		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
+		if p.SessionToken != nil {
+			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "session",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.SessionToken != nil {
-				key = *p.SessionToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
 		if err != nil {
 			return nil, err
 		}
@@ -619,27 +559,15 @@ func NewUpdateShadowMCPAccessRuleEndpoint(s Service, authAPIKeyFn security.AuthA
 		p := req.(*UpdateShadowMCPAccessRulePayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
-			RequiredScopes: []string{"producer"},
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
 		}
 		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
+		if p.SessionToken != nil {
+			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "session",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.SessionToken != nil {
-				key = *p.SessionToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
 		if err != nil {
 			return nil, err
 		}
@@ -654,27 +582,15 @@ func NewDeleteShadowMCPAccessRuleEndpoint(s Service, authAPIKeyFn security.AuthA
 		p := req.(*DeleteShadowMCPAccessRulePayload)
 		var err error
 		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
-			RequiredScopes: []string{"producer"},
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
 		}
 		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
+		if p.SessionToken != nil {
+			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "session",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.SessionToken != nil {
-				key = *p.SessionToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
 		if err != nil {
 			return nil, err
 		}

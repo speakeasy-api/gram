@@ -583,7 +583,7 @@ func (s *Service) UpdateShadowMCPAccessRule(ctx context.Context, payload *gen.Up
 		ID:                     ruleID,
 	})
 	if err != nil {
-		return nil, shadowMCPRepoErr(ctx, s, err, "update shadow mcp access rule")
+		return nil, shadowMCPWriteRuleErr(ctx, s, err, "update shadow mcp access rule")
 	}
 	ruleBefore := buildShadowMCPAccessRule(existingRule)
 	ruleAfter := buildShadowMCPAccessRule(rule)
@@ -870,11 +870,15 @@ func shadowMCPRepoErr(ctx context.Context, s *Service, err error, message string
 }
 
 func shadowMCPCreateRuleErr(ctx context.Context, s *Service, err error) error {
+	return shadowMCPWriteRuleErr(ctx, s, err, "create shadow mcp access rule")
+}
+
+func shadowMCPWriteRuleErr(ctx context.Context, s *Service, err error, message string) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 		return oops.E(oops.CodeConflict, nil, "shadow mcp access rule already exists").Log(ctx, s.logger)
 	}
-	return oops.E(oops.CodeUnexpected, err, "create shadow mcp access rule").Log(ctx, s.logger)
+	return oops.E(oops.CodeUnexpected, err, "%s", message).Log(ctx, s.logger)
 }
 
 func formatPGTimestamp(ts pgtype.Timestamptz) *string {

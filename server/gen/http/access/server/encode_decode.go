@@ -1962,7 +1962,6 @@ func DecodeListShadowMCPApprovalRequestsRequest(mux goahttp.Muxer, decoder func(
 			projectID    *string
 			limit        int
 			cursor       *string
-			apikeyToken  *string
 			sessionToken *string
 			err          error
 		)
@@ -2005,10 +2004,6 @@ func DecodeListShadowMCPApprovalRequestsRequest(mux goahttp.Muxer, decoder func(
 		if cursorRaw != "" {
 			cursor = &cursorRaw
 		}
-		apikeyTokenRaw := r.Header.Get("Gram-Key")
-		if apikeyTokenRaw != "" {
-			apikeyToken = &apikeyTokenRaw
-		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -2016,14 +2011,7 @@ func DecodeListShadowMCPApprovalRequestsRequest(mux goahttp.Muxer, decoder func(
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListShadowMCPApprovalRequestsPayload(status, projectID, limit, cursor, apikeyToken, sessionToken)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
-			}
-		}
+		payload = NewListShadowMCPApprovalRequestsPayload(status, projectID, limit, cursor, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2443,25 +2431,13 @@ func DecodeApproveShadowMCPApprovalRequestRequest(mux goahttp.Muxer, decoder fun
 		}
 
 		var (
-			apikeyToken  *string
 			sessionToken *string
 		)
-		apikeyTokenRaw := r.Header.Get("Gram-Key")
-		if apikeyTokenRaw != "" {
-			apikeyToken = &apikeyTokenRaw
-		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewApproveShadowMCPApprovalRequestPayload(&body, apikeyToken, sessionToken)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
-			}
-		}
+		payload = NewApproveShadowMCPApprovalRequestPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2668,25 +2644,13 @@ func DecodeDenyShadowMCPApprovalRequestRequest(mux goahttp.Muxer, decoder func(*
 		}
 
 		var (
-			apikeyToken  *string
 			sessionToken *string
 		)
-		apikeyTokenRaw := r.Header.Get("Gram-Key")
-		if apikeyTokenRaw != "" {
-			apikeyToken = &apikeyTokenRaw
-		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewDenyShadowMCPApprovalRequestPayload(&body, apikeyToken, sessionToken)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
-			}
-		}
+		payload = NewDenyShadowMCPApprovalRequestPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2878,7 +2842,6 @@ func DecodeListShadowMCPAccessRulesRequest(mux goahttp.Muxer, decoder func(*http
 			projectID    *string
 			limit        int
 			cursor       *string
-			apikeyToken  *string
 			sessionToken *string
 			err          error
 		)
@@ -2930,10 +2893,6 @@ func DecodeListShadowMCPAccessRulesRequest(mux goahttp.Muxer, decoder func(*http
 		if cursorRaw != "" {
 			cursor = &cursorRaw
 		}
-		apikeyTokenRaw := r.Header.Get("Gram-Key")
-		if apikeyTokenRaw != "" {
-			apikeyToken = &apikeyTokenRaw
-		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -2941,14 +2900,7 @@ func DecodeListShadowMCPAccessRulesRequest(mux goahttp.Muxer, decoder func(*http
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListShadowMCPAccessRulesPayload(disposition, accessScope, projectID, limit, cursor, apikeyToken, sessionToken)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
-			}
-		}
+		payload = NewListShadowMCPAccessRulesPayload(disposition, accessScope, projectID, limit, cursor, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3155,25 +3107,13 @@ func DecodeCreateShadowMCPAccessRuleRequest(mux goahttp.Muxer, decoder func(*htt
 		}
 
 		var (
-			apikeyToken  *string
 			sessionToken *string
 		)
-		apikeyTokenRaw := r.Header.Get("Gram-Key")
-		if apikeyTokenRaw != "" {
-			apikeyToken = &apikeyTokenRaw
-		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewCreateShadowMCPAccessRulePayload(&body, apikeyToken, sessionToken)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
-			}
-		}
+		payload = NewCreateShadowMCPAccessRulePayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3380,25 +3320,13 @@ func DecodeUpdateShadowMCPAccessRuleRequest(mux goahttp.Muxer, decoder func(*htt
 		}
 
 		var (
-			apikeyToken  *string
 			sessionToken *string
 		)
-		apikeyTokenRaw := r.Header.Get("Gram-Key")
-		if apikeyTokenRaw != "" {
-			apikeyToken = &apikeyTokenRaw
-		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewUpdateShadowMCPAccessRulePayload(&body, apikeyToken, sessionToken)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
-			}
-		}
+		payload = NewUpdateShadowMCPAccessRulePayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3583,7 +3511,6 @@ func DecodeDeleteShadowMCPAccessRuleRequest(mux goahttp.Muxer, decoder func(*htt
 		var payload *access.DeleteShadowMCPAccessRulePayload
 		var (
 			id           string
-			apikeyToken  *string
 			sessionToken *string
 			err          error
 		)
@@ -3592,10 +3519,6 @@ func DecodeDeleteShadowMCPAccessRuleRequest(mux goahttp.Muxer, decoder func(*htt
 			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
-		apikeyTokenRaw := r.Header.Get("Gram-Key")
-		if apikeyTokenRaw != "" {
-			apikeyToken = &apikeyTokenRaw
-		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -3603,14 +3526,7 @@ func DecodeDeleteShadowMCPAccessRuleRequest(mux goahttp.Muxer, decoder func(*htt
 		if err != nil {
 			return payload, err
 		}
-		payload = NewDeleteShadowMCPAccessRulePayload(id, apikeyToken, sessionToken)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
-			}
-		}
+		payload = NewDeleteShadowMCPAccessRulePayload(id, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

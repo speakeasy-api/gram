@@ -317,7 +317,7 @@ func BuildUpdateMemberRolePayload(accessUpdateMemberRoleBody string, accessUpdat
 
 // BuildListShadowMCPApprovalRequestsPayload builds the payload for the access
 // listShadowMCPApprovalRequests endpoint from CLI flags.
-func BuildListShadowMCPApprovalRequestsPayload(accessListShadowMCPApprovalRequestsStatus string, accessListShadowMCPApprovalRequestsProjectID string, accessListShadowMCPApprovalRequestsLimit string, accessListShadowMCPApprovalRequestsCursor string, accessListShadowMCPApprovalRequestsApikeyToken string, accessListShadowMCPApprovalRequestsSessionToken string) (*access.ListShadowMCPApprovalRequestsPayload, error) {
+func BuildListShadowMCPApprovalRequestsPayload(accessListShadowMCPApprovalRequestsStatus string, accessListShadowMCPApprovalRequestsProjectID string, accessListShadowMCPApprovalRequestsLimit string, accessListShadowMCPApprovalRequestsCursor string, accessListShadowMCPApprovalRequestsSessionToken string) (*access.ListShadowMCPApprovalRequestsPayload, error) {
 	var err error
 	var status *string
 	{
@@ -367,12 +367,6 @@ func BuildListShadowMCPApprovalRequestsPayload(accessListShadowMCPApprovalReques
 			cursor = &accessListShadowMCPApprovalRequestsCursor
 		}
 	}
-	var apikeyToken *string
-	{
-		if accessListShadowMCPApprovalRequestsApikeyToken != "" {
-			apikeyToken = &accessListShadowMCPApprovalRequestsApikeyToken
-		}
-	}
 	var sessionToken *string
 	{
 		if accessListShadowMCPApprovalRequestsSessionToken != "" {
@@ -384,7 +378,6 @@ func BuildListShadowMCPApprovalRequestsPayload(accessListShadowMCPApprovalReques
 	v.ProjectID = projectID
 	v.Limit = limit
 	v.Cursor = cursor
-	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -417,7 +410,7 @@ func BuildCreateShadowMCPApprovalRequestPayload(accessCreateShadowMCPApprovalReq
 
 // BuildApproveShadowMCPApprovalRequestPayload builds the payload for the
 // access approveShadowMCPApprovalRequest endpoint from CLI flags.
-func BuildApproveShadowMCPApprovalRequestPayload(accessApproveShadowMCPApprovalRequestBody string, accessApproveShadowMCPApprovalRequestApikeyToken string, accessApproveShadowMCPApprovalRequestSessionToken string) (*access.ApproveShadowMCPApprovalRequestPayload, error) {
+func BuildApproveShadowMCPApprovalRequestPayload(accessApproveShadowMCPApprovalRequestBody string, accessApproveShadowMCPApprovalRequestSessionToken string) (*access.ApproveShadowMCPApprovalRequestPayload, error) {
 	var err error
 	var body ApproveShadowMCPApprovalRequestRequestBody
 	{
@@ -434,12 +427,6 @@ func BuildApproveShadowMCPApprovalRequestPayload(accessApproveShadowMCPApprovalR
 		}
 		if err != nil {
 			return nil, err
-		}
-	}
-	var apikeyToken *string
-	{
-		if accessApproveShadowMCPApprovalRequestApikeyToken != "" {
-			apikeyToken = &accessApproveShadowMCPApprovalRequestApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -459,7 +446,6 @@ func BuildApproveShadowMCPApprovalRequestPayload(accessApproveShadowMCPApprovalR
 		ObservedServerIdentity: body.ObservedServerIdentity,
 		Reason:                 body.Reason,
 	}
-	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -467,7 +453,7 @@ func BuildApproveShadowMCPApprovalRequestPayload(accessApproveShadowMCPApprovalR
 
 // BuildDenyShadowMCPApprovalRequestPayload builds the payload for the access
 // denyShadowMCPApprovalRequest endpoint from CLI flags.
-func BuildDenyShadowMCPApprovalRequestPayload(accessDenyShadowMCPApprovalRequestBody string, accessDenyShadowMCPApprovalRequestApikeyToken string, accessDenyShadowMCPApprovalRequestSessionToken string) (*access.DenyShadowMCPApprovalRequestPayload, error) {
+func BuildDenyShadowMCPApprovalRequestPayload(accessDenyShadowMCPApprovalRequestBody string, accessDenyShadowMCPApprovalRequestSessionToken string) (*access.DenyShadowMCPApprovalRequestPayload, error) {
 	var err error
 	var body DenyShadowMCPApprovalRequestRequestBody
 	{
@@ -483,12 +469,6 @@ func BuildDenyShadowMCPApprovalRequestPayload(accessDenyShadowMCPApprovalRequest
 		}
 		if err != nil {
 			return nil, err
-		}
-	}
-	var apikeyToken *string
-	{
-		if accessDenyShadowMCPApprovalRequestApikeyToken != "" {
-			apikeyToken = &accessDenyShadowMCPApprovalRequestApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -508,7 +488,6 @@ func BuildDenyShadowMCPApprovalRequestPayload(accessDenyShadowMCPApprovalRequest
 		ObservedServerIdentity: body.ObservedServerIdentity,
 		Reason:                 body.Reason,
 	}
-	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -516,7 +495,7 @@ func BuildDenyShadowMCPApprovalRequestPayload(accessDenyShadowMCPApprovalRequest
 
 // BuildListShadowMCPAccessRulesPayload builds the payload for the access
 // listShadowMCPAccessRules endpoint from CLI flags.
-func BuildListShadowMCPAccessRulesPayload(accessListShadowMCPAccessRulesDisposition string, accessListShadowMCPAccessRulesAccessScope string, accessListShadowMCPAccessRulesProjectID string, accessListShadowMCPAccessRulesLimit string, accessListShadowMCPAccessRulesCursor string, accessListShadowMCPAccessRulesApikeyToken string, accessListShadowMCPAccessRulesSessionToken string) (*access.ListShadowMCPAccessRulesPayload, error) {
+func BuildListShadowMCPAccessRulesPayload(accessListShadowMCPAccessRulesDisposition string, accessListShadowMCPAccessRulesAccessScope string, accessListShadowMCPAccessRulesProjectID string, accessListShadowMCPAccessRulesLimit string, accessListShadowMCPAccessRulesCursor string, accessListShadowMCPAccessRulesSessionToken string) (*access.ListShadowMCPAccessRulesPayload, error) {
 	var err error
 	var disposition *string
 	{
@@ -578,12 +557,6 @@ func BuildListShadowMCPAccessRulesPayload(accessListShadowMCPAccessRulesDisposit
 			cursor = &accessListShadowMCPAccessRulesCursor
 		}
 	}
-	var apikeyToken *string
-	{
-		if accessListShadowMCPAccessRulesApikeyToken != "" {
-			apikeyToken = &accessListShadowMCPAccessRulesApikeyToken
-		}
-	}
 	var sessionToken *string
 	{
 		if accessListShadowMCPAccessRulesSessionToken != "" {
@@ -596,7 +569,6 @@ func BuildListShadowMCPAccessRulesPayload(accessListShadowMCPAccessRulesDisposit
 	v.ProjectID = projectID
 	v.Limit = limit
 	v.Cursor = cursor
-	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -604,7 +576,7 @@ func BuildListShadowMCPAccessRulesPayload(accessListShadowMCPAccessRulesDisposit
 
 // BuildCreateShadowMCPAccessRulePayload builds the payload for the access
 // createShadowMCPAccessRule endpoint from CLI flags.
-func BuildCreateShadowMCPAccessRulePayload(accessCreateShadowMCPAccessRuleBody string, accessCreateShadowMCPAccessRuleApikeyToken string, accessCreateShadowMCPAccessRuleSessionToken string) (*access.CreateShadowMCPAccessRulePayload, error) {
+func BuildCreateShadowMCPAccessRulePayload(accessCreateShadowMCPAccessRuleBody string, accessCreateShadowMCPAccessRuleSessionToken string) (*access.CreateShadowMCPAccessRulePayload, error) {
 	var err error
 	var body CreateShadowMCPAccessRuleRequestBody
 	{
@@ -628,12 +600,6 @@ func BuildCreateShadowMCPAccessRulePayload(accessCreateShadowMCPAccessRuleBody s
 			return nil, err
 		}
 	}
-	var apikeyToken *string
-	{
-		if accessCreateShadowMCPAccessRuleApikeyToken != "" {
-			apikeyToken = &accessCreateShadowMCPAccessRuleApikeyToken
-		}
-	}
 	var sessionToken *string
 	{
 		if accessCreateShadowMCPAccessRuleSessionToken != "" {
@@ -652,7 +618,6 @@ func BuildCreateShadowMCPAccessRulePayload(accessCreateShadowMCPAccessRuleBody s
 		ObservedServerIdentity: body.ObservedServerIdentity,
 		Reason:                 body.Reason,
 	}
-	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -660,7 +625,7 @@ func BuildCreateShadowMCPAccessRulePayload(accessCreateShadowMCPAccessRuleBody s
 
 // BuildUpdateShadowMCPAccessRulePayload builds the payload for the access
 // updateShadowMCPAccessRule endpoint from CLI flags.
-func BuildUpdateShadowMCPAccessRulePayload(accessUpdateShadowMCPAccessRuleBody string, accessUpdateShadowMCPAccessRuleApikeyToken string, accessUpdateShadowMCPAccessRuleSessionToken string) (*access.UpdateShadowMCPAccessRulePayload, error) {
+func BuildUpdateShadowMCPAccessRulePayload(accessUpdateShadowMCPAccessRuleBody string, accessUpdateShadowMCPAccessRuleSessionToken string) (*access.UpdateShadowMCPAccessRulePayload, error) {
 	var err error
 	var body UpdateShadowMCPAccessRuleRequestBody
 	{
@@ -685,12 +650,6 @@ func BuildUpdateShadowMCPAccessRulePayload(accessUpdateShadowMCPAccessRuleBody s
 			return nil, err
 		}
 	}
-	var apikeyToken *string
-	{
-		if accessUpdateShadowMCPAccessRuleApikeyToken != "" {
-			apikeyToken = &accessUpdateShadowMCPAccessRuleApikeyToken
-		}
-	}
 	var sessionToken *string
 	{
 		if accessUpdateShadowMCPAccessRuleSessionToken != "" {
@@ -710,7 +669,6 @@ func BuildUpdateShadowMCPAccessRulePayload(accessUpdateShadowMCPAccessRuleBody s
 		ObservedServerIdentity: body.ObservedServerIdentity,
 		Reason:                 body.Reason,
 	}
-	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -718,7 +676,7 @@ func BuildUpdateShadowMCPAccessRulePayload(accessUpdateShadowMCPAccessRuleBody s
 
 // BuildDeleteShadowMCPAccessRulePayload builds the payload for the access
 // deleteShadowMCPAccessRule endpoint from CLI flags.
-func BuildDeleteShadowMCPAccessRulePayload(accessDeleteShadowMCPAccessRuleID string, accessDeleteShadowMCPAccessRuleApikeyToken string, accessDeleteShadowMCPAccessRuleSessionToken string) (*access.DeleteShadowMCPAccessRulePayload, error) {
+func BuildDeleteShadowMCPAccessRulePayload(accessDeleteShadowMCPAccessRuleID string, accessDeleteShadowMCPAccessRuleSessionToken string) (*access.DeleteShadowMCPAccessRulePayload, error) {
 	var err error
 	var id string
 	{
@@ -726,12 +684,6 @@ func BuildDeleteShadowMCPAccessRulePayload(accessDeleteShadowMCPAccessRuleID str
 		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
 		if err != nil {
 			return nil, err
-		}
-	}
-	var apikeyToken *string
-	{
-		if accessDeleteShadowMCPAccessRuleApikeyToken != "" {
-			apikeyToken = &accessDeleteShadowMCPAccessRuleApikeyToken
 		}
 	}
 	var sessionToken *string
@@ -742,7 +694,6 @@ func BuildDeleteShadowMCPAccessRulePayload(accessDeleteShadowMCPAccessRuleID str
 	}
 	v := &access.DeleteShadowMCPAccessRulePayload{}
 	v.ID = id
-	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil

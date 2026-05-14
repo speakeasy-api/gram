@@ -255,9 +255,6 @@ var _ = Service("access", func() {
 
 	Method("listShadowMCPApprovalRequests", func() {
 		Description("List Shadow MCP approval requests for the current organization. Requires organization admin access because requests include requester and block details.")
-		Security(security.ByKey, func() {
-			Scope("producer")
-		})
 		Security(security.Session)
 
 		Payload(func() {
@@ -273,7 +270,6 @@ var _ = Service("access", func() {
 				Maximum(200)
 			})
 			Attribute("cursor", String, "Cursor for the next page of results.")
-			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
@@ -285,7 +281,6 @@ var _ = Service("access", func() {
 			Param("project_id")
 			Param("limit")
 			Param("cursor")
-			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -319,14 +314,10 @@ var _ = Service("access", func() {
 
 	Method("approveShadowMCPApprovalRequest", func() {
 		Description("Approve a Shadow MCP request, creating an allow rule scoped to the organization or project.")
-		Security(security.ByKey, func() {
-			Scope("producer")
-		})
 		Security(security.Session)
 
 		Payload(func() {
 			Extend(ApproveShadowMCPApprovalRequestForm)
-			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
@@ -334,7 +325,6 @@ var _ = Service("access", func() {
 
 		HTTP(func() {
 			POST("/rpc/access.shadowMcp.requests.approve")
-			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -346,14 +336,10 @@ var _ = Service("access", func() {
 
 	Method("denyShadowMCPApprovalRequest", func() {
 		Description("Deny a Shadow MCP request and optionally create a deny rule.")
-		Security(security.ByKey, func() {
-			Scope("producer")
-		})
 		Security(security.Session)
 
 		Payload(func() {
 			Extend(DenyShadowMCPApprovalRequestForm)
-			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
@@ -361,7 +347,6 @@ var _ = Service("access", func() {
 
 		HTTP(func() {
 			POST("/rpc/access.shadowMcp.requests.deny")
-			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -373,9 +358,6 @@ var _ = Service("access", func() {
 
 	Method("listShadowMCPAccessRules", func() {
 		Description("List managed Shadow MCP allow and deny rules.")
-		Security(security.ByKey, func() {
-			Scope("consumer")
-		})
 		Security(security.Session)
 
 		Payload(func() {
@@ -394,7 +376,6 @@ var _ = Service("access", func() {
 				Maximum(200)
 			})
 			Attribute("cursor", String, "Cursor for the next page of results.")
-			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
@@ -407,7 +388,6 @@ var _ = Service("access", func() {
 			Param("project_id")
 			Param("limit")
 			Param("cursor")
-			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -419,14 +399,10 @@ var _ = Service("access", func() {
 
 	Method("createShadowMCPAccessRule", func() {
 		Description("Create a managed Shadow MCP access rule.")
-		Security(security.ByKey, func() {
-			Scope("producer")
-		})
 		Security(security.Session)
 
 		Payload(func() {
 			Extend(ShadowMCPAccessRuleForm)
-			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
@@ -434,7 +410,6 @@ var _ = Service("access", func() {
 
 		HTTP(func() {
 			POST("/rpc/access.shadowMcp.rules.create")
-			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusCreated)
 		})
@@ -446,14 +421,10 @@ var _ = Service("access", func() {
 
 	Method("updateShadowMCPAccessRule", func() {
 		Description("Update a managed Shadow MCP access rule.")
-		Security(security.ByKey, func() {
-			Scope("producer")
-		})
 		Security(security.Session)
 
 		Payload(func() {
 			Extend(UpdateShadowMCPAccessRuleForm)
-			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
@@ -461,7 +432,6 @@ var _ = Service("access", func() {
 
 		HTTP(func() {
 			PUT("/rpc/access.shadowMcp.rules.update")
-			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -473,9 +443,6 @@ var _ = Service("access", func() {
 
 	Method("deleteShadowMCPAccessRule", func() {
 		Description("Delete a managed Shadow MCP access rule.")
-		Security(security.ByKey, func() {
-			Scope("producer")
-		})
 		Security(security.Session)
 
 		Payload(func() {
@@ -483,14 +450,12 @@ var _ = Service("access", func() {
 				Format(FormatUUID)
 			})
 			Required("id")
-			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
 		HTTP(func() {
 			DELETE("/rpc/access.shadowMcp.rules.delete")
 			Param("id")
-			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusNoContent)
 		})
