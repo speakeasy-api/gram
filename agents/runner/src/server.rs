@@ -6,7 +6,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use tokio::net::TcpListener;
-use tokio::sync::Notify;
+use tokio::sync::{Mutex, Notify};
 
 use crate::runtime::{
     AppState, DEFAULT_THREAD_IDLE_TTL, build_host, ensure_thread, snapshot_threads,
@@ -98,10 +98,25 @@ async fn thread_turn(
         .and_then(|v| v.to_str().ok())
         .map(|s| format!("{thread_id}:{s}"));
 
-    if let Some(ref key) = idempotency_key
-        && host.seen.contains(key)
+    // Per-key admission lock: serialize concurrent retries with the same
+    // key across the bootstrap + enqueue window so we can't enqueue twice.
+    // A failed admission drops the guard with `*done == false`, leaving
+    // the slot available for a fresh retry.
+    let admission = idempotency_key.as_ref().map(|key| {
+        host.seen
+            .entry(key.clone())
+            .or_insert_with(|| Arc::new(Mutex::new(false)))
+            .clone()
+    });
+    let mut admission_guard = if let Some(ref slot) = admission {
+        Some(slot.lock().await)
+    } else {
+        None
+    };
+    if let Some(ref guard) = admission_guard
+        && **guard
     {
-        tracing::info!(key = %key, "dedup: skipping already-queued turn");
+        tracing::info!(key = ?idempotency_key, "dedup: skipping already-queued turn");
         return Ok(Json(ThreadTurnResponse::deduped()));
     }
 
@@ -113,8 +128,8 @@ async fn thread_turn(
         .enqueue(request.input)
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
 
-    if let Some(key) = idempotency_key {
-        host.seen.insert(key);
+    if let Some(ref mut guard) = admission_guard {
+        **guard = true;
     }
 
     // The model's response goes out via /chat/completions on the per-thread

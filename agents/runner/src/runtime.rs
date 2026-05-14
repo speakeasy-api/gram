@@ -20,7 +20,6 @@ use agentkit_tools_core::{
     CatalogReader, CompositePermissionChecker, PathPolicy, PermissionDecision, ToolRegistry,
 };
 use dashmap::DashMap;
-use dashmap::DashSet;
 use futures::FutureExt;
 use serde_json::Value;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -58,7 +57,12 @@ pub struct RuntimeHost {
     pub assistant_id: String,
     pub started_at: Instant,
     pub tokens: TokenRegistry,
-    pub seen: DashSet<String>,
+    /// Per-idempotency-key admission slot. The bool tracks whether the
+    /// keyed turn has actually been enqueued: holding the mutex covers
+    /// the check + bootstrap + enqueue + mark-done sequence so concurrent
+    /// retries with the same key serialize. A failed admission drops the
+    /// guard with `false`, leaving the slot retryable.
+    pub seen: DashMap<String, Arc<tokio::sync::Mutex<bool>>>,
     pub threads: DashMap<String, Arc<OnceCell<Arc<ConfiguredThread>>>>,
     pub gram_client: GramBootstrapClient,
     pub thread_idle_ttl: Duration,
@@ -163,7 +167,7 @@ pub async fn build_host(
         assistant_id,
         started_at: Instant::now(),
         tokens,
-        seen: DashSet::new(),
+        seen: DashMap::new(),
         threads: DashMap::new(),
         gram_client,
         thread_idle_ttl,
@@ -237,7 +241,7 @@ async fn sweep_idle(host: &Arc<RuntimeHost>) {
         // so an evicted thread's keys can never match a future /turn. Drop
         // them so `seen` does not grow without bound over the VM lifetime.
         let prefix = format!("{thread_id}:");
-        host.seen.retain(|key| !key.starts_with(&prefix));
+        host.seen.retain(|key, _| !key.starts_with(&prefix));
     }
 }
 
