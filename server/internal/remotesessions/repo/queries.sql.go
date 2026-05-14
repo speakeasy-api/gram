@@ -367,6 +367,68 @@ func (q *Queries) GetRemoteSessionClientByID(ctx context.Context, arg GetRemoteS
 	return i, err
 }
 
+const getRemoteSessionClientWithIssuerByID = `-- name: GetRemoteSessionClientWithIssuerByID :one
+SELECT
+    c.id                                   AS client_id,
+    c.client_id                            AS external_client_id,
+    c.client_secret_encrypted              AS client_secret_encrypted,
+    c.remote_session_issuer_id             AS remote_session_issuer_id,
+    c.user_session_issuer_id               AS user_session_issuer_id,
+    i.slug                                 AS issuer_slug,
+    i.issuer                               AS issuer_url,
+    i.authorization_endpoint               AS authorization_endpoint,
+    i.token_endpoint                       AS token_endpoint,
+    i.scopes_supported                     AS scopes_supported,
+    i.passthrough                          AS passthrough,
+    i.oidc                                 AS oidc
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = $1
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+`
+
+type GetRemoteSessionClientWithIssuerByIDRow struct {
+	ClientID              uuid.UUID
+	ExternalClientID      string
+	ClientSecretEncrypted pgtype.Text
+	RemoteSessionIssuerID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	IssuerSlug            string
+	IssuerUrl             string
+	AuthorizationEndpoint pgtype.Text
+	TokenEndpoint         pgtype.Text
+	ScopesSupported       []string
+	Passthrough           bool
+	Oidc                  bool
+}
+
+// Joined client + issuer view scoped to a single client_id. Used by
+// the runtime token resolver to find the upstream token endpoint when
+// refreshing an expired access token. Callers establish that the
+// client belongs to the request's project upstream
+// (ListRemoteSessionClientsForUserSessionIssuer); this lookup itself
+// needs only the id since client ids are globally unique.
+func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id uuid.UUID) (GetRemoteSessionClientWithIssuerByIDRow, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionClientWithIssuerByID, id)
+	var i GetRemoteSessionClientWithIssuerByIDRow
+	err := row.Scan(
+		&i.ClientID,
+		&i.ExternalClientID,
+		&i.ClientSecretEncrypted,
+		&i.RemoteSessionIssuerID,
+		&i.UserSessionIssuerID,
+		&i.IssuerSlug,
+		&i.IssuerUrl,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.ScopesSupported,
+		&i.Passthrough,
+		&i.Oidc,
+	)
+	return i, err
+}
+
 const getRemoteSessionIssuerByID = `-- name: GetRemoteSessionIssuerByID :one
 SELECT id, project_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
@@ -757,57 +819,6 @@ func (q *Queries) ListRemoteSessionsByProjectID(ctx context.Context, arg ListRem
 		arg.Cursor,
 		arg.LimitValue,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []RemoteSession
-	for rows.Next() {
-		var i RemoteSession
-		if err := rows.Scan(
-			&i.ID,
-			&i.SubjectUrn,
-			&i.UserSessionIssuerID,
-			&i.RemoteSessionClientID,
-			&i.AccessTokenEncrypted,
-			&i.AccessExpiresAt,
-			&i.RefreshTokenEncrypted,
-			&i.RefreshExpiresAt,
-			&i.Scopes,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRemoteSessionsForSubject = `-- name: ListRemoteSessionsForSubject :many
-SELECT id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, refresh_expires_at, scopes, created_at, updated_at, deleted_at, deleted
-FROM remote_sessions
-WHERE user_session_issuer_id = $1
-  AND subject_urn = $2
-  AND deleted IS FALSE
-ORDER BY updated_at DESC
-`
-
-type ListRemoteSessionsForSubjectParams struct {
-	UserSessionIssuerID uuid.UUID
-	SubjectUrn          urn.SessionSubject
-}
-
-// Used by the MCP runtime resolver to find the upstream token rows
-// bound to a (user_session_issuer, subject_urn) pair. Filters by the
-// partial-unique-index predicate so tombstone rows are invisible.
-func (q *Queries) ListRemoteSessionsForSubject(ctx context.Context, arg ListRemoteSessionsForSubjectParams) ([]RemoteSession, error) {
-	rows, err := q.db.Query(ctx, listRemoteSessionsForSubject, arg.UserSessionIssuerID, arg.SubjectUrn)
 	if err != nil {
 		return nil, err
 	}

@@ -228,6 +228,32 @@ WHERE subject_urn = @subject_urn
   AND user_session_issuer_id = @user_session_issuer_id
   AND deleted IS FALSE;
 
+-- name: GetRemoteSessionClientWithIssuerByID :one
+-- Joined client + issuer view scoped to a single client_id. Used by
+-- the runtime token resolver to find the upstream token endpoint when
+-- refreshing an expired access token. Callers establish that the
+-- client belongs to the request's project upstream
+-- (ListRemoteSessionClientsForUserSessionIssuer); this lookup itself
+-- needs only the id since client ids are globally unique.
+SELECT
+    c.id                                   AS client_id,
+    c.client_id                            AS external_client_id,
+    c.client_secret_encrypted              AS client_secret_encrypted,
+    c.remote_session_issuer_id             AS remote_session_issuer_id,
+    c.user_session_issuer_id               AS user_session_issuer_id,
+    i.slug                                 AS issuer_slug,
+    i.issuer                               AS issuer_url,
+    i.authorization_endpoint               AS authorization_endpoint,
+    i.token_endpoint                       AS token_endpoint,
+    i.scopes_supported                     AS scopes_supported,
+    i.passthrough                          AS passthrough,
+    i.oidc                                 AS oidc
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = @id
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE;
+
 -- name: ListRemoteSessionClientsForUserSessionIssuer :many
 -- Joined client + issuer view used by the consent renderer and the
 -- ChallengeManager. Returns one row per remote_session_client linked to
@@ -265,17 +291,6 @@ WHERE c.project_id = @project_id
   AND (sqlc.narg('cursor')::uuid IS NULL OR s.id < sqlc.narg('cursor')::uuid)
 ORDER BY s.id DESC
 LIMIT sqlc.arg('limit_value');
-
--- name: ListRemoteSessionsForSubject :many
--- Used by the MCP runtime resolver to find the upstream token rows
--- bound to a (user_session_issuer, subject_urn) pair. Filters by the
--- partial-unique-index predicate so tombstone rows are invisible.
-SELECT *
-FROM remote_sessions
-WHERE user_session_issuer_id = @user_session_issuer_id
-  AND subject_urn = @subject_urn
-  AND deleted IS FALSE
-ORDER BY updated_at DESC;
 
 -- name: GetRemoteSessionByID :one
 SELECT s.*

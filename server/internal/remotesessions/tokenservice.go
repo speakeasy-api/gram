@@ -6,13 +6,14 @@
 //
 // Two entry points exposed:
 //
-//   - ResolveAccessToken: multi-row variant. Walks every active row for
-//     the (issuer, subject) pair, returns the first usable token. Kept
-//     as a general utility.
-//   - ResolveOneAccessToken: single-binding variant the MCP serving
-//     path calls. Asserts the product invariants (one client per
-//     issuer, one row per (issuer, subject)) via inv.Check so schema
-//     drift fails loudly instead of silently picking arbitrary rows.
+//   - ResolveAccessToken: per-client primitive. Given a
+//     remote_session_client id and a subject, returns the stored
+//     upstream access token (refreshing if necessary) or empty string
+//     if no usable token exists.
+//   - ResolveOneAccessToken: the variant the MCP serving path calls.
+//     Wraps ResolveAccessToken with an inv.Check that the
+//     user_session_issuer has exactly one remote_session_client bound,
+//     and errors if not.
 //
 // Refresh is invoked only when the stored access_expires_at is in the
 // past. A still-valid access token short-circuits: no upstream token
@@ -32,6 +33,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
@@ -41,81 +43,73 @@ import (
 )
 
 // ErrNoValidToken signals "there is a remote-session requirement for
-// this toolset but the subject has no usable token for any of the
-// bound clients." Callers surface this as a fresh auth challenge so
-// the user can re-link upstream.
+// this toolset but the subject has no usable token." Callers (the MCP
+// runtime) surface this as a fresh auth challenge so the user can
+// re-link upstream.
 var ErrNoValidToken = errors.New("remotesessions: no valid token for subject")
 
-// ResolveAccessToken returns an upstream access token for the given
-// subject across every remote_session_client bound to the
-// user_session_issuer.
+// ResolveAccessToken returns the upstream access token stored for the
+// (client, subject) pair, refreshing via the upstream /token endpoint
+// when the stored access_expires_at is in the past and a
+// refresh_token is present.
 //
-//   - No clients bound: returns ("", nil). The toolset has no
-//     remote-session requirement to satisfy on this request.
-//   - Any active row yields a still-valid (or successfully refreshed)
-//     access token: returns it.
-//   - Otherwise returns ("", ErrNoValidToken).
+// Returns ("", nil) when there is no usable token for this binding —
+// no row, expired with no refresh path, refresh failed, decryption
+// failed. The empty string is the "no token" signal; the caller
+// decides whether absence is a challenge or a no-op.
+//
+// Returns a non-nil error only for unexpected failures (database
+// errors). "No token available" is not an error.
+//
+// The (subject, remote_session_client_id) pair is uniqueness-enforced
+// by a partial index — at most one active row exists per binding, so
+// the lookup is exact.
 func (m *ChallengeManager) ResolveAccessToken(
 	ctx context.Context,
-	projectID, userSessionIssuerID uuid.UUID,
+	clientID uuid.UUID,
 	subject urn.SessionSubject,
 ) (string, error) {
-	q := remotesessions_repo.New(m.db)
-
-	clients, err := q.ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerParams{
-		ProjectID:           projectID,
-		UserSessionIssuerID: userSessionIssuerID,
+	sess, err := remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            subject,
+		RemoteSessionClientID: clientID,
 	})
-	if err != nil {
-		return "", fmt.Errorf("list remote_session_clients: %w", err)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", nil
+	case err != nil:
+		return "", fmt.Errorf("get active remote_session: %w", err)
 	}
-	if len(clients) == 0 {
+
+	tok, err := m.validateAndRefresh(ctx, sess)
+	if err != nil {
 		return "", nil
 	}
-
-	sessions, err := q.ListRemoteSessionsForSubject(ctx, remotesessions_repo.ListRemoteSessionsForSubjectParams{
-		UserSessionIssuerID: userSessionIssuerID,
-		SubjectUrn:          subject,
-	})
-	if err != nil {
-		return "", fmt.Errorf("list remote_sessions for subject: %w", err)
-	}
-
-	clientsByID := make(map[uuid.UUID]remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow, len(clients))
-	for _, c := range clients {
-		clientsByID[c.ClientID] = c
-	}
-	for _, sess := range sessions {
-		client, ok := clientsByID[sess.RemoteSessionClientID]
-		if !ok {
-			continue
-		}
-		tok, err := m.validateAndRefresh(ctx, sess, client)
-		if err == nil && tok != "" {
-			return tok, nil
-		}
-	}
-	return "", ErrNoValidToken
+	return tok, nil
 }
 
-// ResolveOneAccessToken is the single-binding variant the MCP serving
-// path calls. Encodes today's product invariants: a
-// user_session_issuer has exactly one remote_session_client, and a
-// (issuer, subject) pair has at most one active remote_sessions row.
+// ResolveOneAccessToken is the variant the MCP serving path calls.
+// It asserts via inv.Check that the user_session_issuer has exactly
+// one remote_session_client bound, and errors if not — this guards
+// against the case where someone has wired multiple clients to a
+// single issuer, which today's product config explicitly forbids and
+// which would otherwise force the resolver to arbitrarily pick a
+// binding.
 //
-// The second invariant is also enforced at the DB level by the
-// partial unique index on (subject_urn, remote_session_client_id)
-// WHERE deleted IS FALSE, so this assert mainly guards against schema
-// drift (e.g. the WHERE clause being dropped, multiple clients being
-// bound).
+//   - Issuer has no remote_session_clients: returns ("", nil). The
+//     toolset has no remote-session requirement to satisfy.
+//   - Issuer has exactly one bound client and a usable token exists:
+//     returns the access token.
+//   - Issuer has exactly one bound client but no usable token:
+//     returns ("", ErrNoValidToken).
+//   - Issuer has more than one bound client: returns an
+//     inv.InvariantError. The MCP runtime treats this as an internal
+//     error, not a re-auth path.
 func (m *ChallengeManager) ResolveOneAccessToken(
 	ctx context.Context,
 	projectID, userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
 ) (string, error) {
-	q := remotesessions_repo.New(m.db)
-
-	clients, err := q.ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerParams{
+	clients, err := remotesessions_repo.New(m.db).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerParams{
 		ProjectID:           projectID,
 		UserSessionIssuerID: userSessionIssuerID,
 	})
@@ -131,24 +125,11 @@ func (m *ChallengeManager) ResolveOneAccessToken(
 		return "", fmt.Errorf("invariant: %w", err)
 	}
 
-	sessions, err := q.ListRemoteSessionsForSubject(ctx, remotesessions_repo.ListRemoteSessionsForSubjectParams{
-		UserSessionIssuerID: userSessionIssuerID,
-		SubjectUrn:          subject,
-	})
+	tok, err := m.ResolveAccessToken(ctx, clients[0].ClientID, subject)
 	if err != nil {
-		return "", fmt.Errorf("list remote_sessions for subject: %w", err)
+		return "", err
 	}
-	if err := inv.Check("remotesessions.ResolveOneAccessToken",
-		"at most one active remote_sessions row per (issuer, subject)", len(sessions) <= 1,
-	); err != nil {
-		return "", fmt.Errorf("invariant: %w", err)
-	}
-	if len(sessions) == 0 {
-		return "", ErrNoValidToken
-	}
-
-	tok, err := m.validateAndRefresh(ctx, sessions[0], clients[0])
-	if err != nil || tok == "" {
+	if tok == "" {
 		return "", ErrNoValidToken
 	}
 	return tok, nil
@@ -160,7 +141,6 @@ func (m *ChallengeManager) ResolveOneAccessToken(
 func (m *ChallengeManager) validateAndRefresh(
 	ctx context.Context,
 	sess remotesessions_repo.RemoteSession,
-	client remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow,
 ) (string, error) {
 	if sess.AccessExpiresAt.Valid && sess.AccessExpiresAt.Time.After(time.Now()) {
 		plain, err := m.enc.Decrypt(sess.AccessTokenEncrypted)
@@ -172,7 +152,7 @@ func (m *ChallengeManager) validateAndRefresh(
 	if !sess.RefreshTokenEncrypted.Valid || sess.RefreshTokenEncrypted.String == "" {
 		return "", ErrNoValidToken
 	}
-	return m.refreshAccessToken(ctx, sess, client)
+	return m.refreshAccessToken(ctx, sess)
 }
 
 // refreshAccessToken POSTs grant_type=refresh_token to the upstream
@@ -182,8 +162,12 @@ func (m *ChallengeManager) validateAndRefresh(
 func (m *ChallengeManager) refreshAccessToken(
 	ctx context.Context,
 	sess remotesessions_repo.RemoteSession,
-	client remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow,
 ) (string, error) {
+	q := remotesessions_repo.New(m.db)
+	client, err := q.GetRemoteSessionClientWithIssuerByID(ctx, sess.RemoteSessionClientID)
+	if err != nil {
+		return "", fmt.Errorf("load remote_session_client for refresh: %w", err)
+	}
 	if !client.TokenEndpoint.Valid || client.TokenEndpoint.String == "" {
 		return "", errors.New("remote_session_issuer has no token endpoint configured")
 	}
@@ -260,7 +244,7 @@ func (m *ChallengeManager) refreshAccessToken(
 		refreshExpires = conv.ToPGTimestamptz(v)
 	}
 
-	if _, err := remotesessions_repo.New(m.db).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	if _, err := q.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:            sess.SubjectUrn,
 		UserSessionIssuerID:   sess.UserSessionIssuerID,
 		RemoteSessionClientID: sess.RemoteSessionClientID,
