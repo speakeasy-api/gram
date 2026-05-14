@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	registriesgen "github.com/speakeasy-api/gram/server/gen/mcp_registries"
+	mcpserversgen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	remotemcpgen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -36,7 +37,14 @@ type installResult struct {
 	Name          string `json:"name,omitempty"`
 	URL           string `json:"url"`
 	TransportType string `json:"transport_type"`
+	McpServerID   string `json:"mcp_server_id,omitempty"`
 }
+
+// supportedTransports is the set of remote MCP transports the Gram proxy
+// knows how to dial. Keep in sync with externalmcp.NewClient — installing
+// a catalog remote with any other transport produces a row that fails at
+// proxy time.
+var supportedTransports = []string{"streamable-http", "sse"}
 
 // InstallTool registers a catalog server as a remote MCP server. It resolves
 // the upstream URL, transport, and required headers/variables from the
@@ -152,12 +160,47 @@ func (t *InstallTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payloa
 		return oops.E(oops.CodeUnexpected, nil, "create remote mcp server returned no server")
 	}
 
+	// Mirror the dashboard's "Add remote MCP" flow: a remote_mcp_servers
+	// row on its own is not addressable — the dashboard and the xmcp
+	// proxy resolve servers through mcp_servers. Create a disabled link
+	// row so the source shows up in the Sources page; if the link fails,
+	// roll the remote MCP server back so we don't leak orphans.
+	remoteID := created.ID
+	linked, linkErr := t.catalog.CreateMCPServer(ctx, &mcpserversgen.CreateMcpServerPayload{
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		EnvironmentID:         nil,
+		ExternalOauthServerID: nil,
+		OauthProxyServerID:    nil,
+		RemoteMcpServerID:     &remoteID,
+		ToolsetID:             nil,
+		Visibility:            types.McpServerVisibility("disabled"),
+	})
+	if linkErr != nil {
+		if rollbackErr := t.catalog.DeleteRemoteServer(ctx, &remotemcpgen.DeleteServerPayload{
+			ID:               remoteID,
+			SessionToken:     nil,
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+		}); rollbackErr != nil {
+			return fmt.Errorf("link mcp server: %w; rollback of remote mcp server %s also failed: %w", linkErr, remoteID, rollbackErr)
+		}
+		return fmt.Errorf("link mcp server: %w", linkErr)
+	}
+
+	mcpServerID := ""
+	if linked != nil {
+		mcpServerID = linked.ID
+	}
+
 	return writeJSON(wr, installResult{
 		ServerID:      created.ID,
 		ServerSlug:    conv.PtrValOrEmpty(created.Slug, ""),
 		Name:          conv.PtrValOrEmpty(created.Name, ""),
 		URL:           created.URL,
 		TransportType: created.TransportType,
+		McpServerID:   mcpServerID,
 	})
 }
 
@@ -173,6 +216,9 @@ func selectRemote(remotes []*types.ExternalMCPRemote, remoteURL *string, transpo
 		want := strings.TrimSpace(*remoteURL)
 		for _, r := range remotes {
 			if r != nil && r.URL == want {
+				if !slices.Contains(supportedTransports, r.TransportType) {
+					return nil, oops.E(oops.CodeBadRequest, nil, "remote %q uses transport %q which is not supported (must be one of %v)", want, r.TransportType, supportedTransports)
+				}
 				return r, nil
 			}
 		}
@@ -181,6 +227,9 @@ func selectRemote(remotes []*types.ExternalMCPRemote, remoteURL *string, transpo
 
 	if transportType != nil && strings.TrimSpace(*transportType) != "" {
 		want := strings.TrimSpace(*transportType)
+		if !slices.Contains(supportedTransports, want) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "transport %q is not supported (must be one of %v)", want, supportedTransports)
+		}
 		for _, r := range remotes {
 			if r != nil && r.TransportType == want && r.URL != "" {
 				return r, nil
@@ -189,7 +238,7 @@ func selectRemote(remotes []*types.ExternalMCPRemote, remoteURL *string, transpo
 		return nil, oops.E(oops.CodeBadRequest, nil, "no %s remote on this catalog server", want)
 	}
 
-	for _, transport := range []string{"streamable-http", "sse"} {
+	for _, transport := range supportedTransports {
 		for _, r := range remotes {
 			if r != nil && r.TransportType == transport && r.URL != "" {
 				return r, nil

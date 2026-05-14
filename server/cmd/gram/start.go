@@ -736,13 +736,17 @@ func newStartCommand() *cli.Command {
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
 
 			// Hoisted so catalogTools can hand off to GetServerDetails /
-			// CreateServer; the *.Attach calls below reuse the same instances.
+			// CreateServer / link + rollback; the *.Attach calls below
+			// reuse the same instances.
 			externalMcpSvc := externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine)
 			remoteMcpSvc := remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger)
+			mcpServersSvc := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
 			catalogTools := platformtoolsruntime.CatalogExternalTools(
 				&platformcatalog.FuncCatalog{
 					GetServerDetailsFn:   externalMcpSvc.GetServerDetails,
 					CreateRemoteServerFn: remoteMcpSvc.CreateServer,
+					DeleteRemoteServerFn: remoteMcpSvc.DeleteServer,
+					CreateMCPServerFn:    mcpServersSvc.CreateMcpServer,
 				},
 				mcpRegistryClient,
 				externalmcprepo.New(db),
@@ -983,7 +987,7 @@ func newStartCommand() *cli.Command {
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
-			mcpservers.Attach(mux, mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
+			mcpservers.Attach(mux, mcpServersSvc)
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger))
 			remotemcp.Attach(mux, remoteMcpSvc)

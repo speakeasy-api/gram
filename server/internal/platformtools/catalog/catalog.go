@@ -11,6 +11,7 @@ import (
 	"io"
 
 	registriesgen "github.com/speakeasy-api/gram/server/gen/mcp_registries"
+	mcpserversgen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	remotemcpgen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
@@ -21,21 +22,30 @@ const (
 	ToolNameInstallCatalogTool = "platform_install_catalog_server"
 )
 
-// Catalog is the subset of mcp_registries + remote_mcp behavior the install
-// tool depends on. The live wiring constructs an adapter that forwards to the
-// running services; tests substitute a fake.
+// Catalog is the subset of mcp_registries + remote_mcp + mcp_servers
+// behavior the install tool depends on. The live wiring constructs an
+// adapter that forwards to the running services; tests substitute a fake.
+//
+// The install flow mirrors the dashboard's "Add remote MCP" path
+// (client/dashboard/src/pages/sources/remote-mcp/hooks.ts): create the
+// remote MCP server, then create a disabled mcp_servers row that links to
+// it. Without the link row the dashboard treats the source as orphaned.
 type Catalog interface {
 	GetServerDetails(ctx context.Context, payload *registriesgen.GetServerDetailsPayload) (*types.ExternalMCPServer, error)
 	CreateRemoteServer(ctx context.Context, payload *remotemcpgen.CreateServerPayload) (*types.RemoteMcpServer, error)
+	DeleteRemoteServer(ctx context.Context, payload *remotemcpgen.DeleteServerPayload) error
+	CreateMCPServer(ctx context.Context, payload *mcpserversgen.CreateMcpServerPayload) (*types.McpServer, error)
 }
 
-// FuncCatalog adapts mcp_registries.Service.GetServerDetails and
-// remote_mcp.Service.CreateServer method values to the Catalog interface
-// without forcing this package to depend on the concrete service packages
-// (some of them transitively pull platformtools, which would form a cycle).
+// FuncCatalog adapts the underlying Goa service method values to the
+// Catalog interface without forcing this package to import the concrete
+// service packages (some transitively pull platformtools, which would
+// form a cycle).
 type FuncCatalog struct {
 	GetServerDetailsFn   func(ctx context.Context, payload *registriesgen.GetServerDetailsPayload) (*types.ExternalMCPServer, error)
 	CreateRemoteServerFn func(ctx context.Context, payload *remotemcpgen.CreateServerPayload) (*types.RemoteMcpServer, error)
+	DeleteRemoteServerFn func(ctx context.Context, payload *remotemcpgen.DeleteServerPayload) error
+	CreateMCPServerFn    func(ctx context.Context, payload *mcpserversgen.CreateMcpServerPayload) (*types.McpServer, error)
 }
 
 func (f *FuncCatalog) GetServerDetails(ctx context.Context, payload *registriesgen.GetServerDetailsPayload) (*types.ExternalMCPServer, error) {
@@ -44,6 +54,14 @@ func (f *FuncCatalog) GetServerDetails(ctx context.Context, payload *registriesg
 
 func (f *FuncCatalog) CreateRemoteServer(ctx context.Context, payload *remotemcpgen.CreateServerPayload) (*types.RemoteMcpServer, error) {
 	return f.CreateRemoteServerFn(ctx, payload)
+}
+
+func (f *FuncCatalog) DeleteRemoteServer(ctx context.Context, payload *remotemcpgen.DeleteServerPayload) error {
+	return f.DeleteRemoteServerFn(ctx, payload)
+}
+
+func (f *FuncCatalog) CreateMCPServer(ctx context.Context, payload *mcpserversgen.CreateMcpServerPayload) (*types.McpServer, error) {
+	return f.CreateMCPServerFn(ctx, payload)
 }
 
 func decodePayload(payload io.Reader, target any) error {

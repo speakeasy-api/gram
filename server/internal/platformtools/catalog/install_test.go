@@ -48,6 +48,26 @@ func TestSelectRemote_RemoteURLOverride(t *testing.T) {
 	require.Same(t, b, got)
 }
 
+func TestSelectRemote_RejectsUnsupportedTransportOnRemoteURLMatch(t *testing.T) {
+	t.Parallel()
+
+	unsupported := &types.ExternalMCPRemote{URL: "https://ws.example/mcp", TransportType: "websocket", Headers: nil, Variables: nil}
+	wanted := "https://ws.example/mcp"
+
+	_, err := selectRemote([]*types.ExternalMCPRemote{unsupported}, &wanted, nil)
+	require.Error(t, err)
+}
+
+func TestSelectRemote_RejectsUnsupportedTransportInFilter(t *testing.T) {
+	t.Parallel()
+
+	stream := &types.ExternalMCPRemote{URL: "https://stream.example/mcp", TransportType: "streamable-http", Headers: nil, Variables: nil}
+	want := "websocket"
+
+	_, err := selectRemote([]*types.ExternalMCPRemote{stream}, nil, &want)
+	require.Error(t, err)
+}
+
 func TestSelectRemote_TransportFilter(t *testing.T) {
 	t.Parallel()
 
