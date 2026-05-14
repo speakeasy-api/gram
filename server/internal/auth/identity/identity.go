@@ -4,17 +4,19 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
-	"regexp"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -303,15 +305,6 @@ func (r *Resolver) BuildUserInfoFromDB(ctx context.Context, userID string) (*ses
 	}, nil
 }
 
-var slugifyRe = regexp.MustCompile(`[^a-z0-9]+`)
-
-func slugify(name string) string {
-	s := strings.ToLower(strings.TrimSpace(name))
-	s = slugifyRe.ReplaceAllString(s, "-")
-	s = strings.Trim(s, "-")
-	return s
-}
-
 // SyncMembershipsFromWorkOS refreshes local WorkOS organization memberships
 // and invalidates cached user info so the next read observes the synced rows.
 func (r *Resolver) SyncMembershipsFromWorkOS(ctx context.Context, gramUserID, workosUserID string) error {
@@ -346,19 +339,44 @@ func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 
 		gramOrgID := r.resolveGramOrgID(ctx, m.OrganizationID, org.ExternalID)
 
-		slug := slugify(org.Name)
+		slug := orgslug.Slugify(org.Name)
 		if slug == "" {
 			slug = m.OrganizationID
 		}
+		shouldCreateOrg := false
+		existingOrg, err := r.orgRepo.GetOrganizationMetadata(ctx, gramOrgID)
+		switch {
+		case err == nil:
+			if !existingOrg.WorkosID.Valid {
+				if _, err := r.orgRepo.SetOrgWorkosID(ctx, orgRepo.SetOrgWorkosIDParams{
+					WorkosID:       pgtype.Text{String: m.OrganizationID, Valid: true},
+					OrganizationID: gramOrgID,
+				}); err != nil {
+					return nil, fmt.Errorf("set workos id for organization %q: %w", gramOrgID, err)
+				}
+			} else if existingOrg.WorkosID.String != m.OrganizationID {
+				return nil, fmt.Errorf("workos organization %q resolved to gram organization %q with different workos_id %q", m.OrganizationID, gramOrgID, existingOrg.WorkosID.String)
+			}
+		case errors.Is(err, pgx.ErrNoRows):
+			slug, err = orgslug.FindUnique(ctx, r.orgRepo, slug)
+			if err != nil {
+				return nil, fmt.Errorf("find unique slug for workos organization %q: %w", m.OrganizationID, err)
+			}
+			shouldCreateOrg = true
+		default:
+			return nil, fmt.Errorf("get org metadata for workos organization %q: %w", m.OrganizationID, err)
+		}
 
-		if _, err := r.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-			ID:          gramOrgID,
-			Name:        org.Name,
-			Slug:        slug,
-			WorkosID:    pgtype.Text{String: m.OrganizationID, Valid: true},
-			Whitelisted: pgtype.Bool{Bool: false, Valid: false},
-		}); err != nil {
-			return nil, fmt.Errorf("upsert org metadata from workos %q: %w", m.OrganizationID, err)
+		if shouldCreateOrg {
+			if _, err := r.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+				ID:          gramOrgID,
+				Name:        org.Name,
+				Slug:        slug,
+				WorkosID:    pgtype.Text{String: m.OrganizationID, Valid: true},
+				Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+			}); err != nil {
+				return nil, fmt.Errorf("upsert org metadata from workos %q: %w", m.OrganizationID, err)
+			}
 		}
 
 		if err := r.workosClient.EnsureOrgExternalID(ctx, m.OrganizationID, gramOrgID); err != nil {

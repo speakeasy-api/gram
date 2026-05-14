@@ -385,12 +385,13 @@ func TestE2E_Callback_IDPOrgSelectionSyncsMissingMembershipForExistingUser(t *te
 	t.Parallel()
 
 	const (
-		workosUserID       = "user_01IDP_EXISTING_SYNC"
-		speakeasyWorkosID  = "org_01EXISTING_SPEAKEASY"
-		walkerWorkosID     = "org_01EXISTING_WALKER"
-		existingLocalOrgID = "existing-speakeasy-org"
+		workosUserID      = "user_01IDP_EXISTING_SYNC"
+		speakeasyWorkosID = "org_01EXISTING_SPEAKEASY"
+		walkerWorkosID    = "org_01EXISTING_WALKER"
+		collidingOrgID    = "existing-walker-slug-org"
 	)
 	gramUserID := users.UserIDFromWorkOSID(workosUserID)
+	existingLocalOrgID := orgid.FromWorkOSID(speakeasyWorkosID)
 
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{
@@ -424,14 +425,26 @@ func TestE2E_Callback_IDPOrgSelectionSyncsMissingMembershipForExistingUser(t *te
 	require.NoError(t, err)
 	inst.setUserWorkosID(ctx, t, gramUserID, workosUserID)
 
-	speakeasyWorkosIDPtr := speakeasyWorkosID
+	orgQueries := orgRepo.New(inst.conn)
+	_, err = orgQueries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          existingLocalOrgID,
+		Name:        "Local Speakeasy",
+		Slug:        "local-speakeasy",
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = orgQueries.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: existingLocalOrgID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.NoError(t, err)
 	require.NoError(t, inst.createTestOrganization(ctx, MockOrganizationEntry{
-		ID:                 existingLocalOrgID,
-		Name:               "Speakeasy Team",
-		Slug:               "speakeasy-team",
-		WorkosID:           &speakeasyWorkosIDPtr,
-		UserWorkspaceSlugs: []string{"speakeasy-team"},
-	}, gramUserID))
+		ID:                 collidingOrgID,
+		Name:               "Walker Test Org",
+		Slug:               "walker-test-org",
+		UserWorkspaceSlugs: []string{"walker-test-org"},
+	}, ""))
 
 	cached, _, err := inst.sessionManager.GetUserInfo(ctx, gramUserID)
 	require.NoError(t, err)
@@ -450,6 +463,17 @@ func TestE2E_Callback_IDPOrgSelectionSyncsMissingMembershipForExistingUser(t *te
 	require.NoError(t, err)
 	require.NotNil(t, infoResult)
 	assert.Equal(t, orgid.FromWorkOSID(walkerWorkosID), infoResult.ActiveOrganizationID)
+
+	walkerOrg, err := orgRepo.New(inst.conn).GetOrganizationMetadata(ctx, orgid.FromWorkOSID(walkerWorkosID))
+	require.NoError(t, err)
+	assert.Regexp(t, `^walker-test-org-[0-9a-f]{4}$`, walkerOrg.Slug)
+
+	speakeasyOrg, err := orgQueries.GetOrganizationMetadata(ctx, existingLocalOrgID)
+	require.NoError(t, err)
+	assert.Equal(t, "Local Speakeasy", speakeasyOrg.Name)
+	assert.Equal(t, "local-speakeasy", speakeasyOrg.Slug)
+	assert.Equal(t, speakeasyWorkosID, speakeasyOrg.WorkosID.String)
+	assert.False(t, speakeasyOrg.Whitelisted)
 }
 
 // TestE2E_Callback_RejoinedOrg verifies that when a user left an org (soft-deleted
