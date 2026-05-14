@@ -41,6 +41,7 @@ func TestAssistantRuntimeConfigFromCLIPrefersOverrideURL(t *testing.T) {
 	t.Parallel()
 
 	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
+		"assistant-runtime-provider":   assistants.RuntimeProviderFlyIO,
 		"assistant-runtime-server-url": "https://runtime.example.com",
 	})
 
@@ -52,7 +53,9 @@ func TestAssistantRuntimeConfigFromCLIPrefersOverrideURL(t *testing.T) {
 func TestAssistantRuntimeConfigFromCLIFallsBackToServerURL(t *testing.T) {
 	t.Parallel()
 
-	ctx := newAssistantRuntimeCLIContext(t, map[string]string{})
+	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
+		"assistant-runtime-provider": assistants.RuntimeProviderFlyIO,
+	})
 
 	serverURL := &url.URL{Scheme: "https", Host: "gram.example.com"}
 	cfg, err := assistantRuntimeConfigFromCLI(ctx, serverURL)
