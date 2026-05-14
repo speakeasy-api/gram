@@ -524,6 +524,46 @@ SET state = @reaped_state,
 WHERE id = @runtime_id
   AND project_id = @project_id;
 
+-- name: ListStoppedRuntimesForReap :many
+-- Per-thread reap candidates: rows in stopped or failed whose own updated_at
+-- has aged past @stopped_before. No assistant-wide activity check so a single
+-- still-active thread on an assistant cannot pin every dead sibling's machine
+-- indefinitely. The NOT EXISTS guard is per-thread: if admit raced ahead and
+-- inserted a fresh starting/active row on the same thread (warm-resume path),
+-- skip — that row may still be inheriting and restarting this row's machine.
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
+FROM assistant_runtimes r
+WHERE r.backend_metadata_json <> '{}'::jsonb
+  AND r.state IN (@stopped_state, @failed_state)
+  AND r.updated_at < @stopped_before
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_runtimes r2
+    WHERE r2.assistant_thread_id = r.assistant_thread_id
+      AND r2.project_id = r.project_id
+      AND r2.created_at > r.created_at
+      AND r2.state IN (@starting_state, @active_state)
+  )
+ORDER BY r.updated_at ASC
+LIMIT @limit_count;
+
+-- name: MarkAssistantRuntimeMachineReaped :execrows
+-- Per-thread reap: strips the machine slot from backend metadata while
+-- preserving app-level fields (app_name, app_id, app_url, app_ip, region) so
+-- the next admit for the same thread cold-launches into the same Fly app and
+-- keeps its allocated IP and secrets. Filters by current state so a row that
+-- raced into starting/active between selection and update is left alone — the
+-- 0-rows return signals the caller to skip the destructive backend call.
+UPDATE assistant_runtimes
+SET state = @reaped_state,
+    backend_metadata_json = backend_metadata_json - 'machine_id' - 'last_boot_id',
+    updated_at = clock_timestamp(),
+    ended_at = COALESCE(ended_at, clock_timestamp()),
+    deleted_at = COALESCE(deleted_at, clock_timestamp())
+WHERE id = @runtime_id
+  AND project_id = @project_id
+  AND state IN (@stopped_state, @failed_state);
+
 -- name: BeginExpireAssistantRuntime :one
 -- Accepts both `active` and `expiring` so a Temporal-retried attempt (after
 -- Stop failed mid-flight) re-enters the Status/Stop path idempotently.

@@ -2,6 +2,7 @@ package assistants
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -881,16 +882,30 @@ func insertReapableRuntimeRow(
 	updatedAt time.Time,
 ) uuid.UUID {
 	t.Helper()
+	return insertReapableRuntimeRowWithMetadata(t, conn, projectID, assistantID, threadID, state, fmt.Sprintf(`{"app_name":%q}`, appName), updatedAt)
+}
+
+// insertReapableRuntimeRowWithMetadata variant lets a test seed a full
+// flyRuntimeMetadata blob so per-thread reap assertions can verify which
+// fields survive.
+func insertReapableRuntimeRowWithMetadata(
+	t *testing.T,
+	conn *pgxpool.Pool,
+	projectID, assistantID, threadID uuid.UUID,
+	state string,
+	metadataJSON string,
+	updatedAt time.Time,
+) uuid.UUID {
+	t.Helper()
 
 	runtimeID := uuid.New()
-	metadata := fmt.Sprintf(`{"app_name":%q}`, appName)
 	err := assistantsrepo.New(conn).CreateAssistantRuntime(t.Context(), assistantsrepo.CreateAssistantRuntimeParams{
 		ID:                  runtimeID,
 		AssistantThreadID:   threadID,
 		AssistantID:         assistantID,
 		ProjectID:           projectID,
 		Backend:             runtimeBackendFlyIO,
-		BackendMetadataJson: []byte(metadata),
+		BackendMetadataJson: []byte(metadataJSON),
 		State:               state,
 		WarmUntil:           pgtype.Timestamptz{},
 		LastHeartbeatAt:     pgtype.Timestamptz{},
@@ -1152,6 +1167,167 @@ func TestServiceCoreReapInactiveAssistantRuntimesReapsSiblingsAcrossSweeps(t *te
 	require.EqualValues(t, 2, reapCalls.Load())
 }
 
+func TestServiceCoreReapStoppedAssistantRuntimesCollectsOnlyAged(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_stopped_runtimes")
+	require.NoError(t, err)
+
+	projectID, assistantID, threadID := insertReapableProject(t, conn, "stopped-aged")
+	staleID := insertReapableRuntimeRowWithMetadata(t, conn, projectID, assistantID, threadID, runtimeStateStopped,
+		`{"app_name":"gram-asst-stale","app_id":"app-1","app_url":"https://gram-asst-stale.fly.dev","app_ip":"1.2.3.4","machine_id":"machine-stale","last_boot_id":"boot-1"}`,
+		time.Now().UTC().Add(-30*24*time.Hour),
+	)
+
+	freshProject, freshAssistantID, freshThreadID := insertReapableProject(t, conn, "stopped-fresh")
+	freshID := insertReapableRuntimeRow(t, conn, freshProject, freshAssistantID, freshThreadID, runtimeStateStopped, "gram-asst-fresh", time.Now().UTC().Add(-time.Hour))
+
+	reapMachineCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapMachineCalls: reapMachineCalls}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	result, err := core.ReapStoppedAssistantRuntimes(t.Context(), ReapStoppedAssistantRuntimesParams{
+		StoppedTTL: 14 * 24 * time.Hour,
+		BatchSize:  10,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Reaped)
+	require.Equal(t, 0, result.Errors)
+	require.EqualValues(t, 1, reapMachineCalls.Load())
+
+	stale, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: staleID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateReaped, stale.State)
+
+	var staleMeta map[string]any
+	require.NoError(t, json.Unmarshal(stale.BackendMetadataJson, &staleMeta))
+	require.Equal(t, "gram-asst-stale", staleMeta["app_name"], "app fields must survive per-thread reap")
+	require.Equal(t, "app-1", staleMeta["app_id"])
+	require.Equal(t, "1.2.3.4", staleMeta["app_ip"])
+	require.NotContains(t, staleMeta, "machine_id", "machine slot must be cleared")
+	require.NotContains(t, staleMeta, "last_boot_id", "boot id must be cleared")
+
+	fresh, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: freshID, ProjectID: freshProject})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateStopped, fresh.State, "rows inside the TTL window must stay put")
+}
+
+func TestServiceCoreReapStoppedAssistantRuntimesIgnoresSiblingActivity(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_stopped_sibling_active")
+	require.NoError(t, err)
+
+	// Same assistant: one fully-active row, one long-stopped row. The
+	// per-thread sweep must still collect the stopped row — that is the whole
+	// reason this path exists.
+	projectID, assistantID, activeThread := insertReapableProject(t, conn, "stopped-sibling")
+	insertReapableRuntimeRow(t, conn, projectID, assistantID, activeThread, runtimeStateActive, "gram-asst-live", time.Now().UTC().Add(-time.Minute))
+
+	chatB := uuid.New()
+	require.NoError(t, assistantsrepo.New(conn).UpsertAssistantChat(t.Context(), assistantsrepo.UpsertAssistantChatParams{
+		ChatID:         chatB,
+		ProjectID:      projectID,
+		OrganizationID: "org-test",
+		Title:          pgtype.Text{},
+	}))
+	stoppedThread, err := assistantsrepo.New(conn).UpsertAssistantThread(t.Context(), assistantsrepo.UpsertAssistantThreadParams{
+		AssistantID:   assistantID,
+		ProjectID:     projectID,
+		CorrelationID: "corr-stopped-sibling",
+		ChatID:        chatB,
+		SourceKind:    sourceKindSlack,
+		SourceRefJson: []byte("{}"),
+	})
+	require.NoError(t, err)
+	stoppedID := insertReapableRuntimeRow(t, conn, projectID, assistantID, stoppedThread, runtimeStateStopped, "gram-asst-stuck", time.Now().UTC().Add(-30*24*time.Hour))
+
+	reapMachineCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapMachineCalls: reapMachineCalls}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	result, err := core.ReapStoppedAssistantRuntimes(t.Context(), ReapStoppedAssistantRuntimesParams{
+		StoppedTTL: 14 * 24 * time.Hour,
+		BatchSize:  10,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Reaped)
+	require.EqualValues(t, 1, reapMachineCalls.Load())
+
+	stopped, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: stoppedID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateReaped, stopped.State)
+}
+
+func TestServiceCoreReapStoppedAssistantRuntimesSkipsThreadWithFresherStartingRow(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_stopped_race_skip")
+	require.NoError(t, err)
+
+	// Stopped row whose thread has since picked up a fresh starting row —
+	// the warm-resume admit path. The per-thread sweep must skip so it does
+	// not destroy a machine an active admit is restarting.
+	projectID, assistantID, threadID := insertReapableProject(t, conn, "race-skip")
+	stoppedID := insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateStopped, "gram-asst-race", time.Now().UTC().Add(-30*24*time.Hour))
+	startingID := uuid.New()
+	require.NoError(t, assistantsrepo.New(conn).CreateAssistantRuntime(t.Context(), assistantsrepo.CreateAssistantRuntimeParams{
+		ID:                  startingID,
+		AssistantThreadID:   threadID,
+		AssistantID:         assistantID,
+		ProjectID:           projectID,
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJson: []byte(`{"app_name":"gram-asst-race","machine_id":"machine-race"}`),
+		State:               runtimeStateStarting,
+		WarmUntil:           pgtype.Timestamptz{},
+		LastHeartbeatAt:     pgtype.Timestamptz{},
+		UpdatedAt:           pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+		EndedAt:             pgtype.Timestamptz{},
+		DeletedAt:           pgtype.Timestamptz{},
+	}))
+
+	reapMachineCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapMachineCalls: reapMachineCalls}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	result, err := core.ReapStoppedAssistantRuntimes(t.Context(), ReapStoppedAssistantRuntimesParams{
+		StoppedTTL: 14 * 24 * time.Hour,
+		BatchSize:  10,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Reaped)
+	require.EqualValues(t, 0, reapMachineCalls.Load(), "race-skip must not call the backend")
+
+	stopped, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: stoppedID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateStopped, stopped.State, "stopped row must remain untouched")
+}
+
+func TestServiceCoreReapStoppedAssistantRuntimesIgnoresActiveAndStarting(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_stopped_state_filter")
+	require.NoError(t, err)
+
+	projectID, assistantID, threadID := insertReapableProject(t, conn, "stopped-state-active")
+	insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateActive, "gram-asst-active", time.Now().UTC().Add(-30*24*time.Hour))
+
+	startingProject, startingAssistantID, startingThreadID := insertReapableProject(t, conn, "stopped-state-starting")
+	insertReapableRuntimeRow(t, conn, startingProject, startingAssistantID, startingThreadID, runtimeStateStarting, "gram-asst-starting", time.Now().UTC().Add(-30*24*time.Hour))
+
+	reapMachineCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapMachineCalls: reapMachineCalls}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	result, err := core.ReapStoppedAssistantRuntimes(t.Context(), ReapStoppedAssistantRuntimesParams{
+		StoppedTTL: 14 * 24 * time.Hour,
+		BatchSize:  10,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Reaped)
+	require.EqualValues(t, 0, reapMachineCalls.Load())
+}
+
 func TestServiceCoreReapInactiveAssistantRuntimesIgnoresActiveAndStarting(t *testing.T) {
 	t.Parallel()
 
@@ -1178,17 +1354,19 @@ func TestServiceCoreReapInactiveAssistantRuntimesIgnoresActiveAndStarting(t *tes
 }
 
 type testRuntimeBackend struct {
-	backend      string
-	ensureResult RuntimeBackendEnsureResult
-	ensureErr    error
-	configureErr error
-	runTurnErr   error
-	statusResult RuntimeBackendStatus
-	statusErr    error
-	stopErr      error
-	stopCalls    *atomic.Int64
-	reapCalls    *atomic.Int64
-	reapErr      error
+	backend          string
+	ensureResult     RuntimeBackendEnsureResult
+	ensureErr        error
+	configureErr     error
+	runTurnErr       error
+	statusResult     RuntimeBackendStatus
+	statusErr        error
+	stopErr          error
+	stopCalls        *atomic.Int64
+	reapCalls        *atomic.Int64
+	reapErr          error
+	reapMachineCalls *atomic.Int64
+	reapMachineErr   error
 }
 
 func (t testRuntimeBackend) Backend() string {
@@ -1241,6 +1419,13 @@ func (t testRuntimeBackend) Reap(context.Context, assistantRuntimeRecord) error 
 		t.reapCalls.Add(1)
 	}
 	return t.reapErr
+}
+
+func (t testRuntimeBackend) ReapStoppedMachine(context.Context, assistantRuntimeRecord) error {
+	if t.reapMachineCalls != nil {
+		t.reapMachineCalls.Add(1)
+	}
+	return t.reapMachineErr
 }
 
 func mustParseURLForServiceTest(t *testing.T, raw string) *url.URL {

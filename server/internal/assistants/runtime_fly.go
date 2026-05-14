@@ -917,6 +917,36 @@ func (f *FlyRuntimeBackend) Reap(ctx context.Context, runtime assistantRuntimeRe
 	return f.deleteApp(ctx, metadata.AppName)
 }
 
+// ReapStoppedMachine destroys this thread's machine but leaves the app in
+// place. The per-thread janitor uses it to collect dead machines without
+// disturbing sibling threads on the same per-assistant app. The whole-
+// assistant janitor remains the only path that may delete the app.
+func (f *FlyRuntimeBackend) ReapStoppedMachine(ctx context.Context, runtime assistantRuntimeRecord) error {
+	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
+		return err
+	}
+	metadata, err := decodeFlyRuntimeMetadata(runtime.BackendMetadataJSON)
+	if err != nil {
+		return err
+	}
+	if metadata.AppName == "" || metadata.MachineID == "" {
+		return nil
+	}
+
+	flapsClient, err := f.flapsFactory.New(ctx)
+	if err != nil {
+		return fmt.Errorf("create fly runtime flaps client: %w", err)
+	}
+
+	if err := flapsClient.Destroy(ctx, metadata.AppName, fly.RemoveMachineInput{
+		ID:   metadata.MachineID,
+		Kill: true,
+	}, ""); err != nil && !isFlyNotFound(err) {
+		return fmt.Errorf("destroy assistant fly runtime machine: %w", err)
+	}
+	return nil
+}
+
 func (f *FlyRuntimeBackend) deleteApp(ctx context.Context, appName string) error {
 	if err := f.client.DeleteApp(ctx, appName); err != nil && !isFlyNotFound(err) {
 		return fmt.Errorf("delete assistant fly runtime app: %w", err)

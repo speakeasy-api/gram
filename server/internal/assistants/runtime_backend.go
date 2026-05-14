@@ -27,6 +27,11 @@ type RuntimeBackend interface {
 	// (e.g. deletes the Fly app). Idempotent: must succeed when the resource
 	// is already gone. Distinct from Stop, which may preserve state for reuse.
 	Reap(ctx context.Context, runtime assistantRuntimeRecord) error
+	// ReapStoppedMachine tears down only this thread's machine slot, leaving
+	// the surrounding app (and any sibling threads' machines) untouched. Used
+	// by the per-thread janitor so the next admit for this thread can cold-
+	// launch into the same app and keep its IP and secrets. Idempotent.
+	ReapStoppedMachine(ctx context.Context, runtime assistantRuntimeRecord) error
 }
 
 type RuntimeBackendEnsureResult struct {

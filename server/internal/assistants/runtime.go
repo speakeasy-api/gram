@@ -515,6 +515,12 @@ func (m *RuntimeManager) Reap(ctx context.Context, runtime assistantRuntimeRecor
 	return m.Stop(ctx, runtime)
 }
 
+// ReapStoppedMachine on the local manager has no machine/app distinction to
+// preserve, so it collapses to Stop like Reap.
+func (m *RuntimeManager) ReapStoppedMachine(ctx context.Context, runtime assistantRuntimeRecord) error {
+	return m.Stop(ctx, runtime)
+}
+
 func (m *RuntimeManager) ServerURL(_ context.Context, runtime assistantRuntimeRecord, raw *url.URL) (*url.URL, error) {
 	if err := validateRuntimeBackend(m, runtime.Backend); err != nil {
 		return nil, err

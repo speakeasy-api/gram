@@ -1072,6 +1072,102 @@ func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params 
 	return result, nil
 }
 
+// ReapStoppedAssistantRuntimesParams configures one per-thread reap sweep.
+type ReapStoppedAssistantRuntimesParams struct {
+	// StoppedTTL is the minimum age (against the row's own updated_at) before
+	// a stopped or failed runtime row becomes eligible for collection.
+	StoppedTTL time.Duration
+	// BatchSize caps how many runtime rows one sweep will reap. Bounds the
+	// activity's duration under Temporal's StartToCloseTimeout.
+	BatchSize int32
+}
+
+// ReapStoppedAssistantRuntimes drives the per-thread janitor. It collects
+// runtime rows whose own updated_at has aged past StoppedTTL, regardless of
+// sibling activity on the same assistant. The Fly machine for each row is
+// destroyed; the surrounding app stays in place so the next admit for the
+// same thread can cold-launch into it and keep its IP and secrets.
+func (s *ServiceCore) ReapStoppedAssistantRuntimes(ctx context.Context, params ReapStoppedAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
+	if params.StoppedTTL <= 0 {
+		return ReapAssistantRuntimesResult{}, fmt.Errorf("stopped TTL must be positive")
+	}
+	if params.BatchSize <= 0 {
+		return ReapAssistantRuntimesResult{}, fmt.Errorf("batch size must be positive")
+	}
+
+	rows, err := assistantrepo.New(s.db).ListStoppedRuntimesForReap(ctx, assistantrepo.ListStoppedRuntimesForReapParams{
+		StoppedState:  runtimeStateStopped,
+		FailedState:   runtimeStateFailed,
+		StoppedBefore: conv.ToPGTimestamptz(time.Now().UTC().Add(-params.StoppedTTL)),
+		StartingState: runtimeStateStarting,
+		ActiveState:   runtimeStateActive,
+		LimitCount:    params.BatchSize,
+	})
+	if err != nil {
+		return ReapAssistantRuntimesResult{}, fmt.Errorf("list stopped assistant runtimes for reap: %w", err)
+	}
+
+	result := ReapAssistantRuntimesResult{Reaped: 0, Errors: 0}
+	for _, row := range rows {
+		if s.reapStoppedRuntimeRow(ctx, assistantRuntimeRecord{
+			ID:                  row.ID,
+			AssistantThreadID:   row.AssistantThreadID,
+			AssistantID:         row.AssistantID,
+			ProjectID:           row.ProjectID,
+			Backend:             row.Backend,
+			BackendMetadataJSON: row.BackendMetadataJson,
+			State:               row.State,
+			WarmUntil:           row.WarmUntil,
+		}) {
+			result.Reaped++
+		} else {
+			result.Errors++
+		}
+	}
+	return result, nil
+}
+
+// reapStoppedRuntimeRow claims the row in DB before issuing the destructive
+// backend call so a racing warm-resume admit cannot inherit this row's machine
+// slot mid-reap. MarkAssistantRuntimeMachineReaped's state guard plus the
+// affected-row count gate the Flaps destroy: if the row already transitioned
+// to starting/active between the candidate scan and the update, skip cleanly.
+// Returns true on success (including idempotent no-op when the machine was
+// already gone) and on the race-skip path.
+func (s *ServiceCore) reapStoppedRuntimeRow(ctx context.Context, record assistantRuntimeRecord) bool {
+	affected, err := assistantrepo.New(s.db).MarkAssistantRuntimeMachineReaped(ctx, assistantrepo.MarkAssistantRuntimeMachineReapedParams{
+		ReapedState:  runtimeStateReaped,
+		StoppedState: runtimeStateStopped,
+		FailedState:  runtimeStateFailed,
+		RuntimeID:    record.ID,
+		ProjectID:    record.ProjectID,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "mark assistant runtime machine reaped failed",
+			attr.SlogAssistantID(record.AssistantID.String()),
+			attr.SlogAssistantRuntimeID(record.ID.String()),
+			attr.SlogError(err),
+		)
+		return false
+	}
+	if affected == 0 {
+		// Row raced into starting/active; another path now owns this machine.
+		return true
+	}
+
+	if err := s.runtime.ReapStoppedMachine(ctx, record); err != nil {
+		s.logger.WarnContext(ctx, "reap stopped runtime machine failed",
+			attr.SlogAssistantID(record.AssistantID.String()),
+			attr.SlogAssistantThreadID(record.AssistantThreadID.String()),
+			attr.SlogAssistantRuntimeID(record.ID.String()),
+			attr.SlogAssistantRuntimeBackend(record.Backend),
+			attr.SlogError(err),
+		)
+		return false
+	}
+	return true
+}
+
 // reapRuntimeRow tears down the backend resource for one row and records the
 // outcome in DB. Returns true on success (including idempotent no-op when
 // the resource was already gone). Errors are logged here so callers can
