@@ -365,6 +365,52 @@ func (q *Queries) HasOrganizationUserRelationship(ctx context.Context, arg HasOr
 }
 
 const linkRelationshipsToUser = `-- name: LinkRelationshipsToUser :exec
+WITH pending_relationships AS (
+    SELECT
+        id,
+        organization_id,
+        workos_user_id,
+        workos_membership_id,
+        workos_updated_at,
+        workos_last_event_id
+    FROM organization_user_relationships
+    WHERE workos_user_id = $2
+      AND user_id IS NULL
+      AND deleted_at IS NULL
+),
+deleted_pending_for_tombstones AS (
+    UPDATE organization_user_relationships pending
+    SET deleted_at = clock_timestamp(),
+        updated_at = clock_timestamp()
+    FROM pending_relationships
+    WHERE pending.id = pending_relationships.id
+      AND EXISTS (
+          SELECT 1
+          FROM organization_user_relationships existing
+          WHERE existing.organization_id = pending_relationships.organization_id
+            AND existing.user_id = $1
+            AND existing.deleted_at IS NOT NULL
+      )
+    RETURNING
+        pending_relationships.organization_id,
+        pending_relationships.workos_user_id,
+        pending_relationships.workos_membership_id,
+        pending_relationships.workos_updated_at,
+        pending_relationships.workos_last_event_id
+),
+relinked_tombstones AS (
+    UPDATE organization_user_relationships existing
+    SET workos_user_id = deleted_pending_for_tombstones.workos_user_id,
+        workos_membership_id = deleted_pending_for_tombstones.workos_membership_id,
+        workos_updated_at = deleted_pending_for_tombstones.workos_updated_at,
+        workos_last_event_id = deleted_pending_for_tombstones.workos_last_event_id,
+        deleted_at = NULL,
+        updated_at = clock_timestamp()
+    FROM deleted_pending_for_tombstones
+    WHERE existing.organization_id = deleted_pending_for_tombstones.organization_id
+      AND existing.user_id = $1
+      AND existing.deleted_at IS NOT NULL
+)
 UPDATE organization_user_relationships pending
 SET user_id = $1,
     updated_at = clock_timestamp()
@@ -376,7 +422,6 @@ WHERE pending.workos_user_id = $2
       FROM organization_user_relationships existing
       WHERE existing.organization_id = pending.organization_id
         AND existing.user_id = $1
-        AND existing.deleted_at IS NULL
   )
 `
 
@@ -1095,7 +1140,6 @@ WITH updated_existing_user_relationship AS (
     WHERE organization_id = $1
       AND user_id = $2
       AND $2::text IS NOT NULL
-      AND deleted_at IS NULL
     RETURNING id
 )
 INSERT INTO organization_user_relationships (
