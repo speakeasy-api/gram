@@ -789,6 +789,57 @@ func (q *Queries) ListRemoteSessionsByProjectID(ctx context.Context, arg ListRem
 	return items, nil
 }
 
+const listRemoteSessionsForSubject = `-- name: ListRemoteSessionsForSubject :many
+SELECT id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, refresh_expires_at, scopes, created_at, updated_at, deleted_at, deleted
+FROM remote_sessions
+WHERE user_session_issuer_id = $1
+  AND subject_urn = $2
+  AND deleted IS FALSE
+ORDER BY updated_at DESC
+`
+
+type ListRemoteSessionsForSubjectParams struct {
+	UserSessionIssuerID uuid.UUID
+	SubjectUrn          urn.SessionSubject
+}
+
+// Used by the MCP runtime resolver to find the upstream token rows
+// bound to a (user_session_issuer, subject_urn) pair. Filters by the
+// partial-unique-index predicate so tombstone rows are invisible.
+func (q *Queries) ListRemoteSessionsForSubject(ctx context.Context, arg ListRemoteSessionsForSubjectParams) ([]RemoteSession, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionsForSubject, arg.UserSessionIssuerID, arg.SubjectUrn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RemoteSession
+	for rows.Next() {
+		var i RemoteSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.SubjectUrn,
+			&i.UserSessionIssuerID,
+			&i.RemoteSessionClientID,
+			&i.AccessTokenEncrypted,
+			&i.AccessExpiresAt,
+			&i.RefreshTokenEncrypted,
+			&i.RefreshExpiresAt,
+			&i.Scopes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const revokeRemoteSession = `-- name: RevokeRemoteSession :one
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp()

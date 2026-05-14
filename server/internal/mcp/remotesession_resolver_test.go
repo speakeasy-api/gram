@@ -100,6 +100,33 @@ func TestServePublic_UserSessionIssuerRemoteSessionValidTokenResolvesOAuthInput(
 		"resolver must satisfy the toolset's oauth2 scheme, so no WWW-Authenticate challenge should be emitted")
 }
 
+// TestServePublic_UserSessionIssuerRemoteSessionAnonymousSubjectResolves pins
+// the resolver's behaviour for public issuer-gated flows: the consent path
+// stamps an `anonymous:<mcp_session_id>` URN and persists a `remote_sessions`
+// row under it. The runtime must look that row up and surface its access
+// token, otherwise a user who completed /connect successfully would get 401s
+// on every subsequent /mcp/{slug} call because the resolver bypassed itself.
+func TestServePublic_UserSessionIssuerRemoteSessionAnonymousSubjectResolves(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "resolver-anon-token")
+	requestSubject := urn.NewAnonymousSubject("resolver-anon-" + uuid.NewString())
+
+	insertRemoteSessionAccessToken(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, requestSubject, "valid-upstream-token", time.Now().Add(time.Hour))
+
+	sessionToken := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, requestSubject)
+	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), sessionToken, nil)
+	require.NoError(t, err, "initialize should succeed when an anonymous subject has a valid remote_session row")
+	require.Empty(t, w.Header().Get("WWW-Authenticate"),
+		"resolver must run for anonymous subjects too, so no WWW-Authenticate challenge should be emitted")
+}
+
 type remoteSessionResolverFixture struct {
 	Toolset             toolsets_repo.Toolset
 	UserSessionIssuer   usersessions_repo.UserSessionIssuer

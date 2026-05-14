@@ -266,6 +266,17 @@ WHERE c.project_id = @project_id
 ORDER BY s.id DESC
 LIMIT sqlc.arg('limit_value');
 
+-- name: ListRemoteSessionsForSubject :many
+-- Used by the MCP runtime resolver to find the upstream token rows
+-- bound to a (user_session_issuer, subject_urn) pair. Filters by the
+-- partial-unique-index predicate so tombstone rows are invisible.
+SELECT *
+FROM remote_sessions
+WHERE user_session_issuer_id = @user_session_issuer_id
+  AND subject_urn = @subject_urn
+  AND deleted IS FALSE
+ORDER BY updated_at DESC;
+
 -- name: GetRemoteSessionByID :one
 SELECT s.*
 FROM remote_sessions AS s
