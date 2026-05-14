@@ -5,6 +5,8 @@ import {
   getDefaultMatchBreadth,
   getMatchValue,
   getRequestDisplayName,
+  getRequestServerDetail,
+  getRuleServerDetail,
 } from "./shadow-mcp-utils";
 
 function approvalRequest(
@@ -112,5 +114,34 @@ describe("shadow-mcp-utils", () => {
         "full_url",
       ),
     ).toBe("https://stripe.example/mcp");
+  });
+
+  it("labels server identity only request details", () => {
+    const request = approvalRequest({
+      observedName: "Claude AI Calendly",
+      observedServerIdentity: "claude_ai_calendly",
+    });
+
+    expect(getRequestDisplayName(request)).toBe("Claude AI Calendly");
+    expect(getRequestServerDetail(request)).toBe(
+      "Server identity: claude_ai_calendly",
+    );
+    expect(getDefaultMatchBreadth(request)).toBe("server_identity");
+    expect(getMatchValue(request, "server_identity")).toBe(
+      "claude_ai_calendly",
+    );
+  });
+
+  it("labels server identity only rule details", () => {
+    expect(
+      getRuleServerDetail(
+        accessRule({
+          displayName: "Claude AI Calendly",
+          matchBreadth: "server_identity",
+          matchValue: "claude_ai_calendly",
+          observedServerIdentity: "claude_ai_calendly",
+        }),
+      ),
+    ).toBe("Server identity: claude_ai_calendly");
   });
 });

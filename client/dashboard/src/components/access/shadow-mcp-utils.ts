@@ -64,6 +64,24 @@ export function getRuleDisplayName(rule: ShadowMCPAccessRule) {
   return rule.displayName || rule.observedServerIdentity || rule.matchValue;
 }
 
+export function getRequestServerDetail(request: ShadowMCPApprovalRequest) {
+  if (request.observedFullUrl) return request.observedFullUrl;
+  if (request.observedUrlHost) return request.observedUrlHost;
+  if (request.observedServerIdentity) {
+    return `Server identity: ${request.observedServerIdentity}`;
+  }
+  return undefined;
+}
+
+export function getRuleServerDetail(rule: ShadowMCPAccessRule) {
+  if (rule.observedFullUrl) return rule.observedFullUrl;
+  if (rule.observedUrlHost) return rule.observedUrlHost;
+  if (rule.observedServerIdentity) {
+    return `Server identity: ${rule.observedServerIdentity}`;
+  }
+  return `${getMatchBreadthLabel(rule.matchBreadth)}: ${rule.matchValue}`;
+}
+
 export function getRequesterLabel(request: ShadowMCPApprovalRequest) {
   return (
     request.requesterDisplayName ??

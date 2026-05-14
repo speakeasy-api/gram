@@ -59,8 +59,10 @@ import {
   getRequesterDetail,
   getRequesterLabel,
   getRequestDisplayName,
+  getRequestServerDetail,
   getRequestStatusLabel,
   getRuleDisplayName,
+  getRuleServerDetail,
   type ShadowMCPAccessScope,
   type ShadowMCPDisposition,
   type ShadowMCPMatchBreadth,
@@ -279,7 +281,7 @@ function ReviewRequestSheet({
           <div className="border-border rounded-md border px-3 py-3">
             <ServerCell
               name={getRequestDisplayName(request)}
-              detail={request.observedFullUrl ?? request.observedUrlHost}
+              detail={getRequestServerDetail(request)}
             />
             <div className="mt-3 grid grid-cols-2 gap-3">
               <div>
@@ -816,7 +818,7 @@ export function ShadowMCPAccessContent() {
       render: (request) => (
         <ServerCell
           name={getRequestDisplayName(request)}
-          detail={request.observedFullUrl ?? request.observedUrlHost}
+          detail={getRequestServerDetail(request)}
         />
       ),
     },
@@ -882,7 +884,7 @@ export function ShadowMCPAccessContent() {
       render: (rule) => (
         <ServerCell
           name={getRuleDisplayName(rule)}
-          detail={rule.observedFullUrl ?? rule.matchValue}
+          detail={getRuleServerDetail(rule)}
         />
       ),
     },
