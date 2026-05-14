@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type UpdateToolsetRequestBody = {
   /**
+   * Sources this toolset auto-extends when a deployment introduces new tools. Each entry is "<kind>:<source>"; only "function:" entries are accepted today. Passing this field replaces the current value (use the existing list plus additions to extend).
+   */
+  autoSyncSources?: Array<string> | undefined;
+  /**
    * The ID of the custom domain to use for the toolset
    */
   customDomainId?: string | undefined;
@@ -54,6 +58,7 @@ export type UpdateToolsetRequestBody = {
 
 /** @internal */
 export type UpdateToolsetRequestBody$Outbound = {
+  auto_sync_sources?: Array<string> | undefined;
   custom_domain_id?: string | undefined;
   default_environment_slug?: string | undefined;
   description?: string | undefined;
@@ -73,6 +78,7 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodMiniType<
   UpdateToolsetRequestBody
 > = z.pipe(
   z.object({
+    autoSyncSources: z.optional(z.array(z.string())),
     customDomainId: z.optional(z.string()),
     defaultEnvironmentSlug: z.optional(z.string()),
     description: z.optional(z.string()),
@@ -87,6 +93,7 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      autoSyncSources: "auto_sync_sources",
       customDomainId: "custom_domain_id",
       defaultEnvironmentSlug: "default_environment_slug",
       mcpEnabled: "mcp_enabled",

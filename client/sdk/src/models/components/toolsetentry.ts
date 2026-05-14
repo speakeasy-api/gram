@@ -33,6 +33,10 @@ import { ToolsetOrigin, ToolsetOrigin$inboundSchema } from "./toolsetorigin.js";
 
 export type ToolsetEntry = {
   /**
+   * Sources this toolset auto-extends when a deployment introduces new tools. Each entry is "<kind>:<source>"; only "function:" entries are accepted today.
+   */
+  autoSyncSources: Array<string>;
+  /**
    * When the toolset was created.
    */
   createdAt: Date;
@@ -131,6 +135,7 @@ export type ToolsetEntry = {
 export const ToolsetEntry$inboundSchema: z.ZodMiniType<ToolsetEntry, unknown> =
   z.pipe(
     z.object({
+      auto_sync_sources: z.array(z.string()),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -168,6 +173,7 @@ export const ToolsetEntry$inboundSchema: z.ZodMiniType<ToolsetEntry, unknown> =
     }),
     z.transform((v) => {
       return remap$(v, {
+        "auto_sync_sources": "autoSyncSources",
         "created_at": "createdAt",
         "custom_domain_id": "customDomainId",
         "default_environment_slug": "defaultEnvironmentSlug",

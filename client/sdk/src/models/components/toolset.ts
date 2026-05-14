@@ -49,6 +49,10 @@ export type Toolset = {
    */
   accountType: string;
   /**
+   * Sources this toolset auto-extends when a deployment introduces new tools. Each entry is "<kind>:<source>"; only "function:" entries are accepted today.
+   */
+  autoSyncSources: Array<string>;
+  /**
    * When the toolset was created.
    */
   createdAt: Date;
@@ -154,6 +158,7 @@ export type Toolset = {
 export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
   z.object({
     account_type: z.string(),
+    auto_sync_sources: z.array(z.string()),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -196,6 +201,7 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
   z.transform((v) => {
     return remap$(v, {
       "account_type": "accountType",
+      "auto_sync_sources": "autoSyncSources",
       "created_at": "createdAt",
       "custom_domain_id": "customDomainId",
       "default_environment_slug": "defaultEnvironmentSlug",

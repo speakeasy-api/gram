@@ -340,7 +340,10 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to describe existing toolset").Log(ctx, logger)
 	}
 
-	// Convert update params
+	// Convert update params.
+	// AutoSyncSources is left as the zero value (nil); the COALESCE in the
+	// query preserves the existing column value when the param is NULL. We
+	// only assign it below if the caller explicitly provided the field.
 	updateParams := repo.UpdateToolsetParams{
 		Slug:                   conv.ToLower(payload.Slug),
 		Description:            existingToolset.Description,
@@ -436,6 +439,13 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	if payload.ToolSelectionMode != nil {
 		updateParams.ToolSelectionMode = *payload.ToolSelectionMode
+	}
+
+	if payload.AutoSyncSources != nil {
+		if err := validateAutoSyncSources(payload.AutoSyncSources); err != nil {
+			return nil, err
+		}
+		updateParams.AutoSyncSources = payload.AutoSyncSources
 	}
 
 	err = s.createToolsetVersion(ctx, payload.ToolUrns, payload.ResourceUrns, existingToolset.ID, tr)

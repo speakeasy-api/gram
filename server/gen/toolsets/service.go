@@ -230,7 +230,12 @@ type UpdateToolsetPayload struct {
 	CustomDomainID *string
 	// The mode to use for tool selection
 	ToolSelectionMode *string
-	ProjectSlugInput  *string
+	// Sources this toolset auto-extends when a deployment introduces new tools.
+	// Each entry is "<kind>:<source>"; only "function:" entries are accepted
+	// today. Passing this field replaces the current value (use the existing list
+	// plus additions to extend).
+	AutoSyncSources  []string
+	ProjectSlugInput *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

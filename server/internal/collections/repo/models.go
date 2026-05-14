@@ -43,6 +43,7 @@ type Toolset struct {
 	McpIsPublic            bool
 	McpEnabled             bool
 	ToolSelectionMode      string
+	AutoSyncSources        []string
 	CustomDomainID         uuid.NullUUID
 	ExternalOauthServerID  uuid.NullUUID
 	OauthProxyServerID     uuid.NullUUID

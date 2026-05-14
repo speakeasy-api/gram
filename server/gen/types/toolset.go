@@ -56,6 +56,9 @@ type Toolset struct {
 	McpEnabled *bool
 	// The mode to use for tool selection
 	ToolSelectionMode string
+	// Sources this toolset auto-extends when a deployment introduces new tools.
+	// Each entry is "<kind>:<source>"; only "function:" entries are accepted today.
+	AutoSyncSources []string
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string
 	// The registry lineage for toolsets installed from an external MCP catalog
