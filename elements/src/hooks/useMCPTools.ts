@@ -56,6 +56,11 @@ export function useMCPTools({
   // requests. `mcpHeaders` is a write-only proxy that fans cross-cutting
   // header writes (e.g. Gram-Chat-ID) out to every per-server record.
   const perServerHeadersRef = useRef<Record<string, string>[]>([]);
+  // When some servers fail and some succeed we still resolve with the partial
+  // tool map, but flip this so the query is treated as stale — natural refetch
+  // triggers (window focus, reconnect) can then recover the missing servers
+  // instead of the partial result being cached for the session.
+  const partialFailureRef = useRef(false);
   const headersProxyRef = useRef<Record<string, string> | null>(null);
   if (!headersProxyRef.current) {
     headersProxyRef.current = new Proxy<Record<string, string>>(
@@ -133,6 +138,9 @@ export function useMCPTools({
         }
       }
 
+      partialFailureRef.current =
+        rejected > 0 && rejected < serverEntries.length;
+
       // Surface as a query rejection only when every server failed, so React
       // Query's retry/backoff still recovers from total outages (e.g. expired
       // auth hitting every server). Partial failures resolve normally.
@@ -148,7 +156,7 @@ export function useMCPTools({
       return merged;
     },
     enabled: !auth.isLoading && servers.length > 0,
-    staleTime: Infinity,
+    staleTime: () => (partialFailureRef.current ? 0 : Infinity),
     gcTime: Infinity,
   });
 
