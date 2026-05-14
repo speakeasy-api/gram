@@ -147,6 +147,8 @@ The first implementation path attempted to model allowed Shadow MCP runtime acce
 
 The v1 implementation intentionally removes that grant plumbing. RBAC now only protects management operations. Shadow MCP runtime allow/deny is determined by Access Rules directly, scoped to all users in the organization or all users in a project.
 
+Management operations are session-only for v1. API keys are intentionally excluded from the Shadow MCP request/rule management endpoints because API-key authorization is scope-based (`producer`/`consumer`) and does not enforce the same `org:admin` RBAC checks as a dashboard session.
+
 ## Management API
 
 Add methods to the existing `access` service because the admin surface belongs under Access and the operations are org-admin access-policy management.
@@ -166,7 +168,7 @@ Proposed route group:
 
 `listShadowMCPApprovalRequests`
 
-- Auth: session/by-key, require `org:admin` because requests include requester and block details.
+- Auth: session-only, require `org:admin` because requests include requester and block details.
 - Filters: `status`, `project_id`, `cursor`, `limit`.
 - Returns all states.
 
@@ -179,7 +181,7 @@ Proposed route group:
 
 `approveShadowMCPApprovalRequest`
 
-- Auth: require `org:admin`.
+- Auth: session-only, require `org:admin`.
 - Inputs: request id, access scope, match breadth, optional edited match value, admin note.
 - Creates an `allowed` Access Rule when needed.
 - For `access_scope = 'project'`, uses the request project as the rule project.
@@ -189,7 +191,7 @@ Proposed route group:
 
 `denyShadowMCPApprovalRequest`
 
-- Auth: require `org:admin`.
+- Auth: session-only, require `org:admin`.
 - Inputs: request id, admin note, `create_deny_rule` boolean, match breadth, optional edited match value.
 - Marks request `denied`.
 - If `create_deny_rule` is true, creates a project-scoped `denied` Access Rule for the request project.
@@ -199,25 +201,25 @@ Proposed route group:
 
 `listShadowMCPAccessRules`
 
-- Auth: require `org:read` or `org:admin`.
+- Auth: session-only, require `org:read` or `org:admin`.
 - Filters: `disposition`, `access_scope`, `project_id`, `cursor`, `limit`.
 - Returns the rule audience fields so the UI can show organization/project scope.
 
 `createShadowMCPAccessRule`
 
-- Auth: require `org:admin`.
+- Auth: session-only, require `org:admin`.
 - Inputs: disposition, access scope, optional project id for project-scoped rules, evidence fields, match breadth, match value, reason.
 - Creates the rule in one transaction.
 
 `updateShadowMCPAccessRule`
 
-- Auth: require `org:admin`.
+- Auth: session-only, require `org:admin`.
 - Inputs: rule id, disposition, access scope, optional project id for project-scoped rules, evidence fields, match breadth, match value, reason.
 - Audits before/after snapshots.
 
 `deleteShadowMCPAccessRule`
 
-- Auth: require `org:admin`.
+- Auth: session-only, require `org:admin`.
 - Soft-deletes the rule.
 
 ## Runtime enforcement
@@ -337,5 +339,4 @@ Frontend:
 
 1. What exact block event identifier already exists and can safely power the request-access link?
 2. Should exact allow/deny conflicts be prevented at write time, or allowed with a UI warning because deny wins?
-3. Should approval request creation be available to API-key actors, or only authenticated dashboard users?
-4. If granular audiences are needed later, should they attach to users, custom roles, groups, or a separate audience table?
+3. If granular audiences are needed later, should they attach to users, custom roles, groups, or a separate audience table?
