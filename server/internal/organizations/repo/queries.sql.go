@@ -452,7 +452,7 @@ type ListOrganizationsForUserRow struct {
 	WorkosID pgtype.Text
 }
 
-func (q *Queries) ListOrganizationsForUser(ctx context.Context, userID string) ([]ListOrganizationsForUserRow, error) {
+func (q *Queries) ListOrganizationsForUser(ctx context.Context, userID pgtype.Text) ([]ListOrganizationsForUserRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationsForUser, userID)
 	if err != nil {
 		return nil, err

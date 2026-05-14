@@ -251,7 +251,7 @@ func (r *Resolver) BuildUserInfoFromDB(ctx context.Context, userID string) (*ses
 		return nil, fmt.Errorf("get user: %w", err)
 	}
 
-	orgRows, err := r.orgRepo.ListOrganizationsForUser(ctx, userID)
+	orgRows, err := r.orgRepo.ListOrganizationsForUser(ctx, conv.ToPGText(userID))
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("list organizations for user: %w", err)
@@ -366,7 +366,7 @@ func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 		}
 	}
 
-	rows, err := r.orgRepo.ListOrganizationsForUser(ctx, gramUserID)
+	rows, err := r.orgRepo.ListOrganizationsForUser(ctx, conv.ToPGText(gramUserID))
 	if err != nil {
 		return nil, fmt.Errorf("re-read organizations after workos sync: %w", err)
 	}
