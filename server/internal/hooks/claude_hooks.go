@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -318,35 +319,21 @@ func extractSessionMetadata(payload *gen.LogsPayload) claudeLogMetadata {
 
 // Claude is the unified endpoint for all Claude Code hook events.
 func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
-	// Build a request-scoped logger so org/project/source/event are
-	// attached to every log line in this handler — including the
-	// pre-auth entry log. Auth on this endpoint is optional; the
-	// project_slug header may be present even when the API key isn't
-	// validated yet, so include it as a hint up front.
-	toolName := ""
-	if payload.ToolName != nil {
-		toolName = *payload.ToolName
-	}
-	sessionID := ""
-	if payload.SessionID != nil {
-		sessionID = *payload.SessionID
-	}
-	projectSlugHint := ""
-	if payload.ProjectSlugInput != nil {
-		projectSlugHint = *payload.ProjectSlugInput
-	}
+	// project_slug header may be set even when the API key isn't validated
+	// yet on this optional-auth endpoint — log it as a hint up front.
+	projectSlugHint := conv.PtrValOr(payload.ProjectSlugInput, "")
 	hasPluginAuth := hasOptionalPluginAuth(payload)
 
 	logger := s.logger.With(
 		attr.SlogHookSource("claude"),
 		attr.SlogHookEvent(payload.HookEventName),
-		attr.SlogToolName(toolName),
-		attr.SlogGenAIConversationID(sessionID),
+		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
+		attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
 		attr.SlogProjectSlug(projectSlugHint),
 		attr.SlogHookHasPluginAuth(hasPluginAuth),
 	)
 
-	logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Claude: %s", payload.HookEventName),
+	logger.InfoContext(ctx, "claude hook received",
 		attr.SlogEvent("claude_hook"),
 	)
 
@@ -358,22 +345,17 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 		// same path a no-headers request takes — recordHook buffers the event
 		// in Redis, and the OTEL Logs endpoint flushes it once the session is
 		// validated. Policies that need auth context degrade gracefully.
-		if authedCtx, err := s.authorizePluginRequest(ctx, *payload.ApikeyToken, *payload.ProjectSlugInput); err != nil {
+		if authedCtx, err := s.authorizePluginRequest(ctx, conv.PtrValOr(payload.ApikeyToken, ""), projectSlugHint); err != nil {
 			logger.WarnContext(ctx, "plugin auth failed on claude hook; falling back to OTEL-buffered path",
 				attr.SlogEvent("claude_hook_auth_failed"),
 				attr.SlogError(err),
 			)
 		} else {
 			ctx = authedCtx
-			if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
-				logger = logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
-				if authCtx.ProjectID != nil {
-					logger = logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
-				}
-				logger.InfoContext(ctx, "plugin auth ok on claude hook",
-					attr.SlogEvent("claude_hook_auth_ok"),
-				)
-			}
+			logger = s.withAuthContext(ctx, logger)
+			logger.InfoContext(ctx, "plugin auth ok on claude hook",
+				attr.SlogEvent("claude_hook_auth_ok"),
+			)
 		}
 	}
 
@@ -442,16 +424,10 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 }
 
 func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
-	logger := s.logger.With(
+	logger := s.withAuthContext(ctx, s.logger.With(
 		attr.SlogHookSource("claude"),
 		attr.SlogHookEvent(payload.HookEventName),
-	)
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
-		logger = logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
-		if authCtx.ProjectID != nil {
-			logger = logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
-		}
-	}
+	))
 
 	if payload.SessionID == nil || *payload.SessionID == "" {
 		logger.WarnContext(ctx, "Tool event called without session ID",

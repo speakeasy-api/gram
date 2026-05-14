@@ -42,7 +42,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 		attr.SlogProjectID(projectID),
 	)
 
-	logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Codex: %s", payload.HookEventName),
+	logger.InfoContext(ctx, "codex hook received",
 		attr.SlogEvent("codex_hook"),
 	)
 

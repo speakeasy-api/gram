@@ -47,7 +47,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		attr.SlogProjectID(projectID),
 	)
 
-	logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Cursor: %s", payload.HookEventName),
+	logger.InfoContext(ctx, "cursor hook received",
 		attr.SlogEvent("cursor_hook"),
 	)
 
