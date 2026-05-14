@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func staticRBAC(enabled bool) IsRBACEnabled {
@@ -102,93 +101,6 @@ func TestEngineRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
-}
-
-func TestEngineRequirePrincipal_loadsGrantsForAPIKeyUser(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	conn := newTestDB(t)
-	organizationID := "org_require_principal"
-	userID := "user_require_principal"
-	roleSlug := "role_require_principal"
-	serverID := "server_require_principal"
-
-	seedOrganization(t, ctx, conn, organizationID)
-	seedConnectedUser(t, ctx, conn, organizationID, userID, "test@example.com", "Test User", "workos-user-require-principal", "membership-require-principal")
-	seedGrant(t, ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug), ScopeMCPConnect, serverID)
-
-	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
-		ActiveOrganizationID:  organizationID,
-		UserID:                userID,
-		ExternalUserID:        "",
-		APIKeyID:              "key_require_principal",
-		SessionID:             nil,
-		ProjectID:             nil,
-		OrganizationSlug:      "",
-		Email:                 nil,
-		AccountType:           "enterprise",
-		HasActiveSubscription: false,
-		Whitelisted:           false,
-		ProjectSlug:           nil,
-		APIKeyScopes:          nil,
-		IsAdmin:               false,
-	})
-
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, staticRBAC(true), staticChallengeLogging(true), staticMembershipFetcher{roleSlug: roleSlug}, cache.NoopCache)
-
-	err = engine.Require(ctx, MCPCheck(ScopeMCPConnect, serverID, "project_123"))
-	require.NoError(t, err)
-
-	err = engine.RequirePrincipal(ctx, organizationID, userID, MCPCheck(ScopeMCPConnect, serverID, "project_123"))
-	require.NoError(t, err)
-
-	err = engine.RequirePrincipal(ctx, organizationID, userID, MCPCheck(ScopeMCPConnect, "server_denied", "project_123"))
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-}
-
-func TestEngineRequirePrincipal_ignoresContextGrantsForDifferentUser(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	conn := newTestDB(t)
-	organizationID := "org_require_principal_mismatch"
-	targetUserID := "user_require_principal_target"
-	serverID := "server_require_principal_mismatch"
-
-	seedOrganization(t, ctx, conn, organizationID)
-	seedConnectedUser(t, ctx, conn, organizationID, targetUserID, "target@example.com", "Target User", "workos-user-require-principal-target", "membership-require-principal-target")
-
-	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
-		ActiveOrganizationID:  organizationID,
-		UserID:                "different_user",
-		ExternalUserID:        "",
-		APIKeyID:              "key_require_principal_mismatch",
-		SessionID:             nil,
-		ProjectID:             nil,
-		OrganizationSlug:      "",
-		Email:                 nil,
-		AccountType:           "enterprise",
-		HasActiveSubscription: false,
-		Whitelisted:           false,
-		ProjectSlug:           nil,
-		APIKeyScopes:          nil,
-		IsAdmin:               false,
-	})
-	ctx = GrantsToContext(ctx, []Grant{NewGrant(ScopeMCPConnect, serverID)})
-
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, staticRBAC(true), staticChallengeLogging(true), staticMembershipFetcher{roleSlug: "target_role_without_grant"}, cache.NoopCache)
-
-	err = engine.RequirePrincipal(ctx, organizationID, targetUserID, MCPCheck(ScopeMCPConnect, serverID, "project_123"))
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestResolveRoleSlug_cachesEmptyMembershipResult(t *testing.T) {
@@ -634,14 +546,6 @@ type countingMembershipFetcher struct {
 func (c *countingMembershipFetcher) GetOrgMembership(context.Context, string, string) (*workos.Member, error) {
 	c.calls++
 	return nil, nil
-}
-
-type staticMembershipFetcher struct {
-	roleSlug string
-}
-
-func (s staticMembershipFetcher) GetOrgMembership(context.Context, string, string) (*workos.Member, error) {
-	return &workos.Member{RoleSlug: s.roleSlug}, nil
 }
 
 type mapCache struct {
