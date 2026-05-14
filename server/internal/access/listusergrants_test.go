@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -107,7 +108,7 @@ func TestService_ListGrants_NotConnected(t *testing.T) {
 	// is "not connected" from the DB perspective.
 	err := orgrepo.New(ti.conn).DeleteOrganizationUserRelationship(ctx, orgrepo.DeleteOrganizationUserRelationshipParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		UserID:         authCtx.UserID,
+		UserID:         conv.ToPGText(authCtx.UserID),
 	})
 	require.NoError(t, err)
 
