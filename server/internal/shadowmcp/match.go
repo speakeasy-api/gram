@@ -26,7 +26,7 @@ func NormalizeMatchValue(matchBreadth string, matchValue string) (string, error)
 			return "", fmt.Errorf("match_value must be a full URL")
 		}
 		u.Scheme = strings.ToLower(u.Scheme)
-		u.Host = NormalizeHost(u.Host)
+		u.Host = NormalizeURLHost(u.Scheme, u.Host)
 		u.Fragment = ""
 		if u.Path == "/" && u.RawPath == "" {
 			u.Path = ""
@@ -39,7 +39,7 @@ func NormalizeMatchValue(matchBreadth string, matchValue string) (string, error)
 			if err != nil || u.Host == "" {
 				return "", fmt.Errorf("match_value must include a URL host")
 			}
-			value = u.Host
+			return NormalizeURLHost(strings.ToLower(u.Scheme), u.Host), nil
 		}
 		return NormalizeHost(value), nil
 	case MatchBreadthServerIdentity:
@@ -50,12 +50,16 @@ func NormalizeMatchValue(matchBreadth string, matchValue string) (string, error)
 }
 
 func NormalizeHost(host string) string {
+	return strings.ToLower(strings.TrimSpace(host))
+}
+
+func NormalizeURLHost(scheme string, host string) string {
 	host = strings.ToLower(strings.TrimSpace(host))
 	name, port, err := net.SplitHostPort(host)
 	if err != nil {
 		return host
 	}
-	if port == "80" || port == "443" {
+	if (scheme == "http" && port == "80") || (scheme == "https" && port == "443") {
 		return name
 	}
 	return host

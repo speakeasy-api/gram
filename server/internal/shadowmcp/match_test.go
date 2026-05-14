@@ -28,6 +28,18 @@ func TestNormalizeMatchValue(t *testing.T) {
 			want:         "https://example.com/mcp",
 		},
 		{
+			name:         "full url keeps non default http port",
+			matchBreadth: MatchBreadthFullURL,
+			matchValue:   "http://example.com:443/mcp",
+			want:         "http://example.com:443/mcp",
+		},
+		{
+			name:         "full url keeps non default https port",
+			matchBreadth: MatchBreadthFullURL,
+			matchValue:   "https://example.com:80/mcp",
+			want:         "https://example.com:80/mcp",
+		},
+		{
 			name:         "full url normalizes empty root path",
 			matchBreadth: MatchBreadthFullURL,
 			matchValue:   "https://example.com/",
@@ -44,6 +56,12 @@ func TestNormalizeMatchValue(t *testing.T) {
 			matchBreadth: MatchBreadthURLHost,
 			matchValue:   "HTTPS://Example.COM:443/path",
 			want:         "example.com",
+		},
+		{
+			name:         "url host keeps bare port without scheme",
+			matchBreadth: MatchBreadthURLHost,
+			matchValue:   "Example.COM:443",
+			want:         "example.com:443",
 		},
 		{
 			name:         "server identity trims and lowercases",
