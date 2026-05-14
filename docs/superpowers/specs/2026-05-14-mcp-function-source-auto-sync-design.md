@@ -16,7 +16,7 @@ Allow a toolset to declare that it follows one or more function sources. Once de
 
 ## Non-goals
 
-- Auto-sync of OpenAPI sources. Different lifecycle semantics (versions, breaking changes); deferred to a follow-up.
+- Auto-sync of OpenAPI sources. The `kind:source` encoding reserves space for it, but lifecycle semantics (spec revisions, operationId renames, larger blast radius on public MCPs) need their own safety policy. Tracked as a follow-on ticket.
 - Auto-removal when a deployment drops a tool. Removals are higher-risk and have no clean revert — they continue to flow through the existing orphan-URN UI.
 - A project-wide "auto-sync everything" toggle. Scoping must be explicit per source.
 
@@ -38,7 +38,7 @@ deployment-completed hook
         ├── group new URNs by urn.Source
         │
         ▼
-for each toolset with source ∈ auto_sync_function_sources:
+for each toolset with source ∈ auto_sync_sources:
         ├── diff URNs vs latest toolset_version.tool_urns
         ├── if additions: write new toolset_version (additions only)
         └── emit audit-log entry
@@ -48,11 +48,12 @@ for each toolset with source ∈ auto_sync_function_sources:
 
 ```sql
 ALTER TABLE toolsets
-  ADD COLUMN auto_sync_function_sources TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+  ADD COLUMN auto_sync_sources TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
 ```
 
 - Empty array = current manual behavior. Backwards compatible.
-- Each entry is the `Source` segment of `tools:function:<source>:<name>`. Matches `manifest.ManifestV0`'s top-level source identifier.
+- Each entry is a kind-prefixed source identifier: `"<kind>:<source>"`, where `<kind>` matches `urn.ToolKind` (`function`, `http`, etc.) and `<source>` matches the `Source` segment of `tools:<kind>:<source>:<name>`. For functions, `<source>` is the value from `manifest.ManifestV0`'s top-level source identifier.
+- **Only `function:` entries are accepted today.** The server-side validator (PR 2) rejects any other prefix with a stable 400 error. The kind discriminator is reserved in the encoding so OpenAPI auto-sync can land as a purely additive PR later — no column rename, no expand-contract migration on a contract table.
 - Lives on `toolsets`, not `toolset_versions`, because it is _intent_, not a snapshot. Each auto-extend still produces a new immutable `toolset_version`, preserving the existing pattern (mirrors `default_environment_slug`).
 
 A subsequent migration (separate PR, per the CLAUDE.md migration rules) adds the column. No backfill needed — the default handles every existing row.
@@ -64,7 +65,7 @@ Lives in the deployment-completed pathway in `server/internal/deployments/impl.g
 Steps:
 
 1. Load all rows in `function_tool_definitions` for `deployment_id = D`. Build `addedBySource map[string][]urn.Tool` keyed by `urn.Source`.
-2. Load every toolset in the project where `auto_sync_function_sources && ARRAY[<sources in addedBySource>]` (Postgres array-overlap operator).
+2. Load every toolset in the project where `auto_sync_sources && ARRAY[<"function:" || source for each source in addedBySource>]` (Postgres array-overlap operator on the prefixed entries).
 3. For each candidate toolset:
    - Read the latest `toolset_version.tool_urns`.
    - Compute additions: URNs from `addedBySource[source]` for each subscribed source, minus URNs already present. **Never compute deletions.**
@@ -83,7 +84,7 @@ Failure semantics: a failure to extend one toolset must not abort extension of o
 gram push --auto-attach <toolset-slug>[,<slug>...]
 ```
 
-Effect: the push payload includes the slugs. On the server, the column update happens **inside the same transaction that records the deployment**, so the first push with `--auto-attach` already triggers the deployment-completed hook against the updated subscription. The server resolves each slug and **adds** every function source named in this deployment's `gram.deploy.json` to that toolset's `auto_sync_function_sources` (set union — additive, never removes).
+Effect: the push payload includes the slugs. On the server, the column update happens **inside the same transaction that records the deployment**, so the first push with `--auto-attach` already triggers the deployment-completed hook against the updated subscription. The server resolves each slug and **adds** every function source named in this deployment's `gram.deploy.json` to that toolset's `auto_sync_sources`, encoded as `"function:<source>"` entries (set union — additive, never removes).
 
 The CLI flag is coarse-grained on purpose: it subscribes the toolset to _every_ function source in the push. Fine-grained subscription (per-source toggles) is the dashboard's job; this keeps the CLI ergonomic for the common "I just want this MCP to track everything I'm pushing" workflow without overloading flag syntax.
 
@@ -107,7 +108,7 @@ CLI behavior: if both the flag and the file specify `auto_attach`, the **union**
 
 On the MCP detail page (`MCPDetails.tsx`):
 
-- New card **"Auto-sync sources"** between the existing OAuth and Tools cards. Lists every function source present in the project. Each row is a toggle bound to the `auto_sync_function_sources` array on the toolset.
+- New card **"Auto-sync sources"** between the existing OAuth and Tools cards. Lists every function source present in the project. Each row is a toggle bound to the `auto_sync_sources` array on the toolset.
 - Header badge: when the array is non-empty, show a pill "Auto-syncing N sources" so consequences are visible at a glance.
 - Tools list: tools added by auto-sync show an "auto-added <date>" badge. Reuses the same row-affordance pattern as the orphan-URN treatment already in `MCPDetails.tsx`.
 
@@ -115,20 +116,20 @@ The toggle calls the existing `updateToolset` RPC with a new optional field. No 
 
 ## RBAC and audit
 
-- Setting `auto_sync_function_sources` = `toolset:write`. Same scope as any other toolset edit. No new scope needed.
+- Setting `auto_sync_sources` = `toolset:write`. Same scope as any other toolset edit. No new scope needed.
 - Each auto-extend emits an audit-log event via the existing internal audit-logging API (`gram-audit-logging` skill). Actor is the system principal; the deployment ID is in the payload so users can trace why a URN appeared. The standard `/rpc/auditlogs.*` surface exposes these without any extra work.
 
 ## Conflict and edge cases
 
-| Case                                                                                 | Behavior                                                                                                                                                                                                                                                                                                                          |
-| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deployment adds a function tool whose URN already exists as `http` or `externalmcp`  | Auto-sync only operates on URNs whose `Kind = function`. Other kinds are untouched, so no collision risk.                                                                                                                                                                                                                         |
-| Toolset's `auto_sync_function_sources` references a source the project no longer has | Silent no-op for that entry. Column value preserved so a re-upload of the source picks up automatically.                                                                                                                                                                                                                          |
-| Toolset has `mcp_is_public = TRUE`                                                   | No additional guard. Audit log + dashboard badge are the safety net. We can layer a per-toolset confirmation later if customer feedback demands it.                                                                                                                                                                               |
-| Toolset uses `tool_selection_mode = 'dynamic'`                                       | No interaction. Dynamic mode reads from the same `tool_urns` set, so it benefits transparently.                                                                                                                                                                                                                                   |
-| A future deployment removes a tool that was auto-added                               | URN remains in the toolset. Surfaces via the existing orphan-URN UI, where the user prunes deliberately.                                                                                                                                                                                                                          |
-| Two deployments complete concurrently                                                | Per-toolset writes serialize via `SELECT … FOR UPDATE` on the toolset row before reading the latest `toolset_version`. The unique constraint on `(version, toolset_id)` is the second line of defense — on the unlikely race past the row lock, the losing INSERT fails and the activity retries, finding its URNs already added. |
-| User pushes with `--auto-attach my-mcp` but `my-mcp` doesn't exist                   | Push fails before deployment write. Standard 404 surfaced through the CLI.                                                                                                                                                                                                                                                        |
+| Case                                                                                | Behavior                                                                                                                                                                                                                                                                                                                          |
+| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deployment adds a function tool whose URN already exists as `http` or `externalmcp` | Auto-sync only operates on URNs whose `Kind = function`. Other kinds are untouched, so no collision risk.                                                                                                                                                                                                                         |
+| Toolset's `auto_sync_sources` references a source the project no longer has         | Silent no-op for that entry. Column value preserved so a re-upload of the source picks up automatically.                                                                                                                                                                                                                          |
+| Toolset has `mcp_is_public = TRUE`                                                  | No additional guard. Audit log + dashboard badge are the safety net. We can layer a per-toolset confirmation later if customer feedback demands it.                                                                                                                                                                               |
+| Toolset uses `tool_selection_mode = 'dynamic'`                                      | No interaction. Dynamic mode reads from the same `tool_urns` set, so it benefits transparently.                                                                                                                                                                                                                                   |
+| A future deployment removes a tool that was auto-added                              | URN remains in the toolset. Surfaces via the existing orphan-URN UI, where the user prunes deliberately.                                                                                                                                                                                                                          |
+| Two deployments complete concurrently                                               | Per-toolset writes serialize via `SELECT … FOR UPDATE` on the toolset row before reading the latest `toolset_version`. The unique constraint on `(version, toolset_id)` is the second line of defense — on the unlikely race past the row lock, the losing INSERT fails and the activity retries, finding its URNs already added. |
+| User pushes with `--auto-attach my-mcp` but `my-mcp` doesn't exist                  | Push fails before deployment write. Standard 404 surfaced through the CLI.                                                                                                                                                                                                                                                        |
 
 ## Audit and rollback story
 
@@ -137,7 +138,7 @@ The toggle calls the existing `updateToolset` RPC with a new optional field. No 
 
 ## Out of scope (revisit later)
 
-- OpenAPI auto-sync. The data model trivially extends to a polymorphic `auto_sync_sources` with a `kind` discriminator, but the UI and lifecycle semantics differ enough to warrant their own ticket.
+- OpenAPI auto-sync. The data model is already polymorphic via the `kind:source` encoding; what's deferred is the UI surface (operation-group pickers, breaking-change visualization) and the safety policy (per-tag allow-lists, operationId-rename detection). A future PR adds `http:` validator support and the UI; no schema work required.
 - Wildcard "follow all sources" subscription. Forcing explicit scoping is the right default for now.
 - Auto-removal. Tracked in the design above as deliberately deferred.
 
@@ -152,5 +153,5 @@ The toggle calls the existing `updateToolset` RPC with a new optional field. No 
 ## Open implementation questions for the plan stage
 
 1. Activity vs inline transaction in the deployment-completed pathway. Decision: pick activity if toolset count per project can grow beyond a small constant.
-2. Exact wire format for `auto_attach` in the push payload (CLI → server). Likely a string array on the existing push request DTO; verify against the Goa design.
-3. Whether to expose `auto_sync_function_sources` on the `Toolset` read view returned by `gettoolset.go`. Probable yes — needed by the dashboard.
+2. Where the `kind:` prefix gets attached. Two options: (a) CLI sends bare slugs and the server prefixes with `function:` during the column write, or (b) CLI sends pre-prefixed entries. Lean toward (a) — keeps the CLI surface minimal and concentrates the prefix policy on the server, which is also where the validator that rejects unknown kinds lives.
+3. Whether to expose `auto_sync_sources` on the `Toolset` read view returned by `gettoolset.go`. Probable yes — needed by the dashboard.
