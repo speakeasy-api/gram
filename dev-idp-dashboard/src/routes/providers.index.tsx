@@ -4,7 +4,7 @@ export const Route = createFileRoute("/providers/")({
   beforeLoad: () => {
     throw redirect({
       to: "/providers/$mode",
-      params: { mode: "local-speakeasy" },
+      params: { mode: "mock-workos" },
     });
   },
 });

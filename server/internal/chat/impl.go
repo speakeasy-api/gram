@@ -208,7 +208,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	var userInfo *sessions.CachedUserInfo
 	var err error
 	if authCtx.SessionID != nil {
-		userInfo, _, err = s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+		userInfo, _, err = s.sessions.GetUserInfo(ctx, authCtx.UserID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
 		}

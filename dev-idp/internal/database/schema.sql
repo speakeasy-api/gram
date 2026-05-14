@@ -47,7 +47,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS memberships_user_id_organization_id_key
   ON memberships (user_id, organization_id);
 
 -- Per-mode currentUser. `subject_ref` is mode-specific: a `users.id` for
--- local-speakeasy/oauth2-1/oauth2, a WorkOS `sub` for `workos`. Stored as
+-- mock-workos/oauth2-1/oauth2, a WorkOS `sub` for `workos`. Stored as
 -- TEXT with no FK because the workos value is external.
 CREATE TABLE IF NOT EXISTS current_users (
   mode TEXT NOT NULL PRIMARY KEY,
@@ -97,7 +97,7 @@ CREATE INDEX IF NOT EXISTS tokens_user_id_idx ON tokens (user_id);
 CREATE INDEX IF NOT EXISTS tokens_expires_at_idx ON tokens (expires_at);
 
 -- =============================================================================
--- WorkOS-emulation tables (consumed by the local-speakeasy mode's
+-- WorkOS-emulation tables (consumed by the mock-workos mode's
 -- /user_management/* and /authorization/organizations/* endpoints).
 -- =============================================================================
 
