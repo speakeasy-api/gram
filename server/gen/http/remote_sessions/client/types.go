@@ -13,13 +13,6 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// RevokeRemoteSessionRequestBody is the type of the "remoteSessions" service
-// "revokeRemoteSession" endpoint HTTP request body.
-type RevokeRemoteSessionRequestBody struct {
-	// The remote_session id.
-	ID string `form:"id" json:"id" xml:"id"`
-}
-
 // ListRemoteSessionsResponseBody is the type of the "remoteSessions" service
 // "listRemoteSessions" endpoint HTTP response body.
 type ListRemoteSessionsResponseBody struct {
@@ -427,16 +420,6 @@ type RemoteSessionResponseBody struct {
 	Scopes    []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
 	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-}
-
-// NewRevokeRemoteSessionRequestBody builds the HTTP request body from the
-// payload of the "revokeRemoteSession" endpoint of the "remoteSessions"
-// service.
-func NewRevokeRemoteSessionRequestBody(p *remotesessions.RevokeRemoteSessionPayload) *RevokeRemoteSessionRequestBody {
-	body := &RevokeRemoteSessionRequestBody{
-		ID: p.ID,
-	}
-	return body
 }
 
 // NewListRemoteSessionsResultOK builds a "remoteSessions" service

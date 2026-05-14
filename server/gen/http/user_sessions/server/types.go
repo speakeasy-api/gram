@@ -12,13 +12,6 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// RevokeUserSessionRequestBody is the type of the "userSessions" service
-// "revokeUserSession" endpoint HTTP request body.
-type RevokeUserSessionRequestBody struct {
-	// The user_session id.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-}
-
 // ListUserSessionsResponseBody is the type of the "userSessions" service
 // "listUserSessions" endpoint HTTP response body.
 type ListUserSessionsResponseBody struct {
@@ -754,25 +747,12 @@ func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string,
 
 // NewRevokeUserSessionPayload builds a userSessions service revokeUserSession
 // endpoint payload.
-func NewRevokeUserSessionPayload(body *RevokeUserSessionRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.RevokeUserSessionPayload {
-	v := &usersessions.RevokeUserSessionPayload{
-		ID: *body.ID,
-	}
+func NewRevokeUserSessionPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.RevokeUserSessionPayload {
+	v := &usersessions.RevokeUserSessionPayload{}
+	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
-}
-
-// ValidateRevokeUserSessionRequestBody runs the validations defined on
-// RevokeUserSessionRequestBody
-func ValidateRevokeUserSessionRequestBody(body *RevokeUserSessionRequestBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	return
 }

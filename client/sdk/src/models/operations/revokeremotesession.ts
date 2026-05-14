@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type RevokeRemoteSessionSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -23,6 +22,10 @@ export type RevokeRemoteSessionSecurity = {
 
 export type RevokeRemoteSessionRequest = {
   /**
+   * The remote_session id.
+   */
+  id: string;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -34,7 +37,6 @@ export type RevokeRemoteSessionRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  revokeRemoteSessionRequestBody: components.RevokeRemoteSessionRequestBody;
 };
 
 /** @internal */
@@ -142,11 +144,10 @@ export function revokeRemoteSessionSecurityToJSON(
 
 /** @internal */
 export type RevokeRemoteSessionRequest$Outbound = {
+  id: string;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  RevokeRemoteSessionRequestBody:
-    components.RevokeRemoteSessionRequestBody$Outbound;
 };
 
 /** @internal */
@@ -155,18 +156,16 @@ export const RevokeRemoteSessionRequest$outboundSchema: z.ZodMiniType<
   RevokeRemoteSessionRequest
 > = z.pipe(
   z.object({
+    id: z.string(),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    revokeRemoteSessionRequestBody:
-      components.RevokeRemoteSessionRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",
-      revokeRemoteSessionRequestBody: "RevokeRemoteSessionRequestBody",
     });
   }),
 );

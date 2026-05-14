@@ -8,7 +8,6 @@
 package client
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -86,15 +85,12 @@ func BuildListRemoteSessionsPayload(remoteSessionsListRemoteSessionsSubjectUrn s
 
 // BuildRevokeRemoteSessionPayload builds the payload for the remoteSessions
 // revokeRemoteSession endpoint from CLI flags.
-func BuildRevokeRemoteSessionPayload(remoteSessionsRevokeRemoteSessionBody string, remoteSessionsRevokeRemoteSessionSessionToken string, remoteSessionsRevokeRemoteSessionApikeyToken string, remoteSessionsRevokeRemoteSessionProjectSlugInput string) (*remotesessions.RevokeRemoteSessionPayload, error) {
+func BuildRevokeRemoteSessionPayload(remoteSessionsRevokeRemoteSessionID string, remoteSessionsRevokeRemoteSessionSessionToken string, remoteSessionsRevokeRemoteSessionApikeyToken string, remoteSessionsRevokeRemoteSessionProjectSlugInput string) (*remotesessions.RevokeRemoteSessionPayload, error) {
 	var err error
-	var body RevokeRemoteSessionRequestBody
+	var id string
 	{
-		err = json.Unmarshal([]byte(remoteSessionsRevokeRemoteSessionBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		id = remoteSessionsRevokeRemoteSessionID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
 		if err != nil {
 			return nil, err
 		}
@@ -117,9 +113,8 @@ func BuildRevokeRemoteSessionPayload(remoteSessionsRevokeRemoteSessionBody strin
 			projectSlugInput = &remoteSessionsRevokeRemoteSessionProjectSlugInput
 		}
 	}
-	v := &remotesessions.RevokeRemoteSessionPayload{
-		ID: body.ID,
-	}
+	v := &remotesessions.RevokeRemoteSessionPayload{}
+	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

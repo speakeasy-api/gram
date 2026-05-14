@@ -65,6 +65,7 @@ var _ = Service("remoteSessions", func() {
 
 		HTTP(func() {
 			POST("/rpc/remoteSessions.revoke")
+			Param("id")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()

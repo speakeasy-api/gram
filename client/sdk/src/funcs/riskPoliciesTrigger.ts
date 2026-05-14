@@ -91,7 +91,7 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.RevokeRemoteSessionRequestBody, {
+  const body = encodeJSON("body", payload.TriggerRiskAnalysisRequestBody, {
     explode: true,
   });
 

@@ -12,13 +12,6 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// RevokeRemoteSessionRequestBody is the type of the "remoteSessions" service
-// "revokeRemoteSession" endpoint HTTP request body.
-type RevokeRemoteSessionRequestBody struct {
-	// The remote_session id.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-}
-
 // ListRemoteSessionsResponseBody is the type of the "remoteSessions" service
 // "listRemoteSessions" endpoint HTTP response body.
 type ListRemoteSessionsResponseBody struct {
@@ -766,25 +759,12 @@ func NewListRemoteSessionsPayload(subjectUrn *string, remoteSessionClientID *str
 
 // NewRevokeRemoteSessionPayload builds a remoteSessions service
 // revokeRemoteSession endpoint payload.
-func NewRevokeRemoteSessionPayload(body *RevokeRemoteSessionRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.RevokeRemoteSessionPayload {
-	v := &remotesessions.RevokeRemoteSessionPayload{
-		ID: *body.ID,
-	}
+func NewRevokeRemoteSessionPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.RevokeRemoteSessionPayload {
+	v := &remotesessions.RevokeRemoteSessionPayload{}
+	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
-}
-
-// ValidateRevokeRemoteSessionRequestBody runs the validations defined on
-// RevokeRemoteSessionRequestBody
-func ValidateRevokeRemoteSessionRequestBody(body *RevokeRemoteSessionRequestBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	return
 }

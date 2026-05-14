@@ -17380,6 +17380,15 @@ paths:
             operationId: revokeRemoteSession
             parameters:
                 - allowEmptyValue: true
+                  description: The remote_session id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The remote_session id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -17400,12 +17409,6 @@ paths:
                   schema:
                     description: project header
                     type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/RevokeRemoteSessionRequestBody'
-                required: true
             responses:
                 "200":
                     description: OK response.
@@ -18233,7 +18236,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/RevokeRemoteSessionRequestBody'
+                            $ref: '#/components/schemas/TriggerRiskAnalysisRequestBody'
                 required: true
             responses:
                 "200":
@@ -24144,6 +24147,15 @@ paths:
             operationId: revokeUserSessionClient
             parameters:
                 - allowEmptyValue: true
+                  description: The user_session_client id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The user_session_client id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -24164,12 +24176,6 @@ paths:
                   schema:
                     description: project header
                     type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/RevokeRemoteSessionRequestBody'
-                required: true
             responses:
                 "200":
                     description: OK response.
@@ -24389,6 +24395,15 @@ paths:
             operationId: revokeUserSessionConsent
             parameters:
                 - allowEmptyValue: true
+                  description: The user_session_consent id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The user_session_consent id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -24409,12 +24424,6 @@ paths:
                   schema:
                     description: project header
                     type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/RevokeRemoteSessionRequestBody'
-                required: true
             responses:
                 "200":
                     description: OK response.
@@ -25172,6 +25181,15 @@ paths:
             operationId: revokeUserSession
             parameters:
                 - allowEmptyValue: true
+                  description: The user_session id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The user_session id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -25192,12 +25210,6 @@ paths:
                   schema:
                     description: project header
                     type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/RevokeRemoteSessionRequestBody'
-                required: true
             responses:
                 "200":
                     description: OK response.
@@ -33226,15 +33238,6 @@ components:
                 - type
                 - status_codes
                 - content_types
-        RevokeRemoteSessionRequestBody:
-            type: object
-            properties:
-                id:
-                    type: string
-                    description: The remote_session id.
-                    format: uuid
-            required:
-                - id
         RiskCapabilitiesResult:
             type: object
             properties:
@@ -35340,6 +35343,15 @@ components:
                 - status
                 - created_at
                 - updated_at
+        TriggerRiskAnalysisRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The policy ID.
+                    format: uuid
+            required:
+                - id
         UpdateAssistantForm:
             type: object
             properties:
