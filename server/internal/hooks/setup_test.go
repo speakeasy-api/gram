@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"log"
+	"net/url"
 	"os"
 	"testing"
 
@@ -84,7 +85,9 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, nil)
 	t.Cleanup(func() { _ = chatWriterShutdown(t.Context()) })
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter)
-	svc := NewService(logger, conn, tracerProvider, nil, sessionManager, cacheAdapter, nil, nil, authzEngine, nil, nil, nil, shadowMCPClient, chatWriter)
+	siteURL, err := url.Parse("https://app.example.test")
+	require.NoError(t, err)
+	svc := NewService(logger, conn, tracerProvider, nil, sessionManager, cacheAdapter, nil, nil, authzEngine, nil, nil, nil, shadowMCPClient, chatWriter, siteURL, "test-jwt-secret")
 
 	return ctx, &testInstance{
 		service:        svc,

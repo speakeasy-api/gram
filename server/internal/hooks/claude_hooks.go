@@ -610,7 +610,8 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		return result, nil
 	}
 
-	detail, denied := s.enforceShadowMCPToolAccess(ctx, metadata.GramOrgID, metadata.ProjectID, metadata.UserID, payload.ToolInput, mcpToolName, claudeShadowMCPEvidence(rawToolName))
+	evidence := claudeShadowMCPEvidence(rawToolName)
+	detail, denied := s.enforceShadowMCPToolAccess(ctx, metadata.GramOrgID, metadata.ProjectID, metadata.UserID, payload.ToolInput, mcpToolName, evidence)
 	if denied {
 		s.logger.With(
 			attr.SlogHookSource("claude"),
@@ -626,7 +627,17 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			attr.SlogRiskPolicyName(policy.Name),
 		)
 		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
-		userReason := renderUserBlockReason(policy.UserMessage, auditReason)
+		userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
+			OrganizationID:  metadata.GramOrgID,
+			ProjectID:       metadata.ProjectID,
+			RequesterUserID: metadata.UserID,
+			UserMessage:     policy.UserMessage,
+			AuditReason:     auditReason,
+			Evidence:        evidence,
+			ToolName:        mcpToolName,
+			ToolInput:       payload.ToolInput,
+			RiskPolicyID:    policy.ID,
+		})
 		// Record a companion ClickHouse entry with gram.hook.block_reason set
 		// so the trace_summaries materialized view can flag this trace as
 		// blocked. Shares the original PreToolUse trace_id (derived from

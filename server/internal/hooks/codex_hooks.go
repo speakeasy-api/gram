@@ -58,7 +58,8 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 		policy := s.lookupShadowMCPBlockingPolicy(ctx, projectID)
 		if policy != nil {
 			toolName := conv.PtrValOr(payload.ToolName, "")
-			if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, authCtx.UserID, payload.ToolInput, toolName, codexShadowMCPEvidence(payload)); denied {
+			evidence := codexShadowMCPEvidence(payload)
+			if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, authCtx.UserID, payload.ToolInput, toolName, evidence); denied {
 				logger.InfoContext(ctx, "denying codex tool call: failed gram toolset validation",
 					attr.SlogEvent("codex_hook_denied"),
 					attr.SlogHookBlockReason(detail),
@@ -66,7 +67,17 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 					attr.SlogRiskPolicyName(policy.Name),
 				)
 				blockReason = fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
-				userReason = renderUserBlockReason(policy.UserMessage, blockReason)
+				userReason = s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
+					OrganizationID:  orgID,
+					ProjectID:       projectID,
+					RequesterUserID: authCtx.UserID,
+					UserMessage:     policy.UserMessage,
+					AuditReason:     blockReason,
+					Evidence:        evidence,
+					ToolName:        toolName,
+					ToolInput:       payload.ToolInput,
+					RiskPolicyID:    policy.ID,
+				})
 			}
 		}
 	case "PermissionRequest":
