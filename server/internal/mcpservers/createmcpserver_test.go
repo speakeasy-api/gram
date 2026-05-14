@@ -30,6 +30,7 @@ func TestCreateMcpServer_RemoteMcpBackend(t *testing.T) {
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
+		Name:                  "test mcp server",
 		EnvironmentID:         nil,
 		ExternalOauthServerID: nil,
 		OauthProxyServerID:    nil,
@@ -42,6 +43,10 @@ func TestCreateMcpServer_RemoteMcpBackend(t *testing.T) {
 
 	require.NotEmpty(t, result.ID)
 	require.NotEmpty(t, result.ProjectID)
+	require.NotNil(t, result.Name)
+	require.Equal(t, "test mcp server", *result.Name)
+	require.NotNil(t, result.Slug)
+	require.NotEmpty(t, *result.Slug)
 	require.NotNil(t, result.RemoteMcpServerID)
 	require.Equal(t, serverID, *result.RemoteMcpServerID)
 	require.Nil(t, result.ToolsetID)
@@ -54,6 +59,56 @@ func TestCreateMcpServer_RemoteMcpBackend(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
+func TestCreateMcpServer_RejectsEmptyName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		Name:                  "",
+		EnvironmentID:         nil,
+		ExternalOauthServerID: nil,
+		OauthProxyServerID:    nil,
+		RemoteMcpServerID:     &serverID,
+		ToolsetID:             nil,
+		Visibility:            types.McpServerVisibility("disabled"),
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestCreateMcpServer_RejectsWhitespaceName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		Name:                  "   ",
+		EnvironmentID:         nil,
+		ExternalOauthServerID: nil,
+		OauthProxyServerID:    nil,
+		RemoteMcpServerID:     &serverID,
+		ToolsetID:             nil,
+		Visibility:            types.McpServerVisibility("disabled"),
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
 func TestCreateMcpServer_MissingBackend(t *testing.T) {
 	t.Parallel()
 
@@ -63,6 +118,7 @@ func TestCreateMcpServer_MissingBackend(t *testing.T) {
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
+		Name:                  "test mcp server",
 		EnvironmentID:         nil,
 		ExternalOauthServerID: nil,
 		OauthProxyServerID:    nil,
@@ -88,6 +144,7 @@ func TestCreateMcpServer_BothBackends(t *testing.T) {
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
+		Name:                  "test mcp server",
 		EnvironmentID:         nil,
 		ExternalOauthServerID: nil,
 		OauthProxyServerID:    nil,
@@ -114,6 +171,7 @@ func TestCreateMcpServer_BothOAuthSources(t *testing.T) {
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
+		Name:                  "test mcp server",
 		EnvironmentID:         nil,
 		ExternalOauthServerID: &extOAuthID,
 		OauthProxyServerID:    &proxyOAuthID,
@@ -141,6 +199,7 @@ func TestCreateMcpServer_RBACForbidden(t *testing.T) {
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
+		Name:                  "test mcp server",
 		EnvironmentID:         nil,
 		ExternalOauthServerID: nil,
 		OauthProxyServerID:    nil,

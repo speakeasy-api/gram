@@ -11,7 +11,6 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
-import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,19 +27,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getMcpServer mcpServers
+ * checkMcpEndpointSlugAvailability mcpEndpoints
  *
  * @remarks
- * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
+ * Check whether an MCP endpoint slug is available. The uniqueness scope depends on whether a custom_domain_id is provided: platform-domain slugs are checked across all platform-domain endpoints (custom_domain_id IS NULL); custom-domain slugs are checked within the (custom_domain_id, slug) pair. Returns true when the slug is free.
  */
-export function mcpServersGet(
+export function mcpEndpointsCheckSlugAvailability(
   client: GramCore,
-  request?: operations.GetMcpServerRequest | undefined,
-  security?: operations.GetMcpServerSecurity | undefined,
+  request: operations.CheckMcpEndpointSlugAvailabilityRequest,
+  security?: operations.CheckMcpEndpointSlugAvailabilitySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.McpServer,
+    boolean,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -62,13 +61,13 @@ export function mcpServersGet(
 
 async function $do(
   client: GramCore,
-  request?: operations.GetMcpServerRequest | undefined,
-  security?: operations.GetMcpServerSecurity | undefined,
+  request: operations.CheckMcpEndpointSlugAvailabilityRequest,
+  security?: operations.CheckMcpEndpointSlugAvailabilitySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.McpServer,
+      boolean,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -85,7 +84,10 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(z.optional(operations.GetMcpServerRequest$outboundSchema), value),
+      z.parse(
+        operations.CheckMcpEndpointSlugAvailabilityRequest$outboundSchema,
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -94,24 +96,24 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/mcpServers.get")();
+  const path = pathToFunc("/rpc/mcpEndpoints.checkSlugAvailability")();
 
   const query = encodeFormQuery({
-    "id": payload?.id,
-    "slug": payload?.slug,
+    "custom_domain_id": payload.custom_domain_id,
+    "slug": payload.slug,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -147,7 +149,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getMcpServer",
+    operationID: "checkMcpEndpointSlugAvailability",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -203,7 +205,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.McpServer,
+    boolean,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -214,7 +216,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.McpServer$inboundSchema),
+    M.json(200, z.boolean()),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

@@ -22,9 +22,13 @@ export type GetMcpServerSecurity = {
 
 export type GetMcpServerRequest = {
   /**
-   * The ID of the MCP server
+   * The ID of the MCP server. Mutually exclusive with slug.
    */
-  id: string;
+  id?: string | undefined;
+  /**
+   * The slug of the MCP server. Mutually exclusive with id.
+   */
+  slug?: string | undefined;
   /**
    * Session header
    */
@@ -142,7 +146,8 @@ export function getMcpServerSecurityToJSON(
 
 /** @internal */
 export type GetMcpServerRequest$Outbound = {
-  id: string;
+  id?: string | undefined;
+  slug?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -154,7 +159,8 @@ export const GetMcpServerRequest$outboundSchema: z.ZodMiniType<
   GetMcpServerRequest
 > = z.pipe(
   z.object({
-    id: z.string(),
+    id: z.optional(z.string()),
+    slug: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),

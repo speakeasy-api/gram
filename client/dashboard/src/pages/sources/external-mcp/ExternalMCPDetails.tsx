@@ -184,7 +184,10 @@ export default function ExternalMCPDetails() {
           </div>
 
           {/* Overview Tab */}
-          <TabsContent value="overview" className="mt-0 flex-1">
+          <TabsContent
+            value="overview"
+            className="mt-0 min-h-0 flex-1 overflow-y-auto"
+          >
             <div className="mx-auto w-full max-w-[1270px] space-y-6 px-8 py-8">
               {/* Row 1: Name, Registry ID */}
               <div className="flex gap-16">
@@ -234,7 +237,10 @@ export default function ExternalMCPDetails() {
           </TabsContent>
 
           {/* MCP Servers Tab */}
-          <TabsContent value="mcp-servers" className="mt-0 flex-1">
+          <TabsContent
+            value="mcp-servers"
+            className="mt-0 min-h-0 flex-1 overflow-y-auto"
+          >
             <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
               {isLoadingToolsets ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -269,7 +275,10 @@ export default function ExternalMCPDetails() {
           </TabsContent>
 
           {/* Settings Tab */}
-          <TabsContent value="settings" className="mt-0 flex-1">
+          <TabsContent
+            value="settings"
+            className="mt-0 min-h-0 flex-1 overflow-y-auto"
+          >
             <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
               {/* Danger Zone */}
               <div className="border-destructive/30 rounded-lg border p-6">

@@ -1,4 +1,5 @@
 import { useSdkClient } from "@/contexts/Sdk";
+import { formatRemoteMcpDisplay } from "@/lib/sources";
 import type { RemoteMcpServer } from "@gram/client/models/components";
 import {
   invalidateAllMcpEndpoints,
@@ -40,6 +41,10 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
       try {
         await client.mcpServers.create({
           createMcpServerForm: {
+            // mcp_servers.name is required; reuse the canonical
+            // formatRemoteMcpDisplay fallback so the auto-linked row matches
+            // what the dashboard shows for the source.
+            name: formatRemoteMcpDisplay(remoteMcpServer),
             remoteMcpServerId: remoteMcpServer.id,
             visibility: "disabled",
           },

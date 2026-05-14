@@ -56,10 +56,10 @@ export type GetMcpServerQueryError =
  * getMcpServer mcpServers
  *
  * @remarks
- * Get an MCP server by ID
+ * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
  */
 export function useGetMcpServer(
-  request: operations.GetMcpServerRequest,
+  request?: operations.GetMcpServerRequest | undefined,
   security?: operations.GetMcpServerSecurity | undefined,
   options?: QueryHookOptions<GetMcpServerQueryData, GetMcpServerQueryError>,
 ): UseQueryResult<GetMcpServerQueryData, GetMcpServerQueryError> {
@@ -79,10 +79,10 @@ export function useGetMcpServer(
  * getMcpServer mcpServers
  *
  * @remarks
- * Get an MCP server by ID
+ * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
  */
 export function useGetMcpServerSuspense(
-  request: operations.GetMcpServerRequest,
+  request?: operations.GetMcpServerRequest | undefined,
   security?: operations.GetMcpServerSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetMcpServerQueryData,
@@ -105,7 +105,8 @@ export function setGetMcpServerData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      id: string;
+      id?: string | undefined;
+      slug?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -122,7 +123,8 @@ export function invalidateGetMcpServer(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      id: string;
+      id?: string | undefined;
+      slug?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

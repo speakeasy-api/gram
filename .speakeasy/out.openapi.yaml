@@ -9637,6 +9637,123 @@ paths:
       x-speakeasy-name-override: validate
       x-speakeasy-react-hook:
         name: ValidateAPIKey
+  /rpc/mcpEndpoints.checkSlugAvailability:
+    get:
+      description: 'Check whether an MCP endpoint slug is available. The uniqueness scope depends on whether a custom_domain_id is provided: platform-domain slugs are checked across all platform-domain endpoints (custom_domain_id IS NULL); custom-domain slugs are checked within the (custom_domain_id, slug) pair. Returns true when the slug is free.'
+      operationId: checkMcpEndpointSlugAvailability
+      parameters:
+        - allowEmptyValue: true
+          description: The slug to check
+          in: query
+          name: slug
+          required: true
+          schema:
+            description: A url-friendly label (up to 128 characters) that addresses an MCP server through a slug-based URL. Platform-domain slugs (no custom domain) must be prefixed with the organization slug.
+            maxLength: 128
+            pattern: ^[a-z0-9_-]{1,128}$
+            type: string
+        - allowEmptyValue: true
+          description: Optional custom domain ID. Omit to check platform-domain slug availability.
+          in: query
+          name: custom_domain_id
+          schema:
+            description: Optional custom domain ID. Omit to check platform-domain slug availability.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: boolean
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: checkMcpEndpointSlugAvailability mcpEndpoints
+      tags:
+        - mcpEndpoints
+      x-speakeasy-name-override: checkSlugAvailability
+      x-speakeasy-react-hook:
+        name: CheckMcpEndpointSlugAvailability
   /rpc/mcpEndpoints.create:
     post:
       description: Create a new MCP endpoint for an MCP server
@@ -11146,17 +11263,23 @@ paths:
         name: DeleteMcpServer
   /rpc/mcpServers.get:
     get:
-      description: Get an MCP server by ID
+      description: Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
       operationId: getMcpServer
       parameters:
         - allowEmptyValue: true
-          description: The ID of the MCP server
+          description: The ID of the MCP server. Mutually exclusive with slug.
           in: query
           name: id
-          required: true
           schema:
-            description: The ID of the MCP server
+            description: The ID of the MCP server. Mutually exclusive with slug.
             format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The slug of the MCP server. Mutually exclusive with id.
+          in: query
+          name: slug
+          schema:
+            description: The slug of the MCP server. Mutually exclusive with id.
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -11369,7 +11492,7 @@ paths:
         name: McpServers
   /rpc/mcpServers.update:
     post:
-      description: 'Update an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.'
+      description: 'Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.'
       operationId: updateMcpServer
       parameters:
         - allowEmptyValue: true
@@ -25892,6 +26015,9 @@ components:
           type: string
           description: The ID of the external OAuth server to associate with the server
           format: uuid
+        name:
+          type: string
+          description: A human-readable display name for the server
         oauth_proxy_server_id:
           type: string
           description: The ID of the OAuth proxy server to associate with the server
@@ -25913,6 +26039,7 @@ components:
             - public
       description: Form for creating a new MCP server. Exactly one of remote_mcp_server_id or toolset_id must be provided. At most one of external_oauth_server_id or oauth_proxy_server_id may be provided.
       required:
+        - name
         - visibility
     CreatePackageForm:
       type: object
@@ -29744,6 +29871,9 @@ components:
           type: string
           description: The ID of the MCP server
           format: uuid
+        name:
+          type: string
+          description: A human-readable display name for the server
         oauth_proxy_server_id:
           type: string
           description: The ID of the OAuth proxy server associated with the server
@@ -29756,6 +29886,9 @@ components:
           type: string
           description: The ID of the remote MCP server used as the backend
           format: uuid
+        slug:
+          type: string
+          description: A URL-safe, project-unique slug derived server-side from the name and ID
         toolset_id:
           type: string
           description: The ID of the toolset used as the backend
@@ -33756,6 +33889,9 @@ components:
           type: string
           description: The ID of the MCP server to update
           format: uuid
+        name:
+          type: string
+          description: A human-readable display name for the server. Omit to leave the existing name unchanged; if provided, must be non-empty.
         oauth_proxy_server_id:
           type: string
           description: The ID of the OAuth proxy server to associate with the server
@@ -33775,7 +33911,7 @@ components:
             - disabled
             - private
             - public
-      description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.'
+      description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.'
       required:
         - id
         - visibility

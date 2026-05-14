@@ -22,7 +22,7 @@ export type UpdateMcpServerFormVisibility = ClosedEnum<
 >;
 
 /**
- * Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.
+ * Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.
  */
 export type UpdateMcpServerForm = {
   /**
@@ -37,6 +37,10 @@ export type UpdateMcpServerForm = {
    * The ID of the MCP server to update
    */
   id: string;
+  /**
+   * A human-readable display name for the server. Omit to leave the existing name unchanged; if provided, must be non-empty.
+   */
+  name?: string | undefined;
   /**
    * The ID of the OAuth proxy server to associate with the server
    */
@@ -65,6 +69,7 @@ export type UpdateMcpServerForm$Outbound = {
   environment_id?: string | undefined;
   external_oauth_server_id?: string | undefined;
   id: string;
+  name?: string | undefined;
   oauth_proxy_server_id?: string | undefined;
   remote_mcp_server_id?: string | undefined;
   toolset_id?: string | undefined;
@@ -80,6 +85,7 @@ export const UpdateMcpServerForm$outboundSchema: z.ZodMiniType<
     environmentId: z.optional(z.string()),
     externalOauthServerId: z.optional(z.string()),
     id: z.string(),
+    name: z.optional(z.string()),
     oauthProxyServerId: z.optional(z.string()),
     remoteMcpServerId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),

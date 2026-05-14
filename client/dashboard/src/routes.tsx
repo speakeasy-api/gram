@@ -33,6 +33,7 @@ import { LogsRoot, LogsMCPPage, LogsToolsPage } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
+import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import {
   InsightsAgentsPage,
   InsightsEmployeeDetailPage,
@@ -331,6 +332,17 @@ const ROUTE_STRUCTURE = {
         title: "Built-in MCP",
         url: "built-in/:builtInSlug",
         component: BuiltInMCPDetailPage,
+      },
+      // TODO(AGE-1902): collapse with :toolsetSlug once Hosted (toolset-backed)
+      // MCP data moves to mcp_servers/mcp_endpoints. Until then this route is
+      // distinct so the new mcp_servers-backed details page renders against
+      // mcp_servers without disturbing the existing toolset-backed path. The
+      // `x/` prefix is the generic experimental namespace shared with the
+      // `/x/mcp/{slug}` runtime path that already serves these servers.
+      x: {
+        title: "MCP Server Details",
+        url: "x/:mcpServerSlug",
+        component: MCPServerDetails,
       },
       details: {
         title: "MCP Details",

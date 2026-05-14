@@ -1,6 +1,9 @@
 -- name: CreateMCPServer :one
 INSERT INTO mcp_servers (
+    id,
     project_id,
+    name,
+    slug,
     environment_id,
     external_oauth_server_id,
     oauth_proxy_server_id,
@@ -9,7 +12,10 @@ INSERT INTO mcp_servers (
     visibility
 )
 VALUES (
+    @id,
     @project_id,
+    @name,
+    @slug,
     @environment_id,
     @external_oauth_server_id,
     @oauth_proxy_server_id,
@@ -24,6 +30,11 @@ SELECT *
 FROM mcp_servers
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
+-- name: GetMCPServerBySlug :one
+SELECT *
+FROM mcp_servers
+WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
+
 -- name: ListMCPServersByProjectID :many
 SELECT *
 FROM mcp_servers
@@ -36,6 +47,8 @@ ORDER BY created_at DESC;
 -- name: UpdateMCPServer :one
 UPDATE mcp_servers
 SET
+    name = @name,
+    slug = @slug,
     environment_id = @environment_id,
     external_oauth_server_id = @external_oauth_server_id,
     oauth_proxy_server_id = @oauth_proxy_server_id,

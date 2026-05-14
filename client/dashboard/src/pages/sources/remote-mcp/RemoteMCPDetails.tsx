@@ -1,3 +1,5 @@
+import { DetailHero } from "@/components/detail-hero";
+import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import {
@@ -29,6 +31,7 @@ import {
   invalidateAllGetRemoteMcpServer,
   invalidateAllRemoteMcpServers,
   useGetRemoteMcpServer,
+  useMcpEndpoints,
   useMcpServers,
   useUpdateRemoteMcpServerMutation,
 } from "@gram/client/react-query/index.js";
@@ -110,6 +113,22 @@ export default function RemoteMCPDetails() {
     remoteMcpServerId,
   );
 
+  // Mirror the MCP listing page pattern: fetch all endpoints once and bucket
+  // by mcp_server_id rather than N+1 lookups per card.
+  const { data: endpointsResult } = useMcpEndpoints({}, undefined, {
+    enabled: remoteMcpServerId !== "",
+  });
+  const endpointCountByServerId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const endpoint of endpointsResult?.mcpEndpoints ?? []) {
+      counts.set(
+        endpoint.mcpServerId,
+        (counts.get(endpoint.mcpServerId) ?? 0) + 1,
+      );
+    }
+    return counts;
+  }, [endpointsResult]);
+
   if (isError || (!isLoading && !remoteMcpServer)) {
     return <Navigate to={routes.sources.href()} replace />;
   }
@@ -155,7 +174,10 @@ export default function RemoteMCPDetails() {
             </div>
           </div>
 
-          <TabsContent value="overview" className="mt-0 flex-1">
+          <TabsContent
+            value="overview"
+            className="mt-0 min-h-0 flex-1 overflow-y-auto"
+          >
             <OverviewTab
               remoteMcpServer={remoteMcpServer}
               linkedMcpServersCount={linkedMcpServers.length}
@@ -164,14 +186,21 @@ export default function RemoteMCPDetails() {
             />
           </TabsContent>
 
-          <TabsContent value="mcp-servers" className="mt-0 flex-1">
+          <TabsContent
+            value="mcp-servers"
+            className="mt-0 min-h-0 flex-1 overflow-y-auto"
+          >
             <McpServersTab
               isLoading={isLoadingMcpServers}
               mcpServers={linkedMcpServers}
+              endpointCountByServerId={endpointCountByServerId}
             />
           </TabsContent>
 
-          <TabsContent value="settings" className="mt-0 flex-1">
+          <TabsContent
+            value="settings"
+            className="mt-0 min-h-0 flex-1 overflow-y-auto"
+          >
             {remoteMcpServer && (
               <SettingsTab
                 remoteMcpServerId={remoteMcpServer.id}
@@ -205,23 +234,21 @@ function useMcpServersForRemote(
 
 function RemoteMcpHero({ server }: { server: RemoteMcpServer | undefined }) {
   return (
-    <div className="border-b">
-      <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
-        <Stack gap={2}>
-          <Stack direction="horizontal" gap={3} align="center">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
-              <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-            </div>
-            <Heading variant="h1" className="break-all normal-case">
-              {server ? formatRemoteMcpDisplay(server) : "Remote MCP server"}
-            </Heading>
-            <Badge variant="neutral">
-              <Badge.Text>Remote MCP</Badge.Text>
-            </Badge>
-          </Stack>
+    <DetailHero>
+      <Stack gap={2}>
+        <Stack direction="horizontal" gap={3} align="center">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
+            <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+          </div>
+          <Heading variant="h1" className="break-all normal-case">
+            {server ? formatRemoteMcpDisplay(server) : "Remote MCP server"}
+          </Heading>
+          <Badge variant="neutral">
+            <Badge.Text>Remote MCP</Badge.Text>
+          </Badge>
         </Stack>
-      </div>
-    </div>
+      </Stack>
+    </DetailHero>
   );
 }
 
@@ -330,18 +357,24 @@ function OverviewTab({
 function McpServersTab({
   isLoading,
   mcpServers,
+  endpointCountByServerId,
 }: {
   isLoading: boolean;
   mcpServers: McpServer[];
+  endpointCountByServerId: Map<string, number>;
 }) {
   return (
     <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
       {isLoading ? (
         <McpServersSkeleton />
       ) : mcpServers.length > 0 ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           {mcpServers.map((server) => (
-            <McpServerCard key={server.id} server={server} />
+            <MCPServerCard
+              key={server.id}
+              server={server}
+              endpointCount={endpointCountByServerId.get(server.id) ?? 0}
+            />
           ))}
         </div>
       ) : (
@@ -356,7 +389,7 @@ function McpServersTab({
 
 function McpServersSkeleton() {
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
       {[1, 2, 3].map((i) => (
         <div key={i} className="bg-card animate-pulse rounded-xl border p-6">
           <div className="mb-4 flex items-center gap-3">
@@ -368,43 +401,6 @@ function McpServersSkeleton() {
           </div>
         </div>
       ))}
-    </div>
-  );
-}
-
-function McpServerCard({ server }: { server: McpServer }) {
-  // mcp_servers rows have no name; AGE-2118 introduces broader management.
-  // Until then, surface the raw id and visibility so the user can correlate
-  // with the underlying record.
-  const shortId = server.id.slice(0, 8);
-  return (
-    <div className="bg-card rounded-xl border p-5">
-      <div className="mb-3 flex items-start gap-3">
-        <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
-          <Server className="text-primary h-5 w-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <Type className="truncate text-base font-semibold" title={server.id}>
-            {shortId}…
-          </Type>
-          <McpServerVisibilityBadge visibility={server.visibility} />
-        </div>
-      </div>
-      <Type small muted>
-        Manage MCP server settings (coming soon).
-      </Type>
-    </div>
-  );
-}
-
-function McpServerVisibilityBadge({ visibility }: { visibility: string }) {
-  const variant: "success" | "neutral" =
-    visibility === "public" || visibility === "private" ? "success" : "neutral";
-  return (
-    <div className="mt-1">
-      <Badge variant={variant}>
-        <Badge.Text>{visibility}</Badge.Text>
-      </Badge>
     </div>
   );
 }

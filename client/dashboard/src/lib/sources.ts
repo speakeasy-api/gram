@@ -63,9 +63,22 @@ export function remoteMcpRouteParam(server: {
   return server.slug?.trim() || server.id;
 }
 
+// mcpServerRouteParam returns the value to embed in dashboard URLs for an
+// mcp_server row. Mirrors remoteMcpRouteParam: prefers the slug for
+// human-friendly URLs and falls back to the ID. The server's getMcpServer
+// endpoint accepts a UUID id; route params that are UUID-shaped resolve
+// directly, while non-UUID values are looked up by slug.
+export function mcpServerRouteParam(server: {
+  id: string;
+  slug?: string | null | undefined;
+}): string {
+  return server.slug?.trim() || server.id;
+}
+
 // uuidRegex matches the canonical 8-4-4-4-12 hex form that Go's UUID package
 // emits via String() and that the Goa-generated SDK uses on the wire. It is
-// used to disambiguate route params produced by [remoteMcpRouteParam].
+// used to disambiguate route params produced by [remoteMcpRouteParam] and
+// [mcpServerRouteParam].
 const uuidRegex =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -74,6 +87,19 @@ const uuidRegex =
 // where exactly one of `id` or `slug` must be supplied. UUID-shaped values
 // are sent as `id`; everything else as `slug`.
 export function getRemoteMcpServerArgs(idOrSlug: string): {
+  id?: string;
+  slug?: string;
+} {
+  if (uuidRegex.test(idOrSlug)) {
+    return { id: idOrSlug };
+  }
+  return { slug: idOrSlug };
+}
+
+// getMcpServerArgs maps a route-param string into the request shape that
+// [useGetMcpServer] consumes. Mirrors [getRemoteMcpServerArgs] — UUID-shaped
+// values resolve as `id`, everything else as `slug`.
+export function getMcpServerArgs(idOrSlug: string): {
   id?: string;
   slug?: string;
 } {
