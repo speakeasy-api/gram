@@ -40,7 +40,7 @@ export function accessCreateShadowMCPAccessRule(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.ShadowMCPAccessRule,
+    components.CreateShadowMCPAccessRuleResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -68,7 +68,7 @@ async function $do(
 ): Promise<
   [
     Result<
-      components.ShadowMCPAccessRule,
+      components.CreateShadowMCPAccessRuleResult,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -95,7 +95,7 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.ShadowMCPAccessRuleForm, {
+  const body = encodeJSON("body", payload.CreateShadowMCPAccessRuleForm, {
     explode: true,
   });
 
@@ -178,7 +178,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.ShadowMCPAccessRule,
+    components.CreateShadowMCPAccessRuleResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -189,7 +189,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(201, components.ShadowMCPAccessRule$inboundSchema),
+    M.json(201, components.CreateShadowMCPAccessRuleResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

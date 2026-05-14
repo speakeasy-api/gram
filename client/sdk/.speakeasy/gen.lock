@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: c18edf70e5770a13a9e780b5cef585b5
+  docChecksum: ae5c512e102a817089c6d49e5a6f4eac
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -99,7 +99,7 @@ trackedFiles:
   docs/models/components/allowedoriginstatus.md:
     last_write_checksum: sha1:42d4748288a2bfed0a1ca365006851a85d31d2ee
   docs/models/components/approveshadowmcpapprovalrequestform.md:
-    last_write_checksum: sha1:c13ddad1ea4dafb6e9403577cfdd6ef6e944238e
+    last_write_checksum: sha1:5e0f7475ab05ec2164dcef08e04e4ebcfe79a97b
   docs/models/components/asset.md:
     last_write_checksum: sha1:3da48f7c0a6c8e83a69059b082816228dd56dc70
   docs/models/components/assistant.md:
@@ -230,6 +230,16 @@ trackedFiles:
     last_write_checksum: sha1:7f66643a7003dd803ed47f17138bafe5db53d044
   docs/models/components/createserverform.md:
     last_write_checksum: sha1:62c47d0b522a9d5be599889c2d7b8c50b7171cd8
+  docs/models/components/createshadowmcpaccessruleform.md:
+    last_write_checksum: sha1:160705a92fbefbc118859d983723584900826afe
+  docs/models/components/createshadowmcpaccessruleformaccessscope.md:
+    last_write_checksum: sha1:bb474433921ba1650a4ba86bd8b7e9778de6e9a7
+  docs/models/components/createshadowmcpaccessruleformdisposition.md:
+    last_write_checksum: sha1:d19e88d6c172c52e18bfc081f059314ea1d7a754
+  docs/models/components/createshadowmcpaccessruleformmatchbreadth.md:
+    last_write_checksum: sha1:3e498eeeaaacd86e8484fb91e3750602ee635588
+  docs/models/components/createshadowmcpaccessruleresult.md:
+    last_write_checksum: sha1:94baa69d351691bff75352a3f45ca606ff262097
   docs/models/components/createshadowmcpapprovalrequestform.md:
     last_write_checksum: sha1:ab3c403b692b734cf63c66f50f99c2ac8e4bdaf3
   docs/models/components/createsignedchatattachmenturlform2.md:
@@ -261,7 +271,7 @@ trackedFiles:
   docs/models/components/deleterequestbody.md:
     last_write_checksum: sha1:1a2f33568facc0bb5fa16b8080d113b493acc3e2
   docs/models/components/denyshadowmcpapprovalrequestform.md:
-    last_write_checksum: sha1:b3008b35955de6abd2ccaf0394306df231f8294f
+    last_write_checksum: sha1:5a9b2b38d7650d7200478ab82260086ce40d88cd
   docs/models/components/denyshadowmcpapprovalrequestformmatchbreadth.md:
     last_write_checksum: sha1:77e4051a27544b6284ff29613561147c3925f15e
   docs/models/components/deployment.md:
@@ -828,18 +838,10 @@ trackedFiles:
     last_write_checksum: sha1:4df9ba762a2e251b5ca31d9e2f41d314e4d7c96d
   docs/models/components/shadowmcpaccessruledisposition.md:
     last_write_checksum: sha1:12b9b0e55570ce35f08d53d6603606b13dcb7ca5
-  docs/models/components/shadowmcpaccessruleform.md:
-    last_write_checksum: sha1:6b3af0e904a82194456dba81be16045bf7e39f0f
-  docs/models/components/shadowmcpaccessruleformaccessscope.md:
-    last_write_checksum: sha1:b43540a8973b25f82e5ec4dfabfdf24ae3e1bd61
-  docs/models/components/shadowmcpaccessruleformdisposition.md:
-    last_write_checksum: sha1:9fabb4fea63fe3c47900c78823865965faddc251
-  docs/models/components/shadowmcpaccessruleformmatchbreadth.md:
-    last_write_checksum: sha1:a8395f7e8465c78f0b89ccd75c14aaa5255244b0
   docs/models/components/shadowmcpaccessrulematchbreadth.md:
     last_write_checksum: sha1:69a86d88e18394a1599d5069f89bdc4659f24bde
   docs/models/components/shadowmcpapprovaldecisionresult.md:
-    last_write_checksum: sha1:f2d2ba48cc555ce2da6063b842c1c219104f1e0c
+    last_write_checksum: sha1:5d886b00a28f8b9a026ecb3705ae9e77d392d673
   docs/models/components/shadowmcpapprovalrequest.md:
     last_write_checksum: sha1:e5e7abf4a9b215af122cd8039814506c07f07e37
   docs/models/components/skillbreakdownrow.md:
@@ -1241,7 +1243,7 @@ trackedFiles:
   docs/models/operations/createrolesecurity.md:
     last_write_checksum: sha1:6c8d5c2f385a38401d2bed7a7eb437ba706aee59
   docs/models/operations/createshadowmcpaccessrulerequest.md:
-    last_write_checksum: sha1:7c790fde0454514c526be79f45e2bedda7c07152
+    last_write_checksum: sha1:e5fa97cd96755dfa679bab484f8b866b59d080b4
   docs/models/operations/createshadowmcpaccessrulesecurity.md:
     last_write_checksum: sha1:f24fd96a665fb3a32614d87cecffa88c5afecc2f
   docs/models/operations/createshadowmcpapprovalrequestrequest.md:
@@ -2673,7 +2675,7 @@ trackedFiles:
   docs/models/operations/verifyremotemcpurlsecurityoption2.md:
     last_write_checksum: sha1:d7327bb7bc7d90ea3fb3593531e041e6c9fc4f9e
   docs/sdks/access/README.md:
-    last_write_checksum: sha1:1547a27bea27da69563e29523529f2d24c22fe5c
+    last_write_checksum: sha1:b2a1a53934cbb03ded02b2674320081fd8bfb3fe
   docs/sdks/assets/README.md:
     last_write_checksum: sha1:e1884c390454dd09faad4702a812833f9fdf068a
   docs/sdks/assistantmemories/README.md:
@@ -2803,7 +2805,7 @@ trackedFiles:
   src/funcs/accessCreateRole.ts:
     last_write_checksum: sha1:58c02d9b8748fc48ca47749335143eb7fbe4fe4b
   src/funcs/accessCreateShadowMCPAccessRule.ts:
-    last_write_checksum: sha1:c1e46acd1eaa7b3ec110e2150868c093dcbf9256
+    last_write_checksum: sha1:ead20c8e7eb80f303fde557069a3a17ac2982fcc
   src/funcs/accessCreateShadowMCPApprovalRequest.ts:
     last_write_checksum: sha1:566203bccab2864a59b0668a37a2dea80218c815
   src/funcs/accessDeleteRole.ts:
@@ -3633,7 +3635,7 @@ trackedFiles:
     last_write_checksum: sha1:09b19b8524236e2c90452d0539edff8f12f26872
     pristine_git_object: 11ca116616d2f9bdcb90e69b02ef5cded3218aa2
   src/models/components/approveshadowmcpapprovalrequestform.ts:
-    last_write_checksum: sha1:4abadda30cd87fcd9cdd26dcd165d6c34e6b1d35
+    last_write_checksum: sha1:3146c14baf93c3ca15872d7e47bc80af0238816e
   src/models/components/asset.ts:
     id: e5eeb706d6aa
     last_write_checksum: sha1:8acb541aa089a73038818ff795e737d854dd4060
@@ -3772,6 +3774,10 @@ trackedFiles:
     last_write_checksum: sha1:85aeb0cf9b2bcc28284e482e51fc8b2d97ca4a1e
   src/models/components/createserverform.ts:
     last_write_checksum: sha1:c164b51fca530c132093a75b1af4833097355817
+  src/models/components/createshadowmcpaccessruleform.ts:
+    last_write_checksum: sha1:df76f15f3be4104d8f2882a317a35c7abb828ef8
+  src/models/components/createshadowmcpaccessruleresult.ts:
+    last_write_checksum: sha1:ac6ee1fa09b10ba0fe58eb0ff8a77b20b679f70c
   src/models/components/createshadowmcpapprovalrequestform.ts:
     last_write_checksum: sha1:32253d1c6c5e862b40521a6d75e48c5a3900afe9
   src/models/components/createsignedchatattachmenturlform2.ts:
@@ -3813,7 +3819,7 @@ trackedFiles:
   src/models/components/deleterequestbody.ts:
     last_write_checksum: sha1:d043311bd57a1bb95c92c0ab9f62832eb1c573e5
   src/models/components/denyshadowmcpapprovalrequestform.ts:
-    last_write_checksum: sha1:14cd87d6b47c4d4a5c6e35d1760120936953cfd8
+    last_write_checksum: sha1:9b1c88c05bd0f05629f4c7207319d17954fa7d67
   src/models/components/deployment.ts:
     id: 73b9af3ba286
     last_write_checksum: sha1:d8ead7f1765ca6e06c8e7ad181c53d8bd6c8e6b9
@@ -3990,7 +3996,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:c91dbe9993bd450caa8085d5b9a4ed101c3feeb6
+    last_write_checksum: sha1:e72239885fc57032751de2fdd0467ef15ea82f8c
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -4484,10 +4490,8 @@ trackedFiles:
     pristine_git_object: df1eaccb023d9e93f54b641c8791f902963df99a
   src/models/components/shadowmcpaccessrule.ts:
     last_write_checksum: sha1:410c19fca0dd2919599bdcb645ae8cd8969f49f0
-  src/models/components/shadowmcpaccessruleform.ts:
-    last_write_checksum: sha1:581f31dce8e297200239ab81d66d5e8c6b89dba6
   src/models/components/shadowmcpapprovaldecisionresult.ts:
-    last_write_checksum: sha1:c078806ab2fe6dc7e0a312f2ac08b042bc714bf0
+    last_write_checksum: sha1:5fc2c665e6a5219424abb1af91813856ff8acda0
   src/models/components/shadowmcpapprovalrequest.ts:
     last_write_checksum: sha1:b1c3d37c10e415760a51718de6e73429561ef53c
   src/models/components/skillbreakdownrow.ts:
@@ -4811,7 +4815,7 @@ trackedFiles:
   src/models/operations/createrole.ts:
     last_write_checksum: sha1:3793d4e9feca36eb2d8d9422cc1bbc8066bbae0a
   src/models/operations/createshadowmcpaccessrule.ts:
-    last_write_checksum: sha1:0799848c4ed26f73eebdde6f46378b0c9f229898
+    last_write_checksum: sha1:cc05783c40426eaa3fcf5654d2e414655e40f334
   src/models/operations/createshadowmcpapprovalrequest.ts:
     last_write_checksum: sha1:7531fdb216d44745c6fe828312dda6d37eaf20c8
   src/models/operations/createsignedchatattachmenturl.ts:
@@ -5585,7 +5589,7 @@ trackedFiles:
   src/react-query/createRole.ts:
     last_write_checksum: sha1:f5715c31959a44e1c08eb8f96132546380900d63
   src/react-query/createShadowMCPAccessRule.ts:
-    last_write_checksum: sha1:e854d3bfdd48e8dca2c512bc804c2225311ff954
+    last_write_checksum: sha1:68024a1e1ad2a28c397148e2214a2197a7c309dd
   src/react-query/createShadowMCPApprovalRequest.ts:
     last_write_checksum: sha1:a9ccc4f287682371240a53cb0383e8910b08ef3c
   src/react-query/createSignedChatAttachmentURL.ts:
@@ -6473,7 +6477,7 @@ trackedFiles:
   src/react-query/verifyRemoteMcpURL.ts:
     last_write_checksum: sha1:7a8b3ee3d721701d3b98ec26f6b6f3b1b1a27bd9
   src/sdk/access.ts:
-    last_write_checksum: sha1:b7335fcb78887672dc75ea6a89ba505a319878b2
+    last_write_checksum: sha1:2af2e1009f4c6c3f46a92bbccf25f73c2d729728
   src/sdk/assets.ts:
     id: 43fd5a73edb9
     last_write_checksum: sha1:60ccd4abcd9e1b51f7f5542c97336b5a5847b570
@@ -9742,7 +9746,7 @@ examples:
         application/json: {"access_scope": "organization", "display_name": "Dexter.Ziemann", "id": "cb07e968-7ff0-41e3-bf5a-110ddd8f277a", "match_breadth": "full_url", "match_value": "<value>"}
       responses:
         "200":
-          application/json: {"request": {"blocked_count": 95284, "created_at": "2026-01-15T12:10:32.928Z", "id": "893aa289-3caa-4b0e-8b9a-3ed7a02422b4", "organization_id": "<id>", "project_id": "76bb2bf6-1709-4446-8d63-6eb666b7bc26", "requested_at": "2024-03-24T06:24:45.079Z", "status": "requested", "updated_at": "2025-03-19T20:10:31.892Z"}}
+          application/json: {"request": {"blocked_count": 95284, "created_at": "2026-01-15T12:10:32.928Z", "id": "893aa289-3caa-4b0e-8b9a-3ed7a02422b4", "organization_id": "<id>", "project_id": "76bb2bf6-1709-4446-8d63-6eb666b7bc26", "requested_at": "2024-03-24T06:24:45.079Z", "status": "requested", "updated_at": "2025-03-19T20:10:31.892Z"}, "rules": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -9764,7 +9768,7 @@ examples:
         application/json: {"create_deny_rule": true, "id": "3be6c4bf-a350-4f31-b5c7-6008bf1bb80a"}
       responses:
         "200":
-          application/json: {"request": {"blocked_count": 949718, "created_at": "2026-05-06T09:57:36.921Z", "id": "31ffc4f9-7bab-4ebb-84ab-b4efc861adac", "organization_id": "<id>", "project_id": "b54042f0-758a-47ff-80d2-da01ef9e6380", "requested_at": "2024-05-30T23:20:20.940Z", "status": "requested", "updated_at": "2025-09-27T12:24:51.852Z"}}
+          application/json: {"request": {"blocked_count": 949718, "created_at": "2026-05-06T09:57:36.921Z", "id": "31ffc4f9-7bab-4ebb-84ab-b4efc861adac", "organization_id": "<id>", "project_id": "b54042f0-758a-47ff-80d2-da01ef9e6380", "requested_at": "2024-05-30T23:20:20.940Z", "status": "requested", "updated_at": "2025-09-27T12:24:51.852Z"}, "rules": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -9788,7 +9792,7 @@ examples:
         application/json: {"access_scope": "organization", "display_name": "Domenic_Wunsch58", "disposition": "allowed", "match_breadth": "server_identity", "match_value": "<value>"}
       responses:
         "201":
-          application/json: {"access_scope": "organization", "created_at": "2025-01-11T10:19:54.613Z", "display_name": "Celestino_Boyle12", "disposition": "allowed", "id": "445c3863-95a5-4466-aee1-2e8b9d474c3b", "match_breadth": "url_host", "match_value": "<value>", "organization_id": "<id>", "updated_at": "2026-08-15T16:39:01.386Z"}
+          application/json: {"rules": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

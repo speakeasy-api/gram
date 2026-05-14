@@ -48,7 +48,7 @@ type Service interface {
 	// List managed Shadow MCP allow and deny rules.
 	ListShadowMCPAccessRules(context.Context, *ListShadowMCPAccessRulesPayload) (res *ListShadowMCPAccessRulesResult, err error)
 	// Create a managed Shadow MCP access rule.
-	CreateShadowMCPAccessRule(context.Context, *CreateShadowMCPAccessRulePayload) (res *ShadowMCPAccessRule, err error)
+	CreateShadowMCPAccessRule(context.Context, *CreateShadowMCPAccessRulePayload) (res *CreateShadowMCPAccessRuleResult, err error)
 	// Update a managed Shadow MCP access rule.
 	UpdateShadowMCPAccessRule(context.Context, *UpdateShadowMCPAccessRulePayload) (res *ShadowMCPAccessRule, err error)
 	// Delete a managed Shadow MCP access rule.
@@ -114,9 +114,12 @@ type AccessMember struct {
 // ApproveShadowMCPApprovalRequestPayload is the payload type of the access
 // service approveShadowMCPApprovalRequest method.
 type ApproveShadowMCPApprovalRequestPayload struct {
-	SessionToken           *string
-	ID                     string
-	AccessScope            string
+	SessionToken *string
+	ID           string
+	AccessScope  string
+	// Project ids to create project-scoped rules for. Empty falls back to the
+	// request project.
+	ProjectIds             []string
 	MatchBreadth           string
 	MatchValue             string
 	DisplayName            string
@@ -259,7 +262,10 @@ type CreateRolePayload struct {
 // CreateShadowMCPAccessRulePayload is the payload type of the access service
 // createShadowMCPAccessRule method.
 type CreateShadowMCPAccessRulePayload struct {
-	SessionToken           *string
+	SessionToken *string
+	// Project ids to create project-scoped rules for. Empty uses project_id for
+	// single-rule creation.
+	ProjectIds             []string
 	Disposition            string
 	AccessScope            string
 	ProjectID              *string
@@ -270,6 +276,12 @@ type CreateShadowMCPAccessRulePayload struct {
 	ObservedURLHost        *string
 	ObservedServerIdentity *string
 	Reason                 *string
+}
+
+// CreateShadowMCPAccessRuleResult is the result type of the access service
+// createShadowMCPAccessRule method.
+type CreateShadowMCPAccessRuleResult struct {
+	Rules []*ShadowMCPAccessRule
 }
 
 // CreateShadowMCPApprovalRequestPayload is the payload type of the access
@@ -299,9 +311,12 @@ type DeleteShadowMCPAccessRulePayload struct {
 // DenyShadowMCPApprovalRequestPayload is the payload type of the access
 // service denyShadowMCPApprovalRequest method.
 type DenyShadowMCPApprovalRequestPayload struct {
-	SessionToken           *string
-	ID                     string
-	CreateDenyRule         bool
+	SessionToken   *string
+	ID             string
+	CreateDenyRule bool
+	// Project ids to create project-scoped deny rules for. Empty falls back to the
+	// request project.
+	ProjectIds             []string
 	MatchBreadth           *string
 	MatchValue             *string
 	DisplayName            *string
@@ -585,7 +600,7 @@ type Selector struct {
 }
 
 // ShadowMCPAccessRule is the result type of the access service
-// createShadowMCPAccessRule method.
+// updateShadowMCPAccessRule method.
 type ShadowMCPAccessRule struct {
 	ID                     string
 	OrganizationID         string
@@ -611,6 +626,7 @@ type ShadowMCPAccessRule struct {
 type ShadowMCPApprovalDecisionResult struct {
 	Request *ShadowMCPApprovalRequest
 	Rule    *ShadowMCPAccessRule
+	Rules   []*ShadowMCPAccessRule
 }
 
 // ShadowMCPApprovalRequest is the result type of the access service

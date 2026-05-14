@@ -416,7 +416,7 @@ func BuildApproveShadowMCPApprovalRequestPayload(accessApproveShadowMCPApprovalR
 	{
 		err = json.Unmarshal([]byte(accessApproveShadowMCPApprovalRequestBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"access_scope\": \"project\",\n      \"display_name\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"reason\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"access_scope\": \"project\",\n      \"display_name\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"project_ids\": [\n         \"abc123\"\n      ],\n      \"reason\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if !(body.AccessScope == "organization" || body.AccessScope == "project") {
@@ -446,6 +446,12 @@ func BuildApproveShadowMCPApprovalRequestPayload(accessApproveShadowMCPApprovalR
 		ObservedServerIdentity: body.ObservedServerIdentity,
 		Reason:                 body.Reason,
 	}
+	if body.ProjectIds != nil {
+		v.ProjectIds = make([]string, len(body.ProjectIds))
+		for i, val := range body.ProjectIds {
+			v.ProjectIds[i] = val
+		}
+	}
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -459,7 +465,7 @@ func BuildDenyShadowMCPApprovalRequestPayload(accessDenyShadowMCPApprovalRequest
 	{
 		err = json.Unmarshal([]byte(accessDenyShadowMCPApprovalRequestBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"create_deny_rule\": false,\n      \"display_name\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"reason\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"create_deny_rule\": false,\n      \"display_name\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"project_ids\": [\n         \"abc123\"\n      ],\n      \"reason\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.MatchBreadth != nil {
@@ -487,6 +493,12 @@ func BuildDenyShadowMCPApprovalRequestPayload(accessDenyShadowMCPApprovalRequest
 		ObservedURLHost:        body.ObservedURLHost,
 		ObservedServerIdentity: body.ObservedServerIdentity,
 		Reason:                 body.Reason,
+	}
+	if body.ProjectIds != nil {
+		v.ProjectIds = make([]string, len(body.ProjectIds))
+		for i, val := range body.ProjectIds {
+			v.ProjectIds[i] = val
+		}
 	}
 	v.SessionToken = sessionToken
 
@@ -582,7 +594,7 @@ func BuildCreateShadowMCPAccessRulePayload(accessCreateShadowMCPAccessRuleBody s
 	{
 		err = json.Unmarshal([]byte(accessCreateShadowMCPAccessRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"access_scope\": \"project\",\n      \"display_name\": \"abc123\",\n      \"disposition\": \"denied\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"reason\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"access_scope\": \"project\",\n      \"display_name\": \"abc123\",\n      \"disposition\": \"denied\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_ids\": [\n         \"abc123\"\n      ],\n      \"reason\": \"abc123\"\n   }'")
 		}
 		if !(body.Disposition == "allowed" || body.Disposition == "denied") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", body.Disposition, []any{"allowed", "denied"}))
@@ -617,6 +629,12 @@ func BuildCreateShadowMCPAccessRulePayload(accessCreateShadowMCPAccessRuleBody s
 		ObservedURLHost:        body.ObservedURLHost,
 		ObservedServerIdentity: body.ObservedServerIdentity,
 		Reason:                 body.Reason,
+	}
+	if body.ProjectIds != nil {
+		v.ProjectIds = make([]string, len(body.ProjectIds))
+		for i, val := range body.ProjectIds {
+			v.ProjectIds[i] = val
+		}
 	}
 	v.SessionToken = sessionToken
 

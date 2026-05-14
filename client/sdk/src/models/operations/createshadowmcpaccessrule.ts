@@ -15,7 +15,7 @@ export type CreateShadowMCPAccessRuleRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  shadowMCPAccessRuleForm: components.ShadowMCPAccessRuleForm;
+  createShadowMCPAccessRuleForm: components.CreateShadowMCPAccessRuleForm;
 };
 
 /** @internal */
@@ -51,7 +51,8 @@ export function createShadowMCPAccessRuleSecurityToJSON(
 /** @internal */
 export type CreateShadowMCPAccessRuleRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  ShadowMCPAccessRuleForm: components.ShadowMCPAccessRuleForm$Outbound;
+  CreateShadowMCPAccessRuleForm:
+    components.CreateShadowMCPAccessRuleForm$Outbound;
 };
 
 /** @internal */
@@ -61,12 +62,13 @@ export const CreateShadowMCPAccessRuleRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    shadowMCPAccessRuleForm: components.ShadowMCPAccessRuleForm$outboundSchema,
+    createShadowMCPAccessRuleForm:
+      components.CreateShadowMCPAccessRuleForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
-      shadowMCPAccessRuleForm: "ShadowMCPAccessRuleForm",
+      createShadowMCPAccessRuleForm: "CreateShadowMCPAccessRuleForm",
     });
   }),
 );

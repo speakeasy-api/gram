@@ -364,7 +364,7 @@ export class Access extends ClientSDK {
     request: operations.CreateShadowMCPAccessRuleRequest,
     security?: operations.CreateShadowMCPAccessRuleSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ShadowMCPAccessRule> {
+  ): Promise<components.CreateShadowMCPAccessRuleResult> {
     return unwrapAsync(accessCreateShadowMCPAccessRule(
       this,
       request,

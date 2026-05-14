@@ -1691,14 +1691,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ShadowMCPAccessRuleForm'
+              $ref: '#/components/schemas/CreateShadowMCPAccessRuleForm'
         required: true
       responses:
         "201":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ShadowMCPAccessRule'
+                $ref: '#/components/schemas/CreateShadowMCPAccessRuleResult'
           description: Created response.
         "400":
           content:
@@ -26844,6 +26844,11 @@ components:
           type: string
         observed_url_host:
           type: string
+        project_ids:
+          type: array
+          items:
+            type: string
+          description: Project ids to create project-scoped rules for. Empty falls back to the request project.
         reason:
           type: string
       required:
@@ -28682,6 +28687,60 @@ components:
         - url
         - transport_type
         - headers
+    CreateShadowMCPAccessRuleForm:
+      type: object
+      properties:
+        access_scope:
+          type: string
+          enum:
+            - organization
+            - project
+        display_name:
+          type: string
+        disposition:
+          type: string
+          enum:
+            - allowed
+            - denied
+        match_breadth:
+          type: string
+          enum:
+            - full_url
+            - url_host
+            - server_identity
+        match_value:
+          type: string
+        observed_full_url:
+          type: string
+        observed_server_identity:
+          type: string
+        observed_url_host:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        project_ids:
+          type: array
+          items:
+            type: string
+          description: Project ids to create project-scoped rules for. Empty uses project_id for single-rule creation.
+        reason:
+          type: string
+      required:
+        - disposition
+        - access_scope
+        - match_breadth
+        - match_value
+        - display_name
+    CreateShadowMCPAccessRuleResult:
+      type: object
+      properties:
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShadowMCPAccessRule'
+      required:
+        - rules
     CreateShadowMCPApprovalRequestForm:
       type: object
       properties:
@@ -29108,6 +29167,11 @@ components:
           type: string
         observed_url_host:
           type: string
+        project_ids:
+          type: array
+          items:
+            type: string
+          description: Project ids to create project-scoped deny rules for. Empty falls back to the request project.
         reason:
           type: string
       required:
@@ -35467,8 +35531,13 @@ components:
           $ref: '#/components/schemas/ShadowMCPApprovalRequest'
         rule:
           $ref: '#/components/schemas/ShadowMCPAccessRule'
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShadowMCPAccessRule'
       required:
         - request
+        - rules
     ShadowMCPApprovalRequest:
       type: object
       properties:

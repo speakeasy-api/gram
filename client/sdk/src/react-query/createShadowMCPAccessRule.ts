@@ -35,7 +35,7 @@ export type CreateShadowMCPAccessRuleMutationVariables = {
 };
 
 export type CreateShadowMCPAccessRuleMutationData =
-  components.ShadowMCPAccessRule;
+  components.CreateShadowMCPAccessRuleResult;
 
 export type CreateShadowMCPAccessRuleMutationError =
   | errors.ServiceError

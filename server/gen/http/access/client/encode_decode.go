@@ -3405,7 +3405,7 @@ func DecodeCreateShadowMCPAccessRuleResponse(decoder func(*http.Response) goahtt
 			if err != nil {
 				return nil, goahttp.ErrValidationError("access", "createShadowMCPAccessRule", err)
 			}
-			res := NewCreateShadowMCPAccessRuleShadowMCPAccessRuleCreated(&body)
+			res := NewCreateShadowMCPAccessRuleResultCreated(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (

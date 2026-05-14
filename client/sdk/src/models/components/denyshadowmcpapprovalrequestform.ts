@@ -24,6 +24,10 @@ export type DenyShadowMCPApprovalRequestForm = {
   observedFullUrl?: string | undefined;
   observedServerIdentity?: string | undefined;
   observedUrlHost?: string | undefined;
+  /**
+   * Project ids to create project-scoped deny rules for. Empty falls back to the request project.
+   */
+  projectIds?: Array<string> | undefined;
   reason?: string | undefined;
 };
 
@@ -43,6 +47,7 @@ export type DenyShadowMCPApprovalRequestForm$Outbound = {
   observed_full_url?: string | undefined;
   observed_server_identity?: string | undefined;
   observed_url_host?: string | undefined;
+  project_ids?: Array<string> | undefined;
   reason?: string | undefined;
 };
 
@@ -62,6 +67,7 @@ export const DenyShadowMCPApprovalRequestForm$outboundSchema: z.ZodMiniType<
     observedFullUrl: z.optional(z.string()),
     observedServerIdentity: z.optional(z.string()),
     observedUrlHost: z.optional(z.string()),
+    projectIds: z.optional(z.array(z.string())),
     reason: z.optional(z.string()),
   }),
   z.transform((v) => {
@@ -73,6 +79,7 @@ export const DenyShadowMCPApprovalRequestForm$outboundSchema: z.ZodMiniType<
       observedFullUrl: "observed_full_url",
       observedServerIdentity: "observed_server_identity",
       observedUrlHost: "observed_url_host",
+      projectIds: "project_ids",
     });
   }),
 );

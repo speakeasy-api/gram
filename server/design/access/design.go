@@ -402,11 +402,11 @@ var _ = Service("access", func() {
 		Security(security.Session)
 
 		Payload(func() {
-			Extend(ShadowMCPAccessRuleForm)
+			Extend(CreateShadowMCPAccessRuleForm)
 			security.SessionPayload()
 		})
 
-		Result(ShadowMCPAccessRuleModel)
+		Result(CreateShadowMCPAccessRuleResult)
 
 		HTTP(func() {
 			POST("/rpc/access.shadowMcp.rules.create")
@@ -909,9 +909,15 @@ var ListShadowMCPAccessRulesResult = Type("ListShadowMCPAccessRulesResult", func
 })
 
 var ShadowMCPApprovalDecisionResult = Type("ShadowMCPApprovalDecisionResult", func() {
-	Required("request")
+	Required("request", "rules")
 	Attribute("request", ShadowMCPApprovalRequestModel)
 	Attribute("rule", ShadowMCPAccessRuleModel)
+	Attribute("rules", ArrayOf(ShadowMCPAccessRuleModel))
+})
+
+var CreateShadowMCPAccessRuleResult = Type("CreateShadowMCPAccessRuleResult", func() {
+	Required("rules")
+	Attribute("rules", ArrayOf(ShadowMCPAccessRuleModel))
 })
 
 var CreateShadowMCPApprovalRequestForm = Type("CreateShadowMCPApprovalRequestForm", func() {
@@ -929,6 +935,7 @@ var ApproveShadowMCPApprovalRequestForm = Type("ApproveShadowMCPApprovalRequestF
 	Attribute("access_scope", String, func() {
 		Enum("organization", "project")
 	})
+	Attribute("project_ids", ArrayOf(String), "Project ids to create project-scoped rules for. Empty falls back to the request project.")
 	Attribute("match_breadth", String, func() {
 		Enum("full_url", "url_host", "server_identity")
 	})
@@ -947,6 +954,7 @@ var DenyShadowMCPApprovalRequestForm = Type("DenyShadowMCPApprovalRequestForm", 
 		Format(FormatUUID)
 	})
 	Attribute("create_deny_rule", Boolean)
+	Attribute("project_ids", ArrayOf(String), "Project ids to create project-scoped deny rules for. Empty falls back to the request project.")
 	Attribute("match_breadth", String, func() {
 		Enum("full_url", "url_host", "server_identity")
 	})
@@ -956,6 +964,11 @@ var DenyShadowMCPApprovalRequestForm = Type("DenyShadowMCPApprovalRequestForm", 
 	Attribute("observed_url_host", String)
 	Attribute("observed_server_identity", String)
 	Attribute("reason", String)
+})
+
+var CreateShadowMCPAccessRuleForm = Type("CreateShadowMCPAccessRuleForm", func() {
+	Extend(ShadowMCPAccessRuleForm)
+	Attribute("project_ids", ArrayOf(String), "Project ids to create project-scoped rules for. Empty uses project_id for single-rule creation.")
 })
 
 var ShadowMCPAccessRuleForm = Type("ShadowMCPAccessRuleForm", func() {

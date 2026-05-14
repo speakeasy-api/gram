@@ -393,13 +393,13 @@ func (c *Client) ListShadowMCPAccessRules(ctx context.Context, p *ListShadowMCPA
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) CreateShadowMCPAccessRule(ctx context.Context, p *CreateShadowMCPAccessRulePayload) (res *ShadowMCPAccessRule, err error) {
+func (c *Client) CreateShadowMCPAccessRule(ctx context.Context, p *CreateShadowMCPAccessRulePayload) (res *CreateShadowMCPAccessRuleResult, err error) {
 	var ires any
 	ires, err = c.CreateShadowMCPAccessRuleEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ShadowMCPAccessRule), nil
+	return ires.(*CreateShadowMCPAccessRuleResult), nil
 }
 
 // UpdateShadowMCPAccessRule calls the "updateShadowMCPAccessRule" endpoint of

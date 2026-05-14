@@ -18,6 +18,7 @@ import {
 export type ShadowMCPApprovalDecisionResult = {
   request: ShadowMCPApprovalRequest;
   rule?: ShadowMCPAccessRule | undefined;
+  rules: Array<ShadowMCPAccessRule>;
 };
 
 /** @internal */
@@ -27,6 +28,7 @@ export const ShadowMCPApprovalDecisionResult$inboundSchema: z.ZodMiniType<
 > = z.object({
   request: ShadowMCPApprovalRequest$inboundSchema,
   rule: z.optional(ShadowMCPAccessRule$inboundSchema),
+  rules: z.array(ShadowMCPAccessRule$inboundSchema),
 });
 
 export function shadowMCPApprovalDecisionResultFromJSON(

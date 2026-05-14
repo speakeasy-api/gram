@@ -60,44 +60,53 @@ type CreateShadowMCPApprovalRequestRequestBody struct {
 // ApproveShadowMCPApprovalRequestRequestBody is the type of the "access"
 // service "approveShadowMCPApprovalRequest" endpoint HTTP request body.
 type ApproveShadowMCPApprovalRequestRequestBody struct {
-	ID                     string  `form:"id" json:"id" xml:"id"`
-	AccessScope            string  `form:"access_scope" json:"access_scope" xml:"access_scope"`
-	MatchBreadth           string  `form:"match_breadth" json:"match_breadth" xml:"match_breadth"`
-	MatchValue             string  `form:"match_value" json:"match_value" xml:"match_value"`
-	DisplayName            string  `form:"display_name" json:"display_name" xml:"display_name"`
-	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
-	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
-	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
-	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	ID          string `form:"id" json:"id" xml:"id"`
+	AccessScope string `form:"access_scope" json:"access_scope" xml:"access_scope"`
+	// Project ids to create project-scoped rules for. Empty falls back to the
+	// request project.
+	ProjectIds             []string `form:"project_ids,omitempty" json:"project_ids,omitempty" xml:"project_ids,omitempty"`
+	MatchBreadth           string   `form:"match_breadth" json:"match_breadth" xml:"match_breadth"`
+	MatchValue             string   `form:"match_value" json:"match_value" xml:"match_value"`
+	DisplayName            string   `form:"display_name" json:"display_name" xml:"display_name"`
+	ObservedFullURL        *string  `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string  `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string  `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
 // DenyShadowMCPApprovalRequestRequestBody is the type of the "access" service
 // "denyShadowMCPApprovalRequest" endpoint HTTP request body.
 type DenyShadowMCPApprovalRequestRequestBody struct {
-	ID                     string  `form:"id" json:"id" xml:"id"`
-	CreateDenyRule         bool    `form:"create_deny_rule" json:"create_deny_rule" xml:"create_deny_rule"`
-	MatchBreadth           *string `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
-	MatchValue             *string `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
-	DisplayName            *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
-	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
-	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
-	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
-	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	ID             string `form:"id" json:"id" xml:"id"`
+	CreateDenyRule bool   `form:"create_deny_rule" json:"create_deny_rule" xml:"create_deny_rule"`
+	// Project ids to create project-scoped deny rules for. Empty falls back to the
+	// request project.
+	ProjectIds             []string `form:"project_ids,omitempty" json:"project_ids,omitempty" xml:"project_ids,omitempty"`
+	MatchBreadth           *string  `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
+	MatchValue             *string  `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
+	DisplayName            *string  `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	ObservedFullURL        *string  `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string  `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string  `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
 // CreateShadowMCPAccessRuleRequestBody is the type of the "access" service
 // "createShadowMCPAccessRule" endpoint HTTP request body.
 type CreateShadowMCPAccessRuleRequestBody struct {
-	Disposition            string  `form:"disposition" json:"disposition" xml:"disposition"`
-	AccessScope            string  `form:"access_scope" json:"access_scope" xml:"access_scope"`
-	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	MatchBreadth           string  `form:"match_breadth" json:"match_breadth" xml:"match_breadth"`
-	MatchValue             string  `form:"match_value" json:"match_value" xml:"match_value"`
-	DisplayName            string  `form:"display_name" json:"display_name" xml:"display_name"`
-	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
-	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
-	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
-	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Project ids to create project-scoped rules for. Empty uses project_id for
+	// single-rule creation.
+	ProjectIds             []string `form:"project_ids,omitempty" json:"project_ids,omitempty" xml:"project_ids,omitempty"`
+	Disposition            string   `form:"disposition" json:"disposition" xml:"disposition"`
+	AccessScope            string   `form:"access_scope" json:"access_scope" xml:"access_scope"`
+	ProjectID              *string  `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	MatchBreadth           string   `form:"match_breadth" json:"match_breadth" xml:"match_breadth"`
+	MatchValue             string   `form:"match_value" json:"match_value" xml:"match_value"`
+	DisplayName            string   `form:"display_name" json:"display_name" xml:"display_name"`
+	ObservedFullURL        *string  `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string  `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string  `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
 // UpdateShadowMCPAccessRuleRequestBody is the type of the "access" service
@@ -280,6 +289,7 @@ type CreateShadowMCPApprovalRequestResponseBody struct {
 type ApproveShadowMCPApprovalRequestResponseBody struct {
 	Request *ShadowMCPApprovalRequestResponseBody `form:"request,omitempty" json:"request,omitempty" xml:"request,omitempty"`
 	Rule    *ShadowMCPAccessRuleResponseBody      `form:"rule,omitempty" json:"rule,omitempty" xml:"rule,omitempty"`
+	Rules   []*ShadowMCPAccessRuleResponseBody    `form:"rules,omitempty" json:"rules,omitempty" xml:"rules,omitempty"`
 }
 
 // DenyShadowMCPApprovalRequestResponseBody is the type of the "access" service
@@ -287,6 +297,7 @@ type ApproveShadowMCPApprovalRequestResponseBody struct {
 type DenyShadowMCPApprovalRequestResponseBody struct {
 	Request *ShadowMCPApprovalRequestResponseBody `form:"request,omitempty" json:"request,omitempty" xml:"request,omitempty"`
 	Rule    *ShadowMCPAccessRuleResponseBody      `form:"rule,omitempty" json:"rule,omitempty" xml:"rule,omitempty"`
+	Rules   []*ShadowMCPAccessRuleResponseBody    `form:"rules,omitempty" json:"rules,omitempty" xml:"rules,omitempty"`
 }
 
 // ListShadowMCPAccessRulesResponseBody is the type of the "access" service
@@ -300,23 +311,7 @@ type ListShadowMCPAccessRulesResponseBody struct {
 // CreateShadowMCPAccessRuleResponseBody is the type of the "access" service
 // "createShadowMCPAccessRule" endpoint HTTP response body.
 type CreateShadowMCPAccessRuleResponseBody struct {
-	ID                     *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	OrganizationID         *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	AccessScope            *string `form:"access_scope,omitempty" json:"access_scope,omitempty" xml:"access_scope,omitempty"`
-	Disposition            *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
-	MatchBreadth           *string `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
-	MatchValue             *string `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
-	DisplayName            *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
-	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
-	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
-	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
-	SourceRequestID        *string `form:"source_request_id,omitempty" json:"source_request_id,omitempty" xml:"source_request_id,omitempty"`
-	CreatedBy              *string `form:"created_by,omitempty" json:"created_by,omitempty" xml:"created_by,omitempty"`
-	UpdatedBy              *string `form:"updated_by,omitempty" json:"updated_by,omitempty" xml:"updated_by,omitempty"`
-	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	CreatedAt              *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt              *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Rules []*ShadowMCPAccessRuleResponseBody `form:"rules,omitempty" json:"rules,omitempty" xml:"rules,omitempty"`
 }
 
 // UpdateShadowMCPAccessRuleResponseBody is the type of the "access" service
@@ -4969,6 +4964,12 @@ func NewApproveShadowMCPApprovalRequestRequestBody(p *access.ApproveShadowMCPApp
 		ObservedServerIdentity: p.ObservedServerIdentity,
 		Reason:                 p.Reason,
 	}
+	if p.ProjectIds != nil {
+		body.ProjectIds = make([]string, len(p.ProjectIds))
+		for i, val := range p.ProjectIds {
+			body.ProjectIds[i] = val
+		}
+	}
 	return body
 }
 
@@ -4986,6 +4987,12 @@ func NewDenyShadowMCPApprovalRequestRequestBody(p *access.DenyShadowMCPApprovalR
 		ObservedURLHost:        p.ObservedURLHost,
 		ObservedServerIdentity: p.ObservedServerIdentity,
 		Reason:                 p.Reason,
+	}
+	if p.ProjectIds != nil {
+		body.ProjectIds = make([]string, len(p.ProjectIds))
+		for i, val := range p.ProjectIds {
+			body.ProjectIds[i] = val
+		}
 	}
 	return body
 }
@@ -5005,6 +5012,12 @@ func NewCreateShadowMCPAccessRuleRequestBody(p *access.CreateShadowMCPAccessRule
 		ObservedURLHost:        p.ObservedURLHost,
 		ObservedServerIdentity: p.ObservedServerIdentity,
 		Reason:                 p.Reason,
+	}
+	if p.ProjectIds != nil {
+		body.ProjectIds = make([]string, len(p.ProjectIds))
+		for i, val := range p.ProjectIds {
+			body.ProjectIds[i] = val
+		}
 	}
 	return body
 }
@@ -6909,6 +6922,14 @@ func NewApproveShadowMCPApprovalRequestShadowMCPApprovalDecisionResultOK(body *A
 	if body.Rule != nil {
 		v.Rule = unmarshalShadowMCPAccessRuleResponseBodyToAccessShadowMCPAccessRule(body.Rule)
 	}
+	v.Rules = make([]*access.ShadowMCPAccessRule, len(body.Rules))
+	for i, val := range body.Rules {
+		if val == nil {
+			v.Rules[i] = nil
+			continue
+		}
+		v.Rules[i] = unmarshalShadowMCPAccessRuleResponseBodyToAccessShadowMCPAccessRule(val)
+	}
 
 	return v
 }
@@ -7071,6 +7092,14 @@ func NewDenyShadowMCPApprovalRequestShadowMCPApprovalDecisionResultOK(body *Deny
 	v.Request = unmarshalShadowMCPApprovalRequestResponseBodyToAccessShadowMCPApprovalRequest(body.Request)
 	if body.Rule != nil {
 		v.Rule = unmarshalShadowMCPAccessRuleResponseBodyToAccessShadowMCPAccessRule(body.Rule)
+	}
+	v.Rules = make([]*access.ShadowMCPAccessRule, len(body.Rules))
+	for i, val := range body.Rules {
+		if val == nil {
+			v.Rules[i] = nil
+			continue
+		}
+		v.Rules[i] = unmarshalShadowMCPAccessRuleResponseBodyToAccessShadowMCPAccessRule(val)
 	}
 
 	return v
@@ -7394,28 +7423,17 @@ func NewListShadowMCPAccessRulesGatewayError(body *ListShadowMCPAccessRulesGatew
 	return v
 }
 
-// NewCreateShadowMCPAccessRuleShadowMCPAccessRuleCreated builds a "access"
-// service "createShadowMCPAccessRule" endpoint result from a HTTP "Created"
-// response.
-func NewCreateShadowMCPAccessRuleShadowMCPAccessRuleCreated(body *CreateShadowMCPAccessRuleResponseBody) *access.ShadowMCPAccessRule {
-	v := &access.ShadowMCPAccessRule{
-		ID:                     *body.ID,
-		OrganizationID:         *body.OrganizationID,
-		ProjectID:              body.ProjectID,
-		AccessScope:            *body.AccessScope,
-		Disposition:            *body.Disposition,
-		MatchBreadth:           *body.MatchBreadth,
-		MatchValue:             *body.MatchValue,
-		DisplayName:            *body.DisplayName,
-		ObservedFullURL:        body.ObservedFullURL,
-		ObservedURLHost:        body.ObservedURLHost,
-		ObservedServerIdentity: body.ObservedServerIdentity,
-		SourceRequestID:        body.SourceRequestID,
-		CreatedBy:              body.CreatedBy,
-		UpdatedBy:              body.UpdatedBy,
-		Reason:                 body.Reason,
-		CreatedAt:              *body.CreatedAt,
-		UpdatedAt:              *body.UpdatedAt,
+// NewCreateShadowMCPAccessRuleResultCreated builds a "access" service
+// "createShadowMCPAccessRule" endpoint result from a HTTP "Created" response.
+func NewCreateShadowMCPAccessRuleResultCreated(body *CreateShadowMCPAccessRuleResponseBody) *access.CreateShadowMCPAccessRuleResult {
+	v := &access.CreateShadowMCPAccessRuleResult{}
+	v.Rules = make([]*access.ShadowMCPAccessRule, len(body.Rules))
+	for i, val := range body.Rules {
+		if val == nil {
+			v.Rules[i] = nil
+			continue
+		}
+		v.Rules[i] = unmarshalShadowMCPAccessRuleResponseBodyToAccessShadowMCPAccessRule(val)
 	}
 
 	return v
@@ -9163,6 +9181,9 @@ func ValidateApproveShadowMCPApprovalRequestResponseBody(body *ApproveShadowMCPA
 	if body.Request == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("request", "body"))
 	}
+	if body.Rules == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rules", "body"))
+	}
 	if body.Request != nil {
 		if err2 := ValidateShadowMCPApprovalRequestResponseBody(body.Request); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -9171,6 +9192,13 @@ func ValidateApproveShadowMCPApprovalRequestResponseBody(body *ApproveShadowMCPA
 	if body.Rule != nil {
 		if err2 := ValidateShadowMCPAccessRuleResponseBody(body.Rule); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Rules {
+		if e != nil {
+			if err2 := ValidateShadowMCPAccessRuleResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -9182,6 +9210,9 @@ func ValidateDenyShadowMCPApprovalRequestResponseBody(body *DenyShadowMCPApprova
 	if body.Request == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("request", "body"))
 	}
+	if body.Rules == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rules", "body"))
+	}
 	if body.Request != nil {
 		if err2 := ValidateShadowMCPApprovalRequestResponseBody(body.Request); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -9190,6 +9221,13 @@ func ValidateDenyShadowMCPApprovalRequestResponseBody(body *DenyShadowMCPApprova
 	if body.Rule != nil {
 		if err2 := ValidateShadowMCPAccessRuleResponseBody(body.Rule); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Rules {
+		if e != nil {
+			if err2 := ValidateShadowMCPAccessRuleResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -9214,62 +9252,15 @@ func ValidateListShadowMCPAccessRulesResponseBody(body *ListShadowMCPAccessRules
 // ValidateCreateShadowMCPAccessRuleResponseBody runs the validations defined
 // on CreateShadowMCPAccessRuleResponseBody
 func ValidateCreateShadowMCPAccessRuleResponseBody(body *CreateShadowMCPAccessRuleResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	if body.Rules == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rules", "body"))
 	}
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
-	}
-	if body.AccessScope == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("access_scope", "body"))
-	}
-	if body.Disposition == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("disposition", "body"))
-	}
-	if body.MatchBreadth == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("match_breadth", "body"))
-	}
-	if body.MatchValue == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("match_value", "body"))
-	}
-	if body.DisplayName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
-	}
-	if body.AccessScope != nil {
-		if !(*body.AccessScope == "organization" || *body.AccessScope == "project") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access_scope", *body.AccessScope, []any{"organization", "project"}))
+	for _, e := range body.Rules {
+		if e != nil {
+			if err2 := ValidateShadowMCPAccessRuleResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
-	}
-	if body.Disposition != nil {
-		if !(*body.Disposition == "allowed" || *body.Disposition == "denied") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"allowed", "denied"}))
-		}
-	}
-	if body.MatchBreadth != nil {
-		if !(*body.MatchBreadth == "full_url" || *body.MatchBreadth == "url_host" || *body.MatchBreadth == "server_identity") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", *body.MatchBreadth, []any{"full_url", "url_host", "server_identity"}))
-		}
-	}
-	if body.SourceRequestID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.source_request_id", *body.SourceRequestID, goa.FormatUUID))
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
 	return
 }
