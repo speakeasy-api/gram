@@ -8,15 +8,16 @@ import (
 // line around for debugging because the CLI's output is unstable — if the
 // format drifts we still log enough context to recover the original text.
 type MCPServerEntry struct {
-	RawLine    string `json:"raw_line"`
-	Source     string `json:"source"`                 // "claude.ai", "plugin", "local"
-	PluginName string `json:"plugin_name,omitempty"`  // populated when Source == "plugin"
-	Name       string `json:"name"`                   // server name as displayed
-	URL        string `json:"url,omitempty"`          // populated for HTTP/SSE servers
-	Command    string `json:"command,omitempty"`      // populated for stdio servers
-	Transport  string `json:"transport,omitempty"`    // "HTTP", "SSE", "STDIO"
-	Status     string `json:"status"`                 // "connected", "needs_auth", "failed", "unknown"
-	StatusRaw  string `json:"status_raw"`
+	RawLine       string `json:"raw_line"`
+	Source        string `json:"source"`                   // "claude.ai", "plugin", "local"
+	PluginName    string `json:"plugin_name,omitempty"`    // populated when Source == "plugin"
+	Name          string `json:"name"`                     // server name as displayed
+	URL           string `json:"url,omitempty"`            // populated for HTTP/SSE servers
+	Command       string `json:"command,omitempty"`        // populated for stdio servers
+	Transport     string `json:"transport,omitempty"`      // "HTTP", "SSE", "STDIO"
+	Status        string `json:"status"`                   // "connected", "needs_auth", "failed", "unknown"
+	StatusRaw     string `json:"status_raw"`
+	ConnectorUUID string `json:"connector_uuid,omitempty"` // populated for entries shipped by the cowork branch
 }
 
 // ParseClaudeMCPList parses the textual output of `claude mcp list` into

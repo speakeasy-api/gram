@@ -349,21 +349,38 @@ func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePay
 	return result, nil
 }
 
-// captureMCPListSnapshot parses the `claude mcp list` text shipped by the
-// SessionStart hook script (under additional_data.mcp_list_output) and
-// caches it under sessionMCPListCacheKey. SessionStart re-fires on
-// startup/resume/clear/compact, so this re-syncs whenever Claude reloads
-// the session — which is the closest thing to a config-change signal the
-// CLI offers today.
+// captureMCPListSnapshot parses the MCP inventory shipped by the
+// SessionStart hook script and caches it under sessionMCPListCacheKey.
+// SessionStart re-fires on startup/resume/clear/compact, so this re-syncs
+// whenever Claude reloads the session — which is the closest thing to a
+// config-change signal the CLI offers today.
+//
+// Two payload shapes are supported, set by the hook script depending on
+// the execution environment it detected:
+//   - additional_data.mcp_inventory_claude_code: raw text from
+//     `claude mcp list`. Parsed by ParseClaudeMCPList.
+//   - additional_data.mcp_inventory_cowork: structured array scraped from
+//     .mcp.json files inside cowork (no `claude` CLI available). Parsed
+//     by ParseCoworkMCPInventory.
 func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.ClaudePayload) {
 	if payload.SessionID == nil || *payload.SessionID == "" || payload.AdditionalData == nil {
 		return
 	}
-	raw, ok := payload.AdditionalData["mcp_list_output"].(string)
-	if !ok || raw == "" {
+
+	var entries []MCPServerEntry
+	switch {
+	case payload.AdditionalData["mcp_inventory_claude_code"] != nil:
+		raw, ok := payload.AdditionalData["mcp_inventory_claude_code"].(string)
+		if !ok || raw == "" {
+			return
+		}
+		entries = ParseClaudeMCPList(raw)
+	case payload.AdditionalData["mcp_inventory_cowork"] != nil:
+		entries = ParseCoworkMCPInventory(payload.AdditionalData["mcp_inventory_cowork"])
+	default:
 		return
 	}
-	entries := ParseClaudeMCPList(raw)
+
 	key := sessionMCPListCacheKey(*payload.SessionID)
 	if err := s.cache.Set(ctx, key, entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
