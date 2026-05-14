@@ -379,6 +379,11 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 		return
 	}
 
+	// Persistence outlives the request: Claude Code may close the connection
+	// the instant the hook returns (Stop especially), which would otherwise
+	// cancel the in-flight INSERT and drop the chat message.
+	ctx = context.WithoutCancel(ctx)
+
 	sessionID := *payload.SessionID
 
 	// Both plugin-authenticated and OTEL-only requests go through the same
@@ -390,7 +395,12 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 	// avoids this because its payload includes UserEmail directly.
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
 	if err == nil {
-		s.persistHook(ctx, payload, &metadata)
+		// Persistence does DB writes plus a Temporal workflow start, which
+		// can take longer than Claude Code is willing to wait for a hook
+		// response (Stop especially — the client closes the connection
+		// immediately on the response). Run it detached so the response
+		// returns promptly and the work completes in the background.
+		go s.persistHook(ctx, payload, &metadata)
 	} else {
 		if err := s.bufferHook(ctx, sessionID, payload); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to buffer hook", attr.SlogError(err))

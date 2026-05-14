@@ -138,6 +138,11 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 		return
 	}
 
+	// Persistence outlives the request: the client may close the connection
+	// the instant the hook returns, which would otherwise cancel in-flight
+	// INSERTs and drop the chat message.
+	ctx = context.WithoutCancel(ctx)
+
 	userEmail := conv.PtrValOr(payload.UserEmail, "")
 	userID := s.resolveUserByEmail(ctx, userEmail, orgID)
 
@@ -151,7 +156,12 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 		ProjectID:   projectID,
 	}
 
-	s.persistCursorHook(ctx, payload, metadata, blockReason)
+	// Persistence does DB + ClickHouse writes that can take longer than the
+	// client is willing to wait for a hook response (`stop` especially —
+	// curl in send_hook.sh has a 10s --max-time and the client closes the
+	// connection the moment the response lands). Run detached so the
+	// response returns promptly and the work completes in the background.
+	go s.persistCursorHook(ctx, payload, metadata, blockReason)
 }
 
 func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata, blockReason string) {
