@@ -67,7 +67,10 @@ func TestRemoteLoginCallback_AuthenticatedSubject(t *testing.T) {
 	require.NoError(t, authnCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  parentID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
-		ToolsetID:           result.Toolset.ID,
+		Endpoint: mcp.LegacyMcpEndpointRef{
+			McpSlug:        result.Toolset.McpSlug.String,
+			CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		},
 		ClientID:            "test-mcp-client",
 		RedirectURI:         "http://example.com/cb",
 		CodeChallenge:       "",
@@ -107,7 +110,10 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 	require.NoError(t, authnCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  parentID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
-		ToolsetID:           result.Toolset.ID,
+		Endpoint: mcp.LegacyMcpEndpointRef{
+			McpSlug:        result.Toolset.McpSlug.String,
+			CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		},
 		ClientID:            "test-mcp-client",
 		RedirectURI:         "http://example.com/cb",
 		CodeChallenge:       "",
@@ -173,8 +179,8 @@ func TestRemoteLoginChallenge_CustomDomainRegistersGramCallback(t *testing.T) {
 
 	parsed, err := url.Parse(authURL)
 	require.NoError(t, err)
-	gramCallback := ti.serverURL.String() + "/mcp/" + result.Toolset.McpSlug.String + "/remote_login_callback"
-	customCallback := "https://remote-login-custom.example.com/mcp/" + result.Toolset.McpSlug.String + "/remote_login_callback"
+	gramCallback := ti.serverURL.String() + "/mcp/remote_login_callback"
+	customCallback := "https://remote-login-custom.example.com/mcp/remote_login_callback"
 	require.Equal(t, gramCallback, parsed.Query().Get("redirect_uri"))
 
 	upstreamResp := httpGetNoFollow(t, authURL)
@@ -231,10 +237,7 @@ func runRemoteLoginRoundTrip(
 	require.NotEmpty(t, state, "upstream redirect must carry ?state")
 
 	cbReq := httptest.NewRequest(http.MethodGet,
-		"/mcp/"+result.Toolset.McpSlug.String+"/remote_login_callback?code="+url.QueryEscape(code)+"&state="+url.QueryEscape(state), nil)
-	cbCtx := chi.NewRouteContext()
-	cbCtx.URLParams.Add("mcpSlug", result.Toolset.McpSlug.String)
-	cbReq = cbReq.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, cbCtx))
+		"/mcp/remote_login_callback?code="+url.QueryEscape(code)+"&state="+url.QueryEscape(state), nil)
 
 	cbW := httptest.NewRecorder()
 	require.NoError(t, mgr.HandleRemoteLoginCallback(cbW, cbReq))

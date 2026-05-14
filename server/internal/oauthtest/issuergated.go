@@ -34,9 +34,9 @@ type IssuerGatedToolsetOpts struct {
 	// issuer / authorization_endpoint / token_endpoint / registration_endpoint
 	// out of this document and DCR-registers a remote_session_client.
 	UpstreamMetadata []byte
-	// RemoteSessionCallbackBaseURL, when set, registers the Gram
-	// /remote_login_callback URL for the generated MCP slug. Tests that drive
-	// a real upstream authorize flow should set this to the Gram server URL.
+	// RemoteSessionCallbackBaseURL, when set, registers the static Gram
+	// /mcp/remote_login_callback URL. Tests that drive a real upstream
+	// authorize flow should set this to the Gram server URL.
 	RemoteSessionCallbackBaseURL string
 	// AuthnChallengeMode is "chain" or "interactive". Default "interactive".
 	AuthnChallengeMode string
@@ -54,8 +54,8 @@ type IssuerGatedToolsetResult struct {
 // remote_session_issuer + one DCR-registered remote_session_client wired to
 // the provided upstream AS metadata, then creates a toolset bound to the
 // user_session_issuer. Used by integration tests that exercise the
-// /mcp/{slug}/connect + /mcp/{slug}/remote_login_callback handlers against
-// a live dev-idp instance.
+// /mcp/{slug}/connect + /mcp/remote_login_callback handlers against a live
+// dev-idp instance.
 func CreateIssuerGatedToolset(
 	t *testing.T,
 	ctx context.Context,
@@ -124,7 +124,7 @@ func CreateIssuerGatedToolset(
 
 	redirectURIs := []string{"http://localhost/unused"}
 	if opts.RemoteSessionCallbackBaseURL != "" {
-		redirectURIs = []string{strings.TrimRight(opts.RemoteSessionCallbackBaseURL, "/") + "/mcp/" + slug + "/remote_login_callback"}
+		redirectURIs = []string{strings.TrimRight(opts.RemoteSessionCallbackBaseURL, "/") + "/mcp/remote_login_callback"}
 	}
 	clientID, clientSecret := dcrRegister(t, ctx, meta.RegistrationEndpoint, "test-issuer-gated-"+suffix, redirectURIs)
 	encSecret, err := enc.Encrypt([]byte(clientSecret))
