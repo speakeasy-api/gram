@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -65,8 +66,59 @@ func TestAuthorize_CustomDomainPrivateChallengeUsesGramIDPCallback(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, ti.serverURL.Scheme, returnURL.Scheme)
 	require.Equal(t, ti.serverURL.Host, returnURL.Host)
-	require.Equal(t, "/mcp/"+toolset.McpSlug.String+"/idp_callback", returnURL.Path)
+	require.Equal(t, "/mcp/idp_callback", returnURL.Path)
 	require.NotEqual(t, domain.Domain, returnURL.Host)
+
+	_, authnCache := buildChallengeManagerForTest(t, ti)
+	stored, err := authnCache.Get(ctx, "authnChallenge:"+loc.Query().Get("state"))
+	require.NoError(t, err)
+	require.Equal(t, toolset.McpSlug.String, stored.Endpoint.McpSlug)
+	require.True(t, stored.Endpoint.CustomDomainID.Valid)
+	require.Equal(t, domain.ID, stored.Endpoint.CustomDomainID.UUID)
+}
+
+func TestIDPCallback_StaticRouteResolvesToolsetFromChallengeState(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "idp-static-callback-" + uuid.New().String()[:8]
+	toolset, issuer := createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, slug)
+	toolset, domain := attachCustomDomainToToolset(t, ctx, ti, authCtx, toolset, "idp-static-callback.example.com")
+
+	_, authnCache := buildChallengeManagerForTest(t, ti)
+	stateID := uuid.NewString()
+	clientRedirectURI := "http://example.com/cb"
+	require.NoError(t, authnCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:                  stateID,
+		UserSessionIssuerID: issuer.ID,
+		Endpoint: mcp.LegacyMcpEndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
+		},
+		ClientID:            "test-mcp-client",
+		RedirectURI:         clientRedirectURI,
+		State:               "client-state",
+		CodeChallenge:       "",
+		CodeChallengeMethod: "",
+		Subject:             nil,
+		CreatedAt:           time.Now(),
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?state="+stateID+"&error=access_denied", nil)
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleIDPCallback(w, req))
+	require.Equal(t, http.StatusFound, w.Code)
+
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, clientRedirectURI, loc.Scheme+"://"+loc.Host+loc.Path)
+	require.Equal(t, "access_denied", loc.Query().Get("error"))
+	require.Equal(t, "client-state", loc.Query().Get("state"))
 }
 
 func createPrivateIssuerGatedToolset(
