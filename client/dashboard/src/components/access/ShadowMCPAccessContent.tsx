@@ -755,6 +755,7 @@ export function ShadowMCPAccessContent() {
     isFetchingNextPage,
     noun,
     onLoadMore,
+    showEndMessage,
   }: {
     count: number;
     hasNextPage: boolean;
@@ -762,6 +763,7 @@ export function ShadowMCPAccessContent() {
     isFetchingNextPage: boolean;
     noun: string;
     onLoadMore: () => void;
+    showEndMessage: boolean;
   }) => (
     <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
       <Type muted small>
@@ -780,11 +782,11 @@ export function ShadowMCPAccessContent() {
             {isFetchingNextPage ? "Loading..." : "Load more"}
           </Button.Text>
         </Button>
-      ) : (
+      ) : isFetching || showEndMessage ? (
         <Type muted small>
           {isFetching ? "Refreshing..." : `End of ${noun} list`}
         </Type>
-      )}
+      ) : null}
     </div>
   );
 
@@ -1129,12 +1131,12 @@ export function ShadowMCPAccessContent() {
               description="Blocked Shadow MCP servers will appear here after a user requests access."
             />
           ) : (
-            <div>
+            <div className="overflow-hidden rounded-lg border">
               <Table
                 columns={requestColumns}
                 data={requests}
                 rowKey={(row) => row.id}
-                className="[&_thead]:bg-background max-h-128 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
+                className="[&_thead]:bg-background max-h-128 overflow-y-auto rounded-none border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
               />
               {renderPaginationFooter({
                 count: requests.length,
@@ -1145,6 +1147,7 @@ export function ShadowMCPAccessContent() {
                 onLoadMore: () => {
                   void requestsQuery.fetchNextPage();
                 },
+                showEndMessage: (requestsQuery.data?.pages.length ?? 0) > 1,
               })}
             </div>
           )}
@@ -1206,12 +1209,12 @@ export function ShadowMCPAccessContent() {
             description="Create a rule manually or approve a request to make a Shadow MCP decision available for enforcement."
           />
         ) : (
-          <div>
+          <div className="overflow-hidden rounded-lg border">
             <Table
               columns={ruleColumns}
               data={rules}
               rowKey={(row) => row.id}
-              className="[&_thead]:bg-background max-h-128 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
+              className="[&_thead]:bg-background max-h-128 overflow-y-auto rounded-none border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
             />
             {renderPaginationFooter({
               count: rules.length,
@@ -1222,6 +1225,7 @@ export function ShadowMCPAccessContent() {
               onLoadMore: () => {
                 void rulesQuery.fetchNextPage();
               },
+              showEndMessage: (rulesQuery.data?.pages.length ?? 0) > 1,
             })}
           </div>
         )}
