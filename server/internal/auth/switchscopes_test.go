@@ -20,11 +20,10 @@ func TestService_SwitchScopes(t *testing.T) {
 		userInfo := speakeasyMockUserInfo() // Has multiple organizations
 		ctx, instance := newTestAuthService(t, userInfo)
 
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
-
 		// Seed org metadata so Authenticate can look it up after the switch
 		for _, org := range userInfo.Organizations {
-			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+			err := instance.createTestOrganization(ctx, org)
+			require.NoError(t, err)
 		}
 
 		// Create and store a session first
@@ -32,7 +31,6 @@ func TestService_SwitchScopes(t *testing.T) {
 			SessionID:            "test-session-id",
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
-			WorkOSSessionID:      "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -79,15 +77,11 @@ func TestService_SwitchScopes(t *testing.T) {
 		userInfo := defaultMockUserInfo()
 		ctx, instance := newTestAuthService(t, userInfo)
 
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
-		require.NoError(t, instance.createTestOrganization(ctx, userInfo.Organizations[0], userInfo.UserID))
-
 		// Create and store a session first
 		session := sessions.Session{
 			SessionID:            "test-session-id",
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
-			WorkOSSessionID:      "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -151,10 +145,8 @@ func TestService_SwitchScopes(t *testing.T) {
 		userInfo := defaultMockUserInfo()
 		ctx, instance := newTestAuthService(t, userInfo)
 
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
-
 		// Seed org metadata so Authenticate can look it up
-		err := instance.createTestOrganization(ctx, userInfo.Organizations[0], userInfo.UserID)
+		err := instance.createTestOrganization(ctx, userInfo.Organizations[0])
 		require.NoError(t, err)
 
 		// Create and store a session first
@@ -162,7 +154,6 @@ func TestService_SwitchScopes(t *testing.T) {
 			SessionID:            "test-session-id",
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
-			WorkOSSessionID:      "",
 		}
 		err = instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -200,47 +191,5 @@ func TestService_SwitchScopes(t *testing.T) {
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok, "auth context should be set after callback")
 		require.Equal(t, userInfo.Organizations[0].ID, authCtx.ActiveOrganizationID, "incorrect active organization id after switch")
-	})
-
-	t.Run("switch preserves WorkOSSessionID", func(t *testing.T) {
-		t.Parallel()
-
-		userInfo := speakeasyMockUserInfo()
-		ctx, instance := newTestAuthService(t, userInfo)
-
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
-		for _, org := range userInfo.Organizations {
-			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
-		}
-
-		session := sessions.Session{
-			SessionID:            "workos-session-test",
-			UserID:               userInfo.UserID,
-			ActiveOrganizationID: userInfo.Organizations[0].ID,
-			WorkOSSessionID:      "workos-sid-abc123",
-		}
-		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
-
-		authCtx := &contextvalues.AuthContext{
-			SessionID:            &session.SessionID,
-			UserID:               session.UserID,
-			ActiveOrganizationID: session.ActiveOrganizationID,
-			AccountType:          "test",
-			Email:                &userInfo.Email,
-		}
-		ctx = contextvalues.SetAuthContext(ctx, authCtx)
-
-		newOrgID := userInfo.Organizations[1].ID
-		result, err := instance.service.SwitchScopes(ctx, &gen.SwitchScopesPayload{
-			OrganizationID: &newOrgID,
-		})
-		require.NoError(t, err)
-		require.NotNil(t, result)
-
-		// Verify the WorkOSSessionID survived the switch
-		stored, err := instance.sessionManager.GetSession(ctx, session.SessionID)
-		require.NoError(t, err)
-		require.Equal(t, "workos-sid-abc123", stored.WorkOSSessionID, "WorkOSSessionID must survive SwitchScopes")
-		require.Equal(t, newOrgID, stored.ActiveOrganizationID)
 	})
 }

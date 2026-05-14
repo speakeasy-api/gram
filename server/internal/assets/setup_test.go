@@ -74,7 +74,7 @@ func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 

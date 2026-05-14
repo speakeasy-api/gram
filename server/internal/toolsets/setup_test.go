@@ -115,7 +115,7 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 

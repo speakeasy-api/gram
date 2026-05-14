@@ -159,7 +159,9 @@ VALUES (@id, @name, @slug);
 -- name: GetOrganizationByWorkosID :one
 SELECT *
 FROM organization_metadata
-WHERE workos_id = @workos_id;
+WHERE workos_id = @workos_id
+ORDER BY id = @workos_id, created_at ASC
+LIMIT 1;
 
 -- name: GetOrganizationRelationshipForUser :one
 SELECT *
@@ -322,14 +324,6 @@ ON CONFLICT (id) DO UPDATE SET
     disabled_at = NULL,
     updated_at = clock_timestamp()
 RETURNING *;
-
--- name: ListOrganizationsForUser :many
-SELECT om.id, om.name, om.slug, om.workos_id
-FROM organization_user_relationships our
-JOIN organization_metadata om ON om.id = our.organization_id
-WHERE our.user_id = @user_id
-  AND our.deleted_at IS NULL
-  AND om.disabled_at IS NULL;
 
 -- name: DisableOrganizationByWorkosID :execrows
 -- Mark a WorkOS-linked organization as disabled. Append-only: keeps

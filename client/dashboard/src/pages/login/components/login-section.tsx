@@ -83,21 +83,11 @@ function DotBackground() {
   );
 }
 
-export function AuthLayout({
-  children,
-  topRight,
-}: {
-  children: React.ReactNode;
-  topRight?: React.ReactNode;
-}) {
+function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="login-right-pane relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#FAFAFA] p-8 md:w-1/2 md:p-16">
       {/* Moving dot background — scrolls on hover */}
       <DotBackground />
-
-      {topRight && (
-        <div className="absolute top-6 right-6 z-10">{topRight}</div>
-      )}
 
       <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-8">
         <div className="flex flex-col items-center gap-4">

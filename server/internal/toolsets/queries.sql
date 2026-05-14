@@ -252,14 +252,6 @@ SET
 WHERE slug = @slug AND project_id = @project_id
 RETURNING *;
 
--- name: UpdateToolsetUserSessionIssuer :one
-UPDATE toolsets
-SET
-    user_session_issuer_id = @user_session_issuer_id
-  , updated_at = clock_timestamp()
-WHERE slug = @slug AND project_id = @project_id
-RETURNING *;
-
 -- name: ClearToolsetOAuthServers :one
 UPDATE toolsets
 SET

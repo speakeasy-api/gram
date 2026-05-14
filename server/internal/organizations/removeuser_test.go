@@ -59,8 +59,7 @@ func TestService_RemoveUser(t *testing.T) {
 
 	rows, err := orgrepo.New(ti.conn).ListOrganizationUsers(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
-	// The auth user (from InitAuthContext) remains; only the other user was removed.
-	require.Len(t, rows, 1, "expected only the auth user to remain after removing the other user")
+	require.Empty(t, rows, "expected soft-deleted user to no longer appear in organization list")
 
 	ti.orgs.AssertExpectations(t)
 }
@@ -103,8 +102,8 @@ func TestService_RollsBackOnWorkOSError(t *testing.T) {
 
 	rows, err := orgrepo.New(ti.conn).ListOrganizationUsers(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
-	// Auth user (from InitAuthContext) + other user (rollback preserved the row).
-	require.Len(t, rows, 2, "transaction rollback should leave the organization_user_relationships row active")
+	require.Len(t, rows, 1, "transaction rollback should leave the organization_user_relationships row active")
+	require.Equal(t, testOtherUserID, rows[0].UserID.String)
 
 	ti.orgs.AssertExpectations(t)
 }

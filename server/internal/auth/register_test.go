@@ -21,14 +21,11 @@ func TestService_Register(t *testing.T) {
 		userInfo.Organizations = []MockOrganizationEntry{} // User has no organizations
 		ctx, instance := newTestAuthService(t, userInfo)
 
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
-
 		// Create and store a session with no active organization
 		session := sessions.Session{
 			SessionID:            "test-session-id",
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "", // No active organization
-			WorkOSSessionID:      "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -67,7 +64,6 @@ func TestService_Register(t *testing.T) {
 			SessionID:            "test-session-id",
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID, // Has active organization
-			WorkOSSessionID:      "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -112,7 +108,6 @@ func TestService_Register(t *testing.T) {
 			SessionID:            "test-session-id",
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "", // No active organization
-			WorkOSSessionID:      "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -157,7 +152,6 @@ func TestService_Register(t *testing.T) {
 			SessionID:            "test-session-id",
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: "", // No active organization
-			WorkOSSessionID:      "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)
@@ -209,6 +203,33 @@ func TestService_Register(t *testing.T) {
 	t.Run("register allows valid characters in org name", func(t *testing.T) {
 		t.Parallel()
 
+		userInfo := defaultMockUserInfo()
+		userInfo.Organizations = []MockOrganizationEntry{} // User has no organizations
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		// Create and store a session with no active organization
+		session := sessions.Session{
+			SessionID:            "test-session-id",
+			UserID:               userInfo.UserID,
+			ActiveOrganizationID: "", // No active organization
+		}
+		err := instance.sessionManager.StoreSession(ctx, session)
+		require.NoError(t, err)
+
+		// Set up auth context
+		authCtx := &contextvalues.AuthContext{
+			SessionID:            &session.SessionID,
+			UserID:               session.UserID,
+			ActiveOrganizationID: session.ActiveOrganizationID,
+			ProjectID:            nil,
+			OrganizationSlug:     "",
+			Email:                &userInfo.Email,
+			AccountType:          "test",
+			ProjectSlug:          nil,
+			APIKeyScopes:         nil,
+		}
+		ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
 		testCases := []struct {
 			name    string
 			orgName string
@@ -224,36 +245,12 @@ func TestService_Register(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
 
-				// Each subtest gets its own service, session and context so they
-				// can run in parallel without racing on shared Redis state.
-				userInfo := defaultMockUserInfo()
-				userInfo.Organizations = []MockOrganizationEntry{}
-				ctx, instance := newTestAuthService(t, userInfo)
-
-				require.NoError(t, instance.createTestUser(ctx, userInfo))
-
-				sessionID := "session-" + tc.name
-				session := sessions.Session{
-					SessionID:            sessionID,
-					UserID:               userInfo.UserID,
-					ActiveOrganizationID: "",
-					WorkOSSessionID:      "",
-				}
-				err := instance.sessionManager.StoreSession(ctx, session)
-				require.NoError(t, err)
-
-				ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
-					SessionID:            &sessionID,
-					UserID:               session.UserID,
-					ActiveOrganizationID: "",
-					AccountType:          "test",
-					Email:                &userInfo.Email,
-				})
-
-				err = instance.service.Register(ctx, &gen.RegisterPayload{
+				payload := &gen.RegisterPayload{
 					OrgName:      tc.orgName,
 					SessionToken: nil,
-				})
+				}
+
+				err := instance.service.Register(ctx, payload)
 				require.NoError(t, err)
 			})
 		}
@@ -310,42 +307,5 @@ func TestService_Register(t *testing.T) {
 		var oopsErr *oops.ShareableError
 		require.ErrorAs(t, err, &oopsErr)
 		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
-	})
-
-	t.Run("register preserves WorkOSSessionID", func(t *testing.T) {
-		t.Parallel()
-
-		userInfo := defaultMockUserInfo()
-		userInfo.Organizations = []MockOrganizationEntry{} // no orgs yet
-		ctx, instance := newTestAuthService(t, userInfo)
-
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
-
-		session := sessions.Session{
-			SessionID:            "workos-register-test",
-			UserID:               userInfo.UserID,
-			ActiveOrganizationID: "",
-			WorkOSSessionID:      "workos-sid-register-456",
-		}
-		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
-
-		authCtx := &contextvalues.AuthContext{
-			SessionID:            &session.SessionID,
-			UserID:               session.UserID,
-			ActiveOrganizationID: "",
-			AccountType:          "test",
-			Email:                &userInfo.Email,
-		}
-		ctx = contextvalues.SetAuthContext(ctx, authCtx)
-
-		err := instance.service.Register(ctx, &gen.RegisterPayload{
-			OrgName: "Preserve Session Org",
-		})
-		require.NoError(t, err)
-
-		stored, err := instance.sessionManager.GetSession(ctx, session.SessionID)
-		require.NoError(t, err)
-		require.Equal(t, "workos-sid-register-456", stored.WorkOSSessionID, "WorkOSSessionID must survive Register")
-		require.NotEmpty(t, stored.ActiveOrganizationID, "should have an active org after Register")
 	})
 }

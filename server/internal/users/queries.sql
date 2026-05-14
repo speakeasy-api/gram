@@ -76,9 +76,3 @@ SET workos_id = @workos_id,
   updated_at = clock_timestamp()
 WHERE id = @id AND
   workos_id IS NULL;
-
--- name: OverwriteUserWorkosID :exec
-UPDATE users
-SET workos_id = @workos_id,
-  updated_at = clock_timestamp()
-WHERE id = @id;

@@ -3,9 +3,9 @@
 // called /rpc/devIdp.setCurrentUser, the dev-idp falls back to a user
 // derived from the local git committer config.
 //
-// Local modes (mock-workos / oauth2-1 / oauth2) synthesize a row in
+// Local modes (local-speakeasy / oauth2-1 / oauth2) synthesize a row in
 // the dev-idp's users table with the committer email + name and place it
-// in a default organization. Each mode's currentUser is then upserted
+// in a "Speakeasy" organization. Each mode's currentUser is then upserted
 // to point at that user, so the bootstrap fires at most once per mode
 // per dev-idp database.
 //
@@ -105,7 +105,7 @@ func BootstrapLocalUser(ctx context.Context, db *sql.DB, mode string) (uuid.UUID
 	}
 
 	// Seed the two default roles WorkOS provisions on every org so the
-	// mock-workos WorkOS-emulation endpoints have something to return
+	// local-speakeasy WorkOS-emulation endpoints have something to return
 	// from /authorization/organizations/{id}/roles even before any test
 	// calls CreateRole.
 	for _, r := range []struct {

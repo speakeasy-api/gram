@@ -8,9 +8,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -20,15 +18,13 @@ import (
 type GramProvider struct {
 	logger   *slog.Logger
 	sessions *sessions.Manager
-	identity *identity.Resolver
 }
 
 // NewGramProvider creates a new Gram OAuth provider
-func NewGramProvider(logger *slog.Logger, sessions *sessions.Manager, identity *identity.Resolver) *GramProvider {
+func NewGramProvider(logger *slog.Logger, sessions *sessions.Manager) *GramProvider {
 	return &GramProvider{
 		logger:   logger,
 		sessions: sessions,
-		identity: identity,
 	}
 }
 
@@ -43,28 +39,22 @@ func (p *GramProvider) ExchangeToken(
 	serverURL *url.URL,
 	_ string,
 ) (*TokenExchangeResult, error) {
-	idpUser, err := p.identity.ExchangeCodeForTokens(ctx, code)
+	// Exchange code for ID token from Speakeasy
+	idToken, err := p.sessions.ExchangeTokenFromSpeakeasy(ctx, code)
 	if err != nil {
 		p.logger.ErrorContext(ctx, "failed to exchange code for token from oauth gram provider",
 			attr.SlogOAuthProvider(provider.Slug),
 			attr.SlogError(err))
-		return nil, fmt.Errorf("exchange code for token: %w", err)
+		return nil, fmt.Errorf("failed to exchange code for token: %w", err)
 	}
 
-	userID, err := p.identity.UpsertUserFromIDP(ctx, idpUser)
+	// Get user info from Speakeasy
+	userInfo, err := p.sessions.GetUserInfoFromSpeakeasy(ctx, idToken)
 	if err != nil {
-		p.logger.ErrorContext(ctx, "failed to upsert user from oauth gram provider",
+		p.logger.ErrorContext(ctx, "failed to get user info from oauth gram provider",
 			attr.SlogOAuthProvider(provider.Slug),
 			attr.SlogError(err))
-		return nil, fmt.Errorf("upsert user: %w", err)
-	}
-
-	userInfo, err := p.identity.BuildUserInfoFromDB(ctx, userID)
-	if err != nil {
-		p.logger.ErrorContext(ctx, "failed to build user info from oauth gram provider",
-			attr.SlogOAuthProvider(provider.Slug),
-			attr.SlogError(err))
-		return nil, fmt.Errorf("build user info: %w", err)
+		return nil, fmt.Errorf("failed to retrieve user info: %w", err)
 	}
 
 	// Check if user has access to the organization
@@ -84,23 +74,21 @@ func (p *GramProvider) ExchangeToken(
 		return nil, ErrAccessDenied
 	}
 
-	sessionID := fmt.Sprintf("oauth_%s_%s", userID, uuid.New().String())
 	session := sessions.Session{
-		SessionID:            sessionID,
+		SessionID:            idToken,
 		UserID:               userInfo.UserID,
 		ActiveOrganizationID: toolset.OrganizationID,
-		WorkOSSessionID:      idpUser.WorkOSSessionID,
 	}
 
 	if err := p.sessions.StoreSession(ctx, session); err != nil {
 		p.logger.ErrorContext(ctx, "failed to store session from oauth gram provider",
 			attr.SlogOAuthProvider(provider.Slug),
 			attr.SlogError(err))
-		return nil, fmt.Errorf("store session: %w", err)
 	}
 
+	// Use idToken as access token for gram providers
 	return &TokenExchangeResult{
-		AccessToken:  sessionID,
+		AccessToken:  idToken,
 		RefreshToken: "",
 		ExpiresAt:    new(time.Now().Add(session.TTL())),
 	}, nil

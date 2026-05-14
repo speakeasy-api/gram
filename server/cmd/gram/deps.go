@@ -29,7 +29,6 @@ import (
 	svix "github.com/svix/svix-webhooks/go"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
-	"github.com/workos/workos-go/v6/pkg/usermanagement"
 	"github.com/workos/workos-go/v6/pkg/webhooks"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
@@ -470,7 +469,7 @@ func newBillingProvider(
 // workosClientOpts builds the ClientOpts threaded into every workos.NewClient
 // call site below. Pulls the optional --workos-endpoint override (env:
 // WORKOS_API_URL) so local dev can point both real-WorkOS callers at
-// the dev-idp's mock-workos emulator without changing any wiring.
+// the dev-idp's local-speakeasy emulator without changing any wiring.
 func workosClientOpts(c *cli.Context) workos.ClientOpts {
 	return workos.ClientOpts{
 		Endpoint:   c.String("workos-endpoint"),
@@ -481,28 +480,12 @@ func workosClientOpts(c *cli.Context) workos.ClientOpts {
 func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) (access.RoleProvider, error) {
 	apiKey := c.String("workos-api-key")
 
-	// Local dev: when a real WORKOS_API_KEY is configured (GRAM_IDP_MODE=workos),
-	// use it so the access role provider proxies through dev-idp to real WorkOS.
-	// Otherwise fall back to the mock-workos emulator or a stub.
-	if c.String("environment") == "local" {
-		haveRealKey := apiKey != ""
-		opts := workosClientOpts(c)
-
-		if haveRealKey {
-			logger.InfoContext(ctx, "using real WorkOS API key as access role provider")
-			return workos.NewClient(guardianPolicy, apiKey, opts), nil
-		}
-		if opts.Endpoint != "" {
-			logger.InfoContext(ctx, "using dev-idp mock-workos as access role provider")
-			return workos.NewClient(guardianPolicy, "dev-idp-mock", opts), nil
-		}
-		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
-		return workos.NewStubClient(), nil
-	}
-
 	switch {
 	case apiKey != "" && apiKey != "unset":
 		return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), nil
+	case c.String("environment") == "local":
+		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
+		return workos.NewStubClient(), nil
 	default:
 		return nil, errors.New("WorkOS API key not provided")
 	}
@@ -518,25 +501,6 @@ func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *w
 	}
 
 	return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), haveAPIKey, nil
-}
-
-// newIDPUserManagementClient creates a WorkOS user-management SDK client
-// scoped to the IDP application key. Returns nil when the key is empty
-// (local dev with mock IDP).
-func newIDPUserManagementClient(guardianPolicy *guardian.Policy, apiKey string, c *cli.Context) *usermanagement.Client {
-	if apiKey == "" || apiKey == "unset" {
-		return nil
-	}
-
-	retryCfg := guardian.DefaultRetryConfig()
-	retryCfg.WaitMax = 10 * time.Second
-
-	um := usermanagement.NewClient(apiKey)
-	um.HTTPClient = guardianPolicy.PooledClient(guardian.WithRetryConfig(retryCfg))
-	if ep := c.String("workos-endpoint"); ep != "" {
-		um.Endpoint = ep
-	}
-	return um
 }
 
 func newWorkOSWebhooksClient(c *cli.Context) *webhooks.Client {

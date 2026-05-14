@@ -160,7 +160,7 @@ func TestRefreshProxyToken_UpstreamError(t *testing.T) {
 func TestRefreshProxyToken_GramProviderUnsupported(t *testing.T) {
 	t.Parallel()
 
-	provider := providers.NewGramProvider(testenv.NewLogger(t), nil, nil)
+	provider := providers.NewGramProvider(testenv.NewLogger(t), nil)
 	_, err := provider.RefreshToken(
 		context.Background(),
 		"some-refresh-token",

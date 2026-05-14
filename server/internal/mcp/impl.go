@@ -33,9 +33,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
-	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -70,15 +70,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
-// IdentityResolver abstracts the identity operations the authn-challenge OAuth
-// flow needs. Satisfied by *identity.Resolver.
-type IdentityResolver interface {
-	BuildAuthorizationURL(ctx context.Context, params sessions.AuthURLParams) (*url.URL, error)
-	ExchangeCodeForTokens(ctx context.Context, code string) (*identity.IDPUserInfo, error)
-	UpsertUserFromIDP(ctx context.Context, idpUser *identity.IDPUserInfo) (string, error)
-	HasAccessToOrganization(ctx context.Context, organizationID, userID string) (*sessions.Organization, string, bool)
-}
-
 type Service struct {
 	logger                 *slog.Logger
 	tracer                 trace.Tracer
@@ -104,7 +95,6 @@ type Service struct {
 	temporal               *temporal.Environment
 	assistantTokens        *assistanttokens.Manager
 	sessions               *sessions.Manager
-	identityResolver       IdentityResolver
 	chatSessionsManager    *chatsessions.Manager
 	externalmcpRepo        *externalmcp_repo.Queries
 	deploymentsRepo        *deployments_repo.Queries
@@ -116,6 +106,12 @@ type Service struct {
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
 	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
+	// idpClient drives the user-session AS authn-challenge path's calls to
+	// the Speakeasy IDP (issuer-gated /authorize → /idp_callback flow). The
+	// same client backs the chat-session Manager via auth/sessions, so both
+	// paths share the user-bootstrap side effects (UpsertUser, posthog
+	// signup, WorkOS sync). See auth/speakeasyclient.
+	idpClient *speakeasyclient.Client
 	// userSessionSigner mints the SessionClaims JWT issued at /token.
 	// HS256 with GRAM_JWT_SIGNING_KEY -- same key the chat-session signer
 	// uses, intentionally separate signer code so each path is removable
@@ -172,7 +168,7 @@ func NewService(
 	platformExtras []platformtools.ExternalTool,
 	platformFeatureChecker platformtools.FeatureChecker,
 	platformToolsets map[string]platformtools.Toolset,
-	identityResolver IdentityResolver,
+	idpClient *speakeasyclient.Client,
 	userSessionSigner *usersessions.Signer,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -244,7 +240,7 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		identityResolver:  identityResolver,
+		idpClient:         idpClient,
 		userSessionSigner: userSessionSigner,
 	}
 }

@@ -543,7 +543,7 @@ func seedWorkOSUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, userI
 	})
 	require.NoError(t, err)
 
-	err = usersrepo.New(conn).OverwriteUserWorkosID(ctx, usersrepo.OverwriteUserWorkosIDParams{
+	err = usersrepo.New(conn).SetUserWorkosID(ctx, usersrepo.SetUserWorkosIDParams{
 		WorkosID: conv.ToPGText(workosUserID),
 		ID:       userID,
 	})

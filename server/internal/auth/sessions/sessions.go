@@ -4,65 +4,71 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 )
 
-// SessionRevoker invalidates an IDP session. Implemented by the WorkOS
-// adapter so sessions.Manager doesn't depend on the WorkOS SDK directly.
-type SessionRevoker interface {
-	RevokeSession(ctx context.Context, sessionID string) error
-}
-
-// UserResolver provides identity-layer operations that Authenticate needs.
-// Implemented by the identity.Resolver to avoid a circular import.
-type UserResolver interface {
-	HasAccessToOrganization(ctx context.Context, organizationID, userID string) (*Organization, string, bool)
-	IsAdmin(ctx context.Context, userID string) bool
-	GetUserInfo(ctx context.Context, userID string) (*CachedUserInfo, bool, error)
-	InvalidateUserInfoCache(ctx context.Context, userID string) error
-}
-
 type Manager struct {
-	logger       *slog.Logger
-	tracer       trace.Tracer
-	sessionCache cache.TypedCacheObject[Session]
-	idpClient    SessionRevoker
-	orgRepo      *orgRepo.Queries
-	billingRepo  billing.Repository
-	identity     UserResolver
+	logger                 *slog.Logger
+	tracer                 trace.Tracer
+	sessionCache           cache.TypedCacheObject[Session]
+	userInfoCache          cache.TypedCacheObject[CachedUserInfo]
+	speakeasyServerAddress string
+	speakeasySecretKey     string
+	httpClient             *guardian.HTTPClient
+	orgRepo                *orgRepo.Queries
+	pylon                  *pylon.Pylon
+	posthog                *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	billingRepo            billing.Repository
+	speakeasyClient        *speakeasyclient.Client
 }
 
 func NewManager(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	redisClient *redis.Client,
 	suffix cache.Suffix,
-	idpClient SessionRevoker,
+	speakeasyServerAddress string,
+	speakeasySecretKey string,
+	pylon *pylon.Pylon,
+	posthog *posthog.Posthog,
 	billingRepo billing.Repository,
-	identity UserResolver,
+	speakeasyClient *speakeasyclient.Client,
 ) *Manager {
 	logger = logger.With(attr.SlogComponent("sessions"))
+	httpClient := guardianPolicy.PooledClient()
+	httpClient.Timeout = 10 * time.Second
 
 	return &Manager{
-		logger:       logger,
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/sessions"),
-		sessionCache: cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
-		idpClient:    idpClient,
-		orgRepo:      orgRepo.New(db),
-		billingRepo:  billingRepo,
-		identity:     identity,
+		logger:                 logger.With(attr.SlogComponent("sessions")),
+		tracer:                 tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/sessions"),
+		sessionCache:           cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		userInfoCache:          cache.NewTypedObjectCache[CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		speakeasyServerAddress: speakeasyServerAddress,
+		speakeasySecretKey:     speakeasySecretKey,
+		httpClient:             httpClient,
+		orgRepo:                orgRepo.New(db),
+		pylon:                  pylon,
+		posthog:                posthog,
+		billingRepo:            billingRepo,
+		speakeasyClient:        speakeasyClient,
 	}
 }
 
@@ -94,29 +100,21 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		IsAdmin:               false,
 	}
 
+	// Populate IsAdmin from the cached user info so the access manager can gate
+	// the RBAC scope-override header to admins only. A cache miss leaves IsAdmin
+	// false, which is the safe default.
+	if userInfo, err := s.userInfoCache.Get(ctx, UserInfoCacheKey(session.UserID)); err == nil {
+		authCtx.IsAdmin = userInfo.Admin
+	}
+
 	if session.ActiveOrganizationID == "" {
-		// Populate IsAdmin from cached user info. A cache miss leaves it false
-		// (safe default). No org membership check needed for org-less sessions.
-		authCtx.IsAdmin = s.identity.IsAdmin(ctx, session.UserID)
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 		return ctx, nil
 	}
 
-	// HasAccessToOrganization calls GetUserInfo internally, which populates
-	// the user info cache on a miss. We check IsAdmin AFTER this call so the
-	// cache is guaranteed to be warm — avoids a false-negative on cold cache.
-	_, email, ok := s.identity.HasAccessToOrganization(ctx, session.ActiveOrganizationID, session.UserID)
-	authCtx.IsAdmin = s.identity.IsAdmin(ctx, session.UserID)
-
+	_, email, ok := s.HasAccessToOrganization(ctx, session.ActiveOrganizationID, session.UserID, session.SessionID)
 	if !ok {
-		if !authCtx.IsAdmin {
-			return ctx, oops.C(oops.CodeForbidden)
-		}
-		// Admin visiting a customer org they don't belong to — fall back to
-		// cached user info for the email the auth context needs.
-		if userInfo, _, err := s.identity.GetUserInfo(ctx, session.UserID); err == nil {
-			email = userInfo.Email
-		}
+		return ctx, oops.C(oops.CodeForbidden)
 	}
 
 	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgRepo, s.billingRepo, session.ActiveOrganizationID)
@@ -146,14 +144,6 @@ func (s *Manager) Billing() billing.Repository {
 	return s.billingRepo
 }
 
-func (s *Manager) GetSession(ctx context.Context, sessionID string) (Session, error) {
-	session, err := s.sessionCache.Get(ctx, SessionCacheKey(sessionID))
-	if err != nil {
-		return Session{}, fmt.Errorf("get session: %w", err)
-	}
-	return session, nil
-}
-
 func (s *Manager) StoreSession(ctx context.Context, session Session) error {
 	err := s.sessionCache.Store(ctx, session)
 	if err != nil {
@@ -173,48 +163,10 @@ func (s *Manager) UpdateSession(ctx context.Context, session Session) error {
 }
 
 func (s *Manager) ClearSession(ctx context.Context, session Session) error {
-	// Look up the full cached session to retrieve the WorkOS session ID
-	// before deleting it.
-	if stored, err := s.sessionCache.Get(ctx, SessionCacheKey(session.SessionID)); err == nil {
-		session = stored
-	}
-
-	// Revoke the WorkOS AuthKit session so the user is prompted to sign in
-	// again on next login rather than being auto-authenticated.
-	if session.WorkOSSessionID != "" && s.idpClient != nil {
-		if err := s.idpClient.RevokeSession(ctx, session.WorkOSSessionID); err != nil {
-			// Non-fatal: the Gram session is still cleared, and the WorkOS
-			// session will expire naturally.
-			s.logger.ErrorContext(ctx, "failed to revoke WorkOS session", attr.SlogError(err))
-		}
-	}
-
 	err := s.sessionCache.Delete(ctx, session)
 	if err != nil {
 		return fmt.Errorf("clear session: %w", err)
 	}
 
-	return nil
-}
-
-// GetUserInfo delegates to the identity resolver.
-func (s *Manager) GetUserInfo(ctx context.Context, userID string) (*CachedUserInfo, bool, error) {
-	info, ok, err := s.identity.GetUserInfo(ctx, userID)
-	if err != nil {
-		return nil, false, fmt.Errorf("get user info: %w", err)
-	}
-	return info, ok, nil
-}
-
-// HasAccessToOrganization delegates to the identity resolver.
-func (s *Manager) HasAccessToOrganization(ctx context.Context, organizationID, userID string) (*Organization, string, bool) {
-	return s.identity.HasAccessToOrganization(ctx, organizationID, userID)
-}
-
-// InvalidateUserInfoCache delegates to the identity resolver.
-func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) error {
-	if err := s.identity.InvalidateUserInfoCache(ctx, userID); err != nil {
-		return fmt.Errorf("invalidate user info cache: %w", err)
-	}
 	return nil
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -75,6 +76,9 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
@@ -82,17 +86,16 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 	require.NoError(t, err)
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	// UpsertUserFromIDP (called inside InitAuthContext) now backfills workos_id
-	// with the mock IDP's user ID. Override it to the test-specific WorkOS user
-	// ID so that mock expectations on GetOrgMembership match.
-	err = userrepo.New(conn).OverwriteUserWorkosID(ctx, userrepo.OverwriteUserWorkosIDParams{
+	// workos_id is set by InitAuthContext via UpsertOrganizationMetadata (from the mock IDP's workos_id).
+
+	err = userrepo.New(conn).SetUserWorkosID(ctx, userrepo.SetUserWorkosIDParams{
 		ID:       authCtx.UserID,
 		WorkosID: conv.ToPGText(testAuthUserWorkOSID),
 	})
@@ -122,6 +125,9 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
@@ -129,17 +135,16 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 	require.NoError(t, err)
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	// UpsertUserFromIDP (called inside InitAuthContext) now backfills workos_id
-	// with the mock IDP's user ID. Override it to the test-specific WorkOS user
-	// ID so that mock expectations on GetOrgMembership match.
-	err = userrepo.New(conn).OverwriteUserWorkosID(ctx, userrepo.OverwriteUserWorkosIDParams{
+	// workos_id is set by InitAuthContext via UpsertOrganizationMetadata (from the mock IDP's workos_id).
+
+	err = userrepo.New(conn).SetUserWorkosID(ctx, userrepo.SetUserWorkosIDParams{
 		ID:       authCtx.UserID,
 		WorkosID: conv.ToPGText(testAuthUserWorkOSID),
 	})

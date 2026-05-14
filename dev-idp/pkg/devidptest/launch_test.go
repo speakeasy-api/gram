@@ -22,7 +22,7 @@ func TestLaunch_ExposesOAuth21Metadata(t *testing.T) {
 	require.NotEmpty(t, inst.Issuer)
 	require.Equal(t, inst.Issuer+"/oauth2-1", inst.OAuth21URL)
 	require.Equal(t, inst.Issuer+"/oauth2", inst.OAuth20URL)
-	require.Empty(t, inst.MockWorkosURL, "mock-workos is opt-in")
+	require.Empty(t, inst.LocalSpeakeasyURL, "local-speakeasy is opt-in")
 
 	body := inst.OAuth21Metadata(t)
 	var meta map[string]any
@@ -46,15 +46,15 @@ func TestLaunch_ExposesOAuth20Metadata(t *testing.T) {
 		"oauth2 mode does not advertise DCR")
 }
 
-func TestLaunch_EnableMockWorkos(t *testing.T) {
+func TestLaunch_EnableLocalSpeakeasy(t *testing.T) {
 	t.Parallel()
 
-	inst := devidptest.Launch(t, devidptest.LaunchOpts{EnableMockWorkos: true})
+	inst := devidptest.Launch(t, devidptest.LaunchOpts{EnableLocalSpeakeasy: true})
 
-	require.Equal(t, inst.Issuer+"/mock-workos", inst.MockWorkosURL)
+	require.Equal(t, inst.Issuer+"/local-speakeasy", inst.LocalSpeakeasyURL)
 
-	cu, err := inst.Repo.GetCurrentUser(t.Context(), devidptest.MockWorkosMode)
-	require.NoError(t, err, "current_users for mock-workos should be seeded when enabled")
+	cu, err := inst.Repo.GetCurrentUser(t.Context(), devidptest.LocalSpeakeasyMode)
+	require.NoError(t, err, "current_users for local-speakeasy should be seeded when enabled")
 	require.Equal(t, inst.DefaultUser.ID.String(), cu.SubjectRef)
 }
 

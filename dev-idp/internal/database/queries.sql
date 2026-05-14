@@ -61,23 +61,6 @@ VALUES (@id, @name, @slug)
 ON CONFLICT (slug) DO UPDATE SET slug = excluded.slug
 RETURNING *;
 
--- GetOrganizationByWorkosID looks up an organization by its workos_id
--- text field. Used by mock-workos handlers to resolve external org IDs
--- (e.g. Gram KSUIDs like "org_01KMD...") to the internal dev-idp org.
--- name: GetOrganizationByWorkosID :one
-SELECT * FROM organizations WHERE workos_id = @workos_id;
-
--- SetOrganizationWorkosID stamps the workos_id on the first org that
--- doesn't already have one. Used by mock-workos to auto-associate an
--- external org ID with the default dev-idp org on first request.
--- name: SetOrganizationWorkosID :one
-UPDATE organizations
-SET workos_id = @workos_id, updated_at = @ts
-WHERE id = (
-  SELECT id FROM organizations WHERE workos_id IS NULL ORDER BY created_at ASC LIMIT 1
-)
-RETURNING *;
-
 -- =============================================================================
 -- WorkOS emulation: users (ListUsers with filters)
 -- =============================================================================

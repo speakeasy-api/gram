@@ -11,7 +11,7 @@ import (
 	"context"
 )
 
-// Dev-idp users CRUD. The local-mode currentUser (mock-workos / oauth2-1 /
+// Dev-idp users CRUD. The local-mode currentUser (local-speakeasy / oauth2-1 /
 // oauth2) references rows in this table by id (idp-design.md §3, §5).
 // Permanently unauthenticated.
 type Service interface {
@@ -104,9 +104,9 @@ type User struct {
 	PhotoURL *string
 	// Optional GitHub handle.
 	GithubHandle *string
-	// Admin flag.
+	// Admin flag echoed by local-speakeasy validate.
 	Admin bool
-	// Whitelist flag.
+	// Whitelist flag echoed by local-speakeasy validate.
 	Whitelisted bool
 	CreatedAt   string
 	UpdatedAt   string
