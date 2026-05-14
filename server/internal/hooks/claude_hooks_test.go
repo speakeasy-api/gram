@@ -141,10 +141,10 @@ func TestClaude_ContinuesWhenPluginAuthFails(t *testing.T) {
 	require.Equal(t, "UserPromptSubmit", buffered[0].HookEventName)
 }
 
-// Sanity check the OTEL fallback path: with no auth context and no Redis
-// cached metadata, handlePreToolUse should still gracefully allow the call
-// rather than erroring (the buffered hook will be re-persisted later).
-func TestClaude_PreToolUse_AllowsWhenNoAuthAndNoCachedMetadata(t *testing.T) {
+// When Claude PreToolUse cannot resolve org/project metadata for an MCP call,
+// fail closed. Buffered telemetry can be replayed later, but it cannot undo an
+// already-allowed tool call.
+func TestClaude_PreToolUse_DeniesMCPWhenNoAuthAndNoCachedMetadata(t *testing.T) {
 	t.Parallel()
 	_, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
@@ -167,8 +167,10 @@ func TestClaude_PreToolUse_AllowsWhenNoAuthAndNoCachedMetadata(t *testing.T) {
 	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
 	require.True(t, ok)
 	require.NotNil(t, output.PermissionDecision)
-	assert.Equal(t, "allow", *output.PermissionDecision,
-		"OTEL path with no metadata should default to allow so first call isn't blocked")
+	assert.Equal(t, "deny", *output.PermissionDecision,
+		"MCP tool calls without enforcement metadata must fail closed")
+	require.NotNil(t, output.PermissionDecisionReason)
+	assert.Contains(t, *output.PermissionDecisionReason, "could not verify this MCP tool call")
 }
 
 // Claude Code's hook output schema only permits hookSpecificOutput for
