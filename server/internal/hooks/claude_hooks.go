@@ -169,18 +169,40 @@ func (d *formDecoder) Decode(v any) error {
 
 // Logs handles authenticated OTEL logs data from Claude Code
 func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
+	claudeMetadata := extractSessionMetadata(payload)
+
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		// Auth middleware should have rejected this already; log here so a
+		// stray unauthenticated request is still visible per source/event
+		// when filtering hook traffic in Datadog.
+		s.logger.WarnContext(ctx, "rejected unauthorized claude OTEL logs request",
+			attr.SlogEvent("claude_logs_unauthorized"),
+			attr.SlogHookSource("claude"),
+			attr.SlogHookEvent("Logs"),
+			attr.SlogGenAIConversationID(claudeMetadata.SessionID),
+			attr.SlogServiceName(claudeMetadata.ServiceName),
+		)
 		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	}
 
-	claudeMetadata := extractSessionMetadata(payload)
+	orgID := authCtx.ActiveOrganizationID
+	projectID := authCtx.ProjectID.String()
+
 	if claudeMetadata.SessionID == "" {
-		s.logger.WarnContext(ctx, "Logs payload contained no session ID")
+		s.logger.WarnContext(ctx, "claude OTEL logs payload contained no session ID",
+			attr.SlogEvent("claude_logs_no_session"),
+			attr.SlogHookSource("claude"),
+			attr.SlogHookEvent("Logs"),
+			attr.SlogOrganizationID(orgID),
+			attr.SlogProjectID(projectID),
+			attr.SlogServiceName(claudeMetadata.ServiceName),
+			attr.SlogAuthUserEmail(claudeMetadata.UserEmail),
+		)
 		return nil
 	}
 
-	userID := s.resolveUserByEmail(ctx, claudeMetadata.UserEmail, authCtx.ActiveOrganizationID)
+	userID := s.resolveUserByEmail(ctx, claudeMetadata.UserEmail, orgID)
 
 	completeMetadata := SessionMetadata{
 		SessionID:   claudeMetadata.SessionID,
@@ -188,18 +210,33 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		UserEmail:   claudeMetadata.UserEmail,
 		UserID:      userID,
 		ClaudeOrgID: claudeMetadata.ClaudeOrgID,
-		GramOrgID:   authCtx.ActiveOrganizationID,
-		ProjectID:   authCtx.ProjectID.String(),
+		GramOrgID:   orgID,
+		ProjectID:   projectID,
 	}
 
 	if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
-		s.logger.ErrorContext(ctx, "Failed to store session metadata", attr.SlogError(err))
+		s.logger.ErrorContext(ctx, "Failed to store session metadata",
+			attr.SlogEvent("claude_logs_cache_set_failed"),
+			attr.SlogHookSource("claude"),
+			attr.SlogHookEvent("Logs"),
+			attr.SlogOrganizationID(orgID),
+			attr.SlogProjectID(projectID),
+			attr.SlogGenAIConversationID(completeMetadata.SessionID),
+			attr.SlogError(err),
+		)
 	}
 
 	s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata)
 
 	s.logger.InfoContext(ctx, "Stored session metadata",
 		attr.SlogEvent("session_validated"),
+		attr.SlogHookSource("claude"),
+		attr.SlogHookEvent("Logs"),
+		attr.SlogOrganizationID(orgID),
+		attr.SlogProjectID(projectID),
+		attr.SlogGenAIConversationID(completeMetadata.SessionID),
+		attr.SlogServiceName(completeMetadata.ServiceName),
+		attr.SlogAuthUserEmail(completeMetadata.UserEmail),
 	)
 
 	return nil
@@ -209,19 +246,27 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		s.logger.WarnContext(ctx, "rejected unauthorized claude OTEL metrics request",
+			attr.SlogEvent("claude_metrics_unauthorized"),
+			attr.SlogHookSource("claude"),
+			attr.SlogHookEvent("Metrics"),
+		)
 		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	}
 
+	orgID := authCtx.ActiveOrganizationID
+	projectID := authCtx.ProjectID.String()
+
 	s.logger.InfoContext(ctx, "Received Claude token metrics",
 		attr.SlogEvent("claude_metrics"),
-		attr.SlogValueAny(map[string]any{
-			"organization_id": authCtx.ActiveOrganizationID,
-			"project_id":      authCtx.ProjectID.String(),
-		}),
+		attr.SlogHookSource("claude"),
+		attr.SlogHookEvent("Metrics"),
+		attr.SlogOrganizationID(orgID),
+		attr.SlogProjectID(projectID),
 	)
 
 	// Write metrics to ClickHouse
-	s.writeMetricsToClickHouse(ctx, payload, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+	s.writeMetricsToClickHouse(ctx, payload, orgID, projectID)
 
 	return nil
 }
@@ -282,16 +327,34 @@ func extractSessionMetadata(payload *gen.LogsPayload) claudeLogMetadata {
 
 // Claude is the unified endpoint for all Claude Code hook events.
 func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+	// Log entry with top-level org/project/source/event attrs so the request
+	// is filterable in Datadog even before auth resolves. Auth on this
+	// endpoint is optional; the project_slug header may be present even
+	// when the API key isn't validated yet, so include it as a hint.
+	toolName := ""
+	if payload.ToolName != nil {
+		toolName = *payload.ToolName
+	}
+	sessionID := ""
+	if payload.SessionID != nil {
+		sessionID = *payload.SessionID
+	}
+	projectSlugHint := ""
+	if payload.ProjectSlugInput != nil {
+		projectSlugHint = *payload.ProjectSlugInput
+	}
+	hasPluginAuth := hasOptionalPluginAuth(payload)
 	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Claude: %s", payload.HookEventName),
 		attr.SlogEvent("claude_hook"),
-		attr.SlogValueAny(map[string]any{
-			"hookEventName": payload.HookEventName,
-			"toolName":      payload.ToolName,
-			"sessionID":     payload.SessionID,
-		}),
+		attr.SlogHookSource("claude"),
+		attr.SlogHookEvent(payload.HookEventName),
+		attr.SlogToolName(toolName),
+		attr.SlogGenAIConversationID(sessionID),
+		attr.SlogProjectSlug(projectSlugHint),
+		attr.SlogHookHasPluginAuth(hasPluginAuth),
 	)
 
-	if hasOptionalPluginAuth(payload) {
+	if hasPluginAuth {
 		// Auth is optional. Returning a 401 on failure deadlocks the client:
 		// send_hook.sh maps any non-2xx to "block all tool calls", but
 		// recovering (e.g. `gram login`) requires Bash, which the hook just
@@ -302,10 +365,28 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 		if authedCtx, err := s.authorizePluginRequest(ctx, *payload.ApikeyToken, *payload.ProjectSlugInput); err != nil {
 			s.logger.WarnContext(ctx, "plugin auth failed on claude hook; falling back to OTEL-buffered path",
 				attr.SlogEvent("claude_hook_auth_failed"),
+				attr.SlogHookSource("claude"),
+				attr.SlogHookEvent(payload.HookEventName),
+				attr.SlogProjectSlug(projectSlugHint),
 				attr.SlogError(err),
 			)
 		} else {
 			ctx = authedCtx
+			if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+				attrs := []any{
+					attr.SlogEvent("claude_hook_auth_ok"),
+					attr.SlogHookSource("claude"),
+					attr.SlogHookEvent(payload.HookEventName),
+					attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+				}
+				if authCtx.ProjectID != nil {
+					attrs = append(attrs, attr.SlogProjectID(authCtx.ProjectID.String()))
+				}
+				if authCtx.ProjectSlug != nil {
+					attrs = append(attrs, attr.SlogProjectSlug(*authCtx.ProjectSlug))
+				}
+				s.logger.InfoContext(ctx, "plugin auth ok on claude hook", attrs...)
+			}
 		}
 	}
 
@@ -375,7 +456,18 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 
 func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 	if payload.SessionID == nil || *payload.SessionID == "" {
-		s.logger.WarnContext(ctx, "Tool event called without session ID")
+		attrs := []any{
+			attr.SlogEvent("claude_hook_no_session"),
+			attr.SlogHookSource("claude"),
+			attr.SlogHookEvent(payload.HookEventName),
+		}
+		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+			attrs = append(attrs, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+			if authCtx.ProjectID != nil {
+				attrs = append(attrs, attr.SlogProjectID(authCtx.ProjectID.String()))
+			}
+		}
+		s.logger.WarnContext(ctx, "Tool event called without session ID", attrs...)
 		return
 	}
 
@@ -393,7 +485,20 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 		s.persistHook(ctx, payload, &metadata)
 	} else {
 		if err := s.bufferHook(ctx, sessionID, payload); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to buffer hook", attr.SlogError(err))
+			attrs := []any{
+				attr.SlogEvent("claude_hook_buffer_failed"),
+				attr.SlogHookSource("claude"),
+				attr.SlogHookEvent(payload.HookEventName),
+				attr.SlogGenAIConversationID(sessionID),
+				attr.SlogError(err),
+			}
+			if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+				attrs = append(attrs, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+				if authCtx.ProjectID != nil {
+					attrs = append(attrs, attr.SlogProjectID(authCtx.ProjectID.String()))
+				}
+			}
+			s.logger.ErrorContext(ctx, "Failed to buffer hook", attrs...)
 		}
 	}
 }
@@ -511,6 +616,10 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			// buffered hook will be re-persisted once metadata arrives.
 			s.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; allowing tool call",
 				attr.SlogEvent("claude_hook_pretooluse_no_metadata"),
+				attr.SlogHookSource("claude"),
+				attr.SlogHookEvent(payload.HookEventName),
+				attr.SlogGenAIConversationID(sessionID),
+				attr.SlogToolName(rawToolName),
 				attr.SlogError(err),
 			)
 			if output != nil {
@@ -532,13 +641,15 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	if denied {
 		s.logger.InfoContext(ctx, "denying claude tool call: failed gram toolset validation",
 			attr.SlogEvent("claude_hook_denied"),
-			attr.SlogValueAny(map[string]any{
-				"hookEventName": payload.HookEventName,
-				"toolName":      rawToolName,
-				"reason":        detail,
-				"policyID":      policy.ID,
-				"policyName":    policy.Name,
-			}),
+			attr.SlogHookSource("claude"),
+			attr.SlogHookEvent(payload.HookEventName),
+			attr.SlogOrganizationID(metadata.GramOrgID),
+			attr.SlogProjectID(metadata.ProjectID),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogToolName(rawToolName),
+			attr.SlogHookBlockReason(detail),
+			attr.SlogRiskPolicyID(policy.ID),
+			attr.SlogRiskPolicyName(policy.Name),
 		)
 		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 		userReason := renderUserBlockReason(policy.UserMessage, auditReason)

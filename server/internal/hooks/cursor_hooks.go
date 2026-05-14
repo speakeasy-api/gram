@@ -26,19 +26,30 @@ import (
 func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.CursorHookResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		s.logger.WarnContext(ctx, "rejected unauthorized cursor hook request",
+			attr.SlogEvent("cursor_hook_unauthorized"),
+			attr.SlogHookSource("cursor"),
+			attr.SlogHookEvent(payload.HookEventName),
+			attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
+			attr.SlogGenAIConversationID(conv.PtrValOr(payload.ConversationID, "")),
+			attr.SlogAuthUserEmail(conv.PtrValOr(payload.UserEmail, "")),
+		)
 		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	}
 
-	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Cursor: %s", payload.HookEventName),
-		attr.SlogEvent("cursor_hook"),
-		attr.SlogValueAny(map[string]any{
-			"hookEventName": payload.HookEventName,
-			"toolName":      payload.ToolName,
-		}),
-	)
-
 	orgID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
+
+	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Cursor: %s", payload.HookEventName),
+		attr.SlogEvent("cursor_hook"),
+		attr.SlogHookSource("cursor"),
+		attr.SlogHookEvent(payload.HookEventName),
+		attr.SlogOrganizationID(orgID),
+		attr.SlogProjectID(projectID),
+		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
+		attr.SlogGenAIConversationID(conv.PtrValOr(payload.ConversationID, "")),
+		attr.SlogAuthUserEmail(conv.PtrValOr(payload.UserEmail, "")),
+	)
 
 	result := &gen.CursorHookResult{
 		Permission:        nil,
@@ -74,13 +85,14 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		if detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, payload.ToolInput, toolName, orgID); denied {
 			s.logger.InfoContext(ctx, "denying cursor tool call: failed gram toolset validation",
 				attr.SlogEvent("cursor_hook_denied"),
-				attr.SlogValueAny(map[string]any{
-					"hookEventName": payload.HookEventName,
-					"toolName":      conv.PtrValOr(payload.ToolName, ""),
-					"reason":        detail,
-					"policyID":      policy.ID,
-					"policyName":    policy.Name,
-				}),
+				attr.SlogHookSource("cursor"),
+				attr.SlogHookEvent(payload.HookEventName),
+				attr.SlogOrganizationID(orgID),
+				attr.SlogProjectID(projectID),
+				attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
+				attr.SlogHookBlockReason(detail),
+				attr.SlogRiskPolicyID(policy.ID),
+				attr.SlogRiskPolicyName(policy.Name),
 			)
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 			userReason := renderUserBlockReason(policy.UserMessage, auditReason)
