@@ -56,8 +56,24 @@ UPDATE assistant_runtimes
 SET
   state = $1,
   updated_at = clock_timestamp()
-WHERE project_id = $2
-  AND assistant_thread_id = $3
+WHERE id = (
+  SELECT r.id
+  FROM assistant_runtimes r
+  JOIN assistant_threads t
+    ON t.project_id = r.project_id
+   AND t.id = $2
+   AND (
+     r.assistant_thread_id = t.id
+     OR (r.runtime_version = 2 AND r.assistant_id = t.assistant_id)
+   )
+  WHERE r.project_id = $3
+    AND r.state IN ($4, $1)
+    AND r.deleted IS FALSE
+    AND r.ended IS FALSE
+  ORDER BY r.runtime_version DESC, r.created_at DESC
+  LIMIT 1
+)
+  AND project_id = $3
   AND state IN ($4, $1)
   AND deleted IS FALSE
   AND ended IS FALSE
@@ -66,8 +82,8 @@ RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_me
 
 type BeginExpireAssistantRuntimeParams struct {
 	ExpiringState string
-	ProjectID     uuid.UUID
 	ThreadID      uuid.UUID
+	ProjectID     uuid.UUID
 	ActiveState   string
 }
 
@@ -86,11 +102,18 @@ type BeginExpireAssistantRuntimeRow struct {
 // Stop failed mid-flight) re-enters the Status/Stop path idempotently.
 // ErrNoRows means another actor (Stop, reaper, manual API) already finalized
 // the row; callers must not then call Stop.
+//
+// v2 (single-VM-per-assistant) rows pin assistant_thread_id to the admitting
+// thread, but every thread workflow under the assistant runs its own warm
+// timer and calls expire with its own thread id. Resolve the row via
+// assistant_threads.assistant_id when no v1 row matches the caller's thread
+// so any thread can flip the v2 row to expiring; the post-CAS /state poll
+// guards against tearing down a VM another thread is still using.
 func (q *Queries) BeginExpireAssistantRuntime(ctx context.Context, arg BeginExpireAssistantRuntimeParams) (BeginExpireAssistantRuntimeRow, error) {
 	row := q.db.QueryRow(ctx, beginExpireAssistantRuntime,
 		arg.ExpiringState,
-		arg.ProjectID,
 		arg.ThreadID,
+		arg.ProjectID,
 		arg.ActiveState,
 	)
 	var i BeginExpireAssistantRuntimeRow

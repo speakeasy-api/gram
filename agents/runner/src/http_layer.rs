@@ -17,15 +17,14 @@ use thiserror::Error;
 
 use crate::errors::RunnerError;
 
-const HTTP_MAX_RETRIES: u32 = 3;
-
-// Bootstrap retries are tuned for a control-plane round-trip whose
-// failure stalls the entire VM's first turn for an assistant. Cap is
-// 7 attempts with 250ms→30s exponential bounds so a transient gateway
-// blip stretches up to ~30s of recovery before bubbling out.
-const BOOTSTRAP_MAX_RETRIES: u32 = 7;
-const BOOTSTRAP_RETRY_MIN: Duration = Duration::from_millis(250);
-const BOOTSTRAP_RETRY_MAX: Duration = Duration::from_secs(30);
+// Liberal retry bounds for every runner-originated request: chat
+// completions, MCP, /threads/turn, bootstrap. A turn that bubbles a
+// transient gateway blip back to the user is more painful than waiting
+// up to ~30s for recovery, so we cap at 7 attempts with 250ms→30s
+// exponential bounds across the board.
+const HTTP_MAX_RETRIES: u32 = 7;
+const HTTP_RETRY_MIN: Duration = Duration::from_millis(250);
+const HTTP_RETRY_MAX: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Error)]
 enum MiddlewareError {
@@ -95,20 +94,17 @@ pub fn build_http(client: reqwest::Client, registry: TokenRegistry) -> Http {
 }
 
 fn retry_middleware() -> RetryTransientMiddleware<ExponentialBackoff> {
-    let policy = ExponentialBackoff::builder().build_with_max_retries(HTTP_MAX_RETRIES);
+    let policy = ExponentialBackoff::builder()
+        .retry_bounds(HTTP_RETRY_MIN, HTTP_RETRY_MAX)
+        .build_with_max_retries(HTTP_MAX_RETRIES);
     RetryTransientMiddleware::new_with_policy(policy).with_retry_log_level(tracing::Level::INFO)
 }
 
-/// Wraps a base reqwest client with the bootstrap retry policy. Used by the
-/// management-API bootstrap call so a transient 5xx or network blip does not
-/// strand the VM's first turn for an assistant.
+/// Wraps a base reqwest client with the shared liberal retry policy. Used by
+/// the management-API bootstrap call so a transient 5xx or network blip does
+/// not strand the VM's first turn for an assistant.
 pub fn build_bootstrap_client(client: reqwest::Client) -> ClientWithMiddleware {
-    let policy = ExponentialBackoff::builder()
-        .retry_bounds(BOOTSTRAP_RETRY_MIN, BOOTSTRAP_RETRY_MAX)
-        .build_with_max_retries(BOOTSTRAP_MAX_RETRIES);
-    let retry = RetryTransientMiddleware::new_with_policy(policy)
-        .with_retry_log_level(tracing::Level::INFO);
-    ClientBuilder::new(client).with(retry).build()
+    ClientBuilder::new(client).with(retry_middleware()).build()
 }
 
 /// `McpHttpClient` impl that mints a fresh bearer token per request from a
