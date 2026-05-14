@@ -3,7 +3,6 @@ package remotesessions
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -15,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -58,7 +58,7 @@ func (s *Service) ListRemoteSessions(ctx context.Context, payload *gen.ListRemot
 
 	items := make([]*types.RemoteSession, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, remoteSessionView(row))
+		items = append(items, mv.BuildRemoteSessionView(row))
 	}
 
 	var nextCursor *string
@@ -104,7 +104,7 @@ func (s *Service) RevokeRemoteSession(ctx context.Context, payload *gen.RevokeRe
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "remote session not found").Log(ctx, logger)
+			return nil
 		}
 		return oops.E(oops.CodeUnexpected, err, "revoke remote session").Log(ctx, logger)
 	}
@@ -126,23 +126,4 @@ func (s *Service) RevokeRemoteSession(ctx context.Context, payload *gen.RevokeRe
 	}
 
 	return nil
-}
-
-func remoteSessionView(row repo.RemoteSession) *types.RemoteSession {
-	var refreshExpiresAt *string
-	if row.RefreshExpiresAt.Valid {
-		v := row.RefreshExpiresAt.Time.Format(time.RFC3339)
-		refreshExpiresAt = &v
-	}
-	return &types.RemoteSession{
-		ID:                    row.ID.String(),
-		SubjectUrn:            row.SubjectUrn.String(),
-		UserSessionIssuerID:   row.UserSessionIssuerID.String(),
-		RemoteSessionClientID: row.RemoteSessionClientID.String(),
-		AccessExpiresAt:       row.AccessExpiresAt.Time.Format(time.RFC3339),
-		RefreshExpiresAt:      refreshExpiresAt,
-		Scopes:                row.Scopes,
-		CreatedAt:             row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:             row.UpdatedAt.Time.Format(time.RFC3339),
-	}
 }

@@ -6,10 +6,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -360,14 +362,20 @@ func TestDeleteRemoteSessionIssuer_NotFound(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	err := ti.service.DeleteRemoteSessionIssuer(ctx, &gen.DeleteRemoteSessionIssuerPayload{
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerDelete)
+	require.NoError(t, err)
+
+	err = ti.service.DeleteRemoteSessionIssuer(ctx, &gen.DeleteRemoteSessionIssuerPayload{
 		ID:               uuid.NewString(),
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
-	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeNotFound)
+	require.NoError(t, err, "delete is idempotent: missing issuer returns success")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerDelete)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount, "no audit entry when there was nothing to delete")
 }
 
 // fakeIssuerServer returns an httptest.Server that serves an RFC 8414
@@ -405,21 +413,22 @@ func fakeIssuerServer(t *testing.T, mutate func(doc map[string]any)) *httptest.S
 func TestDiscoverRemoteSessionIssuer_HappyPath(t *testing.T) {
 	t.Parallel()
 
+	idp := devidptest.Launch(t, devidptest.LaunchOpts{})
 	ctx, ti := newTestService(t)
 
-	server := fakeIssuerServer(t, nil)
-
 	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
-		Issuer:           server.URL,
+		Issuer:           idp.OAuth21URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, draft)
-	require.Equal(t, server.URL, draft.Issuer)
+	require.Equal(t, idp.OAuth21URL, draft.Issuer)
 	require.NotNil(t, draft.AuthorizationEndpoint)
+	require.NotNil(t, draft.TokenEndpoint)
 	require.NotNil(t, draft.JwksURI)
+	require.NotNil(t, draft.RegistrationEndpoint)
 	require.Empty(t, draft.DiscoveryWarnings)
 }
 
@@ -482,4 +491,133 @@ func TestDiscoverRemoteSessionIssuer_BadURL(t *testing.T) {
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestRegisterRemoteSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	const upstreamClientID = "register-endpoint-client"
+	const upstreamSecret = "register-endpoint-secret"
+
+	var (
+		seenMethod  string
+		seenPayload map[string]any
+	)
+	dcr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenMethod = r.Method
+		_ = json.NewDecoder(r.Body).Decode(&seenPayload)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":                upstreamClientID,
+			"client_secret":            upstreamSecret,
+			"client_id_issued_at":      time.Now().Unix(),
+			"client_secret_expires_at": time.Now().Add(time.Hour).Unix(),
+		})
+	}))
+	t.Cleanup(dcr.Close)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsi-register", dcr.URL+"/register")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-register").String()
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
+	require.NoError(t, err)
+
+	clientName := "registration-client-name"
+	redirectURIs := []string{"https://app.example.com/callback"}
+	result, err := ti.service.RegisterRemoteSessionIssuer(ctx, &gen.RegisterRemoteSessionIssuerPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerID:   userIssuerID,
+		ClientName:            &clientName,
+		RedirectUris:          redirectURIs,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, upstreamClientID, result.ClientID)
+	require.Equal(t, issuerID, result.RemoteSessionIssuerID)
+	require.Equal(t, userIssuerID, result.UserSessionIssuerID)
+	require.NotNil(t, result.ClientSecretExpiresAt)
+	require.Equal(t, http.MethodPost, seenMethod)
+	require.Equal(t, clientName, seenPayload["client_name"])
+	require.ElementsMatch(t, []any{"https://app.example.com/callback"}, seenPayload["redirect_uris"])
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestRegisterRemoteSessionIssuer_NoRegistrationEndpoint(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	// Issuer with no registration_endpoint configured.
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsi-register-no-endpoint", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-register-no-endpoint").String()
+
+	_, err := ti.service.RegisterRemoteSessionIssuer(ctx, &gen.RegisterRemoteSessionIssuerPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerID:   userIssuerID,
+		ClientName:            nil,
+		RedirectUris:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestRegisterRemoteSessionIssuer_RBACForbidden(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsi-register-rbac", "https://idp.example.com/register")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-register-rbac").String()
+
+	// Hand the caller only read scope; register should be denied.
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeProjectRead,
+		Selector: authz.NewSelector(authz.ScopeProjectRead, authCtx.ProjectID.String()),
+	})
+
+	_, err := ti.service.RegisterRemoteSessionIssuer(ctx, &gen.RegisterRemoteSessionIssuerPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerID:   userIssuerID,
+		ClientName:            nil,
+		RedirectUris:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestRegisterRemoteSessionIssuer_IssuerNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-register-missing").String()
+
+	_, err := ti.service.RegisterRemoteSessionIssuer(ctx, &gen.RegisterRemoteSessionIssuerPayload{
+		RemoteSessionIssuerID: uuid.NewString(),
+		UserSessionIssuerID:   userIssuerID,
+		ClientName:            nil,
+		RedirectUris:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
 }

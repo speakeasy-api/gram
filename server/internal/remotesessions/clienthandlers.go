@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -34,7 +35,7 @@ import (
 const dcrHTTPTimeout = 10 * time.Second
 
 // dcrMaxBodyBytes bounds the registration response body to keep a hostile
-// upstream from exhausting memory.
+// upstream from exhausting memory. Currently 1 MiB.
 const dcrMaxBodyBytes = 1 << 20
 
 // rfc7591Request is the subset of an RFC 7591 Dynamic Client Registration
@@ -199,7 +200,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
 	}
 
-	return remoteSessionClientView(created), nil
+	return mv.BuildRemoteSessionClientView(created), nil
 }
 
 func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.UpdateRemoteSessionClientPayload) (*types.RemoteSessionClient, error) {
@@ -243,7 +244,7 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote session client").Log(ctx, logger)
 	}
 
-	beforeView := remoteSessionClientView(existing)
+	beforeView := mv.BuildRemoteSessionClientView(existing)
 
 	var secretCiphertext pgtype.Text
 	if payload.ClientSecret != nil && *payload.ClientSecret != "" {
@@ -268,7 +269,7 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeUnexpected, err, "update remote session client").Log(ctx, logger)
 	}
 
-	afterView := remoteSessionClientView(updated)
+	afterView := mv.BuildRemoteSessionClientView(updated)
 
 	if err := s.auditLogger.LogRemoteSessionClientUpdate(ctx, dbtx, audit.LogRemoteSessionClientUpdateEvent{
 		OrganizationID:         authCtx.ActiveOrganizationID,
@@ -332,7 +333,7 @@ func (s *Service) ListRemoteSessionClients(ctx context.Context, payload *gen.Lis
 
 	items := make([]*types.RemoteSessionClient, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, remoteSessionClientView(row))
+		items = append(items, mv.BuildRemoteSessionClientView(row))
 	}
 
 	var nextCursor *string
@@ -375,7 +376,7 @@ func (s *Service) GetRemoteSessionClient(ctx context.Context, payload *gen.GetRe
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote session client").Log(ctx, logger)
 	}
 
-	return remoteSessionClientView(client), nil
+	return mv.BuildRemoteSessionClientView(client), nil
 }
 
 // DeleteRemoteSessionClient soft-deletes a client and cascades the soft-delete
@@ -413,7 +414,7 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "remote session client not found").Log(ctx, logger)
+			return nil
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete remote session client").Log(ctx, logger)
 	}
@@ -496,27 +497,4 @@ func registerClientViaDCR(ctx context.Context, policy *guardian.Policy, params d
 	}
 
 	return dcr, nil
-}
-
-func remoteSessionClientView(row repo.RemoteSessionClient) *types.RemoteSessionClient {
-	var issuedAt string
-	if row.ClientIDIssuedAt.Valid {
-		issuedAt = row.ClientIDIssuedAt.Time.Format(time.RFC3339)
-	}
-	var expiresAt *string
-	if row.ClientSecretExpiresAt.Valid {
-		s := row.ClientSecretExpiresAt.Time.Format(time.RFC3339)
-		expiresAt = &s
-	}
-	return &types.RemoteSessionClient{
-		ID:                    row.ID.String(),
-		ProjectID:             row.ProjectID.String(),
-		RemoteSessionIssuerID: row.RemoteSessionIssuerID.String(),
-		UserSessionIssuerID:   row.UserSessionIssuerID.String(),
-		ClientID:              row.ClientID,
-		ClientIDIssuedAt:      issuedAt,
-		ClientSecretExpiresAt: expiresAt,
-		CreatedAt:             row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:             row.UpdatedAt.Time.Format(time.RFC3339),
-	}
 }

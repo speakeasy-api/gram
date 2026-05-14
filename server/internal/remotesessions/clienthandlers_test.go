@@ -2,9 +2,7 @@ package remotesessions_test
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -105,25 +104,10 @@ func TestCreateRemoteSessionClient_Manual(t *testing.T) {
 func TestCreateRemoteSessionClient_AutoRegister(t *testing.T) {
 	t.Parallel()
 
+	idp := devidptest.Launch(t, devidptest.LaunchOpts{})
 	ctx, ti := newTestService(t)
 
-	const upstreamClientID = "auto-registered-client"
-	const upstreamSecret = "auto-registered-secret"
-
-	var seenMethod string
-	dcr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seenMethod = r.Method
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"client_id":                upstreamClientID,
-			"client_secret":            upstreamSecret,
-			"client_id_issued_at":      time.Now().Unix(),
-			"client_secret_expires_at": time.Now().Add(time.Hour).Unix(),
-		})
-	}))
-	t.Cleanup(dcr.Close)
-
-	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-auto", dcr.URL+"/register")
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-auto", idp.OAuth21URL+"/register")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-auto").String()
 
 	autoRegister := true
@@ -138,9 +122,10 @@ func TestCreateRemoteSessionClient_AutoRegister(t *testing.T) {
 		ProjectSlugInput:      nil,
 	})
 	require.NoError(t, err)
-	require.Equal(t, upstreamClientID, result.ClientID)
-	require.NotNil(t, result.ClientSecretExpiresAt)
-	require.Equal(t, http.MethodPost, seenMethod)
+	require.True(t, strings.HasPrefix(result.ClientID, "client_"), "dev-idp DCR mints client_<hex> ids")
+	// dev-idp's /register sets client_secret_expires_at=0 per RFC 7591
+	// (0 = never expires), which Gram surfaces as a nil ExpiresAt.
+	require.Nil(t, result.ClientSecretExpiresAt)
 }
 
 func TestCreateRemoteSessionClient_RBACForbidden(t *testing.T) {
@@ -413,12 +398,18 @@ func TestDeleteRemoteSessionClient_NotFound(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	err := ti.service.DeleteRemoteSessionClient(ctx, &clientsgen.DeleteRemoteSessionClientPayload{
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDelete)
+	require.NoError(t, err)
+
+	err = ti.service.DeleteRemoteSessionClient(ctx, &clientsgen.DeleteRemoteSessionClientPayload{
 		ID:               uuid.NewString(),
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
-	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeNotFound)
+	require.NoError(t, err, "delete is idempotent: missing client returns success")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDelete)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount, "no audit entry when there was nothing to delete")
 }

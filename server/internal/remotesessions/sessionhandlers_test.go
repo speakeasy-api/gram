@@ -36,7 +36,7 @@ func TestListRemoteSessions(t *testing.T) {
 	require.NoError(t, err)
 
 	result, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{
-		SubjectUrn:          nil,
+		SubjectUrn:            nil,
 		RemoteSessionClientID: nil,
 		Cursor:                nil,
 		Limit:                 nil,
@@ -71,7 +71,7 @@ func TestListRemoteSessions_FilteredByPrincipal(t *testing.T) {
 
 	filter := alice.String()
 	result, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{
-		SubjectUrn:          &filter,
+		SubjectUrn:            &filter,
 		RemoteSessionClientID: nil,
 		Cursor:                nil,
 		Limit:                 nil,
@@ -98,7 +98,7 @@ func TestListRemoteSessions_FilteredByClient(t *testing.T) {
 	insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_in_b"), userIssuerID, clientB)
 
 	result, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{
-		SubjectUrn:          nil,
+		SubjectUrn:            nil,
 		RemoteSessionClientID: &clientA,
 		Cursor:                nil,
 		Limit:                 nil,
@@ -119,7 +119,7 @@ func TestListRemoteSessions_RBACForbidden(t *testing.T) {
 	ctx = withExactAccessGrants(t, ctx, ti.conn)
 
 	_, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{
-		SubjectUrn:          nil,
+		SubjectUrn:            nil,
 		RemoteSessionClientID: nil,
 		Cursor:                nil,
 		Limit:                 nil,
@@ -155,7 +155,7 @@ func TestListRemoteSessions_PaginationTraversal(t *testing.T) {
 		pages++
 		require.Less(t, pages, 10, "pagination did not terminate")
 		result, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{
-			SubjectUrn:          nil,
+			SubjectUrn:            nil,
 			RemoteSessionClientID: &clientID,
 			Cursor:                cursor,
 			Limit:                 &pageSize,
@@ -206,7 +206,7 @@ func TestRevokeRemoteSession(t *testing.T) {
 
 	// Subsequent list must omit the revoked row.
 	result, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{
-		SubjectUrn:          nil,
+		SubjectUrn:            nil,
 		RemoteSessionClientID: &clientID,
 		Cursor:                nil,
 		Limit:                 nil,
@@ -225,14 +225,20 @@ func TestRevokeRemoteSession_NotFound(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	err := ti.service.RevokeRemoteSession(ctx, &gen.RevokeRemoteSessionPayload{
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionDelete)
+	require.NoError(t, err)
+
+	err = ti.service.RevokeRemoteSession(ctx, &gen.RevokeRemoteSessionPayload{
 		ID:               uuid.NewString(),
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
-	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeNotFound)
+	require.NoError(t, err, "revoke is idempotent: missing session returns success")
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionDelete)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount, "no audit entry when there was nothing to revoke")
 }
 
 func liveProjectID(t *testing.T, ctx context.Context) uuid.UUID {

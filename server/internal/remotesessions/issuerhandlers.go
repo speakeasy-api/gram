@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -161,7 +162,7 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
 	}
 
-	return remoteSessionIssuerView(issuer), nil
+	return mv.BuildRemoteSessionIssuerView(issuer), nil
 }
 
 // RegisterRemoteSessionIssuer performs an RFC 7591 Dynamic Client Registration
@@ -274,7 +275,7 @@ func (s *Service) RegisterRemoteSessionIssuer(ctx context.Context, payload *gen.
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
 	}
 
-	return remoteSessionClientView(created), nil
+	return mv.BuildRemoteSessionClientView(created), nil
 }
 
 // UpdateRemoteSessionIssuer applies an optional patch to an existing
@@ -315,7 +316,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote session issuer").Log(ctx, logger)
 	}
 
-	beforeView := remoteSessionIssuerView(existing)
+	beforeView := mv.BuildRemoteSessionIssuerView(existing)
 
 	updated, err := txRepo.UpdateRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionIssuerParams{
 		Slug:                              conv.PtrToPGText(payload.Slug),
@@ -340,7 +341,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeUnexpected, err, "update remote session issuer").Log(ctx, logger)
 	}
 
-	afterView := remoteSessionIssuerView(updated)
+	afterView := mv.BuildRemoteSessionIssuerView(updated)
 
 	if err := s.auditLogger.LogRemoteSessionIssuerUpdate(ctx, dbtx, audit.LogRemoteSessionIssuerUpdateEvent{
 		OrganizationID:         authCtx.ActiveOrganizationID,
@@ -391,7 +392,7 @@ func (s *Service) ListRemoteSessionIssuers(ctx context.Context, payload *gen.Lis
 
 	items := make([]*types.RemoteSessionIssuer, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, remoteSessionIssuerView(row))
+		items = append(items, mv.BuildRemoteSessionIssuerView(row))
 	}
 
 	var nextCursor *string
@@ -459,7 +460,7 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 		}
 	}
 
-	return remoteSessionIssuerView(issuer), nil
+	return mv.BuildRemoteSessionIssuerView(issuer), nil
 }
 
 // DeleteRemoteSessionIssuer soft-deletes an issuer. Blocked when any
@@ -503,7 +504,7 @@ func (s *Service) DeleteRemoteSessionIssuer(ctx context.Context, payload *gen.De
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "remote session issuer not found").Log(ctx, logger)
+			return nil
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete remote session issuer").Log(ctx, logger)
 	}
@@ -647,25 +648,4 @@ func parseCursor(cursor *string) (uuid.NullUUID, error) {
 		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("parse cursor: %w", err)
 	}
 	return uuid.NullUUID{UUID: id, Valid: true}, nil
-}
-
-func remoteSessionIssuerView(row repo.RemoteSessionIssuer) *types.RemoteSessionIssuer {
-	return &types.RemoteSessionIssuer{
-		ID:                                row.ID.String(),
-		ProjectID:                         row.ProjectID.String(),
-		Slug:                              row.Slug,
-		Issuer:                            row.Issuer,
-		AuthorizationEndpoint:             conv.FromPGText[string](row.AuthorizationEndpoint),
-		TokenEndpoint:                     conv.FromPGText[string](row.TokenEndpoint),
-		RegistrationEndpoint:              conv.FromPGText[string](row.RegistrationEndpoint),
-		JwksURI:                           conv.FromPGText[string](row.JwksUri),
-		ScopesSupported:                   row.ScopesSupported,
-		GrantTypesSupported:               row.GrantTypesSupported,
-		ResponseTypesSupported:            row.ResponseTypesSupported,
-		TokenEndpointAuthMethodsSupported: row.TokenEndpointAuthMethodsSupported,
-		Oidc:                              row.Oidc,
-		Passthrough:                       row.Passthrough,
-		CreatedAt:                         row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:                         row.UpdatedAt.Time.Format(time.RFC3339),
-	}
 }
