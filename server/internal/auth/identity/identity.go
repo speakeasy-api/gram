@@ -357,7 +357,7 @@ func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 
 		if err := r.orgRepo.UpsertOrganizationUserRelationshipFromWorkOS(ctx, orgRepo.UpsertOrganizationUserRelationshipFromWorkOSParams{
 			OrganizationID:     gramOrgID,
-			UserID:             gramUserID,
+			UserID:             pgtype.Text{String: gramUserID, Valid: gramUserID != ""},
 			WorkosMembershipID: pgtype.Text{String: m.ID, Valid: m.ID != ""},
 			WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 			WorkosLastEventID:  pgtype.Text{String: "", Valid: false},

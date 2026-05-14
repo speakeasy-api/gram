@@ -1,3 +1,4 @@
+mod clip;
 mod compaction;
 mod errors;
 mod http_layer;

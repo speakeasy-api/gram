@@ -62,10 +62,10 @@ func init() {
 		},
 		{
 			id:          "pi.encoded-payload",
-			description: "Long encoded blob adjacent to decode/execute verb",
+			description: "Long encoded blob with explicit decode/eval intent",
 			family:      familyEncodedPayload,
 			confidence:  0.7,
-			pattern:     regexp.MustCompile(`(?i)\b(decode|execute|eval|run)\b.{0,40}([A-Za-z0-9+/]{40,}={0,2}|[0-9a-fA-F]{64,})`),
+			pattern:     regexp.MustCompile(`(?i)\b(decode|eval|execute)\b.{0,30}\b(base64|hex|encoded|payload|following|this)\b.{0,40}([A-Za-z0-9+/]{40,}={0,2}|[0-9a-fA-F]{64,})`),
 		},
 	}
 
@@ -182,14 +182,15 @@ func runFamily(text string, fam ruleFamily) []Finding {
 			continue
 		}
 		out = append(out, Finding{
-			RuleID:      rule.id,
-			Description: rule.description,
-			Match:       text[loc[0]:loc[1]],
-			StartPos:    loc[0],
-			EndPos:      loc[1],
-			Source:      SourcePromptInjection,
-			Confidence:  rule.confidence,
-			Tags:        nil,
+			RuleID:           rule.id,
+			Description:      rule.description,
+			Match:            text[loc[0]:loc[1]],
+			StartPos:         loc[0],
+			EndPos:           loc[1],
+			Source:           SourcePromptInjection,
+			Confidence:       rule.confidence,
+			Tags:             nil,
+			DeadLetterReason: "",
 		})
 	}
 	return out
@@ -216,14 +217,15 @@ func detectInstructionOverrides(text string) []Finding {
 			continue
 		}
 		out = append(out, Finding{
-			RuleID:      "pi.instruction-override",
-			Description: "Instruction override phrase detected: " + kw,
-			Match:       scan[idx : idx+len(kw)],
-			StartPos:    idx,
-			EndPos:      idx + len(kw),
-			Source:      SourcePromptInjection,
-			Confidence:  0.9,
-			Tags:        nil,
+			RuleID:           "pi.instruction-override",
+			Description:      "Instruction override phrase detected: " + kw,
+			Match:            scan[idx : idx+len(kw)],
+			StartPos:         idx,
+			EndPos:           idx + len(kw),
+			Source:           SourcePromptInjection,
+			Confidence:       0.9,
+			Tags:             nil,
+			DeadLetterReason: "",
 		})
 		// One finding is enough for this family; multiple keywords would
 		// just produce overlapping findings the dedup pass would drop.
@@ -239,13 +241,14 @@ func detectDelimiterInjection(text string) []Finding {
 		return nil
 	}
 	return []Finding{{
-		RuleID:      "pi.delimiter-injection",
-		Description: "Forged role or instruction delimiter detected",
-		Match:       text[loc[0]:loc[1]],
-		StartPos:    loc[0],
-		EndPos:      loc[1],
-		Source:      SourcePromptInjection,
-		Confidence:  0.8,
-		Tags:        nil,
+		RuleID:           "pi.delimiter-injection",
+		Description:      "Forged role or instruction delimiter detected",
+		Match:            text[loc[0]:loc[1]],
+		StartPos:         loc[0],
+		EndPos:           loc[1],
+		Source:           SourcePromptInjection,
+		Confidence:       0.8,
+		Tags:             nil,
+		DeadLetterReason: "",
 	}}
 }

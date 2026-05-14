@@ -108,7 +108,7 @@ func InitAuthContext(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sess
 	// Create org-user relationship
 	_, err = orgQueries.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
 		OrganizationID: mockidp.MockOrgID,
-		UserID:         userID,
+		UserID:         conv.ToPGText(userID),
 	})
 	require.NoError(t, err)
 

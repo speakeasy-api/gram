@@ -147,10 +147,19 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 		}
 		return nil
 
+	case string(workos.EventKindUserCreated),
+		string(workos.EventKindUserUpdated),
+		string(workos.EventKindUserDeleted):
+		if _, err := background.ExecuteProcessWorkOSUserEventsWorkflowDebounced(ctx, h.temporalEnv, background.ProcessWorkOSUserEventsWorkflowParams{
+			WorkOSUserID: event.Data.ID,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS user sync").Log(ctx, logger)
+		}
+		return nil
+
 	default:
-		// user.*, dsync.*, and any new event types are accepted (so WorkOS
-		// stops retrying) but not yet processed. Add a workflow before
-		// enabling those subscriptions in the WorkOS dashboard.
+		// dsync.* and any new event types are accepted so WorkOS stops
+		// retrying, but they are not processed yet.
 		return nil
 	}
 }

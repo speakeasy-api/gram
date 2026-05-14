@@ -634,7 +634,7 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 
 	if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
 		OrganizationID: org.ID,
-		UserID:         authCtx.UserID,
+		UserID:         conv.ToPGText(authCtx.UserID),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error creating organization user relationship").Log(ctx, s.logger)
 	}
@@ -678,7 +678,7 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sess
 
 	if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
 		OrganizationID: org.ID,
-		UserID:         userInfo.UserID,
+		UserID:         conv.ToPGText(userInfo.UserID),
 	}); err != nil {
 		return "", fmt.Errorf("create org-user relationship: %w", err)
 	}

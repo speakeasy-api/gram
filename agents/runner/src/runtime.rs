@@ -23,6 +23,9 @@ use tokio::sync::{Mutex as AsyncMutex, Notify, oneshot};
 
 use agentkit_compaction::AgentBuilderCompactorExt;
 
+use std::path::PathBuf;
+
+use crate::clip::ClippedToolSource;
 use crate::compaction::build_compactor;
 use crate::errors::RunnerError;
 use crate::http_layer::{McpRotatingClient, TokenRegistry, build_http};
@@ -30,6 +33,11 @@ use crate::idempotency::IdempotencyCache;
 use crate::tools;
 use crate::wire::{McpServer, RunnerConfig, RunnerMessage, RunnerRequest};
 use crate::workdir::ASSISTANT_WORKDIR;
+
+/// Subdirectory under [`ASSISTANT_WORKDIR`] where oversized tool results spill
+/// to disk. Lives inside the workdir so the agent's filesystem tools can read
+/// or grep the spilled files when the in-band pointer references them.
+const TOOL_RESULT_SPILL_DIR: &str = "tool-results";
 
 const MCP_CMD_CAPACITY: usize = 32;
 
@@ -154,7 +162,8 @@ pub async fn build_runtime(
         mcp_server_ids.push(server.id.clone());
         manager.register_server(build_mcp_server_config(server, &http_client, &tokens)?);
     }
-    let mcp_source = manager.source();
+    let spill_root = PathBuf::from(ASSISTANT_WORKDIR).join(TOOL_RESULT_SPILL_DIR);
+    let mcp_source = ClippedToolSource::new(manager.source(), spill_root);
 
     let (mcp_cmd_tx, mcp_cmd_rx) = mpsc::channel(MCP_CMD_CAPACITY);
     let (mcp_ready_tx, mcp_ready_rx) = oneshot::channel::<()>();

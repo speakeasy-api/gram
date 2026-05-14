@@ -221,10 +221,21 @@ export function buildSlackManifest(
     oauth_config: { scopes: oauthScopes },
   };
   if (input.webhookUrl) {
+    // Slack interactivity (button clicks, modal submissions) uses a separate
+    // `request_url` from event_subscriptions, even though Gram answers both
+    // on the same trigger webhook. Without this Slack shows "This app is
+    // not configured to handle interactive responses" the moment a user
+    // clicks a Block Kit button. Always enable it when we have a webhook —
+    // same rationale as the all-scopes superset: missing it post-install
+    // forces a re-install.
     manifest.settings = {
       event_subscriptions: {
         request_url: input.webhookUrl,
         bot_events: sortedEvents,
+      },
+      interactivity: {
+        is_enabled: true,
+        request_url: input.webhookUrl,
       },
     };
   }

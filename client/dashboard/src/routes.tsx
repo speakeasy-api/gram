@@ -34,6 +34,7 @@ import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import {
+  InsightsAgentsPage,
   InsightsEmployeeDetailPage,
   InsightsEmployeesLayout,
   InsightsEmployeesPage,
@@ -366,6 +367,11 @@ const ROUTE_STRUCTURE = {
     component: InsightsRoot,
     indexComponent: RedirectToInsightsTools,
     subPages: {
+      costs: {
+        title: "Costs",
+        url: "costs",
+        component: InsightsAgentsPage,
+      },
       tools: {
         title: "Tools",
         url: "tools",

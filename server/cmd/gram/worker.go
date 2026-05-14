@@ -310,6 +310,11 @@ func newWorkerCommand() *cli.Command {
 			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
 			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},
 		},
+		&cli.StringFlag{
+			Name:    "pi-classifier-url",
+			Usage:   "Base URL of the gram-pi-classifier service (e.g. http://gram-pi-classifier:8000). Empty disables L1 ML prompt-injection detection; L0 heuristics still run when a policy enables the prompt_injection source.",
+			EnvVars: []string{"PI_CLASSIFIER_URL"},
+		},
 	}
 
 	flags = append(flags, redisFlags...)
@@ -317,6 +322,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, functionsFlags...)
 	flags = append(flags, pulseMCPFlags...)
 	flags = append(flags, assistantRuntimeFlags...)
+	flags = append(flags, svixFlags...)
 
 	return &cli.Command{
 		Name:  "worker",
@@ -456,6 +462,14 @@ func newWorkerCommand() *cli.Command {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
 				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker)
+			}
+
+			svixClient, shutdown, err := newSvixClient(c, logger, guardianPolicy)
+			if shutdown != nil {
+				shutdownFuncs = append(shutdownFuncs, shutdown)
+			}
+			if err != nil {
+				return fmt.Errorf("failed to create svix webhook sender: %w", err)
 			}
 
 			tigrisStore, shutdown, err := newTigrisStore(ctx, c, logger)
@@ -658,6 +672,7 @@ func newWorkerCommand() *cli.Command {
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, db, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver)
 			assistantsCore.SetWakeCanceller(triggerApp)
+			assistantsCore.SetChatMessageWriter(chatWriter)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
@@ -670,6 +685,13 @@ func newWorkerCommand() *cli.Command {
 				piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 				logger.InfoContext(ctx, "presidio PII scanner enabled", attr.SlogURL(presidioURL))
 			}
+
+			var promptInjectionClassifier risk_analysis.PromptInjectionClassifier = risk_analysis.StubClassifier{}
+			if piURL := c.String("pi-classifier-url"); piURL != "" {
+				promptInjectionClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
+				logger.InfoContext(ctx, "pi_classifier L1 prompt-injection scanner enabled", attr.SlogURL(piURL))
+			}
+			piScanner := risk_analysis.NewPromptInjectionScanner(logger, promptInjectionClassifier)
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:      guardianPolicy,
@@ -696,9 +718,12 @@ func newWorkerCommand() *cli.Command {
 				AssistantsCore:      assistantsCore,
 				TemporalEnv:         temporalEnv,
 				PIIScanner:          piiScanner,
+				PIScanner:           piScanner,
 				ShadowMCPClient:     shadowMCPClient,
 				AuditLogger:         auditLogger,
 				WorkOSClient:        backgroundWorkOSClient,
+				SvixClient:          svixClient,
+				ProductFeatures:     productFeatures,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

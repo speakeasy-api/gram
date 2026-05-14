@@ -4,11 +4,27 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
 
 export type ListToolsSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
+
+/**
+ * The type of tool
+ */
+export const ToolTypes = {
+  Http: "http",
+  Prompt: "prompt",
+  Function: "function",
+  Platform: "platform",
+  Externalmcp: "externalmcp",
+} as const;
+/**
+ * The type of tool
+ */
+export type ToolTypes = ClosedEnum<typeof ToolTypes>;
 
 export type ListToolsRequest = {
   /**
@@ -27,6 +43,7 @@ export type ListToolsRequest = {
    * Filter tools by URN prefix (e.g. 'tools:http:kitchen-sink' to match all tools starting with that prefix)
    */
   urnPrefix?: string | undefined;
+  toolTypes?: Array<ToolTypes> | undefined;
   /**
    * Session header
    */
@@ -69,11 +86,17 @@ export function listToolsSecurityToJSON(
 }
 
 /** @internal */
+export const ToolTypes$outboundSchema: z.ZodMiniEnum<typeof ToolTypes> = z.enum(
+  ToolTypes,
+);
+
+/** @internal */
 export type ListToolsRequest$Outbound = {
   cursor?: string | undefined;
   limit?: number | undefined;
   deployment_id?: string | undefined;
   urn_prefix?: string | undefined;
+  tool_types?: Array<string> | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
@@ -88,6 +111,7 @@ export const ListToolsRequest$outboundSchema: z.ZodMiniType<
     limit: z.optional(z.int()),
     deploymentId: z.optional(z.string()),
     urnPrefix: z.optional(z.string()),
+    toolTypes: z.optional(z.array(ToolTypes$outboundSchema)),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
   }),
@@ -95,6 +119,7 @@ export const ListToolsRequest$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       deploymentId: "deployment_id",
       urnPrefix: "urn_prefix",
+      toolTypes: "tool_types",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
     });

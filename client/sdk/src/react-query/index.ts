@@ -173,6 +173,7 @@ export * from "./revokeInvite.js";
 export * from "./revokeUserSession.js";
 export * from "./revokeUserSessionClient.js";
 export * from "./revokeUserSessionConsent.js";
+export * from "./riskCapabilities.js";
 export * from "./riskCreatePolicy.js";
 export * from "./riskListPolicies.js";
 export * from "./riskListResults.js";

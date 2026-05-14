@@ -356,7 +356,7 @@ func (ti *testInstance) createTestOrganization(ctx context.Context, org MockOrga
 	if userID != "" {
 		_, err = orgQueries.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
 			OrganizationID: org.ID,
-			UserID:         userID,
+			UserID:         conv.ToPGText(userID),
 		})
 		if err != nil {
 			return fmt.Errorf("failed to upsert organization user relationship: %w", err)

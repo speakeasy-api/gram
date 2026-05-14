@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -432,7 +433,7 @@ func TestE2E_Callback_RejoinedOrg(t *testing.T) {
 	// Soft-delete the relationship via the SQLc method.
 	err = orgRepo.New(inst.conn).DeleteOrganizationUserRelationship(ctx, orgRepo.DeleteOrganizationUserRelationshipParams{
 		OrganizationID: workosOrgID,
-		UserID:         gramUserID,
+		UserID:         conv.ToPGText(gramUserID),
 	})
 	require.NoError(t, err)
 

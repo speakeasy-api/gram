@@ -19,6 +19,9 @@ type RiskPolicy struct {
 	Sources []string
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string
+	// Prompt-injection detection rule ids enabled in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+	PromptInjectionRules []string
 	// Whether the policy is active.
 	Enabled bool
 	// Policy action: flag (log only) or block (deny in real-time).

@@ -140,7 +140,7 @@ func seedConnectedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, or
 
 	err = orgrepo.New(conn).AttachWorkOSUserToOrg(ctx, orgrepo.AttachWorkOSUserToOrgParams{
 		OrganizationID:     organizationID,
-		UserID:             userID,
+		UserID:             conv.ToPGText(userID),
 		WorkosMembershipID: conv.PtrToPGText(conv.PtrEmpty(workosMembershipID)),
 	})
 	require.NoError(t, err)

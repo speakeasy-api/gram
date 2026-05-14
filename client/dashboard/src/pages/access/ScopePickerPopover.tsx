@@ -108,10 +108,13 @@ function useMCPServers(enabled: boolean) {
         ? `${baseUrl}/mcp/${t.mcpSlug}`
         : `${baseUrl}/mcp/${project?.slug ?? ""}/${t.slug}/${t.defaultEnvironmentSlug ?? ""}`;
       const mcpUrl = fullUrl.replace(/^https?:\/\//, "");
-      // Skip external MCP/catalog servers — tool names aren't resolved yet
-      // TODO: re-enable once external server tool names are available
-      const isExternal = t.tools.some((tool) => tool.type === "externalmcp");
-      if (isExternal) continue;
+      // Skip toolsets containing proxy external MCP tools — proxy tools are not
+      // RBAC-compatible yet. Backend encodes proxy entries with a ":proxy" name
+      // suffix while direct entries get the real ":<tool-name>".
+      const hasProxyExternalMcp = t.tools.some(
+        (tool) => tool.type === "externalmcp" && tool.name.endsWith(":proxy"),
+      );
+      if (hasProxyExternalMcp) continue;
       const tools = t.tools.map((tool) => ({
         id: tool.id,
         name: tool.name,
