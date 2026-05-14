@@ -742,6 +742,46 @@ func TestProcessWorkOSOrganizationEvents_MembershipDeleteSoftDeletesAndClearsAss
 	require.Equal(t, "event_01HZDEL2", assignments[0].WorkosLastEventID.String)
 }
 
+func TestProcessWorkOSOrganizationEvents_MembershipRejoinReusesTombstone(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_membership_rejoin")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_mem_rejoin"
+	const workosOrgID = "org_01HZMEMREJOIN"
+	const userID = "user_mem_rejoin"
+	const workosUserID = "user_01HZMEMREJOIN"
+	const firstMembershipID = "mem_01HZREJOIN1"
+	const secondMembershipID = "mem_01HZREJOIN2"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZREJOIN1", firstMembershipID, workosOrgID, workosUserID, time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)),
+			newWorkOSMembershipEvent(t, "organization_membership.deleted", "event_01HZREJOIN2", firstMembershipID, workosOrgID, workosUserID, time.Date(2026, 5, 6, 13, 0, 0, 0, time.UTC)),
+			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZREJOIN3", secondMembershipID, workosOrgID, workosUserID, time.Date(2026, 5, 6, 14, 0, 0, 0, time.UTC)),
+		},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZREJOIN3", res.LastEventID)
+
+	relationship, err := orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+	require.False(t, relationship.Deleted)
+	require.Equal(t, secondMembershipID, relationship.WorkosMembershipID.String)
+	require.Equal(t, "event_01HZREJOIN3", relationship.WorkosLastEventID.String)
+}
+
 func TestProcessWorkOSOrganizationEvents_MembershipUnknownOrganizationSkips(t *testing.T) {
 	t.Parallel()
 
