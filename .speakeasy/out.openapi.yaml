@@ -11472,6 +11472,326 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdateMcpServer
+  /rpc/organizations.createPortalSession:
+    post:
+      description: Create a webhook portal session.
+      operationId: createPortalSession
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatePortalSessionResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: createPortalSession organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: createPortalSession
+      x-speakeasy-react-hook:
+        name: CreatePortalSession
+  /rpc/organizations.disableWebhooks:
+    post:
+      description: Disable  webhooks for the active organization.
+      operationId: disableWebhooks
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: disableWebhooks organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: disableWebhooks
+      x-speakeasy-react-hook:
+        name: DisableWebhooks
+  /rpc/organizations.enableWebhooks:
+    post:
+      description: Enable  webhooks for the active organization.
+      operationId: enableWebhooks
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: enableWebhooks organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: enableWebhooks
+      x-speakeasy-react-hook:
+        name: EnableWebhooks
+  /rpc/organizations.get:
+    get:
+      description: Get the active organization from the session.
+      operationId: getOrganization
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: get organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: Organization
   /rpc/organizations.getInviteByToken:
     get:
       description: Resolve a WorkOS invitation from its token (e.g. accept-flow).
@@ -14161,7 +14481,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GramProductFeatures'
+                $ref: '#/components/schemas/GetProductFeaturesResponseBody'
           description: OK response.
         "400":
           content:
@@ -14224,6 +14544,8 @@ paths:
       tags:
         - features
       x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: ProductFeatures
   /rpc/productFeatures.set:
     post:
       description: Enable or disable an organization feature flag.
@@ -25651,6 +25973,18 @@ components:
           description: Optional URL-safe identifier. Auto-generated from name if omitted.
       required:
         - name
+    CreatePortalSessionResult:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Front-end token for the webhook portal session.
+        url:
+          type: string
+          description: URL for the webhook portal session.
+      required:
+        - url
+        - token
     CreateProjectForm:
       type: object
       properties:
@@ -27661,6 +27995,30 @@ components:
         - top_tools_by_count
         - top_tools_by_failure_rate
         - interval_seconds
+    GetProductFeaturesResponseBody:
+      type: object
+      properties:
+        authz_challenge_logging_enabled:
+          type: boolean
+          description: Whether authz challenge logging to ClickHouse is enabled
+        logs_enabled:
+          type: boolean
+          description: Whether logging is enabled
+        session_capture_enabled:
+          type: boolean
+          description: Whether Claude Code session capture is enabled
+        tool_io_logs_enabled:
+          type: boolean
+          description: Whether tool I/O logging is enabled
+        webhooks:
+          type: boolean
+          description: Whether webhooks are enabled
+      required:
+        - logs_enabled
+        - tool_io_logs_enabled
+        - session_capture_enabled
+        - authz_challenge_logging_enabled
+        - webhooks
     GetProjectForm:
       type: object
       properties:
@@ -27790,27 +28148,6 @@ components:
       description: Result of user metrics summary query
       required:
         - metrics
-    GramProductFeatures:
-      type: object
-      properties:
-        authz_challenge_logging_enabled:
-          type: boolean
-          description: Whether authz challenge logging to ClickHouse is enabled
-        logs_enabled:
-          type: boolean
-          description: Whether logging is enabled
-        session_capture_enabled:
-          type: boolean
-          description: Whether Claude Code session capture is enabled
-        tool_io_logs_enabled:
-          type: boolean
-          description: Whether tool I/O logging is enabled
-      description: Current state of product feature flags
-      required:
-        - logs_enabled
-        - tool_io_logs_enabled
-        - session_capture_enabled
-        - authz_challenge_logging_enabled
     HTTPToolDefinition:
       type: object
       properties:
@@ -29947,6 +30284,46 @@ components:
         - asset_id
         - name
         - slug
+    Organization:
+      type: object
+      properties:
+        account_type:
+          type: string
+          description: The account type of the organization
+        created_at:
+          type: string
+          description: The creation date of the organization.
+          format: date-time
+        id:
+          type: string
+          description: The ID of the organization
+        name:
+          type: string
+          description: The name of the organization
+        slug:
+          type: string
+          description: A short url-friendly label that uniquely identifies a resource.
+          pattern: ^[a-z0-9_-]{1,128}$
+          maxLength: 40
+        updated_at:
+          type: string
+          description: The last update date of the organization.
+          format: date-time
+        webhooks_enabled:
+          type: boolean
+          description: Whether webhooks are enabled for the organization
+        webhooks_onboarded:
+          type: boolean
+          description: Whether webhooks support is initialized for the organization
+      required:
+        - id
+        - name
+        - slug
+        - account_type
+        - webhooks_onboarded
+        - webhooks_enabled
+        - created_at
+        - updated_at
     OrganizationEntry:
       type: object
       properties:
