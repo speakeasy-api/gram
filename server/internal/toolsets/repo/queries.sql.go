@@ -992,57 +992,6 @@ func (q *Queries) GetToolsetsByToolURN(ctx context.Context, arg GetToolsetsByToo
 	return items, nil
 }
 
-const listEnabledToolsetsByOrganization = `-- name: ListEnabledToolsetsByOrganization :many
-SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.user_session_issuer_id, t.created_at, t.updated_at, t.deleted_at, t.deleted
-FROM toolsets t
-JOIN projects p ON t.project_id = p.id
-WHERE p.organization_id = $1
-  AND t.mcp_enabled IS TRUE
-  AND t.deleted IS FALSE
-  AND p.deleted IS FALSE
-ORDER BY t.created_at DESC
-`
-
-func (q *Queries) ListEnabledToolsetsByOrganization(ctx context.Context, organizationID string) ([]Toolset, error) {
-	rows, err := q.db.Query(ctx, listEnabledToolsetsByOrganization, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Toolset
-	for rows.Next() {
-		var i Toolset
-		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
-			&i.ProjectID,
-			&i.Name,
-			&i.Slug,
-			&i.Description,
-			&i.DefaultEnvironmentSlug,
-			&i.McpSlug,
-			&i.McpIsPublic,
-			&i.McpEnabled,
-			&i.ToolSelectionMode,
-			&i.CustomDomainID,
-			&i.ExternalOauthServerID,
-			&i.OauthProxyServerID,
-			&i.UserSessionIssuerID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listToolsetsByOrganization = `-- name: ListToolsetsByOrganization :many
 SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.user_session_issuer_id, t.created_at, t.updated_at, t.deleted_at, t.deleted
 FROM toolsets t

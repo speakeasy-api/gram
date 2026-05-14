@@ -94,9 +94,8 @@ INSERT INTO assistant_toolsets (
 -- Flips mcp_enabled to TRUE for the listed toolsets in a project. Every
 -- toolset attached to an assistant must be MCP-reachable for the runtime's
 -- startup config to build; we enable on attach so users don't have to do it
--- separately. Bypasses the unpaid-plan public-server cap on purpose: an
--- assistant-attached toolset has no working alternative. mcp_slug is
--- required for an MCP-reachable toolset, so we skip rows that lack one.
+-- separately. mcp_slug is required for an MCP-reachable toolset, so we skip
+-- rows that lack one.
 UPDATE toolsets
 SET mcp_enabled = TRUE,
     updated_at = clock_timestamp()

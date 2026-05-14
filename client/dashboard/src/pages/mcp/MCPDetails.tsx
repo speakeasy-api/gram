@@ -517,7 +517,6 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
     target: ServerStatus;
     sourceStatus: ServerStatus;
   } | null>(null);
-  const [isMaxServersModalOpen, setIsMaxServersModalOpen] = useState(false);
   const updateToolsetMutation = useUpdateToolsetMutation();
   const telemetry = useTelemetry();
 
@@ -601,18 +600,11 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
           toast.success(label);
         },
         onError: (error) => {
-          if (
-            error instanceof Error &&
-            error.message.includes("maximum number of public MCP servers")
-          ) {
-            setIsMaxServersModalOpen(true);
-          } else {
-            toast.error(
-              error instanceof Error
-                ? error.message
-                : "Failed to update server status",
-            );
-          }
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Failed to update server status",
+          );
         },
       },
     );
@@ -726,16 +718,6 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
         isLoading={updateToolsetMutation.isPending}
         currentlyEnabled={currentStatus !== "disabled"}
         targetIsPublic={pendingStatus === "public"}
-      />
-      <FeatureRequestModal
-        isOpen={isMaxServersModalOpen}
-        onClose={() => setIsMaxServersModalOpen(false)}
-        title="MCP Server Limit Reached"
-        description="You have reached the maximum number of MCP servers for the Base plan. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade."
-        actionType="max_public_mcp_servers"
-        icon={Globe}
-        telemetryData={{ slug: toolset.slug }}
-        accountUpgrade
       />
     </>
   );
