@@ -262,6 +262,12 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrInit, err)
 	}
 
+	if idpUser.OrganizationID != "" {
+		if err := s.identity.SyncMembershipsFromWorkOS(ctx, userID, idpUser.Sub); err != nil {
+			return redirectWithError(authErrInit, err)
+		}
+	}
+
 	userInfo, _, err := s.identity.GetUserInfo(ctx, userID)
 	if err != nil {
 		return redirectWithError(authErrInit, err)
@@ -334,11 +340,8 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 	// Priority 3: org the user selected in the IDP auth flow (WorkOS AuthKit).
 	if !activeOrgSelected && idpUser.OrganizationID != "" {
-		for _, org := range userInfo.Organizations {
-			if org.WorkosID != nil && *org.WorkosID == idpUser.OrganizationID {
-				activeOrgID = org.ID
-				break
-			}
+		if org, ok := activeOrganizationFromWorkOSID(idpUser.OrganizationID, userInfo.Organizations); ok {
+			activeOrgID = org.ID
 		}
 	}
 
@@ -415,6 +418,18 @@ func activeOrganizationFromState(payload *gen.CallbackPayload, organizations []s
 
 	for _, org := range organizations {
 		if org.Slug == orgSlug {
+			return org, true
+		}
+	}
+
+	return empty, false
+}
+
+func activeOrganizationFromWorkOSID(workosOrgID string, organizations []sessions.Organization) (sessions.Organization, bool) {
+	var empty sessions.Organization
+
+	for _, org := range organizations {
+		if org.WorkosID != nil && *org.WorkosID == workosOrgID {
 			return org, true
 		}
 	}

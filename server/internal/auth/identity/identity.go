@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.opentelemetry.io/otel/codes"
@@ -313,6 +312,23 @@ func slugify(name string) string {
 	return s
 }
 
+// SyncMembershipsFromWorkOS refreshes local WorkOS organization memberships
+// and invalidates cached user info so the next read observes the synced rows.
+func (r *Resolver) SyncMembershipsFromWorkOS(ctx context.Context, gramUserID, workosUserID string) error {
+	if r.workosClient == nil || workosUserID == "" {
+		return nil
+	}
+
+	if _, err := r.syncMembershipsFromWorkOS(ctx, gramUserID, workosUserID); err != nil {
+		return err
+	}
+
+	if err := r.InvalidateUserInfoCache(ctx, gramUserID); err != nil {
+		return fmt.Errorf("invalidate user info cache: %w", err)
+	}
+	return nil
+}
+
 func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, workosUserID string) ([]orgRepo.ListOrganizationsForUserRow, error) {
 	members, err := r.workosClient.ListUserMemberships(ctx, workosUserID)
 	if err != nil {
@@ -325,8 +341,7 @@ func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 	for _, m := range members {
 		org, err := r.workosClient.GetOrganization(ctx, m.OrganizationID)
 		if err != nil {
-			r.logger.ErrorContext(ctx, "workos get organization failed", attr.SlogError(err))
-			continue
+			return nil, fmt.Errorf("get workos organization %q: %w", m.OrganizationID, err)
 		}
 
 		gramOrgID := r.resolveGramOrgID(ctx, m.OrganizationID, org.ExternalID)
@@ -343,8 +358,7 @@ func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 			WorkosID:    pgtype.Text{String: m.OrganizationID, Valid: true},
 			Whitelisted: pgtype.Bool{Bool: false, Valid: false},
 		}); err != nil {
-			r.logger.ErrorContext(ctx, "upsert org metadata from workos failed", attr.SlogError(err))
-			continue
+			return nil, fmt.Errorf("upsert org metadata from workos %q: %w", m.OrganizationID, err)
 		}
 
 		if err := r.workosClient.EnsureOrgExternalID(ctx, m.OrganizationID, gramOrgID); err != nil {
@@ -354,16 +368,20 @@ func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 				attr.SlogOrganizationID(gramOrgID),
 			)
 		}
+	}
 
-		if err := r.orgRepo.UpsertOrganizationUserRelationshipFromWorkOS(ctx, orgRepo.UpsertOrganizationUserRelationshipFromWorkOSParams{
-			OrganizationID:     gramOrgID,
-			UserID:             pgtype.Text{String: gramUserID, Valid: gramUserID != ""},
-			WorkosMembershipID: pgtype.Text{String: m.ID, Valid: m.ID != ""},
-			WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-			WorkosLastEventID:  pgtype.Text{String: "", Valid: false},
-		}); err != nil {
-			r.logger.ErrorContext(ctx, "upsert org user relationship from workos failed", attr.SlogError(err))
-		}
+	workosOrgIDs := make([]string, len(members))
+	membershipIDs := make([]string, len(members))
+	for i, m := range members {
+		workosOrgIDs[i] = m.OrganizationID
+		membershipIDs[i] = m.ID
+	}
+	if err := r.orgRepo.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
+		UserID:              pgtype.Text{String: gramUserID, Valid: gramUserID != ""},
+		WorkosOrgIds:        workosOrgIDs,
+		WorkosMembershipIds: membershipIDs,
+	}); err != nil {
+		return nil, fmt.Errorf("set user workos memberships: %w", err)
 	}
 
 	rows, err := r.orgRepo.ListOrganizationsForUser(ctx, conv.ToPGText(gramUserID))

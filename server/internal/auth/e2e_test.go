@@ -381,6 +381,77 @@ func TestE2E_Callback_ExistingUserWithDBOrgs(t *testing.T) {
 	assert.Equal(t, orgEntry.ID, authCtx.ActiveOrganizationID, "should use DB org, not WorkOS ghost org")
 }
 
+func TestE2E_Callback_IDPOrgSelectionSyncsMissingMembershipForExistingUser(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID       = "user_01IDP_EXISTING_SYNC"
+		speakeasyWorkosID  = "org_01EXISTING_SPEAKEASY"
+		walkerWorkosID     = "org_01EXISTING_WALKER"
+		existingLocalOrgID = "existing-speakeasy-org"
+	)
+	gramUserID := users.UserIDFromWorkOSID(workosUserID)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_EXISTING_SPEAKEASY", UserID: workosUserID, OrganizationID: speakeasyWorkosID, Organization: "Speakeasy Team", RoleSlug: "admin"},
+				{ID: "om_EXISTING_WALKER", UserID: workosUserID, OrganizationID: walkerWorkosID, Organization: "Walker Test Org", RoleSlug: "admin"},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			speakeasyWorkosID: {ID: speakeasyWorkosID, Name: "Speakeasy Team"},
+			walkerWorkosID:    {ID: walkerWorkosID, Name: "Walker Test Org"},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:         workosUserID,
+		Email:          "existing-sync@example.com",
+		OrganizationID: walkerWorkosID,
+		Organizations:  []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	_, err := usersRepo.New(inst.conn).UpsertUser(ctx, usersRepo.UpsertUserParams{
+		ID:          gramUserID,
+		Email:       userInfo.Email,
+		DisplayName: userInfo.Email,
+		PhotoUrl:    conv.PtrToPGText(nil),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	inst.setUserWorkosID(ctx, t, gramUserID, workosUserID)
+
+	speakeasyWorkosIDPtr := speakeasyWorkosID
+	require.NoError(t, inst.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:                 existingLocalOrgID,
+		Name:               "Speakeasy Team",
+		Slug:               "speakeasy-team",
+		WorkosID:           &speakeasyWorkosIDPtr,
+		UserWorkspaceSlugs: []string{"speakeasy-team"},
+	}, gramUserID))
+
+	cached, _, err := inst.sessionManager.GetUserInfo(ctx, gramUserID)
+	require.NoError(t, err)
+	require.Len(t, cached.Organizations, 1)
+	require.Equal(t, existingLocalOrgID, cached.Organizations[0].ID)
+
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+	require.NotEmpty(t, result.SessionToken)
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+
+	infoResult, err := inst.service.Info(ctx, &gen.InfoPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, infoResult)
+	assert.Equal(t, orgid.FromWorkOSID(walkerWorkosID), infoResult.ActiveOrganizationID)
+}
+
 // TestE2E_Callback_RejoinedOrg verifies that when a user left an org (soft-deleted
 // relationship) and then rejoined in WorkOS, the fallback clears deleted_at.
 func TestE2E_Callback_RejoinedOrg(t *testing.T) {
