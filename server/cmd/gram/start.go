@@ -397,18 +397,6 @@ func newStartCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:     "workos-client-id",
-			Usage:    "WorkOS application client ID",
-			EnvVars:  []string{"WORKOS_CLIENT_ID"},
-			Required: false,
-		},
-		&cli.StringFlag{
-			Name:     "registry-client-id",
-			Usage:    "Registry (environment-level) WorkOS client ID for SSO code exchange in invite magic-link callback",
-			EnvVars:  []string{"REGISTRY_CLIENT_ID"},
-			Required: false,
-		},
-		&cli.StringFlag{
 			Name:     "workos-endpoint",
 			Usage:    "Base URL for WorkOS API calls. Leave unset for production (defaults to https://api.workos.com); set to the dev-idp's mock-workos mode for fully-local development.",
 			EnvVars:  []string{"WORKOS_API_URL"},

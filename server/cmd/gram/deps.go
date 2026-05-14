@@ -473,10 +473,9 @@ func newBillingProvider(
 // the dev-idp's mock-workos emulator without changing any wiring.
 func workosClientOpts(c *cli.Context) workos.ClientOpts {
 	return workos.ClientOpts{
-		Endpoint:         c.String("workos-endpoint"),
-		HTTPClient:       nil,
-		ClientID:         c.String("workos-client-id"),
-		RegistryClientID: c.String("registry-client-id"),
+		Endpoint:   c.String("workos-endpoint"),
+		HTTPClient: nil,
+		ClientID:   c.String("idp-client-id"),
 	}
 }
 
