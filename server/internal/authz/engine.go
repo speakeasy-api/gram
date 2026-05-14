@@ -278,6 +278,10 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, ErrMissingGrants)
 	}
 
+	return e.requireWithGrants(ctx, grants, checks...)
+}
+
+func (e *Engine) requireWithGrants(ctx context.Context, grants []Grant, checks ...Check) error {
 	matches := make([]grantMatch, 0, len(checks))
 	for _, check := range checks {
 		if err := validateInput(check); err != nil {

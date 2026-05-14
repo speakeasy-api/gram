@@ -74,6 +74,38 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 		"missing x-gram-toolset-id should be denied once auth-context metadata is in play")
 }
 
+func TestMergeClaudeAuthContextMetadata_PreservesAuthUserIDWhenCacheIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	metadata := mergeClaudeAuthContextMetadata(
+		SessionMetadata{
+			SessionID:   "session_test",
+			ServiceName: "",
+			UserEmail:   "",
+			UserID:      "user_from_auth",
+			ClaudeOrgID: "",
+			GramOrgID:   "org_from_auth",
+			ProjectID:   "project_from_auth",
+		},
+		SessionMetadata{
+			SessionID:   "session_test",
+			ServiceName: "claude-code",
+			UserEmail:   "local-hook-testing@example.com",
+			UserID:      "",
+			ClaudeOrgID: "claude_org",
+			GramOrgID:   "org_from_cache",
+			ProjectID:   "project_from_cache",
+		},
+	)
+
+	assert.Equal(t, "user_from_auth", metadata.UserID)
+	assert.Equal(t, "org_from_auth", metadata.GramOrgID)
+	assert.Equal(t, "project_from_auth", metadata.ProjectID)
+	assert.Equal(t, "claude-code", metadata.ServiceName)
+	assert.Equal(t, "local-hook-testing@example.com", metadata.UserEmail)
+	assert.Equal(t, "claude_org", metadata.ClaudeOrgID)
+}
+
 // When plugin auth headers are present but the API key is invalid/expired,
 // Claude() must NOT return a 401 error — that causes the client-side hook
 // script to block ALL tool calls, deadlocking the user. Instead it should
@@ -109,10 +141,10 @@ func TestClaude_ContinuesWhenPluginAuthFails(t *testing.T) {
 	require.Equal(t, "UserPromptSubmit", buffered[0].HookEventName)
 }
 
-// Sanity check the OTEL fallback path: with no auth context and no Redis
-// cached metadata, handlePreToolUse should still gracefully allow the call
-// rather than erroring (the buffered hook will be re-persisted later).
-func TestClaude_PreToolUse_AllowsWhenNoAuthAndNoCachedMetadata(t *testing.T) {
+// When Claude PreToolUse cannot resolve org/project metadata for an MCP call,
+// fail closed. Buffered telemetry can be replayed later, but it cannot undo an
+// already-allowed tool call.
+func TestClaude_PreToolUse_DeniesMCPWhenNoAuthAndNoCachedMetadata(t *testing.T) {
 	t.Parallel()
 	_, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
@@ -135,8 +167,10 @@ func TestClaude_PreToolUse_AllowsWhenNoAuthAndNoCachedMetadata(t *testing.T) {
 	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
 	require.True(t, ok)
 	require.NotNil(t, output.PermissionDecision)
-	assert.Equal(t, "allow", *output.PermissionDecision,
-		"OTEL path with no metadata should default to allow so first call isn't blocked")
+	assert.Equal(t, "deny", *output.PermissionDecision,
+		"MCP tool calls without enforcement metadata must fail closed")
+	require.NotNil(t, output.PermissionDecisionReason)
+	assert.Contains(t, *output.PermissionDecisionReason, "could not verify this MCP tool call")
 }
 
 // Claude Code's hook output schema only permits hookSpecificOutput for
