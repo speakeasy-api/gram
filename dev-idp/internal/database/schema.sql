@@ -56,8 +56,20 @@ CREATE TABLE IF NOT EXISTS current_users (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Short-TTL `/authorize` codes. `client_id` is recorded for inspection only —
--- never validated against any registered list.
+-- Dynamically registered OAuth 2.1 clients. The dev-idp only needs enough
+-- state to reject /authorize redirect_uri values that were not registered.
+CREATE TABLE IF NOT EXISTS oauth_clients (
+  client_id TEXT NOT NULL PRIMARY KEY,
+  mode TEXT NOT NULL,
+  client_secret TEXT NOT NULL,
+  redirect_uris TEXT NOT NULL DEFAULT '[]',
+
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS oauth_clients_mode_idx ON oauth_clients (mode);
+
+-- Short-TTL `/authorize` codes.
 CREATE TABLE IF NOT EXISTS auth_codes (
   code TEXT NOT NULL PRIMARY KEY,
   mode TEXT NOT NULL,

@@ -53,6 +53,14 @@ type Membership struct {
 	UpdatedAt      time.Time
 }
 
+type OauthClient struct {
+	ClientID     string
+	Mode         string
+	ClientSecret string
+	RedirectUris string
+	CreatedAt    time.Time
+}
+
 type Organization struct {
 	ID          uuid.UUID
 	Name        string
