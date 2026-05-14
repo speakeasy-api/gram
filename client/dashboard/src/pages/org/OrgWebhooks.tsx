@@ -13,7 +13,7 @@ import {
 import { Stack, useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Webhook } from "lucide-react";
 import { AppPortal } from "svix-react";
-import React from "react";
+import React, { JSX } from "react";
 
 import "svix-react/style.css";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -22,14 +22,18 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
 export default function OrgWebhooks() {
-  const { data: features } = useProductFeatures();
-  let content = (
-    <RequireScope scope={["org:read"]} level="page">
-      <OrgWebhooksInner />
-    </RequireScope>
-  );
+  const { data: features, isLoading } = useProductFeatures();
 
-  if (features?.webhooks === false) {
+  let content: JSX.Element | null = null;
+  if (isLoading) {
+    content = null;
+  } else if (features?.webhooks) {
+    content = (
+      <RequireScope scope={["org:read"]} level="page">
+        <OrgWebhooksInner />
+      </RequireScope>
+    );
+  } else {
     content = <WebhooksDisabled />;
   }
 
