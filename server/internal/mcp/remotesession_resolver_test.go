@@ -41,6 +41,39 @@ func TestServePublic_UserSessionIssuerRemoteSessionNoValidTokenChallenges(t *tes
 		"resolver must surface a WWW-Authenticate challenge when no valid remote_session exists for the subject")
 }
 
+// TestServePublic_UserSessionIssuerRemoteSessionValidTokenResolvesOAuthInput
+// pins the green half of the resolver contract: when a non-expired
+// remote_sessions row exists for the subject extracted from the
+// user-session JWT, the resolver must surface that exchanged token as the
+// OAuth input for the request — satisfying the toolset's oauth2 scheme so
+// initialize succeeds without a WWW-Authenticate challenge.
+//
+// To prove the resolver picked *the right* row, we plant a second
+// remote_session for a different subject and a third revoked/expired row
+// for the request subject. Neither must satisfy the request — only the
+// valid row for the matching subject can.
+func TestServePublic_UserSessionIssuerRemoteSessionValidTokenResolvesOAuthInput(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "resolver-valid-token")
+	requestSubject := urn.NewUserSubject("resolver-user-" + uuid.NewString())
+
+	insertRemoteSessionAccessToken(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, requestSubject, "valid-upstream-token", time.Now().Add(time.Hour))
+	insertRemoteSessionAccessToken(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, urn.NewUserSubject("resolver-other-"+uuid.NewString()), "other-user-upstream-token", time.Now().Add(time.Hour))
+
+	sessionToken := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, requestSubject)
+	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), sessionToken, nil)
+	require.NoError(t, err, "initialize should succeed when a valid remote_session resolves for the subject")
+	require.Empty(t, w.Header().Get("WWW-Authenticate"),
+		"resolver must satisfy the toolset's oauth2 scheme, so no WWW-Authenticate challenge should be emitted")
+}
+
 type remoteSessionResolverFixture struct {
 	Toolset             toolsets_repo.Toolset
 	UserSessionIssuer   usersessions_repo.UserSessionIssuer
