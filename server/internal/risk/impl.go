@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -58,6 +59,7 @@ type Service struct {
 	completionClient openrouter.CompletionClient
 	shadowMCPClient  *shadowmcp.Client
 	audit            *audit.Logger
+	cache            cache.Cache
 	piClassifier     bool
 }
 
@@ -85,6 +87,7 @@ func NewObserver(
 		completionClient: nil,
 		shadowMCPClient:  nil,
 		audit:            auditLogger,
+		cache:            nil,
 		piClassifier:     false,
 	}
 }
@@ -99,6 +102,7 @@ func NewService(
 	completionClient openrouter.CompletionClient,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
+	redisCache cache.Cache,
 	piClassifier bool,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
@@ -114,6 +118,7 @@ func NewService(
 		completionClient: completionClient,
 		shadowMCPClient:  shadowMCPClient,
 		audit:            auditLogger,
+		cache:            redisCache,
 		piClassifier:     piClassifier,
 	}
 }
@@ -1048,5 +1053,118 @@ func foundRowToResult(
 		Confidence:    conv.FromPGFloat8(confidence),
 		Tags:          tags,
 		CreatedAt:     createdAt.Time.Format(time.RFC3339),
+	}
+}
+
+// ensureApprovalPolicy validates the policy ID for an approval endpoint and
+// confirms the policy belongs to the active project. Returns the parsed
+// UUID on success.
+func (s *Service) ensureApprovalPolicy(ctx context.Context, authCtx *contextvalues.AuthContext, rawPolicyID string) (uuid.UUID, error) {
+	policyID, err := uuid.Parse(rawPolicyID)
+	if err != nil {
+		return uuid.Nil, oops.E(oops.CodeInvalid, err, "invalid policy id")
+	}
+	if _, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+		ID:        policyID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		return uuid.Nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
+	}
+	return policyID, nil
+}
+
+func (s *Service) ListShadowMCPApprovals(ctx context.Context, payload *gen.ListShadowMCPApprovalsPayload) (*gen.ListShadowMCPApprovalsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	policyID, err := s.ensureApprovalPolicy(ctx, authCtx, payload.PolicyID)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := shadowmcp.ListShadowMCPApprovals(ctx, s.cache, authCtx.ProjectID.String(), policyID.String())
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list shadow-mcp approvals").Log(ctx, s.logger)
+	}
+
+	out := make([]*types.ShadowMCPApproval, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, shadowMCPApprovalToType(policyID, r))
+	}
+	return &gen.ListShadowMCPApprovalsResult{Approvals: out}, nil
+}
+
+func (s *Service) ApproveShadowMCP(ctx context.Context, payload *gen.ApproveShadowMCPPayload) (*types.ShadowMCPApproval, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	policyID, err := s.ensureApprovalPolicy(ctx, authCtx, payload.PolicyID)
+	if err != nil {
+		return nil, err
+	}
+
+	canonical := shadowmcp.CanonicalizeApprovalURL(payload.URL)
+	if canonical == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "approval URL is empty")
+	}
+
+	approval := shadowmcp.ShadowMCPApproval{
+		URL:        canonical,
+		ServerName: strings.TrimSpace(conv.PtrValOr(payload.ServerName, "")),
+		ApprovedBy: conv.PtrValOr(authCtx.Email, ""),
+		ApprovedAt: time.Now().UTC(),
+	}
+	if err := shadowmcp.AddShadowMCPApproval(ctx, s.cache, authCtx.ProjectID.String(), policyID.String(), approval); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "store shadow-mcp approval").Log(ctx, s.logger)
+	}
+	return shadowMCPApprovalToType(policyID, approval), nil
+}
+
+func (s *Service) RevokeShadowMCPApproval(ctx context.Context, payload *gen.RevokeShadowMCPApprovalPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return err
+	}
+
+	policyID, err := s.ensureApprovalPolicy(ctx, authCtx, payload.PolicyID)
+	if err != nil {
+		return err
+	}
+
+	if err := shadowmcp.RemoveShadowMCPApproval(ctx, s.cache, authCtx.ProjectID.String(), policyID.String(), payload.URL); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "remove shadow-mcp approval").Log(ctx, s.logger)
+	}
+	return nil
+}
+
+func shadowMCPApprovalToType(policyID uuid.UUID, a shadowmcp.ShadowMCPApproval) *types.ShadowMCPApproval {
+	var serverName, approvedBy *string
+	if a.ServerName != "" {
+		s := a.ServerName
+		serverName = &s
+	}
+	if a.ApprovedBy != "" {
+		s := a.ApprovedBy
+		approvedBy = &s
+	}
+	return &types.ShadowMCPApproval{
+		PolicyID:   policyID.String(),
+		URL:        a.URL,
+		ServerName: serverName,
+		ApprovedBy: approvedBy,
+		ApprovedAt: a.ApprovedAt.UTC().Format(time.RFC3339),
 	}
 }

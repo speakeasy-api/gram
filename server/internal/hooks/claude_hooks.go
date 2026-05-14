@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -21,7 +22,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -612,6 +616,30 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	case !isGramHostedMCPURL(matched.URL):
 		detail = fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverPrefix, matched.URL)
 	}
+	// Allowlist check: if the user has explicitly approved this URL for
+	// this policy, override the would-be deny. Failures from the cache
+	// fall through to the deny path so a flaky Redis can't silently let a
+	// real shadow server through.
+	if detail != "" && matched != nil && matched.URL != "" {
+		approved, approvalErr := shadowmcp.IsShadowMCPURLApproved(ctx, s.cache, metadata.ProjectID, policy.ID, matched.URL)
+		if approvalErr != nil {
+			s.logger.WarnContext(ctx, "shadow-mcp allowlist lookup failed; treating as not approved",
+				attr.SlogEvent("claude_hook_allowlist_lookup_failed"),
+				attr.SlogError(approvalErr),
+			)
+		}
+		if approved {
+			s.logger.InfoContext(ctx, "shadow-mcp call allowed via approved URL",
+				attr.SlogEvent("claude_hook_allowlist_allow"),
+				attr.SlogValueAny(map[string]any{
+					"toolName":   rawToolName,
+					"matchedURL": matched.URL,
+					"policyID":   policy.ID,
+				}),
+			)
+			detail = ""
+		}
+	}
 	if detail != "" {
 		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 		userReason := renderUserBlockReason(policy.UserMessage, auditReason)
@@ -639,6 +667,12 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		// is for the agent-facing response only.
 		s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 
+		// Surface the block in the Recent Findings table (risk_results)
+		// alongside batch-scanner findings, with the URL in the match
+		// column so the dashboard can filter and offer "Exclude from
+		// policy" actions against the URL itself.
+		s.recordShadowMCPBlockFinding(ctx, payload, &metadata, policy, matched, detail)
+
 		// systemMessage renders as a warning in the user's terminal;
 		// permissionDecisionReason is what Claude itself sees and may quote
 		// back to the user, so we send the same self-branded message in both.
@@ -658,6 +692,83 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 
 func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	return makeHookResult(payload.HookEventName), nil
+}
+
+// recordShadowMCPBlockFinding writes a risk_results row so the Recent
+// Findings table reflects live hook-time blocks alongside batch-scanner
+// findings. Best-effort: the block decision has already been made and
+// returned to the user, so failures here just log. The chat_message_id
+// FK requires that recordHook successfully persisted the tool-call
+// message (gated by FeatureSessionCapture) — when it didn't, we skip.
+func (s *Service) recordShadowMCPBlockFinding(
+	ctx context.Context,
+	payload *gen.ClaudePayload,
+	metadata *SessionMetadata,
+	policy *risk.ShadowMCPPolicy,
+	matched *MCPServerEntry,
+	detail string,
+) {
+	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil {
+		return
+	}
+
+	projectID, err := uuid.Parse(metadata.ProjectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "shadow-mcp block: invalid project id",
+			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
+		return
+	}
+	policyID, err := uuid.Parse(policy.ID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "shadow-mcp block: invalid policy id",
+			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
+		return
+	}
+
+	chatID := sessionIDToUUID(*payload.SessionID)
+	msgID, err := s.repo.FindAssistantToolCallMessageID(ctx, repo.FindAssistantToolCallMessageIDParams{
+		ProjectID:  uuid.NullUUID{UUID: projectID, Valid: true},
+		ChatID:     chatID,
+		ToolCallID: *payload.ToolUseID,
+	})
+	if err != nil {
+		// Most common cause: SessionCapture feature flag is off, so the
+		// tool-call chat_message was never persisted. The ClickHouse path
+		// still records the block; only the Recent Findings surfacing is
+		// skipped.
+		s.logger.DebugContext(ctx, "shadow-mcp block: no chat_message found for tool_use_id; skipping risk_result write",
+			attr.SlogEvent("claude_hook_block_finding_no_message"),
+			attr.SlogError(err),
+		)
+		return
+	}
+
+	matchURL := ""
+	if matched != nil {
+		matchURL = matched.URL
+	}
+	description := detail
+	if matched != nil && matched.Name != "" {
+		description = fmt.Sprintf("%s (server: %s)", detail, matched.Name)
+	}
+
+	insertParams := repo.InsertShadowMCPBlockResultParams{
+		ID:                uuid.New(),
+		ProjectID:         projectID,
+		OrganizationID:    metadata.GramOrgID,
+		RiskPolicyID:      policyID,
+		RiskPolicyVersion: policy.Version,
+		ChatMessageID:     msgID,
+		Description:       pgtype.Text{String: description, Valid: description != ""},
+		Match:             pgtype.Text{String: matchURL, Valid: matchURL != ""},
+		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
+	}
+	if err := s.repo.InsertShadowMCPBlockResult(ctx, insertParams); err != nil {
+		s.logger.WarnContext(ctx, "shadow-mcp block: failed to insert risk_result",
+			attr.SlogEvent("claude_hook_block_finding_insert_failed"),
+			attr.SlogError(err),
+		)
+	}
 }
 
 // writeClaudeBlockToClickHouse writes a companion ClickHouse log entry for a
