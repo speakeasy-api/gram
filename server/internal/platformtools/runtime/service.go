@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	platformcatalog "github.com/speakeasy-api/gram/server/internal/platformtools/catalog"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
@@ -48,6 +49,21 @@ func WithTriggerTools(app *bgtriggers.App) Option {
 func WithSlackHTTPClient(client *guardian.HTTPClient) Option {
 	return func(c *config) {
 		c.deps.SlackHTTPClient = client
+	}
+}
+
+// CatalogExternalTools wires the platform_search_catalog and
+// platform_install_catalog_server tools through the supplied catalog
+// adapter. Pass the result through WithExternalTools.
+//
+// We surface these as ExternalTools (rather than rolling them into the
+// default registry struct) so callers can choose to omit them in contexts
+// where the remoteMcp service is not constructed, e.g. the background
+// worker. The runtime catalogs them as platform tools by URN either way.
+func CatalogExternalTools(catalog platformcatalog.Catalog) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformcatalog.NewSearchTool(catalog), RequiredFeature: ""},
+		{Executor: platformcatalog.NewInstallTool(catalog), RequiredFeature: ""},
 	}
 }
 

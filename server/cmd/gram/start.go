@@ -78,6 +78,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/otelforwarding"
 	"github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	platformcatalog "github.com/speakeasy-api/gram/server/internal/platformtools/catalog"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
@@ -750,8 +751,28 @@ func newStartCommand() *cli.Command {
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
+
+			// Hoisted so catalogTools can hand off to GetServerDetails /
+			// CreateServer / link + rollback; the *.Attach calls below
+			// reuse the same instances.
+			externalMcpSvc := externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine)
+			remoteMcpSvc := remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger)
+			mcpServersSvc := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
+			catalogTools := platformtoolsruntime.CatalogExternalTools(
+				&platformcatalog.FuncCatalog{
+					ListCatalogFn:        externalMcpSvc.ListCatalog,
+					GetServerDetailsFn:   externalMcpSvc.GetServerDetails,
+					CreateRemoteServerFn: remoteMcpSvc.CreateServer,
+					DeleteRemoteServerFn: remoteMcpSvc.DeleteServer,
+					CreateMCPServerFn:    mcpServersSvc.CreateMcpServer,
+				},
+			)
+			platformExtras := append([]platformtools.ExternalTool{}, memoryTools...)
+			platformExtras = append(platformExtras, catalogTools...)
+
 			platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
-				AssistantMemoryTools: memoryTools,
+				AssistantMemoryTools:  memoryTools,
+				AssistantCatalogTools: catalogTools,
 			})
 
 			platformSvc := platformtoolsruntime.NewService(
@@ -762,7 +783,7 @@ func newStartCommand() *cli.Command {
 				platformtoolsruntime.WithTriggerTools(triggerApp),
 				platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
 				platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
-				platformtoolsruntime.WithExternalTools(memoryTools),
+				platformtoolsruntime.WithExternalTools(platformExtras),
 			)
 
 			mcpService := mcp.NewService(
@@ -791,7 +812,7 @@ func newStartCommand() *cli.Command {
 				assistantTokenManager,
 				shadowMCPClient,
 				auditLogger,
-				memoryTools,
+				platformExtras,
 				platformFeatureChecker,
 				platformToolsets,
 				identityResolver,
@@ -814,7 +835,6 @@ func newStartCommand() *cli.Command {
 			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
-			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
 			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
 
 			otelForwardClient := otelforwarding.NewClient(logger, db, encryptionClient, cache.NewRedisCacheAdapter(redisClient))
@@ -976,6 +996,7 @@ func newStartCommand() *cli.Command {
 			}
 			plugins.Attach(mux, plugins.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url")))
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine))
+			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			templates.Attach(mux, templates.NewService(logger, tracerProvider, db, sessionManager, toolsetsSvc, authzEngine, auditLogger))
@@ -984,19 +1005,19 @@ func newStartCommand() *cli.Command {
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
-			mcpservers.Attach(mux, mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
+			mcpservers.Attach(mux, mcpServersSvc)
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger))
-			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger))
+			remotemcp.Attach(mux, remoteMcpSvc)
 			xmcp.Attach(mux, xmcp.NewService(logger, tracerProvider, meterProvider, db, encryptionClient, authzEngine, guardianPolicy, posthogClient, billingRepo, billingTracker, mcpService, serverURL), mcpMetadataService)
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
-			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, memoryTools))
+			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, platformExtras))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			oauth.AttachExternalOAuth(mux, externalOAuthService)
 			oauth.Attach(mux, oauthService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine))
 			mcpmetadata.Attach(mux, mcpMetadataService)
-			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine))
+			externalmcp.Attach(mux, externalMcpSvc)
 			collections.Attach(mux, collections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, serverURL))
 			mcp.Attach(mux, mcpService, mcpMetadataService)
 			chat.Attach(mux, chatService)
