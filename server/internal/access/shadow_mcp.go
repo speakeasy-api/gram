@@ -424,6 +424,8 @@ func (s *Service) ListShadowMCPAccessRules(ctx context.Context, payload *gen.Lis
 	}
 
 	disposition := conv.PtrValOr(payload.Disposition, "")
+	accessScope := conv.PtrValOr(payload.AccessScope, "")
+	projectID := conv.PtrValOr(payload.ProjectID, "")
 	limit, err := shadowMCPLimit(payload.Limit)
 	if err != nil {
 		return nil, err
@@ -436,8 +438,8 @@ func (s *Service) ListShadowMCPAccessRules(ctx context.Context, payload *gen.Lis
 	rows, err := queries.ListShadowMCPAccessRules(ctx, repo.ListShadowMCPAccessRulesParams{
 		OrganizationID:  ac.ActiveOrganizationID,
 		Disposition:     disposition,
-		AccessScope:     "",
-		ProjectID:       "",
+		AccessScope:     accessScope,
+		ProjectID:       projectID,
 		CursorCreatedAt: cursorCreatedAt,
 		CursorID:        cursorID,
 		LimitCount:      limit + 1,

@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 12bf3d49e3c9e2d2c4ad3e29f6bc9fe2
+  docChecksum: e027ae3dd00e56f5798e57d345c58420
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -1048,6 +1048,8 @@ trackedFiles:
     last_write_checksum: sha1:cf97151bbe73384a8d79ca55961485537464c54a
   docs/models/errors/serviceerror.md:
     last_write_checksum: sha1:097bb544c117064d446c158dc017cfc4f91ddd00
+  docs/models/operations/accessscope.md:
+    last_write_checksum: sha1:6cf59d10b40c8800d05eb366495d7717a1dbd3b2
   docs/models/operations/addexternaloauthserverrequest.md:
     last_write_checksum: sha1:84e94966265587fd3e16f3193acf55bf51f4d32d
   docs/models/operations/addexternaloauthserversecurity.md:
@@ -2081,7 +2083,7 @@ trackedFiles:
   docs/models/operations/listservernameoverridessecurityoption2.md:
     last_write_checksum: sha1:8d9ecac3bc39f2ddb04e60c77550e8fa0af01e6d
   docs/models/operations/listshadowmcpaccessrulesrequest.md:
-    last_write_checksum: sha1:17d22de72ffde226c9bd37f2be2b9a0731e80fe4
+    last_write_checksum: sha1:d275c1bd2d57c4bcf894912802caacd11c5e9c7f
   docs/models/operations/listshadowmcpaccessrulessecurity.md:
     last_write_checksum: sha1:48da9d709576f5f0b81c94bafb3b07f59e915555
   docs/models/operations/listshadowmcpapprovalrequestsrequest.md:
@@ -2831,7 +2833,7 @@ trackedFiles:
   src/funcs/accessListScopes.ts:
     last_write_checksum: sha1:1ad64e3abc6903cae51f27d132504002ba9c94e9
   src/funcs/accessListShadowMCPAccessRules.ts:
-    last_write_checksum: sha1:3d12516c8fc2031371bdc4aa981af4fb46173975
+    last_write_checksum: sha1:37614861f0720695a443c2581915a319a0ddfdaa
   src/funcs/accessListShadowMCPApprovalRequests.ts:
     last_write_checksum: sha1:f0aa966200f7501d9f23f79e44c009fb82c850d9
   src/funcs/accessResolveChallenge.ts:
@@ -5173,7 +5175,7 @@ trackedFiles:
   src/models/operations/listservernameoverrides.ts:
     last_write_checksum: sha1:944a7a8abb10a2922165d89c2d046cbe8be3a9fb
   src/models/operations/listshadowmcpaccessrules.ts:
-    last_write_checksum: sha1:8499b8e5ec91e953e4d214b0cc8feb46c1d60a5f
+    last_write_checksum: sha1:5bf25b2d8b1dfae834c0e433299b2789adcc4654
   src/models/operations/listshadowmcpapprovalrequests.ts:
     last_write_checksum: sha1:ce9eae7471972309247bb796df3d4b9093208a33
   src/models/operations/listslackapps.ts:
@@ -6315,9 +6317,9 @@ trackedFiles:
     last_write_checksum: sha1:67149aa3981bf96df946e29cecd8a23ec10a7ab4
     pristine_git_object: f81377b2b53c8cd0c4f191e23b41567ee7c7b65e
   src/react-query/shadowMCPAccessRules.core.ts:
-    last_write_checksum: sha1:0775c77af55287eea88b1450731f830943c1b079
+    last_write_checksum: sha1:52c3790132e12976a4703c7a4a46ce682f1a20f0
   src/react-query/shadowMCPAccessRules.ts:
-    last_write_checksum: sha1:80e2edc0ae04440c3f072267d27df4362a7b7fb2
+    last_write_checksum: sha1:024fa9831fe31acb900e7ee96ade365e093bd406
   src/react-query/shadowMCPApprovalRequests.core.ts:
     last_write_checksum: sha1:91e1a4777d7bb05af2ba460fdaf9f5b820e31db8
   src/react-query/shadowMCPApprovalRequests.ts:

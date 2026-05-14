@@ -115,6 +115,8 @@ export function setShadowMCPAccessRulesData(
   queryKeyBase: [
     parameters: {
       disposition?: operations.Disposition | undefined;
+      accessScope?: operations.AccessScope | undefined;
+      projectId?: string | undefined;
       limit?: number | undefined;
       cursor?: string | undefined;
       gramKey?: string | undefined;
@@ -133,6 +135,8 @@ export function invalidateShadowMCPAccessRules(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       disposition?: operations.Disposition | undefined;
+      accessScope?: operations.AccessScope | undefined;
+      projectId?: string | undefined;
       limit?: number | undefined;
       cursor?: string | undefined;
       gramKey?: string | undefined;

@@ -48,6 +48,8 @@ export function buildShadowMCPAccessRulesQuery(
   return {
     queryKey: queryKeyShadowMCPAccessRules({
       disposition: request?.disposition,
+      accessScope: request?.accessScope,
+      projectId: request?.projectId,
       limit: request?.limit,
       cursor: request?.cursor,
       gramKey: request?.gramKey,
@@ -80,6 +82,8 @@ export function buildShadowMCPAccessRulesQuery(
 export function queryKeyShadowMCPAccessRules(
   parameters: {
     disposition?: operations.Disposition | undefined;
+    accessScope?: operations.AccessScope | undefined;
+    projectId?: string | undefined;
     limit?: number | undefined;
     cursor?: string | undefined;
     gramKey?: string | undefined;

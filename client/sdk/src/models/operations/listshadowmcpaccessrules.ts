@@ -17,8 +17,16 @@ export const Disposition = {
 } as const;
 export type Disposition = ClosedEnum<typeof Disposition>;
 
+export const AccessScope = {
+  Organization: "organization",
+  Project: "project",
+} as const;
+export type AccessScope = ClosedEnum<typeof AccessScope>;
+
 export type ListShadowMCPAccessRulesRequest = {
   disposition?: Disposition | undefined;
+  accessScope?: AccessScope | undefined;
+  projectId?: string | undefined;
   limit?: number | undefined;
   /**
    * Cursor for the next page of results.
@@ -72,8 +80,14 @@ export const Disposition$outboundSchema: z.ZodMiniEnum<typeof Disposition> = z
   .enum(Disposition);
 
 /** @internal */
+export const AccessScope$outboundSchema: z.ZodMiniEnum<typeof AccessScope> = z
+  .enum(AccessScope);
+
+/** @internal */
 export type ListShadowMCPAccessRulesRequest$Outbound = {
   disposition?: string | undefined;
+  access_scope?: string | undefined;
+  project_id?: string | undefined;
   limit: number;
   cursor?: string | undefined;
   "Gram-Key"?: string | undefined;
@@ -87,6 +101,8 @@ export const ListShadowMCPAccessRulesRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     disposition: z.optional(Disposition$outboundSchema),
+    accessScope: z.optional(AccessScope$outboundSchema),
+    projectId: z.optional(z.string()),
     limit: z._default(z.int(), 50),
     cursor: z.optional(z.string()),
     gramKey: z.optional(z.string()),
@@ -94,6 +110,8 @@ export const ListShadowMCPAccessRulesRequest$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      accessScope: "access_scope",
+      projectId: "project_id",
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
     });

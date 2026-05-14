@@ -382,6 +382,12 @@ var _ = Service("access", func() {
 			Attribute("disposition", String, func() {
 				Enum("allowed", "denied")
 			})
+			Attribute("access_scope", String, func() {
+				Enum("organization", "project")
+			})
+			Attribute("project_id", String, func() {
+				Format(FormatUUID)
+			})
 			Attribute("limit", Int, func() {
 				Default(50)
 				Minimum(1)
@@ -397,6 +403,8 @@ var _ = Service("access", func() {
 		HTTP(func() {
 			GET("/rpc/access.shadowMcp.rules.list")
 			Param("disposition")
+			Param("access_scope")
+			Param("project_id")
 			Param("limit")
 			Param("cursor")
 			security.ByKeyHeader()

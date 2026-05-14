@@ -516,7 +516,7 @@ func BuildDenyShadowMCPApprovalRequestPayload(accessDenyShadowMCPApprovalRequest
 
 // BuildListShadowMCPAccessRulesPayload builds the payload for the access
 // listShadowMCPAccessRules endpoint from CLI flags.
-func BuildListShadowMCPAccessRulesPayload(accessListShadowMCPAccessRulesDisposition string, accessListShadowMCPAccessRulesLimit string, accessListShadowMCPAccessRulesCursor string, accessListShadowMCPAccessRulesApikeyToken string, accessListShadowMCPAccessRulesSessionToken string) (*access.ListShadowMCPAccessRulesPayload, error) {
+func BuildListShadowMCPAccessRulesPayload(accessListShadowMCPAccessRulesDisposition string, accessListShadowMCPAccessRulesAccessScope string, accessListShadowMCPAccessRulesProjectID string, accessListShadowMCPAccessRulesLimit string, accessListShadowMCPAccessRulesCursor string, accessListShadowMCPAccessRulesApikeyToken string, accessListShadowMCPAccessRulesSessionToken string) (*access.ListShadowMCPAccessRulesPayload, error) {
 	var err error
 	var disposition *string
 	{
@@ -525,6 +525,28 @@ func BuildListShadowMCPAccessRulesPayload(accessListShadowMCPAccessRulesDisposit
 			if !(*disposition == "allowed" || *disposition == "denied") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("disposition", *disposition, []any{"allowed", "denied"}))
 			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var accessScope *string
+	{
+		if accessListShadowMCPAccessRulesAccessScope != "" {
+			accessScope = &accessListShadowMCPAccessRulesAccessScope
+			if !(*accessScope == "organization" || *accessScope == "project") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("access_scope", *accessScope, []any{"organization", "project"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var projectID *string
+	{
+		if accessListShadowMCPAccessRulesProjectID != "" {
+			projectID = &accessListShadowMCPAccessRulesProjectID
+			err = goa.MergeErrors(err, goa.ValidateFormat("project_id", *projectID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -570,6 +592,8 @@ func BuildListShadowMCPAccessRulesPayload(accessListShadowMCPAccessRulesDisposit
 	}
 	v := &access.ListShadowMCPAccessRulesPayload{}
 	v.Disposition = disposition
+	v.AccessScope = accessScope
+	v.ProjectID = projectID
 	v.Limit = limit
 	v.Cursor = cursor
 	v.ApikeyToken = apikeyToken

@@ -8784,9 +8784,11 @@ func NewDenyShadowMCPApprovalRequestPayload(body *DenyShadowMCPApprovalRequestRe
 
 // NewListShadowMCPAccessRulesPayload builds a access service
 // listShadowMCPAccessRules endpoint payload.
-func NewListShadowMCPAccessRulesPayload(disposition *string, limit int, cursor *string, apikeyToken *string, sessionToken *string) *access.ListShadowMCPAccessRulesPayload {
+func NewListShadowMCPAccessRulesPayload(disposition *string, accessScope *string, projectID *string, limit int, cursor *string, apikeyToken *string, sessionToken *string) *access.ListShadowMCPAccessRulesPayload {
 	v := &access.ListShadowMCPAccessRulesPayload{}
 	v.Disposition = disposition
+	v.AccessScope = accessScope
+	v.ProjectID = projectID
 	v.Limit = limit
 	v.Cursor = cursor
 	v.ApikeyToken = apikeyToken

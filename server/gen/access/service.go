@@ -463,6 +463,8 @@ type ListScopesResult struct {
 // listShadowMCPAccessRules method.
 type ListShadowMCPAccessRulesPayload struct {
 	Disposition *string
+	AccessScope *string
+	ProjectID   *string
 	Limit       int
 	// Cursor for the next page of results.
 	Cursor       *string

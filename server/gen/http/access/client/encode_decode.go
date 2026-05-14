@@ -3128,6 +3128,12 @@ func EncodeListShadowMCPAccessRulesRequest(encoder func(*http.Request) goahttp.E
 		if p.Disposition != nil {
 			values.Add("disposition", *p.Disposition)
 		}
+		if p.AccessScope != nil {
+			values.Add("access_scope", *p.AccessScope)
+		}
+		if p.ProjectID != nil {
+			values.Add("project_id", *p.ProjectID)
+		}
 		values.Add("limit", fmt.Sprintf("%v", p.Limit))
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)

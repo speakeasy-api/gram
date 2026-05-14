@@ -220,6 +220,8 @@ func ParseEndpoint(
 
 		accessListShadowMCPAccessRulesFlags            = flag.NewFlagSet("list-shadow-mcp-access-rules", flag.ExitOnError)
 		accessListShadowMCPAccessRulesDispositionFlag  = accessListShadowMCPAccessRulesFlags.String("disposition", "", "")
+		accessListShadowMCPAccessRulesAccessScopeFlag  = accessListShadowMCPAccessRulesFlags.String("access-scope", "", "")
+		accessListShadowMCPAccessRulesProjectIDFlag    = accessListShadowMCPAccessRulesFlags.String("project-id", "", "")
 		accessListShadowMCPAccessRulesLimitFlag        = accessListShadowMCPAccessRulesFlags.String("limit", "50", "")
 		accessListShadowMCPAccessRulesCursorFlag       = accessListShadowMCPAccessRulesFlags.String("cursor", "", "")
 		accessListShadowMCPAccessRulesApikeyTokenFlag  = accessListShadowMCPAccessRulesFlags.String("apikey-token", "", "")
@@ -3254,7 +3256,7 @@ func ParseEndpoint(
 				data, err = accessc.BuildDenyShadowMCPApprovalRequestPayload(*accessDenyShadowMCPApprovalRequestBodyFlag, *accessDenyShadowMCPApprovalRequestApikeyTokenFlag, *accessDenyShadowMCPApprovalRequestSessionTokenFlag)
 			case "list-shadow-mcp-access-rules":
 				endpoint = c.ListShadowMCPAccessRules()
-				data, err = accessc.BuildListShadowMCPAccessRulesPayload(*accessListShadowMCPAccessRulesDispositionFlag, *accessListShadowMCPAccessRulesLimitFlag, *accessListShadowMCPAccessRulesCursorFlag, *accessListShadowMCPAccessRulesApikeyTokenFlag, *accessListShadowMCPAccessRulesSessionTokenFlag)
+				data, err = accessc.BuildListShadowMCPAccessRulesPayload(*accessListShadowMCPAccessRulesDispositionFlag, *accessListShadowMCPAccessRulesAccessScopeFlag, *accessListShadowMCPAccessRulesProjectIDFlag, *accessListShadowMCPAccessRulesLimitFlag, *accessListShadowMCPAccessRulesCursorFlag, *accessListShadowMCPAccessRulesApikeyTokenFlag, *accessListShadowMCPAccessRulesSessionTokenFlag)
 			case "create-shadow-mcp-access-rule":
 				endpoint = c.CreateShadowMCPAccessRule()
 				data, err = accessc.BuildCreateShadowMCPAccessRulePayload(*accessCreateShadowMCPAccessRuleBodyFlag, *accessCreateShadowMCPAccessRuleApikeyTokenFlag, *accessCreateShadowMCPAccessRuleSessionTokenFlag)
@@ -4580,6 +4582,8 @@ func accessListShadowMCPAccessRulesUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] access list-shadow-mcp-access-rules", os.Args[0])
 	fmt.Fprint(os.Stderr, " -disposition STRING")
+	fmt.Fprint(os.Stderr, " -access-scope STRING")
+	fmt.Fprint(os.Stderr, " -project-id STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
@@ -4592,6 +4596,8 @@ func accessListShadowMCPAccessRulesUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -disposition STRING: `)
+	fmt.Fprintln(os.Stderr, `    -access-scope STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
@@ -4599,7 +4605,7 @@ func accessListShadowMCPAccessRulesUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-shadow-mcp-access-rules --disposition \"denied\" --limit 2 --cursor \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-shadow-mcp-access-rules --disposition \"denied\" --access-scope \"project\" --project-id \"550e8400-e29b-41d4-a716-446655440000\" --limit 2 --cursor \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessCreateShadowMCPAccessRuleUsage() {

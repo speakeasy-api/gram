@@ -2874,6 +2874,8 @@ func DecodeListShadowMCPAccessRulesRequest(mux goahttp.Muxer, decoder func(*http
 		var payload *access.ListShadowMCPAccessRulesPayload
 		var (
 			disposition  *string
+			accessScope  *string
+			projectID    *string
 			limit        int
 			cursor       *string
 			apikeyToken  *string
@@ -2889,6 +2891,22 @@ func DecodeListShadowMCPAccessRulesRequest(mux goahttp.Muxer, decoder func(*http
 			if !(*disposition == "allowed" || *disposition == "denied") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("disposition", *disposition, []any{"allowed", "denied"}))
 			}
+		}
+		accessScopeRaw := qp.Get("access_scope")
+		if accessScopeRaw != "" {
+			accessScope = &accessScopeRaw
+		}
+		if accessScope != nil {
+			if !(*accessScope == "organization" || *accessScope == "project") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("access_scope", *accessScope, []any{"organization", "project"}))
+			}
+		}
+		projectIDRaw := qp.Get("project_id")
+		if projectIDRaw != "" {
+			projectID = &projectIDRaw
+		}
+		if projectID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("project_id", *projectID, goa.FormatUUID))
 		}
 		{
 			limitRaw := qp.Get("limit")
@@ -2923,7 +2941,7 @@ func DecodeListShadowMCPAccessRulesRequest(mux goahttp.Muxer, decoder func(*http
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListShadowMCPAccessRulesPayload(disposition, limit, cursor, apikeyToken, sessionToken)
+		payload = NewListShadowMCPAccessRulesPayload(disposition, accessScope, projectID, limit, cursor, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

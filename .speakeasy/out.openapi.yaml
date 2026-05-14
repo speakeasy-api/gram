@@ -1905,6 +1905,20 @@ paths:
             type: string
         - allowEmptyValue: true
           in: query
+          name: access_scope
+          schema:
+            enum:
+              - organization
+              - project
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: project_id
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          in: query
           name: limit
           schema:
             default: 50

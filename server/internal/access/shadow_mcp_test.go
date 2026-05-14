@@ -317,6 +317,55 @@ func TestService_ListShadowMCPAccessRules_CursorPagination(t *testing.T) {
 	require.Nil(t, secondPage.NextCursor)
 }
 
+func TestService_ListShadowMCPAccessRules_FiltersByScopeAndProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	project := createShadowMCPProject(t, ctx, ti, authCtx.ActiveOrganizationID)
+	projectID := project.ID.String()
+	ctx = withRBACGrants(t, ctx,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+		authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)},
+	)
+
+	orgRule, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
+		Disposition:  shadowMCPRuleAllowed,
+		AccessScope:  shadowMCPAccessScopeOrganization,
+		MatchBreadth: "url_host",
+		MatchValue:   "org-filter.example.com",
+		DisplayName:  "Org Filter Rule",
+	})
+	require.NoError(t, err)
+
+	projectRule, err := ti.service.CreateShadowMCPAccessRule(ctx, &gen.CreateShadowMCPAccessRulePayload{
+		Disposition:  shadowMCPRuleAllowed,
+		AccessScope:  shadowMCPAccessScopeProject,
+		ProjectID:    &projectID,
+		MatchBreadth: "url_host",
+		MatchValue:   "project-filter.example.com",
+		DisplayName:  "Project Filter Rule",
+	})
+	require.NoError(t, err)
+
+	orgOnly, err := ti.service.ListShadowMCPAccessRules(ctx, &gen.ListShadowMCPAccessRulesPayload{
+		AccessScope: conv.PtrEmpty(shadowMCPAccessScopeOrganization),
+		Limit:       10,
+	})
+	require.NoError(t, err)
+	require.Len(t, orgOnly.Rules, 1)
+	require.Equal(t, orgRule.ID, orgOnly.Rules[0].ID)
+
+	projectOnly, err := ti.service.ListShadowMCPAccessRules(ctx, &gen.ListShadowMCPAccessRulesPayload{
+		AccessScope: conv.PtrEmpty(shadowMCPAccessScopeProject),
+		ProjectID:   &projectID,
+		Limit:       10,
+	})
+	require.NoError(t, err)
+	require.Len(t, projectOnly.Rules, 1)
+	require.Equal(t, projectRule.ID, projectOnly.Rules[0].ID)
+}
+
 func TestService_CreateShadowMCPAccessRule_NormalizesMatchValue(t *testing.T) {
 	t.Parallel()
 
