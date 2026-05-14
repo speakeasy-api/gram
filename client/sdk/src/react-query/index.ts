@@ -217,6 +217,7 @@ export * from "./setPluginAssignments.js";
 export * from "./setProjectLogo.js";
 export * from "./setSourceEnvironmentLink.js";
 export * from "./setToolsetEnvironmentLink.js";
+export * from "./setToolsetUserSessionIssuer.js";
 export * from "./switchScopes.js";
 export * from "./telemetryCaptureEvent.js";
 export * from "./template.js";

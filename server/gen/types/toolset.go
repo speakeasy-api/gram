@@ -64,6 +64,14 @@ type Toolset struct {
 	ExternalOauthServer *ExternalOAuthServer
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServer
+	// The id of the user_session_issuer wired to this toolset, present when the
+	// OAuth-Proxy → user-sessions migration has completed at least the user
+	// session issuer step. Looked up by the project-scoped slug convention
+	// {toolset.slug}-usi.
+	UserSessionIssuerID *string
+	// The slug of the user_session_issuer wired to this toolset; present when
+	// user_session_issuer_id is.
+	UserSessionIssuerSlug *Slug
 	// When the toolset was created.
 	CreatedAt string
 	// When the toolset was last updated.

@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 5b79f292ecaa111e503072bb1973a3b4
+  docChecksum: 7bf13e21ec233ce3a699d2c459e27d5b
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -804,6 +804,8 @@ trackedFiles:
     last_write_checksum: sha1:ca0a42489f870939188a9646b227e8d0039b1453
   docs/models/components/settoolsetenvironmentlinkrequestbody.md:
     last_write_checksum: sha1:f70322cc0be8a3119e961c0a6c46035cbedd81fe
+  docs/models/components/setusersessionissuerrequestbody.md:
+    last_write_checksum: sha1:ceae3021adb182e78c41962bb83962f960c6d351
   docs/models/components/severitytext.md:
     last_write_checksum: sha1:15969d4a62e02ba012c6724258259371a0a81bbb
   docs/models/components/skillbreakdownrow.md:
@@ -853,7 +855,7 @@ trackedFiles:
   docs/models/components/toolmetric.md:
     last_write_checksum: sha1:bcb67ef196ad7c4ef453f5bb187dd420decb9d48
   docs/models/components/toolset.md:
-    last_write_checksum: sha1:5725e86544ddb46c678d5db4d98f8e205ca26c3a
+    last_write_checksum: sha1:0be2ea4a2b1e9ac362da4b595b22977a4755d92b
   docs/models/components/toolsetentry.md:
     last_write_checksum: sha1:5a00688fe13621349ae44f35054e8264d913553a
   docs/models/components/toolsetenvironmentlink.md:
@@ -2368,6 +2370,14 @@ trackedFiles:
     last_write_checksum: sha1:9f00649d1a53b8016b14a532e8c7ad0b3854140a
   docs/models/operations/settoolsetenvironmentlinksecurity.md:
     last_write_checksum: sha1:d429d0f232be88e75a211efc30f71d6ecb42c21c
+  docs/models/operations/settoolsetusersessionissuerrequest.md:
+    last_write_checksum: sha1:27cff0a80623c34e2937e0875c640c11bc72084f
+  docs/models/operations/settoolsetusersessionissuersecurity.md:
+    last_write_checksum: sha1:5242d8497e97357bab2661c36af2f4b79465ec59
+  docs/models/operations/settoolsetusersessionissuersecurityoption1.md:
+    last_write_checksum: sha1:eedcce782a5d1d8224243f1558608b6b498aa490
+  docs/models/operations/settoolsetusersessionissuersecurityoption2.md:
+    last_write_checksum: sha1:1268c85290fd4f2f3a7d2a2035350bca0e824919
   docs/models/operations/sortby.md:
     last_write_checksum: sha1:e634b96c47cd8768b661409c7a207a8766551ef0
   docs/models/operations/sortorder.md:
@@ -2679,7 +2689,7 @@ trackedFiles:
   docs/sdks/tools/README.md:
     last_write_checksum: sha1:73c0e5a99b2d5a2bfa29e1937f9255e5228d1a86
   docs/sdks/toolsets/README.md:
-    last_write_checksum: sha1:dfc7e57a0d89efb2b755730311c8f6e891c89066
+    last_write_checksum: sha1:e275ad4acd5090e39054535a665f4371d13dcfc0
   docs/sdks/triggers/README.md:
     last_write_checksum: sha1:83cba427bf9553fb5cd63ce59def4d855d272e77
   docs/sdks/usage/README.md:
@@ -3352,6 +3362,8 @@ trackedFiles:
     id: 1bcbce53ee72
     last_write_checksum: sha1:1b386f960230fa0ed2052a1cfd5a123cf47b115a
     pristine_git_object: 06b77e7809ffcda3d992fa7bdbb6638ee63615fb
+  src/funcs/toolsetsSetUserSessionIssuer.ts:
+    last_write_checksum: sha1:0ba5d9dd088666ec74b9615212cc170368697bdd
   src/funcs/toolsetsUpdateBySlug.ts:
     id: 11ddf65847cb
     last_write_checksum: sha1:f5744e9ac43cdea5f946443aca2443e441a45437
@@ -3898,7 +3910,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:ea73df793671babb0a613623ba23edd165614511
+    last_write_checksum: sha1:af70874600c4332d43307a7f8c4b2431faa0776d
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -4386,6 +4398,8 @@ trackedFiles:
     id: fdce1112a599
     last_write_checksum: sha1:d263fbc867d12c688e6cf05a8a69083ca43aece1
     pristine_git_object: df1eaccb023d9e93f54b641c8791f902963df99a
+  src/models/components/setusersessionissuerrequestbody.ts:
+    last_write_checksum: sha1:7c356da0075d8d9895abaa7cd04b5d9b2d6d3cb8
   src/models/components/skillbreakdownrow.ts:
     last_write_checksum: sha1:553768c909bc6d4953baff1dfbf71111768c1bb5
   src/models/components/skillsummary.ts:
@@ -4428,7 +4442,7 @@ trackedFiles:
     last_write_checksum: sha1:ca1d07131744d819aab5576b42801d6764c38528
   src/models/components/toolset.ts:
     id: dba8195a7f5f
-    last_write_checksum: sha1:95c6a0b3cc03740e6b3811feeba5a24dfcf379b7
+    last_write_checksum: sha1:8f51442e4372265f4e2d806d8fc6baecd4429e8e
     pristine_git_object: 3b4743bbb66a98251cb9a6b87bef530dc0aabbb5
   src/models/components/toolsetentry.ts:
     id: ee0bfdcf358d
@@ -4946,7 +4960,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:5f1157debaec1bfb6900da52c3faf948dcc0f4d5
+    last_write_checksum: sha1:28a72040a89b14fec7588ff0d05f147e041cae24
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -5224,6 +5238,8 @@ trackedFiles:
     id: 88f194de51ea
     last_write_checksum: sha1:262772bd45b6fdf63eb341b203b344ac67e9fc91
     pristine_git_object: 3a6aab09a2a3a1931f0e408ef9178472683485cb
+  src/models/operations/settoolsetusersessionissuer.ts:
+    last_write_checksum: sha1:7869537b6e7450220ebe4217b2f54558496bb834
   src/models/operations/submitfeedback.ts:
     last_write_checksum: sha1:08946361c95bc56fc01e41751ed6e1cf303e5458
   src/models/operations/switchauthscopes.ts:
@@ -5710,7 +5726,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:4b7829a7949c66280c5aacac7e5ca38a4ab9e2af
+    last_write_checksum: sha1:a77d72ce3edd769c10cf711a77cd3cdd822ecaa8
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -6188,6 +6204,8 @@ trackedFiles:
     id: eb7f2c957212
     last_write_checksum: sha1:67149aa3981bf96df946e29cecd8a23ec10a7ab4
     pristine_git_object: f81377b2b53c8cd0c4f191e23b41567ee7c7b65e
+  src/react-query/setToolsetUserSessionIssuer.ts:
+    last_write_checksum: sha1:6b828ce006ac402dec23c9ff75552a006d4bb226
   src/react-query/switchScopes.ts:
     id: 89899b6a30ab
     last_write_checksum: sha1:dbf86dcacdd6cf6443e195320fd1e00bfb0e2284
@@ -6466,7 +6484,7 @@ trackedFiles:
     pristine_git_object: 4c7e184e2d9dee5ccd82b2ef46f3236d7ec30efb
   src/sdk/toolsets.ts:
     id: 0715c1588060
-    last_write_checksum: sha1:9962151594a11edebf6f2b23c2fbcb70ed8ad93a
+    last_write_checksum: sha1:d9f289d398d07943c3102177270c44fb46478de3
     pristine_git_object: 499da61dc8ecf32ab1637b84167ecef2052c32b2
   src/sdk/triggers.ts:
     last_write_checksum: sha1:e38ef614f5ad5706d131c34193150531a46af67b
@@ -9620,6 +9638,20 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  setToolsetUserSessionIssuer:
+    speakeasy-default-set-toolset-user-session-issuer:
+      parameters:
+        query:
+          slug: "<value>"
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2026-09-08T18:44:39.379Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 16455}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>", "<value 3>"], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [], "toolset_version": 503506, "updated_at": "2024-09-22T05:20:40.508Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:
