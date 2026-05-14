@@ -66,6 +66,9 @@ importers:
       confbox:
         specifier: ^0.2.2
         version: 0.2.2
+      emulate:
+        specifier: ^0.4.1
+        version: 0.4.1(hono@4.11.7)
       get-port-please:
         specifier: ^3.2.0
         version: 3.2.0
@@ -6338,6 +6341,10 @@ packages:
   empathic@2.0.0:
     resolution: {integrity: sha512-i6UzDscO/XfAcNYD75CfICkmfLedpyPDdozrLMmQc5ORaQcdMoc21OnlEylMIqI7U8eniKrPMxxtj8k0vhmJhA==}
     engines: {node: '>=14'}
+
+  emulate@0.4.1:
+    resolution: {integrity: sha512-96CEZB96M7fC5na1lFl9sL7AS5d2lRgJkZVb/e8ufbLMLLxEy2oHhN4E9d7+eJbtABne/CeumSRX2j7A9UDlEQ==}
+    hasBin: true
 
   encodeurl@2.0.0:
     resolution: {integrity: sha512-Q0n9HRi4m6JuGIV1eFlmvJB7ZEVxu93IrMyiMsGC0lrMJMWzRgx6WGquyfQgZVb31vhGgXnfmPNNXmxnOkRBrg==}
@@ -15976,6 +15983,15 @@ snapshots:
   emoji-regex@9.2.2: {}
 
   empathic@2.0.0: {}
+
+  emulate@0.4.1(hono@4.11.7):
+    dependencies:
+      '@hono/node-server': 1.19.9(hono@4.11.7)
+      commander: 14.0.3
+      picocolors: 1.1.1
+      yaml: 2.8.1
+    transitivePeerDependencies:
+      - hono
 
   encodeurl@2.0.0: {}
 

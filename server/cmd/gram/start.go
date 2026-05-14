@@ -350,12 +350,6 @@ func newStartCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringSliceFlag{
-			Name:     "polar-product-ids-topup",
-			Usage:    "Product IDs of one-time credit top-up packs in Polar",
-			EnvVars:  []string{"POLAR_PRODUCT_IDS_TOPUP"},
-			Required: false,
-		},
-		&cli.StringSliceFlag{
 			Name:     "disallowed-cidr-blocks",
 			Usage:    "List of CIDR blocks to block for SSRF protection",
 			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
