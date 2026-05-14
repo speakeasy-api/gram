@@ -1127,40 +1127,39 @@ func (s *ServiceCore) ReapStoppedAssistantRuntimes(ctx context.Context, params R
 	return result, nil
 }
 
-// reapStoppedRuntimeRow claims the row in DB before issuing the destructive
-// backend call so a racing warm-resume admit cannot inherit this row's machine
-// slot mid-reap. MarkAssistantRuntimeMachineReaped's state guard plus the
-// affected-row count gate the Flaps destroy: if the row already transitioned
-// to starting/active between the candidate scan and the update, skip cleanly.
-// Returns true on success (including idempotent no-op when the machine was
-// already gone) and on the race-skip path.
+// reapStoppedRuntimeRow tears down the machine first and only flips the row
+// to `reaped` once the destroy call returns. Inverting the order would orphan
+// the machine if the Fly call hits a transient error: a row marked `reaped`
+// with `machine_id` cleared no longer matches `ListStoppedRuntimesForReap`,
+// so the next sweep cannot retry — and the whole-assistant 7d janitor cannot
+// either, because it inherits the same cleared metadata. The narrow window
+// where a racing warm-resume admit copies this row's `machine_id` before
+// destroy is bounded by `ListStoppedRuntimesForReap`'s per-thread NOT EXISTS
+// guard, which excludes any row whose thread already has a fresher
+// starting/active sibling. Returns true on success (including idempotent
+// no-op when the machine was already gone).
 func (s *ServiceCore) reapStoppedRuntimeRow(ctx context.Context, record assistantRuntimeRecord) bool {
-	affected, err := assistantrepo.New(s.db).MarkAssistantRuntimeMachineReaped(ctx, assistantrepo.MarkAssistantRuntimeMachineReapedParams{
-		ReapedState:  runtimeStateReaped,
-		StoppedState: runtimeStateStopped,
-		FailedState:  runtimeStateFailed,
-		RuntimeID:    record.ID,
-		ProjectID:    record.ProjectID,
-	})
-	if err != nil {
-		s.logger.WarnContext(ctx, "mark assistant runtime machine reaped failed",
-			attr.SlogAssistantID(record.AssistantID.String()),
-			attr.SlogAssistantRuntimeID(record.ID.String()),
-			attr.SlogError(err),
-		)
-		return false
-	}
-	if affected == 0 {
-		// Row raced into starting/active; another path now owns this machine.
-		return true
-	}
-
 	if err := s.runtime.ReapStoppedMachine(ctx, record); err != nil {
 		s.logger.WarnContext(ctx, "reap stopped runtime machine failed",
 			attr.SlogAssistantID(record.AssistantID.String()),
 			attr.SlogAssistantThreadID(record.AssistantThreadID.String()),
 			attr.SlogAssistantRuntimeID(record.ID.String()),
 			attr.SlogAssistantRuntimeBackend(record.Backend),
+			attr.SlogError(err),
+		)
+		return false
+	}
+
+	if _, err := assistantrepo.New(s.db).MarkAssistantRuntimeMachineReaped(ctx, assistantrepo.MarkAssistantRuntimeMachineReapedParams{
+		ReapedState:  runtimeStateReaped,
+		StoppedState: runtimeStateStopped,
+		FailedState:  runtimeStateFailed,
+		RuntimeID:    record.ID,
+		ProjectID:    record.ProjectID,
+	}); err != nil {
+		s.logger.WarnContext(ctx, "mark assistant runtime machine reaped failed",
+			attr.SlogAssistantID(record.AssistantID.String()),
+			attr.SlogAssistantRuntimeID(record.ID.String()),
 			attr.SlogError(err),
 		)
 		return false
