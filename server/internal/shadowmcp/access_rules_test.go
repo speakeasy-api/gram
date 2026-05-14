@@ -1,7 +1,6 @@
 package shadowmcp_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -9,18 +8,16 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
-func TestEvaluateAccessRules_AllowsMatchingRuleWithGrant(t *testing.T) {
+func TestEvaluateAccessRules_AllowsMatchingOrganizationRule(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
 	rule := f.createAccessRule(t, "allowed", "full_url", "https://mcp.example.com/v1")
-	authorizer := accessRuleAuthorizer{allowedRules: map[string]struct{}{rule.ID.String(): {}}}
 
-	decision := f.client.EvaluateAccessRules(t.Context(), authorizer, f.orgID, f.projectID.String(), "user_test", shadowmcp.AccessEvidence{
+	decision := f.client.EvaluateAccessRules(t.Context(), f.orgID, f.projectID.String(), shadowmcp.AccessEvidence{
 		FullURL:        "https://mcp.example.com/v1",
 		URLHost:        "",
 		ServerIdentity: "",
@@ -34,11 +31,10 @@ func TestEvaluateAccessRules_DenyRuleWins(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	allowed := f.createAccessRule(t, "allowed", "url_host", "mcp.example.com")
+	f.createAccessRule(t, "allowed", "url_host", "mcp.example.com")
 	denied := f.createAccessRule(t, "denied", "full_url", "https://mcp.example.com/v1")
-	authorizer := accessRuleAuthorizer{allowedRules: map[string]struct{}{allowed.ID.String(): {}}}
 
-	decision := f.client.EvaluateAccessRules(t.Context(), authorizer, f.orgID, f.projectID.String(), "user_test", shadowmcp.AccessEvidence{
+	decision := f.client.EvaluateAccessRules(t.Context(), f.orgID, f.projectID.String(), shadowmcp.AccessEvidence{
 		FullURL:        "https://mcp.example.com/v1",
 		URLHost:        "",
 		ServerIdentity: "",
@@ -48,37 +44,45 @@ func TestEvaluateAccessRules_DenyRuleWins(t *testing.T) {
 	require.Equal(t, denied.ID.String(), decision.RuleID)
 }
 
-func TestEvaluateAccessRules_MissingGrantBlocksAllowedRule(t *testing.T) {
+func TestEvaluateAccessRules_ProjectRuleOnlyMatchesSameProject(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t)
-	f.createAccessRule(t, "allowed", "server_identity", "github")
-	authorizer := accessRuleAuthorizer{allowedRules: map[string]struct{}{}}
+	otherProjectID := uuid.New()
+	rule := f.createProjectAccessRule(t, f.projectID, "allowed", "server_identity", "github")
 
-	decision := f.client.EvaluateAccessRules(t.Context(), authorizer, f.orgID, f.projectID.String(), "user_test", shadowmcp.AccessEvidence{
+	allowed := f.client.EvaluateAccessRules(t.Context(), f.orgID, f.projectID.String(), shadowmcp.AccessEvidence{
 		FullURL:        "",
 		URLHost:        "",
 		ServerIdentity: "github",
 	})
+	require.Equal(t, shadowmcp.AccessRuleOutcomeAllowed, allowed.Outcome)
+	require.Equal(t, rule.ID.String(), allowed.RuleID)
 
-	require.Equal(t, shadowmcp.AccessRuleOutcomeMissingGrant, decision.Outcome)
-}
-
-type accessRuleAuthorizer struct {
-	allowedRules map[string]struct{}
-}
-
-func (a accessRuleAuthorizer) RequireShadowMCPConnect(_ context.Context, _ string, _ string, ruleID string, _ string) error {
-	if _, ok := a.allowedRules[ruleID]; ok {
-		return nil
-	}
-	return oops.C(oops.CodeForbidden)
+	blocked := f.client.EvaluateAccessRules(t.Context(), f.orgID, otherProjectID.String(), shadowmcp.AccessEvidence{
+		FullURL:        "",
+		URLHost:        "",
+		ServerIdentity: "github",
+	})
+	require.Equal(t, shadowmcp.AccessRuleOutcomeNoMatch, blocked.Outcome)
 }
 
 func (f *fixture) createAccessRule(t *testing.T, disposition string, matchBreadth string, matchValue string) accessrepo.ShadowMcpAccessRule {
 	t.Helper()
+	return f.createAccessRuleWithScope(t, uuid.NullUUID{}, "organization", disposition, matchBreadth, matchValue)
+}
+
+func (f *fixture) createProjectAccessRule(t *testing.T, projectID uuid.UUID, disposition string, matchBreadth string, matchValue string) accessrepo.ShadowMcpAccessRule {
+	t.Helper()
+	return f.createAccessRuleWithScope(t, uuid.NullUUID{UUID: projectID, Valid: true}, "project", disposition, matchBreadth, matchValue)
+}
+
+func (f *fixture) createAccessRuleWithScope(t *testing.T, projectID uuid.NullUUID, accessScope string, disposition string, matchBreadth string, matchValue string) accessrepo.ShadowMcpAccessRule {
+	t.Helper()
 	rule, err := accessrepo.New(f.conn).CreateShadowMCPAccessRule(t.Context(), accessrepo.CreateShadowMCPAccessRuleParams{
 		OrganizationID:         f.orgID,
+		ProjectID:              projectID,
+		AccessScope:            accessScope,
 		Disposition:            disposition,
 		MatchBreadth:           matchBreadth,
 		MatchValue:             matchValue,
