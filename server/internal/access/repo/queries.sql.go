@@ -13,6 +13,163 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const createShadowMCPAccessRule = `-- name: CreateShadowMCPAccessRule :one
+INSERT INTO shadow_mcp_access_rules (
+  organization_id,
+  project_id,
+  access_scope,
+  disposition,
+  match_breadth,
+  match_value,
+  display_name,
+  observed_full_url,
+  observed_url_host,
+  observed_server_identity,
+  source_request_id,
+  created_by,
+  updated_by,
+  reason
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  $7,
+  $8,
+  $9,
+  $10,
+  $11,
+  $12,
+  $13,
+  $14
+)
+RETURNING id, organization_id, project_id, access_scope, disposition, match_breadth, match_value, display_name, observed_full_url, observed_url_host, observed_server_identity, source_request_id, created_by, updated_by, reason, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateShadowMCPAccessRuleParams struct {
+	OrganizationID         string
+	ProjectID              uuid.NullUUID
+	AccessScope            string
+	Disposition            string
+	MatchBreadth           string
+	MatchValue             string
+	DisplayName            string
+	ObservedFullUrl        pgtype.Text
+	ObservedUrlHost        pgtype.Text
+	ObservedServerIdentity pgtype.Text
+	SourceRequestID        uuid.NullUUID
+	CreatedBy              pgtype.Text
+	UpdatedBy              pgtype.Text
+	Reason                 pgtype.Text
+}
+
+func (q *Queries) CreateShadowMCPAccessRule(ctx context.Context, arg CreateShadowMCPAccessRuleParams) (ShadowMcpAccessRule, error) {
+	row := q.db.QueryRow(ctx, createShadowMCPAccessRule,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.AccessScope,
+		arg.Disposition,
+		arg.MatchBreadth,
+		arg.MatchValue,
+		arg.DisplayName,
+		arg.ObservedFullUrl,
+		arg.ObservedUrlHost,
+		arg.ObservedServerIdentity,
+		arg.SourceRequestID,
+		arg.CreatedBy,
+		arg.UpdatedBy,
+		arg.Reason,
+	)
+	var i ShadowMcpAccessRule
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AccessScope,
+		&i.Disposition,
+		&i.MatchBreadth,
+		&i.MatchValue,
+		&i.DisplayName,
+		&i.ObservedFullUrl,
+		&i.ObservedUrlHost,
+		&i.ObservedServerIdentity,
+		&i.SourceRequestID,
+		&i.CreatedBy,
+		&i.UpdatedBy,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const decideShadowMCPApprovalRequest = `-- name: DecideShadowMCPApprovalRequest :one
+UPDATE shadow_mcp_approval_requests
+SET status = $1,
+    decided_at = clock_timestamp(),
+    decided_by = $2,
+    decision_note = $3,
+    updated_at = clock_timestamp()
+WHERE organization_id = $4
+  AND id = $5
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, requester_user_id, requester_email, requester_display_name, status, risk_policy_id, risk_result_id, observed_name, observed_full_url, observed_url_host, observed_server_identity, request_fingerprint, tool_name, tool_call, block_reason, blocked_count, first_blocked_at, last_blocked_at, requested_at, decided_at, decided_by, decision_note, created_at, updated_at, deleted_at, deleted
+`
+
+type DecideShadowMCPApprovalRequestParams struct {
+	Status         string
+	DecidedBy      pgtype.Text
+	DecisionNote   pgtype.Text
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) DecideShadowMCPApprovalRequest(ctx context.Context, arg DecideShadowMCPApprovalRequestParams) (ShadowMcpApprovalRequest, error) {
+	row := q.db.QueryRow(ctx, decideShadowMCPApprovalRequest,
+		arg.Status,
+		arg.DecidedBy,
+		arg.DecisionNote,
+		arg.OrganizationID,
+		arg.ID,
+	)
+	var i ShadowMcpApprovalRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RequesterUserID,
+		&i.RequesterEmail,
+		&i.RequesterDisplayName,
+		&i.Status,
+		&i.RiskPolicyID,
+		&i.RiskResultID,
+		&i.ObservedName,
+		&i.ObservedFullUrl,
+		&i.ObservedUrlHost,
+		&i.ObservedServerIdentity,
+		&i.RequestFingerprint,
+		&i.ToolName,
+		&i.ToolCall,
+		&i.BlockReason,
+		&i.BlockedCount,
+		&i.FirstBlockedAt,
+		&i.LastBlockedAt,
+		&i.RequestedAt,
+		&i.DecidedAt,
+		&i.DecidedBy,
+		&i.DecisionNote,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const deletePrincipalGrant = `-- name: DeletePrincipalGrant :execrows
 DELETE FROM principal_grants
 WHERE id = $1
@@ -52,6 +209,50 @@ func (q *Queries) DeletePrincipalGrantsByPrincipal(ctx context.Context, arg Dele
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const deleteShadowMCPAccessRule = `-- name: DeleteShadowMCPAccessRule :one
+UPDATE shadow_mcp_access_rules
+SET deleted_at = clock_timestamp(),
+    updated_by = $1,
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND id = $3
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, access_scope, disposition, match_breadth, match_value, display_name, observed_full_url, observed_url_host, observed_server_identity, source_request_id, created_by, updated_by, reason, created_at, updated_at, deleted_at, deleted
+`
+
+type DeleteShadowMCPAccessRuleParams struct {
+	UpdatedBy      pgtype.Text
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) DeleteShadowMCPAccessRule(ctx context.Context, arg DeleteShadowMCPAccessRuleParams) (ShadowMcpAccessRule, error) {
+	row := q.db.QueryRow(ctx, deleteShadowMCPAccessRule, arg.UpdatedBy, arg.OrganizationID, arg.ID)
+	var i ShadowMcpAccessRule
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AccessScope,
+		&i.Disposition,
+		&i.MatchBreadth,
+		&i.MatchValue,
+		&i.DisplayName,
+		&i.ObservedFullUrl,
+		&i.ObservedUrlHost,
+		&i.ObservedServerIdentity,
+		&i.SourceRequestID,
+		&i.CreatedBy,
+		&i.UpdatedBy,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const getGlobalRoleBySlug = `-- name: GetGlobalRoleBySlug :one
@@ -153,6 +354,150 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 		return nil, err
 	}
 	return items, nil
+}
+
+const getShadowMCPAccessRule = `-- name: GetShadowMCPAccessRule :one
+SELECT id, organization_id, project_id, access_scope, disposition, match_breadth, match_value, display_name, observed_full_url, observed_url_host, observed_server_identity, source_request_id, created_by, updated_by, reason, created_at, updated_at, deleted_at, deleted
+FROM shadow_mcp_access_rules
+WHERE organization_id = $1
+  AND id = $2
+  AND deleted IS FALSE
+`
+
+type GetShadowMCPAccessRuleParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) GetShadowMCPAccessRule(ctx context.Context, arg GetShadowMCPAccessRuleParams) (ShadowMcpAccessRule, error) {
+	row := q.db.QueryRow(ctx, getShadowMCPAccessRule, arg.OrganizationID, arg.ID)
+	var i ShadowMcpAccessRule
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AccessScope,
+		&i.Disposition,
+		&i.MatchBreadth,
+		&i.MatchValue,
+		&i.DisplayName,
+		&i.ObservedFullUrl,
+		&i.ObservedUrlHost,
+		&i.ObservedServerIdentity,
+		&i.SourceRequestID,
+		&i.CreatedBy,
+		&i.UpdatedBy,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getShadowMCPAccessRuleByMatch = `-- name: GetShadowMCPAccessRuleByMatch :one
+SELECT id, organization_id, project_id, access_scope, disposition, match_breadth, match_value, display_name, observed_full_url, observed_url_host, observed_server_identity, source_request_id, created_by, updated_by, reason, created_at, updated_at, deleted_at, deleted
+FROM shadow_mcp_access_rules
+WHERE organization_id = $1
+  AND access_scope = $2
+  AND (
+    ($2::text = 'organization' AND project_id IS NULL)
+    OR ($2::text = 'project' AND project_id = $3)
+  )
+  AND match_breadth = $4
+  AND match_value = $5
+  AND deleted IS FALSE
+`
+
+type GetShadowMCPAccessRuleByMatchParams struct {
+	OrganizationID string
+	AccessScope    string
+	ProjectID      uuid.NullUUID
+	MatchBreadth   string
+	MatchValue     string
+}
+
+func (q *Queries) GetShadowMCPAccessRuleByMatch(ctx context.Context, arg GetShadowMCPAccessRuleByMatchParams) (ShadowMcpAccessRule, error) {
+	row := q.db.QueryRow(ctx, getShadowMCPAccessRuleByMatch,
+		arg.OrganizationID,
+		arg.AccessScope,
+		arg.ProjectID,
+		arg.MatchBreadth,
+		arg.MatchValue,
+	)
+	var i ShadowMcpAccessRule
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AccessScope,
+		&i.Disposition,
+		&i.MatchBreadth,
+		&i.MatchValue,
+		&i.DisplayName,
+		&i.ObservedFullUrl,
+		&i.ObservedUrlHost,
+		&i.ObservedServerIdentity,
+		&i.SourceRequestID,
+		&i.CreatedBy,
+		&i.UpdatedBy,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getShadowMCPApprovalRequest = `-- name: GetShadowMCPApprovalRequest :one
+SELECT id, organization_id, project_id, requester_user_id, requester_email, requester_display_name, status, risk_policy_id, risk_result_id, observed_name, observed_full_url, observed_url_host, observed_server_identity, request_fingerprint, tool_name, tool_call, block_reason, blocked_count, first_blocked_at, last_blocked_at, requested_at, decided_at, decided_by, decision_note, created_at, updated_at, deleted_at, deleted
+FROM shadow_mcp_approval_requests
+WHERE organization_id = $1
+  AND id = $2
+  AND deleted IS FALSE
+`
+
+type GetShadowMCPApprovalRequestParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) GetShadowMCPApprovalRequest(ctx context.Context, arg GetShadowMCPApprovalRequestParams) (ShadowMcpApprovalRequest, error) {
+	row := q.db.QueryRow(ctx, getShadowMCPApprovalRequest, arg.OrganizationID, arg.ID)
+	var i ShadowMcpApprovalRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RequesterUserID,
+		&i.RequesterEmail,
+		&i.RequesterDisplayName,
+		&i.Status,
+		&i.RiskPolicyID,
+		&i.RiskResultID,
+		&i.ObservedName,
+		&i.ObservedFullUrl,
+		&i.ObservedUrlHost,
+		&i.ObservedServerIdentity,
+		&i.RequestFingerprint,
+		&i.ToolName,
+		&i.ToolCall,
+		&i.BlockReason,
+		&i.BlockedCount,
+		&i.FirstBlockedAt,
+		&i.LastBlockedAt,
+		&i.RequestedAt,
+		&i.DecidedAt,
+		&i.DecidedBy,
+		&i.DecisionNote,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const insertChallengeResolutions = `-- name: InsertChallengeResolutions :many
@@ -311,6 +656,80 @@ func (q *Queries) ListGlobalRoles(ctx context.Context) ([]GlobalRole, error) {
 	return items, nil
 }
 
+const listMatchingShadowMCPAccessRules = `-- name: ListMatchingShadowMCPAccessRules :many
+SELECT id, organization_id, project_id, access_scope, disposition, match_breadth, match_value, display_name, observed_full_url, observed_url_host, observed_server_identity, source_request_id, created_by, updated_by, reason, created_at, updated_at, deleted_at, deleted
+FROM shadow_mcp_access_rules
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND (
+    access_scope = 'organization'
+    OR (access_scope = 'project' AND project_id = $2)
+  )
+  AND (
+    (match_breadth = 'full_url' AND match_value = ANY($3::text[]))
+    OR (match_breadth = 'url_host' AND match_value = ANY($4::text[]))
+    OR (match_breadth = 'server_identity' AND match_value = ANY($5::text[]))
+  )
+ORDER BY
+  CASE WHEN disposition = 'denied' THEN 0 ELSE 1 END,
+  created_at DESC,
+  id DESC
+`
+
+type ListMatchingShadowMCPAccessRulesParams struct {
+	OrganizationID   string
+	ProjectID        uuid.NullUUID
+	FullUrls         []string
+	UrlHosts         []string
+	ServerIdentities []string
+}
+
+func (q *Queries) ListMatchingShadowMCPAccessRules(ctx context.Context, arg ListMatchingShadowMCPAccessRulesParams) ([]ShadowMcpAccessRule, error) {
+	rows, err := q.db.Query(ctx, listMatchingShadowMCPAccessRules,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.FullUrls,
+		arg.UrlHosts,
+		arg.ServerIdentities,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShadowMcpAccessRule
+	for rows.Next() {
+		var i ShadowMcpAccessRule
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.AccessScope,
+			&i.Disposition,
+			&i.MatchBreadth,
+			&i.MatchValue,
+			&i.DisplayName,
+			&i.ObservedFullUrl,
+			&i.ObservedUrlHost,
+			&i.ObservedServerIdentity,
+			&i.SourceRequestID,
+			&i.CreatedBy,
+			&i.UpdatedBy,
+			&i.Reason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrganizationRolesByOrg = `-- name: ListOrganizationRolesByOrg :many
 SELECT id, organization_id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, workos_deleted_at, workos_deleted, workos_last_event_id, created_at, updated_at, deleted_at, deleted
 FROM organization_roles
@@ -411,6 +830,162 @@ func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipa
 	return items, nil
 }
 
+const listShadowMCPAccessRules = `-- name: ListShadowMCPAccessRules :many
+SELECT id, organization_id, project_id, access_scope, disposition, match_breadth, match_value, display_name, observed_full_url, observed_url_host, observed_server_identity, source_request_id, created_by, updated_by, reason, created_at, updated_at, deleted_at, deleted
+FROM shadow_mcp_access_rules
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND ($2::text = '' OR disposition = $2)
+  AND ($3::text = '' OR access_scope = $3)
+  AND ($4::text = '' OR project_id::text = $4)
+  AND (
+    $5::timestamptz IS NULL
+    OR (created_at, id) < ($5::timestamptz, $6::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $7
+`
+
+type ListShadowMCPAccessRulesParams struct {
+	OrganizationID  string
+	Disposition     string
+	AccessScope     string
+	ProjectID       string
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        uuid.NullUUID
+	LimitCount      int32
+}
+
+func (q *Queries) ListShadowMCPAccessRules(ctx context.Context, arg ListShadowMCPAccessRulesParams) ([]ShadowMcpAccessRule, error) {
+	rows, err := q.db.Query(ctx, listShadowMCPAccessRules,
+		arg.OrganizationID,
+		arg.Disposition,
+		arg.AccessScope,
+		arg.ProjectID,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShadowMcpAccessRule
+	for rows.Next() {
+		var i ShadowMcpAccessRule
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.AccessScope,
+			&i.Disposition,
+			&i.MatchBreadth,
+			&i.MatchValue,
+			&i.DisplayName,
+			&i.ObservedFullUrl,
+			&i.ObservedUrlHost,
+			&i.ObservedServerIdentity,
+			&i.SourceRequestID,
+			&i.CreatedBy,
+			&i.UpdatedBy,
+			&i.Reason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listShadowMCPApprovalRequests = `-- name: ListShadowMCPApprovalRequests :many
+
+SELECT id, organization_id, project_id, requester_user_id, requester_email, requester_display_name, status, risk_policy_id, risk_result_id, observed_name, observed_full_url, observed_url_host, observed_server_identity, request_fingerprint, tool_name, tool_call, block_reason, blocked_count, first_blocked_at, last_blocked_at, requested_at, decided_at, decided_by, decision_note, created_at, updated_at, deleted_at, deleted
+FROM shadow_mcp_approval_requests
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND ($2::text = '' OR status = $2)
+  AND ($3::text = '' OR project_id::text = $3)
+  AND (
+    $4::timestamptz IS NULL
+    OR (requested_at, id) < ($4::timestamptz, $5::uuid)
+  )
+ORDER BY requested_at DESC, id DESC
+LIMIT $6
+`
+
+type ListShadowMCPApprovalRequestsParams struct {
+	OrganizationID    string
+	Status            string
+	ProjectID         string
+	CursorRequestedAt pgtype.Timestamptz
+	CursorID          uuid.NullUUID
+	LimitCount        int32
+}
+
+// Queries for Shadow MCP approval requests and managed access rules.
+func (q *Queries) ListShadowMCPApprovalRequests(ctx context.Context, arg ListShadowMCPApprovalRequestsParams) ([]ShadowMcpApprovalRequest, error) {
+	rows, err := q.db.Query(ctx, listShadowMCPApprovalRequests,
+		arg.OrganizationID,
+		arg.Status,
+		arg.ProjectID,
+		arg.CursorRequestedAt,
+		arg.CursorID,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShadowMcpApprovalRequest
+	for rows.Next() {
+		var i ShadowMcpApprovalRequest
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.RequesterUserID,
+			&i.RequesterEmail,
+			&i.RequesterDisplayName,
+			&i.Status,
+			&i.RiskPolicyID,
+			&i.RiskResultID,
+			&i.ObservedName,
+			&i.ObservedFullUrl,
+			&i.ObservedUrlHost,
+			&i.ObservedServerIdentity,
+			&i.RequestFingerprint,
+			&i.ToolName,
+			&i.ToolCall,
+			&i.BlockReason,
+			&i.BlockedCount,
+			&i.FirstBlockedAt,
+			&i.LastBlockedAt,
+			&i.RequestedAt,
+			&i.DecidedAt,
+			&i.DecidedBy,
+			&i.DecisionNote,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markGlobalRoleDeleted = `-- name: MarkGlobalRoleDeleted :execrows
 UPDATE global_roles
 SET workos_deleted_at = $1,
@@ -464,6 +1039,83 @@ func (q *Queries) MarkOrganizationRoleDeleted(ctx context.Context, arg MarkOrgan
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const updateShadowMCPAccessRule = `-- name: UpdateShadowMCPAccessRule :one
+UPDATE shadow_mcp_access_rules
+SET disposition = $1,
+    project_id = $2,
+    access_scope = $3,
+    match_breadth = $4,
+    match_value = $5,
+    display_name = $6,
+    observed_full_url = $7,
+    observed_url_host = $8,
+    observed_server_identity = $9,
+    updated_by = $10,
+    reason = $11,
+    updated_at = clock_timestamp()
+WHERE organization_id = $12
+  AND id = $13
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, access_scope, disposition, match_breadth, match_value, display_name, observed_full_url, observed_url_host, observed_server_identity, source_request_id, created_by, updated_by, reason, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateShadowMCPAccessRuleParams struct {
+	Disposition            string
+	ProjectID              uuid.NullUUID
+	AccessScope            string
+	MatchBreadth           string
+	MatchValue             string
+	DisplayName            string
+	ObservedFullUrl        pgtype.Text
+	ObservedUrlHost        pgtype.Text
+	ObservedServerIdentity pgtype.Text
+	UpdatedBy              pgtype.Text
+	Reason                 pgtype.Text
+	OrganizationID         string
+	ID                     uuid.UUID
+}
+
+func (q *Queries) UpdateShadowMCPAccessRule(ctx context.Context, arg UpdateShadowMCPAccessRuleParams) (ShadowMcpAccessRule, error) {
+	row := q.db.QueryRow(ctx, updateShadowMCPAccessRule,
+		arg.Disposition,
+		arg.ProjectID,
+		arg.AccessScope,
+		arg.MatchBreadth,
+		arg.MatchValue,
+		arg.DisplayName,
+		arg.ObservedFullUrl,
+		arg.ObservedUrlHost,
+		arg.ObservedServerIdentity,
+		arg.UpdatedBy,
+		arg.Reason,
+		arg.OrganizationID,
+		arg.ID,
+	)
+	var i ShadowMcpAccessRule
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AccessScope,
+		&i.Disposition,
+		&i.MatchBreadth,
+		&i.MatchValue,
+		&i.DisplayName,
+		&i.ObservedFullUrl,
+		&i.ObservedUrlHost,
+		&i.ObservedServerIdentity,
+		&i.SourceRequestID,
+		&i.CreatedBy,
+		&i.UpdatedBy,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const upsertGlobalRole = `-- name: UpsertGlobalRole :exec
@@ -615,6 +1267,136 @@ func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalG
 		&i.Selectors,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertShadowMCPApprovalRequest = `-- name: UpsertShadowMCPApprovalRequest :one
+INSERT INTO shadow_mcp_approval_requests (
+  organization_id,
+  project_id,
+  requester_user_id,
+  requester_email,
+  requester_display_name,
+  status,
+  risk_policy_id,
+  risk_result_id,
+  observed_name,
+  observed_full_url,
+  observed_url_host,
+  observed_server_identity,
+  request_fingerprint,
+  tool_name,
+  tool_call,
+  block_reason,
+  first_blocked_at,
+  last_blocked_at
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  'requested',
+  $6,
+  $7,
+  $8,
+  $9,
+  $10,
+  $11,
+  $12,
+  $13,
+  $14,
+  $15,
+  clock_timestamp(),
+  clock_timestamp()
+)
+ON CONFLICT (organization_id, project_id, requester_user_id, request_fingerprint)
+WHERE deleted IS FALSE AND status = 'requested' AND requester_user_id IS NOT NULL AND request_fingerprint IS NOT NULL
+DO UPDATE SET
+  requester_email = EXCLUDED.requester_email,
+  requester_display_name = EXCLUDED.requester_display_name,
+  risk_policy_id = COALESCE(EXCLUDED.risk_policy_id, shadow_mcp_approval_requests.risk_policy_id),
+  risk_result_id = COALESCE(EXCLUDED.risk_result_id, shadow_mcp_approval_requests.risk_result_id),
+  observed_name = COALESCE(EXCLUDED.observed_name, shadow_mcp_approval_requests.observed_name),
+  observed_full_url = COALESCE(EXCLUDED.observed_full_url, shadow_mcp_approval_requests.observed_full_url),
+  observed_url_host = COALESCE(EXCLUDED.observed_url_host, shadow_mcp_approval_requests.observed_url_host),
+  observed_server_identity = COALESCE(EXCLUDED.observed_server_identity, shadow_mcp_approval_requests.observed_server_identity),
+  tool_name = COALESCE(EXCLUDED.tool_name, shadow_mcp_approval_requests.tool_name),
+  tool_call = COALESCE(EXCLUDED.tool_call, shadow_mcp_approval_requests.tool_call),
+  block_reason = COALESCE(EXCLUDED.block_reason, shadow_mcp_approval_requests.block_reason),
+  blocked_count = shadow_mcp_approval_requests.blocked_count + 1,
+  last_blocked_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+RETURNING id, organization_id, project_id, requester_user_id, requester_email, requester_display_name, status, risk_policy_id, risk_result_id, observed_name, observed_full_url, observed_url_host, observed_server_identity, request_fingerprint, tool_name, tool_call, block_reason, blocked_count, first_blocked_at, last_blocked_at, requested_at, decided_at, decided_by, decision_note, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertShadowMCPApprovalRequestParams struct {
+	OrganizationID         string
+	ProjectID              uuid.UUID
+	RequesterUserID        pgtype.Text
+	RequesterEmail         pgtype.Text
+	RequesterDisplayName   pgtype.Text
+	RiskPolicyID           uuid.NullUUID
+	RiskResultID           uuid.NullUUID
+	ObservedName           pgtype.Text
+	ObservedFullUrl        pgtype.Text
+	ObservedUrlHost        pgtype.Text
+	ObservedServerIdentity pgtype.Text
+	RequestFingerprint     pgtype.Text
+	ToolName               pgtype.Text
+	ToolCall               pgtype.Text
+	BlockReason            pgtype.Text
+}
+
+func (q *Queries) UpsertShadowMCPApprovalRequest(ctx context.Context, arg UpsertShadowMCPApprovalRequestParams) (ShadowMcpApprovalRequest, error) {
+	row := q.db.QueryRow(ctx, upsertShadowMCPApprovalRequest,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.RequesterUserID,
+		arg.RequesterEmail,
+		arg.RequesterDisplayName,
+		arg.RiskPolicyID,
+		arg.RiskResultID,
+		arg.ObservedName,
+		arg.ObservedFullUrl,
+		arg.ObservedUrlHost,
+		arg.ObservedServerIdentity,
+		arg.RequestFingerprint,
+		arg.ToolName,
+		arg.ToolCall,
+		arg.BlockReason,
+	)
+	var i ShadowMcpApprovalRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RequesterUserID,
+		&i.RequesterEmail,
+		&i.RequesterDisplayName,
+		&i.Status,
+		&i.RiskPolicyID,
+		&i.RiskResultID,
+		&i.ObservedName,
+		&i.ObservedFullUrl,
+		&i.ObservedUrlHost,
+		&i.ObservedServerIdentity,
+		&i.RequestFingerprint,
+		&i.ToolName,
+		&i.ToolCall,
+		&i.BlockReason,
+		&i.BlockedCount,
+		&i.FirstBlockedAt,
+		&i.LastBlockedAt,
+		&i.RequestedAt,
+		&i.DecidedAt,
+		&i.DecidedBy,
+		&i.DecisionNote,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }

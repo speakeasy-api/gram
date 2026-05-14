@@ -52,6 +52,46 @@ func UpdateMemberRoleAccessPath() string {
 	return "/rpc/access.updateMemberRole"
 }
 
+// ListShadowMCPApprovalRequestsAccessPath returns the URL path to the access service listShadowMCPApprovalRequests HTTP endpoint.
+func ListShadowMCPApprovalRequestsAccessPath() string {
+	return "/rpc/access.shadowMcp.requests.list"
+}
+
+// CreateShadowMCPApprovalRequestAccessPath returns the URL path to the access service createShadowMCPApprovalRequest HTTP endpoint.
+func CreateShadowMCPApprovalRequestAccessPath() string {
+	return "/rpc/access.shadowMcp.requests.create"
+}
+
+// ApproveShadowMCPApprovalRequestAccessPath returns the URL path to the access service approveShadowMCPApprovalRequest HTTP endpoint.
+func ApproveShadowMCPApprovalRequestAccessPath() string {
+	return "/rpc/access.shadowMcp.requests.approve"
+}
+
+// DenyShadowMCPApprovalRequestAccessPath returns the URL path to the access service denyShadowMCPApprovalRequest HTTP endpoint.
+func DenyShadowMCPApprovalRequestAccessPath() string {
+	return "/rpc/access.shadowMcp.requests.deny"
+}
+
+// ListShadowMCPAccessRulesAccessPath returns the URL path to the access service listShadowMCPAccessRules HTTP endpoint.
+func ListShadowMCPAccessRulesAccessPath() string {
+	return "/rpc/access.shadowMcp.rules.list"
+}
+
+// CreateShadowMCPAccessRuleAccessPath returns the URL path to the access service createShadowMCPAccessRule HTTP endpoint.
+func CreateShadowMCPAccessRuleAccessPath() string {
+	return "/rpc/access.shadowMcp.rules.create"
+}
+
+// UpdateShadowMCPAccessRuleAccessPath returns the URL path to the access service updateShadowMCPAccessRule HTTP endpoint.
+func UpdateShadowMCPAccessRuleAccessPath() string {
+	return "/rpc/access.shadowMcp.rules.update"
+}
+
+// DeleteShadowMCPAccessRuleAccessPath returns the URL path to the access service deleteShadowMCPAccessRule HTTP endpoint.
+func DeleteShadowMCPAccessRuleAccessPath() string {
+	return "/rpc/access.shadowMcp.rules.delete"
+}
+
 // GetRBACStatusAccessPath returns the URL path to the access service getRBACStatus HTTP endpoint.
 func GetRBACStatusAccessPath() string {
 	return "/rpc/access.getRBACStatus"

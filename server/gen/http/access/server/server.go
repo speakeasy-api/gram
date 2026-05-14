@@ -18,22 +18,30 @@ import (
 
 // Server lists the access service endpoint HTTP handlers.
 type Server struct {
-	Mounts               []*MountPoint
-	ListRoles            http.Handler
-	GetRole              http.Handler
-	CreateRole           http.Handler
-	UpdateRole           http.Handler
-	DeleteRole           http.Handler
-	ListScopes           http.Handler
-	ListMembers          http.Handler
-	ListGrants           http.Handler
-	UpdateMemberRole     http.Handler
-	GetRBACStatus        http.Handler
-	EnableRBAC           http.Handler
-	DisableRBAC          http.Handler
-	ListChallenges       http.Handler
-	ListChallengeBuckets http.Handler
-	ResolveChallenge     http.Handler
+	Mounts                          []*MountPoint
+	ListRoles                       http.Handler
+	GetRole                         http.Handler
+	CreateRole                      http.Handler
+	UpdateRole                      http.Handler
+	DeleteRole                      http.Handler
+	ListScopes                      http.Handler
+	ListMembers                     http.Handler
+	ListGrants                      http.Handler
+	UpdateMemberRole                http.Handler
+	ListShadowMCPApprovalRequests   http.Handler
+	CreateShadowMCPApprovalRequest  http.Handler
+	ApproveShadowMCPApprovalRequest http.Handler
+	DenyShadowMCPApprovalRequest    http.Handler
+	ListShadowMCPAccessRules        http.Handler
+	CreateShadowMCPAccessRule       http.Handler
+	UpdateShadowMCPAccessRule       http.Handler
+	DeleteShadowMCPAccessRule       http.Handler
+	GetRBACStatus                   http.Handler
+	EnableRBAC                      http.Handler
+	DisableRBAC                     http.Handler
+	ListChallenges                  http.Handler
+	ListChallengeBuckets            http.Handler
+	ResolveChallenge                http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -72,6 +80,14 @@ func New(
 			{"ListMembers", "GET", "/rpc/access.listMembers"},
 			{"ListGrants", "GET", "/rpc/access.listGrants"},
 			{"UpdateMemberRole", "PUT", "/rpc/access.updateMemberRole"},
+			{"ListShadowMCPApprovalRequests", "GET", "/rpc/access.shadowMcp.requests.list"},
+			{"CreateShadowMCPApprovalRequest", "POST", "/rpc/access.shadowMcp.requests.create"},
+			{"ApproveShadowMCPApprovalRequest", "POST", "/rpc/access.shadowMcp.requests.approve"},
+			{"DenyShadowMCPApprovalRequest", "POST", "/rpc/access.shadowMcp.requests.deny"},
+			{"ListShadowMCPAccessRules", "GET", "/rpc/access.shadowMcp.rules.list"},
+			{"CreateShadowMCPAccessRule", "POST", "/rpc/access.shadowMcp.rules.create"},
+			{"UpdateShadowMCPAccessRule", "PUT", "/rpc/access.shadowMcp.rules.update"},
+			{"DeleteShadowMCPAccessRule", "DELETE", "/rpc/access.shadowMcp.rules.delete"},
 			{"GetRBACStatus", "GET", "/rpc/access.getRBACStatus"},
 			{"EnableRBAC", "POST", "/rpc/access.enableRBAC"},
 			{"DisableRBAC", "POST", "/rpc/access.disableRBAC"},
@@ -79,21 +95,29 @@ func New(
 			{"ListChallengeBuckets", "GET", "/rpc/access.listChallengeBuckets"},
 			{"ResolveChallenge", "POST", "/rpc/access.resolveChallenge"},
 		},
-		ListRoles:            NewListRolesHandler(e.ListRoles, mux, decoder, encoder, errhandler, formatter),
-		GetRole:              NewGetRoleHandler(e.GetRole, mux, decoder, encoder, errhandler, formatter),
-		CreateRole:           NewCreateRoleHandler(e.CreateRole, mux, decoder, encoder, errhandler, formatter),
-		UpdateRole:           NewUpdateRoleHandler(e.UpdateRole, mux, decoder, encoder, errhandler, formatter),
-		DeleteRole:           NewDeleteRoleHandler(e.DeleteRole, mux, decoder, encoder, errhandler, formatter),
-		ListScopes:           NewListScopesHandler(e.ListScopes, mux, decoder, encoder, errhandler, formatter),
-		ListMembers:          NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
-		ListGrants:           NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
-		UpdateMemberRole:     NewUpdateMemberRoleHandler(e.UpdateMemberRole, mux, decoder, encoder, errhandler, formatter),
-		GetRBACStatus:        NewGetRBACStatusHandler(e.GetRBACStatus, mux, decoder, encoder, errhandler, formatter),
-		EnableRBAC:           NewEnableRBACHandler(e.EnableRBAC, mux, decoder, encoder, errhandler, formatter),
-		DisableRBAC:          NewDisableRBACHandler(e.DisableRBAC, mux, decoder, encoder, errhandler, formatter),
-		ListChallenges:       NewListChallengesHandler(e.ListChallenges, mux, decoder, encoder, errhandler, formatter),
-		ListChallengeBuckets: NewListChallengeBucketsHandler(e.ListChallengeBuckets, mux, decoder, encoder, errhandler, formatter),
-		ResolveChallenge:     NewResolveChallengeHandler(e.ResolveChallenge, mux, decoder, encoder, errhandler, formatter),
+		ListRoles:                       NewListRolesHandler(e.ListRoles, mux, decoder, encoder, errhandler, formatter),
+		GetRole:                         NewGetRoleHandler(e.GetRole, mux, decoder, encoder, errhandler, formatter),
+		CreateRole:                      NewCreateRoleHandler(e.CreateRole, mux, decoder, encoder, errhandler, formatter),
+		UpdateRole:                      NewUpdateRoleHandler(e.UpdateRole, mux, decoder, encoder, errhandler, formatter),
+		DeleteRole:                      NewDeleteRoleHandler(e.DeleteRole, mux, decoder, encoder, errhandler, formatter),
+		ListScopes:                      NewListScopesHandler(e.ListScopes, mux, decoder, encoder, errhandler, formatter),
+		ListMembers:                     NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
+		ListGrants:                      NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
+		UpdateMemberRole:                NewUpdateMemberRoleHandler(e.UpdateMemberRole, mux, decoder, encoder, errhandler, formatter),
+		ListShadowMCPApprovalRequests:   NewListShadowMCPApprovalRequestsHandler(e.ListShadowMCPApprovalRequests, mux, decoder, encoder, errhandler, formatter),
+		CreateShadowMCPApprovalRequest:  NewCreateShadowMCPApprovalRequestHandler(e.CreateShadowMCPApprovalRequest, mux, decoder, encoder, errhandler, formatter),
+		ApproveShadowMCPApprovalRequest: NewApproveShadowMCPApprovalRequestHandler(e.ApproveShadowMCPApprovalRequest, mux, decoder, encoder, errhandler, formatter),
+		DenyShadowMCPApprovalRequest:    NewDenyShadowMCPApprovalRequestHandler(e.DenyShadowMCPApprovalRequest, mux, decoder, encoder, errhandler, formatter),
+		ListShadowMCPAccessRules:        NewListShadowMCPAccessRulesHandler(e.ListShadowMCPAccessRules, mux, decoder, encoder, errhandler, formatter),
+		CreateShadowMCPAccessRule:       NewCreateShadowMCPAccessRuleHandler(e.CreateShadowMCPAccessRule, mux, decoder, encoder, errhandler, formatter),
+		UpdateShadowMCPAccessRule:       NewUpdateShadowMCPAccessRuleHandler(e.UpdateShadowMCPAccessRule, mux, decoder, encoder, errhandler, formatter),
+		DeleteShadowMCPAccessRule:       NewDeleteShadowMCPAccessRuleHandler(e.DeleteShadowMCPAccessRule, mux, decoder, encoder, errhandler, formatter),
+		GetRBACStatus:                   NewGetRBACStatusHandler(e.GetRBACStatus, mux, decoder, encoder, errhandler, formatter),
+		EnableRBAC:                      NewEnableRBACHandler(e.EnableRBAC, mux, decoder, encoder, errhandler, formatter),
+		DisableRBAC:                     NewDisableRBACHandler(e.DisableRBAC, mux, decoder, encoder, errhandler, formatter),
+		ListChallenges:                  NewListChallengesHandler(e.ListChallenges, mux, decoder, encoder, errhandler, formatter),
+		ListChallengeBuckets:            NewListChallengeBucketsHandler(e.ListChallengeBuckets, mux, decoder, encoder, errhandler, formatter),
+		ResolveChallenge:                NewResolveChallengeHandler(e.ResolveChallenge, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -111,6 +135,14 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListMembers = m(s.ListMembers)
 	s.ListGrants = m(s.ListGrants)
 	s.UpdateMemberRole = m(s.UpdateMemberRole)
+	s.ListShadowMCPApprovalRequests = m(s.ListShadowMCPApprovalRequests)
+	s.CreateShadowMCPApprovalRequest = m(s.CreateShadowMCPApprovalRequest)
+	s.ApproveShadowMCPApprovalRequest = m(s.ApproveShadowMCPApprovalRequest)
+	s.DenyShadowMCPApprovalRequest = m(s.DenyShadowMCPApprovalRequest)
+	s.ListShadowMCPAccessRules = m(s.ListShadowMCPAccessRules)
+	s.CreateShadowMCPAccessRule = m(s.CreateShadowMCPAccessRule)
+	s.UpdateShadowMCPAccessRule = m(s.UpdateShadowMCPAccessRule)
+	s.DeleteShadowMCPAccessRule = m(s.DeleteShadowMCPAccessRule)
 	s.GetRBACStatus = m(s.GetRBACStatus)
 	s.EnableRBAC = m(s.EnableRBAC)
 	s.DisableRBAC = m(s.DisableRBAC)
@@ -133,6 +165,14 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListMembersHandler(mux, h.ListMembers)
 	MountListGrantsHandler(mux, h.ListGrants)
 	MountUpdateMemberRoleHandler(mux, h.UpdateMemberRole)
+	MountListShadowMCPApprovalRequestsHandler(mux, h.ListShadowMCPApprovalRequests)
+	MountCreateShadowMCPApprovalRequestHandler(mux, h.CreateShadowMCPApprovalRequest)
+	MountApproveShadowMCPApprovalRequestHandler(mux, h.ApproveShadowMCPApprovalRequest)
+	MountDenyShadowMCPApprovalRequestHandler(mux, h.DenyShadowMCPApprovalRequest)
+	MountListShadowMCPAccessRulesHandler(mux, h.ListShadowMCPAccessRules)
+	MountCreateShadowMCPAccessRuleHandler(mux, h.CreateShadowMCPAccessRule)
+	MountUpdateShadowMCPAccessRuleHandler(mux, h.UpdateShadowMCPAccessRule)
+	MountDeleteShadowMCPAccessRuleHandler(mux, h.DeleteShadowMCPAccessRule)
 	MountGetRBACStatusHandler(mux, h.GetRBACStatus)
 	MountEnableRBACHandler(mux, h.EnableRBAC)
 	MountDisableRBACHandler(mux, h.DisableRBAC)
@@ -600,6 +640,438 @@ func NewUpdateMemberRoleHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateMemberRole")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListShadowMCPApprovalRequestsHandler configures the mux to serve the
+// "access" service "listShadowMCPApprovalRequests" endpoint.
+func MountListShadowMCPApprovalRequestsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.shadowMcp.requests.list", f)
+}
+
+// NewListShadowMCPApprovalRequestsHandler creates a HTTP handler which loads
+// the HTTP request and calls the "access" service
+// "listShadowMCPApprovalRequests" endpoint.
+func NewListShadowMCPApprovalRequestsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListShadowMCPApprovalRequestsRequest(mux, decoder)
+		encodeResponse = EncodeListShadowMCPApprovalRequestsResponse(encoder)
+		encodeError    = EncodeListShadowMCPApprovalRequestsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listShadowMCPApprovalRequests")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateShadowMCPApprovalRequestHandler configures the mux to serve the
+// "access" service "createShadowMCPApprovalRequest" endpoint.
+func MountCreateShadowMCPApprovalRequestHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.shadowMcp.requests.create", f)
+}
+
+// NewCreateShadowMCPApprovalRequestHandler creates a HTTP handler which loads
+// the HTTP request and calls the "access" service
+// "createShadowMCPApprovalRequest" endpoint.
+func NewCreateShadowMCPApprovalRequestHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateShadowMCPApprovalRequestRequest(mux, decoder)
+		encodeResponse = EncodeCreateShadowMCPApprovalRequestResponse(encoder)
+		encodeError    = EncodeCreateShadowMCPApprovalRequestError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createShadowMCPApprovalRequest")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountApproveShadowMCPApprovalRequestHandler configures the mux to serve the
+// "access" service "approveShadowMCPApprovalRequest" endpoint.
+func MountApproveShadowMCPApprovalRequestHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.shadowMcp.requests.approve", f)
+}
+
+// NewApproveShadowMCPApprovalRequestHandler creates a HTTP handler which loads
+// the HTTP request and calls the "access" service
+// "approveShadowMCPApprovalRequest" endpoint.
+func NewApproveShadowMCPApprovalRequestHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeApproveShadowMCPApprovalRequestRequest(mux, decoder)
+		encodeResponse = EncodeApproveShadowMCPApprovalRequestResponse(encoder)
+		encodeError    = EncodeApproveShadowMCPApprovalRequestError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "approveShadowMCPApprovalRequest")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDenyShadowMCPApprovalRequestHandler configures the mux to serve the
+// "access" service "denyShadowMCPApprovalRequest" endpoint.
+func MountDenyShadowMCPApprovalRequestHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.shadowMcp.requests.deny", f)
+}
+
+// NewDenyShadowMCPApprovalRequestHandler creates a HTTP handler which loads
+// the HTTP request and calls the "access" service
+// "denyShadowMCPApprovalRequest" endpoint.
+func NewDenyShadowMCPApprovalRequestHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDenyShadowMCPApprovalRequestRequest(mux, decoder)
+		encodeResponse = EncodeDenyShadowMCPApprovalRequestResponse(encoder)
+		encodeError    = EncodeDenyShadowMCPApprovalRequestError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "denyShadowMCPApprovalRequest")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListShadowMCPAccessRulesHandler configures the mux to serve the
+// "access" service "listShadowMCPAccessRules" endpoint.
+func MountListShadowMCPAccessRulesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.shadowMcp.rules.list", f)
+}
+
+// NewListShadowMCPAccessRulesHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "listShadowMCPAccessRules"
+// endpoint.
+func NewListShadowMCPAccessRulesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListShadowMCPAccessRulesRequest(mux, decoder)
+		encodeResponse = EncodeListShadowMCPAccessRulesResponse(encoder)
+		encodeError    = EncodeListShadowMCPAccessRulesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listShadowMCPAccessRules")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateShadowMCPAccessRuleHandler configures the mux to serve the
+// "access" service "createShadowMCPAccessRule" endpoint.
+func MountCreateShadowMCPAccessRuleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.shadowMcp.rules.create", f)
+}
+
+// NewCreateShadowMCPAccessRuleHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "createShadowMCPAccessRule"
+// endpoint.
+func NewCreateShadowMCPAccessRuleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateShadowMCPAccessRuleRequest(mux, decoder)
+		encodeResponse = EncodeCreateShadowMCPAccessRuleResponse(encoder)
+		encodeError    = EncodeCreateShadowMCPAccessRuleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createShadowMCPAccessRule")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateShadowMCPAccessRuleHandler configures the mux to serve the
+// "access" service "updateShadowMCPAccessRule" endpoint.
+func MountUpdateShadowMCPAccessRuleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("PUT", "/rpc/access.shadowMcp.rules.update", f)
+}
+
+// NewUpdateShadowMCPAccessRuleHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "updateShadowMCPAccessRule"
+// endpoint.
+func NewUpdateShadowMCPAccessRuleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateShadowMCPAccessRuleRequest(mux, decoder)
+		encodeResponse = EncodeUpdateShadowMCPAccessRuleResponse(encoder)
+		encodeError    = EncodeUpdateShadowMCPAccessRuleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateShadowMCPAccessRule")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteShadowMCPAccessRuleHandler configures the mux to serve the
+// "access" service "deleteShadowMCPAccessRule" endpoint.
+func MountDeleteShadowMCPAccessRuleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/access.shadowMcp.rules.delete", f)
+}
+
+// NewDeleteShadowMCPAccessRuleHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "deleteShadowMCPAccessRule"
+// endpoint.
+func NewDeleteShadowMCPAccessRuleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteShadowMCPAccessRuleRequest(mux, decoder)
+		encodeResponse = EncodeDeleteShadowMCPAccessRuleResponse(encoder)
+		encodeError    = EncodeDeleteShadowMCPAccessRuleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteShadowMCPAccessRule")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {
