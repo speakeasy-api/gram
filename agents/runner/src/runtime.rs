@@ -304,18 +304,18 @@ async fn spawn_thread(
     let completions_http = build_http(thread_http_client.clone(), host.tokens.clone());
     let adapter = CompletionsAdapter::with_client(provider.clone(), completions_http);
 
-    // Compactor outbound headers omit Gram-Chat-ID so the server's chat
-    // capture pipeline does not mistake the compactor's "summarise this
-    // transcript" turn for divergence on the user's chat. A separate
-    // `compaction` header carries the chat id for downstream observability.
+    // Compactor outbound calls send a `gram-chat-id` of the form
+    // `compaction:<chat id>` so the server's chat capture pipeline can
+    // recognise the compactor's "summarise this transcript" turn instead of
+    // mistaking it for divergence on the user's chat.
     let mut compactor_headers = http::HeaderMap::new();
     compactor_headers.insert(
         http::HeaderName::from_static("x-gram-source"),
         http::HeaderValue::from_static("assistant"),
     );
     compactor_headers.insert(
-        http::HeaderName::from_static("compaction"),
-        http::HeaderValue::from_str(&bootstrap.chat_id)
+        http::HeaderName::from_static("gram-chat-id"),
+        http::HeaderValue::from_str(&format!("compaction:{}", bootstrap.chat_id))
             .map_err(|source| RunnerError::HeaderValue { source })?,
     );
     let compactor_http_client = reqwest::Client::builder()
