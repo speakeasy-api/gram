@@ -2624,6 +2624,126 @@ CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)
 WHERE found IS TRUE;
 
+-- Shadow MCP approval requests are created when a user requests access after
+-- a Shadow MCP risk policy blocks a server.
+CREATE TABLE IF NOT EXISTS shadow_mcp_approval_requests (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+
+  requester_user_id TEXT,
+  requester_email TEXT,
+  requester_display_name TEXT,
+
+  status TEXT NOT NULL CHECK (status IN ('requested', 'approved', 'denied')),
+  risk_policy_id uuid,
+  risk_result_id uuid,
+
+  observed_name TEXT CHECK (observed_name IS NULL OR observed_name <> ''),
+  observed_full_url TEXT CHECK (observed_full_url IS NULL OR observed_full_url <> ''),
+  observed_url_host TEXT CHECK (observed_url_host IS NULL OR observed_url_host <> ''),
+  observed_server_identity TEXT CHECK (observed_server_identity IS NULL OR observed_server_identity <> ''),
+  request_fingerprint TEXT CHECK (request_fingerprint IS NULL OR request_fingerprint <> ''),
+
+  tool_name TEXT CHECK (tool_name IS NULL OR tool_name <> ''),
+  tool_call TEXT,
+  block_reason TEXT,
+  blocked_count INT NOT NULL DEFAULT 1 CHECK (blocked_count > 0),
+  first_blocked_at timestamptz,
+  last_blocked_at timestamptz,
+  requested_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  decided_at timestamptz,
+  decided_by TEXT,
+  decision_note TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT shadow_mcp_approval_requests_pkey PRIMARY KEY (id),
+  CONSTRAINT shadow_mcp_approval_requests_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT shadow_mcp_approval_requests_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
+  CONSTRAINT shadow_mcp_approval_requests_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE SET NULL,
+  CONSTRAINT shadow_mcp_approval_requests_risk_result_id_fkey FOREIGN KEY (risk_result_id) REFERENCES risk_results(id) ON DELETE SET NULL,
+  CONSTRAINT shadow_mcp_approval_requests_observed_identity_check CHECK (
+    observed_full_url IS NOT NULL OR observed_url_host IS NOT NULL OR observed_server_identity IS NOT NULL
+  ),
+  CONSTRAINT shadow_mcp_approval_requests_decision_check CHECK (
+    (status = 'requested' AND decided_at IS NULL) OR
+    (status IN ('approved', 'denied') AND decided_at IS NOT NULL)
+  )
+);
+
+CREATE INDEX IF NOT EXISTS shadow_mcp_approval_requests_project_status_requested_idx
+ON shadow_mcp_approval_requests (project_id, status, requested_at DESC)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS shadow_mcp_approval_requests_organization_status_requested_idx
+ON shadow_mcp_approval_requests (organization_id, status, requested_at DESC)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS shadow_mcp_approval_requests_active_requester_fingerprint_key
+ON shadow_mcp_approval_requests (organization_id, project_id, requester_user_id, request_fingerprint)
+WHERE deleted IS FALSE AND status = 'requested' AND requester_user_id IS NOT NULL AND request_fingerprint IS NOT NULL;
+
+-- Shadow MCP access rules are the managed allow/deny server list used by
+-- runtime enforcement.
+CREATE TABLE IF NOT EXISTS shadow_mcp_access_rules (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid,
+  access_scope TEXT NOT NULL DEFAULT 'organization' CHECK (access_scope IN ('organization', 'project')),
+
+  disposition TEXT NOT NULL CHECK (disposition IN ('allowed', 'denied')),
+  match_breadth TEXT NOT NULL CHECK (match_breadth IN ('full_url', 'url_host', 'server_identity')),
+  match_value TEXT NOT NULL CHECK (match_value <> ''),
+
+  display_name TEXT NOT NULL CHECK (display_name <> ''),
+  observed_full_url TEXT CHECK (observed_full_url IS NULL OR observed_full_url <> ''),
+  observed_url_host TEXT CHECK (observed_url_host IS NULL OR observed_url_host <> ''),
+  observed_server_identity TEXT CHECK (observed_server_identity IS NULL OR observed_server_identity <> ''),
+  source_request_id uuid,
+
+  created_by TEXT,
+  updated_by TEXT,
+  reason TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT shadow_mcp_access_rules_pkey PRIMARY KEY (id),
+  CONSTRAINT shadow_mcp_access_rules_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
+  CONSTRAINT shadow_mcp_access_rules_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT shadow_mcp_access_rules_scope_project_check CHECK (
+    (access_scope = 'organization' AND project_id IS NULL) OR
+    (access_scope = 'project' AND project_id IS NOT NULL)
+  ),
+  CONSTRAINT shadow_mcp_access_rules_source_request_id_fkey FOREIGN KEY (source_request_id) REFERENCES shadow_mcp_approval_requests(id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS shadow_mcp_access_rules_organization_scope_match_value_key
+ON shadow_mcp_access_rules (organization_id, match_breadth, match_value)
+WHERE deleted IS FALSE AND access_scope = 'organization';
+
+CREATE UNIQUE INDEX IF NOT EXISTS shadow_mcp_access_rules_project_scope_match_value_key
+ON shadow_mcp_access_rules (organization_id, project_id, match_breadth, match_value)
+WHERE deleted IS FALSE AND access_scope = 'project';
+
+CREATE INDEX IF NOT EXISTS shadow_mcp_access_rules_project_scope_created_idx
+ON shadow_mcp_access_rules (organization_id, project_id, disposition, created_at DESC)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS shadow_mcp_access_rules_organization_disposition_created_idx
+ON shadow_mcp_access_rules (organization_id, disposition, created_at DESC)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS shadow_mcp_access_rules_source_request_id_idx
+ON shadow_mcp_access_rules (source_request_id)
+WHERE source_request_id IS NOT NULL AND deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS authz_challenge_resolutions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
