@@ -24,12 +24,17 @@ import { useCallback, useMemo, useReducer } from "react";
 
 import { deriveMigrationDefaults, type MigrationDefaults } from "./defaults";
 
+import { getServerURL } from "@/lib/utils";
+
 // Gram's user-session callback URL — has to be present in any upstream
 // client's redirect_uri list (RFC 7591 considers it `invalid_client_metadata`
-// to register without one). Shared with the clone-confirmation copy in the
-// modal so the operator-facing string and the DCR-payload string stay equal.
-export const REMOTE_LOGIN_CALLBACK_URL =
-  "https://app.getgram.ai/mcp/remote_login_callback";
+// to register without one). Host comes from the build-time
+// __GRAM_SERVER_URL__ constant (see vite.config.ts), so the dashboard agrees
+// with the server about its own identity instead of guessing via
+// window.location.origin.
+export function remoteLoginCallbackURL(): string {
+  return `${getServerURL()}/mcp/remote_login_callback`;
+}
 
 // useOAuthProxyMigration orchestrates the writes needed to port a toolset from
 // the legacy OAuth Proxy paradigm onto user-session world. The shape of the
@@ -342,10 +347,11 @@ export function useOAuthProxyMigration(
               },
             },
           });
-          // Link the newly-created USI to this toolset via its FK so the
-          // toolset payload (and the "USI wired" indicator that reads it)
-          // reflects the linkage. The hook is project-scoped, so without
-          // this step the USI exists but is unattached to the toolset.
+          // Link the newly-created user session issuer to this toolset via
+          // its FK so the toolset payload (and the "user session issuer
+          // wired" indicator that reads it) reflects the linkage. The hook
+          // is project-scoped, so without this step the user session issuer
+          // exists but is unattached to the toolset.
           await setToolsetUSI.mutateAsync({
             request: {
               slug: toolset.slug,
@@ -459,7 +465,7 @@ export function useOAuthProxyMigration(
                     // request with no redirect_uris. Send Gram's
                     // user-session callback so the issued client is usable
                     // from the start.
-                    redirectUris: [REMOTE_LOGIN_CALLBACK_URL],
+                    redirectUris: [remoteLoginCallbackURL()],
                   },
                 },
               });

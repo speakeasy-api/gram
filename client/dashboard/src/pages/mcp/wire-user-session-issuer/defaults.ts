@@ -35,11 +35,11 @@ export function deriveMigrationDefaults(
   if (!proxy) return null;
 
   // Slug is `{toolset.slug}-{random}`. The toolset name is what an operator
-  // recognises in a list; the resource type ("usi" / "rsi") is not — the
-  // link is the FK on toolsets.user_session_issuer_id, not the slug. USI and
-  // RSI live in different tables with independent uniqueness, so the same
-  // value works for both and reads as a pair. 4 bytes of entropy is plenty
-  // for project-scoped uniqueness.
+  // recognises in a list; the resource type is not — the link is the FK on
+  // toolsets.user_session_issuer_id, not the slug. The user session issuer
+  // and the remote session issuer live in different tables with independent
+  // uniqueness, so the same value works for both and reads as a pair. 4
+  // bytes of entropy is plenty for project-scoped uniqueness.
   const slug = `${toolset.slug}-${randomSlugSuffix()}`;
   return {
     proxyProvider: proxy,

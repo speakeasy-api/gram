@@ -958,10 +958,10 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
         <div className="flex items-center gap-2">
           {userSessionIssuerWired && (
             <span
-              className="rounded-full border border-green-500/40 bg-green-50 px-2 py-0.5 text-[10px] font-medium tracking-wide text-green-900 uppercase dark:bg-green-950 dark:text-green-200"
+              className="rounded-full border border-green-500/40 bg-green-50 px-2 py-0.5 text-[11px] font-medium tracking-wide text-green-900 dark:bg-green-950 dark:text-green-200"
               title={`User session issuer: ${toolset.userSessionIssuerSlug}`}
             >
-              USI wired
+              User session issuer wired
             </span>
           )}
           {showWireUserSessionIssuer && (

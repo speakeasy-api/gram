@@ -19,7 +19,7 @@ import {
   type MigrationParadigm,
   type MigrationStep,
   type MigrationStepKey,
-  REMOTE_LOGIN_CALLBACK_URL,
+  remoteLoginCallbackURL,
   useOAuthProxyMigration,
 } from "./useOAuthProxyMigration";
 
@@ -572,6 +572,7 @@ function ClonePane({
   remoteSessionIssuer: RemoteSessionIssuer | null;
   onBack: () => void;
 }) {
+  const callbackUrl = remoteLoginCallbackURL();
   return (
     <Stack gap={3}>
       <StrategyHeader title="Clone" onBack={onBack} />
@@ -590,7 +591,7 @@ function ClonePane({
         />
         <FieldReadOnly
           label="Callback URL to register"
-          value={REMOTE_LOGIN_CALLBACK_URL}
+          value={callbackUrl}
           hint="Add this to the client's redirect URI list on the authorization server."
           mono
         />
@@ -611,8 +612,7 @@ function ClonePane({
           }
         />
         <span>
-          I've registered{" "}
-          <code className="font-mono">{REMOTE_LOGIN_CALLBACK_URL}</code> as a
+          I've registered <code className="font-mono">{callbackUrl}</code> as a
           redirect URI on the upstream authorization server.
         </span>
       </label>
@@ -633,7 +633,10 @@ function RegisterPane({
 }) {
   return (
     <Stack gap={3}>
-      <StrategyHeader title="Register (DCR)" onBack={onBack} />
+      <StrategyHeader
+        title="Register via Dynamic Client Registration"
+        onBack={onBack}
+      />
       <Type small className="text-muted-foreground">
         Gram sends an RFC 7591 Dynamic Client Registration request to the
         issuer's registration_endpoint. The issuer mints a new client_id and
@@ -643,6 +646,12 @@ function RegisterPane({
       <FieldReadOnly
         label="Registration endpoint"
         value={remoteSessionIssuer?.registrationEndpoint ?? "—"}
+        mono
+      />
+      <FieldReadOnly
+        label="Callback URL Gram will request"
+        value={remoteLoginCallbackURL()}
+        hint="Sent as redirect_uris on the RFC 7591 registration request so the issued client is usable from the start."
         mono
       />
       <FieldLabel label="Client name (sent on registration)">

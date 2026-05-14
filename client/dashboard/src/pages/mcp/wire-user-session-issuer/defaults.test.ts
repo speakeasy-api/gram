@@ -43,7 +43,7 @@ describe("deriveMigrationDefaults", () => {
     expect(d?.remoteSessionIssuerSlug).toMatch(/^github-[0-9a-f]{8}$/);
   });
 
-  it("uses one slug for both the USI and RSI so they read as a pair", () => {
+  it("uses one slug for both the user session issuer and remote session issuer so they read as a pair", () => {
     const d = deriveMigrationDefaults(mkToolset({ slug: "github" }));
     expect(d?.userSessionIssuerSlug).toBe(d?.remoteSessionIssuerSlug);
   });
