@@ -69,6 +69,12 @@ func TestNormalizeMatchValue(t *testing.T) {
 			matchValue:   "  Linear MCP  ",
 			want:         "linear mcp",
 		},
+		{
+			name:         "server identity preserves separators while lowercasing",
+			matchBreadth: MatchBreadthServerIdentity,
+			matchValue:   "claude_ai_Calendly",
+			want:         "claude_ai_calendly",
+		},
 	}
 
 	for _, tt := range tests {
