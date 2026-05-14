@@ -24,6 +24,7 @@ const STORAGE_KEY = "gram-rbac-dev-override";
 const HIDDEN_KEY = "gram-dev-toolbar-hidden";
 const SUPER_ADMIN_KEY = "gram-dev-super-admin";
 const SHADOW_MCP_RULES_PAGE_SIZE = 200;
+const DEV_TOOLBAR_PORTAL_SELECTOR = "[data-rbac-dev-toolbar-portal='true']";
 
 type ResourceType = "org" | "project" | "environment" | "mcp" | "shadow_mcp";
 
@@ -437,7 +438,13 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
   useEffect(() => {
     if (collapsed) return;
     const onDown = (e: MouseEvent) => {
-      if (rootRef.current?.contains(e.target as Node)) return;
+      const targetNode = e.target instanceof Node ? e.target : null;
+      if (targetNode && rootRef.current?.contains(targetNode)) return;
+
+      const targetElement =
+        targetNode instanceof Element ? targetNode : targetNode?.parentElement;
+      if (targetElement?.closest(DEV_TOOLBAR_PORTAL_SELECTOR)) return;
+
       setCollapsed(true);
     };
     document.addEventListener("mousedown", onDown);
@@ -843,6 +850,7 @@ function ResourceDropdown({
         createPortal(
           <div
             ref={panelRef}
+            data-rbac-dev-toolbar-portal="true"
             className="border-border bg-background fixed z-[999999] rounded-md border shadow-lg"
             style={{
               top: triggerRect.bottom + 4,
