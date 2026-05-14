@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -17,7 +19,13 @@ type RuntimeBackend interface {
 	SupportsBackend(backend string) bool
 	Ensure(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendEnsureResult, error)
 	Configure(ctx context.Context, runtime assistantRuntimeRecord, config runtimeStartupConfig) error
-	RunTurn(ctx context.Context, runtime assistantRuntimeRecord, idempotencyKey string, authToken string, prompt string) error
+	// RunTurn delivers a turn for `threadID` to the runner backing
+	// `runtime`. v1 runtime rows pin a single thread (threadID matches
+	// runtime.AssistantThreadID) and the call lands on /turn; v2 rows
+	// serve every thread under the assistant and the call lands on
+	// /threads/{threadID}/turn so the runner can dispatch to the right
+	// per-thread tokio task.
+	RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string) error
 	ServerURL(ctx context.Context, runtime assistantRuntimeRecord, raw *url.URL) (*url.URL, error)
 	Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error)
 	// Stop halts the active runtime so it can be re-admitted later. Backends

@@ -12,6 +12,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireAssistantAdvisoryLock = `-- name: AcquireAssistantAdvisoryLock :exec
+SELECT pg_advisory_xact_lock(hashtext('asst:' || $1::text))
+`
+
+// pg_advisory_xact_lock auto-releases at commit. Hashed on the assistant
+// id so concurrent workers admitting the same assistant serialise on VM
+// creation; concurrent admits across assistants do not contend.
+func (q *Queries) AcquireAssistantAdvisoryLock(ctx context.Context, assistantID string) error {
+	_, err := q.db.Exec(ctx, acquireAssistantAdvisoryLock, assistantID)
+	return err
+}
+
 type AddAssistantToolsetsParams struct {
 	AssistantID   uuid.UUID
 	ToolsetID     uuid.UUID
@@ -810,6 +822,65 @@ func (q *Queries) InsertAssistantThreadEvent(ctx context.Context, arg InsertAssi
 	return id, err
 }
 
+const listAssistantPendingThreads = `-- name: ListAssistantPendingThreads :many
+SELECT t.id, t.project_id
+FROM assistant_threads t
+WHERE t.project_id = $1
+  AND t.assistant_id = $2
+  AND t.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM assistant_thread_events e
+    WHERE e.project_id = t.project_id
+      AND e.assistant_thread_id = t.id
+      AND e.deleted IS FALSE
+      AND e.status = $3
+  )
+ORDER BY (
+  SELECT MIN(e.created_at)
+  FROM assistant_thread_events e
+  WHERE e.project_id = t.project_id
+    AND e.assistant_thread_id = t.id
+    AND e.deleted IS FALSE
+    AND e.status = $3
+) ASC
+`
+
+type ListAssistantPendingThreadsParams struct {
+	ProjectID     uuid.UUID
+	AssistantID   uuid.UUID
+	PendingStatus string
+}
+
+type ListAssistantPendingThreadsRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// v2 admit needs every thread with pending events under an assistant
+// (no per-thread runtime gating — one VM serves them all). Used after
+// the v2 runtime row is reserved so the workflow can fan out to one
+// ProcessThreadEvents per thread.
+func (q *Queries) ListAssistantPendingThreads(ctx context.Context, arg ListAssistantPendingThreadsParams) ([]ListAssistantPendingThreadsRow, error) {
+	rows, err := q.db.Query(ctx, listAssistantPendingThreads, arg.ProjectID, arg.AssistantID, arg.PendingStatus)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssistantPendingThreadsRow
+	for rows.Next() {
+		var i ListAssistantPendingThreadsRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAssistantRuntimesForReap = `-- name: ListAssistantRuntimesForReap :many
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
 FROM assistant_runtimes
@@ -1149,6 +1220,86 @@ func (q *Queries) ListWarmPendingThreads(ctx context.Context, arg ListWarmPendin
 	return items, nil
 }
 
+const loadAssistantThreadForBootstrap = `-- name: LoadAssistantThreadForBootstrap :one
+SELECT
+  t.id,
+  t.assistant_id,
+  t.project_id,
+  t.correlation_id,
+  t.chat_id,
+  t.source_kind,
+  t.source_ref_json,
+  a.organization_id,
+  a.created_by_user_id,
+  a.name,
+  a.model,
+  a.instructions,
+  a.warm_ttl_seconds,
+  a.max_concurrency,
+  a.status,
+  a.created_at,
+  a.updated_at,
+  a.deleted_at
+FROM assistant_threads t
+JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
+WHERE t.id = $1
+  AND t.project_id = $2
+  AND t.deleted IS FALSE
+  AND a.deleted IS FALSE
+`
+
+type LoadAssistantThreadForBootstrapParams struct {
+	ThreadID  uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type LoadAssistantThreadForBootstrapRow struct {
+	ID              uuid.UUID
+	AssistantID     uuid.UUID
+	ProjectID       uuid.UUID
+	CorrelationID   string
+	ChatID          uuid.UUID
+	SourceKind      string
+	SourceRefJson   []byte
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Model           string
+	Instructions    string
+	WarmTtlSeconds  int64
+	MaxConcurrency  int64
+	Status          string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+}
+
+func (q *Queries) LoadAssistantThreadForBootstrap(ctx context.Context, arg LoadAssistantThreadForBootstrapParams) (LoadAssistantThreadForBootstrapRow, error) {
+	row := q.db.QueryRow(ctx, loadAssistantThreadForBootstrap, arg.ThreadID, arg.ProjectID)
+	var i LoadAssistantThreadForBootstrapRow
+	err := row.Scan(
+		&i.ID,
+		&i.AssistantID,
+		&i.ProjectID,
+		&i.CorrelationID,
+		&i.ChatID,
+		&i.SourceKind,
+		&i.SourceRefJson,
+		&i.OrganizationID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.Model,
+		&i.Instructions,
+		&i.WarmTtlSeconds,
+		&i.MaxConcurrency,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const loadAssistantToolsets = `-- name: LoadAssistantToolsets :many
 SELECT
   at.assistant_id,
@@ -1338,6 +1489,156 @@ func (q *Queries) LoadThreadContext(ctx context.Context, arg LoadThreadContextPa
 	return i, err
 }
 
+const loadThreadContextV2 = `-- name: LoadThreadContextV2 :one
+SELECT
+  t.id,
+  t.assistant_id,
+  t.project_id,
+  t.correlation_id,
+  t.chat_id,
+  t.source_kind,
+  t.source_ref_json,
+  t.last_event_at,
+  a.id AS assistant_record_id,
+  a.project_id AS assistant_record_project_id,
+  a.organization_id,
+  a.created_by_user_id,
+  a.name,
+  a.model,
+  a.instructions,
+  a.warm_ttl_seconds,
+  a.max_concurrency,
+  a.status,
+  a.created_at,
+  a.updated_at,
+  a.deleted_at,
+  r.id AS runtime_id,
+  r.assistant_id AS runtime_assistant_id,
+  r.project_id AS runtime_project_id,
+  r.backend,
+  r.backend_metadata_json,
+  r.state,
+  r.warm_until
+FROM assistant_threads t
+JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
+JOIN assistant_runtimes r ON r.assistant_id = t.assistant_id
+  AND r.project_id = t.project_id
+  AND r.runtime_version = 2
+WHERE t.id = $1
+  AND t.project_id = $2
+  AND t.deleted IS FALSE
+  AND a.deleted IS FALSE
+  AND r.deleted IS FALSE
+  AND r.ended IS FALSE
+  AND r.state IN ($3, $4)
+`
+
+type LoadThreadContextV2Params struct {
+	ThreadID      uuid.UUID
+	ProjectID     uuid.UUID
+	StartingState string
+	ActiveState   string
+}
+
+type LoadThreadContextV2Row struct {
+	ID                       uuid.UUID
+	AssistantID              uuid.UUID
+	ProjectID                uuid.UUID
+	CorrelationID            string
+	ChatID                   uuid.UUID
+	SourceKind               string
+	SourceRefJson            []byte
+	LastEventAt              pgtype.Timestamptz
+	AssistantRecordID        uuid.UUID
+	AssistantRecordProjectID uuid.UUID
+	OrganizationID           string
+	CreatedByUserID          pgtype.Text
+	Name                     string
+	Model                    string
+	Instructions             string
+	WarmTtlSeconds           int64
+	MaxConcurrency           int64
+	Status                   string
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+	DeletedAt                pgtype.Timestamptz
+	RuntimeID                uuid.UUID
+	RuntimeAssistantID       uuid.UUID
+	RuntimeProjectID         uuid.UUID
+	Backend                  string
+	BackendMetadataJson      []byte
+	State                    string
+	WarmUntil                pgtype.Timestamptz
+}
+
+// v2 sibling of LoadThreadContext: the runtime row is keyed on assistant,
+// not thread. Joins assistant_thread → assistant → v2 runtime by
+// assistant_id, returning the same shape as LoadThreadContext (with
+// assistant_thread_id on the runtime row left NULL).
+func (q *Queries) LoadThreadContextV2(ctx context.Context, arg LoadThreadContextV2Params) (LoadThreadContextV2Row, error) {
+	row := q.db.QueryRow(ctx, loadThreadContextV2,
+		arg.ThreadID,
+		arg.ProjectID,
+		arg.StartingState,
+		arg.ActiveState,
+	)
+	var i LoadThreadContextV2Row
+	err := row.Scan(
+		&i.ID,
+		&i.AssistantID,
+		&i.ProjectID,
+		&i.CorrelationID,
+		&i.ChatID,
+		&i.SourceKind,
+		&i.SourceRefJson,
+		&i.LastEventAt,
+		&i.AssistantRecordID,
+		&i.AssistantRecordProjectID,
+		&i.OrganizationID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.Model,
+		&i.Instructions,
+		&i.WarmTtlSeconds,
+		&i.MaxConcurrency,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.RuntimeID,
+		&i.RuntimeAssistantID,
+		&i.RuntimeProjectID,
+		&i.Backend,
+		&i.BackendMetadataJson,
+		&i.State,
+		&i.WarmUntil,
+	)
+	return i, err
+}
+
+const lookupActiveAssistantRuntimeV2 = `-- name: LookupActiveAssistantRuntimeV2 :one
+SELECT id
+FROM assistant_runtimes
+WHERE project_id = $1
+  AND assistant_id = $2
+  AND runtime_version = 2
+  AND deleted IS FALSE
+  AND ended IS FALSE
+LIMIT 1
+`
+
+type LookupActiveAssistantRuntimeV2Params struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+}
+
+func (q *Queries) LookupActiveAssistantRuntimeV2(ctx context.Context, arg LookupActiveAssistantRuntimeV2Params) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lookupActiveAssistantRuntimeV2, arg.ProjectID, arg.AssistantID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const markAssistantRuntimeReaped = `-- name: MarkAssistantRuntimeReaped :exec
 UPDATE assistant_runtimes
 SET state = $1,
@@ -1370,6 +1671,11 @@ SET
   updated_at = clock_timestamp(),
   deleted_at = clock_timestamp()
 WHERE deleted IS FALSE
+  -- v2 rows host every thread under one assistant; the per-event TTL the
+  -- v1 reaper enforces does not apply (the VM stays warm across the
+  -- assistant's idle window). v2 cleanup happens via a longer-horizon
+  -- reaper added separately, not this one.
+  AND runtime_version = 1
   AND (
     (state = $2 AND updated_at < $3)
     OR (
@@ -1502,6 +1808,60 @@ type ReserveAssistantRuntimeParams struct {
 func (q *Queries) ReserveAssistantRuntime(ctx context.Context, arg ReserveAssistantRuntimeParams) error {
 	_, err := q.db.Exec(ctx, reserveAssistantRuntime,
 		arg.AssistantThreadID,
+		arg.AssistantID,
+		arg.ProjectID,
+		arg.Backend,
+		arg.State,
+	)
+	return err
+}
+
+const reserveAssistantRuntimeV2 = `-- name: ReserveAssistantRuntimeV2 :exec
+INSERT INTO assistant_runtimes (
+  assistant_thread_id,
+  assistant_id,
+  project_id,
+  backend,
+  state,
+  runtime_version,
+  backend_metadata_json
+) VALUES (
+  NULL,
+  $1,
+  $2,
+  $3,
+  $4,
+  2,
+  COALESCE((
+    SELECT r.backend_metadata_json
+    FROM assistant_runtimes r
+    WHERE r.project_id = $2
+      AND r.assistant_id = $1
+      AND r.runtime_version = 2
+      AND r.backend = $3
+      AND r.backend_metadata_json <> '{}'::jsonb
+    ORDER BY r.created_at DESC
+    LIMIT 1
+  ), '{}'::jsonb)
+)
+ON CONFLICT DO NOTHING
+`
+
+type ReserveAssistantRuntimeV2Params struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+	Backend     string
+	State       string
+}
+
+// v2 runtimes are keyed on (project_id, assistant_id) — one VM serves
+// every thread under an assistant. assistant_thread_id is NULL on v2
+// rows. The unique partial index `assistant_runtimes_v2_one_per_assistant`
+// backs the ON CONFLICT and guarantees the single-VM invariant under
+// concurrent admit. Callers must hold pg_advisory_xact_lock on the
+// assistant id to serialise VM creation across workers.
+func (q *Queries) ReserveAssistantRuntimeV2(ctx context.Context, arg ReserveAssistantRuntimeV2Params) error {
+	_, err := q.db.Exec(ctx, reserveAssistantRuntimeV2,
 		arg.AssistantID,
 		arg.ProjectID,
 		arg.Backend,

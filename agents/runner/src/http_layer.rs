@@ -48,7 +48,7 @@ impl TokenRegistry {
         Ok(())
     }
 
-    fn current(&self) -> Result<String, RunnerError> {
+    pub fn current(&self) -> Result<String, RunnerError> {
         Ok(self
             .inner
             .read()

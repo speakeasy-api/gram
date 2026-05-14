@@ -1,4 +1,3 @@
-use http::StatusCode;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -53,8 +52,6 @@ pub enum RunnerError {
     #[error("submit input: {0}")]
     SubmitInput(String),
 
-    #[error("config error for key: {key}")]
-    ConfigError { key: String },
 }
 
 impl From<agentkit_loop::LoopError> for RunnerError {
@@ -63,22 +60,3 @@ impl From<agentkit_loop::LoopError> for RunnerError {
     }
 }
 
-impl RunnerError {
-    pub fn configure_status_code(&self) -> StatusCode {
-        match self {
-            RunnerError::AgentStart(_) | RunnerError::HttpClient(_) => {
-                StatusCode::SERVICE_UNAVAILABLE
-            }
-            RunnerError::McpHeaderName { .. }
-            | RunnerError::McpHeaderValue { .. }
-            | RunnerError::HeaderValue { .. }
-            | RunnerError::UnsupportedHistoryRole(_)
-            | RunnerError::MissingToolCallId
-            | RunnerError::ToolCallArguments { .. }
-            | RunnerError::ConfigError { .. } => StatusCode::BAD_REQUEST,
-            RunnerError::AgentBuild(_) | RunnerError::Loop(_) | RunnerError::SubmitInput(_) => {
-                StatusCode::INTERNAL_SERVER_ERROR
-            }
-        }
-    }
-}

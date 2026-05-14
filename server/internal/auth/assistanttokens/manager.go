@@ -35,11 +35,14 @@ type Claims struct {
 	OrgID     string `json:"org_id"`
 	ProjectID string `json:"project_id"`
 	// UserID is the assistant owner at mint time. It outlives an ownership
-	// transfer by at most the token TTL — after that the next /configure or
-	// /turn mints a fresh token against the new owner.
+	// transfer by at most the token TTL — after that the next /turn mints
+	// a fresh token against the new owner.
 	UserID      string `json:"user_id"`
 	AssistantID string `json:"assistant_id"`
-	ThreadID    string `json:"thread_id"`
+	// ThreadID is omitted for v2 assistant-scoped tokens (a single VM serves
+	// every thread under one assistant). Older v1 tokens still carry it and
+	// must remain valid until the TTL drains.
+	ThreadID string `json:"thread_id,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -48,8 +51,9 @@ type GenerateInput struct {
 	ProjectID   uuid.UUID
 	UserID      string
 	AssistantID uuid.UUID
-	ThreadID    uuid.UUID
-	TTL         time.Duration
+	// ThreadID may be uuid.Nil for assistant-scoped (v2) tokens.
+	ThreadID uuid.UUID
+	TTL      time.Duration
 }
 
 type Manager struct {
@@ -81,12 +85,17 @@ func (m *Manager) Generate(input GenerateInput) (string, error) {
 		ttl = 15 * time.Minute
 	}
 
+	threadClaim := ""
+	if input.ThreadID != uuid.Nil {
+		threadClaim = input.ThreadID.String()
+	}
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		OrgID:       input.OrgID,
 		ProjectID:   input.ProjectID.String(),
 		UserID:      input.UserID,
 		AssistantID: input.AssistantID.String(),
-		ThreadID:    input.ThreadID.String(),
+		ThreadID:    threadClaim,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    issuer,
 			Subject:   input.AssistantID.String(),
@@ -161,9 +170,14 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "invalid assistant token project")
 	}
 
-	threadID, err := uuid.Parse(claims.ThreadID)
-	if err != nil {
-		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "invalid assistant token thread")
+	// v1 tokens carry a ThreadID claim; v2 tokens omit it. Treat the empty
+	// claim as the v2 shape.
+	threadID := uuid.Nil
+	if claims.ThreadID != "" {
+		threadID, err = uuid.Parse(claims.ThreadID)
+		if err != nil {
+			return ctx, nil, oops.E(oops.CodeUnauthorized, err, "invalid assistant token thread")
+		}
 	}
 
 	assistantID, err := uuid.Parse(claims.AssistantID)
@@ -228,29 +242,55 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 // checkRevocation rejects tokens for deleted threads, deleted assistants, or
 // non-active assistants. Result is memoized for revocationCacheTTL so the
 // per-turn burst of authorized calls (1× /chat/completions + N× MCP)
-// collapses to a single DB hit.
+// collapses to a single DB hit. v2 tokens omit ThreadID — the lookup
+// collapses to an assistant-only check.
 func (m *Manager) checkRevocation(ctx context.Context, threadID, assistantID uuid.UUID) error {
-	if allowed, ok := m.revocation.get(threadID); ok {
+	cacheKey := threadID
+	if cacheKey == uuid.Nil {
+		cacheKey = assistantID
+	}
+	if allowed, ok := m.revocation.get(cacheKey); ok {
 		if allowed {
 			return nil
 		}
 		return oops.E(oops.CodeUnauthorized, nil, "assistant token has been revoked")
 	}
 
-	row, err := m.tokens.GetAssistantTokenRevocation(ctx, tokenrepo.GetAssistantTokenRevocationParams{
-		ThreadID:    threadID,
-		AssistantID: assistantID,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			m.revocation.put(threadID, false)
-			return oops.E(oops.CodeUnauthorized, nil, "assistant token thread not found")
+	var (
+		threadDeleted    bool
+		assistantDeleted bool
+		assistantStatus  string
+	)
+	if threadID != uuid.Nil {
+		row, err := m.tokens.GetAssistantTokenRevocation(ctx, tokenrepo.GetAssistantTokenRevocationParams{
+			ThreadID:    threadID,
+			AssistantID: assistantID,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				m.revocation.put(cacheKey, false)
+				return oops.E(oops.CodeUnauthorized, nil, "assistant token thread not found")
+			}
+			return oops.E(oops.CodeUnauthorized, err, "unable to load assistant thread")
 		}
-		return oops.E(oops.CodeUnauthorized, err, "unable to load assistant thread")
+		threadDeleted = row.ThreadDeleted
+		assistantDeleted = row.AssistantDeleted
+		assistantStatus = row.AssistantStatus
+	} else {
+		row, err := m.tokens.GetAssistantRevocation(ctx, assistantID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				m.revocation.put(cacheKey, false)
+				return oops.E(oops.CodeUnauthorized, nil, "assistant token assistant not found")
+			}
+			return oops.E(oops.CodeUnauthorized, err, "unable to load assistant")
+		}
+		assistantDeleted = row.AssistantDeleted
+		assistantStatus = row.AssistantStatus
 	}
 
-	allowed := !row.ThreadDeleted && !row.AssistantDeleted && row.AssistantStatus == "active"
-	m.revocation.put(threadID, allowed)
+	allowed := !threadDeleted && !assistantDeleted && assistantStatus == "active"
+	m.revocation.put(cacheKey, allowed)
 	if !allowed {
 		return oops.E(oops.CodeUnauthorized, nil, "assistant token has been revoked")
 	}

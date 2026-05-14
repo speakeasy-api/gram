@@ -887,7 +887,9 @@ func TestFlyRuntimeBackendPinsRequestsToOwningMachine(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	threadID := uuid.New()
 	rec := assistantRuntimeRecord{
+		AssistantThreadID:   threadID,
 		Backend:             runtimeBackendFlyIO,
 		BackendMetadataJSON: rawMetadata,
 	}
@@ -895,12 +897,53 @@ func TestFlyRuntimeBackendPinsRequestsToOwningMachine(t *testing.T) {
 	require.NoError(t, backend.Configure(context.Background(), rec, runtimeStartupConfig{}))
 	require.Equal(t, "machine-thread-A", configureHeader, "configure must pin to the owning machine")
 
-	require.NoError(t, backend.RunTurn(context.Background(), rec, "idem-1", "tok", "hi"))
+	require.NoError(t, backend.RunTurn(context.Background(), rec, threadID, "idem-1", "tok", "hi"))
 	require.Equal(t, "machine-thread-A", turnHeader, "run turn must pin to the owning machine")
 
 	_, err = backend.Status(context.Background(), rec)
 	require.NoError(t, err)
 	require.Equal(t, "machine-thread-A", stateHeader, "status must pin to the owning machine")
+}
+
+func TestFlyRuntimeBackendV2RunTurnHitsThreadScopedRoute(t *testing.T) {
+	t.Parallel()
+
+	// v2 runtime rows leave AssistantThreadID null and the runner exposes
+	// /threads/{thread_id}/turn so per-thread tokio tasks can dispatch off
+	// the URL segment. The legacy /turn path is gone on v2 images.
+	threadID := uuid.New()
+	var observedPath string
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc(fmt.Sprintf("/threads/%s/turn", threadID), func(w http.ResponseWriter, r *http.Request) {
+		observedPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"finish_reason":"accepted"}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	backend, _, _ := newTestFlyRuntimeBackend(t, srv)
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:   "gram-asst-v2",
+		AppID:     "app-v2",
+		AppURL:    srv.URL,
+		MachineID: "machine-v2",
+	})
+	require.NoError(t, err)
+
+	rec := assistantRuntimeRecord{
+		AssistantThreadID:   uuid.Nil,
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	}
+
+	require.NoError(t, backend.RunTurn(context.Background(), rec, threadID, "idem-v2", "tok", "hi"))
+	require.Equal(t, fmt.Sprintf("/threads/%s/turn", threadID), observedPath)
 }
 
 func TestFlyRuntimeBackendServerURLRejectsLoopback(t *testing.T) {

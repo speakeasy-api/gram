@@ -793,6 +793,23 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		}
 	}
 
+	// When the caller authenticated with an assistant runtime token, the
+	// chat must belong to a thread under that assistant. v2 tokens are
+	// assistant-scoped (no ThreadID claim), so this is the only check
+	// keeping a leaked runner token from writing into an unrelated chat.
+	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok && chatID != uuid.Nil && authCtx.ProjectID != nil {
+		chatAssistantID, err := s.repo.GetAssistantThreadAssistantIDByChatID(ctx, repo.GetAssistantThreadAssistantIDByChatIDParams{
+			ChatID:    chatID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		if err != nil {
+			return oops.E(oops.CodeForbidden, err, "chat does not belong to assistant").Log(ctx, s.logger)
+		}
+		if chatAssistantID != principal.AssistantID {
+			return oops.E(oops.CodeForbidden, nil, "chat does not belong to assistant").Log(ctx, s.logger)
+		}
+	}
+
 	// Non-streaming: Use UnifiedClient
 	temp := float64(chatRequest.Temperature)
 

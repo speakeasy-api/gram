@@ -11,6 +11,24 @@ import (
 	"github.com/google/uuid"
 )
 
+const getAssistantRevocation = `-- name: GetAssistantRevocation :one
+SELECT a.deleted AS assistant_deleted, a.status AS assistant_status
+FROM assistants a
+WHERE a.id = $1
+`
+
+type GetAssistantRevocationRow struct {
+	AssistantDeleted bool
+	AssistantStatus  string
+}
+
+func (q *Queries) GetAssistantRevocation(ctx context.Context, assistantID uuid.UUID) (GetAssistantRevocationRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantRevocation, assistantID)
+	var i GetAssistantRevocationRow
+	err := row.Scan(&i.AssistantDeleted, &i.AssistantStatus)
+	return i, err
+}
+
 const getAssistantTokenRevocation = `-- name: GetAssistantTokenRevocation :one
 SELECT t.deleted AS thread_deleted, a.deleted AS assistant_deleted, a.status AS assistant_status
 FROM assistant_threads t

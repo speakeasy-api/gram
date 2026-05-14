@@ -80,6 +80,22 @@ type runtimeStartupConfig struct {
 	ContextWindow uint64 `json:"context_window,omitempty"`
 }
 
+// threadBootstrap is the response the v2 runner receives from
+// /rpc/assistants.getThreadBootstrap when a /turn lands for a thread it has
+// not seen yet. It carries everything that v1's /configure pushed down,
+// minus the auth token — the runner already holds an assistant-scoped JWT
+// from the /turn request.
+type threadBootstrap struct {
+	Model          string             `json:"model"`
+	Instructions   string             `json:"instructions,omitempty"`
+	CompletionsURL string             `json:"completions_url"`
+	ChatID         string             `json:"chat_id"`
+	MCPServers     []runtimeMCPServer `json:"mcp_servers"`
+	History        []runtimeMessage   `json:"history,omitempty"`
+	ContextWindow  uint64             `json:"context_window,omitempty"`
+	SourceRefJSON  json.RawMessage    `json:"source_ref_json,omitempty"`
+}
+
 type runtimeMCPServer struct {
 	ID      string            `json:"id"`
 	URL     string            `json:"url"`
@@ -569,10 +585,12 @@ func (m *RuntimeManager) ServerURL(_ context.Context, runtime assistantRuntimeRe
 func (m *RuntimeManager) RunTurn(
 	ctx context.Context,
 	runtime assistantRuntimeRecord,
+	threadID uuid.UUID,
 	idempotencyKey string,
 	authToken string,
 	prompt string,
 ) error {
+	_ = threadID // local backend keys by AssistantThreadID; v2 (single-VM) is a Fly-only concept
 	if err := validateRuntimeBackend(m, runtime.Backend); err != nil {
 		return err
 	}

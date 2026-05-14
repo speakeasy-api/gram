@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -110,7 +111,11 @@ type assistantThreadRecord struct {
 }
 
 type assistantRuntimeRecord struct {
-	ID                  uuid.UUID
+	ID uuid.UUID
+	// AssistantThreadID is uuid.Nil on v2 runtime rows — one VM serves
+	// every thread under the assistant, so the binding is via AssistantID
+	// and the foreign key to assistant_threads is dropped on this column
+	// (so the sentinel does not have to back to a real row).
 	AssistantThreadID   uuid.UUID
 	AssistantID         uuid.UUID
 	ProjectID           uuid.UUID
@@ -285,6 +290,12 @@ type ServiceCore struct {
 	contextWindow   *openrouter.ContextWindowResolver
 	wakeCanceller   WakeCanceller
 	chatWriter      *chat.ChatMessageWriter
+	// runtimeVersion gates v2 (single-VM-per-assistant) admit. Defaults to
+	// 1; flipping to 2 routes new admits through the v2 reserve query and
+	// skips the Configure activity. Existing v1 runtimes drain via the
+	// reaper. Behaves as a kill-switch — flipping back to 1 after a v2
+	// row exists is safe (the v2 row stays around until reaped).
+	runtimeVersion int
 }
 
 func NewServiceCore(
@@ -310,7 +321,28 @@ func NewServiceCore(
 		contextWindow:   contextWindow,
 		wakeCanceller:   nil,
 		chatWriter:      nil,
+		runtimeVersion:  runtimeVersionV1,
 	}
+}
+
+const (
+	runtimeVersionV1 = 1
+	runtimeVersionV2 = 2
+)
+
+// SetRuntimeVersion flips the kill-switch between v1 (per-thread VM) and
+// v2 (single VM per assistant). 2 enables the v2 admit path; any other
+// value falls back to v1.
+func (s *ServiceCore) SetRuntimeVersion(version int) {
+	if version == runtimeVersionV2 {
+		s.runtimeVersion = runtimeVersionV2
+		return
+	}
+	s.runtimeVersion = runtimeVersionV1
+}
+
+func (s *ServiceCore) isV2() bool {
+	return s.runtimeVersion == runtimeVersionV2
 }
 
 // SetWakeCanceller is set after construction to break an import cycle:
@@ -1289,6 +1321,10 @@ func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.
 		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
 	}
 
+	if s.isV2() {
+		return s.admitPendingThreadsV2(ctx, assistant)
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return AdmitPendingThreadsResult{}, fmt.Errorf("begin assistant admit tx: %w", err)
@@ -1356,8 +1392,63 @@ func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.
 	return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: admitted}, nil
 }
 
+// admitPendingThreadsV2 reserves the assistant's single v2 runtime under
+// pg_advisory_xact_lock (which auto-releases at commit) and admits every
+// pending thread under the assistant. Skips MaxConcurrency entirely —
+// one VM serves them all, so the v1 cap doesn't apply.
+func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assistantRecord) (AdmitPendingThreadsResult, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return AdmitPendingThreadsResult{}, fmt.Errorf("begin assistant admit tx (v2): %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	queries := assistantrepo.New(tx)
+	if err := queries.AcquireAssistantAdvisoryLock(ctx, assistant.ID.String()); err != nil {
+		return AdmitPendingThreadsResult{}, fmt.Errorf("acquire assistant advisory lock: %w", err)
+	}
+
+	if _, err := queries.LookupActiveAssistantRuntimeV2(ctx, assistantrepo.LookupActiveAssistantRuntimeV2Params{
+		ProjectID:   assistant.ProjectID,
+		AssistantID: assistant.ID,
+	}); err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return AdmitPendingThreadsResult{}, fmt.Errorf("lookup v2 runtime: %w", err)
+		}
+		if err := queries.ReserveAssistantRuntimeV2(ctx, assistantrepo.ReserveAssistantRuntimeV2Params{
+			AssistantID: assistant.ID,
+			ProjectID:   assistant.ProjectID,
+			Backend:     s.runtime.Backend(),
+			State:       runtimeStateStarting,
+		}); err != nil {
+			return AdmitPendingThreadsResult{}, fmt.Errorf("reserve v2 assistant runtime: %w", err)
+		}
+	}
+
+	threads, err := queries.ListAssistantPendingThreads(ctx, assistantrepo.ListAssistantPendingThreadsParams{
+		ProjectID:     assistant.ProjectID,
+		AssistantID:   assistant.ID,
+		PendingStatus: eventStatusPending,
+	})
+	if err != nil {
+		return AdmitPendingThreadsResult{}, fmt.Errorf("list assistant pending threads: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return AdmitPendingThreadsResult{}, fmt.Errorf("commit assistant admit tx (v2): %w", err)
+	}
+
+	admitted := make([]uuid.UUID, 0, len(threads))
+	for _, t := range threads {
+		admitted = append(admitted, t.ID)
+	}
+	return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: admitted}, nil
+}
+
 func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, threadID uuid.UUID) (ProcessThreadEventsResult, error) {
-	thread, assistant, runtimeRecord, err := s.loadThreadContext(ctx, projectID, threadID)
+	thread, assistant, runtimeRecord, err := s.loadThreadContextDispatch(ctx, projectID, threadID)
 	if err != nil {
 		return ProcessThreadEventsResult{}, err
 	}
@@ -1399,7 +1490,11 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		return ProcessThreadEventsResult{}, err
 	}
 
-	if ensureResult.NeedsConfigure {
+	// v2 runtime rows skip the Configure activity entirely: each thread
+	// self-bootstraps on its first /turn via /rpc/assistants.getThreadBootstrap.
+	// The configure-vs-turn split is exactly the window where Fly's misroute
+	// caused the cross-thread chat corruption fixed by AGE-2320.
+	if ensureResult.NeedsConfigure && !s.isV2() {
 		startupConfig, err := s.tracedBuildStartupConfig(ctx, thread, runtimeRecord, assistant, ensureResult.ColdStart)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "build runtime startup config failed", attr.SlogAssistantThreadID(thread.ID.String()), attr.SlogError(err))
@@ -1622,11 +1717,19 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return fmt.Errorf("decode assistant turn: %w", err)
 	}
-	turnToken, err := s.mintAssistantRuntimeToken(assistant, thread)
+	// v2 runtime rows host every thread on a single VM, so the runner is
+	// addressed with an assistant-scoped token; v1 rows pin a single thread
+	// and use the thread-scoped token shape.
+	var turnToken string
+	if runtime.AssistantThreadID != uuid.Nil {
+		turnToken, err = s.mintAssistantRuntimeToken(assistant, thread)
+	} else {
+		turnToken, err = s.MintAssistantScopedRuntimeToken(assistant)
+	}
 	if err != nil {
 		return err
 	}
-	if err := s.runtime.RunTurn(ctx, runtime, event.ID.String(), turnToken, prompt); err != nil {
+	if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt); err != nil {
 		return fmt.Errorf("run assistant turn: %w", err)
 	}
 	return nil
@@ -1798,6 +1901,114 @@ func (s *ServiceCore) mintAssistantRuntimeToken(assistant assistantRecord, threa
 	return token, nil
 }
 
+// MintAssistantScopedRuntimeToken issues an assistant-scoped JWT the v2
+// runner reuses across every thread it hosts. ThreadID is omitted on
+// purpose — a single VM serves every thread under one assistant, so the
+// per-call thread context flows through the request body (e.g. /turn URL
+// segment) rather than the token claims. Exported for the v2 admit path.
+func (s *ServiceCore) MintAssistantScopedRuntimeToken(assistant assistantRecord) (string, error) {
+	token, err := s.assistantTokens.Generate(assistanttokens.GenerateInput{
+		OrgID:       assistant.OrganizationID,
+		ProjectID:   assistant.ProjectID,
+		UserID:      assistant.CreatedByUserID,
+		AssistantID: assistant.ID,
+		ThreadID:    uuid.Nil,
+		TTL:         assistantRuntimeTokenTTL,
+	})
+	if err != nil {
+		return "", fmt.Errorf("generate assistant execution token: %w", err)
+	}
+	return token, nil
+}
+
+// BuildThreadBootstrap composes the response the v2 runner pulls from
+// /rpc/assistants.getThreadBootstrap when it first sees a thread. The
+// caller is responsible for confirming the requesting principal is
+// scoped to the thread's assistant before invoking this method.
+func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threadID, principalAssistantID uuid.UUID) (threadBootstrap, error) {
+	row, err := assistantrepo.New(s.db).LoadAssistantThreadForBootstrap(ctx, assistantrepo.LoadAssistantThreadForBootstrapParams{
+		ThreadID:  threadID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return threadBootstrap{}, oops.E(oops.CodeNotFound, nil, "assistant thread not found")
+		}
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant thread")
+	}
+	if row.AssistantID != principalAssistantID {
+		return threadBootstrap{}, oops.E(oops.CodeForbidden, nil, "thread does not belong to assistant")
+	}
+
+	thread := assistantThreadRecord{
+		ID:            row.ID,
+		AssistantID:   row.AssistantID,
+		ProjectID:     row.ProjectID,
+		CorrelationID: row.CorrelationID,
+		ChatID:        row.ChatID,
+		SourceKind:    row.SourceKind,
+		SourceRefJSON: row.SourceRefJson,
+		LastEventAt:   time.Time{},
+	}
+	assistant := assistantRecord{
+		ID:              row.AssistantID,
+		ProjectID:       row.ProjectID,
+		OrganizationID:  row.OrganizationID,
+		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:            row.Name,
+		Model:           row.Model,
+		Instructions:    row.Instructions,
+		Toolsets:        nil,
+		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		Status:          row.Status,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+		DeletedAt:       row.DeletedAt,
+	}
+	toolsets, err := s.loadAssistantToolsets(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
+	if err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant toolsets")
+	}
+	assistant.Toolsets = toolsets[assistant.ID]
+
+	runtimeServerURL := s.serverURL
+	if runtimeServerURL == nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, nil, "assistant runtime server url not configured")
+	}
+
+	mcpServers, err := resolveAssistantMCPServers(runtimeServerURL, assistant.Toolsets)
+	if err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "resolve assistant mcp servers")
+	}
+
+	instructions, err := composeInstructions(assistant.Instructions, thread)
+	if err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions")
+	}
+
+	history, err := s.loadChatHistory(ctx, thread.ChatID, thread.ProjectID)
+	if err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant chat history")
+	}
+
+	completionsEndpoint := runtimeServerURL.JoinPath("chat", "completions")
+	completionsQuery := completionsEndpoint.Query()
+	completionsQuery.Set("unstable_normalizeOutboundMessages", "1")
+	completionsEndpoint.RawQuery = completionsQuery.Encode()
+
+	return threadBootstrap{
+		Model:          assistant.Model,
+		Instructions:   instructions,
+		CompletionsURL: completionsEndpoint.String(),
+		ChatID:         thread.ChatID.String(),
+		MCPServers:     mcpServers,
+		History:        history,
+		ContextWindow:  s.resolveAssistantContextWindow(ctx, assistant.Model),
+		SourceRefJSON:  thread.SourceRefJSON,
+	}, nil
+}
+
 // assistantRuntimeTokenTTL bounds the lifetime of tokens handed to runners.
 // Long enough to cover a typical 30-min turn plus bootstrap slack; short
 // enough that a leaked token ages out well before the thread retires. Fresh
@@ -1945,6 +2156,67 @@ func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, thread
 		return ExpireThreadRuntimeResult{}, err
 	}
 	return ExpireThreadRuntimeResult{Stopped: true, RemainingSeconds: 0}, nil
+}
+
+func (s *ServiceCore) loadThreadContextDispatch(ctx context.Context, projectID, threadID uuid.UUID) (assistantThreadRecord, assistantRecord, assistantRuntimeRecord, error) {
+	if s.isV2() {
+		return s.loadThreadContextV2(ctx, projectID, threadID)
+	}
+	return s.loadThreadContext(ctx, projectID, threadID)
+}
+
+func (s *ServiceCore) loadThreadContextV2(ctx context.Context, projectID, threadID uuid.UUID) (assistantThreadRecord, assistantRecord, assistantRuntimeRecord, error) {
+	row, err := assistantrepo.New(s.db).LoadThreadContextV2(ctx, assistantrepo.LoadThreadContextV2Params{
+		ThreadID:      threadID,
+		ProjectID:     projectID,
+		StartingState: runtimeStateStarting,
+		ActiveState:   runtimeStateActive,
+	})
+	if err != nil {
+		return assistantThreadRecord{}, assistantRecord{}, assistantRuntimeRecord{}, fmt.Errorf("load assistant thread context (v2): %w", err)
+	}
+	thread := assistantThreadRecord{
+		ID:            row.ID,
+		AssistantID:   row.AssistantID,
+		ProjectID:     row.ProjectID,
+		CorrelationID: row.CorrelationID,
+		ChatID:        row.ChatID,
+		SourceKind:    row.SourceKind,
+		SourceRefJSON: row.SourceRefJson,
+		LastEventAt:   row.LastEventAt.Time,
+	}
+	assistant := assistantRecord{
+		ID:              row.AssistantRecordID,
+		ProjectID:       row.AssistantRecordProjectID,
+		OrganizationID:  row.OrganizationID,
+		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:            row.Name,
+		Model:           row.Model,
+		Instructions:    row.Instructions,
+		Toolsets:        nil,
+		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		Status:          row.Status,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+		DeletedAt:       row.DeletedAt,
+	}
+	runtime := assistantRuntimeRecord{
+		ID:                  row.RuntimeID,
+		AssistantThreadID:   uuid.Nil,
+		AssistantID:         row.RuntimeAssistantID,
+		ProjectID:           row.RuntimeProjectID,
+		Backend:             row.Backend,
+		BackendMetadataJSON: row.BackendMetadataJson,
+		State:               row.State,
+		WarmUntil:           row.WarmUntil,
+	}
+	refs, err := s.loadAssistantToolsets(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
+	if err != nil {
+		return assistantThreadRecord{}, assistantRecord{}, assistantRuntimeRecord{}, err
+	}
+	assistant.Toolsets = refs[assistant.ID]
+	return thread, assistant, runtime, nil
 }
 
 func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID uuid.UUID) (assistantThreadRecord, assistantRecord, assistantRuntimeRecord, error) {

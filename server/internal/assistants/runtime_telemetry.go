@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -119,12 +121,13 @@ func (t *telemetryRuntimeBackend) Configure(ctx context.Context, runtime assista
 func (t *telemetryRuntimeBackend) RunTurn(
 	ctx context.Context,
 	runtime assistantRuntimeRecord,
+	threadID uuid.UUID,
 	idempotencyKey string,
 	authToken string,
 	prompt string,
 ) error {
 	t.emit(ctx, runtime, "runtime_turn", "runtime turn dispatched", "INFO", nil)
-	if err := t.inner.RunTurn(ctx, runtime, idempotencyKey, authToken, prompt); err != nil {
+	if err := t.inner.RunTurn(ctx, runtime, threadID, idempotencyKey, authToken, prompt); err != nil {
 		t.emit(ctx, runtime, "runtime_turn", "runtime turn errored", "ERROR", err)
 		return fmt.Errorf("runtime run turn: %w", err)
 	}

@@ -1210,7 +1210,7 @@ func (t testRuntimeBackend) Configure(context.Context, assistantRuntimeRecord, r
 	return t.configureErr
 }
 
-func (t testRuntimeBackend) RunTurn(context.Context, assistantRuntimeRecord, string, string, string) error {
+func (t testRuntimeBackend) RunTurn(context.Context, assistantRuntimeRecord, uuid.UUID, string, string, string) error {
 	return t.runTurnErr
 }
 

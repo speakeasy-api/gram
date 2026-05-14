@@ -167,6 +167,54 @@ func TestCheckRevocation_threadMissing(t *testing.T) {
 	requireUnauthorized(t, err)
 }
 
+func TestCheckRevocation_assistantScoped(t *testing.T) {
+	t.Parallel()
+
+	// v2 tokens omit ThreadID — revocation must fall back to an
+	// assistant-only lookup and pass when the assistant is active.
+	f := newFixture(t, "tokens_assistant_scoped")
+	m := New("test-secret", f.conn, nil)
+
+	require.NoError(t, m.checkRevocation(t.Context(), uuid.Nil, f.assistantID))
+}
+
+func TestCheckRevocation_assistantScoped_assistantPaused(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "tokens_assistant_scoped_paused")
+	err := assistantsrepo.New(f.conn).SetAssistantStatus(t.Context(), assistantsrepo.SetAssistantStatusParams{
+		Status:    "paused",
+		ID:        f.assistantID,
+		ProjectID: f.projectID,
+	})
+	require.NoError(t, err)
+
+	m := New("test-secret", f.conn, nil)
+
+	err = m.checkRevocation(t.Context(), uuid.Nil, f.assistantID)
+	requireUnauthorized(t, err)
+}
+
+func TestGenerate_assistantScopedOmitsThreadClaim(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "tokens_generate_v2")
+	m := New("test-secret", f.conn, nil)
+
+	token, err := m.Generate(GenerateInput{
+		OrgID:       "org",
+		ProjectID:   f.projectID,
+		UserID:      "user",
+		AssistantID: f.assistantID,
+		ThreadID:    uuid.Nil,
+		TTL:         time.Minute,
+	})
+	require.NoError(t, err)
+	claims, err := m.Validate(token)
+	require.NoError(t, err)
+	require.Empty(t, claims.ThreadID, "v2 tokens must omit the ThreadID claim")
+}
+
 func TestCheckRevocation_cacheHitSkipsDB(t *testing.T) {
 	t.Parallel()
 

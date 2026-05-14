@@ -16,6 +16,18 @@ import (
 )
 
 var assistantRuntimeFlags = []cli.Flag{
+	&cli.IntFlag{
+		Name:    "assistant-runtime-version",
+		Usage:   "Assistant runtime version: 1 (per-thread VM, legacy) or 2 (single VM per assistant). v2 admits skip the configure activity and the runner self-bootstraps each thread on its first /turn.",
+		Value:   1,
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_VERSION"},
+		Action: func(_ *cli.Context, val int) error {
+			if val == 1 || val == 2 {
+				return nil
+			}
+			return fmt.Errorf("invalid assistant runtime version %d (allowed: 1, 2)", val)
+		},
+	},
 	&cli.StringFlag{
 		Name:    "assistant-runtime-provider",
 		Usage:   "Assistant runtime provider. Allowed values: local, flyio.",

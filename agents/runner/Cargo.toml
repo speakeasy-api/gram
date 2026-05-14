@@ -32,6 +32,8 @@ async-trait = "0.1"
 axum = { version = "0.8", features = ["http1", "json"] }
 chrono = "0.4"
 clap = { version = "4", features = ["derive", "env"] }
+dashmap = "6"
+futures = "0.3"
 http = "1"
 reqwest = "0.13.2"
 reqwest-middleware = "0.5"

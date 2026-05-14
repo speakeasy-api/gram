@@ -246,13 +246,13 @@ func (f *FlyRuntimeBackend) ensureExisting(
 		metadata.LastBootID = ""
 	}
 
-	machine, err := f.tracedResolveMachine(ctx, flapsClient, appName, runtime.AssistantThreadID, metadata.MachineID, metadata.LastBootID, sameAppIncarnation)
+	machine, err := f.tracedResolveMachine(ctx, flapsClient, appName, runtime, metadata.MachineID, metadata.LastBootID, sameAppIncarnation)
 	if err != nil {
 		if errors.Is(err, errFlyAppCorrupted) {
 			f.logger.WarnContext(ctx,
 				"assistant fly runtime app corrupted, tearing down for recreate",
 				attr.SlogFlyAppName(appName),
-				attr.SlogAssistantThreadID(runtime.AssistantThreadID.String()),
+				attr.SlogAssistantID(runtime.AssistantID.String()),
 			)
 			if delErr := f.deleteApp(ctx, appName); delErr != nil && !isFlyNotFound(delErr) {
 				f.logger.WarnContext(ctx,
@@ -402,20 +402,20 @@ func (f *FlyRuntimeBackend) resolveMachine(
 	ctx context.Context,
 	flapsClient flyRuntimeFlapsClient,
 	appName string,
-	threadID uuid.UUID,
+	runtime assistantRuntimeRecord,
 	machineID string,
 	lastBootID string,
 	sameAppIncarnation bool,
 ) (*fly.Machine, error) {
-	wantThreadID := threadID.String()
+	matches := machineMatcherForRuntime(runtime)
 	hadPriorBoot := sameAppIncarnation && (lastBootID != "" || machineID != "")
 
 	if machineID != "" {
 		machine, err := flapsClient.Get(ctx, appName, machineID)
 		switch {
 		case err == nil:
-			if !machineBelongsToThread(machine, wantThreadID) {
-				return nil, fmt.Errorf("assistant fly runtime machine %s does not belong to thread %s", machineID, wantThreadID)
+			if !matches(machine) {
+				return nil, fmt.Errorf("assistant fly runtime machine %s does not belong to runtime %s", machineID, runtime.ID)
 			}
 			return machine, nil
 		case !isFlyNotFound(err):
@@ -438,18 +438,38 @@ func (f *FlyRuntimeBackend) resolveMachine(
 		if machine == nil || !machine.IsActive() {
 			continue
 		}
-		if machineBelongsToThread(machine, wantThreadID) {
+		if matches(machine) {
 			return machine, nil
 		}
 	}
 	return nil, nil
 }
 
-func machineBelongsToThread(machine *fly.Machine, threadID string) bool {
-	if machine == nil || machine.Config == nil {
-		return false
+// machineMatcherForRuntime returns a predicate that picks the machine that
+// belongs to a runtime row. v1 (per-thread) machines are stamped with the
+// thread id; v2 (per-assistant) machines are stamped with the assistant id
+// only and any active machine in the per-assistant app is fair game.
+func machineMatcherForRuntime(runtime assistantRuntimeRecord) func(*fly.Machine) bool {
+	if runtime.AssistantThreadID != uuid.Nil {
+		want := runtime.AssistantThreadID.String()
+		return func(machine *fly.Machine) bool {
+			if machine == nil || machine.Config == nil {
+				return false
+			}
+			return machine.Config.Metadata[flyMachineMetadataThreadID] == want
+		}
 	}
-	return machine.Config.Metadata[flyMachineMetadataThreadID] == threadID
+	want := runtime.AssistantID.String()
+	return func(machine *fly.Machine) bool {
+		if machine == nil || machine.Config == nil {
+			return false
+		}
+		// v2 machines have no thread tag; require the assistant tag.
+		if _, hasThread := machine.Config.Metadata[flyMachineMetadataThreadID]; hasThread {
+			return false
+		}
+		return machine.Config.Metadata[flyMachineMetadataAssistantID] == want
+	}
 }
 
 func (f *FlyRuntimeBackend) launchMachine(
@@ -461,7 +481,7 @@ func (f *FlyRuntimeBackend) launchMachine(
 	input := fly.LaunchMachineInput{
 		Config:              f.machineConfig(runtime),
 		Region:              f.config.DefaultFlyRegion,
-		Name:                "assistant-" + shortRuntimeName(runtime.AssistantThreadID),
+		Name:                "assistant-" + shortRuntimeName(runtimeMachineNameID(runtime)),
 		SkipLaunch:          false,
 		RequiresReplacement: true,
 	}
@@ -547,7 +567,7 @@ func (f *FlyRuntimeBackend) tracedResolveMachine(
 	ctx context.Context,
 	flapsClient flyRuntimeFlapsClient,
 	appName string,
-	threadID uuid.UUID,
+	runtime assistantRuntimeRecord,
 	machineID string,
 	lastBootID string,
 	sameAppIncarnation bool,
@@ -560,7 +580,7 @@ func (f *FlyRuntimeBackend) tracedResolveMachine(
 		}
 		span.End()
 	}()
-	return f.resolveMachine(ctx, flapsClient, appName, threadID, machineID, lastBootID, sameAppIncarnation)
+	return f.resolveMachine(ctx, flapsClient, appName, runtime, machineID, lastBootID, sameAppIncarnation)
 }
 
 // maybeRecycleImage applies an in-place machine update when the running
@@ -768,7 +788,7 @@ func (f *FlyRuntimeBackend) tracedRuntimeState(ctx context.Context, target flyRu
 	return f.runtimeState(ctx, target)
 }
 
-func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, idempotencyKey string, authToken string, prompt string) error {
+func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string) error {
 	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
 		return err
 	}
@@ -788,9 +808,19 @@ func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 		return fmt.Errorf("marshal assistant fly runtime turn request: %w", err)
 	}
 
+	// v1 runtime rows pin a single thread per VM, so the runner exposes
+	// one /turn endpoint. v2 rows host every thread under one assistant
+	// and the runner expects /threads/{thread_id}/turn — the URL segment
+	// is the only signal the runner has for which per-thread tokio task
+	// to enqueue against.
+	turnPath := "/turn"
+	if runtime.AssistantThreadID == uuid.Nil {
+		turnPath = "/threads/" + threadID.String() + "/turn"
+	}
+
 	if _, err := f.runtimeRequest(ctx, targetFromMetadata(metadata), runtimeHTTPRequest{
 		Method:         http.MethodPost,
-		Path:           "/turn",
+		Path:           turnPath,
 		ContentType:    "application/json",
 		Body:           reqBody,
 		IdempotencyKey: idempotencyKey,
@@ -927,27 +957,37 @@ func (f *FlyRuntimeBackend) deleteApp(ctx context.Context, appName string) error
 func (f *FlyRuntimeBackend) machineConfig(runtime assistantRuntimeRecord) *fly.MachineConfig {
 	stop := fly.MachineAutostopOff
 	autostart := true
+	env := map[string]string{
+		"GRAM_ASSISTANT_ID":         runtime.AssistantID.String(),
+		"GRAM_ASSISTANT_PROJECT_ID": runtime.ProjectID.String(),
+	}
+	metadata := map[string]string{
+		fly.MachineConfigMetadataKeyFlyPlatformVersion: "v2",
+		fly.MachineConfigMetadataKeyFlyProcessGroup:    flyMachineMetadataRoleAssistant,
+		flyMachineMetadataAssistantID:                  runtime.AssistantID.String(),
+		flyMachineMetadataProjectID:                    runtime.ProjectID.String(),
+		flyMachineMetadataRole:                         flyMachineMetadataRoleAssistant,
+	}
+	// v1 machines pin a thread (one VM per thread). v2 machines serve every
+	// thread under the assistant, so the thread tag is omitted and the
+	// runner pulls per-thread bootstrap on the first /turn for each thread.
+	if runtime.AssistantThreadID != uuid.Nil {
+		env["GRAM_ASSISTANT_THREAD_ID"] = runtime.AssistantThreadID.String()
+		metadata[flyMachineMetadataThreadID] = runtime.AssistantThreadID.String()
+	}
+	if f.config.ServerURLOverride != nil {
+		env["GRAM_SERVER_URL"] = f.config.ServerURLOverride.String()
+	}
 	return &fly.MachineConfig{
 		Image: fmt.Sprintf("%s:%s", f.config.OCIImage, f.config.ImageVersion),
-		Env: map[string]string{
-			"GRAM_ASSISTANT_ID":         runtime.AssistantID.String(),
-			"GRAM_ASSISTANT_PROJECT_ID": runtime.ProjectID.String(),
-			"GRAM_ASSISTANT_THREAD_ID":  runtime.AssistantThreadID.String(),
-		},
+		Env:   env,
 		Guest: &fly.MachineGuest{
 			CPUKind:       "shared",
 			CPUs:          2,
 			MemoryMB:      1024,
 			PersistRootfs: fly.MachinePersistRootfsNever,
 		},
-		Metadata: map[string]string{
-			fly.MachineConfigMetadataKeyFlyPlatformVersion: "v2",
-			fly.MachineConfigMetadataKeyFlyProcessGroup:    flyMachineMetadataRoleAssistant,
-			flyMachineMetadataAssistantID:                  runtime.AssistantID.String(),
-			flyMachineMetadataProjectID:                    runtime.ProjectID.String(),
-			flyMachineMetadataThreadID:                     runtime.AssistantThreadID.String(),
-			flyMachineMetadataRole:                         flyMachineMetadataRoleAssistant,
-		},
+		Metadata: metadata,
 		Services: []fly.MachineService{
 			{
 				Protocol:           "tcp",
@@ -1117,6 +1157,17 @@ func decodeFlyRuntimeMetadata(raw []byte) (flyRuntimeMetadata, error) {
 		return flyRuntimeMetadata{}, fmt.Errorf("decode assistant fly runtime metadata: %w", err)
 	}
 	return metadata, nil
+}
+
+// runtimeMachineNameID returns the id used to derive the launched Fly
+// machine's name. v1 machines name themselves after the thread; v2
+// machines name themselves after the assistant since one VM serves
+// every thread under it.
+func runtimeMachineNameID(runtime assistantRuntimeRecord) uuid.UUID {
+	if runtime.AssistantThreadID != uuid.Nil {
+		return runtime.AssistantThreadID
+	}
+	return runtime.AssistantID
 }
 
 func shortRuntimeName(id uuid.UUID) string {

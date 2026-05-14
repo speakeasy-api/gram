@@ -5,6 +5,11 @@ SET
   updated_at = clock_timestamp(),
   deleted_at = clock_timestamp()
 WHERE deleted IS FALSE
+  -- v2 rows host every thread under one assistant; the per-event TTL the
+  -- v1 reaper enforces does not apply (the VM stays warm across the
+  -- assistant's idle window). v2 cleanup happens via a longer-horizon
+  -- reaper added separately, not this one.
+  AND runtime_version = 1
   AND (
     (state = @starting_state AND updated_at < @starting_cutoff)
     OR (
@@ -34,6 +39,33 @@ RETURNING assistant_id;
 SELECT project_id
 FROM assistant_threads
 WHERE id = @thread_id;
+
+-- name: LoadAssistantThreadForBootstrap :one
+SELECT
+  t.id,
+  t.assistant_id,
+  t.project_id,
+  t.correlation_id,
+  t.chat_id,
+  t.source_kind,
+  t.source_ref_json,
+  a.organization_id,
+  a.created_by_user_id,
+  a.name,
+  a.model,
+  a.instructions,
+  a.warm_ttl_seconds,
+  a.max_concurrency,
+  a.status,
+  a.created_at,
+  a.updated_at,
+  a.deleted_at
+FROM assistant_threads t
+JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
+WHERE t.id = @thread_id
+  AND t.project_id = @project_id
+  AND t.deleted IS FALSE
+  AND a.deleted IS FALSE;
 
 -- name: ResolveThreadCorrelation :one
 SELECT id, project_id, assistant_id, correlation_id
@@ -337,6 +369,132 @@ INSERT INTO assistant_runtimes (
   ), '{}'::jsonb)
 )
 ON CONFLICT DO NOTHING;
+
+-- name: ReserveAssistantRuntimeV2 :exec
+-- v2 runtimes are keyed on (project_id, assistant_id) — one VM serves
+-- every thread under an assistant. assistant_thread_id is NULL on v2
+-- rows. The unique partial index `assistant_runtimes_v2_one_per_assistant`
+-- backs the ON CONFLICT and guarantees the single-VM invariant under
+-- concurrent admit. Callers must hold pg_advisory_xact_lock on the
+-- assistant id to serialise VM creation across workers.
+INSERT INTO assistant_runtimes (
+  assistant_thread_id,
+  assistant_id,
+  project_id,
+  backend,
+  state,
+  runtime_version,
+  backend_metadata_json
+) VALUES (
+  NULL,
+  @assistant_id,
+  @project_id,
+  @backend,
+  @state,
+  2,
+  COALESCE((
+    SELECT r.backend_metadata_json
+    FROM assistant_runtimes r
+    WHERE r.project_id = @project_id
+      AND r.assistant_id = @assistant_id
+      AND r.runtime_version = 2
+      AND r.backend = @backend
+      AND r.backend_metadata_json <> '{}'::jsonb
+    ORDER BY r.created_at DESC
+    LIMIT 1
+  ), '{}'::jsonb)
+)
+ON CONFLICT DO NOTHING;
+
+-- name: ListAssistantPendingThreads :many
+-- v2 admit needs every thread with pending events under an assistant
+-- (no per-thread runtime gating — one VM serves them all). Used after
+-- the v2 runtime row is reserved so the workflow can fan out to one
+-- ProcessThreadEvents per thread.
+SELECT t.id, t.project_id
+FROM assistant_threads t
+WHERE t.project_id = @project_id
+  AND t.assistant_id = @assistant_id
+  AND t.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM assistant_thread_events e
+    WHERE e.project_id = t.project_id
+      AND e.assistant_thread_id = t.id
+      AND e.deleted IS FALSE
+      AND e.status = @pending_status
+  )
+ORDER BY (
+  SELECT MIN(e.created_at)
+  FROM assistant_thread_events e
+  WHERE e.project_id = t.project_id
+    AND e.assistant_thread_id = t.id
+    AND e.deleted IS FALSE
+    AND e.status = @pending_status
+) ASC;
+
+-- name: LookupActiveAssistantRuntimeV2 :one
+SELECT id
+FROM assistant_runtimes
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND runtime_version = 2
+  AND deleted IS FALSE
+  AND ended IS FALSE
+LIMIT 1;
+
+-- name: AcquireAssistantAdvisoryLock :exec
+-- pg_advisory_xact_lock auto-releases at commit. Hashed on the assistant
+-- id so concurrent workers admitting the same assistant serialise on VM
+-- creation; concurrent admits across assistants do not contend.
+SELECT pg_advisory_xact_lock(hashtext('asst:' || @assistant_id::text));
+
+-- name: LoadThreadContextV2 :one
+-- v2 sibling of LoadThreadContext: the runtime row is keyed on assistant,
+-- not thread. Joins assistant_thread → assistant → v2 runtime by
+-- assistant_id, returning the same shape as LoadThreadContext (with
+-- assistant_thread_id on the runtime row left NULL).
+SELECT
+  t.id,
+  t.assistant_id,
+  t.project_id,
+  t.correlation_id,
+  t.chat_id,
+  t.source_kind,
+  t.source_ref_json,
+  t.last_event_at,
+  a.id AS assistant_record_id,
+  a.project_id AS assistant_record_project_id,
+  a.organization_id,
+  a.created_by_user_id,
+  a.name,
+  a.model,
+  a.instructions,
+  a.warm_ttl_seconds,
+  a.max_concurrency,
+  a.status,
+  a.created_at,
+  a.updated_at,
+  a.deleted_at,
+  r.id AS runtime_id,
+  r.assistant_id AS runtime_assistant_id,
+  r.project_id AS runtime_project_id,
+  r.backend,
+  r.backend_metadata_json,
+  r.state,
+  r.warm_until
+FROM assistant_threads t
+JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
+JOIN assistant_runtimes r ON r.assistant_id = t.assistant_id
+  AND r.project_id = t.project_id
+  AND r.runtime_version = 2
+WHERE t.id = @thread_id
+  AND t.project_id = @project_id
+  AND t.deleted IS FALSE
+  AND a.deleted IS FALSE
+  AND r.deleted IS FALSE
+  AND r.ended IS FALSE
+  AND r.state IN (@starting_state, @active_state);
 
 -- name: TouchProcessingLease :exec
 WITH touch_runtime AS (
