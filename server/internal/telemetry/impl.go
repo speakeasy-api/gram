@@ -836,6 +836,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
 	apiKeyID := conv.PtrValOr(payload.APIKeyID, "")
 	toolsetSlug := conv.PtrValOr(payload.ToolsetSlug, "")
+	remoteMCPServerID := conv.PtrValOr(payload.RemoteMcpServerID, "")
 	eventSource := conv.PtrValOr(payload.EventSource, "")
 	hookSource := conv.PtrValOr(payload.HookSource, "")
 
@@ -853,30 +854,32 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 
 	// Fetch all data sequentially to avoid ClickHouse concurrent query limits
 	summary, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
-		GramProjectID:  projectID,
-		TimeStart:      timeStart,
-		TimeEnd:        timeEnd,
-		UserID:         userID,
-		ExternalUserID: externalUserID,
-		APIKeyID:       apiKeyID,
-		ToolsetSlug:    toolsetSlug,
-		EventSource:    eventSource,
-		HookSource:     hookSource,
+		GramProjectID:     projectID,
+		TimeStart:         timeStart,
+		TimeEnd:           timeEnd,
+		UserID:            userID,
+		ExternalUserID:    externalUserID,
+		APIKeyID:          apiKeyID,
+		ToolsetSlug:       toolsetSlug,
+		RemoteMCPServerID: remoteMCPServerID,
+		EventSource:       eventSource,
+		HookSource:        hookSource,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving overview summary")
 	}
 
 	comparison, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
-		GramProjectID:  projectID,
-		TimeStart:      comparisonStart,
-		TimeEnd:        comparisonEnd,
-		UserID:         userID,
-		ExternalUserID: externalUserID,
-		APIKeyID:       apiKeyID,
-		ToolsetSlug:    toolsetSlug,
-		EventSource:    eventSource,
-		HookSource:     hookSource,
+		GramProjectID:     projectID,
+		TimeStart:         comparisonStart,
+		TimeEnd:           comparisonEnd,
+		UserID:            userID,
+		ExternalUserID:    externalUserID,
+		APIKeyID:          apiKeyID,
+		ToolsetSlug:       toolsetSlug,
+		RemoteMCPServerID: remoteMCPServerID,
+		EventSource:       eventSource,
+		HookSource:        hookSource,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison summary")
@@ -885,16 +888,17 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	var timeSeries []repo.TimeSeriesBucket
 	if payload.IncludeTimeSeries {
 		timeSeries, err = s.chRepo.GetTimeSeriesMetrics(ctx, repo.GetTimeSeriesMetricsParams{
-			GramProjectID:   projectID,
-			TimeStart:       timeStart,
-			TimeEnd:         timeEnd,
-			IntervalSeconds: intervalSeconds,
-			UserID:          userID,
-			ExternalUserID:  externalUserID,
-			APIKeyID:        apiKeyID,
-			ToolsetSlug:     toolsetSlug,
-			EventSource:     eventSource,
-			HookSource:      hookSource,
+			GramProjectID:     projectID,
+			TimeStart:         timeStart,
+			TimeEnd:           timeEnd,
+			IntervalSeconds:   intervalSeconds,
+			UserID:            userID,
+			ExternalUserID:    externalUserID,
+			APIKeyID:          apiKeyID,
+			ToolsetSlug:       toolsetSlug,
+			RemoteMCPServerID: remoteMCPServerID,
+			EventSource:       eventSource,
+			HookSource:        hookSource,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving time series")
@@ -902,34 +906,36 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	}
 
 	toolsByCount, err := s.chRepo.GetToolMetricsBreakdown(ctx, repo.GetToolMetricsBreakdownParams{
-		GramProjectID:  projectID,
-		TimeStart:      timeStart,
-		TimeEnd:        timeEnd,
-		UserID:         userID,
-		ExternalUserID: externalUserID,
-		APIKeyID:       apiKeyID,
-		ToolsetSlug:    toolsetSlug,
-		EventSource:    eventSource,
-		HookSource:     hookSource,
-		Limit:          10,
-		SortBy:         "count",
+		GramProjectID:     projectID,
+		TimeStart:         timeStart,
+		TimeEnd:           timeEnd,
+		UserID:            userID,
+		ExternalUserID:    externalUserID,
+		APIKeyID:          apiKeyID,
+		ToolsetSlug:       toolsetSlug,
+		RemoteMCPServerID: remoteMCPServerID,
+		EventSource:       eventSource,
+		HookSource:        hookSource,
+		Limit:             10,
+		SortBy:            "count",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by count")
 	}
 
 	toolsByFailure, err := s.chRepo.GetToolMetricsBreakdown(ctx, repo.GetToolMetricsBreakdownParams{
-		GramProjectID:  projectID,
-		TimeStart:      timeStart,
-		TimeEnd:        timeEnd,
-		UserID:         userID,
-		ExternalUserID: externalUserID,
-		APIKeyID:       apiKeyID,
-		ToolsetSlug:    toolsetSlug,
-		EventSource:    eventSource,
-		HookSource:     hookSource,
-		Limit:          10,
-		SortBy:         "failure_rate",
+		GramProjectID:     projectID,
+		TimeStart:         timeStart,
+		TimeEnd:           timeEnd,
+		UserID:            userID,
+		ExternalUserID:    externalUserID,
+		APIKeyID:          apiKeyID,
+		ToolsetSlug:       toolsetSlug,
+		RemoteMCPServerID: remoteMCPServerID,
+		EventSource:       eventSource,
+		HookSource:        hookSource,
+		Limit:             10,
+		SortBy:            "failure_rate",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by failure rate")
@@ -1009,15 +1015,16 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 
 	// Fetch tool call metrics from ClickHouse for current period (no filters)
 	toolMetrics, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
-		GramProjectID:  projectID,
-		TimeStart:      timeStart,
-		TimeEnd:        timeEnd,
-		UserID:         "",
-		ExternalUserID: "",
-		APIKeyID:       "",
-		ToolsetSlug:    "",
-		EventSource:    "",
-		HookSource:     "",
+		GramProjectID:     projectID,
+		TimeStart:         timeStart,
+		TimeEnd:           timeEnd,
+		UserID:            "",
+		ExternalUserID:    "",
+		APIKeyID:          "",
+		ToolsetSlug:       "",
+		RemoteMCPServerID: "",
+		EventSource:       "",
+		HookSource:        "",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tool call metrics")
@@ -1035,15 +1042,16 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 
 	// Fetch comparison period tool metrics from ClickHouse
 	toolMetricsComparison, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
-		GramProjectID:  projectID,
-		TimeStart:      comparisonStart,
-		TimeEnd:        comparisonEnd,
-		UserID:         "",
-		ExternalUserID: "",
-		APIKeyID:       "",
-		ToolsetSlug:    "",
-		EventSource:    "",
-		HookSource:     "",
+		GramProjectID:     projectID,
+		TimeStart:         comparisonStart,
+		TimeEnd:           comparisonEnd,
+		UserID:            "",
+		ExternalUserID:    "",
+		APIKeyID:          "",
+		ToolsetSlug:       "",
+		RemoteMCPServerID: "",
+		EventSource:       "",
+		HookSource:        "",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison tool call metrics")

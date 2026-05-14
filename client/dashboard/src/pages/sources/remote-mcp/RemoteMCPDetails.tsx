@@ -1,5 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { SourceActivityPanel } from "@/components/sources/SourceActivityPanel";
+import { computeTelemetrySummary } from "@/components/sources/sourceTelemetrySummary";
 import {
   SourceInfoRow,
   SourceInfoTable,
@@ -14,6 +16,7 @@ import {
   TabsList,
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
+import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { dateTimeFormatters } from "@/lib/dates";
 import {
   formatRemoteMcpDisplay,
@@ -21,10 +24,13 @@ import {
   remoteMcpRouteParam,
 } from "@/lib/sources";
 import { useRoutes } from "@/routes";
+import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import type {
+  GetObservabilityOverviewResult,
   McpServer,
   RemoteMcpServer,
 } from "@gram/client/models/components";
+import { useGramContext } from "@gram/client/react-query/_context";
 import {
   invalidateAllGetRemoteMcpServer,
   invalidateAllRemoteMcpServers,
@@ -32,8 +38,9 @@ import {
   useMcpServers,
   useUpdateRemoteMcpServerMutation,
 } from "@gram/client/react-query/index.js";
+import { unwrapAsync } from "@gram/client/types/fp";
 import { Alert, Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { Loader2, Network, Server, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -246,6 +253,51 @@ function OverviewTab({
     : "—";
   const showLinkedCount = remoteMcpServer != null && !isLoadingMcpServers;
 
+  // Scoped to this remote MCP server via the remote_mcp_server_id filter on
+  // getObservabilityOverview, so topToolsByCount is already only this
+  // server's tool calls — no client-side URN filtering needed.
+  const gramClient = useGramContext();
+  const remoteMcpServerId = remoteMcpServer?.id ?? "";
+  const telemetryFrom = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d;
+  }, []);
+  const telemetryTo = useMemo(() => new Date(), []);
+
+  const { data: telemetryData, isLoading: isLoadingTelemetry } =
+    useLogsEnabledErrorCheck(
+      useQuery<GetObservabilityOverviewResult>({
+        queryKey: [
+          "remote-mcp-source-telemetry",
+          remoteMcpServerId,
+          telemetryFrom.toISOString(),
+        ],
+        queryFn: () =>
+          unwrapAsync(
+            telemetryGetObservabilityOverview(gramClient, {
+              getObservabilityOverviewPayload: {
+                from: telemetryFrom,
+                to: telemetryTo,
+                remoteMcpServerId,
+                includeTimeSeries: false,
+              },
+            }),
+          ),
+        enabled: remoteMcpServerId !== "",
+        throwOnError: false,
+      }),
+    );
+
+  const sourceToolMetrics = useMemo(
+    () => telemetryData?.topToolsByCount ?? [],
+    [telemetryData],
+  );
+  const sourceTelemetrySummary = useMemo(
+    () => computeTelemetrySummary(sourceToolMetrics),
+    [sourceToolMetrics],
+  );
+
   return (
     <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
       <div className="grid grid-cols-[280px_1fr] items-start gap-8">
@@ -304,24 +356,12 @@ function OverviewTab({
           </SourceInfoTable>
         </div>
 
-        {/* Source Activity */}
-        <div className="flex flex-col">
-          <div className="mb-3 flex items-center justify-between">
-            <Heading variant="h4">Source Activity</Heading>
-            <Type muted small>
-              Last 7 days
-            </Type>
-          </div>
-          <div className="flex flex-col items-center justify-center rounded-lg border p-12 text-center">
-            <Type muted className="mb-1 block">
-              No invocation data yet
-            </Type>
-            <Type muted small>
-              Telemetry will appear here once tools from this source are called
-              via an MCP server.
-            </Type>
-          </div>
-        </div>
+        <SourceActivityPanel
+          tools={sourceToolMetrics}
+          summary={sourceTelemetrySummary}
+          isLoading={isLoadingTelemetry}
+          windowLabel="Last 7 days"
+        />
       </div>
     </div>
   );
