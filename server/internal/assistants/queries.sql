@@ -1,15 +1,17 @@
 -- name: ReapStuckAssistantRuntimes :many
+-- Short-horizon reaper for rows the happy-path can no longer move. Applies
+-- to both v1 (per-thread VM) and v2 (single VM per assistant) rows: the
+-- starting/active/expiring liveness markers it keys on are version-agnostic.
+-- A v2 VM in active use updates warm_until and last_heartbeat_at via every
+-- thread workflow, so an in-flight VM is never matched by the active branch;
+-- only assistants whose entire thread set has gone idle past the cutoffs are
+-- collected.
 UPDATE assistant_runtimes
 SET
   state = @stopped_state,
   updated_at = clock_timestamp(),
   deleted_at = clock_timestamp()
 WHERE deleted IS FALSE
-  -- v2 rows host every thread under one assistant; the per-event TTL the
-  -- v1 reaper enforces does not apply (the VM stays warm across the
-  -- assistant's idle window). v2 cleanup happens via a longer-horizon
-  -- reaper added separately, not this one.
-  AND runtime_version = 1
   AND (
     (state = @starting_state AND updated_at < @starting_cutoff)
     OR (
@@ -20,7 +22,8 @@ WHERE deleted IS FALSE
     )
     -- Backstop for activities that exhaust Temporal's retry budget after CAS
     -- active->expiring without reaching Stop. Without this the partial unique
-    -- index on (assistant_thread_id) blocks new admits indefinitely.
+    -- indexes (v1 on assistant_thread_id, v2 on assistant_id) block new
+    -- admits indefinitely.
     OR (state = @expiring_state AND updated_at < @expiring_cutoff)
   )
 RETURNING assistant_id;
