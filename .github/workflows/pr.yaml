@@ -590,7 +590,7 @@ jobs:
   cli-build-lint:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.cli == 'true'
+    if: needs.changes.outputs.cli == 'true' && github.event_name != 'push'
     env:
       GOMAXPROCS: 4
     services:
@@ -658,7 +658,7 @@ jobs:
   plog-build-lint:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.plog == 'true'
+    if: needs.changes.outputs.plog == 'true' && github.event_name != 'push'
     env:
       GOMAXPROCS: 4
     steps:
@@ -711,7 +711,7 @@ jobs:
   server-test:
     runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.server == 'true'
+    if: needs.changes.outputs.server == 'true' && github.event_name != 'push'
     env:
       GOMAXPROCS: 8
     steps:
@@ -1013,7 +1013,8 @@ jobs:
     if: |
       !cancelled() &&
       needs.sdk-gen-check.result != 'failure' &&
-      needs.changes.outputs.client == 'true'
+      needs.changes.outputs.client == 'true' &&
+      github.event_name != 'push'
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
@@ -1061,7 +1062,7 @@ jobs:
     name: Check SDK is up-to-date
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.sdk-gen == 'true'
+    if: needs.changes.outputs.sdk-gen == 'true' && github.event_name != 'push'
     env:
       SPEAKEASY_API_KEY: ${{ secrets.SPEAKEASY_API_KEY }}
     steps:
@@ -1114,7 +1115,8 @@ jobs:
     if: |
       !cancelled() &&
       needs.sdk-gen-check.result != 'failure' &&
-      needs.changes.outputs.sdk == 'true'
+      needs.changes.outputs.sdk == 'true' &&
+      github.event_name != 'push'
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
@@ -1400,7 +1402,7 @@ jobs:
   ts-framework-test:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
-    if: needs.changes.outputs.tsframework == 'true'
+    if: needs.changes.outputs.tsframework == 'true' && github.event_name != 'push'
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
@@ -1441,7 +1443,7 @@ jobs:
   elements-build-lint:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.elements == 'true'
+    if: needs.changes.outputs.elements == 'true' && github.event_name != 'push'
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
     steps:
@@ -1490,7 +1492,7 @@ jobs:
   elements-test:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.elements == 'true'
+    if: needs.changes.outputs.elements == 'true' && github.event_name != 'push'
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
@@ -1529,7 +1531,7 @@ jobs:
   elements-examples:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.elements == 'true'
+    if: needs.changes.outputs.elements == 'true' && github.event_name != 'push'
     strategy:
       fail-fast: false
       matrix:
@@ -1585,7 +1587,7 @@ jobs:
   ci-gate:
     name: CI Gate
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    if: always()
+    if: always() && github.event_name != 'push'
     needs:
       - changes
       - server-build-lint
