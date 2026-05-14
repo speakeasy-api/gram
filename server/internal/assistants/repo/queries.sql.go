@@ -1826,19 +1826,19 @@ INSERT INTO assistant_runtimes (
   runtime_version,
   backend_metadata_json
 ) VALUES (
-  NULL,
   $1,
   $2,
   $3,
   $4,
+  $5,
   2,
   COALESCE((
     SELECT r.backend_metadata_json
     FROM assistant_runtimes r
-    WHERE r.project_id = $2
-      AND r.assistant_id = $1
+    WHERE r.project_id = $3
+      AND r.assistant_id = $2
       AND r.runtime_version = 2
-      AND r.backend = $3
+      AND r.backend = $4
       AND r.backend_metadata_json <> '{}'::jsonb
     ORDER BY r.created_at DESC
     LIMIT 1
@@ -1848,20 +1848,25 @@ ON CONFLICT DO NOTHING
 `
 
 type ReserveAssistantRuntimeV2Params struct {
-	AssistantID uuid.UUID
-	ProjectID   uuid.UUID
-	Backend     string
-	State       string
+	AssistantThreadID uuid.UUID
+	AssistantID       uuid.UUID
+	ProjectID         uuid.UUID
+	Backend           string
+	State             string
 }
 
 // v2 runtimes are keyed on (project_id, assistant_id) — one VM serves
-// every thread under an assistant. assistant_thread_id is NULL on v2
-// rows. The unique partial index `assistant_runtimes_v2_one_per_assistant`
-// backs the ON CONFLICT and guarantees the single-VM invariant under
-// concurrent admit. Callers must hold pg_advisory_xact_lock on the
-// assistant id to serialise VM creation across workers.
+// every thread under an assistant. assistant_thread_id is set to the
+// admitting thread (the one that triggered admit) so the column stays
+// a real reference; the runtime_version = 2 marker carries the v2
+// semantic distinction. The unique partial index
+// `assistant_runtimes_v2_one_per_assistant` backs the ON CONFLICT and
+// guarantees the single-VM invariant under concurrent admit. Callers
+// must hold pg_advisory_xact_lock on the assistant id to serialise VM
+// creation across workers.
 func (q *Queries) ReserveAssistantRuntimeV2(ctx context.Context, arg ReserveAssistantRuntimeV2Params) error {
 	_, err := q.db.Exec(ctx, reserveAssistantRuntimeV2,
+		arg.AssistantThreadID,
 		arg.AssistantID,
 		arg.ProjectID,
 		arg.Backend,
@@ -2131,7 +2136,7 @@ SET
   updated_at = clock_timestamp(),
   deleted_at = clock_timestamp()
 WHERE project_id = $2
-  AND assistant_thread_id = $3
+  AND id = $3
   AND deleted IS FALSE
   AND ended IS FALSE
   AND state IN ($4, $5, $6)
@@ -2140,7 +2145,7 @@ WHERE project_id = $2
 type StopAssistantRuntimeParams struct {
 	State         string
 	ProjectID     uuid.UUID
-	ThreadID      uuid.UUID
+	RuntimeID     uuid.UUID
 	StartingState string
 	ActiveState   string
 	ExpiringState string
@@ -2150,7 +2155,7 @@ func (q *Queries) StopAssistantRuntime(ctx context.Context, arg StopAssistantRun
 	_, err := q.db.Exec(ctx, stopAssistantRuntime,
 		arg.State,
 		arg.ProjectID,
-		arg.ThreadID,
+		arg.RuntimeID,
 		arg.StartingState,
 		arg.ActiveState,
 		arg.ExpiringState,

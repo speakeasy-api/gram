@@ -372,11 +372,14 @@ ON CONFLICT DO NOTHING;
 
 -- name: ReserveAssistantRuntimeV2 :exec
 -- v2 runtimes are keyed on (project_id, assistant_id) — one VM serves
--- every thread under an assistant. assistant_thread_id is NULL on v2
--- rows. The unique partial index `assistant_runtimes_v2_one_per_assistant`
--- backs the ON CONFLICT and guarantees the single-VM invariant under
--- concurrent admit. Callers must hold pg_advisory_xact_lock on the
--- assistant id to serialise VM creation across workers.
+-- every thread under an assistant. assistant_thread_id is set to the
+-- admitting thread (the one that triggered admit) so the column stays
+-- a real reference; the runtime_version = 2 marker carries the v2
+-- semantic distinction. The unique partial index
+-- `assistant_runtimes_v2_one_per_assistant` backs the ON CONFLICT and
+-- guarantees the single-VM invariant under concurrent admit. Callers
+-- must hold pg_advisory_xact_lock on the assistant id to serialise VM
+-- creation across workers.
 INSERT INTO assistant_runtimes (
   assistant_thread_id,
   assistant_id,
@@ -386,7 +389,7 @@ INSERT INTO assistant_runtimes (
   runtime_version,
   backend_metadata_json
 ) VALUES (
-  NULL,
+  @assistant_thread_id,
   @assistant_id,
   @project_id,
   @backend,
@@ -633,7 +636,7 @@ SET
   updated_at = clock_timestamp(),
   deleted_at = clock_timestamp()
 WHERE project_id = @project_id
-  AND assistant_thread_id = @thread_id
+  AND id = @runtime_id
   AND deleted IS FALSE
   AND ended IS FALSE
   AND state IN (@starting_state, @active_state, @expiring_state);

@@ -32,7 +32,7 @@ use crate::clip::ClippedToolSource;
 use crate::compaction::build_compactor;
 use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
-use crate::http_layer::{McpRotatingClient, TokenRegistry, build_http};
+use crate::http_layer::{McpRotatingClient, TokenRegistry, build_bootstrap_client, build_http};
 use crate::tools;
 use crate::wire::{McpServer, RunnerMessage, ThreadBootstrap};
 use crate::workdir::ASSISTANT_WORKDIR;
@@ -155,12 +155,10 @@ pub async fn build_host(
     let mcp_actor = tokio::spawn(run_mcp_actor(manager, mcp_cmd_rx));
 
     let gram_client = GramBootstrapClient::new(
-        server_url.clone(),
-        http_client.clone(),
+        server_url,
+        build_bootstrap_client(http_client.clone()),
         tokens.clone(),
     );
-
-    let _ = server_url; // captured by GramBootstrapClient
     let host = Arc::new(RuntimeHost {
         assistant_id,
         started_at: Instant::now(),

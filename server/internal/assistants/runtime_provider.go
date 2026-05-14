@@ -16,7 +16,6 @@ import (
 )
 
 const (
-	RuntimeProviderLocal = runtimeBackendLocal
 	RuntimeProviderFlyIO = runtimeBackendFlyIO
 
 	defaultFlyRuntimeRegion = "us"
@@ -25,7 +24,6 @@ const (
 
 type RuntimeBackendConfig struct {
 	Provider string
-	Local    RuntimeManagerConfig
 	Fly      FlyRuntimeConfig
 }
 
@@ -59,24 +57,12 @@ func (c FlyRuntimeConfig) Validate() error {
 	return nil
 }
 
-func normalizeRuntimeProvider(provider string) string {
-	switch provider {
-	case "", runtimeBackendLegacyFirecracker:
-		return RuntimeProviderLocal
-	default:
-		return provider
-	}
-}
-
 func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider, httpPolicy *guardian.Policy, config RuntimeBackendConfig) RuntimeBackend {
-	provider := normalizeRuntimeProvider(config.Provider)
-	switch provider {
-	case RuntimeProviderLocal:
-		return NewRuntimeManager(logger, httpPolicy, config.Local)
+	switch config.Provider {
 	case RuntimeProviderFlyIO:
 		return NewFlyRuntimeBackend(logger, tracerProvider, httpPolicy, config.Fly)
 	default:
-		panic(fmt.Sprintf("assistants.NewRuntimeBackend: unsupported provider %q (CLI validation should have rejected this)", provider))
+		panic(fmt.Sprintf("assistants.NewRuntimeBackend: unsupported provider %q (CLI validation should have rejected this)", config.Provider))
 	}
 }
 

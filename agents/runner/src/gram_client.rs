@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use reqwest_middleware::ClientWithMiddleware;
 use serde::Serialize;
 use thiserror::Error;
 
@@ -11,21 +12,27 @@ const BOOTSTRAP_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Lightweight client used by the runner to pull a per-thread bootstrap
 /// from the management API. Uses the host's shared `TokenRegistry` so the
-/// bearer always reflects the most recent rotation pushed via /turn.
+/// bearer always reflects the most recent rotation pushed via /turn. The
+/// underlying client carries `RetryTransientMiddleware` so transient 5xx /
+/// network errors are retried with exponential backoff before the first
+/// turn for an assistant fails.
 #[derive(Clone)]
 pub struct GramBootstrapClient {
     base_url: String,
-    http: reqwest::Client,
+    http: ClientWithMiddleware,
     tokens: TokenRegistry,
 }
 
 #[derive(Debug, Error)]
 pub enum GramClientError {
     #[error("send bootstrap request: {0}")]
-    Send(#[from] reqwest::Error),
+    Send(#[from] reqwest_middleware::Error),
 
     #[error("read bootstrap token")]
     Token,
+
+    #[error("read bootstrap body: {0}")]
+    Read(#[from] reqwest::Error),
 
     #[error("bootstrap request failed: status={status} body={body}")]
     Status { status: u16, body: String },
@@ -40,7 +47,7 @@ struct BootstrapRequest<'a> {
 }
 
 impl GramBootstrapClient {
-    pub fn new(base_url: String, http: reqwest::Client, tokens: TokenRegistry) -> Self {
+    pub fn new(base_url: String, http: ClientWithMiddleware, tokens: TokenRegistry) -> Self {
         Self {
             base_url,
             http,
@@ -57,18 +64,20 @@ impl GramBootstrapClient {
     ) -> Result<ThreadBootstrap, GramClientError> {
         let url = format!("{}{}", self.base_url.trim_end_matches('/'), BOOTSTRAP_PATH);
         let bearer = self.tokens.current().map_err(|_| GramClientError::Token)?;
+        let body = serde_json::to_vec(&BootstrapRequest { thread_id })?;
 
         let resp = self
             .http
             .post(&url)
             .timeout(BOOTSTRAP_TIMEOUT)
             .bearer_auth(&bearer)
-            .json(&BootstrapRequest { thread_id })
+            .header(http::header::CONTENT_TYPE, "application/json")
+            .body(body)
             .send()
             .await?;
 
         let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
+        let body = resp.text().await?;
         if !status.is_success() {
             return Err(GramClientError::Status {
                 status: status.as_u16(),

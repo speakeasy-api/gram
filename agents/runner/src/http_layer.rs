@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 use agentkit_http::Http;
 use agentkit_mcp::{
@@ -8,7 +9,7 @@ use agentkit_mcp::{
 };
 use async_trait::async_trait;
 use http::{HeaderMap, HeaderName, HeaderValue};
-use reqwest_middleware::{ClientBuilder, Middleware, Next};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Middleware, Next};
 use reqwest_retry::RetryTransientMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use rmcp::transport::streamable_http_client::StreamableHttpClient as RmcpStreamableHttpClient;
@@ -17,6 +18,14 @@ use thiserror::Error;
 use crate::errors::RunnerError;
 
 const HTTP_MAX_RETRIES: u32 = 3;
+
+// Bootstrap retries are tuned for a control-plane round-trip whose
+// failure stalls the entire VM's first turn for an assistant. Cap is
+// 7 attempts with 250ms→30s exponential bounds so a transient gateway
+// blip stretches up to ~30s of recovery before bubbling out.
+const BOOTSTRAP_MAX_RETRIES: u32 = 7;
+const BOOTSTRAP_RETRY_MIN: Duration = Duration::from_millis(250);
+const BOOTSTRAP_RETRY_MAX: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Error)]
 enum MiddlewareError {
@@ -88,6 +97,18 @@ pub fn build_http(client: reqwest::Client, registry: TokenRegistry) -> Http {
 fn retry_middleware() -> RetryTransientMiddleware<ExponentialBackoff> {
     let policy = ExponentialBackoff::builder().build_with_max_retries(HTTP_MAX_RETRIES);
     RetryTransientMiddleware::new_with_policy(policy).with_retry_log_level(tracing::Level::INFO)
+}
+
+/// Wraps a base reqwest client with the bootstrap retry policy. Used by the
+/// management-API bootstrap call so a transient 5xx or network blip does not
+/// strand the VM's first turn for an assistant.
+pub fn build_bootstrap_client(client: reqwest::Client) -> ClientWithMiddleware {
+    let policy = ExponentialBackoff::builder()
+        .retry_bounds(BOOTSTRAP_RETRY_MIN, BOOTSTRAP_RETRY_MAX)
+        .build_with_max_retries(BOOTSTRAP_MAX_RETRIES);
+    let retry =
+        RetryTransientMiddleware::new_with_policy(policy).with_retry_log_level(tracing::Level::INFO);
+    ClientBuilder::new(client).with(retry).build()
 }
 
 /// `McpHttpClient` impl that mints a fresh bearer token per request from a

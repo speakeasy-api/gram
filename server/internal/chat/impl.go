@@ -793,11 +793,14 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		}
 	}
 
-	// When the caller authenticated with an assistant runtime token, the
-	// chat must belong to a thread under that assistant. v2 tokens are
-	// assistant-scoped (no ThreadID claim), so this is the only check
-	// keeping a leaked runner token from writing into an unrelated chat.
-	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok && chatID != uuid.Nil && authCtx.ProjectID != nil {
+	// Assistant-scoped runner tokens carry no ThreadID claim, so the chat
+	// header is the only signal binding a completion to the right thread.
+	// Reject the request if the header is missing or the chat does not
+	// belong to a thread under the principal's assistant.
+	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+		if chatID == uuid.Nil || authCtx.ProjectID == nil {
+			return oops.E(oops.CodeForbidden, nil, "assistant runtime token requires a chat ID").Log(ctx, s.logger)
+		}
 		chatAssistantID, err := s.repo.GetAssistantThreadAssistantIDByChatID(ctx, repo.GetAssistantThreadAssistantIDByChatIDParams{
 			ChatID:    chatID,
 			ProjectID: *authCtx.ProjectID,

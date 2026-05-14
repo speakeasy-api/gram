@@ -52,7 +52,6 @@ func TestFlyRuntimeBackendEmitsPhaseSpansOnColdCreate(t *testing.T) {
 		"launchMachine",
 		"waitStarted",
 		"waitHealth",
-		"runtimeState",
 	}, phaseNamesFrom(spans), "cold-create must open one span per setup phase, in order")
 
 	for _, sp := range spans {
@@ -67,8 +66,6 @@ func TestFlyRuntimeBackendEmitsPhaseSpansOnColdCreate(t *testing.T) {
 		"waitStarted must report cold_start=true")
 	require.True(t, boolAttr(t, spanByName(spans, "waitHealth"), attr.AssistantColdStartKey),
 		"waitHealth must report cold_start=true once a launch happened")
-	require.True(t, boolAttr(t, spanByName(spans, "runtimeState"), attr.AssistantColdStartKey),
-		"runtimeState must report cold_start=true on cold create")
 }
 
 func TestFlyRuntimeBackendEmitsPhaseSpansOnWarmReuse(t *testing.T) {
@@ -79,6 +76,7 @@ func TestFlyRuntimeBackendEmitsPhaseSpansOnWarmReuse(t *testing.T) {
 	recorder := installRecordingTracer(t, backend)
 
 	threadID := uuid.New()
+	assistantID := uuid.New()
 	apiClient.app = &fly.App{ID: "app-1", Name: "gram-asst-test"}
 	flapsClient.machine = &fly.Machine{
 		ID:         "machine-1",
@@ -86,7 +84,7 @@ func TestFlyRuntimeBackendEmitsPhaseSpansOnWarmReuse(t *testing.T) {
 		Region:     "iad",
 		InstanceID: "boot-1",
 		Config: &fly.MachineConfig{
-			Metadata: map[string]string{flyMachineMetadataThreadID: threadID.String()},
+			Metadata: map[string]string{flyMachineMetadataAssistantID: assistantID.String()},
 		},
 	}
 	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
@@ -102,7 +100,7 @@ func TestFlyRuntimeBackendEmitsPhaseSpansOnWarmReuse(t *testing.T) {
 
 	_, err = backend.Ensure(t.Context(), assistantRuntimeRecord{
 		AssistantThreadID:   threadID,
-		AssistantID:         uuid.New(),
+		AssistantID:         assistantID,
 		ProjectID:           uuid.New(),
 		Backend:             runtimeBackendFlyIO,
 		BackendMetadataJSON: rawMetadata,
@@ -114,9 +112,8 @@ func TestFlyRuntimeBackendEmitsPhaseSpansOnWarmReuse(t *testing.T) {
 		"ensureApp",
 		"resolveMachine",
 		"waitHealth",
-		"runtimeState",
 	}, phaseNamesFrom(spans), "warm reuse must skip launchMachine and waitStarted")
-	require.False(t, boolAttr(t, spanByName(spans, "runtimeState"), attr.AssistantColdStartKey),
+	require.False(t, boolAttr(t, spanByName(spans, "waitHealth"), attr.AssistantColdStartKey),
 		"warm reuse must report cold_start=false")
 	require.False(t, boolAttr(t, spanByName(spans, "ensureApp"), attr.AssistantAppCreatedKey),
 		"warm reuse must report app_created=false")
@@ -130,6 +127,7 @@ func TestFlyRuntimeBackendInstanceIDDriftMarksColdStartOnWaitAndStateSpans(t *te
 	recorder := installRecordingTracer(t, backend)
 
 	threadID := uuid.New()
+	assistantID := uuid.New()
 	apiClient.app = &fly.App{ID: "app-1", Name: "gram-asst-test"}
 	flapsClient.machine = &fly.Machine{
 		ID:         "machine-1",
@@ -137,7 +135,7 @@ func TestFlyRuntimeBackendInstanceIDDriftMarksColdStartOnWaitAndStateSpans(t *te
 		Region:     "iad",
 		InstanceID: "boot-2",
 		Config: &fly.MachineConfig{
-			Metadata: map[string]string{flyMachineMetadataThreadID: threadID.String()},
+			Metadata: map[string]string{flyMachineMetadataAssistantID: assistantID.String()},
 		},
 	}
 	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
@@ -153,7 +151,7 @@ func TestFlyRuntimeBackendInstanceIDDriftMarksColdStartOnWaitAndStateSpans(t *te
 
 	result, err := backend.Ensure(t.Context(), assistantRuntimeRecord{
 		AssistantThreadID:   threadID,
-		AssistantID:         uuid.New(),
+		AssistantID:         assistantID,
 		ProjectID:           uuid.New(),
 		Backend:             runtimeBackendFlyIO,
 		BackendMetadataJSON: rawMetadata,
@@ -164,8 +162,6 @@ func TestFlyRuntimeBackendInstanceIDDriftMarksColdStartOnWaitAndStateSpans(t *te
 	spans := phaseSpansFrom(recorder)
 	require.True(t, boolAttr(t, spanByName(spans, "waitHealth"), attr.AssistantColdStartKey),
 		"waitHealth must report cold_start=true once instance-id drift is known")
-	require.True(t, boolAttr(t, spanByName(spans, "runtimeState"), attr.AssistantColdStartKey),
-		"runtimeState must report cold_start=true once instance-id drift is known")
 }
 
 func TestFlyRuntimeBackendPhaseSpanOnLaunchFailureCarriesErrorAndClass(t *testing.T) {

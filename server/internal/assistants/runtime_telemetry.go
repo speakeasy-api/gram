@@ -77,7 +77,7 @@ func assistantLogContextFrom(ctx context.Context) (assistantLogContext, bool) {
 // telemetryRuntimeBackend wraps a concrete RuntimeBackend to emit one
 // telemetry log per operation. Correlation ids, assistant ids and event ids
 // are pulled from context so the interface stays unchanged and any backend
-// (local firecracker, fly, future remotes) inherits the same instrumentation.
+// inherits the same instrumentation.
 type telemetryRuntimeBackend struct {
 	inner  RuntimeBackend
 	logger *telemetry.Logger
@@ -107,15 +107,6 @@ func (t *telemetryRuntimeBackend) Ensure(ctx context.Context, runtime assistantR
 		t.emit(ctx, runtime, "runtime_ensure", "runtime reused (warm)", "INFO", nil)
 	}
 	return result, nil
-}
-
-func (t *telemetryRuntimeBackend) Configure(ctx context.Context, runtime assistantRuntimeRecord, config runtimeStartupConfig) error {
-	if err := t.inner.Configure(ctx, runtime, config); err != nil {
-		t.emit(ctx, runtime, "runtime_configure", "runtime configure failed", "ERROR", err)
-		return fmt.Errorf("runtime configure: %w", err)
-	}
-	t.emit(ctx, runtime, "runtime_configure", "runtime configured", "INFO", nil)
-	return nil
 }
 
 func (t *telemetryRuntimeBackend) RunTurn(

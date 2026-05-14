@@ -754,71 +754,6 @@ func TestServiceCoreProcessThreadEventsMarksRuntimeFailedOnUnhealthyTurn(t *test
 	require.Equal(t, eventStatusProcessing, event.Status, "unhealthy turn leaves the event in processing for the reaper")
 }
 
-func TestServiceCoreProcessThreadEventsDoesNotStopRuntimeOnConfigureFailure(t *testing.T) {
-	t.Parallel()
-
-	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_config_fail")
-	require.NoError(t, err)
-
-	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
-
-	var stopCalls atomic.Int64
-	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
-	backend := testRuntimeBackend{
-		backend: runtimeBackendFlyIO,
-		ensureResult: RuntimeBackendEnsureResult{
-			ColdStart:      true,
-			NeedsConfigure: true,
-			BackendMetadataJSON: []byte(`{
-				"app_name": "gram-asst-test",
-				"app_url": "https://gram-asst-test.fly.dev",
-				"machine_id": "machine-1",
-				"last_boot_id": "boot-1"
-			}`),
-		},
-		configureErr: errors.New("runtime Configure blew up"),
-		stopCalls:    &stopCalls,
-	}
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger), nil)
-
-	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
-	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{threadID}, admitted.ThreadIDs)
-
-	result, err := core.ProcessThreadEvents(t.Context(), projectID, threadID)
-	require.NoError(t, err)
-	require.True(t, result.RetryAdmission)
-	require.False(t, result.RuntimeActive)
-	require.Equal(t, int64(0), stopCalls.Load(), "configure failure should preserve the Fly app for reuse/recovery")
-
-	failedRuntime, err := assistantsrepo.New(conn).GetLatestAssistantRuntimeByThreadID(t.Context(), assistantsrepo.GetLatestAssistantRuntimeByThreadIDParams{AssistantThreadID: threadID, ProjectID: projectID})
-	require.NoError(t, err)
-	require.Equal(t, runtimeStateFailed, failedRuntime.State)
-	require.True(t, failedRuntime.Deleted)
-	require.JSONEq(t, string(backend.ensureResult.BackendMetadataJSON), string(failedRuntime.BackendMetadataJson))
-
-	hotAdmit, err := core.AdmitPendingThreads(t.Context(), assistantID)
-	require.NoError(t, err)
-	require.Empty(t, hotAdmit.ThreadIDs, "admission backoff must block re-admit immediately after a setup failure")
-
-	// Simulate the backoff window elapsing so the next admit is eligible.
-	err = assistantsrepo.New(conn).BackdateAssistantRuntimeUpdatedAt(t.Context(), assistantsrepo.BackdateAssistantRuntimeUpdatedAtParams{
-		UpdatedAt:         pgtype.Timestamptz{Time: time.Now().UTC().Add(-time.Hour), Valid: true},
-		AssistantThreadID: threadID,
-		State:             runtimeStateFailed,
-	})
-	require.NoError(t, err)
-
-	admittedAgain, err := core.AdmitPendingThreads(t.Context(), assistantID)
-	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{threadID}, admittedAgain.ThreadIDs)
-
-	nextRuntime, err := assistantsrepo.New(conn).GetActiveAssistantRuntimeByThreadID(t.Context(), assistantsrepo.GetActiveAssistantRuntimeByThreadIDParams{AssistantThreadID: threadID, ProjectID: projectID})
-	require.NoError(t, err)
-	require.JSONEq(t, string(backend.ensureResult.BackendMetadataJSON), string(nextRuntime.BackendMetadataJson))
-}
-
 // insertReapableProject inserts an isolated project + assistant + thread so a
 // single test can host several independent fixtures without colliding on the
 // project slug or the per-thread-active runtime unique index.
@@ -1181,7 +1116,6 @@ type testRuntimeBackend struct {
 	backend      string
 	ensureResult RuntimeBackendEnsureResult
 	ensureErr    error
-	configureErr error
 	runTurnErr   error
 	statusResult RuntimeBackendStatus
 	statusErr    error
@@ -1204,10 +1138,6 @@ func (t testRuntimeBackend) Ensure(context.Context, assistantRuntimeRecord) (Run
 		return RuntimeBackendEnsureResult{}, t.ensureErr
 	}
 	return t.ensureResult, nil
-}
-
-func (t testRuntimeBackend) Configure(context.Context, assistantRuntimeRecord, runtimeStartupConfig) error {
-	return t.configureErr
 }
 
 func (t testRuntimeBackend) RunTurn(context.Context, assistantRuntimeRecord, uuid.UUID, string, string, string) error {
