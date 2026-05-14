@@ -41,6 +41,32 @@ func TestServePublic_UserSessionIssuerRemoteSessionNoValidTokenChallenges(t *tes
 		"resolver must surface a WWW-Authenticate challenge when no valid remote_session exists for the subject")
 }
 
+// TestServePublic_UserSessionIssuerRemoteSessionNoRowsChallenges pins the
+// zero-rows variant of the negative path: when the subject has no
+// remote_sessions entries at all, the resolver must produce the same
+// auth-challenge outcome as the only-expired case. Kept as a distinct
+// test so the resolver cannot accidentally branch on row existence
+// (e.g. "skip the check when nothing is stored").
+func TestServePublic_UserSessionIssuerRemoteSessionNoRowsChallenges(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "resolver-no-rows")
+	requestSubject := urn.NewUserSubject("resolver-user-" + uuid.NewString())
+
+	sessionToken := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, requestSubject)
+	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), sessionToken, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unauthorized")
+	require.Contains(t, w.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+fixture.Toolset.McpSlug.String,
+		"resolver must surface a WWW-Authenticate challenge when the subject has no remote_sessions rows")
+}
+
 // TestServePublic_UserSessionIssuerRemoteSessionValidTokenResolvesOAuthInput
 // pins the green half of the resolver contract: when a non-expired
 // remote_sessions row exists for the subject extracted from the
