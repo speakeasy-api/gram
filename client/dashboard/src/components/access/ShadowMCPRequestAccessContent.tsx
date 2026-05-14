@@ -156,7 +156,7 @@ function RequestAccessMessage({
             Request sent
           </Type>
           <Type muted small className="text-center">
-            Your admin has been notified. You can close this page.
+            You can close this page.
           </Type>
         </Stack>
       </Stack>

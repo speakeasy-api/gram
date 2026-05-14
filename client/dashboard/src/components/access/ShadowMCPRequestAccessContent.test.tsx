@@ -180,11 +180,7 @@ describe("ShadowMCPRequestAccessContent", () => {
         sessionStorage.getItem("shadowMcpApprovalRequestToken"),
       ).toBeNull();
       expect(screen.getByText("Request sent")).toBeTruthy();
-      expect(
-        screen.getByText(
-          "Your admin has been notified. You can close this page.",
-        ),
-      ).toBeTruthy();
+      expect(screen.getByText("You can close this page.")).toBeTruthy();
     });
   });
 
