@@ -22,11 +22,6 @@ func (s *Service) enforceShadowMCPToolAccess(
 		return "Shadow MCP validation is unavailable", true
 	}
 
-	detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, toolInput, toolName, organizationID)
-	if !denied {
-		return "", false
-	}
-
 	decision := s.shadowMCPClient.EvaluateAccessRules(ctx, organizationID, projectID, evidence)
 	s.logger.InfoContext(ctx, "evaluated shadow mcp access rules",
 		attr.SlogEvent("shadow_mcp_access_rule_evaluated"),
@@ -39,7 +34,15 @@ func (s *Service) enforceShadowMCPToolAccess(
 			"tool_name":                 toolName,
 		}),
 	)
-	if decision.Allows() {
+	switch decision.Outcome {
+	case shadowmcp.AccessRuleOutcomeDenied, shadowmcp.AccessRuleOutcomeError:
+		return decision.Reason, true
+	case shadowmcp.AccessRuleOutcomeAllowed:
+		return "", false
+	}
+
+	detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, toolInput, toolName, organizationID)
+	if !denied {
 		return "", false
 	}
 	return detail, true

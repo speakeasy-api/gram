@@ -64,7 +64,7 @@ func NormalizeAccessEvidence(evidence AccessEvidence) AccessEvidence {
 		}
 		if normalized.URLHost == "" {
 			if u, err := url.Parse(evidence.FullURL); err == nil && u.Host != "" {
-				normalized.URLHost = NormalizeHost(u.Host)
+				normalized.URLHost = NormalizeURLHost(strings.ToLower(u.Scheme), u.Host)
 			}
 		}
 	}
