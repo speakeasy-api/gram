@@ -73,6 +73,9 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_workos_id_key
 ON organization_metadata (workos_id);
 
+CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_slug_key
+ON organization_metadata (slug);
+
 CREATE UNIQUE INDEX IF NOT EXISTS projects_organization_id_slug_key
 ON projects (organization_id, slug)
 WHERE deleted IS FALSE;
