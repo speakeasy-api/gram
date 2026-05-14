@@ -516,7 +516,6 @@ func (s *Service) EnableWebhooks(ctx context.Context, payload *gen.EnableWebhook
 	return nil
 }
 
-// TODO(georges): tests
 func (s *Service) DisableWebhooks(ctx context.Context, payload *gen.DisableWebhooksPayload) (err error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -576,7 +575,6 @@ func (s *Service) DisableWebhooks(ctx context.Context, payload *gen.DisableWebho
 	return nil
 }
 
-// TODO(georges): tests
 func (s *Service) CreatePortalSession(ctx context.Context, payload *gen.CreatePortalSessionPayload) (res *gen.CreatePortalSessionResult, err error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -595,11 +593,6 @@ func (s *Service) CreatePortalSession(ctx context.Context, payload *gen.CreatePo
 		caps = new(minimumSvixAppPortalCapabilities())
 	} else {
 		return nil, readCheckErr
-	}
-
-	// tmp
-	if true {
-		caps = new([]models.AppPortalCapability)
 	}
 
 	logger := s.logger

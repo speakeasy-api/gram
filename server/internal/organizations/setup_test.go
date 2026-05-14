@@ -70,6 +70,7 @@ type testInstance struct {
 	service *organizations.Service
 	conn    *pgxpool.Pool
 	orgs    *MockOrganizationProvider
+	svixSrv *svixtest.MockServer
 }
 
 func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) {
@@ -124,6 +125,7 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 		service: svc,
 		conn:    conn,
 		orgs:    orgs,
+		svixSrv: svixSrv,
 	}
 }
 
@@ -181,6 +183,7 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 		service: svc,
 		conn:    conn,
 		orgs:    orgs,
+		svixSrv: svixSrv,
 	}
 }
 
