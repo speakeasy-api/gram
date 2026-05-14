@@ -21,15 +21,12 @@ import {
 import { Type } from "@/components/ui/type";
 import { Input } from "@/components/moon/input";
 import { Textarea } from "@/components/moon/textarea";
+import { useOrganization } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { ShadowMCPAccessRule } from "@gram/client/models/components/shadowmcpaccessrule.js";
 import type { ShadowMCPApprovalRequest } from "@gram/client/models/components/shadowmcpapprovalrequest.js";
-import {
-  invalidateAllRoles,
-  useRoles,
-} from "@gram/client/react-query/roles.js";
 import { useApproveShadowMCPApprovalRequestMutation } from "@gram/client/react-query/approveShadowMCPApprovalRequest.js";
 import { useCreateShadowMCPAccessRuleMutation } from "@gram/client/react-query/createShadowMCPAccessRule.js";
 import { useDeleteShadowMCPAccessRuleMutation } from "@gram/client/react-query/deleteShadowMCPAccessRule.js";
@@ -54,6 +51,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   formatShortDate,
+  getAccessScopeLabel,
   getDefaultMatchBreadth,
   getDispositionLabel,
   getMatchBreadthLabel,
@@ -63,11 +61,9 @@ import {
   getRequestDisplayName,
   getRequestStatusLabel,
   getRuleDisplayName,
-  roleNamesForIds,
-  roleOptionsFromRoles,
+  type ShadowMCPAccessScope,
   type ShadowMCPDisposition,
   type ShadowMCPMatchBreadth,
-  type ShadowMCPRoleOption,
 } from "./shadow-mcp-utils";
 
 type RequestStatusFilter = "requested" | "approved" | "denied" | "all";
@@ -158,100 +154,6 @@ function RuleDispositionBadge({
   );
 }
 
-function RoleSummary({
-  roleIds,
-  roleNames,
-}: {
-  roleIds: string[];
-  roleNames: string[];
-}) {
-  if (roleIds.length === 0) {
-    return (
-      <Type variant="body" className="text-muted-foreground text-sm">
-        No role grants
-      </Type>
-    );
-  }
-
-  const visible = roleNames.slice(0, 2);
-  const hiddenCount = roleNames.length - visible.length;
-
-  return (
-    <div className="flex flex-wrap gap-1">
-      {visible.map((roleName) => (
-        <Badge key={roleName} variant="neutral">
-          <Badge.Text>{roleName}</Badge.Text>
-        </Badge>
-      ))}
-      {hiddenCount > 0 && (
-        <Badge variant="neutral">
-          <Badge.Text>+{hiddenCount}</Badge.Text>
-        </Badge>
-      )}
-    </div>
-  );
-}
-
-function RolePicker({
-  roles,
-  selectedRoleIds,
-  onChange,
-}: {
-  roles: ShadowMCPRoleOption[];
-  selectedRoleIds: string[];
-  onChange: (roleIds: string[]) => void;
-}) {
-  const editableRoles = roles.filter((role) => !role.isSystem);
-
-  if (editableRoles.length === 0) {
-    return (
-      <div className="border-border bg-muted/30 rounded-md border px-3 py-3">
-        <Type muted small>
-          Create a custom role before assigning Shadow MCP access.
-        </Type>
-      </div>
-    );
-  }
-
-  const toggleRole = (roleId: string) => {
-    if (selectedRoleIds.includes(roleId)) {
-      onChange(selectedRoleIds.filter((id) => id !== roleId));
-    } else {
-      onChange([...selectedRoleIds, roleId]);
-    }
-  };
-
-  return (
-    <div className="border-border divide-border divide-y rounded-md border">
-      {editableRoles.map((role) => (
-        <label
-          key={role.id}
-          className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 px-3 py-2.5"
-        >
-          <Checkbox
-            checked={selectedRoleIds.includes(role.id)}
-            onCheckedChange={() => toggleRole(role.id)}
-            className="mt-0.5"
-          />
-          <div className="min-w-0 flex-1">
-            <Type variant="body" className="text-sm font-medium">
-              {role.name}
-            </Type>
-            {role.description && (
-              <Type
-                variant="body"
-                className="text-muted-foreground mt-0.5 text-xs"
-              >
-                {role.description}
-              </Type>
-            )}
-          </div>
-        </label>
-      ))}
-    </div>
-  );
-}
-
 function Field({
   label,
   children,
@@ -269,9 +171,18 @@ function Field({
   );
 }
 
+function projectName(
+  projects: { id: string; name: string }[],
+  projectId?: string | null,
+) {
+  if (!projectId) return "All projects";
+  return (
+    projects.find((project) => project.id === projectId)?.name ?? "Project"
+  );
+}
+
 function ReviewRequestSheet({
   request,
-  roles,
   open,
   isSubmitting,
   onOpenChange,
@@ -279,15 +190,14 @@ function ReviewRequestSheet({
   onDeny,
 }: {
   request: ShadowMCPApprovalRequest | null;
-  roles: ShadowMCPRoleOption[];
   open: boolean;
   isSubmitting: boolean;
   onOpenChange: (open: boolean) => void;
   onApprove: (input: {
     displayName: string;
+    accessScope: ShadowMCPAccessScope;
     matchBreadth: ShadowMCPMatchBreadth;
     matchValue: string;
-    roleIds: string[];
     reason?: string;
   }) => Promise<void>;
   onDeny: (input: {
@@ -303,7 +213,8 @@ function ReviewRequestSheet({
   const [matchBreadth, setMatchBreadth] =
     useState<ShadowMCPMatchBreadth>("full_url");
   const [matchValue, setMatchValue] = useState("");
-  const [roleIds, setRoleIds] = useState<string[]>([]);
+  const [accessScope, setAccessScope] =
+    useState<ShadowMCPAccessScope>("project");
   const [reason, setReason] = useState("");
   const [createDenyRule, setCreateDenyRule] = useState(true);
 
@@ -313,9 +224,9 @@ function ReviewRequestSheet({
     const nextMatchBreadth = getDefaultMatchBreadth(request);
     setAction("approve");
     setDisplayName(getRequestDisplayName(request));
+    setAccessScope("project");
     setMatchBreadth(nextMatchBreadth);
     setMatchValue(getMatchValue(request, nextMatchBreadth));
-    setRoleIds([]);
     setReason("");
     setCreateDenyRule(true);
   }, [request, open]);
@@ -324,9 +235,7 @@ function ReviewRequestSheet({
 
   const canSubmit =
     action === "approve"
-      ? displayName.trim().length > 0 &&
-        matchValue.trim().length > 0 &&
-        roleIds.length > 0
+      ? displayName.trim().length > 0 && matchValue.trim().length > 0
       : !createDenyRule ||
         (displayName.trim().length > 0 && matchValue.trim().length > 0);
 
@@ -337,9 +246,9 @@ function ReviewRequestSheet({
       if (action === "approve") {
         await onApprove({
           displayName: displayName.trim(),
+          accessScope,
           matchBreadth,
           matchValue: matchValue.trim(),
-          roleIds,
           reason: trimmedReason,
         });
       } else {
@@ -463,12 +372,23 @@ function ReviewRequestSheet({
           )}
 
           {action === "approve" ? (
-            <Field label="Roles">
-              <RolePicker
-                roles={roles}
-                selectedRoleIds={roleIds}
-                onChange={setRoleIds}
-              />
+            <Field label="Scope">
+              <Select
+                value={accessScope}
+                onValueChange={(value) =>
+                  setAccessScope(value as ShadowMCPAccessScope)
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="project">This project</SelectItem>
+                  <SelectItem value="organization">
+                    Entire organization
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </Field>
           ) : (
             <label className="flex items-start gap-3">
@@ -515,23 +435,24 @@ function ReviewRequestSheet({
 
 function AccessRuleSheet({
   rule,
-  roles,
+  projects,
   open,
   isSubmitting,
   onOpenChange,
   onSubmit,
 }: {
   rule: ShadowMCPAccessRule | null;
-  roles: ShadowMCPRoleOption[];
+  projects: { id: string; name: string }[];
   open: boolean;
   isSubmitting: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (input: {
     displayName: string;
     disposition: ShadowMCPDisposition;
+    accessScope: ShadowMCPAccessScope;
+    projectId?: string;
     matchBreadth: ShadowMCPMatchBreadth;
     matchValue: string;
-    roleIds?: string[];
     reason?: string;
   }) => Promise<void>;
 }) {
@@ -541,8 +462,11 @@ function AccessRuleSheet({
   const [matchBreadth, setMatchBreadth] =
     useState<ShadowMCPMatchBreadth>("full_url");
   const [matchValue, setMatchValue] = useState("");
-  const [roleIds, setRoleIds] = useState<string[]>([]);
+  const [accessScope, setAccessScope] =
+    useState<ShadowMCPAccessScope>("organization");
+  const [projectId, setProjectId] = useState("");
   const [reason, setReason] = useState("");
+  const defaultProjectId = projects[0]?.id ?? "";
 
   useEffect(() => {
     if (!open) return;
@@ -550,34 +474,37 @@ function AccessRuleSheet({
     if (rule) {
       setDisposition(rule.disposition);
       setDisplayName(rule.displayName);
+      setAccessScope(rule.accessScope);
+      setProjectId(rule.projectId ?? "");
       setMatchBreadth(rule.matchBreadth);
       setMatchValue(rule.matchValue);
-      setRoleIds(rule.roleIds);
       setReason(rule.reason ?? "");
       return;
     }
 
     setDisposition("allowed");
     setDisplayName("");
+    setAccessScope("organization");
+    setProjectId(defaultProjectId);
     setMatchBreadth("full_url");
     setMatchValue("");
-    setRoleIds([]);
     setReason("");
-  }, [rule, open]);
+  }, [defaultProjectId, rule, open]);
 
   const canSubmit =
     displayName.trim().length > 0 &&
     matchValue.trim().length > 0 &&
-    (disposition === "denied" || roleIds.length > 0);
+    (accessScope === "organization" || projectId !== "");
 
   const submit = async () => {
     try {
       await onSubmit({
         displayName: displayName.trim(),
         disposition,
+        accessScope,
+        projectId: accessScope === "project" ? projectId : undefined,
         matchBreadth,
         matchValue: matchValue.trim(),
-        roleIds: disposition === "allowed" ? roleIds : undefined,
         reason: reason.trim() || undefined,
       });
     } catch {
@@ -614,7 +541,7 @@ function AccessRuleSheet({
                   Allow
                 </Type>
                 <Type muted small>
-                  Grant selected roles access.
+                  Allow matching calls.
                 </Type>
               </span>
             </label>
@@ -668,15 +595,41 @@ function AccessRuleSheet({
             </Field>
           </div>
 
-          {disposition === "allowed" && (
-            <Field label="Roles">
-              <RolePicker
-                roles={roles}
-                selectedRoleIds={roleIds}
-                onChange={setRoleIds}
-              />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Scope">
+              <Select
+                value={accessScope}
+                onValueChange={(value) =>
+                  setAccessScope(value as ShadowMCPAccessScope)
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="organization">Organization</SelectItem>
+                  <SelectItem value="project">Project</SelectItem>
+                </SelectContent>
+              </Select>
             </Field>
-          )}
+
+            {accessScope === "project" && (
+              <Field label="Project">
+                <Select value={projectId} onValueChange={setProjectId}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+          </div>
 
           <Field label="Reason">
             <Textarea
@@ -737,6 +690,7 @@ function RuleActionsMenu({
 export function ShadowMCPAccessContent() {
   const queryClient = useQueryClient();
   const client = useSdkClient();
+  const organization = useOrganization();
   const { hasScope } = useRBAC();
   const canAdmin = hasScope("org:admin");
   const [requestStatusFilter, setRequestStatusFilter] =
@@ -750,11 +704,6 @@ export function ShadowMCPAccessContent() {
     null,
   );
 
-  const { data: rolesData } = useRoles();
-  const roles = useMemo(
-    () => roleOptionsFromRoles(rolesData?.roles ?? []),
-    [rolesData],
-  );
   const requestStatus =
     requestStatusFilter === "all" ? undefined : requestStatusFilter;
   const ruleDisposition =
@@ -850,7 +799,6 @@ export function ShadowMCPAccessContent() {
     await Promise.all([
       invalidateAllShadowMCPApprovalRequests(queryClient),
       invalidateAllShadowMCPAccessRules(queryClient),
-      invalidateAllRoles(queryClient),
       queryClient.invalidateQueries({
         queryKey: SHADOW_MCP_REQUESTS_QUERY_KEY,
       }),
@@ -963,14 +911,15 @@ export function ShadowMCPAccessContent() {
       render: (rule) => <RuleDispositionBadge disposition={rule.disposition} />,
     },
     {
-      key: "roles",
-      header: "Roles",
+      key: "scope",
+      header: "Scope",
       width: "0.5fr",
       render: (rule) => (
-        <RoleSummary
-          roleIds={rule.roleIds}
-          roleNames={roleNamesForIds(rule.roleIds, roles)}
-        />
+        <Type variant="body">
+          {rule.accessScope === "project"
+            ? projectName(organization.projects, rule.projectId)
+            : getAccessScopeLabel(rule.accessScope)}
+        </Type>
       ),
     },
     {
@@ -1013,7 +962,6 @@ export function ShadowMCPAccessContent() {
     <div className="space-y-8">
       <ReviewRequestSheet
         request={reviewRequest}
-        roles={roles}
         open={!!reviewRequest}
         isSubmitting={isReviewSubmitting}
         onOpenChange={(open) => {
@@ -1027,13 +975,13 @@ export function ShadowMCPAccessContent() {
               approveShadowMCPApprovalRequestForm: {
                 id: reviewRequest.id,
                 displayName: input.displayName,
+                accessScope: input.accessScope,
                 matchBreadth: input.matchBreadth,
                 matchValue: input.matchValue,
                 observedFullUrl: reviewRequest.observedFullUrl,
                 observedServerIdentity: reviewRequest.observedServerIdentity,
                 observedUrlHost: reviewRequest.observedUrlHost,
                 reason: input.reason,
-                roleIds: input.roleIds,
               },
             },
           });
@@ -1067,7 +1015,7 @@ export function ShadowMCPAccessContent() {
 
       <AccessRuleSheet
         rule={editingRule}
-        roles={roles}
+        projects={organization.projects}
         open={isRuleSheetOpen}
         isSubmitting={isRuleSubmitting}
         onOpenChange={(open) => {
@@ -1082,6 +1030,8 @@ export function ShadowMCPAccessContent() {
                   id: editingRule.id,
                   displayName: input.displayName,
                   disposition: input.disposition,
+                  accessScope: input.accessScope,
+                  projectId: input.projectId,
                   matchBreadth: input.matchBreadth,
                   matchValue: input.matchValue,
                   observedFullUrl:
@@ -1097,7 +1047,6 @@ export function ShadowMCPAccessContent() {
                       ? input.matchValue
                       : editingRule.observedUrlHost,
                   reason: input.reason,
-                  roleIds: input.roleIds,
                 },
               },
             });
@@ -1108,6 +1057,8 @@ export function ShadowMCPAccessContent() {
                 shadowMCPAccessRuleForm: {
                   displayName: input.displayName,
                   disposition: input.disposition,
+                  accessScope: input.accessScope,
+                  projectId: input.projectId,
                   matchBreadth: input.matchBreadth,
                   matchValue: input.matchValue,
                   observedFullUrl:
@@ -1123,7 +1074,6 @@ export function ShadowMCPAccessContent() {
                       ? input.matchValue
                       : undefined,
                   reason: input.reason,
-                  roleIds: input.roleIds,
                 },
               },
             });

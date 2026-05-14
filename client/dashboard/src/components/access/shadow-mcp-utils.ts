@@ -1,4 +1,3 @@
-import type { Role } from "@gram/client/models/components/role.js";
 import type { ShadowMCPAccessRule } from "@gram/client/models/components/shadowmcpaccessrule.js";
 import type { ShadowMCPApprovalRequest } from "@gram/client/models/components/shadowmcpapprovalrequest.js";
 
@@ -6,21 +5,7 @@ export type ShadowMCPMatchBreadth = "full_url" | "url_host" | "server_identity";
 
 export type ShadowMCPDisposition = "allowed" | "denied";
 
-export interface ShadowMCPRoleOption {
-  id: string;
-  name: string;
-  description?: string;
-  isSystem?: boolean;
-}
-
-export function roleOptionsFromRoles(roles: Role[]): ShadowMCPRoleOption[] {
-  return roles.map((role) => ({
-    id: role.id,
-    name: role.name,
-    description: role.description,
-    isSystem: role.isSystem,
-  }));
-}
+export type ShadowMCPAccessScope = "organization" | "project";
 
 export function getMatchBreadthLabel(matchBreadth: ShadowMCPMatchBreadth) {
   switch (matchBreadth) {
@@ -35,6 +20,10 @@ export function getMatchBreadthLabel(matchBreadth: ShadowMCPMatchBreadth) {
 
 export function getDispositionLabel(disposition: ShadowMCPDisposition) {
   return disposition === "allowed" ? "Allowed" : "Denied";
+}
+
+export function getAccessScopeLabel(accessScope: ShadowMCPAccessScope) {
+  return accessScope === "organization" ? "Organization" : "Project";
 }
 
 export function getRequestStatusLabel(
@@ -118,14 +107,4 @@ export function getMatchValue(
     case "server_identity":
       return source.observedServerIdentity ?? "";
   }
-}
-
-export function roleNamesForIds(
-  roleIds: string[],
-  roles: ShadowMCPRoleOption[],
-) {
-  return roleIds.map((roleId) => {
-    const role = roles.find((candidate) => candidate.id === roleId);
-    return role?.name ?? roleId;
-  });
 }

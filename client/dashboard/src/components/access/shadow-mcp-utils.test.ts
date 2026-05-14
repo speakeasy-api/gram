@@ -5,7 +5,6 @@ import {
   getDefaultMatchBreadth,
   getMatchValue,
   getRequestDisplayName,
-  roleNamesForIds,
 } from "./shadow-mcp-utils";
 
 function approvalRequest(
@@ -28,6 +27,7 @@ function accessRule(
   overrides: Partial<ShadowMCPAccessRule>,
 ): ShadowMCPAccessRule {
   return {
+    accessScope: "organization",
     createdAt: new Date("2026-05-01T00:00:00Z"),
     displayName: "Datadog",
     disposition: "allowed",
@@ -35,7 +35,6 @@ function accessRule(
     matchBreadth: "full_url",
     matchValue: "https://datadog.example/mcp",
     organizationId: "org_1",
-    roleIds: [],
     updatedAt: new Date("2026-05-01T00:00:00Z"),
     ...overrides,
   };
@@ -113,19 +112,5 @@ describe("shadow-mcp-utils", () => {
         "full_url",
       ),
     ).toBe("https://stripe.example/mcp");
-  });
-
-  it("maps role ids to names and leaves unknown ids readable", () => {
-    expect(
-      roleNamesForIds(
-        ["role_dev", "role_unknown"],
-        [
-          {
-            id: "role_dev",
-            name: "Developers",
-          },
-        ],
-      ),
-    ).toEqual(["Developers", "role_unknown"]);
   });
 });

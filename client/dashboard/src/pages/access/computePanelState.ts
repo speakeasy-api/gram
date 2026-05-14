@@ -70,12 +70,7 @@ export function computePanelState(
   customTab?: CustomTab,
 ): PanelState {
   const noun = resourceType === "project" ? "project" : "server";
-  const allLabel =
-    resourceType === "project"
-      ? "All projects"
-      : resourceType === "shadow_mcp"
-        ? "All Shadow MCP"
-        : "All servers";
+  const allLabel = resourceType === "project" ? "All projects" : "All servers";
 
   // Unrestricted
   if (selectors === null) {

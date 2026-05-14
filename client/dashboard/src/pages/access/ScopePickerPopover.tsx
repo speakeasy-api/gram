@@ -31,7 +31,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useInfiniteQuery, useQueries } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type {
   ActivePanel,
@@ -42,8 +42,6 @@ import type {
 } from "./types";
 import { ANNOTATION_TO_DISPOSITION } from "./types";
 import { computePanelState, type CollectionGroup } from "./computePanelState";
-
-const SHADOW_MCP_PICKER_PAGE_SIZE = 100;
 
 interface ScopePickerPopoverProps {
   /** The resource type determines which resource list to show */
@@ -149,58 +147,7 @@ export function ScopePickerPopover({
   onCustomTabChange,
 }: ScopePickerPopoverProps) {
   const organization = useOrganization();
-  const client = useSdkClient();
   const mcpServers = useMCPServers(resourceType === "mcp");
-  const isShadowMCPConnect = scope === "shadow_mcp:connect";
-  const shadowMCPRulesQuery = useInfiniteQuery({
-    queryKey: ["shadow-mcp", "access-rules", "allowed", "scope-picker"],
-    queryFn: ({ pageParam }) =>
-      client.access.listShadowMCPAccessRules({
-        disposition: "allowed",
-        limit: SHADOW_MCP_PICKER_PAGE_SIZE,
-        cursor: pageParam,
-      }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    enabled: isShadowMCPConnect,
-  });
-  const {
-    data: shadowMCPRulesData,
-    fetchNextPage: fetchNextShadowMCPRulesPage,
-    hasNextPage: hasNextShadowMCPRulesPage,
-    isError: isShadowMCPRulesError,
-    isFetching: isFetchingShadowMCPRules,
-    isFetchingNextPage: isFetchingNextShadowMCPRulesPage,
-    isLoading: isLoadingShadowMCPRules,
-  } = shadowMCPRulesQuery;
-
-  useEffect(() => {
-    if (
-      !isShadowMCPConnect ||
-      isShadowMCPRulesError ||
-      !hasNextShadowMCPRulesPage ||
-      isFetchingShadowMCPRules
-    ) {
-      return;
-    }
-
-    void fetchNextShadowMCPRulesPage();
-  }, [
-    fetchNextShadowMCPRulesPage,
-    hasNextShadowMCPRulesPage,
-    isShadowMCPConnect,
-    isShadowMCPRulesError,
-    isFetchingShadowMCPRules,
-  ]);
-
-  const shadowMCPRules = useMemo(
-    () => shadowMCPRulesData?.pages.flatMap((page) => page.rules) ?? [],
-    [shadowMCPRulesData?.pages],
-  );
-  const shadowMCPRulesLoading =
-    isLoadingShadowMCPRules ||
-    (!isShadowMCPRulesError && hasNextShadowMCPRulesPage) ||
-    isFetchingNextShadowMCPRulesPage;
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   // Override for when user clicks a mode but selectors are still empty
@@ -259,12 +206,7 @@ export function ScopePickerPopover({
     return projects;
   }, [organization.projects, mcpServers]);
 
-  const resourceKind =
-    resourceType === "project"
-      ? "project"
-      : resourceType === "shadow_mcp"
-        ? "shadow_mcp"
-        : "mcp";
+  const resourceKind = resourceType === "project" ? "project" : "mcp";
 
   const filteredProjectList = useMemo(
     () =>
@@ -290,16 +232,6 @@ export function ScopePickerPopover({
       }))
       .filter((g) => g.servers.length > 0);
   }, [mcpServers, resourceSearch]);
-
-  const filteredShadowMCPRules = useMemo(() => {
-    if (!resourceSearch) return shadowMCPRules;
-    const q = resourceSearch.toLowerCase();
-    return shadowMCPRules.filter(
-      (rule) =>
-        rule.displayName.toLowerCase().includes(q) ||
-        rule.matchValue.toLowerCase().includes(q),
-    );
-  }, [shadowMCPRules, resourceSearch]);
 
   // Fixed-scope permissions have no resource picker — their granularity is
   // baked into the scope definition. Org scopes are always org-wide;
@@ -367,17 +299,11 @@ export function ScopePickerPopover({
   }) => (
     <div className="shrink-0 pb-1.5">
       <ScopeOption
-        label={
-          resourceType === "project"
-            ? "All projects"
-            : isShadowMCPConnect
-              ? "All Shadow MCP"
-              : "All servers"
-        }
+        label={resourceType === "project" ? "All projects" : "All servers"}
         selected={activePanel === "all"}
         onClick={() => switchPanel("all")}
       />
-      {resourceType === "mcp" && !isShadowMCPConnect && (
+      {resourceType === "mcp" && (
         <ScopeOption
           label="Specific projects"
           selected={activePanel === "projects"}
@@ -391,14 +317,14 @@ export function ScopePickerPopover({
         selected={activePanel === "servers"}
         onClick={() => switchPanel("servers")}
       />
-      {isMcpConnect && !isShadowMCPConnect && (
+      {isMcpConnect && (
         <ScopeOption
           label="Specific tools"
           selected={activePanel === "tools"}
           onClick={() => switchPanel("tools")}
         />
       )}
-      {isMcpConnect && !isShadowMCPConnect && includeCollection && (
+      {isMcpConnect && includeCollection && (
         <ScopeOption
           label="Specific collections"
           selected={activePanel === "collection"}
@@ -415,11 +341,7 @@ export function ScopePickerPopover({
         <input
           type="text"
           placeholder={
-            resourceType === "project"
-              ? "Search projects…"
-              : isShadowMCPConnect
-                ? "Search rules…"
-                : "Search servers…"
+            resourceType === "project" ? "Search projects…" : "Search servers…"
           }
           value={resourceSearch}
           onChange={(e) => setResourceSearch(e.target.value)}
@@ -441,41 +363,7 @@ export function ScopePickerPopover({
         onWheel={handleResourceWheel}
         className="h-[250px] overflow-y-auto"
       >
-        {isShadowMCPConnect && isShadowMCPRulesError ? (
-          <div className="text-muted-foreground px-3 py-3 text-sm">
-            Shadow MCP rules could not be loaded
-          </div>
-        ) : isShadowMCPConnect && shadowMCPRulesLoading ? (
-          <div className="text-muted-foreground px-3 py-3 text-sm">
-            Loading rules...
-          </div>
-        ) : isShadowMCPConnect ? (
-          filteredShadowMCPRules.length === 0 ? (
-            <div className="text-muted-foreground px-3 py-3 text-sm">
-              {shadowMCPRules.length === 0
-                ? "No allowed Shadow MCP rules found"
-                : "No matching rules"}
-            </div>
-          ) : (
-            filteredShadowMCPRules.map((rule) => (
-              <ResourceCheckbox
-                key={rule.id}
-                id={rule.id}
-                name={
-                  <>
-                    <span>{rule.displayName}</span>
-                    <span className="text-muted-foreground/60">
-                      {" "}
-                      {rule.matchValue}
-                    </span>
-                  </>
-                }
-                checked={isResourceSelected(rule.id)}
-                onToggle={toggleResource}
-              />
-            ))
-          )
-        ) : resourceType === "project" ? (
+        {resourceType === "project" ? (
           filteredProjectList.length === 0 ? (
             <div className="text-muted-foreground px-3 py-3 text-sm">
               {projectList.length === 0
