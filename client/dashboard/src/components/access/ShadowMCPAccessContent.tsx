@@ -334,7 +334,7 @@ function ReviewRequestSheet({
 
           {(action === "approve" || createDenyRule) && (
             <>
-              <Field label="Display name">
+              <Field label="Rule name">
                 <Input
                   value={displayName}
                   onChange={(event) => setDisplayName(event.target.value)}
@@ -560,7 +560,7 @@ function AccessRuleSheet({
             </label>
           </RadioGroup>
 
-          <Field label="Display name">
+          <Field label="Rule name">
             <Input
               value={displayName}
               onChange={(event) => setDisplayName(event.target.value)}
