@@ -88,9 +88,21 @@ SET
   , custom_domain_id = COALESCE(@custom_domain_id, custom_domain_id)
   , mcp_enabled = COALESCE(@mcp_enabled, mcp_enabled)
   , tool_selection_mode = COALESCE(@tool_selection_mode, tool_selection_mode)
+  , auto_sync_sources = COALESCE(sqlc.narg('auto_sync_sources')::TEXT[], auto_sync_sources)
   , updated_at = clock_timestamp()
 WHERE slug = @slug AND project_id = @project_id
 RETURNING *;
+
+-- name: ListToolsetsByAutoSyncSource :many
+-- Returns non-deleted toolsets in a project whose auto_sync_sources array
+-- overlaps the provided sources. Used by the deployment-completed activity
+-- to find subscribers to extend with new tool URNs.
+SELECT *
+FROM toolsets
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND auto_sync_sources && @sources::TEXT[]
+ORDER BY id;
 
 -- name: DeleteToolset :one
 UPDATE toolsets

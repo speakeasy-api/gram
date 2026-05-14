@@ -3622,6 +3622,10 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 		}
 		res.PromptTemplates[i] = unmarshalPromptTemplateEntryResponseBodyToTypesPromptTemplateEntry(val)
 	}
+	res.AutoSyncSources = make([]string, len(v.AutoSyncSources))
+	for i, val := range v.AutoSyncSources {
+		res.AutoSyncSources[i] = val
+	}
 	if v.Origin != nil {
 		res.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(v.Origin)
 	}

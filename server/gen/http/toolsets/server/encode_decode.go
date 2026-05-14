@@ -3571,6 +3571,14 @@ func marshalTypesToolsetEntryToToolsetEntryResponseBody(v *types.ToolsetEntry) *
 	} else {
 		res.PromptTemplates = []*PromptTemplateEntryResponseBody{}
 	}
+	if v.AutoSyncSources != nil {
+		res.AutoSyncSources = make([]string, len(v.AutoSyncSources))
+		for i, val := range v.AutoSyncSources {
+			res.AutoSyncSources[i] = val
+		}
+	} else {
+		res.AutoSyncSources = []string{}
+	}
 	if v.Origin != nil {
 		res.Origin = marshalTypesToolsetOriginToToolsetOriginResponseBody(v.Origin)
 	}

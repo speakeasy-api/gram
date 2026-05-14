@@ -58,6 +58,11 @@ type UpdateToolsetRequestBody struct {
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	// Sources this toolset auto-extends when a deployment introduces new tools.
+	// Each entry is "<kind>:<source>"; only "function:" entries are accepted
+	// today. Passing this field replaces the current value (use the existing list
+	// plus additions to extend).
+	AutoSyncSources []string `form:"auto_sync_sources,omitempty" json:"auto_sync_sources,omitempty" xml:"auto_sync_sources,omitempty"`
 }
 
 // AddExternalOAuthServerRequestBody is the type of the "toolsets" service
@@ -131,6 +136,9 @@ type CreateToolsetResponseBody struct {
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// Sources this toolset auto-extends when a deployment introduces new tools.
+	// Each entry is "<kind>:<source>"; only "function:" entries are accepted today.
+	AutoSyncSources []string `form:"auto_sync_sources" json:"auto_sync_sources" xml:"auto_sync_sources"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
@@ -209,6 +217,9 @@ type UpdateToolsetResponseBody struct {
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// Sources this toolset auto-extends when a deployment introduces new tools.
+	// Each entry is "<kind>:<source>"; only "function:" entries are accepted today.
+	AutoSyncSources []string `form:"auto_sync_sources" json:"auto_sync_sources" xml:"auto_sync_sources"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
@@ -273,6 +284,9 @@ type GetToolsetResponseBody struct {
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// Sources this toolset auto-extends when a deployment introduces new tools.
+	// Each entry is "<kind>:<source>"; only "function:" entries are accepted today.
+	AutoSyncSources []string `form:"auto_sync_sources" json:"auto_sync_sources" xml:"auto_sync_sources"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
@@ -337,6 +351,9 @@ type CloneToolsetResponseBody struct {
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// Sources this toolset auto-extends when a deployment introduces new tools.
+	// Each entry is "<kind>:<source>"; only "function:" entries are accepted today.
+	AutoSyncSources []string `form:"auto_sync_sources" json:"auto_sync_sources" xml:"auto_sync_sources"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
@@ -401,6 +418,9 @@ type AddExternalOAuthServerResponseBody struct {
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// Sources this toolset auto-extends when a deployment introduces new tools.
+	// Each entry is "<kind>:<source>"; only "function:" entries are accepted today.
+	AutoSyncSources []string `form:"auto_sync_sources" json:"auto_sync_sources" xml:"auto_sync_sources"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
@@ -465,6 +485,9 @@ type RemoveOAuthServerResponseBody struct {
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// Sources this toolset auto-extends when a deployment introduces new tools.
+	// Each entry is "<kind>:<source>"; only "function:" entries are accepted today.
+	AutoSyncSources []string `form:"auto_sync_sources" json:"auto_sync_sources" xml:"auto_sync_sources"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
@@ -529,6 +552,9 @@ type AddOAuthProxyServerResponseBody struct {
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// Sources this toolset auto-extends when a deployment introduces new tools.
+	// Each entry is "<kind>:<source>"; only "function:" entries are accepted today.
+	AutoSyncSources []string `form:"auto_sync_sources" json:"auto_sync_sources" xml:"auto_sync_sources"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
@@ -593,6 +619,9 @@ type UpdateOAuthProxyServerResponseBody struct {
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// Sources this toolset auto-extends when a deployment introduces new tools.
+	// Each entry is "<kind>:<source>"; only "function:" entries are accepted today.
+	AutoSyncSources []string `form:"auto_sync_sources" json:"auto_sync_sources" xml:"auto_sync_sources"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
@@ -3420,6 +3449,9 @@ type ToolsetEntryResponseBody struct {
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// Sources this toolset auto-extends when a deployment introduces new tools.
+	// Each entry is "<kind>:<source>"; only "function:" entries are accepted today.
+	AutoSyncSources []string `form:"auto_sync_sources" json:"auto_sync_sources" xml:"auto_sync_sources"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The registry lineage for toolsets installed from an external MCP catalog
@@ -3674,6 +3706,14 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 	} else {
 		body.PromptTemplates = []*PromptTemplateResponseBody{}
 	}
+	if res.AutoSyncSources != nil {
+		body.AutoSyncSources = make([]string, len(res.AutoSyncSources))
+		for i, val := range res.AutoSyncSources {
+			body.AutoSyncSources[i] = val
+		}
+	} else {
+		body.AutoSyncSources = []string{}
+	}
 	if res.Origin != nil {
 		body.Origin = marshalTypesToolsetOriginToToolsetOriginResponseBody(res.Origin)
 	}
@@ -3846,6 +3886,14 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 	} else {
 		body.PromptTemplates = []*PromptTemplateResponseBody{}
 	}
+	if res.AutoSyncSources != nil {
+		body.AutoSyncSources = make([]string, len(res.AutoSyncSources))
+		for i, val := range res.AutoSyncSources {
+			body.AutoSyncSources[i] = val
+		}
+	} else {
+		body.AutoSyncSources = []string{}
+	}
 	if res.Origin != nil {
 		body.Origin = marshalTypesToolsetOriginToToolsetOriginResponseBody(res.Origin)
 	}
@@ -3979,6 +4027,14 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 		}
 	} else {
 		body.PromptTemplates = []*PromptTemplateResponseBody{}
+	}
+	if res.AutoSyncSources != nil {
+		body.AutoSyncSources = make([]string, len(res.AutoSyncSources))
+		for i, val := range res.AutoSyncSources {
+			body.AutoSyncSources[i] = val
+		}
+	} else {
+		body.AutoSyncSources = []string{}
 	}
 	if res.Origin != nil {
 		body.Origin = marshalTypesToolsetOriginToToolsetOriginResponseBody(res.Origin)
@@ -4114,6 +4170,14 @@ func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
 	} else {
 		body.PromptTemplates = []*PromptTemplateResponseBody{}
 	}
+	if res.AutoSyncSources != nil {
+		body.AutoSyncSources = make([]string, len(res.AutoSyncSources))
+		for i, val := range res.AutoSyncSources {
+			body.AutoSyncSources[i] = val
+		}
+	} else {
+		body.AutoSyncSources = []string{}
+	}
 	if res.Origin != nil {
 		body.Origin = marshalTypesToolsetOriginToToolsetOriginResponseBody(res.Origin)
 	}
@@ -4247,6 +4311,14 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 		}
 	} else {
 		body.PromptTemplates = []*PromptTemplateResponseBody{}
+	}
+	if res.AutoSyncSources != nil {
+		body.AutoSyncSources = make([]string, len(res.AutoSyncSources))
+		for i, val := range res.AutoSyncSources {
+			body.AutoSyncSources[i] = val
+		}
+	} else {
+		body.AutoSyncSources = []string{}
 	}
 	if res.Origin != nil {
 		body.Origin = marshalTypesToolsetOriginToToolsetOriginResponseBody(res.Origin)
@@ -4382,6 +4454,14 @@ func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResp
 	} else {
 		body.PromptTemplates = []*PromptTemplateResponseBody{}
 	}
+	if res.AutoSyncSources != nil {
+		body.AutoSyncSources = make([]string, len(res.AutoSyncSources))
+		for i, val := range res.AutoSyncSources {
+			body.AutoSyncSources[i] = val
+		}
+	} else {
+		body.AutoSyncSources = []string{}
+	}
 	if res.Origin != nil {
 		body.Origin = marshalTypesToolsetOriginToToolsetOriginResponseBody(res.Origin)
 	}
@@ -4516,6 +4596,14 @@ func NewAddOAuthProxyServerResponseBody(res *types.Toolset) *AddOAuthProxyServer
 	} else {
 		body.PromptTemplates = []*PromptTemplateResponseBody{}
 	}
+	if res.AutoSyncSources != nil {
+		body.AutoSyncSources = make([]string, len(res.AutoSyncSources))
+		for i, val := range res.AutoSyncSources {
+			body.AutoSyncSources[i] = val
+		}
+	} else {
+		body.AutoSyncSources = []string{}
+	}
 	if res.Origin != nil {
 		body.Origin = marshalTypesToolsetOriginToToolsetOriginResponseBody(res.Origin)
 	}
@@ -4649,6 +4737,14 @@ func NewUpdateOAuthProxyServerResponseBody(res *types.Toolset) *UpdateOAuthProxy
 		}
 	} else {
 		body.PromptTemplates = []*PromptTemplateResponseBody{}
+	}
+	if res.AutoSyncSources != nil {
+		body.AutoSyncSources = make([]string, len(res.AutoSyncSources))
+		for i, val := range res.AutoSyncSources {
+			body.AutoSyncSources[i] = val
+		}
+	} else {
+		body.AutoSyncSources = []string{}
 	}
 	if res.Origin != nil {
 		body.Origin = marshalTypesToolsetOriginToToolsetOriginResponseBody(res.Origin)
@@ -6483,6 +6579,12 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessio
 		v.ResourceUrns = make([]string, len(body.ResourceUrns))
 		for i, val := range body.ResourceUrns {
 			v.ResourceUrns[i] = val
+		}
+	}
+	if body.AutoSyncSources != nil {
+		v.AutoSyncSources = make([]string, len(body.AutoSyncSources))
+		for i, val := range body.AutoSyncSources {
+			v.AutoSyncSources[i] = val
 		}
 	}
 	v.Slug = types.Slug(slug)

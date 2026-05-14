@@ -728,3 +728,67 @@ func TestToolsetsService_UpdateToolset_NotFound_NoAuditLog(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, beforeCount, afterCount)
 }
+
+func TestToolsetsService_UpdateToolset_AutoSyncSources(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	created := createMinimalPrivateToolset(t, ctx, ti, "Auto-Sync Sources Toolset")
+	require.Empty(t, created.AutoSyncSources, "newly created toolset starts with empty auto_sync_sources")
+
+	updatePayload := func(slug types.Slug, sources []string) *gen.UpdateToolsetPayload {
+		return &gen.UpdateToolsetPayload{
+			SessionToken:           nil,
+			ApikeyToken:            nil,
+			Slug:                   slug,
+			Name:                   nil,
+			Description:            nil,
+			DefaultEnvironmentSlug: nil,
+			ToolUrns:               nil,
+			ResourceUrns:           nil,
+			PromptTemplateNames:    nil,
+			McpSlug:                nil,
+			McpEnabled:             nil,
+			McpIsPublic:            nil,
+			CustomDomainID:         nil,
+			ToolSelectionMode:      nil,
+			AutoSyncSources:        sources,
+			ProjectSlugInput:       nil,
+		}
+	}
+
+	// Set: explicit list of function: entries persists.
+	res, err := ti.service.UpdateToolset(ctx, updatePayload(created.Slug, []string{"function:my-tools", "function:internal"}))
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"function:my-tools", "function:internal"}, res.AutoSyncSources)
+
+	// Skip (nil): prior value preserved via COALESCE.
+	res, err = ti.service.UpdateToolset(ctx, updatePayload(created.Slug, nil))
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"function:my-tools", "function:internal"}, res.AutoSyncSources)
+
+	// Replace: new list overwrites entirely.
+	res, err = ti.service.UpdateToolset(ctx, updatePayload(created.Slug, []string{"function:other"}))
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"function:other"}, res.AutoSyncSources)
+
+	// Clear: explicit empty slice clears the subscription.
+	res, err = ti.service.UpdateToolset(ctx, updatePayload(created.Slug, []string{}))
+	require.NoError(t, err)
+	require.Empty(t, res.AutoSyncSources)
+
+	// Reject http: (reserved kind) with bad_request. Prior value (empty) preserved.
+	_, err = ti.service.UpdateToolset(ctx, updatePayload(created.Slug, []string{"http:my-spec"}))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "http")
+
+	// Reject malformed entry.
+	_, err = ti.service.UpdateToolset(ctx, updatePayload(created.Slug, []string{"function-no-colon"}))
+	require.Error(t, err)
+
+	// Confirm the toolset state did not drift after the rejections by doing a
+	// no-op update (nil = COALESCE preserves) and checking the returned value.
+	res, err = ti.service.UpdateToolset(ctx, updatePayload(created.Slug, nil))
+	require.NoError(t, err)
+	require.Empty(t, res.AutoSyncSources, "rejected updates must not have mutated auto_sync_sources")
+}

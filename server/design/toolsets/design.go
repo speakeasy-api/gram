@@ -359,6 +359,7 @@ var UpdateToolsetForm = Type("UpdateToolsetForm", func() {
 	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
 	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
+	Attribute("auto_sync_sources", ArrayOf(String), `Sources this toolset auto-extends when a deployment introduces new tools. Each entry is "<kind>:<source>"; only "function:" entries are accepted today. Passing this field replaces the current value (use the existing list plus additions to extend).`)
 	security.ProjectPayload()
 	Required("slug")
 })
