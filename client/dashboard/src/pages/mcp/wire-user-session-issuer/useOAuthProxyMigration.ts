@@ -1,4 +1,4 @@
-import type { Toolset } from "@gram/client/models/components";
+import type { Toolset } from "@/lib/toolTypes";
 import {
   invalidateAllRemoteSessionClients,
   invalidateAllRemoteSessionIssuers,
