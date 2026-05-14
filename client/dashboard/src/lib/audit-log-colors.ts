@@ -5,6 +5,7 @@ export function getActionCategory(action: string): ActionCategory {
 
   if (
     verb?.includes("delete") ||
+    verb?.includes("disable") ||
     verb?.includes("detach") ||
     verb?.includes("revoke") ||
     verb?.includes("remove")
@@ -16,7 +17,11 @@ export function getActionCategory(action: string): ActionCategory {
     return "deploy";
   }
 
-  if (verb?.includes("create") || verb?.includes("upload")) {
+  if (
+    verb?.includes("create") ||
+    verb?.includes("upload") ||
+    verb?.includes("enable")
+  ) {
     return "create";
   }
 

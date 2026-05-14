@@ -470,22 +470,28 @@ function SecurityOverviewContent() {
                             </TableCell>
                             <TableCell className="pr-4">
                               {isShadowMCP && result.match ? (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  disabled={approveMutation.isPending}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleExclude(
-                                      result.policyId,
-                                      result.match!,
-                                    );
-                                  }}
-                                  title="Exclude this URL from the policy"
+                                <RequireScope
+                                  scope="org:admin"
+                                  level="component"
+                                  reason="Only organization admins can exclude URLs from a policy."
                                 >
-                                  <ShieldOff className="mr-1 h-3 w-3" />
-                                  <span className="text-xs">Exclude</span>
-                                </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={approveMutation.isPending}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleExclude(
+                                        result.policyId,
+                                        result.match!,
+                                      );
+                                    }}
+                                    title="Exclude this URL from the policy"
+                                  >
+                                    <ShieldOff className="mr-1 h-3 w-3" />
+                                    <span className="text-xs">Exclude</span>
+                                  </Button>
+                                </RequireScope>
                               ) : null}
                             </TableCell>
                           </TableRow>

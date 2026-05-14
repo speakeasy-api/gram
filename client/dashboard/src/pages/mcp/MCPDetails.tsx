@@ -100,6 +100,7 @@ import { toast } from "sonner";
 import { useModel } from "../playground/Openrouter";
 import { AddToolsDialog } from "../toolsets/AddToolsDialog";
 import { ToolsetEmptyState } from "../toolsets/ToolsetEmptyState";
+import { useToolsets } from "../toolsets/useToolsets";
 import { getSystemProvidedVariables } from "./environmentVariableUtils";
 import { useMcpConfigs, useMcpSlugValidation } from "./mcp-details-utils";
 import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
@@ -517,7 +518,6 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
     target: ServerStatus;
     sourceStatus: ServerStatus;
   } | null>(null);
-  const [isMaxServersModalOpen, setIsMaxServersModalOpen] = useState(false);
   const updateToolsetMutation = useUpdateToolsetMutation();
   const telemetry = useTelemetry();
 
@@ -601,18 +601,11 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
           toast.success(label);
         },
         onError: (error) => {
-          if (
-            error instanceof Error &&
-            error.message.includes("maximum number of public MCP servers")
-          ) {
-            setIsMaxServersModalOpen(true);
-          } else {
-            toast.error(
-              error instanceof Error
-                ? error.message
-                : "Failed to update server status",
-            );
-          }
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Failed to update server status",
+          );
         },
       },
     );
@@ -726,16 +719,6 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
         isLoading={updateToolsetMutation.isPending}
         currentlyEnabled={currentStatus !== "disabled"}
         targetIsPublic={pendingStatus === "public"}
-      />
-      <FeatureRequestModal
-        isOpen={isMaxServersModalOpen}
-        onClose={() => setIsMaxServersModalOpen(false)}
-        title="MCP Server Limit Reached"
-        description="You have reached the maximum number of MCP servers for the Base plan. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade."
-        actionType="max_public_mcp_servers"
-        icon={Globe}
-        telemetryData={{ slug: toolset.slug }}
-        accountUpgrade
       />
     </>
   );
@@ -1252,6 +1235,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   const { domain } = useCustomDomain();
   const routes = useRoutes();
   const client = useSdkClient();
+  const toolsets = useToolsets();
   const { data: deploymentResult, refetch: refetchDeployment } =
     useLatestDeployment();
   const deployment = deploymentResult?.deployment;
@@ -1341,9 +1325,13 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         slug: toolset.slug,
       });
 
-      invalidateAllToolset(queryClient);
+      invalidateAllToolset(queryClient, { refetchType: "none" });
       invalidateAllGetPeriodUsage(queryClient);
       refetchDeployment();
+      // Wait for the toolset list to refresh before navigating so the
+      // listing page never renders a card for the deleted toolset (which
+      // would trigger a per-card getBySlug refetch that 404s).
+      await toolsets.refetch();
 
       toast.success(`MCP server "${toolset.slug}" deleted`);
       setIsDeleteDialogOpen(false);

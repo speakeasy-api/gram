@@ -44,12 +44,19 @@ function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
       <Type small muted className="mb-4 max-w-md text-center">
         Create an assistant to wire a model up to your MCP servers.
       </Type>
-      <Button onClick={onCreate}>
-        <Button.LeftIcon>
-          <Plus className="h-4 w-4" />
-        </Button.LeftIcon>
-        <Button.Text>Create Assistant</Button.Text>
-      </Button>
+      <RequireScope
+        scope={["project:write", "mcp:write"]}
+        all
+        level="component"
+        reason="You don't have permission to create assistants."
+      >
+        <Button onClick={onCreate}>
+          <Button.LeftIcon>
+            <Plus className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Create Assistant</Button.Text>
+        </Button>
+      </RequireScope>
     </div>
   );
 }
@@ -75,12 +82,19 @@ export default function AssistantsIndex() {
           Configure model, instructions, and MCP servers for each assistant.
         </Page.Section.Description>
         <Page.Section.CTA>
-          <Button onClick={() => routes.assistants.newAssistant.goTo()}>
-            <Button.LeftIcon>
-              <Plus className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>New Assistant</Button.Text>
-          </Button>
+          <RequireScope
+            scope={["project:write", "mcp:write"]}
+            all
+            level="component"
+            reason="You don't have permission to create assistants."
+          >
+            <Button onClick={() => routes.assistants.newAssistant.goTo()}>
+              <Button.LeftIcon>
+                <Plus className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>New Assistant</Button.Text>
+            </Button>
+          </RequireScope>
         </Page.Section.CTA>
         <Page.Section.Body>
           {isLoading ? (

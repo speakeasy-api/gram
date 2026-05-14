@@ -17,6 +17,7 @@ type Session struct {
 	SessionID            string
 	ActiveOrganizationID string
 	UserID               string
+	WorkOSSessionID      string
 }
 
 func SessionCacheKey(sessionID string) string {
@@ -38,7 +39,7 @@ func (s Session) TTL() time.Duration {
 var _ cache.CacheableObject[CachedUserInfo] = (*CachedUserInfo)(nil)
 
 // Organization is an internal representation of a user's organization membership,
-// populated from the Speakeasy IDP response. This is distinct from the Goa-generated
+// populated from the database. This is distinct from the Goa-generated
 // auth.OrganizationEntry which is the API response type.
 type Organization struct {
 	ID                 string
@@ -50,7 +51,6 @@ type Organization struct {
 
 type CachedUserInfo struct {
 	UserID             string
-	UserWhitelisted    bool
 	Admin              bool
 	Email              string
 	DisplayName        *string
@@ -60,7 +60,7 @@ type CachedUserInfo struct {
 }
 
 func UserInfoCacheKey(userID string) string {
-	return "speakeasyUserInfo:" + userID
+	return "userInfo:" + userID
 }
 
 func (c CachedUserInfo) CacheKey() string {
@@ -81,4 +81,5 @@ type AuthURLParams struct {
 	State           string
 	ClientID        string
 	ScopesSupported []string
+	OrganizationID  string // WorkOS org ID — when set, AuthKit skips the org selector
 }

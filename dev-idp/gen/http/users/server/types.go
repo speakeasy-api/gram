@@ -71,9 +71,9 @@ type CreateResponseBody struct {
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
 	// Optional GitHub handle.
 	GithubHandle *string `form:"github_handle,omitempty" json:"github_handle,omitempty" xml:"github_handle,omitempty"`
-	// Admin flag echoed by local-speakeasy validate.
+	// Admin flag.
 	Admin bool `form:"admin" json:"admin" xml:"admin"`
-	// Whitelist flag echoed by local-speakeasy validate.
+	// Whitelist flag.
 	Whitelisted bool   `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -92,9 +92,9 @@ type UpdateResponseBody struct {
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
 	// Optional GitHub handle.
 	GithubHandle *string `form:"github_handle,omitempty" json:"github_handle,omitempty" xml:"github_handle,omitempty"`
-	// Admin flag echoed by local-speakeasy validate.
+	// Admin flag.
 	Admin bool `form:"admin" json:"admin" xml:"admin"`
-	// Whitelist flag echoed by local-speakeasy validate.
+	// Whitelist flag.
 	Whitelisted bool   `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -121,9 +121,9 @@ type UserResponseBody struct {
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
 	// Optional GitHub handle.
 	GithubHandle *string `form:"github_handle,omitempty" json:"github_handle,omitempty" xml:"github_handle,omitempty"`
-	// Admin flag echoed by local-speakeasy validate.
+	// Admin flag.
 	Admin bool `form:"admin" json:"admin" xml:"admin"`
-	// Whitelist flag echoed by local-speakeasy validate.
+	// Whitelist flag.
 	Whitelisted bool   `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`

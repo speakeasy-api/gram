@@ -196,16 +196,6 @@ SELECT EXISTS (
   AND deleted IS FALSE
 );
 
--- name: ListEnabledToolsetsByOrganization :many
-SELECT t.*
-FROM toolsets t
-JOIN projects p ON t.project_id = p.id
-WHERE p.organization_id = @organization_id
-  AND t.mcp_enabled IS TRUE
-  AND t.deleted IS FALSE
-  AND p.deleted IS FALSE
-ORDER BY t.created_at DESC;
-
 -- name: ListToolsetsByOrganization :many
 SELECT t.*
 FROM toolsets t
@@ -258,6 +248,14 @@ RETURNING *;
 UPDATE toolsets
 SET
     oauth_proxy_server_id = @oauth_proxy_server_id
+  , updated_at = clock_timestamp()
+WHERE slug = @slug AND project_id = @project_id
+RETURNING *;
+
+-- name: UpdateToolsetUserSessionIssuer :one
+UPDATE toolsets
+SET
+    user_session_issuer_id = @user_session_issuer_id
   , updated_at = clock_timestamp()
 WHERE slug = @slug AND project_id = @project_id
 RETURNING *;

@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -73,20 +72,26 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *mcp.Service
-	conn           *pgxpool.Pool
-	sessionManager *sessions.Manager
-	serverURL      *url.URL
-	siteURL        *url.URL
-	logger         *slog.Logger
-	tracerProvider trace.TracerProvider
-	cacheAdapter   cache.Cache
-	enc            *encryption.Client
-	authzEngine    *authz.Engine
-	audit          *audit.Logger
+	service             *mcp.Service
+	conn                *pgxpool.Pool
+	sessionManager      *sessions.Manager
+	serverURL           *url.URL
+	siteURL             *url.URL
+	logger              *slog.Logger
+	tracerProvider      trace.TracerProvider
+	cacheAdapter        cache.Cache
+	authnChallengeCache cache.TypedCacheObject[mcp.AuthnChallengeState]
+	enc                 *encryption.Client
+	authzEngine         *authz.Engine
+	audit               *audit.Logger
 }
 
 func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestMCPServiceWithIdentityResolver(t, nil)
+}
+
+func newTestMCPServiceWithIdentityResolver(t *testing.T, identityResolver mcp.IdentityResolver) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -105,7 +110,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
@@ -120,7 +125,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
-	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, guardianPolicy)
+	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, nil, guardianPolicy)
 	billingStub := billing.NewStubClient(logger, tracerProvider)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, nil, nil, nil, nil, nil)
@@ -158,22 +163,24 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	_ = featClient
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter)
 	auditLogger := audit.NewLogger()
-	idpClient := speakeasyclient.NewClient(logger, tracerProvider, guardianPolicy, "http://idp.test", "test-secret-key", conn, nil, posthog)
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, idpClient, userSessionSigner)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, identityResolver, userSessionSigner)
+
+	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](logger, cacheAdapter, cache.SuffixNone)
 
 	return ctx, &testInstance{
-		service:        svc,
-		conn:           conn,
-		sessionManager: sessionManager,
-		serverURL:      serverURL,
-		siteURL:        siteURL,
-		logger:         logger,
-		tracerProvider: tracerProvider,
-		cacheAdapter:   cacheAdapter,
-		enc:            enc,
-		authzEngine:    authzEngine,
-		audit:          auditLogger,
+		service:             svc,
+		conn:                conn,
+		sessionManager:      sessionManager,
+		serverURL:           serverURL,
+		siteURL:             siteURL,
+		logger:              logger,
+		tracerProvider:      tracerProvider,
+		cacheAdapter:        cacheAdapter,
+		authnChallengeCache: authnCache,
+		enc:                 enc,
+		authzEngine:         authzEngine,
+		audit:               auditLogger,
 	}
 }
 

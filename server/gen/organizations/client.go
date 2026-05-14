@@ -15,24 +15,54 @@ import (
 
 // Client is the "organizations" service client.
 type Client struct {
-	SendInviteEndpoint       goa.Endpoint
-	RevokeInviteEndpoint     goa.Endpoint
-	ListInvitesEndpoint      goa.Endpoint
-	GetInviteByTokenEndpoint goa.Endpoint
-	ListUsersEndpoint        goa.Endpoint
-	RemoveUserEndpoint       goa.Endpoint
+	GetEndpoint                 goa.Endpoint
+	SendInviteEndpoint          goa.Endpoint
+	RevokeInviteEndpoint        goa.Endpoint
+	ListInvitesEndpoint         goa.Endpoint
+	GetInviteByTokenEndpoint    goa.Endpoint
+	ListUsersEndpoint           goa.Endpoint
+	RemoveUserEndpoint          goa.Endpoint
+	EnableWebhooksEndpoint      goa.Endpoint
+	DisableWebhooksEndpoint     goa.Endpoint
+	CreatePortalSessionEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "organizations" service client given the endpoints.
-func NewClient(sendInvite, revokeInvite, listInvites, getInviteByToken, listUsers, removeUser goa.Endpoint) *Client {
+func NewClient(get, sendInvite, revokeInvite, listInvites, getInviteByToken, listUsers, removeUser, enableWebhooks, disableWebhooks, createPortalSession goa.Endpoint) *Client {
 	return &Client{
-		SendInviteEndpoint:       sendInvite,
-		RevokeInviteEndpoint:     revokeInvite,
-		ListInvitesEndpoint:      listInvites,
-		GetInviteByTokenEndpoint: getInviteByToken,
-		ListUsersEndpoint:        listUsers,
-		RemoveUserEndpoint:       removeUser,
+		GetEndpoint:                 get,
+		SendInviteEndpoint:          sendInvite,
+		RevokeInviteEndpoint:        revokeInvite,
+		ListInvitesEndpoint:         listInvites,
+		GetInviteByTokenEndpoint:    getInviteByToken,
+		ListUsersEndpoint:           listUsers,
+		RemoveUserEndpoint:          removeUser,
+		EnableWebhooksEndpoint:      enableWebhooks,
+		DisableWebhooksEndpoint:     disableWebhooks,
+		CreatePortalSessionEndpoint: createPortalSession,
 	}
+}
+
+// Get calls the "get" endpoint of the "organizations" service.
+// Get may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Get(ctx context.Context, p *GetPayload) (res *Organization, err error) {
+	var ires any
+	ires, err = c.GetEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*Organization), nil
 }
 
 // SendInvite calls the "sendInvite" endpoint of the "organizations" service.
@@ -159,4 +189,65 @@ func (c *Client) ListUsers(ctx context.Context, p *ListUsersPayload) (res *ListU
 func (c *Client) RemoveUser(ctx context.Context, p *RemoveUserPayload) (err error) {
 	_, err = c.RemoveUserEndpoint(ctx, p)
 	return
+}
+
+// EnableWebhooks calls the "enableWebhooks" endpoint of the "organizations"
+// service.
+// EnableWebhooks may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) EnableWebhooks(ctx context.Context, p *EnableWebhooksPayload) (err error) {
+	_, err = c.EnableWebhooksEndpoint(ctx, p)
+	return
+}
+
+// DisableWebhooks calls the "disableWebhooks" endpoint of the "organizations"
+// service.
+// DisableWebhooks may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DisableWebhooks(ctx context.Context, p *DisableWebhooksPayload) (err error) {
+	_, err = c.DisableWebhooksEndpoint(ctx, p)
+	return
+}
+
+// CreatePortalSession calls the "createPortalSession" endpoint of the
+// "organizations" service.
+// CreatePortalSession may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreatePortalSession(ctx context.Context, p *CreatePortalSessionPayload) (res *CreatePortalSessionResult, err error) {
+	var ires any
+	ires, err = c.CreatePortalSessionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*CreatePortalSessionResult), nil
 }

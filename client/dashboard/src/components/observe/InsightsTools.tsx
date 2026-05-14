@@ -1,5 +1,4 @@
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
-import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsConfig } from "@/components/insights-sidebar";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { ErrorAlert } from "@/components/ui/alert";
@@ -316,38 +315,33 @@ export function InsightsToolsContent() {
           </div>
         </div>
       ) : (
-        <EnterpriseGate
-          icon="workflow"
-          description="Tools are available on the Enterprise plan. Book a time to get started."
-        >
-          <HooksInnerContent
-            isLogsDisabled={isLogsDisabled}
-            isLoading={isLoading}
-            error={error}
-            groupedTraces={groupedTraces}
-            serverOptions={serverOptions}
-            onServerSelectionChange={handleServerSelectionChange}
-            userEmailOptions={userEmailOptions}
-            onUserEmailSelectionChange={handleUserEmailSelectionChange}
-            activeFilters={activeFilters}
-            addFilter={addFilter}
-            selectedHookTypes={selectedHookTypes}
-            onHookTypesChange={handleHookTypesChange}
-            selectedLog={selectedLog}
-            setSelectedLog={setSelectedLog}
-            dateRange={dateRange}
-            customRange={customRange}
-            customRangeLabel={customRangeLabel}
-            onDateRangeChange={setDateRangeParam}
-            onCustomRangeChange={setCustomRangeParam}
-            onClearCustomRange={clearCustomRange}
-            projectSlug={projectSlug}
-            serverNameMappings={serverNameMappings}
-            summaryData={summaryData}
-            summaryPending={summaryPending}
-            summaryIsError={summaryIsError}
-          />
-        </EnterpriseGate>
+        <HooksInnerContent
+          isLogsDisabled={isLogsDisabled}
+          isLoading={isLoading}
+          error={error}
+          groupedTraces={groupedTraces}
+          serverOptions={serverOptions}
+          onServerSelectionChange={handleServerSelectionChange}
+          userEmailOptions={userEmailOptions}
+          onUserEmailSelectionChange={handleUserEmailSelectionChange}
+          activeFilters={activeFilters}
+          addFilter={addFilter}
+          selectedHookTypes={selectedHookTypes}
+          onHookTypesChange={handleHookTypesChange}
+          selectedLog={selectedLog}
+          setSelectedLog={setSelectedLog}
+          dateRange={dateRange}
+          customRange={customRange}
+          customRangeLabel={customRangeLabel}
+          onDateRangeChange={setDateRangeParam}
+          onCustomRangeChange={setCustomRangeParam}
+          onClearCustomRange={clearCustomRange}
+          projectSlug={projectSlug}
+          serverNameMappings={serverNameMappings}
+          summaryData={summaryData}
+          summaryPending={summaryPending}
+          summaryIsError={summaryIsError}
+        />
       )}
     </>
   );

@@ -38,8 +38,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
@@ -74,6 +74,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/otelforwarding"
 	"github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -81,6 +82,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -98,6 +100,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/usage"
+	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/variations"
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
@@ -162,16 +165,21 @@ func newStartCommand() *cli.Command {
 			Value:   false,
 		},
 		&cli.StringFlag{
-			Name:     "speakeasy-server-address",
-			Usage:    "Speakeasy server address",
-			EnvVars:  []string{"SPEAKEASY_SERVER_ADDRESS"},
+			Name:     "idp-base-url",
+			Usage:    "OIDC identity provider base URL (e.g. http://localhost:35291/oauth2)",
+			EnvVars:  []string{"GRAM_IDP_BASE_URL"},
 			Required: true,
 		},
 		&cli.StringFlag{
-			Name:     "speakeasy-secret-key",
-			Usage:    "Speakeasy secret key",
-			EnvVars:  []string{"SPEAKEASY_SECRET_KEY"},
+			Name:     "idp-client-id",
+			Usage:    "OIDC client ID for the identity provider",
+			EnvVars:  []string{"GRAM_IDP_CLIENT_ID"},
 			Required: true,
+		},
+		&cli.StringFlag{
+			Name:    "idp-client-secret",
+			Usage:   "WorkOS API key scoped to the IDP application (falls back to workos-api-key if unset)",
+			EnvVars: []string{"GRAM_IDP_CLIENT_SECRET"},
 		},
 		&cli.BoolFlag{
 			Name:    "with-otel-tracing",
@@ -388,7 +396,7 @@ func newStartCommand() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:     "workos-endpoint",
-			Usage:    "Base URL for WorkOS API calls. Leave unset for production (defaults to https://api.workos.com); set to the dev-idp's local-speakeasy mode for fully-local development.",
+			Usage:    "Base URL for WorkOS API calls. Leave unset for production (defaults to https://api.workos.com); set to the dev-idp's mock-workos mode for fully-local development.",
 			EnvVars:  []string{"WORKOS_API_URL"},
 			Required: false,
 		},
@@ -524,30 +532,41 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
 
-			speakeasyIDPClient := speakeasyclient.NewClient(
+			idpClientSecret := c.String("idp-client-secret")
+			if idpClientSecret == "" {
+				idpClientSecret = c.String("workos-api-key")
+			}
+
+			umClient := newIDPUserManagementClient(guardianPolicy, idpClientSecret, c)
+			if umClient == nil {
+				return fmt.Errorf("failed to create IDP user management client: idp-client-secret (or workos-api-key) is required")
+			}
+
+			idpClient := identity.NewWorkOSAdapter(umClient)
+
+			identityResolver := identity.NewResolver(
 				logger,
 				tracerProvider,
-				guardianPolicy,
-				c.String("speakeasy-server-address"),
-				c.String("speakeasy-secret-key"),
-				db,
-				conv.Ternary(workosAvailable, workosClient, nil),
+				cache.NewRedisCacheAdapter(redisClient),
+				c.String("idp-base-url"),
+				c.String("idp-client-id"),
+				idpClient,
+				workosClient,
+				orgRepo.New(db),
+				userRepo.New(db),
+				pylonClient,
 				posthogClient,
 			)
 
 			sessionManager := sessions.NewManager(
 				logger,
 				tracerProvider,
-				guardianPolicy,
 				db,
 				redisClient,
 				cache.SuffixNone,
-				c.String("speakeasy-server-address"),
-				c.String("speakeasy-secret-key"),
-				pylonClient,
-				posthogClient,
+				idpClient,
 				billingRepo,
-				speakeasyIDPClient,
+				identityResolver,
 			)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String(usersessions.JWTSigningKeyFlag))
@@ -724,7 +743,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, guardianPolicy)
+			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, identityResolver, guardianPolicy)
 			externalOAuthService := oauth.NewExternalOAuthService(logger, guardianPolicy, db, cache.NewRedisCacheAdapter(redisClient), authorizer, encryptionClient, externalMcpOAuthConfig)
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient))
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL)
@@ -776,7 +795,7 @@ func newStartCommand() *cli.Command {
 				memoryTools,
 				platformFeatureChecker,
 				platformToolsets,
-				speakeasyIDPClient,
+				identityResolver,
 				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
 			)
 
@@ -792,6 +811,7 @@ func newStartCommand() *cli.Command {
 			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo)
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, db, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver)
 			assistantsCore.SetWakeCanceller(triggerApp)
+			assistantsCore.SetChatMessageWriter(chatWriter)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
@@ -925,18 +945,20 @@ func newStartCommand() *cli.Command {
 				tracerProvider,
 				db,
 				sessionManager,
+				identityResolver,
 				auth.AuthConfigurations{
-					SpeakeasyServerAddress: c.String("speakeasy-server-address"),
-					GramServerURL:          c.String("server-url"),
-					SignInRedirectURL:      auth.FormSignInRedirectURL(c.String("site-url")),
-					Environment:            c.String("environment"),
+					IDPBaseURL:        c.String("idp-base-url"),
+					GramServerURL:     c.String("server-url"),
+					SignInRedirectURL: auth.FormSignInRedirectURL(c.String("site-url")),
+					Environment:       c.String("environment"),
 				},
 				authzEngine,
 				billingRepo,
 				&background.TemporalAssistantsSubscriptionCancelScheduler{TemporalEnv: temporalEnv},
 				posthogClient,
+				cache.NewRedisCacheAdapter(redisClient),
 			))
-			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, productFeatures, authzEngine))
+			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, productFeatures, authzEngine, auditLogger, svixClient))
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 
@@ -966,6 +988,7 @@ func newStartCommand() *cli.Command {
 			mcpservers.Attach(mux, mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger))
+			remotesessions.Attach(mux, remotesessions.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, guardianPolicy, auditLogger))
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger))
 			xmcp.Attach(mux, xmcp.NewService(logger, tracerProvider, meterProvider, db, encryptionClient, authzEngine, guardianPolicy, posthogClient, billingRepo, billingTracker, mcpService, serverURL), mcpMetadataService)
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))

@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -283,6 +284,7 @@ type ServiceCore struct {
 	telemetryLogger *telemetry.Logger
 	contextWindow   *openrouter.ContextWindowResolver
 	wakeCanceller   WakeCanceller
+	chatWriter      *chat.ChatMessageWriter
 }
 
 func NewServiceCore(
@@ -307,6 +309,7 @@ func NewServiceCore(
 		telemetryLogger: telemetryLogger,
 		contextWindow:   contextWindow,
 		wakeCanceller:   nil,
+		chatWriter:      nil,
 	}
 }
 
@@ -314,6 +317,14 @@ func NewServiceCore(
 // assistants must not import triggers.
 func (s *ServiceCore) SetWakeCanceller(c WakeCanceller) {
 	s.wakeCanceller = c
+}
+
+// SetChatMessageWriter wires the chat writer used by self-heal. Set after
+// construction (rather than via NewServiceCore) to match the existing
+// post-construction injection pattern and avoid churning every test call
+// site. Self-heal is skipped if the writer was never set.
+func (s *ServiceCore) SetChatMessageWriter(w *chat.ChatMessageWriter) {
+	s.chatWriter = w
 }
 
 // resolveAssistantContextWindow returns the smallest context_length the gram
@@ -1466,12 +1477,56 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				}, nil
 			}
 
+			// First-attempt history corruption: write a trimmed generation,
+			// tear the runtime down so the next admit /configures with it,
+			// and re-pend the event. Further attempts fall through to the
+			// terminal-fail branch so persistent corruption can't loop.
+			if errors.Is(runErr, ErrHistoryCorrupted) && event.Attempts <= 1 {
+				if healErr := s.selfHealCorruptHistory(ctx, thread.ChatID, thread.ProjectID); healErr != nil {
+					s.logger.ErrorContext(ctx, "assistant self-heal failed",
+						attr.SlogAssistantThreadID(thread.ID.String()),
+						attr.SlogAssistantEventID(event.ID.String()),
+						attr.SlogError(healErr),
+					)
+					s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant self-heal failed", "ERROR", healErr)
+					if err := s.failEvent(ctx, thread.ProjectID, event.ID, fmt.Errorf("self-heal failed: %w", healErr)); err != nil {
+						return ProcessThreadEventsResult{}, err
+					}
+					warmUntil := time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds) * time.Second)
+					if err := s.setRuntimeActive(ctx, thread.ProjectID, runtimeRecord.ID, warmUntil); err != nil {
+						return ProcessThreadEventsResult{}, err
+					}
+					return ProcessThreadEventsResult{
+						AssistantID:       assistant.ID,
+						WarmUntil:         warmUntil,
+						WarmTTLSeconds:    assistant.WarmTTLSeconds,
+						RuntimeActive:     true,
+						RetryAdmission:    false,
+						ProcessedAnyEvent: processedAny,
+					}, nil
+				}
+				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_self_heal", "assistant history self-heal applied", "WARN", runErr)
+				_ = s.runtime.Stop(ctx, runtimeRecord)
+				_ = s.stopRuntimeRecord(ctx, thread.ProjectID, thread.ID, runtimeStateStopped)
+				if err := s.resetEventToPending(ctx, thread.ProjectID, event.ID, runErr); err != nil {
+					return ProcessThreadEventsResult{}, err
+				}
+				return ProcessThreadEventsResult{
+					AssistantID:       assistant.ID,
+					WarmUntil:         time.Time{},
+					WarmTTLSeconds:    assistant.WarmTTLSeconds,
+					RuntimeActive:     false,
+					RetryAdmission:    true,
+					ProcessedAnyEvent: processedAny,
+				}, nil
+			}
+
 			// Upstream completion provider rejected the request (Anthropic 400
 			// on a malformed message, OpenRouter rate limit, etc). The runtime
 			// is fine — replaying the same input would just produce the same
 			// failure, so terminally fail the event and keep the VM warm for
 			// subsequent ones rather than churning Fly on every retry.
-			if errors.Is(runErr, ErrCompletionFailed) {
+			if errors.Is(runErr, ErrCompletionFailed) || errors.Is(runErr, ErrHistoryCorrupted) {
 				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event failed at completion provider", "ERROR", runErr)
 				if err := s.failEvent(ctx, thread.ProjectID, event.ID, runErr); err != nil {
 					return ProcessThreadEventsResult{}, err
@@ -1944,6 +1999,100 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 	}
 	assistant.Toolsets = refs[assistant.ID]
 	return thread, assistant, runtime, nil
+}
+
+const (
+	selfHealUserMessageCap    = 5
+	selfHealUserMessageMaxLen = 1000
+)
+
+// selfHealRecoveryNoticeTemplate prefixes the trimmed generation when the
+// upstream provider rejects the replayed transcript. The "%d" slot is the
+// number of user messages retained; the second is the per-message rune cap.
+// Sent as a user-role row because loadChatHistory drops system rows.
+const selfHealRecoveryNoticeTemplate = "[gram self-heal] Earlier conversation history was rejected by the inference provider as malformed and has been discarded. " +
+	"The %d user message(s) that follow are the most recent ones, each truncated to %d characters. " +
+	"Prior context (including any tool calls and their results) is not available. " +
+	"Before asking the user to repeat themselves, try to recover the lost context using your available tools — " +
+	"e.g. search prior messages or threads in whichever channel this conversation lives in, look up referenced records, " +
+	"or re-fetch any IDs that appear in the surviving messages. Only ask the user to restate context if your tools can't recover it."
+
+// selfHealCorruptHistory writes a fresh generation containing a leading
+// recovery notice followed by the last selfHealUserMessageCap user-role
+// messages (each truncated to selfHealUserMessageMaxLen runes). The next
+// /configure pulls this generation as the live history; assistant/tool
+// turns are dropped — they're the most likely source of the rejection.
+func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID) error {
+	if s.chatWriter == nil {
+		return fmt.Errorf("self-heal: chat writer not configured")
+	}
+
+	messages, err := chatrepo.New(s.db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return fmt.Errorf("self-heal: list chat messages: %w", err)
+	}
+
+	var currentGen int32
+	userMessages := make([]chatrepo.ChatMessage, 0, len(messages))
+	for _, m := range messages {
+		if m.Generation > currentGen {
+			currentGen = m.Generation
+		}
+		if m.Role == "user" {
+			userMessages = append(userMessages, m)
+		}
+	}
+	if len(userMessages) > selfHealUserMessageCap {
+		userMessages = userMessages[len(userMessages)-selfHealUserMessageCap:]
+	}
+
+	nextGen := currentGen + 1
+	empty := conv.ToPGTextEmpty("")
+	base := chatrepo.CreateChatMessageParams{
+		ChatID:           chatID,
+		ProjectID:        projectID,
+		Role:             "user",
+		Content:          "",
+		ContentRaw:       nil,
+		ContentAssetUrl:  empty,
+		StorageError:     empty,
+		Model:            empty,
+		MessageID:        empty,
+		ToolCallID:       empty,
+		UserID:           empty,
+		ExternalUserID:   empty,
+		FinishReason:     empty,
+		ToolCalls:        nil,
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		TotalTokens:      0,
+		Origin:           empty,
+		UserAgent:        empty,
+		IpAddress:        empty,
+		Source:           empty,
+		ContentHash:      nil,
+		Generation:       nextGen,
+	}
+
+	rows := make([]chatrepo.CreateChatMessageParams, 0, len(userMessages)+1)
+	notice := base
+	notice.Content = fmt.Sprintf(selfHealRecoveryNoticeTemplate, len(userMessages), selfHealUserMessageMaxLen)
+	rows = append(rows, notice)
+	for _, m := range userMessages {
+		row := base
+		row.Content = conv.TruncateString(m.Content, selfHealUserMessageMaxLen)
+		row.UserID = m.UserID
+		row.ExternalUserID = m.ExternalUserID
+		rows = append(rows, row)
+	}
+
+	if _, err := s.chatWriter.Write(ctx, projectID, rows); err != nil {
+		return fmt.Errorf("self-heal: write recovery generation: %w", err)
+	}
+	return nil
 }
 
 func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID) ([]runtimeMessage, error) {

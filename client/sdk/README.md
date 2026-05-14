@@ -319,6 +319,10 @@ run();
 
 ### [Organizations](docs/sdks/organizations/README.md)
 
+* [createPortalSession](docs/sdks/organizations/README.md#createportalsession) - createPortalSession organizations
+* [disableWebhooks](docs/sdks/organizations/README.md#disablewebhooks) - disableWebhooks organizations
+* [enableWebhooks](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
+* [get](docs/sdks/organizations/README.md#get) - get organizations
 * [getInviteByToken](docs/sdks/organizations/README.md#getinvitebytoken) - getInviteByToken organizations
 * [listInvites](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 * [listUsers](docs/sdks/organizations/README.md#listusers) - listUsers organizations
@@ -376,6 +380,29 @@ run();
 * [listServers](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
 * [updateServer](docs/sdks/remotemcp/README.md#updateserver) - updateServer remoteMcp
 * [verifyURL](docs/sdks/remotemcp/README.md#verifyurl) - verifyURL remoteMcp
+
+### [RemoteSessionClients](docs/sdks/remotesessionclients/README.md)
+
+* [create](docs/sdks/remotesessionclients/README.md#create) - createRemoteSessionClient remoteSessionClients
+* [delete](docs/sdks/remotesessionclients/README.md#delete) - deleteRemoteSessionClient remoteSessionClients
+* [get](docs/sdks/remotesessionclients/README.md#get) - getRemoteSessionClient remoteSessionClients
+* [list](docs/sdks/remotesessionclients/README.md#list) - listRemoteSessionClients remoteSessionClients
+* [update](docs/sdks/remotesessionclients/README.md#update) - updateRemoteSessionClient remoteSessionClients
+
+### [RemoteSessionIssuers](docs/sdks/remotesessionissuers/README.md)
+
+* [create](docs/sdks/remotesessionissuers/README.md#create) - createRemoteSessionIssuer remoteSessionIssuers
+* [delete](docs/sdks/remotesessionissuers/README.md#delete) - deleteRemoteSessionIssuer remoteSessionIssuers
+* [discover](docs/sdks/remotesessionissuers/README.md#discover) - discoverRemoteSessionIssuer remoteSessionIssuers
+* [get](docs/sdks/remotesessionissuers/README.md#get) - getRemoteSessionIssuer remoteSessionIssuers
+* [list](docs/sdks/remotesessionissuers/README.md#list) - listRemoteSessionIssuers remoteSessionIssuers
+* [register](docs/sdks/remotesessionissuers/README.md#register) - registerRemoteSessionIssuer remoteSessionIssuers
+* [update](docs/sdks/remotesessionissuers/README.md#update) - updateRemoteSessionIssuer remoteSessionIssuers
+
+### [RemoteSessions](docs/sdks/remotesessions/README.md)
+
+* [list](docs/sdks/remotesessions/README.md#list) - listRemoteSessions remoteSessions
+* [revoke](docs/sdks/remotesessions/README.md#revoke) - revokeRemoteSession remoteSessions
 
 ### [Resources](docs/sdks/resources/README.md)
 
@@ -643,6 +670,10 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpServersGet`](docs/sdks/mcpservers/README.md#get) - getMcpServer mcpServers
 - [`mcpServersList`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`mcpServersUpdate`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
+- [`organizationsCreatePortalSession`](docs/sdks/organizations/README.md#createportalsession) - createPortalSession organizations
+- [`organizationsDisableWebhooks`](docs/sdks/organizations/README.md#disablewebhooks) - disableWebhooks organizations
+- [`organizationsEnableWebhooks`](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
+- [`organizationsGet`](docs/sdks/organizations/README.md#get) - get organizations
 - [`organizationsGetInviteByToken`](docs/sdks/organizations/README.md#getinvitebytoken) - getInviteByToken organizations
 - [`organizationsListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 - [`organizationsListUsers`](docs/sdks/organizations/README.md#listusers) - listUsers organizations
@@ -685,6 +716,20 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`remoteMcpListServers`](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
 - [`remoteMcpUpdateServer`](docs/sdks/remotemcp/README.md#updateserver) - updateServer remoteMcp
 - [`remoteMcpVerifyURL`](docs/sdks/remotemcp/README.md#verifyurl) - verifyURL remoteMcp
+- [`remoteSessionClientsCreate`](docs/sdks/remotesessionclients/README.md#create) - createRemoteSessionClient remoteSessionClients
+- [`remoteSessionClientsDelete`](docs/sdks/remotesessionclients/README.md#delete) - deleteRemoteSessionClient remoteSessionClients
+- [`remoteSessionClientsGet`](docs/sdks/remotesessionclients/README.md#get) - getRemoteSessionClient remoteSessionClients
+- [`remoteSessionClientsList`](docs/sdks/remotesessionclients/README.md#list) - listRemoteSessionClients remoteSessionClients
+- [`remoteSessionClientsUpdate`](docs/sdks/remotesessionclients/README.md#update) - updateRemoteSessionClient remoteSessionClients
+- [`remoteSessionIssuersCreate`](docs/sdks/remotesessionissuers/README.md#create) - createRemoteSessionIssuer remoteSessionIssuers
+- [`remoteSessionIssuersDelete`](docs/sdks/remotesessionissuers/README.md#delete) - deleteRemoteSessionIssuer remoteSessionIssuers
+- [`remoteSessionIssuersDiscover`](docs/sdks/remotesessionissuers/README.md#discover) - discoverRemoteSessionIssuer remoteSessionIssuers
+- [`remoteSessionIssuersGet`](docs/sdks/remotesessionissuers/README.md#get) - getRemoteSessionIssuer remoteSessionIssuers
+- [`remoteSessionIssuersList`](docs/sdks/remotesessionissuers/README.md#list) - listRemoteSessionIssuers remoteSessionIssuers
+- [`remoteSessionIssuersRegister`](docs/sdks/remotesessionissuers/README.md#register) - registerRemoteSessionIssuer remoteSessionIssuers
+- [`remoteSessionIssuersUpdate`](docs/sdks/remotesessionissuers/README.md#update) - updateRemoteSessionIssuer remoteSessionIssuers
+- [`remoteSessionsList`](docs/sdks/remotesessions/README.md#list) - listRemoteSessions remoteSessions
+- [`remoteSessionsRevoke`](docs/sdks/remotesessions/README.md#revoke) - revokeRemoteSession remoteSessions
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
 - [`riskApprovalsCreate`](docs/sdks/approvals/README.md#create) - approveShadowMCP risk
 - [`riskApprovalsDelete`](docs/sdks/approvals/README.md#delete) - revokeShadowMCPApproval risk
@@ -830,8 +875,11 @@ To learn about this feature and how to get started, check
 - [`useCreateMcpServerMutation`](docs/sdks/mcpservers/README.md#create) - createMcpServer mcpServers
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreatePluginMutation`](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
+- [`useCreatePortalSessionMutation`](docs/sdks/organizations/README.md#createportalsession) - createPortalSession organizations
 - [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
 - [`useCreateRemoteMcpServerMutation`](docs/sdks/remotemcp/README.md#createserver) - createServer remoteMcp
+- [`useCreateRemoteSessionClientMutation`](docs/sdks/remotesessionclients/README.md#create) - createRemoteSessionClient remoteSessionClients
+- [`useCreateRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#create) - createRemoteSessionIssuer remoteSessionIssuers
 - [`useCreateRoleMutation`](docs/sdks/access/README.md#createrole) - createRole access
 - [`useCreateSignedChatAttachmentURLMutation`](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
 - [`useCreateSlackAppMutation`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
@@ -849,6 +897,8 @@ To learn about this feature and how to get started, check
 - [`useDeletePluginMutation`](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
 - [`useDeleteProjectMutation`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
 - [`useDeleteRemoteMcpServerMutation`](docs/sdks/remotemcp/README.md#deleteserver) - deleteServer remoteMcp
+- [`useDeleteRemoteSessionClientMutation`](docs/sdks/remotesessionclients/README.md#delete) - deleteRemoteSessionClient remoteSessionClients
+- [`useDeleteRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#delete) - deleteRemoteSessionIssuer remoteSessionIssuers
 - [`useDeleteRoleMutation`](docs/sdks/access/README.md#deleterole) - deleteRole access
 - [`useDeleteSlackAppMutation`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
 - [`useDeleteSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletesourcelink) - deleteSourceEnvironmentLink environments
@@ -860,10 +910,12 @@ To learn about this feature and how to get started, check
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 - [`useDisableRBACMutation`](docs/sdks/access/README.md#disablerbac) - disableRBAC access
+- [`useDisableWebhooksMutation`](docs/sdks/organizations/README.md#disablewebhooks) - disableWebhooks organizations
+- [`useDiscoverRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#discover) - discoverRemoteSessionIssuer remoteSessionIssuers
 - [`useEnableRBACMutation`](docs/sdks/access/README.md#enablerbac) - enableRBAC access
+- [`useEnableWebhooksMutation`](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useExportMcpMetadataMutation`](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
-- [`useFeaturesGet`](docs/sdks/features/README.md#get) - getProductFeatures features
 - [`useFeaturesSetMutation`](docs/sdks/features/README.md#set) - setProductFeature features
 - [`useFetchOpenAPIv3FromURLMutation`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 - [`useGetAssistantMemory`](docs/sdks/assistantmemories/README.md#get) - getAssistantMemory assistantMemories
@@ -931,6 +983,7 @@ To learn about this feature and how to get started, check
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`useMcpServers`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
+- [`useOrganization`](docs/sdks/organizations/README.md#get) - get organizations
 - [`useOtelForwardingConfig`](docs/sdks/otelforwarding/README.md#getconfig) - getConfig otelForwarding
 - [`usePauseTriggerMutation`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 - [`usePlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
@@ -938,6 +991,7 @@ To learn about this feature and how to get started, check
 - [`usePluginsDownloadCodexInstallScript`](docs/sdks/plugins/README.md#downloadcodexinstallscript) - downloadCodexInstallScript plugins
 - [`usePluginsDownloadObservabilityPlugin`](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 - [`usePluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
+- [`useProductFeatures`](docs/sdks/features/README.md#get) - getProductFeatures features
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`useProjectsSetOrganizationWhitelistMutation`](docs/sdks/projects/README.md#setorganizationwhitelist) - setOrganizationWhitelist projects
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
@@ -947,7 +1001,13 @@ To learn about this feature and how to get started, check
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
+- [`useRegisterRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#register) - registerRemoteSessionIssuer remoteSessionIssuers
 - [`useRemoteMcpServers`](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
+- [`useRemoteSessionClient`](docs/sdks/remotesessionclients/README.md#get) - getRemoteSessionClient remoteSessionClients
+- [`useRemoteSessionClients`](docs/sdks/remotesessionclients/README.md#list) - listRemoteSessionClients remoteSessionClients
+- [`useRemoteSessionIssuer`](docs/sdks/remotesessionissuers/README.md#get) - getRemoteSessionIssuer remoteSessionIssuers
+- [`useRemoteSessionIssuers`](docs/sdks/remotesessionissuers/README.md#list) - listRemoteSessionIssuers remoteSessionIssuers
+- [`useRemoteSessions`](docs/sdks/remotesessions/README.md#list) - listRemoteSessions remoteSessions
 - [`useRemoveOAuthServerMutation`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
 - [`useRemoveOrganizationUserMutation`](docs/sdks/organizations/README.md#removeuser) - removeUser organizations
 - [`useRemovePluginServerMutation`](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
@@ -957,6 +1017,7 @@ To learn about this feature and how to get started, check
 - [`useResumeTriggerMutation`](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useRevokeInviteMutation`](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
+- [`useRevokeRemoteSessionMutation`](docs/sdks/remotesessions/README.md#revoke) - revokeRemoteSession remoteSessions
 - [`useRevokeUserSessionClientMutation`](docs/sdks/usersessionclients/README.md#revoke) - revokeUserSessionClient userSessionClients
 - [`useRevokeUserSessionConsentMutation`](docs/sdks/usersessionconsents/README.md#revoke) - revokeUserSessionConsent userSessionConsents
 - [`useRevokeUserSessionMutation`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
@@ -1007,6 +1068,8 @@ To learn about this feature and how to get started, check
 - [`useUpdatePluginMutation`](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
 - [`useUpdatePluginServerMutation`](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins
 - [`useUpdateRemoteMcpServerMutation`](docs/sdks/remotemcp/README.md#updateserver) - updateServer remoteMcp
+- [`useUpdateRemoteSessionClientMutation`](docs/sdks/remotesessionclients/README.md#update) - updateRemoteSessionClient remoteSessionClients
+- [`useUpdateRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#update) - updateRemoteSessionIssuer remoteSessionIssuers
 - [`useUpdateRoleMutation`](docs/sdks/access/README.md#updaterole) - updateRole access
 - [`useUpdateSlackAppMutation`](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
