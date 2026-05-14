@@ -82,13 +82,47 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 func observedShadowMCPName(evidence shadowmcp.AccessEvidence, toolName string) *string {
 	switch {
 	case evidence.ServerIdentity != "":
-		return &evidence.ServerIdentity
+		name := humanizeShadowMCPServerIdentity(evidence.ServerIdentity)
+		return &name
 	case evidence.URLHost != "":
 		return &evidence.URLHost
 	case toolName != "":
 		return &toolName
 	default:
 		return nil
+	}
+}
+
+func humanizeShadowMCPServerIdentity(value string) string {
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		return r == '_' || r == '-' || r == '.' || r == ':' || r == ' '
+	})
+	if len(parts) == 0 {
+		return value
+	}
+
+	words := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		words = append(words, humanizeShadowMCPServerIdentityWord(part))
+	}
+	if len(words) == 0 {
+		return value
+	}
+	return strings.Join(words, " ")
+}
+
+func humanizeShadowMCPServerIdentityWord(value string) string {
+	lower := strings.ToLower(value)
+	switch lower {
+	case "ai", "api", "http", "https", "mcp", "oauth", "url":
+		return strings.ToUpper(lower)
+	case "github":
+		return "GitHub"
+	default:
+		return strings.ToUpper(lower[:1]) + lower[1:]
 	}
 }
 

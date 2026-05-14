@@ -73,3 +73,16 @@ func TestShadowMCPApprovalRequestURLRequiresEvidence(t *testing.T) {
 	})
 	require.False(t, ok)
 }
+
+func TestObservedShadowMCPName_HumanizesServerIdentity(t *testing.T) {
+	t.Parallel()
+
+	name := observedShadowMCPName(shadowmcp.AccessEvidence{
+		FullURL:        "",
+		URLHost:        "",
+		ServerIdentity: "claude_ai_calendly",
+	}, "authenticate")
+
+	require.NotNil(t, name)
+	require.Equal(t, "Claude AI Calendly", *name)
+}
