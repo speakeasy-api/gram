@@ -37,7 +37,7 @@ Required keys for the default flow (listed in the order the user encounters them
 7. **Show the tokens card.** Once the install card resolves with \`installed: true\`, call \`request_environment_secrets\` in the order the user will read them in Slack's UI: \`SLACK_SIGNING_SECRET\` (Basic Information → App Credentials), then \`SLACK_BOT_TOKEN\` (OAuth & Permissions → Bot User OAuth Token), then \`SLACK_USER_TOKEN\` (OAuth & Permissions → User OAuth Token). This is a separate card, not part of the install card. If the install card resolved with \`cancelled: true\`, do not call \`request_environment_secrets\` — they have nothing to paste.
 8. **Self-handshake.** Single short burst, no confirmation:
    - **a.** Ask for the user's Slack handle.
-   - **b.** DM the user a greeting in the assistant's voice (the persona picked via \`propose_identity\`). Do not template.
+   - **b.** DM the user a greeting in the assistant's voice (the persona picked via \`propose_personality\`). Do not template.
    - **c.** Search your own messages for the greeting; read \`bot_id\` off the bot-authored message. Do not substitute a user id.
    - **d.** \`update_trigger(id, config)\` adding \`event.bot_id != "<bot_id>"\` to \`config.filter\` (AND with any existing filter). Required to break reply loops.
 

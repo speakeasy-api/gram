@@ -10,7 +10,8 @@ import { computeBehaviorSection } from "../behaviors";
 import { getIntegrationDoc, listIntegrationDocs } from "../docs";
 import { setSection } from "../sections";
 import {
-  ProposeIdentityComponent,
+  ProposeNameComponent,
+  ProposePersonalityComponent,
   RequestEnvironmentSecretsComponent,
   ShowSlackAppGuideComponent,
   ShowWebhookUrlComponent,
@@ -179,13 +180,19 @@ async function ensureAssistant(
     warm_ttl_seconds?: number;
     max_concurrency?: number;
   },
+  idOverride?: string | null,
 ) {
   const { sdk, draft } = deps;
-  if (draft.assistantId) {
+  // streamText captures tool closures at response start, so a tool's `draft`
+  // snapshot is stale for subsequent tool calls in the same response. Callers
+  // can pass `idOverride` to force the update path against an id created
+  // moments earlier in the same response.
+  const currentId = idOverride !== undefined ? idOverride : draft.assistantId;
+  if (currentId) {
     const prevName = draft.assistant?.name;
     const updated = await sdk.assistants.update({
       updateAssistantForm: {
-        id: draft.assistantId,
+        id: currentId,
         ...(payload.name !== undefined ? { name: payload.name } : {}),
         ...(payload.instructions !== undefined
           ? { instructions: payload.instructions }
@@ -363,7 +370,7 @@ type ShowSlackGuideArgs = {
 type ListIntegrationsArgs = { keywords?: string[] };
 type ReadDocsArgs = { slug: string };
 type FinishArgs = { message?: string };
-type ProposeIdentityArgs = {
+type ProposeNameArgs = {
   goal?: string;
   name_suggestions: string[];
 };
@@ -384,6 +391,37 @@ type PersonalityChoice =
 function buildAssistantTools(deps: ToolDeps) {
   const { sdk, draft, organizationId } = deps;
 
+  // Live mirror of the assistant — `draft` is closure-captured by streamText
+  // and won't pick up draft.setAssistant calls made by earlier tool calls in
+  // the same response. Tools that read assistant state across a single
+  // response (e.g. propose_name → propose_personality) consult `live` first.
+  type LiveToolset = {
+    toolsetSlug: string;
+    environmentSlug?: string | undefined;
+  };
+  const live: {
+    id: string | null;
+    name: string | undefined;
+    instructions: string;
+    toolsets: ReadonlyArray<LiveToolset>;
+  } = {
+    id: draft.assistantId,
+    name: draft.assistant?.name,
+    instructions: draft.assistant?.instructions ?? "",
+    toolsets: draft.assistant?.toolsets ?? [],
+  };
+  const trackLive = (a: {
+    id: string;
+    name: string;
+    instructions: string;
+    toolsets: ReadonlyArray<LiveToolset>;
+  }) => {
+    live.id = a.id;
+    live.name = a.name;
+    live.instructions = a.instructions;
+    live.toolsets = a.toolsets;
+  };
+
   // The LLM may emit multiple mutating tool calls in parallel within one turn.
   // Without this, two attach_toolset calls would each read the same pre-attach
   // toolsets snapshot, compute their own next array, and PUT — last write wins.
@@ -396,10 +434,10 @@ function buildAssistantTools(deps: ToolDeps) {
 
   const triggerCreateInFlight = new Map<string, Promise<ToolResult>>();
 
-  const propose_identity = defineFrontendTool<ProposeIdentityArgs, ToolResult>(
+  const propose_name = defineFrontendTool<ProposeNameArgs, ToolResult>(
     {
       description:
-        "Present a name + personality picker to the user. Use this as the FIRST step of creation, before any toolsets or triggers. Generate 4-6 unique first-name suggestions that fit the user's stated goal. Treat the assistant like a coworker: pick real first names from a mix of cultures. Never use the phrasing '[Owner]'s assistant', role titles ('Support Bot'), product names, or generic words ('Helper', 'Assistant'). Distinct names only — no duplicates, no variants of the same name. User picks a name (yours or their own) and a personality source (preset, short description, pasted instructions, or random). The tool returns their choice; you then synthesize the final instructions and call update_assistant.",
+        "Present a name picker to the user. Generate 4-6 unique first-name suggestions that fit the user's stated goal. Treat the assistant like a coworker: pick real first names from a mix of cultures. Never use the phrasing '[Owner]'s assistant', role titles ('Support Bot'), product names, or generic words ('Helper', 'Assistant'). Distinct names only — no duplicates, no variants of the same name. The tool creates the assistant + its env when the user picks. See system prompt for when to call this vs. update_assistant directly.",
       parameters: z.object({
         goal: z
           .string()
@@ -417,52 +455,98 @@ function buildAssistantTools(deps: ToolDeps) {
       }),
       execute: async (_args, ctx) => {
         const toolCallId = ctx.toolCallId ?? "";
-        type IdentityResult = {
+        type NameResult = {
           success: boolean;
           cancelled?: boolean;
           name?: string;
+        };
+        const userInput: NameResult = await withTimeout(
+          new Promise<NameResult>((resolve) => {
+            draft.registerPending(toolCallId, (r) => resolve(r as NameResult));
+          }),
+          15 * 60 * 1000,
+          "propose_name",
+        ).catch((): NameResult => ({ success: false, cancelled: true }));
+
+        if (!userInput.success || !userInput.name) {
+          return okResult({
+            cancelled: true,
+            note: "User skipped the name picker. Ask them directly what to name the assistant, then call update_assistant({ name }) followed by propose_personality. Do not re-call propose_name unless they ask.",
+          });
+        }
+
+        const name = userInput.name;
+        return serialize(async () => {
+          try {
+            const a = await ensureAssistant(deps, { name });
+            trackLive(a);
+            return okResult({
+              name,
+              note: `Saved name "${name}". Now call propose_personality to let the user pick their personality.`,
+            });
+          } catch (e) {
+            return errResult(e instanceof Error ? e.message : "save failed");
+          }
+        });
+      },
+    },
+    "propose_name",
+  );
+
+  const propose_personality = defineFrontendTool<
+    Record<string, never>,
+    ToolResult
+  >(
+    {
+      description:
+        "Present a personality picker to the user. Call this after the assistant has a name. The user picks one of: preset / short description / pasted instructions / random. For presets with bundled instructions and pasted text, this tool writes # Personality directly. For description-based and random, the result note tells you to call set_personality with synthesized content.",
+      parameters: z.object({}),
+      execute: async (_args, ctx) => {
+        const toolCallId = ctx.toolCallId ?? "";
+        type PersonalityPickResult = {
+          success: boolean;
+          cancelled?: boolean;
           personality?: PersonalityChoice;
         };
-        const userInput: IdentityResult = await withTimeout(
-          new Promise<IdentityResult>((resolve) => {
+        const userInput: PersonalityPickResult = await withTimeout(
+          new Promise<PersonalityPickResult>((resolve) => {
             draft.registerPending(toolCallId, (r) =>
-              resolve(r as IdentityResult),
+              resolve(r as PersonalityPickResult),
             );
           }),
           15 * 60 * 1000,
-          "propose_identity",
+          "propose_personality",
         ).catch(
-          (e): IdentityResult => ({
-            success: false,
-            cancelled: true,
-            name: e instanceof Error ? e.message : "timeout",
-          }),
+          (): PersonalityPickResult => ({ success: false, cancelled: true }),
         );
 
-        if (!userInput.success || !userInput.name || !userInput.personality) {
+        if (!userInput.success || !userInput.personality) {
           return okResult({
             cancelled: true,
-            note: "User skipped the identity picker. Ask them directly for a name and the gist of the personality they want, then call update_assistant with sensible defaults. Do not re-call propose_identity unless they ask.",
+            note: "User skipped the personality picker. Ask them in chat for the gist of the personality they want, then call set_personality with a reasonable expansion. Do not re-call propose_personality unless they ask.",
           });
         }
 
         const p = userInput.personality;
-        const name = userInput.name;
+        const name = live.name ?? "the assistant";
         return serialize(async () => {
           try {
             if (p.kind === "prebuilt") {
               const hasInstructions = p.prebuilt.instructions.trim().length > 0;
-              const current = draft.assistant?.instructions ?? "";
-              const next = hasInstructions
-                ? setSection(current, "Personality", p.prebuilt.instructions)
-                : current;
-              const a = await ensureAssistant(
-                deps,
-                hasInstructions ? { name, instructions: next } : { name },
-              );
-              await recomputeBehaviorSection(deps, a);
+              if (hasInstructions) {
+                const next = setSection(
+                  live.instructions,
+                  "Personality",
+                  p.prebuilt.instructions,
+                );
+                const a = await ensureAssistant(
+                  deps,
+                  { instructions: next },
+                  live.id,
+                );
+                trackLive(a);
+              }
               return okResult({
-                name,
                 personality: {
                   kind: "prebuilt" as const,
                   slug: p.prebuilt.slug,
@@ -471,42 +555,39 @@ function buildAssistantTools(deps: ToolDeps) {
                   body_set: hasInstructions,
                 },
                 note: hasInstructions
-                  ? `Saved name "${name}" and the "${p.prebuilt.title}" personality verbatim under # Personality. Now describe what this assistant does — call set_tasks with role-specific guidance derived from the user's stated goal. Do not call set_personality unless the user explicitly asks to change it.`
-                  : `Saved name "${name}". The "${p.prebuilt.title}" preset has no body — synthesize personality content (voice, tone, formatting habits, uncertainty handling) matching the title "${p.prebuilt.title}" and summary "${p.prebuilt.summary}", then call set_personality with the result. Then call set_tasks with role-specific guidance.`,
+                  ? `Saved the "${p.prebuilt.title}" personality verbatim under # Personality for "${name}". Now describe what this assistant does — call set_tasks with role-specific guidance derived from the user's stated goal. Do not call set_personality unless the user explicitly asks to change it.`
+                  : `The "${p.prebuilt.title}" preset has no body — synthesize personality content (voice, tone, formatting habits, uncertainty handling) matching the title "${p.prebuilt.title}" and summary "${p.prebuilt.summary}", then call set_personality with the result. Then call set_tasks with role-specific guidance.`,
               });
             }
             if (p.kind === "custom_text") {
-              const current = draft.assistant?.instructions ?? "";
-              const next = setSection(current, "Personality", p.custom_text);
-              const a = await ensureAssistant(deps, {
-                name,
-                instructions: next,
-              });
-              await recomputeBehaviorSection(deps, a);
+              const next = setSection(
+                live.instructions,
+                "Personality",
+                p.custom_text,
+              );
+              const a = await ensureAssistant(
+                deps,
+                { instructions: next },
+                live.id,
+              );
+              trackLive(a);
               return okResult({
-                name,
                 personality: { kind: "custom_text" as const },
-                note: `Saved name "${name}" and the user's pasted personality verbatim under # Personality. Now call set_tasks with role-specific guidance. Do not modify # Personality.`,
+                note: `Saved the user's pasted personality verbatim under # Personality for "${name}". Now call set_tasks with role-specific guidance. Do not modify # Personality.`,
               });
             }
             if (p.kind === "generate") {
-              const a = await ensureAssistant(deps, { name });
-              await recomputeBehaviorSection(deps, a);
               return okResult({
-                name,
                 personality: {
                   kind: "generate" as const,
                   description: p.describe,
                 },
-                note: `Saved name "${name}". The user described their desired personality: "${p.describe}". Expand that into a full personality (voice, tone, formatting habits, uncertainty handling) and call set_personality with the expanded text. Then call set_tasks with role-specific guidance.`,
+                note: `The user described their desired personality: "${p.describe}". Expand that into a full personality (voice, tone, formatting habits, uncertainty handling) and call set_personality with the expanded text. Then call set_tasks with role-specific guidance.`,
               });
             }
-            const a = await ensureAssistant(deps, { name });
-            await recomputeBehaviorSection(deps, a);
             return okResult({
-              name,
               personality: { kind: "random" as const },
-              note: `Saved name "${name}". Invent a distinctive personality from scratch (voice, formatting habits, sign-off, uncertainty handling). Keep it professional-compatible. Call set_personality with the result, then set_tasks with role-specific guidance.`,
+              note: `Invent a distinctive personality from scratch (voice, formatting habits, sign-off, uncertainty handling). Keep it professional-compatible. Call set_personality with the result, then set_tasks with role-specific guidance.`,
             });
           } catch (e) {
             return errResult(e instanceof Error ? e.message : "save failed");
@@ -514,7 +595,7 @@ function buildAssistantTools(deps: ToolDeps) {
         });
       },
     },
-    "propose_identity",
+    "propose_personality",
   );
 
   const update_assistant = defineFrontendTool<UpdateAssistantArgs, ToolResult>(
@@ -553,7 +634,12 @@ function buildAssistantTools(deps: ToolDeps) {
       execute: async (args) =>
         serialize(async () => {
           try {
-            const a = await ensureAssistant(deps, args as UpdateAssistantArgs);
+            const a = await ensureAssistant(
+              deps,
+              args as UpdateAssistantArgs,
+              live.id,
+            );
+            trackLive(a);
             const envResult = a.name
               ? await ensureAssistantEnv(deps, a.name)
               : null;
@@ -595,9 +681,17 @@ function buildAssistantTools(deps: ToolDeps) {
         serialize(async () => {
           const { instructions } = args as SetPersonalityArgs;
           try {
-            const current = draft.assistant?.instructions ?? "";
-            const next = setSection(current, "Personality", instructions);
-            const updated = await ensureAssistant(deps, { instructions: next });
+            const next = setSection(
+              live.instructions,
+              "Personality",
+              instructions,
+            );
+            const updated = await ensureAssistant(
+              deps,
+              { instructions: next },
+              live.id,
+            );
+            trackLive(updated);
             return okResult({
               assistant: {
                 id: updated.id,
@@ -631,9 +725,13 @@ function buildAssistantTools(deps: ToolDeps) {
         serialize(async () => {
           const { tasks } = args as SetTasksArgs;
           try {
-            const current = draft.assistant?.instructions ?? "";
-            const next = setSection(current, "Tasks", tasks);
-            const updated = await ensureAssistant(deps, { instructions: next });
+            const next = setSection(live.instructions, "Tasks", tasks);
+            const updated = await ensureAssistant(
+              deps,
+              { instructions: next },
+              live.id,
+            );
+            trackLive(updated);
             return okResult({
               assistant: {
                 id: updated.id,
@@ -668,7 +766,8 @@ function buildAssistantTools(deps: ToolDeps) {
         serialize(async () => {
           const { toolset_slug, environment_slug } = args as AttachToolsetArgs;
           try {
-            const a = await ensureAssistant(deps, {});
+            const a = await ensureAssistant(deps, {}, live.id);
+            trackLive(a);
             const notes: string[] = [];
             let boundSlug = environment_slug;
             if (!boundSlug) {
@@ -688,6 +787,7 @@ function buildAssistantTools(deps: ToolDeps) {
               updateAssistantForm: { id: a.id, toolsets: next },
             });
             draft.setAssistant(updated);
+            trackLive(updated);
             draft.invalidateAll();
             await recomputeBehaviorSection(deps, updated);
             return okResult({
@@ -712,16 +812,17 @@ function buildAssistantTools(deps: ToolDeps) {
         serialize(async () => {
           const { toolset_slug } = args as DetachToolsetArgs;
           try {
-            if (!draft.assistantId || !draft.assistant) {
+            if (!live.id) {
               return errResult("No assistant exists yet. Create one first.");
             }
-            const next = draft.assistant.toolsets.filter(
+            const next = live.toolsets.filter(
               (t) => t.toolsetSlug !== toolset_slug,
             );
             const updated = await sdk.assistants.update({
-              updateAssistantForm: { id: draft.assistantId, toolsets: next },
+              updateAssistantForm: { id: live.id, toolsets: next },
             });
             draft.setAssistant(updated);
+            trackLive(updated);
             draft.invalidateAll();
             await recomputeBehaviorSection(deps, updated);
             return okResult({ toolsets: updated.toolsets });
@@ -975,7 +1076,8 @@ function buildAssistantTools(deps: ToolDeps) {
             const notes: string[] = [];
             let slug = environment_slug;
             if (!slug) {
-              const a = await ensureAssistant(deps, {});
+              const a = await ensureAssistant(deps, {}, live.id);
+              trackLive(a);
               const envResult = await ensureAssistantEnv(deps, a.name);
               slug = envResult.env.slug;
               if (envResult.note) notes.push(envResult.note);
@@ -1060,7 +1162,8 @@ function buildAssistantTools(deps: ToolDeps) {
             if (environment_slug) {
               slug = environment_slug;
             } else {
-              const a = await ensureAssistant(deps, {});
+              const a = await ensureAssistant(deps, {}, live.id);
+              trackLive(a);
               const envResult = await ensureAssistantEnv(deps, a.name);
               slug = envResult.env.slug;
               if (envResult.note) preNotes.push(envResult.note);
@@ -1174,7 +1277,7 @@ function buildAssistantTools(deps: ToolDeps) {
       execute: async () => {
         try {
           const res = await sdk.triggers.list();
-          const assistantId = draft.assistantId;
+          const assistantId = live.id ?? draft.assistantId;
           const scoped = assistantId
             ? res.triggers.filter(
                 (t) =>
@@ -1229,7 +1332,8 @@ function buildAssistantTools(deps: ToolDeps) {
           args as CreateTriggerArgs;
         const run = async (): Promise<ToolResult> => {
           try {
-            const a = await ensureAssistant(deps, {});
+            const a = await ensureAssistant(deps, {}, live.id);
+            trackLive(a);
             const notes: string[] = [];
             let boundEnvId = environment_id;
             if (!boundEnvId) {
@@ -1288,7 +1392,7 @@ function buildAssistantTools(deps: ToolDeps) {
             );
           }
         };
-        const key = `${draft.assistantId ?? "new"}:${definition_slug}:${name}`;
+        const key = `${live.id ?? draft.assistantId ?? "new"}:${definition_slug}:${name}`;
         const inflight = triggerCreateInFlight.get(key);
         if (inflight) return inflight;
         const p = serialize(run);
@@ -1412,7 +1516,7 @@ function buildAssistantTools(deps: ToolDeps) {
               (t) =>
                 t.definitionSlug === "slack" &&
                 t.targetKind === "assistant" &&
-                t.targetRef === draft.assistantId,
+                t.targetRef === (live.id ?? draft.assistantId),
             );
             if (slackTriggers.length > 0) {
               const first = slackTriggers[0]!;
@@ -1552,11 +1656,12 @@ function buildAssistantTools(deps: ToolDeps) {
       }),
       execute: async (args) => {
         const { message } = args as FinishArgs;
-        if (!draft.assistantId) {
+        const id = live.id ?? draft.assistantId;
+        if (!id) {
           return errResult("No assistant has been created yet.");
         }
         try {
-          const a = await sdk.assistants.get({ id: draft.assistantId });
+          const a = await sdk.assistants.get({ id });
           return okResult({
             assistant: {
               id: a.id,
@@ -1575,7 +1680,8 @@ function buildAssistantTools(deps: ToolDeps) {
   );
 
   return {
-    propose_identity,
+    propose_name,
+    propose_personality,
     update_assistant,
     set_personality,
     set_tasks,
@@ -1621,7 +1727,8 @@ export function useOnboardingTools(): {
 
   const components = useMemo<Record<string, ToolCallMessagePartComponent>>(
     () => ({
-      propose_identity: ProposeIdentityComponent,
+      propose_name: ProposeNameComponent,
+      propose_personality: ProposePersonalityComponent,
       request_environment_secrets: RequestEnvironmentSecretsComponent,
       show_webhook_url: ShowWebhookUrlComponent,
       show_slack_app_guide: ShowSlackAppGuideComponent,
