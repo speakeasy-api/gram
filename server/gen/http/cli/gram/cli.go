@@ -80,7 +80,7 @@ func UsageCommands() []string {
 		"chat (list-chats|load-chat|generate-title|credit-usage|list-chats-with-resolutions|delete-chat|submit-feedback)",
 		"chat-sessions (create|revoke)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
-		"domains (get-domain|create-domain|delete-domain)",
+		"domains (get-domain|create-domain|delete-domain|list-mcp-endpoints)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details)",
 		"collections (create|list|update|delete|attach-server|detach-server|list-servers)",
@@ -517,6 +517,9 @@ func ParseEndpoint(
 
 		domainsDeleteDomainFlags            = flag.NewFlagSet("delete-domain", flag.ExitOnError)
 		domainsDeleteDomainSessionTokenFlag = domainsDeleteDomainFlags.String("session-token", "", "")
+
+		domainsListMcpEndpointsFlags            = flag.NewFlagSet("list-mcp-endpoints", flag.ExitOnError)
+		domainsListMcpEndpointsSessionTokenFlag = domainsListMcpEndpointsFlags.String("session-token", "", "")
 
 		environmentsFlags = flag.NewFlagSet("environments", flag.ContinueOnError)
 
@@ -1623,6 +1626,7 @@ func ParseEndpoint(
 	domainsGetDomainFlags.Usage = domainsGetDomainUsage
 	domainsCreateDomainFlags.Usage = domainsCreateDomainUsage
 	domainsDeleteDomainFlags.Usage = domainsDeleteDomainUsage
+	domainsListMcpEndpointsFlags.Usage = domainsListMcpEndpointsUsage
 
 	environmentsFlags.Usage = environmentsUsage
 	environmentsCreateEnvironmentFlags.Usage = environmentsCreateEnvironmentUsage
@@ -2232,6 +2236,9 @@ func ParseEndpoint(
 
 			case "delete-domain":
 				epf = domainsDeleteDomainFlags
+
+			case "list-mcp-endpoints":
+				epf = domainsListMcpEndpointsFlags
 
 			}
 
@@ -3168,6 +3175,9 @@ func ParseEndpoint(
 			case "delete-domain":
 				endpoint = c.DeleteDomain()
 				data, err = domainsc.BuildDeleteDomainPayload(*domainsDeleteDomainSessionTokenFlag)
+			case "list-mcp-endpoints":
+				endpoint = c.ListMcpEndpoints()
+				data, err = domainsc.BuildListMcpEndpointsPayload(*domainsListMcpEndpointsSessionTokenFlag)
 			}
 		case "environments":
 			c := environmentsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -5458,6 +5468,7 @@ func domainsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-domain: Get the custom domain for an organization`)
 	fmt.Fprintln(os.Stderr, `    create-domain: Create a custom domain for an organization`)
 	fmt.Fprintln(os.Stderr, `    delete-domain: Delete a custom domain`)
+	fmt.Fprintln(os.Stderr, `    list-mcp-endpoints: List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s domains COMMAND --help\n", os.Args[0])
@@ -5516,6 +5527,24 @@ func domainsDeleteDomainUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains delete-domain --session-token \"abc123\"")
+}
+
+func domainsListMcpEndpointsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] domains list-mcp-endpoints", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains list-mcp-endpoints --session-token \"abc123\"")
 }
 
 // environmentsUsage displays the usage of the environments command and its

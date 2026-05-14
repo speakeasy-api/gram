@@ -21,3 +21,8 @@ func CreateDomainDomainsPath() string {
 func DeleteDomainDomainsPath() string {
 	return "/rpc/domain.delete"
 }
+
+// ListMcpEndpointsDomainsPath returns the URL path to the domains service listMcpEndpoints HTTP endpoint.
+func ListMcpEndpointsDomainsPath() string {
+	return "/rpc/domain.listMcpEndpoints"
+}

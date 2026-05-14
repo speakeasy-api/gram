@@ -129,6 +129,7 @@ export * from "./listchats.js";
 export * from "./listchatswithresolutions.js";
 export * from "./listcollections.js";
 export * from "./listcollectionservers.js";
+export * from "./listcustomdomainmcpendpoints.js";
 export * from "./listdeployments.js";
 export * from "./listenvironments.js";
 export * from "./listfilteroptions.js";

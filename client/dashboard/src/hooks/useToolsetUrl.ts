@@ -96,3 +96,16 @@ export function internalMcpUrl(
     : `${project.slug}/${toolset.slug}/${toolset.defaultEnvironmentSlug}`;
   return `${getServerURL()}/mcp/${urlSuffix}`;
 }
+
+/**
+ * Formats the resolved URL for an MCP endpoint registered under a custom
+ * domain. MCP endpoints are addressed at `https://<domain>/mcp/<slug>` — the
+ * `/mcp/` segment is implicit and shared by both platform and custom-domain
+ * endpoints.
+ */
+export function customDomainMcpEndpointUrl(
+  domain: string,
+  slug: string,
+): string {
+  return `https://${domain}/mcp/${slug}`;
+}

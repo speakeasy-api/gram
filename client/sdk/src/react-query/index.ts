@@ -53,6 +53,7 @@ export * from "./createToolset.js";
 export * from "./createTopUpCheckout.js";
 export * from "./createTrigger.js";
 export * from "./createUserSessionIssuer.js";
+export * from "./customDomainMcpEndpoints.js";
 export * from "./deleteDomain.js";
 export * from "./deleteEnvironment.js";
 export * from "./deleteGlobalVariation.js";
