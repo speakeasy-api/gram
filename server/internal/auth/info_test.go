@@ -83,7 +83,7 @@ func TestService_Info(t *testing.T) {
 		require.Equal(t, "Default", org.Projects[0].Name)
 	})
 
-	t.Run("info request for admin user filters organizations", func(t *testing.T) {
+	t.Run("info request for admin user filters to active organization", func(t *testing.T) {
 		t.Parallel()
 
 		userInfo := adminMockUserInfo()
@@ -140,6 +140,172 @@ func TestService_Info(t *testing.T) {
 		// Admin should only see the active organization
 		require.Len(t, result.Organizations, 1)
 		require.Equal(t, userInfo.Organizations[0].ID, result.Organizations[0].ID)
+	})
+
+	t.Run("info returns non-member org for admin override", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := adminMockUserInfo()
+		userInfo.UserID = "admin-info-override-user"
+		userInfo.Email = "admin-info-override@speakeasyapi.dev"
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		err := instance.createTestUser(ctx, userInfo)
+		require.NoError(t, err)
+		for _, org := range userInfo.Organizations {
+			err = instance.createTestOrganization(ctx, org, userInfo.UserID)
+			require.NoError(t, err)
+		}
+		// Create customer org in DB — admin is NOT a member.
+		err = instance.createTestOrganization(ctx, MockOrganizationEntry{
+			ID:   "customer-org-for-info",
+			Name: "Customer Org",
+			Slug: "customer-org",
+		}, "")
+		require.NoError(t, err)
+
+		// Session active org is the customer org (set by callback admin override).
+		session := sessions.Session{
+			SessionID:            "admin-override-info-session",
+			UserID:               userInfo.UserID,
+			ActiveOrganizationID: "customer-org-for-info",
+			WorkOSSessionID:      "",
+		}
+		err = instance.sessionManager.StoreSession(ctx, session)
+		require.NoError(t, err)
+
+		ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+			SessionID:            &session.SessionID,
+			UserID:               session.UserID,
+			ActiveOrganizationID: session.ActiveOrganizationID,
+			AccountType:          "test",
+			Email:                &userInfo.Email,
+		})
+
+		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		require.True(t, result.IsAdmin)
+		require.Len(t, result.Organizations, 1)
+		require.Equal(t, "customer-org-for-info", result.Organizations[0].ID)
+		require.Equal(t, "Customer Org", result.Organizations[0].Name)
+		require.Equal(t, "customer-org", result.Organizations[0].Slug)
+		require.Equal(t, "customer-org-for-info", result.ActiveOrganizationID)
+	})
+
+	t.Run("info returns correct org after state param callback", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.UserID = "state-info-user"
+		userInfo.Email = "state-info@example.com"
+		userInfo.Organizations = []MockOrganizationEntry{
+			{
+				ID:                 "primary-org-info",
+				Name:               "Primary",
+				Slug:               "primary",
+				UserWorkspaceSlugs: []string{"primary-ws"},
+			},
+			{
+				ID:                 "target-org-info",
+				Name:               "Target",
+				Slug:               "target",
+				UserWorkspaceSlugs: []string{"target-ws"},
+			},
+		}
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		err := instance.createTestUser(ctx, userInfo)
+		require.NoError(t, err)
+		for _, org := range userInfo.Organizations {
+			err = instance.createTestOrganization(ctx, org, userInfo.UserID)
+			require.NoError(t, err)
+		}
+
+		// Simulate callback set active org to target (via state param).
+		session := sessions.Session{
+			SessionID:            "state-info-session",
+			UserID:               userInfo.UserID,
+			ActiveOrganizationID: "target-org-info",
+			WorkOSSessionID:      "",
+		}
+		err = instance.sessionManager.StoreSession(ctx, session)
+		require.NoError(t, err)
+
+		ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+			SessionID:            &session.SessionID,
+			UserID:               session.UserID,
+			ActiveOrganizationID: session.ActiveOrganizationID,
+			AccountType:          "test",
+			Email:                &userInfo.Email,
+		})
+
+		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		// Non-admin user sees all their orgs.
+		require.Len(t, result.Organizations, 2)
+		require.Equal(t, "target-org-info", result.ActiveOrganizationID)
+	})
+
+	t.Run("info returns correct org after IDP selection callback", func(t *testing.T) {
+		t.Parallel()
+
+		workosOrgID := "workos_idp_info_org"
+		userInfo := defaultMockUserInfo()
+		userInfo.UserID = "idp-info-user"
+		userInfo.Email = "idp-info@example.com"
+		userInfo.Organizations = []MockOrganizationEntry{
+			{
+				ID:                 "org-a-info",
+				Name:               "Org A",
+				Slug:               "org-a",
+				UserWorkspaceSlugs: []string{"org-a-ws"},
+			},
+			{
+				ID:                 "org-b-info",
+				Name:               "Org B",
+				Slug:               "org-b",
+				WorkosID:           &workosOrgID,
+				UserWorkspaceSlugs: []string{"org-b-ws"},
+			},
+		}
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		err := instance.createTestUser(ctx, userInfo)
+		require.NoError(t, err)
+		for _, org := range userInfo.Organizations {
+			err = instance.createTestOrganization(ctx, org, userInfo.UserID)
+			require.NoError(t, err)
+		}
+
+		// Simulate callback set active org to org-b (via IDP selection).
+		session := sessions.Session{
+			SessionID:            "idp-info-session",
+			UserID:               userInfo.UserID,
+			ActiveOrganizationID: "org-b-info",
+			WorkOSSessionID:      "",
+		}
+		err = instance.sessionManager.StoreSession(ctx, session)
+		require.NoError(t, err)
+
+		ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+			SessionID:            &session.SessionID,
+			UserID:               session.UserID,
+			ActiveOrganizationID: session.ActiveOrganizationID,
+			AccountType:          "test",
+			Email:                &userInfo.Email,
+		})
+
+		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		// Non-admin user sees all their orgs.
+		require.Len(t, result.Organizations, 2)
+		require.Equal(t, "org-b-info", result.ActiveOrganizationID)
 	})
 
 	t.Run("unauthenticated info request", func(t *testing.T) {
@@ -396,6 +562,14 @@ func TestService_Info_AdminVisitingCustomerOrgDoesNotUpsertRelationship(t *testi
 	// Simulate the admin override: the session's active org is a customer org that
 	// does not appear in the admin's userInfo.Organizations list.
 	const customerOrgID = "customer-org-override-456"
+	// Create the customer org in DB without membership.
+	err = instance.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:   customerOrgID,
+		Name: "Customer Override Org",
+		Slug: "customer-override",
+	}, "")
+	require.NoError(t, err)
+
 	session := sessions.Session{
 		SessionID:            "admin-customer-session-id",
 		UserID:               userInfo.UserID,
@@ -422,6 +596,12 @@ func TestService_Info_AdminVisitingCustomerOrgDoesNotUpsertRelationship(t *testi
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.True(t, result.IsAdmin)
+
+	// Info should return the customer org (fetched from DB).
+	require.Len(t, result.Organizations, 1)
+	require.Equal(t, customerOrgID, result.Organizations[0].ID)
+	require.Equal(t, "Customer Override Org", result.Organizations[0].Name)
+	require.Equal(t, "customer-override", result.Organizations[0].Slug)
 
 	// No relationship row must be created for the customer org.
 	queries := orgRepo.New(instance.conn)

@@ -35,6 +35,11 @@ SELECT *
 FROM organization_metadata
 WHERE id = @id;
 
+-- name: GetOrganizationMetadataBySlug :one
+SELECT *
+FROM organization_metadata
+WHERE slug = @slug;
+
 -- name: GetOrganizationNameByWorkosID :one
 SELECT name
 FROM organization_metadata

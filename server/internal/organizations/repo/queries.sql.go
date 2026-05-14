@@ -185,6 +185,36 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 	return i, err
 }
 
+const getOrganizationMetadataBySlug = `-- name: GetOrganizationMetadataBySlug :one
+SELECT id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+FROM organization_metadata
+WHERE slug = $1
+`
+
+func (q *Queries) GetOrganizationMetadataBySlug(ctx context.Context, slug string) (OrganizationMetadatum, error) {
+	row := q.db.QueryRow(ctx, getOrganizationMetadataBySlug, slug)
+	var i OrganizationMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.SsoConnectionID,
+		&i.WorkosID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
 const getOrganizationNameByWorkosID = `-- name: GetOrganizationNameByWorkosID :one
 SELECT name
 FROM organization_metadata

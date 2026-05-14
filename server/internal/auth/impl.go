@@ -299,39 +299,41 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}, nil
 	}
 
-	activeOrg := userInfo.Organizations[0]
+	// Default to the first org; overridden by the priority chain below.
+	activeOrgID := userInfo.Organizations[0].ID
 	activeOrgSelected := false
 
-	// Priority 1: org slug from the state param (explicit destination URL).
-	if org, ok := activeOrganizationFromState(payload, userInfo.Organizations); ok {
-		activeOrg = org
-		activeOrgSelected = true
+	// Priority 1: admin override header — look up org from DB since
+	// the admin may not be a member of the target org.
+	if userInfo.Admin {
+		if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
+			orgMeta, err := s.orgRepo.GetOrganizationMetadataBySlug(ctx, adminOverride)
+			if err == nil {
+				activeOrgID = orgMeta.ID
+				activeOrgSelected = true
+			}
+		}
 	}
 
-	// Priority 2: org the user selected in the IDP auth flow (WorkOS AuthKit).
+	// Priority 2: org slug from the state param (explicit destination URL).
+	if !activeOrgSelected {
+		if org, ok := activeOrganizationFromState(payload, userInfo.Organizations); ok {
+			activeOrgID = org.ID
+			activeOrgSelected = true
+		}
+	}
+
+	// Priority 3: org the user selected in the IDP auth flow (WorkOS AuthKit).
 	if !activeOrgSelected && idpUser.OrganizationID != "" {
 		for _, org := range userInfo.Organizations {
 			if org.WorkosID != nil && *org.WorkosID == idpUser.OrganizationID {
-				activeOrg = org
-				activeOrgSelected = true
+				activeOrgID = org.ID
 				break
 			}
 		}
 	}
 
-	// Priority 3: admin override header.
-	if !activeOrgSelected && userInfo.Admin {
-		if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
-			for _, org := range userInfo.Organizations {
-				if org.Slug == adminOverride {
-					activeOrg = org
-					break
-				}
-			}
-		}
-	}
-
-	orgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, activeOrg.ID)
+	orgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, activeOrgID)
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}
@@ -340,7 +342,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrInit, errors.New("this organization is disabled, please reach out to support@speakeasy.com for more information"))
 	}
 
-	session.ActiveOrganizationID = activeOrg.ID
+	session.ActiveOrganizationID = activeOrgID
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		return redirectWithError(authErrInit, err)
 	}
@@ -514,11 +516,28 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
 	}
 
-	// For admins we only return the active organization to avoid overloaded returns
+	// For admins we only return the active organization to avoid overloaded returns.
+	// The active org may not be in the admin's membership list (admin override),
+	// so fall back to a DB lookup.
 	if userInfo.Admin {
+		found := false
 		for _, org := range userInfo.Organizations {
 			if org.ID == authCtx.ActiveOrganizationID {
 				userInfo.Organizations = []sessions.Organization{org}
+				found = true
+				break
+			}
+		}
+		if !found {
+			orgMeta, err := s.orgRepo.GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
+			if err == nil {
+				userInfo.Organizations = []sessions.Organization{{
+					ID:                 orgMeta.ID,
+					Name:               orgMeta.Name,
+					Slug:               orgMeta.Slug,
+					WorkosID:           conv.FromPGText[string](orgMeta.WorkosID),
+					UserWorkspaceSlugs: nil,
+				}}
 			}
 		}
 	}

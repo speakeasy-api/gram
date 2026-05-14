@@ -114,24 +114,25 @@ func TestService_Callback(t *testing.T) {
 		require.Equal(t, "nonadmin-primary-org", authCtx.ActiveOrganizationID, "non-admin users should ignore admin override")
 	})
 
-	t.Run("successful callback for admin with override", func(t *testing.T) {
+	t.Run("successful callback for admin with override to non-member org", func(t *testing.T) {
 		t.Parallel()
 
 		userInfo := adminMockUserInfo()
 		userInfo.UserID = "admin-override-user-123"
 		userInfo.Email = "admin-override@speakeasyapi.dev"
-		userInfo.Organizations = append(userInfo.Organizations, MockOrganizationEntry{
-			ID:                 "customer-org-123",
-			Name:               "Customer Organization",
-			Slug:               "customer-org",
-			UserWorkspaceSlugs: []string{"customer-workspace"},
-		})
+		// Admin is NOT a member of customer-org — it only exists in DB.
 		ctx, instance := newTestAuthService(t, userInfo)
 
 		require.NoError(t, instance.createTestUser(ctx, userInfo))
 		for _, org := range userInfo.Organizations {
 			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
 		}
+		// Create customer org in DB without membership.
+		require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+			ID:   "customer-org-123",
+			Name: "Customer Organization",
+			Slug: "customer-org",
+		}, ""))
 
 		ctx = contextvalues.SetAdminOverrideInContext(ctx, "customer-org")
 
@@ -151,6 +152,109 @@ func TestService_Callback(t *testing.T) {
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok, "auth context should be set after callback")
 		require.Equal(t, "customer-org-123", authCtx.ActiveOrganizationID, "incorrect active organization id for admin override")
+	})
+
+	t.Run("admin override takes priority over state param org", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := adminMockUserInfo()
+		userInfo.UserID = "admin-priority-user"
+		userInfo.Email = "admin-priority@speakeasyapi.dev"
+		// Admin is a member of state-org (via state param), but NOT override-org.
+		userInfo.Organizations = append(userInfo.Organizations,
+			MockOrganizationEntry{
+				ID:                 "state-org-123",
+				Name:               "State Organization",
+				Slug:               "state-org",
+				UserWorkspaceSlugs: []string{"state-workspace"},
+			},
+		)
+
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		for _, org := range userInfo.Organizations {
+			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+		}
+		// Create override org in DB without membership.
+		require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+			ID:   "override-org-456",
+			Name: "Override Organization",
+			Slug: "override-org",
+		}, ""))
+
+		// Set admin override to one org, but state param points to a different org.
+		ctx = contextvalues.SetAdminOverrideInContext(ctx, "override-org")
+		redirectURL := "https://dev.getgram.ai/state-org/projects/default"
+		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
+
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+			Code:  "mock_code",
+			State: &stateParam,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
+		require.NoError(t, err, "load session after callback")
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok, "auth context should be set after callback")
+		require.Equal(t, "override-org-456", authCtx.ActiveOrganizationID, "admin override should take priority over state param")
+	})
+
+	t.Run("state param takes priority over IDP org selection", func(t *testing.T) {
+		t.Parallel()
+
+		workosOrgID := "workos_org_idp_123"
+		userInfo := defaultMockUserInfo()
+		userInfo.UserID = "state-vs-idp-user"
+		userInfo.Email = "state-vs-idp@example.com"
+		userInfo.OrganizationID = workosOrgID // IDP selected this org
+		userInfo.Organizations = []MockOrganizationEntry{
+			{
+				ID:                 "primary-org-000",
+				Name:               "Primary Org",
+				Slug:               "primary-org",
+				UserWorkspaceSlugs: []string{"primary-workspace"},
+			},
+			{
+				ID:                 "state-target-org",
+				Name:               "State Target Org",
+				Slug:               "state-target",
+				UserWorkspaceSlugs: []string{"state-workspace"},
+			},
+			{
+				ID:                 "idp-selected-org",
+				Name:               "IDP Selected Org",
+				Slug:               "idp-selected",
+				WorkosID:           &workosOrgID,
+				UserWorkspaceSlugs: []string{"idp-workspace"},
+			},
+		}
+
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		for _, org := range userInfo.Organizations {
+			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+		}
+
+		// State param points to state-target org, IDP selected idp-selected org.
+		redirectURL := "https://dev.getgram.ai/state-target/projects/default"
+		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
+
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+			Code:  "mock_code",
+			State: &stateParam,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
+		require.NoError(t, err, "load session after callback")
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok, "auth context should be set after callback")
+		require.Equal(t, "state-target-org", authCtx.ActiveOrganizationID, "state param should take priority over IDP org selection")
 	})
 
 	t.Run("user with no organizations and assistants disposition auto-provisions org", func(t *testing.T) {
