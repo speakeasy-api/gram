@@ -5,7 +5,11 @@ import type { OAuthProxyProvider } from "@gram/client/models/components";
 // oauth_proxy_provider. Kept separate from React so the logic stays unit
 // testable without rendering hooks.
 
-export const DEFAULT_SESSION_DURATION_HOURS = 24;
+// Default to 2 weeks — middle of the three options the modal offers
+// (1 week / 2 weeks / 1 month). Keep in lockstep with
+// REFRESH_TOKEN_DURATION_OPTIONS in WireUserSessionIssuerModal so the
+// selector opens on a real option rather than a custom value.
+export const DEFAULT_SESSION_DURATION_HOURS = 24 * 14;
 
 export type MigrationDefaults = {
   proxyProvider: OAuthProxyProvider;
@@ -30,10 +34,17 @@ export function deriveMigrationDefaults(
   const proxy = toolset.oauthProxyServer?.oauthProxyProviders?.[0];
   if (!proxy) return null;
 
+  // Slug is `{toolset.slug}-{random}`. The toolset name is what an operator
+  // recognises in a list; the resource type ("usi" / "rsi") is not — the
+  // link is the FK on toolsets.user_session_issuer_id, not the slug. USI and
+  // RSI live in different tables with independent uniqueness, so the same
+  // value works for both and reads as a pair. 4 bytes of entropy is plenty
+  // for project-scoped uniqueness.
+  const slug = `${toolset.slug}-${randomSlugSuffix()}`;
   return {
     proxyProvider: proxy,
-    userSessionIssuerSlug: `${toolset.slug}-usi`,
-    remoteSessionIssuerSlug: `${toolset.slug}-rsi`,
+    userSessionIssuerSlug: slug,
+    remoteSessionIssuerSlug: slug,
     issuerOriginGuess: extractOrigin(proxy.authorizationEndpoint),
     sessionDurationHours: DEFAULT_SESSION_DURATION_HOURS,
   };
@@ -49,9 +60,8 @@ function extractOrigin(url: string | null | undefined): string | null {
   }
 }
 
-// canCloneProvider mirrors the server-side admin endpoint's preconditions so
-// the UI can pre-empt obviously-broken submissions: gram-managed providers
-// don't carry a clonable upstream client.
-export function canCloneProvider(provider: OAuthProxyProvider): boolean {
-  return provider.providerType === "custom";
+function randomSlugSuffix(): string {
+  const bytes = new Uint8Array(4);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }

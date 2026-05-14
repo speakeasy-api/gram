@@ -2,90 +2,125 @@ import type { Toolset } from "@/lib/toolTypes";
 import {
   invalidateAllRemoteSessionClients,
   invalidateAllRemoteSessionIssuers,
+  invalidateAllToolset,
   invalidateAllUserSessionIssuers,
   useCloneClientFromOAuthProxyProviderMutation,
+  useCreateRemoteSessionClientMutation,
   useCreateRemoteSessionIssuerMutation,
   useCreateUserSessionIssuerMutation,
   useDiscoverRemoteSessionIssuerMutation,
+  useRegisterRemoteSessionIssuerMutation,
   useRemoteSessionClients,
   useRemoteSessionIssuers,
+  useSetToolsetUserSessionIssuerMutation,
   useUserSessionIssuers,
 } from "@gram/client/react-query";
+import type {
+  RemoteSessionIssuer,
+  UserSessionIssuer,
+} from "@gram/client/models/components";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useReducer } from "react";
 
-import {
-  canCloneProvider,
-  deriveMigrationDefaults,
-  type MigrationDefaults,
-} from "./defaults";
+import { deriveMigrationDefaults, type MigrationDefaults } from "./defaults";
 
-// useOAuthProxyMigration orchestrates the three writes needed to port a
-// toolset from the legacy OAuth Proxy paradigm to user-session world:
+// Gram's user-session callback URL — has to be present in any upstream
+// client's redirect_uri list (RFC 7591 considers it `invalid_client_metadata`
+// to register without one). Shared with the clone-confirmation copy in the
+// modal so the operator-facing string and the DCR-payload string stay equal.
+export const REMOTE_LOGIN_CALLBACK_URL =
+  "https://app.getgram.ai/mcp/remote_login_callback";
+
+// useOAuthProxyMigration orchestrates the writes needed to port a toolset from
+// the legacy OAuth Proxy paradigm onto user-session world. The shape of the
+// migration depends on which OAuth Proxy paradigm the toolset uses today:
 //
-//   1. ensure a user_session_issuer exists for the project,
-//   2. ensure a remote_session_issuer exists (running discovery first so the
-//      caller doesn't have to hand-type the well-known fields), and
-//   3. mint a remote_session_client by cloning the upstream client_id /
-//      client_secret out of the existing oauth_proxy_provider — this keeps
-//      the redirect URIs already registered with the upstream IdP usable.
+//   - Gram-managed (providerType === "gram"): Gram is itself the upstream
+//     identity provider, so the migration produces only a user_session_issuer.
+//     There is no external authorization server for Gram to be an OAuth client
+//     of, so no remote_session_issuer / remote_session_client pair is needed.
 //
-// Re-entry is idempotent: on mount the hook queries the existing issuers and
-// clients in the project and skips any step that already has a matching row.
-// This way an operator can resume a half-finished migration without rolling
-// back the partial state. Strictly orchestration; renders no UI.
+//   - Custom (providerType === "custom"): an external IdP. The migration
+//     produces a user_session_issuer plus a remote_session_issuer / client
+//     pair. The client step branches three ways — see ClientStrategy below.
+//
+// Re-entry is idempotent: on mount the hook queries existing rows by slug and
+// marks any matching step as already done, so an operator can resume a
+// half-finished migration. Strictly orchestration; renders no UI.
 
 export type MigrationStepKey =
   | "userSessionIssuer"
   | "remoteSessionIssuer"
   | "remoteSessionClient";
 
-export type StepStatus = "pending" | "skipped" | "running" | "done" | "error";
+export type StepStatus = "pending" | "running" | "done" | "error";
+
+export type MigrationParadigm = "gram" | "custom";
+
+// Three ways the remote_session_client can be created:
+//   - clone:    Read the upstream client_id / client_secret from the existing
+//               oauth_proxy_provider and reuse it. Preserves the IdP-side
+//               registration (including its registered redirect URIs).
+//   - register: Run RFC 7591 Dynamic Client Registration against the issuer's
+//               registration_endpoint. Mints a fresh upstream client. Only
+//               available when the issuer advertises a registration endpoint.
+//   - manual:   Operator pastes the client_id / client_secret they already
+//               registered out-of-band with the upstream IdP.
+export type ClientStrategy = "clone" | "register" | "manual";
 
 export type MigrationStep = {
   key: MigrationStepKey;
-  label: string;
+  /** Short resource name, e.g. "User Session Issuer". */
+  resourceLabel: string;
+  /** Verb-led summary of what this step does. */
+  description: string;
   status: StepStatus;
-  /** Human-readable error from the most recent attempt, if any. */
   error: string | null;
-  /** Server-assigned id once the step succeeds (or is detected as already done). */
   resultId: string | null;
 };
 
 export type MigrationFormState = {
   userSessionIssuerSlug: string;
   remoteSessionIssuerSlug: string;
-  /** Issuer URL the user confirms before we hit the upstream discovery endpoint. */
   issuerUrl: string;
   sessionDurationHours: number;
+  /** Which path to use for the remote_session_client step. null = chooser. */
+  clientStrategy: ClientStrategy | null;
+  /** Gate on the clone path — operator confirms they've registered the new callback. */
+  cloneCallbackConfirmed: boolean;
+  /** Manual-path inputs. */
+  manualClientId: string;
+  manualClientSecret: string;
+  manualClientName: string;
 };
 
 export type UseOAuthProxyMigrationResult =
   | {
       ready: false;
-      reason: "no-proxy-provider" | "not-clonable";
-      defaults: MigrationDefaults | null;
+      reason: "no-proxy-provider";
+      defaults: null;
     }
   | {
       ready: true;
+      paradigm: MigrationParadigm;
       defaults: MigrationDefaults;
       form: MigrationFormState;
       setForm: (patch: Partial<MigrationFormState>) => void;
       steps: MigrationStep[];
       currentStep: MigrationStep | null;
       isComplete: boolean;
-      /** Run the current step. No-op when no step is pending. */
+      /** The remote_session_issuer this migration is targeting, once it exists. */
+      remoteSessionIssuer: RemoteSessionIssuer | null;
+      /** The user_session_issuer this migration is targeting, once it exists. */
+      userSessionIssuer: UserSessionIssuer | null;
       runCurrentStep: () => Promise<void>;
-      /** Reset transient errors and re-detect existing state from the server. */
       reset: () => void;
     };
 
 type InternalState = {
   form: MigrationFormState;
-  // Per-step error overrides; success is derived from server state.
   errors: Partial<Record<MigrationStepKey, string>>;
   running: MigrationStepKey | null;
-  resetCounter: number;
 };
 
 type Action =
@@ -118,12 +153,7 @@ function reducer(state: InternalState, action: Action): InternalState {
         errors: { ...state.errors, [action.key]: undefined },
       };
     case "reset":
-      return {
-        ...state,
-        errors: {},
-        running: null,
-        resetCounter: state.resetCounter + 1,
-      };
+      return { ...state, errors: {}, running: null };
   }
 }
 
@@ -132,16 +162,24 @@ export function useOAuthProxyMigration(
 ): UseOAuthProxyMigrationResult {
   const queryClient = useQueryClient();
   const defaults = useMemo(() => deriveMigrationDefaults(toolset), [toolset]);
+  const paradigm: MigrationParadigm | null =
+    defaults?.proxyProvider.providerType === "gram"
+      ? "gram"
+      : defaults
+        ? "custom"
+        : null;
 
-  // Form state is seeded once from defaults; we always render the hook so
-  // listing queries fire regardless of whether the migration is actually
-  // applicable. The `ready` flag below gates the rest of the surface.
   const initialForm: MigrationFormState = useMemo(
     () => ({
       userSessionIssuerSlug: defaults?.userSessionIssuerSlug ?? "",
       remoteSessionIssuerSlug: defaults?.remoteSessionIssuerSlug ?? "",
       issuerUrl: defaults?.issuerOriginGuess ?? "",
       sessionDurationHours: defaults?.sessionDurationHours ?? 24,
+      clientStrategy: null,
+      cloneCallbackConfirmed: false,
+      manualClientId: "",
+      manualClientSecret: "",
+      manualClientName: "Gram",
     }),
     [defaults],
   );
@@ -150,7 +188,6 @@ export function useOAuthProxyMigration(
     form: initialForm,
     errors: {},
     running: null,
-    resetCounter: 0,
   });
 
   const { data: userIssuersData, refetch: refetchUserIssuers } =
@@ -191,6 +228,9 @@ export function useOAuthProxyMigration(
   const discoverRemoteIssuer = useDiscoverRemoteSessionIssuerMutation();
   const createRemoteIssuer = useCreateRemoteSessionIssuerMutation();
   const cloneProvider = useCloneClientFromOAuthProxyProviderMutation();
+  const registerRemoteIssuer = useRegisterRemoteSessionIssuerMutation();
+  const createRemoteClient = useCreateRemoteSessionClientMutation();
+  const setToolsetUSI = useSetToolsetUserSessionIssuerMutation();
 
   const setForm = useCallback(
     (patch: Partial<MigrationFormState>) =>
@@ -206,15 +246,17 @@ export function useOAuthProxyMigration(
   }, [refetchUserIssuers, refetchRemoteIssuers, refetchRemoteClients]);
 
   const buildSteps = (): MigrationStep[] => {
-    const stepDef = (
+    const mkStep = (
       key: MigrationStepKey,
-      label: string,
+      resourceLabel: string,
+      description: string,
       existingId: string | null,
     ): MigrationStep => {
       if (existingId) {
         return {
           key,
-          label,
+          resourceLabel,
+          description,
           status: "done",
           error: null,
           resultId: existingId,
@@ -223,32 +265,56 @@ export function useOAuthProxyMigration(
       if (state.errors[key]) {
         return {
           key,
-          label,
+          resourceLabel,
+          description,
           status: "error",
           error: state.errors[key] ?? null,
           resultId: null,
         };
       }
       if (state.running === key) {
-        return { key, label, status: "running", error: null, resultId: null };
+        return {
+          key,
+          resourceLabel,
+          description,
+          status: "running",
+          error: null,
+          resultId: null,
+        };
       }
-      return { key, label, status: "pending", error: null, resultId: null };
+      return {
+        key,
+        resourceLabel,
+        description,
+        status: "pending",
+        error: null,
+        resultId: null,
+      };
     };
 
+    const usiStep = mkStep(
+      "userSessionIssuer",
+      "User Session Issuer",
+      "Authorization server identity Gram presents to MCP clients. Mints user sessions that MCP clients exchange for access tokens.",
+      existingUserIssuer?.id ?? null,
+    );
+
+    if (paradigm === "gram") {
+      return [usiStep];
+    }
+
     return [
-      stepDef(
-        "userSessionIssuer",
-        "Create user session issuer",
-        existingUserIssuer?.id ?? null,
-      ),
-      stepDef(
+      usiStep,
+      mkStep(
         "remoteSessionIssuer",
-        "Create remote session issuer",
+        "Remote Session Issuer",
+        "Upstream authorization server identity Gram speaks OAuth to as a client. Pre-filled by hitting the upstream's RFC 8414 well-known document.",
         existingRemoteIssuer?.id ?? null,
       ),
-      stepDef(
+      mkStep(
         "remoteSessionClient",
-        "Clone OAuth proxy client",
+        "Remote Session Client",
+        "Credentials Gram uses when acting as the remote session issuer's OAuth client. Cloned, registered, or supplied manually depending on the strategy you pick.",
         existingRemoteClient?.id ?? null,
       ),
     ];
@@ -267,7 +333,7 @@ export function useOAuthProxyMigration(
     try {
       switch (next.key) {
         case "userSessionIssuer": {
-          await createUserIssuer.mutateAsync({
+          const usi = await createUserIssuer.mutateAsync({
             request: {
               createUserSessionIssuerForm: {
                 slug: state.form.userSessionIssuerSlug,
@@ -276,7 +342,20 @@ export function useOAuthProxyMigration(
               },
             },
           });
+          // Link the newly-created USI to this toolset via its FK so the
+          // toolset payload (and the "USI wired" indicator that reads it)
+          // reflects the linkage. The hook is project-scoped, so without
+          // this step the USI exists but is unattached to the toolset.
+          await setToolsetUSI.mutateAsync({
+            request: {
+              slug: toolset.slug,
+              setUserSessionIssuerRequestBody: {
+                userSessionIssuerId: usi.id,
+              },
+            },
+          });
           await invalidateAllUserSessionIssuers(queryClient);
+          await invalidateAllToolset(queryClient);
           await refetchUserIssuers();
           break;
         }
@@ -343,18 +422,68 @@ export function useOAuthProxyMigration(
         case "remoteSessionClient": {
           if (!existingUserIssuer || !existingRemoteIssuer) {
             throw new Error(
-              "previous steps must complete before cloning the client",
+              "previous steps must complete before creating the client",
             );
           }
-          await cloneProvider.mutateAsync({
-            request: {
-              cloneClientFromOAuthProxyProviderForm: {
-                oauthProxyProviderId: defaults.proxyProvider.id,
-                remoteSessionIssuerId: existingRemoteIssuer.id,
-                userSessionIssuerId: existingUserIssuer.id,
-              },
-            },
-          });
+          switch (state.form.clientStrategy) {
+            case "clone": {
+              if (!state.form.cloneCallbackConfirmed) {
+                throw new Error(
+                  "confirm the upstream redirect URI is registered before cloning",
+                );
+              }
+              await cloneProvider.mutateAsync({
+                request: {
+                  cloneClientFromOAuthProxyProviderForm: {
+                    oauthProxyProviderId: defaults.proxyProvider.id,
+                    remoteSessionIssuerId: existingRemoteIssuer.id,
+                    userSessionIssuerId: existingUserIssuer.id,
+                  },
+                },
+              });
+              break;
+            }
+            case "register": {
+              if (!existingRemoteIssuer.registrationEndpoint) {
+                throw new Error(
+                  "issuer has no registration_endpoint; register is unavailable",
+                );
+              }
+              await registerRemoteIssuer.mutateAsync({
+                request: {
+                  registerRemoteSessionIssuerForm: {
+                    remoteSessionIssuerId: existingRemoteIssuer.id,
+                    userSessionIssuerId: existingUserIssuer.id,
+                    clientName: state.form.manualClientName || "Gram",
+                    // RFC 7591 issuers (e.g. Notion) reject a registration
+                    // request with no redirect_uris. Send Gram's
+                    // user-session callback so the issued client is usable
+                    // from the start.
+                    redirectUris: [REMOTE_LOGIN_CALLBACK_URL],
+                  },
+                },
+              });
+              break;
+            }
+            case "manual": {
+              if (!state.form.manualClientId.trim()) {
+                throw new Error("client_id is required");
+              }
+              await createRemoteClient.mutateAsync({
+                request: {
+                  createRemoteSessionClientForm: {
+                    remoteSessionIssuerId: existingRemoteIssuer.id,
+                    userSessionIssuerId: existingUserIssuer.id,
+                    clientId: state.form.manualClientId.trim(),
+                    clientSecret: state.form.manualClientSecret || undefined,
+                  },
+                },
+              });
+              break;
+            }
+            default:
+              throw new Error("pick a client strategy first");
+          }
           await invalidateAllRemoteSessionClients(queryClient);
           await refetchRemoteClients();
           break;
@@ -369,10 +498,14 @@ export function useOAuthProxyMigration(
     defaults,
     steps,
     state.form,
+    toolset.slug,
     createUserIssuer,
+    setToolsetUSI,
     discoverRemoteIssuer,
     createRemoteIssuer,
     cloneProvider,
+    registerRemoteIssuer,
+    createRemoteClient,
     existingUserIssuer,
     existingRemoteIssuer,
     queryClient,
@@ -381,21 +514,21 @@ export function useOAuthProxyMigration(
     refetchRemoteClients,
   ]);
 
-  if (!defaults) {
+  if (!defaults || !paradigm) {
     return { ready: false, reason: "no-proxy-provider", defaults: null };
-  }
-  if (!canCloneProvider(defaults.proxyProvider)) {
-    return { ready: false, reason: "not-clonable", defaults };
   }
 
   return {
     ready: true,
+    paradigm,
     defaults,
     form: state.form,
     setForm,
     steps,
     currentStep,
     isComplete,
+    remoteSessionIssuer: existingRemoteIssuer,
+    userSessionIssuer: existingUserIssuer,
     runCurrentStep,
     reset,
   };

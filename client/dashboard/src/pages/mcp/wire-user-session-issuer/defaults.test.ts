@@ -1,7 +1,7 @@
 import type { Toolset } from "@/lib/toolTypes";
 import { describe, expect, it } from "vitest";
 
-import { canCloneProvider, deriveMigrationDefaults } from "./defaults";
+import { deriveMigrationDefaults } from "./defaults";
 
 function mkToolset(overrides: {
   slug?: string;
@@ -37,10 +37,15 @@ describe("deriveMigrationDefaults", () => {
     expect(deriveMigrationDefaults(mkToolset({ noProvider: true }))).toBeNull();
   });
 
-  it("derives slugs from the toolset slug", () => {
+  it("uses the toolset slug as the base with a random suffix", () => {
     const d = deriveMigrationDefaults(mkToolset({ slug: "github" }));
-    expect(d?.userSessionIssuerSlug).toBe("github-usi");
-    expect(d?.remoteSessionIssuerSlug).toBe("github-rsi");
+    expect(d?.userSessionIssuerSlug).toMatch(/^github-[0-9a-f]{8}$/);
+    expect(d?.remoteSessionIssuerSlug).toMatch(/^github-[0-9a-f]{8}$/);
+  });
+
+  it("uses one slug for both the USI and RSI so they read as a pair", () => {
+    const d = deriveMigrationDefaults(mkToolset({ slug: "github" }));
+    expect(d?.userSessionIssuerSlug).toBe(d?.remoteSessionIssuerSlug);
   });
 
   it("extracts the origin from the authorization_endpoint", () => {
@@ -58,18 +63,15 @@ describe("deriveMigrationDefaults", () => {
     );
     expect(d?.issuerOriginGuess).toBeNull();
   });
-});
 
-describe("canCloneProvider", () => {
-  it("permits custom providers", () => {
-    const t = mkToolset({ providerType: "custom" });
-    const provider = t.oauthProxyServer!.oauthProxyProviders![0]!;
-    expect(canCloneProvider(provider)).toBe(true);
-  });
-
-  it("refuses gram-managed providers", () => {
-    const t = mkToolset({ providerType: "gram" });
-    const provider = t.oauthProxyServer!.oauthProxyProviders![0]!;
-    expect(canCloneProvider(provider)).toBe(false);
+  it("preserves the proxy provider's providerType so the hook can branch on paradigm", () => {
+    expect(
+      deriveMigrationDefaults(mkToolset({ providerType: "gram" }))
+        ?.proxyProvider.providerType,
+    ).toBe("gram");
+    expect(
+      deriveMigrationDefaults(mkToolset({ providerType: "custom" }))
+        ?.proxyProvider.providerType,
+    ).toBe("custom");
   });
 });

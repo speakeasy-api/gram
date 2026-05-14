@@ -936,11 +936,18 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
     ? "Enable the MCP server to configure OAuth"
     : "This MCP server does not require the OAuth authorization code flow";
 
-  // The migration entry point only appears when the toolset is on the legacy
-  // OAuth-Proxy paradigm: external and Gram-managed paradigms have nothing to
-  // port. Gated to admins so a typical project member doesn't see plumbing
-  // they aren't expected to operate.
-  const showWireUserSessionIssuer = isAdmin && oauthParadigm === "proxy";
+  // The migration entry point appears for both OAuth Proxy paradigms (custom
+  // and gram-managed): both produce a user_session_issuer, even though
+  // gram-managed skips the remote_session_* pair. External-OAuth toolsets
+  // have nothing to port. Gated to admins so a typical project member
+  // doesn't see plumbing they aren't expected to operate.
+  const showWireUserSessionIssuer =
+    isAdmin && (oauthParadigm === "proxy" || oauthParadigm === "gram");
+  // userSessionIssuerSlug is populated by the toolsets read path when the
+  // OAuth-Proxy → user-sessions migration has produced a user_session_issuer
+  // for this toolset. Admin-only on the dashboard side: regular project
+  // members aren't expected to think about the user-session plumbing.
+  const userSessionIssuerWired = isAdmin && !!toolset.userSessionIssuerSlug;
 
   return (
     <PageSection
@@ -949,6 +956,14 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
       headingExtra={undefined}
       action={
         <div className="flex items-center gap-2">
+          {userSessionIssuerWired && (
+            <span
+              className="rounded-full border border-green-500/40 bg-green-50 px-2 py-0.5 text-[10px] font-medium tracking-wide text-green-900 uppercase dark:bg-green-950 dark:text-green-200"
+              title={`User session issuer: ${toolset.userSessionIssuerSlug}`}
+            >
+              USI wired
+            </span>
+          )}
           {showWireUserSessionIssuer && (
             <Button
               variant="tertiary"
