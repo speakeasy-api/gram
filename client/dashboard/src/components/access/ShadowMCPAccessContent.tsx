@@ -1,5 +1,4 @@
 import { RequireScope } from "@/components/require-scope";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Heading } from "@/components/ui/heading";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
@@ -164,7 +163,7 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="space-y-2">
+    <label className="block space-y-2">
       <Type variant="body" className="text-sm font-medium">
         {label}
       </Type>
@@ -174,17 +173,18 @@ function Field({
 }
 
 function projectName(
-  projects: { id: string; name: string }[],
+  projects: { id: string; name: string }[] | undefined,
   projectId?: string | null,
 ) {
   if (!projectId) return "All projects";
   return (
-    projects.find((project) => project.id === projectId)?.name ?? "Project"
+    projects?.find((project) => project.id === projectId)?.name ?? "Project"
   );
 }
 
 function ReviewRequestSheet({
   request,
+  projects,
   open,
   isSubmitting,
   onOpenChange,
@@ -192,6 +192,7 @@ function ReviewRequestSheet({
   onDeny,
 }: {
   request: ShadowMCPApprovalRequest | null;
+  projects?: { id: string; name: string }[];
   open: boolean;
   isSubmitting: boolean;
   onOpenChange: (open: boolean) => void;
@@ -215,10 +216,7 @@ function ReviewRequestSheet({
   const [matchBreadth, setMatchBreadth] =
     useState<ShadowMCPMatchBreadth>("full_url");
   const [matchValue, setMatchValue] = useState("");
-  const [accessScope, setAccessScope] =
-    useState<ShadowMCPAccessScope>("project");
   const [reason, setReason] = useState("");
-  const [createDenyRule, setCreateDenyRule] = useState(true);
 
   useEffect(() => {
     if (!request || !open) return;
@@ -226,20 +224,17 @@ function ReviewRequestSheet({
     const nextMatchBreadth = getDefaultMatchBreadth(request);
     setAction("approve");
     setDisplayName(getRequestDisplayName(request));
-    setAccessScope("project");
     setMatchBreadth(nextMatchBreadth);
     setMatchValue(getMatchValue(request, nextMatchBreadth));
     setReason("");
-    setCreateDenyRule(true);
   }, [request, open]);
 
   if (!request) return null;
 
   const canSubmit =
-    action === "approve"
-      ? displayName.trim().length > 0 && matchValue.trim().length > 0
-      : !createDenyRule ||
-        (displayName.trim().length > 0 && matchValue.trim().length > 0);
+    displayName.trim().length > 0 && matchValue.trim().length > 0;
+  const submitLabel =
+    action === "approve" ? "Approve and create rule" : "Deny and create rule";
 
   const submit = async () => {
     const trimmedReason = reason.trim() || undefined;
@@ -248,17 +243,17 @@ function ReviewRequestSheet({
       if (action === "approve") {
         await onApprove({
           displayName: displayName.trim(),
-          accessScope,
+          accessScope: "project",
           matchBreadth,
           matchValue: matchValue.trim(),
           reason: trimmedReason,
         });
       } else {
         await onDeny({
-          createDenyRule,
-          displayName: createDenyRule ? displayName.trim() : undefined,
-          matchBreadth: createDenyRule ? matchBreadth : undefined,
-          matchValue: createDenyRule ? matchValue.trim() : undefined,
+          createDenyRule: true,
+          displayName: displayName.trim(),
+          matchBreadth,
+          matchValue: matchValue.trim(),
           reason: trimmedReason,
         });
       }
@@ -277,22 +272,33 @@ function ReviewRequestSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4">
-          <div className="border-border rounded-md border px-3 py-3">
-            <ServerCell
-              name={getRequestDisplayName(request)}
-              detail={getRequestServerDetail(request)}
-            />
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <div>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
+          <section className="border-border rounded-md border px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <ServerCell
+                name={getRequestDisplayName(request)}
+                detail={getRequestServerDetail(request)}
+              />
+              <RequestStatusBadge status={request.status} />
+            </div>
+            <div className="mt-4 grid grid-cols-6 gap-4">
+              <div className="col-span-3 min-w-0">
                 <Type muted small>
                   Requester
                 </Type>
-                <Type variant="body" className="mt-1 text-sm">
+                <Type variant="body" className="mt-1 truncate text-sm">
                   {getRequesterLabel(request)}
                 </Type>
+                {getRequesterDetail(request) && (
+                  <Type
+                    variant="body"
+                    className="text-muted-foreground truncate text-xs"
+                  >
+                    {getRequesterDetail(request)}
+                  </Type>
+                )}
               </div>
-              <div>
+              <div className="col-span-2">
                 <Type muted small>
                   Last blocked
                 </Type>
@@ -300,31 +306,50 @@ function ReviewRequestSheet({
                   {formatShortDate(request.lastBlockedAt)}
                 </Type>
               </div>
+              <div className="col-span-1">
+                <Type muted small>
+                  Blocked
+                </Type>
+                <Type variant="body" className="mt-1 text-sm">
+                  {request.blockedCount.toLocaleString()}{" "}
+                  {request.blockedCount === 1 ? "time" : "times"}
+                </Type>
+              </div>
             </div>
-          </div>
+          </section>
 
           <RadioGroup
             value={action}
             onValueChange={(value) => setAction(value as ReviewAction)}
-            className="grid grid-cols-2 gap-3"
+            className="border-border grid grid-cols-2 gap-4 rounded-md border p-3"
           >
-            <label className="border-border has-[[data-state=checked]]:border-primary flex cursor-pointer gap-3 rounded-md border p-3">
-              <RadioGroupItem value="approve" className="mt-1" />
+            <label
+              className={cn(
+                "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                action === "approve" && "border-border bg-card shadow-xs",
+              )}
+            >
+              <RadioGroupItem value="approve" className="mt-1.5" />
               <span>
-                <Type variant="body" className="font-medium">
-                  Approve
-                </Type>
+                <Badge variant="success">
+                  <Badge.Text>Approve</Badge.Text>
+                </Badge>
                 <Type muted small>
-                  Create an allow rule.
+                  Allow matching access.
                 </Type>
               </span>
             </label>
-            <label className="border-border has-[[data-state=checked]]:border-primary flex cursor-pointer gap-3 rounded-md border p-3">
-              <RadioGroupItem value="deny" className="mt-1" />
+            <label
+              className={cn(
+                "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                action === "deny" && "border-border bg-card shadow-xs",
+              )}
+            >
+              <RadioGroupItem value="deny" className="mt-1.5" />
               <span>
-                <Type variant="body" className="font-medium">
-                  Deny
-                </Type>
+                <Badge variant="destructive">
+                  <Badge.Text>Deny</Badge.Text>
+                </Badge>
                 <Type muted small>
                   Reject the request.
                 </Type>
@@ -332,91 +357,74 @@ function ReviewRequestSheet({
             </label>
           </RadioGroup>
 
-          {(action === "approve" || createDenyRule) && (
-            <>
-              <Field label="Rule name">
-                <Input
-                  value={displayName}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                />
-              </Field>
+          <section className="border-border space-y-4 rounded-md border px-4 py-4">
+            <div>
+              <Type variant="body" className="text-sm font-medium">
+                Rule
+              </Type>
+              <Type muted small>
+                {action === "approve"
+                  ? "Allow rule details"
+                  : "Deny rule details"}
+              </Type>
+            </div>
 
-              <div className="grid grid-cols-[160px_1fr] gap-3">
-                <Field label="Match">
-                  <Select
-                    value={matchBreadth}
-                    onValueChange={(value) => {
-                      const nextBreadth = value as ShadowMCPMatchBreadth;
-                      setMatchBreadth(nextBreadth);
-                      setMatchValue(getMatchValue(request, nextBreadth));
-                    }}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MATCH_BREADTH_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label="Match value">
-                  <Input
-                    value={matchValue}
-                    onChange={(event) => setMatchValue(event.target.value)}
-                  />
-                </Field>
-              </div>
-            </>
-          )}
+            <Field label="Rule name">
+              <Input
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+              />
+            </Field>
 
-          {action === "approve" ? (
             <Field label="Scope">
+              <Select value={request.projectId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={request.projectId}>
+                    {projectName(projects, request.projectId)}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+
+            <Field label="Match">
               <Select
-                value={accessScope}
-                onValueChange={(value) =>
-                  setAccessScope(value as ShadowMCPAccessScope)
-                }
+                value={matchBreadth}
+                onValueChange={(value) => {
+                  const nextBreadth = value as ShadowMCPMatchBreadth;
+                  setMatchBreadth(nextBreadth);
+                  setMatchValue(getMatchValue(request, nextBreadth));
+                }}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="project">This project</SelectItem>
-                  <SelectItem value="organization">
-                    Entire organization
-                  </SelectItem>
+                  {MATCH_BREADTH_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </Field>
-          ) : (
-            <label className="flex items-start gap-3">
-              <Checkbox
-                checked={createDenyRule}
-                onCheckedChange={(checked) => setCreateDenyRule(!!checked)}
-                className="mt-0.5"
+            <Field label="Match value">
+              <Input
+                value={matchValue}
+                onChange={(event) => setMatchValue(event.target.value)}
               />
-              <span>
-                <Type variant="body" className="text-sm font-medium">
-                  Create deny rule
-                </Type>
-                <Type muted small>
-                  Future matching calls will be blocked explicitly.
-                </Type>
-              </span>
-            </label>
-          )}
+            </Field>
 
-          <Field label="Reason">
-            <Textarea
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              placeholder="Optional"
-            />
-          </Field>
+            <Field label="Reason">
+              <Textarea
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Optional"
+              />
+            </Field>
+          </section>
         </div>
 
         <SheetFooter>
@@ -425,9 +433,7 @@ function ReviewRequestSheet({
             disabled={!canSubmit || isSubmitting}
             className="w-full"
           >
-            <Button.Text>
-              {action === "approve" ? "Approve request" : "Deny request"}
-            </Button.Text>
+            <Button.Text>{submitLabel}</Button.Text>
           </Button>
         </SheetFooter>
       </SheetContent>
@@ -464,8 +470,6 @@ function AccessRuleSheet({
   const [matchBreadth, setMatchBreadth] =
     useState<ShadowMCPMatchBreadth>("full_url");
   const [matchValue, setMatchValue] = useState("");
-  const [accessScope, setAccessScope] =
-    useState<ShadowMCPAccessScope>("organization");
   const [projectId, setProjectId] = useState("");
   const [reason, setReason] = useState("");
   const defaultProjectId = projects[0]?.id ?? "";
@@ -476,7 +480,6 @@ function AccessRuleSheet({
     if (rule) {
       setDisposition(rule.disposition);
       setDisplayName(rule.displayName);
-      setAccessScope(rule.accessScope);
       setProjectId(rule.projectId ?? "");
       setMatchBreadth(rule.matchBreadth);
       setMatchValue(rule.matchValue);
@@ -486,7 +489,6 @@ function AccessRuleSheet({
 
     setDisposition("allowed");
     setDisplayName("");
-    setAccessScope("organization");
     setProjectId(defaultProjectId);
     setMatchBreadth("full_url");
     setMatchValue("");
@@ -496,15 +498,15 @@ function AccessRuleSheet({
   const canSubmit =
     displayName.trim().length > 0 &&
     matchValue.trim().length > 0 &&
-    (accessScope === "organization" || projectId !== "");
+    projectId !== "";
 
   const submit = async () => {
     try {
       await onSubmit({
         displayName: displayName.trim(),
         disposition,
-        accessScope,
-        projectId: accessScope === "project" ? projectId : undefined,
+        accessScope: "project",
+        projectId,
         matchBreadth,
         matchValue: matchValue.trim(),
         reason: reason.trim() || undefined,
@@ -528,31 +530,41 @@ function AccessRuleSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
           <RadioGroup
             value={disposition}
             onValueChange={(value) =>
               setDisposition(value as ShadowMCPDisposition)
             }
-            className="grid grid-cols-2 gap-3"
+            className="border-border bg-muted/20 grid grid-cols-2 gap-1 rounded-md border p-1"
           >
-            <label className="border-border has-[[data-state=checked]]:border-primary flex cursor-pointer gap-3 rounded-md border p-3">
-              <RadioGroupItem value="allowed" className="mt-1" />
+            <label
+              className={cn(
+                "flex cursor-pointer items-start gap-3 rounded-sm px-3 py-2.5 transition-colors",
+                disposition === "allowed" && "bg-background shadow-xs",
+              )}
+            >
+              <RadioGroupItem value="allowed" className="mt-0.5" />
               <span>
-                <Type variant="body" className="font-medium">
-                  Allow
-                </Type>
+                <Badge variant="success">
+                  <Badge.Text>Allow</Badge.Text>
+                </Badge>
                 <Type muted small>
                   Allow matching calls.
                 </Type>
               </span>
             </label>
-            <label className="border-border has-[[data-state=checked]]:border-primary flex cursor-pointer gap-3 rounded-md border p-3">
-              <RadioGroupItem value="denied" className="mt-1" />
+            <label
+              className={cn(
+                "flex cursor-pointer items-start gap-3 rounded-sm px-3 py-2.5 transition-colors",
+                disposition === "denied" && "bg-background shadow-xs",
+              )}
+            >
+              <RadioGroupItem value="denied" className="mt-0.5" />
               <span>
-                <Type variant="body" className="font-medium">
-                  Deny
-                </Type>
+                <Badge variant="destructive">
+                  <Badge.Text>Deny</Badge.Text>
+                </Badge>
                 <Type muted small>
                   Block matching calls.
                 </Type>
@@ -560,15 +572,52 @@ function AccessRuleSheet({
             </label>
           </RadioGroup>
 
-          <Field label="Rule name">
-            <Input
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              placeholder="Datadog"
-            />
-          </Field>
+          <section className="border-border space-y-4 rounded-md border px-4 py-4">
+            <div>
+              <Type variant="body" className="text-sm font-medium">
+                Rule
+              </Type>
+              <Type muted small>
+                {disposition === "allowed"
+                  ? "Allow rule details"
+                  : "Deny rule details"}
+              </Type>
+            </div>
 
-          <div className="grid grid-cols-[160px_1fr] gap-3">
+            <Field label="Rule name">
+              <Input
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+                placeholder="Datadog"
+              />
+            </Field>
+
+            <Field label="Scope">
+              <Select value="project">
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="project">Project</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+
+            <Field label="Project">
+              <Select value={projectId} onValueChange={setProjectId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+
             <Field label="Match">
               <Select
                 value={matchBreadth}
@@ -595,51 +644,15 @@ function AccessRuleSheet({
                 placeholder="https://example.com/mcp"
               />
             </Field>
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Scope">
-              <Select
-                value={accessScope}
-                onValueChange={(value) =>
-                  setAccessScope(value as ShadowMCPAccessScope)
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="organization">Organization</SelectItem>
-                  <SelectItem value="project">Project</SelectItem>
-                </SelectContent>
-              </Select>
+            <Field label="Reason">
+              <Textarea
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Optional"
+              />
             </Field>
-
-            {accessScope === "project" && (
-              <Field label="Project">
-                <Select value={projectId} onValueChange={setProjectId}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select project" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            )}
-          </div>
-
-          <Field label="Reason">
-            <Textarea
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              placeholder="Optional"
-            />
-          </Field>
+          </section>
         </div>
 
         <SheetFooter>
