@@ -1139,6 +1139,11 @@ WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS assistant_runtimes (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  -- v1 rows pin one VM per thread and stamp the thread's id here. v2 rows
+  -- host every thread under one assistant and use uuid.Nil as a sentinel —
+  -- the foreign key to assistant_threads is intentionally absent so the
+  -- sentinel does not have to back to a real row, and so reaping a thread
+  -- does not cascade-delete the assistant's shared v2 runtime.
   assistant_thread_id uuid NOT NULL,
   assistant_id uuid NOT NULL,
   project_id uuid NOT NULL,
@@ -1149,6 +1154,7 @@ CREATE TABLE IF NOT EXISTS assistant_runtimes (
   last_heartbeat_at timestamptz,
   backend_metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   ended_at timestamptz,
+  runtime_version smallint NOT NULL DEFAULT 1,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1157,14 +1163,17 @@ CREATE TABLE IF NOT EXISTS assistant_runtimes (
   ended boolean NOT NULL GENERATED ALWAYS AS (ended_at IS NOT NULL) stored,
 
   CONSTRAINT assistant_runtimes_pkey PRIMARY KEY (id),
-  CONSTRAINT assistant_runtimes_assistant_thread_id_fkey FOREIGN KEY (assistant_thread_id) REFERENCES assistant_threads(id) ON DELETE CASCADE,
   CONSTRAINT assistant_runtimes_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants(id) ON DELETE CASCADE,
   CONSTRAINT assistant_runtimes_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS assistant_runtimes_assistant_thread_id_active_key
 ON assistant_runtimes (assistant_thread_id)
-WHERE deleted IS FALSE AND ended IS FALSE;
+WHERE deleted IS FALSE AND ended IS FALSE AND runtime_version = 1;
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_runtimes_v2_one_per_assistant
+ON assistant_runtimes (project_id, assistant_id)
+WHERE runtime_version = 2 AND deleted IS FALSE AND ended IS FALSE;
 
 CREATE INDEX IF NOT EXISTS assistant_runtimes_project_id_assistant_id_state_idx
 ON assistant_runtimes (project_id, assistant_id, state)
