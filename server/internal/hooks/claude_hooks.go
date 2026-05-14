@@ -171,33 +171,35 @@ func (d *formDecoder) Decode(v any) error {
 func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 	claudeMetadata := extractSessionMetadata(payload)
 
+	logger := s.logger.With(
+		attr.SlogHookSource("claude"),
+		attr.SlogHookEvent("Logs"),
+		attr.SlogServiceName(claudeMetadata.ServiceName),
+		attr.SlogGenAIConversationID(claudeMetadata.SessionID),
+		attr.SlogAuthUserEmail(claudeMetadata.UserEmail),
+	)
+
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		// Auth middleware should have rejected this already; log here so a
 		// stray unauthenticated request is still visible per source/event
 		// when filtering hook traffic in Datadog.
-		s.logger.WarnContext(ctx, "rejected unauthorized claude OTEL logs request",
+		logger.WarnContext(ctx, "rejected unauthorized claude OTEL logs request",
 			attr.SlogEvent("claude_logs_unauthorized"),
-			attr.SlogHookSource("claude"),
-			attr.SlogHookEvent("Logs"),
-			attr.SlogGenAIConversationID(claudeMetadata.SessionID),
-			attr.SlogServiceName(claudeMetadata.ServiceName),
 		)
 		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	}
 
 	orgID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
+	logger = logger.With(
+		attr.SlogOrganizationID(orgID),
+		attr.SlogProjectID(projectID),
+	)
 
 	if claudeMetadata.SessionID == "" {
-		s.logger.WarnContext(ctx, "claude OTEL logs payload contained no session ID",
+		logger.WarnContext(ctx, "claude OTEL logs payload contained no session ID",
 			attr.SlogEvent("claude_logs_no_session"),
-			attr.SlogHookSource("claude"),
-			attr.SlogHookEvent("Logs"),
-			attr.SlogOrganizationID(orgID),
-			attr.SlogProjectID(projectID),
-			attr.SlogServiceName(claudeMetadata.ServiceName),
-			attr.SlogAuthUserEmail(claudeMetadata.UserEmail),
 		)
 		return nil
 	}
@@ -215,28 +217,16 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 	}
 
 	if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
-		s.logger.ErrorContext(ctx, "Failed to store session metadata",
+		logger.ErrorContext(ctx, "Failed to store session metadata",
 			attr.SlogEvent("claude_logs_cache_set_failed"),
-			attr.SlogHookSource("claude"),
-			attr.SlogHookEvent("Logs"),
-			attr.SlogOrganizationID(orgID),
-			attr.SlogProjectID(projectID),
-			attr.SlogGenAIConversationID(completeMetadata.SessionID),
 			attr.SlogError(err),
 		)
 	}
 
 	s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata)
 
-	s.logger.InfoContext(ctx, "Stored session metadata",
+	logger.InfoContext(ctx, "Stored session metadata",
 		attr.SlogEvent("session_validated"),
-		attr.SlogHookSource("claude"),
-		attr.SlogHookEvent("Logs"),
-		attr.SlogOrganizationID(orgID),
-		attr.SlogProjectID(projectID),
-		attr.SlogGenAIConversationID(completeMetadata.SessionID),
-		attr.SlogServiceName(completeMetadata.ServiceName),
-		attr.SlogAuthUserEmail(completeMetadata.UserEmail),
 	)
 
 	return nil
@@ -244,12 +234,15 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 
 // Metrics handles authenticated OTEL metrics data from Claude Code
 func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) error {
+	logger := s.logger.With(
+		attr.SlogHookSource("claude"),
+		attr.SlogHookEvent("Metrics"),
+	)
+
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		s.logger.WarnContext(ctx, "rejected unauthorized claude OTEL metrics request",
+		logger.WarnContext(ctx, "rejected unauthorized claude OTEL metrics request",
 			attr.SlogEvent("claude_metrics_unauthorized"),
-			attr.SlogHookSource("claude"),
-			attr.SlogHookEvent("Metrics"),
 		)
 		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	}
@@ -257,10 +250,8 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 	orgID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
 
-	s.logger.InfoContext(ctx, "Received Claude token metrics",
+	logger.InfoContext(ctx, "Received Claude token metrics",
 		attr.SlogEvent("claude_metrics"),
-		attr.SlogHookSource("claude"),
-		attr.SlogHookEvent("Metrics"),
 		attr.SlogOrganizationID(orgID),
 		attr.SlogProjectID(projectID),
 	)
@@ -327,10 +318,11 @@ func extractSessionMetadata(payload *gen.LogsPayload) claudeLogMetadata {
 
 // Claude is the unified endpoint for all Claude Code hook events.
 func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
-	// Log entry with top-level org/project/source/event attrs so the request
-	// is filterable in Datadog even before auth resolves. Auth on this
-	// endpoint is optional; the project_slug header may be present even
-	// when the API key isn't validated yet, so include it as a hint.
+	// Build a request-scoped logger so org/project/source/event are
+	// attached to every log line in this handler — including the
+	// pre-auth entry log. Auth on this endpoint is optional; the
+	// project_slug header may be present even when the API key isn't
+	// validated yet, so include it as a hint up front.
 	toolName := ""
 	if payload.ToolName != nil {
 		toolName = *payload.ToolName
@@ -344,14 +336,18 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 		projectSlugHint = *payload.ProjectSlugInput
 	}
 	hasPluginAuth := hasOptionalPluginAuth(payload)
-	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Claude: %s", payload.HookEventName),
-		attr.SlogEvent("claude_hook"),
+
+	logger := s.logger.With(
 		attr.SlogHookSource("claude"),
 		attr.SlogHookEvent(payload.HookEventName),
 		attr.SlogToolName(toolName),
 		attr.SlogGenAIConversationID(sessionID),
 		attr.SlogProjectSlug(projectSlugHint),
 		attr.SlogHookHasPluginAuth(hasPluginAuth),
+	)
+
+	logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Claude: %s", payload.HookEventName),
+		attr.SlogEvent("claude_hook"),
 	)
 
 	if hasPluginAuth {
@@ -363,29 +359,20 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 		// in Redis, and the OTEL Logs endpoint flushes it once the session is
 		// validated. Policies that need auth context degrade gracefully.
 		if authedCtx, err := s.authorizePluginRequest(ctx, *payload.ApikeyToken, *payload.ProjectSlugInput); err != nil {
-			s.logger.WarnContext(ctx, "plugin auth failed on claude hook; falling back to OTEL-buffered path",
+			logger.WarnContext(ctx, "plugin auth failed on claude hook; falling back to OTEL-buffered path",
 				attr.SlogEvent("claude_hook_auth_failed"),
-				attr.SlogHookSource("claude"),
-				attr.SlogHookEvent(payload.HookEventName),
-				attr.SlogProjectSlug(projectSlugHint),
 				attr.SlogError(err),
 			)
 		} else {
 			ctx = authedCtx
 			if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
-				attrs := []any{
-					attr.SlogEvent("claude_hook_auth_ok"),
-					attr.SlogHookSource("claude"),
-					attr.SlogHookEvent(payload.HookEventName),
-					attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
-				}
+				logger = logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 				if authCtx.ProjectID != nil {
-					attrs = append(attrs, attr.SlogProjectID(authCtx.ProjectID.String()))
+					logger = logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 				}
-				if authCtx.ProjectSlug != nil {
-					attrs = append(attrs, attr.SlogProjectSlug(*authCtx.ProjectSlug))
-				}
-				s.logger.InfoContext(ctx, "plugin auth ok on claude hook", attrs...)
+				logger.InfoContext(ctx, "plugin auth ok on claude hook",
+					attr.SlogEvent("claude_hook_auth_ok"),
+				)
 			}
 		}
 	}
@@ -411,7 +398,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 	case "Notification":
 		return s.handleNotification(ctx, payload)
 	default:
-		s.logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
+		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
 		return makeHookResult(payload.HookEventName), nil
 	}
 }
@@ -455,23 +442,26 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 }
 
 func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
+	logger := s.logger.With(
+		attr.SlogHookSource("claude"),
+		attr.SlogHookEvent(payload.HookEventName),
+	)
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		logger = logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		if authCtx.ProjectID != nil {
+			logger = logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+		}
+	}
+
 	if payload.SessionID == nil || *payload.SessionID == "" {
-		attrs := []any{
+		logger.WarnContext(ctx, "Tool event called without session ID",
 			attr.SlogEvent("claude_hook_no_session"),
-			attr.SlogHookSource("claude"),
-			attr.SlogHookEvent(payload.HookEventName),
-		}
-		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
-			attrs = append(attrs, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
-			if authCtx.ProjectID != nil {
-				attrs = append(attrs, attr.SlogProjectID(authCtx.ProjectID.String()))
-			}
-		}
-		s.logger.WarnContext(ctx, "Tool event called without session ID", attrs...)
+		)
 		return
 	}
 
 	sessionID := *payload.SessionID
+	logger = logger.With(attr.SlogGenAIConversationID(sessionID))
 
 	// Both plugin-authenticated and OTEL-only requests go through the same
 	// Redis-buffered flow: persist when session metadata is in the cache,
@@ -485,20 +475,10 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 		s.persistHook(ctx, payload, &metadata)
 	} else {
 		if err := s.bufferHook(ctx, sessionID, payload); err != nil {
-			attrs := []any{
+			logger.ErrorContext(ctx, "Failed to buffer hook",
 				attr.SlogEvent("claude_hook_buffer_failed"),
-				attr.SlogHookSource("claude"),
-				attr.SlogHookEvent(payload.HookEventName),
-				attr.SlogGenAIConversationID(sessionID),
 				attr.SlogError(err),
-			}
-			if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
-				attrs = append(attrs, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
-				if authCtx.ProjectID != nil {
-					attrs = append(attrs, attr.SlogProjectID(authCtx.ProjectID.String()))
-				}
-			}
-			s.logger.ErrorContext(ctx, "Failed to buffer hook", attrs...)
+			)
 		}
 	}
 }
@@ -639,14 +619,15 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 
 	detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, payload.ToolInput, mcpToolName, metadata.GramOrgID)
 	if denied {
-		s.logger.InfoContext(ctx, "denying claude tool call: failed gram toolset validation",
-			attr.SlogEvent("claude_hook_denied"),
+		s.logger.With(
 			attr.SlogHookSource("claude"),
 			attr.SlogHookEvent(payload.HookEventName),
 			attr.SlogOrganizationID(metadata.GramOrgID),
 			attr.SlogProjectID(metadata.ProjectID),
 			attr.SlogGenAIConversationID(sessionID),
 			attr.SlogToolName(rawToolName),
+		).InfoContext(ctx, "denying claude tool call: failed gram toolset validation",
+			attr.SlogEvent("claude_hook_denied"),
 			attr.SlogHookBlockReason(detail),
 			attr.SlogRiskPolicyID(policy.ID),
 			attr.SlogRiskPolicyName(policy.Name),

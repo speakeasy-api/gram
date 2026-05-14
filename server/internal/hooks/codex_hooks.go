@@ -20,29 +20,30 @@ import (
 )
 
 func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.CodexHookResult, error) {
+	logger := s.logger.With(
+		attr.SlogHookSource("codex"),
+		attr.SlogHookEvent(payload.HookEventName),
+		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
+		attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
+	)
+
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		s.logger.WarnContext(ctx, "rejected unauthorized codex hook request",
+		logger.WarnContext(ctx, "rejected unauthorized codex hook request",
 			attr.SlogEvent("codex_hook_unauthorized"),
-			attr.SlogHookSource("codex"),
-			attr.SlogHookEvent(payload.HookEventName),
-			attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
-			attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
 		)
 		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	}
 
 	orgID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
-
-	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Codex: %s", payload.HookEventName),
-		attr.SlogEvent("codex_hook"),
-		attr.SlogHookSource("codex"),
-		attr.SlogHookEvent(payload.HookEventName),
+	logger = logger.With(
 		attr.SlogOrganizationID(orgID),
 		attr.SlogProjectID(projectID),
-		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
-		attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
+	)
+
+	logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Codex: %s", payload.HookEventName),
+		attr.SlogEvent("codex_hook"),
 	)
 
 	var blockReason, userReason string
@@ -58,13 +59,8 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 		if policy != nil {
 			toolName := conv.PtrValOr(payload.ToolName, "")
 			if detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, payload.ToolInput, toolName, orgID); denied {
-				s.logger.InfoContext(ctx, "denying codex tool call: failed gram toolset validation",
+				logger.InfoContext(ctx, "denying codex tool call: failed gram toolset validation",
 					attr.SlogEvent("codex_hook_denied"),
-					attr.SlogHookSource("codex"),
-					attr.SlogHookEvent(payload.HookEventName),
-					attr.SlogOrganizationID(orgID),
-					attr.SlogProjectID(projectID),
-					attr.SlogToolName(toolName),
 					attr.SlogHookBlockReason(detail),
 					attr.SlogRiskPolicyID(policy.ID),
 					attr.SlogRiskPolicyName(policy.Name),
