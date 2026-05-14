@@ -257,6 +257,44 @@ func TestService_Callback(t *testing.T) {
 		require.Equal(t, "state-target-org", authCtx.ActiveOrganizationID, "state param should take priority over IDP org selection")
 	})
 
+	t.Run("admin state param resolves non-member org from DB", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := adminMockUserInfo()
+		userInfo.UserID = "admin-state-nonmember"
+		userInfo.Email = "admin-state-nonmember@speakeasyapi.dev"
+
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		for _, org := range userInfo.Organizations {
+			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+		}
+		// Customer org exists in DB but admin is NOT a member.
+		require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+			ID:   "customer-from-registry",
+			Name: "Customer From Registry",
+			Slug: "customer-registry",
+		}, ""))
+
+		// State param points to the non-member customer org (e.g. link from registry).
+		redirectURL := "https://dev.getgram.ai/customer-registry/projects/default"
+		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
+
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+			Code:  "mock_code",
+			State: &stateParam,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
+		require.NoError(t, err, "load session after callback")
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok, "auth context should be set after callback")
+		require.Equal(t, "customer-from-registry", authCtx.ActiveOrganizationID, "admin state param should resolve non-member org from DB")
+	})
+
 	t.Run("user with no organizations and assistants disposition auto-provisions org", func(t *testing.T) {
 		t.Parallel()
 

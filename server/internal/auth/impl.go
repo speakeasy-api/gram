@@ -316,10 +316,19 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	// Priority 2: org slug from the state param (explicit destination URL).
+	// First try the user's own orgs; for admins, fall back to a DB lookup
+	// since they may access orgs they aren't a member of.
 	if !activeOrgSelected {
 		if org, ok := activeOrganizationFromState(payload, userInfo.Organizations); ok {
 			activeOrgID = org.ID
 			activeOrgSelected = true
+		} else if userInfo.Admin {
+			if slug := organizationSlugFromState(payload); slug != "" {
+				if orgMeta, err := s.orgRepo.GetOrganizationMetadataBySlug(ctx, slug); err == nil {
+					activeOrgID = orgMeta.ID
+					activeOrgSelected = true
+				}
+			}
 		}
 	}
 
@@ -386,15 +395,20 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	}, nil
 }
 
+// organizationSlugFromState extracts the org slug from the state param's
+// final destination URL. Returns "" if the state is missing or has no org slug.
+func organizationSlugFromState(payload *gen.CallbackPayload) string {
+	state := decodeStateParam(payload)
+	if state == nil {
+		return ""
+	}
+	return organizationSlugFromDestinationURL(state.FinalDestinationURL)
+}
+
 func activeOrganizationFromState(payload *gen.CallbackPayload, organizations []sessions.Organization) (sessions.Organization, bool) {
 	var empty sessions.Organization
 
-	state := decodeStateParam(payload)
-	if state == nil {
-		return empty, false
-	}
-
-	orgSlug := organizationSlugFromDestinationURL(state.FinalDestinationURL)
+	orgSlug := organizationSlugFromState(payload)
 	if orgSlug == "" {
 		return empty, false
 	}
