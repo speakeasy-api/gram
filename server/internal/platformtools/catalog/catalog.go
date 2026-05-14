@@ -31,6 +31,7 @@ const (
 // remote MCP server, then create a disabled mcp_servers row that links to
 // it. Without the link row the dashboard treats the source as orphaned.
 type Catalog interface {
+	ListCatalog(ctx context.Context, payload *registriesgen.ListCatalogPayload) (*registriesgen.ListCatalogResult, error)
 	GetServerDetails(ctx context.Context, payload *registriesgen.GetServerDetailsPayload) (*types.ExternalMCPServer, error)
 	CreateRemoteServer(ctx context.Context, payload *remotemcpgen.CreateServerPayload) (*types.RemoteMcpServer, error)
 	DeleteRemoteServer(ctx context.Context, payload *remotemcpgen.DeleteServerPayload) error
@@ -42,10 +43,15 @@ type Catalog interface {
 // service packages (some transitively pull platformtools, which would
 // form a cycle).
 type FuncCatalog struct {
+	ListCatalogFn        func(ctx context.Context, payload *registriesgen.ListCatalogPayload) (*registriesgen.ListCatalogResult, error)
 	GetServerDetailsFn   func(ctx context.Context, payload *registriesgen.GetServerDetailsPayload) (*types.ExternalMCPServer, error)
 	CreateRemoteServerFn func(ctx context.Context, payload *remotemcpgen.CreateServerPayload) (*types.RemoteMcpServer, error)
 	DeleteRemoteServerFn func(ctx context.Context, payload *remotemcpgen.DeleteServerPayload) error
 	CreateMCPServerFn    func(ctx context.Context, payload *mcpserversgen.CreateMcpServerPayload) (*types.McpServer, error)
+}
+
+func (f *FuncCatalog) ListCatalog(ctx context.Context, payload *registriesgen.ListCatalogPayload) (*registriesgen.ListCatalogResult, error) {
+	return f.ListCatalogFn(ctx, payload)
 }
 
 func (f *FuncCatalog) GetServerDetails(ctx context.Context, payload *registriesgen.GetServerDetailsPayload) (*types.ExternalMCPServer, error) {

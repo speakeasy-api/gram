@@ -55,7 +55,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	externalmcprepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
@@ -743,13 +742,12 @@ func newStartCommand() *cli.Command {
 			mcpServersSvc := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
 			catalogTools := platformtoolsruntime.CatalogExternalTools(
 				&platformcatalog.FuncCatalog{
+					ListCatalogFn:        externalMcpSvc.ListCatalog,
 					GetServerDetailsFn:   externalMcpSvc.GetServerDetails,
 					CreateRemoteServerFn: remoteMcpSvc.CreateServer,
 					DeleteRemoteServerFn: remoteMcpSvc.DeleteServer,
 					CreateMCPServerFn:    mcpServersSvc.CreateMcpServer,
 				},
-				mcpRegistryClient,
-				externalmcprepo.New(db),
 			)
 			platformExtras := append([]platformtools.ExternalTool{}, memoryTools...)
 			platformExtras = append(platformExtras, catalogTools...)

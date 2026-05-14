@@ -5,22 +5,15 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/google/uuid"
+	registriesgen "github.com/speakeasy-api/gram/server/gen/mcp_registries"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	externalmcprepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
 const handlerSearch = "search_catalog"
-
-// maxSearchResults caps the aggregated multi-registry response to keep tool
-// output small enough for an LLM to read in one shot. Mirrors the v0 limit
-// applied by externalmcp.ListCatalog.
-const maxSearchResults = 100
 
 type searchInput struct {
 	Query      *string `json:"query,omitempty" jsonschema:"Substring filter passed to the registry."`
@@ -55,22 +48,22 @@ type searchResult struct {
 	NextCursor *string          `json:"next_cursor,omitempty"`
 }
 
-// SearchTool wraps the MCP registry list endpoint as a platform tool.
+// SearchTool wraps mcpRegistries.listCatalog as a platform tool so dispatch
+// runs through the same RBAC path (ScopeProjectRead) as the dashboard
+// catalog view.
 type SearchTool struct {
-	descriptor     core.ToolDescriptor
-	registryClient *externalmcp.RegistryClient
-	repo           *externalmcprepo.Queries
+	descriptor core.ToolDescriptor
+	catalog    Catalog
 }
 
-func NewSearchTool(registryClient *externalmcp.RegistryClient, repo *externalmcprepo.Queries) *SearchTool {
+func NewSearchTool(catalog Catalog) *SearchTool {
 	readOnly := true
 	destructive := false
 	idempotent := true
 	openWorld := true
 
 	return &SearchTool{
-		registryClient: registryClient,
-		repo:           repo,
+		catalog: catalog,
 		descriptor: core.ToolDescriptor{
 			SourceSlug:  SourceCatalog,
 			HandlerName: handlerSearch,
@@ -93,7 +86,7 @@ func (t *SearchTool) Descriptor() core.ToolDescriptor {
 }
 
 func (t *SearchTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.registryClient == nil || t.repo == nil {
+	if t.catalog == nil {
 		return oops.E(oops.CodeUnexpected, nil, "catalog tools are not configured")
 	}
 
@@ -110,77 +103,30 @@ func (t *SearchTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload
 		return err
 	}
 
-	registries, err := t.resolveRegistries(ctx, input.RegistryID)
+	result, err := t.catalog.ListCatalog(ctx, &registriesgen.ListCatalogPayload{
+		RegistryID:       input.RegistryID,
+		Search:           input.Query,
+		Cursor:           input.Cursor,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
 	if err != nil {
-		return err
+		return fmt.Errorf("list catalog: %w", err)
 	}
 
-	servers := make([]searchToolView, 0)
-	var nextCursor *string
-	for _, registry := range registries {
-		result, err := t.registryClient.ListServers(ctx, externalmcp.Registry{
-			ID:  registry.ID,
-			URL: registry.URL,
-		}, externalmcp.ListServersParams{
-			Search: input.Query,
-			Cursor: input.Cursor,
-		})
-		if err != nil {
-			// One registry being down should not blank out the rest of the
-			// catalog — externalmcp.ListCatalog applies the same resilience
-			// when aggregating multiple registries.
+	views := make([]searchToolView, 0, len(result.Servers))
+	for _, server := range result.Servers {
+		if server == nil {
 			continue
 		}
-		for _, server := range result.Servers {
-			if server == nil {
-				continue
-			}
-			servers = append(servers, toolViewFromServer(server))
-			if len(servers) >= maxSearchResults {
-				break
-			}
-		}
-		if len(registries) == 1 {
-			nextCursor = result.NextCursor
-		}
-		if len(servers) >= maxSearchResults {
-			break
-		}
+		views = append(views, toolViewFromServer(server))
 	}
 
 	return writeJSON(wr, searchResult{
-		Servers:    servers,
-		NextCursor: nextCursor,
+		Servers:    views,
+		NextCursor: result.NextCursor,
 	})
-}
-
-type registryRow struct {
-	ID  uuid.UUID
-	URL string
-}
-
-func (t *SearchTool) resolveRegistries(ctx context.Context, registryID *string) ([]registryRow, error) {
-	if registryID != nil && *registryID != "" {
-		parsed, err := uuid.Parse(*registryID)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id")
-		}
-		row, err := t.repo.GetMCPRegistryByID(ctx, parsed)
-		if err != nil {
-			return nil, fmt.Errorf("get mcp registry: %w", err)
-		}
-		return []registryRow{{ID: row.ID, URL: row.Url}}, nil
-	}
-
-	rows, err := t.repo.ListMCPRegistries(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list mcp registries: %w", err)
-	}
-	out := make([]registryRow, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, registryRow{ID: row.ID, URL: row.Url})
-	}
-	return out, nil
 }
 
 func toolViewFromServer(server *types.ExternalMCPServer) searchToolView {
