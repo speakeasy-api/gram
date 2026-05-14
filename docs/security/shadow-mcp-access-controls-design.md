@@ -141,6 +141,12 @@ RBAC still gates the management API:
 
 If a later product version needs granular user or role audiences, add that as a separate audience model after the org/project audience is proven. Do not keep unused `shadow_mcp:connect` plumbing in v1, because role grants will look like they control access even though the runtime decision is rule-policy based.
 
+### Superseded RBAC-grant approach
+
+The first implementation path attempted to model allowed Shadow MCP runtime access as `shadow_mcp:connect` grants on roles, with Access Rules acting as grant-backed resources. We moved away from that design because it split the source of truth: the admin page presented Access Rules, while the runtime decision actually depended on RBAC grants and role editor state.
+
+The v1 implementation intentionally removes that grant plumbing. RBAC now only protects management operations. Shadow MCP runtime allow/deny is determined by Access Rules directly, scoped to all users in the organization or all users in a project.
+
 ## Management API
 
 Add methods to the existing `access` service because the admin surface belongs under Access and the operations are org-admin access-policy management.
@@ -208,13 +214,11 @@ Proposed route group:
 - Auth: require `org:admin`.
 - Inputs: rule id, disposition, access scope, optional project id for project-scoped rules, evidence fields, match breadth, match value, reason.
 - Audits before/after snapshots.
-- Clears any stale role grants to that rule while migrating away from the earlier role-grant design.
 
 `deleteShadowMCPAccessRule`
 
 - Auth: require `org:admin`.
 - Soft-deletes the rule.
-- Clears any stale role grants to the rule in the same transaction.
 
 ## Runtime enforcement
 
