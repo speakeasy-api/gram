@@ -22,7 +22,7 @@ func TestResolveAssistantMCPServers_EmptyUserToolsetsStillGetsPlatformServer(t *
 
 	require.Equal(t, "_platform-"+platformtools.AssistantsPlatformToolsetSlug, servers[0].ID)
 	require.Equal(t,
-		"https://gram.test/x/platform-mcp/"+platformtools.AssistantsPlatformToolsetSlug,
+		"https://gram.test/platform/mcp/"+platformtools.AssistantsPlatformToolsetSlug,
 		servers[0].URL,
 	)
 	require.Empty(t, servers[0].Headers)
@@ -53,7 +53,7 @@ func TestResolveAssistantMCPServers_UserToolsetsListedBeforePlatformServer(t *te
 
 	require.Equal(t, "_platform-"+platformtools.AssistantsPlatformToolsetSlug, servers[1].ID)
 	require.Equal(t,
-		"https://gram.test/x/platform-mcp/"+platformtools.AssistantsPlatformToolsetSlug,
+		"https://gram.test/platform/mcp/"+platformtools.AssistantsPlatformToolsetSlug,
 		servers[1].URL,
 	)
 }
