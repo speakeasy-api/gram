@@ -87,6 +87,14 @@ WHERE remote_session_issuer_id = @remote_session_issuer_id AND deleted IS FALSE;
 -- client of a remote_session_issuer. client_secret_encrypted is stored
 -- encrypted via the project encryption key.
 
+-- name: GetOAuthProxyProviderForClone :one
+-- Read just the fields cloneOAuthProxyProvider needs: project scoping for
+-- isolation, provider_type to refuse non-custom providers, and the secrets
+-- JSONB so the handler can extract client_id / client_secret server-side.
+SELECT id, project_id, provider_type, secrets
+FROM oauth_proxy_providers
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
 -- name: CreateRemoteSessionClient :one
 INSERT INTO remote_session_clients (
     project_id,

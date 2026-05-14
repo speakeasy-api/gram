@@ -33,6 +33,7 @@ export * from "./chatresolution.js";
 export * from "./chatsummary.js";
 export * from "./claudehookpayload.js";
 export * from "./claudehookresult.js";
+export * from "./cloneclientfromoauthproxyproviderform.js";
 export * from "./cloneenvironmentrequestbody.js";
 export * from "./codexhookpayload.js";
 export * from "./codexhookresult.js";

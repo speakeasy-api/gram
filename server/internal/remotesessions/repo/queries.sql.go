@@ -40,7 +40,6 @@ func (q *Queries) CountRemoteSessionClientsByIssuerID(ctx context.Context, remot
 }
 
 const createRemoteSessionClient = `-- name: CreateRemoteSessionClient :one
-
 INSERT INTO remote_session_clients (
     project_id,
     remote_session_issuer_id,
@@ -72,9 +71,6 @@ type CreateRemoteSessionClientParams struct {
 	ClientSecretExpiresAt pgtype.Timestamptz
 }
 
-// Remote session clients — credentials Gram uses when acting as an OAuth
-// client of a remote_session_issuer. client_secret_encrypted is stored
-// encrypted via the project encryption key.
 func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemoteSessionClientParams) (RemoteSessionClient, error) {
 	row := q.db.QueryRow(ctx, createRemoteSessionClient,
 		arg.ProjectID,
@@ -299,6 +295,43 @@ func (q *Queries) GetActiveRemoteSession(ctx context.Context, arg GetActiveRemot
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getOAuthProxyProviderForClone = `-- name: GetOAuthProxyProviderForClone :one
+
+SELECT id, project_id, provider_type, secrets
+FROM oauth_proxy_providers
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+`
+
+type GetOAuthProxyProviderForCloneParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetOAuthProxyProviderForCloneRow struct {
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	ProviderType string
+	Secrets      []byte
+}
+
+// Remote session clients — credentials Gram uses when acting as an OAuth
+// client of a remote_session_issuer. client_secret_encrypted is stored
+// encrypted via the project encryption key.
+// Read just the fields cloneOAuthProxyProvider needs: project scoping for
+// isolation, provider_type to refuse non-custom providers, and the secrets
+// JSONB so the handler can extract client_id / client_secret server-side.
+func (q *Queries) GetOAuthProxyProviderForClone(ctx context.Context, arg GetOAuthProxyProviderForCloneParams) (GetOAuthProxyProviderForCloneRow, error) {
+	row := q.db.QueryRow(ctx, getOAuthProxyProviderForClone, arg.ID, arg.ProjectID)
+	var i GetOAuthProxyProviderForCloneRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ProviderType,
+		&i.Secrets,
 	)
 	return i, err
 }

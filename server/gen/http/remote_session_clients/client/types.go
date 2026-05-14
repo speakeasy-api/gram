@@ -30,6 +30,19 @@ type CreateRemoteSessionClientRequestBody struct {
 	AutoRegister *bool `form:"auto_register,omitempty" json:"auto_register,omitempty" xml:"auto_register,omitempty"`
 }
 
+// CloneClientFromOAuthProxyProviderRequestBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP request body.
+type CloneClientFromOAuthProxyProviderRequestBody struct {
+	// The oauth_proxy_provider to read client_id / client_secret from. Must live
+	// in the caller's project.
+	OauthProxyProviderID string `form:"oauth_proxy_provider_id" json:"oauth_proxy_provider_id" xml:"oauth_proxy_provider_id"`
+	// The remote_session_issuer the new client is registered with.
+	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
+	// The user_session_issuer the new client is paired with.
+	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+}
+
 // UpdateRemoteSessionClientRequestBody is the type of the
 // "remoteSessionClients" service "updateRemoteSessionClient" endpoint HTTP
 // request body.
@@ -46,6 +59,28 @@ type UpdateRemoteSessionClientRequestBody struct {
 // "remoteSessionClients" service "createRemoteSessionClient" endpoint HTTP
 // response body.
 type CreateRemoteSessionClientResponseBody struct {
+	// The remote_session_client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The owning project id.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The user_session_issuer this client is paired with.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID         *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	ClientIDIssuedAt *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// CloneClientFromOAuthProxyProviderResponseBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP response body.
+type CloneClientFromOAuthProxyProviderResponseBody struct {
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id.
@@ -291,6 +326,196 @@ type CreateRemoteSessionClientUnexpectedResponseBody struct {
 // "remoteSessionClients" service "createRemoteSessionClient" endpoint HTTP
 // response body for the "gateway_error" error.
 type CreateRemoteSessionClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneClientFromOAuthProxyProviderUnauthorizedResponseBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP response body for the "unauthorized" error.
+type CloneClientFromOAuthProxyProviderUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneClientFromOAuthProxyProviderForbiddenResponseBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP response body for the "forbidden" error.
+type CloneClientFromOAuthProxyProviderForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneClientFromOAuthProxyProviderBadRequestResponseBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP response body for the "bad_request" error.
+type CloneClientFromOAuthProxyProviderBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneClientFromOAuthProxyProviderNotFoundResponseBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP response body for the "not_found" error.
+type CloneClientFromOAuthProxyProviderNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneClientFromOAuthProxyProviderConflictResponseBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP response body for the "conflict" error.
+type CloneClientFromOAuthProxyProviderConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneClientFromOAuthProxyProviderUnsupportedMediaResponseBody is the type of
+// the "remoteSessionClients" service "cloneClientFromOAuthProxyProvider"
+// endpoint HTTP response body for the "unsupported_media" error.
+type CloneClientFromOAuthProxyProviderUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneClientFromOAuthProxyProviderInvalidResponseBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP response body for the "invalid" error.
+type CloneClientFromOAuthProxyProviderInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneClientFromOAuthProxyProviderInvariantViolationResponseBody is the type
+// of the "remoteSessionClients" service "cloneClientFromOAuthProxyProvider"
+// endpoint HTTP response body for the "invariant_violation" error.
+type CloneClientFromOAuthProxyProviderInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneClientFromOAuthProxyProviderUnexpectedResponseBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP response body for the "unexpected" error.
+type CloneClientFromOAuthProxyProviderUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneClientFromOAuthProxyProviderGatewayErrorResponseBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP response body for the "gateway_error" error.
+type CloneClientFromOAuthProxyProviderGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1101,6 +1326,18 @@ func NewCreateRemoteSessionClientRequestBody(p *remotesessionclients.CreateRemot
 	return body
 }
 
+// NewCloneClientFromOAuthProxyProviderRequestBody builds the HTTP request body
+// from the payload of the "cloneClientFromOAuthProxyProvider" endpoint of the
+// "remoteSessionClients" service.
+func NewCloneClientFromOAuthProxyProviderRequestBody(p *remotesessionclients.CloneClientFromOAuthProxyProviderPayload) *CloneClientFromOAuthProxyProviderRequestBody {
+	body := &CloneClientFromOAuthProxyProviderRequestBody{
+		OauthProxyProviderID:  p.OauthProxyProviderID,
+		RemoteSessionIssuerID: p.RemoteSessionIssuerID,
+		UserSessionIssuerID:   p.UserSessionIssuerID,
+	}
+	return body
+}
+
 // NewUpdateRemoteSessionClientRequestBody builds the HTTP request body from
 // the payload of the "updateRemoteSessionClient" endpoint of the
 // "remoteSessionClients" service.
@@ -1270,6 +1507,179 @@ func NewCreateRemoteSessionClientUnexpected(body *CreateRemoteSessionClientUnexp
 // NewCreateRemoteSessionClientGatewayError builds a remoteSessionClients
 // service createRemoteSessionClient endpoint gateway_error error.
 func NewCreateRemoteSessionClientGatewayError(body *CreateRemoteSessionClientGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneClientFromOAuthProxyProviderRemoteSessionClientOK builds a
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// result from a HTTP "OK" response.
+func NewCloneClientFromOAuthProxyProviderRemoteSessionClientOK(body *CloneClientFromOAuthProxyProviderResponseBody) *types.RemoteSessionClient {
+	v := &types.RemoteSessionClient{
+		ID:                    *body.ID,
+		ProjectID:             *body.ProjectID,
+		RemoteSessionIssuerID: *body.RemoteSessionIssuerID,
+		UserSessionIssuerID:   *body.UserSessionIssuerID,
+		ClientID:              *body.ClientID,
+		ClientIDIssuedAt:      *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt: body.ClientSecretExpiresAt,
+		CreatedAt:             *body.CreatedAt,
+		UpdatedAt:             *body.UpdatedAt,
+	}
+
+	return v
+}
+
+// NewCloneClientFromOAuthProxyProviderUnauthorized builds a
+// remoteSessionClients service cloneClientFromOAuthProxyProvider endpoint
+// unauthorized error.
+func NewCloneClientFromOAuthProxyProviderUnauthorized(body *CloneClientFromOAuthProxyProviderUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneClientFromOAuthProxyProviderForbidden builds a remoteSessionClients
+// service cloneClientFromOAuthProxyProvider endpoint forbidden error.
+func NewCloneClientFromOAuthProxyProviderForbidden(body *CloneClientFromOAuthProxyProviderForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneClientFromOAuthProxyProviderBadRequest builds a remoteSessionClients
+// service cloneClientFromOAuthProxyProvider endpoint bad_request error.
+func NewCloneClientFromOAuthProxyProviderBadRequest(body *CloneClientFromOAuthProxyProviderBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneClientFromOAuthProxyProviderNotFound builds a remoteSessionClients
+// service cloneClientFromOAuthProxyProvider endpoint not_found error.
+func NewCloneClientFromOAuthProxyProviderNotFound(body *CloneClientFromOAuthProxyProviderNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneClientFromOAuthProxyProviderConflict builds a remoteSessionClients
+// service cloneClientFromOAuthProxyProvider endpoint conflict error.
+func NewCloneClientFromOAuthProxyProviderConflict(body *CloneClientFromOAuthProxyProviderConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneClientFromOAuthProxyProviderUnsupportedMedia builds a
+// remoteSessionClients service cloneClientFromOAuthProxyProvider endpoint
+// unsupported_media error.
+func NewCloneClientFromOAuthProxyProviderUnsupportedMedia(body *CloneClientFromOAuthProxyProviderUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneClientFromOAuthProxyProviderInvalid builds a remoteSessionClients
+// service cloneClientFromOAuthProxyProvider endpoint invalid error.
+func NewCloneClientFromOAuthProxyProviderInvalid(body *CloneClientFromOAuthProxyProviderInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneClientFromOAuthProxyProviderInvariantViolation builds a
+// remoteSessionClients service cloneClientFromOAuthProxyProvider endpoint
+// invariant_violation error.
+func NewCloneClientFromOAuthProxyProviderInvariantViolation(body *CloneClientFromOAuthProxyProviderInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneClientFromOAuthProxyProviderUnexpected builds a remoteSessionClients
+// service cloneClientFromOAuthProxyProvider endpoint unexpected error.
+func NewCloneClientFromOAuthProxyProviderUnexpected(body *CloneClientFromOAuthProxyProviderUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneClientFromOAuthProxyProviderGatewayError builds a
+// remoteSessionClients service cloneClientFromOAuthProxyProvider endpoint
+// gateway_error error.
+func NewCloneClientFromOAuthProxyProviderGatewayError(body *CloneClientFromOAuthProxyProviderGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1992,6 +2402,60 @@ func ValidateCreateRemoteSessionClientResponseBody(body *CreateRemoteSessionClie
 	return
 }
 
+// ValidateCloneClientFromOAuthProxyProviderResponseBody runs the validations
+// defined on CloneClientFromOAuthProxyProviderResponseBody
+func ValidateCloneClientFromOAuthProxyProviderResponseBody(body *CloneClientFromOAuthProxyProviderResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.ClientIDIssuedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.ClientIDIssuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+	}
+	if body.ClientSecretExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
 // ValidateUpdateRemoteSessionClientResponseBody runs the validations defined
 // on UpdateRemoteSessionClientResponseBody
 func ValidateUpdateRemoteSessionClientResponseBody(body *UpdateRemoteSessionClientResponseBody) (err error) {
@@ -2337,6 +2801,256 @@ func ValidateCreateRemoteSessionClientUnexpectedResponseBody(body *CreateRemoteS
 // ValidateCreateRemoteSessionClientGatewayErrorResponseBody runs the
 // validations defined on createRemoteSessionClient_gateway_error_response_body
 func ValidateCreateRemoteSessionClientGatewayErrorResponseBody(body *CreateRemoteSessionClientGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneClientFromOAuthProxyProviderUnauthorizedResponseBody runs the
+// validations defined on
+// cloneClientFromOAuthProxyProvider_unauthorized_response_body
+func ValidateCloneClientFromOAuthProxyProviderUnauthorizedResponseBody(body *CloneClientFromOAuthProxyProviderUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneClientFromOAuthProxyProviderForbiddenResponseBody runs the
+// validations defined on
+// cloneClientFromOAuthProxyProvider_forbidden_response_body
+func ValidateCloneClientFromOAuthProxyProviderForbiddenResponseBody(body *CloneClientFromOAuthProxyProviderForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneClientFromOAuthProxyProviderBadRequestResponseBody runs the
+// validations defined on
+// cloneClientFromOAuthProxyProvider_bad_request_response_body
+func ValidateCloneClientFromOAuthProxyProviderBadRequestResponseBody(body *CloneClientFromOAuthProxyProviderBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneClientFromOAuthProxyProviderNotFoundResponseBody runs the
+// validations defined on
+// cloneClientFromOAuthProxyProvider_not_found_response_body
+func ValidateCloneClientFromOAuthProxyProviderNotFoundResponseBody(body *CloneClientFromOAuthProxyProviderNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneClientFromOAuthProxyProviderConflictResponseBody runs the
+// validations defined on
+// cloneClientFromOAuthProxyProvider_conflict_response_body
+func ValidateCloneClientFromOAuthProxyProviderConflictResponseBody(body *CloneClientFromOAuthProxyProviderConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneClientFromOAuthProxyProviderUnsupportedMediaResponseBody runs
+// the validations defined on
+// cloneClientFromOAuthProxyProvider_unsupported_media_response_body
+func ValidateCloneClientFromOAuthProxyProviderUnsupportedMediaResponseBody(body *CloneClientFromOAuthProxyProviderUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneClientFromOAuthProxyProviderInvalidResponseBody runs the
+// validations defined on
+// cloneClientFromOAuthProxyProvider_invalid_response_body
+func ValidateCloneClientFromOAuthProxyProviderInvalidResponseBody(body *CloneClientFromOAuthProxyProviderInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneClientFromOAuthProxyProviderInvariantViolationResponseBody runs
+// the validations defined on
+// cloneClientFromOAuthProxyProvider_invariant_violation_response_body
+func ValidateCloneClientFromOAuthProxyProviderInvariantViolationResponseBody(body *CloneClientFromOAuthProxyProviderInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneClientFromOAuthProxyProviderUnexpectedResponseBody runs the
+// validations defined on
+// cloneClientFromOAuthProxyProvider_unexpected_response_body
+func ValidateCloneClientFromOAuthProxyProviderUnexpectedResponseBody(body *CloneClientFromOAuthProxyProviderUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneClientFromOAuthProxyProviderGatewayErrorResponseBody runs the
+// validations defined on
+// cloneClientFromOAuthProxyProvider_gateway_error_response_body
+func ValidateCloneClientFromOAuthProxyProviderGatewayErrorResponseBody(body *CloneClientFromOAuthProxyProviderGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

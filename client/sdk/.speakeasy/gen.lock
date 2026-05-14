@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 0af29334b330c66eee75cdf07387a787
+  docChecksum: 5b79f292ecaa111e503072bb1973a3b4
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -156,6 +156,8 @@ trackedFiles:
     last_write_checksum: sha1:9aeeb4a542ec059884f17b4d64a4200ea5f462f5
   docs/models/components/claudehookresult.md:
     last_write_checksum: sha1:e29f7febd8b2bebbe3c91639ce9b538e22f23356
+  docs/models/components/cloneclientfromoauthproxyproviderform.md:
+    last_write_checksum: sha1:8b7c704d386943adb2fe3410a94ba2391201a7b2
   docs/models/components/cloneenvironmentrequestbody.md:
     last_write_checksum: sha1:b8f70e603600ad77b21e37d50cdcde0ee184a2c9
   docs/models/components/codexhookpayload.md:
@@ -1060,6 +1062,14 @@ trackedFiles:
     last_write_checksum: sha1:df0ade5b1bee55ad3029d5e609fe67d8dbfbc2b5
   docs/models/operations/clearmcpregistrycachesecurityoption2.md:
     last_write_checksum: sha1:4b9e06e065173677603f86f6b62ddf0c843a356e
+  docs/models/operations/cloneclientfromoauthproxyproviderrequest.md:
+    last_write_checksum: sha1:19a1462a5597dda30576271ce85240f7d77fce6a
+  docs/models/operations/cloneclientfromoauthproxyprovidersecurity.md:
+    last_write_checksum: sha1:95d322de1089de3efd28e5651f0f7dbc36cb8f1e
+  docs/models/operations/cloneclientfromoauthproxyprovidersecurityoption1.md:
+    last_write_checksum: sha1:4f8da61e0ed05ac5f471016a3e085c400b4b1eb2
+  docs/models/operations/cloneclientfromoauthproxyprovidersecurityoption2.md:
+    last_write_checksum: sha1:cd05ad2bc4b66ae922dea4dae350256b1d542556
   docs/models/operations/cloneenvironmentrequest.md:
     last_write_checksum: sha1:bfc0cdb38b0d30ee58d15832eefa0e1a50af0330
   docs/models/operations/cloneenvironmentsecurity.md:
@@ -2651,7 +2661,7 @@ trackedFiles:
   docs/sdks/remotemcp/README.md:
     last_write_checksum: sha1:ba40ec39aacdc278cab5c33f3c7668bade49ca6c
   docs/sdks/remotesessionclients/README.md:
-    last_write_checksum: sha1:f92af989def5cbd7fa482fc179c2b8eb6659f3b0
+    last_write_checksum: sha1:5423bae0e7002d370a455a446ff196279fb6639c
   docs/sdks/remotesessionissuers/README.md:
     last_write_checksum: sha1:69682b216c8455f4aefa76ef8e94a7058b59857b
   docs/sdks/remotesessions/README.md:
@@ -3174,6 +3184,8 @@ trackedFiles:
     last_write_checksum: sha1:f078bf874d38cfebf8e5614af75b94d3af6239ca
   src/funcs/remoteMcpVerifyURL.ts:
     last_write_checksum: sha1:9f0f774d3c687cdc2a068a156179cf6efea40cac
+  src/funcs/remoteSessionClientsCloneClientFromOAuthProxyProvider.ts:
+    last_write_checksum: sha1:e5ada8454c71337288791c99c48aff6a7ed3d7b1
   src/funcs/remoteSessionClientsCreate.ts:
     last_write_checksum: sha1:355d9b6f91985725b78f816ec087c55da0c1e61e
   src/funcs/remoteSessionClientsDelete.ts:
@@ -3588,6 +3600,8 @@ trackedFiles:
     last_write_checksum: sha1:f990486e8333c922eb2244e05361ba69c4c472b7
   src/models/components/claudehookresult.ts:
     last_write_checksum: sha1:d72da8680ef447c6322a6f1162d87dfeca8bf1ca
+  src/models/components/cloneclientfromoauthproxyproviderform.ts:
+    last_write_checksum: sha1:436daac86b753fad5eb848aeeeedc26456ac4a5c
   src/models/components/cloneenvironmentrequestbody.ts:
     last_write_checksum: sha1:b1706b25cf4df77a03adf7a51df0566edb5b9147
   src/models/components/codexhookpayload.ts:
@@ -3884,7 +3898,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:584db13d611b1f3d3dc7ae46f26420a78b064e86
+    last_write_checksum: sha1:ea73df793671babb0a613623ba23edd165614511
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -4626,6 +4640,8 @@ trackedFiles:
     pristine_git_object: 0e1b5a154af078c04c6e289ed4796e1379b1460f
   src/models/operations/clearmcpregistrycache.ts:
     last_write_checksum: sha1:d6fd706c54c7f486d9cf289ea3ebe4b848e4a92d
+  src/models/operations/cloneclientfromoauthproxyprovider.ts:
+    last_write_checksum: sha1:0703bd13fe6c4285a5d8769ec4d316b7e5b2e025
   src/models/operations/cloneenvironment.ts:
     last_write_checksum: sha1:9924c5d3a7174f48f167e36d9b1f77cf2fa24653
   src/models/operations/clonetoolset.ts:
@@ -4930,7 +4946,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:e5cc7956d5d89a183a23c475762a7c1a7de4e3e3
+    last_write_checksum: sha1:5f1157debaec1bfb6900da52c3faf948dcc0f4d5
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -5380,6 +5396,8 @@ trackedFiles:
     id: fb34660efa37
     last_write_checksum: sha1:f894807a99070df2c7c69fe762665b475ee7efa1
     pristine_git_object: 0469e624ed8634d1885e61591fedbba189a28eb4
+  src/react-query/cloneClientFromOAuthProxyProvider.ts:
+    last_write_checksum: sha1:12a74af12efb5958952336758d916295f5a14e42
   src/react-query/cloneEnvironment.ts:
     last_write_checksum: sha1:a9e55bd54f67750bc5326edae1f15e048459ed1e
   src/react-query/cloneToolset.ts:
@@ -5692,7 +5710,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:e00971c04baff511fbbdffa7cca5cade536d37bc
+    last_write_checksum: sha1:4b7829a7949c66280c5aacac7e5ca38a4ab9e2af
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -6413,7 +6431,7 @@ trackedFiles:
   src/sdk/remotemcp.ts:
     last_write_checksum: sha1:b441a0e7f045edc5e8e346027d0b9b9b5ca17d3c
   src/sdk/remotesessionclients.ts:
-    last_write_checksum: sha1:4d37ea00a0f97673497698af9cca29a09aae0fe0
+    last_write_checksum: sha1:fb6ce207fea0c5121f2bd9a135f843a03f86e6a6
   src/sdk/remotesessionissuers.ts:
     last_write_checksum: sha1:22b8a84e9a75cd661e51a4326c328f94f3107e27
   src/sdk/remotesessions.ts:
@@ -9580,6 +9598,28 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  cloneOAuthProxyProvider:
+    speakeasy-default-clone-O-auth-proxy-provider:
+      requestBody:
+        application/json: {"oauth_proxy_provider_id": "635fd5d5-dd94-4b68-ac14-9e43e62bfc3f", "remote_session_issuer_id": "dd7f0b47-9e44-4a03-b85d-24403425a4e0", "user_session_issuer_id": "b31ad3a5-1392-4428-9621-7177c0c344f8"}
+      responses:
+        "200":
+          application/json: {"client_id": "<id>", "client_id_issued_at": "2024-09-09T16:12:40.803Z", "created_at": "2025-07-06T02:09:41.503Z", "id": "63084392-ab6b-4697-8d3a-46fd0cc18030", "project_id": "34f7ba33-10e4-4b1e-9f2c-2a4ca017638a", "remote_session_issuer_id": "2748ecb5-b9e4-4425-8df8-217b37f116f3", "updated_at": "2026-04-19T21:27:43.099Z", "user_session_issuer_id": "28f9e9ae-b982-4233-965f-405edc1ac0ec"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  cloneClientFromOAuthProxyProvider:
+    speakeasy-default-clone-client-from-O-auth-proxy-provider:
+      requestBody:
+        application/json: {"oauth_proxy_provider_id": "4a856623-2d21-4b55-b070-a5607b54b87a", "remote_session_issuer_id": "3895728d-43a4-4b97-8f00-c03a994bce37", "user_session_issuer_id": "b0f7056a-e9d9-4356-a167-cc7cd78aaddc"}
+      responses:
+        "200":
+          application/json: {"client_id": "<id>", "client_id_issued_at": "2024-06-09T04:24:29.173Z", "created_at": "2025-02-18T14:09:42.387Z", "id": "f3fc5b5a-e998-4c89-a8f2-8cf8a8b51f4a", "project_id": "25d93e75-99b2-46ab-b933-b11be662a0e4", "remote_session_issuer_id": "a828f763-fcd9-422a-8e23-e0c7f1bdc3de", "updated_at": "2025-10-11T07:26:15.440Z", "user_session_issuer_id": "dd99072f-e0be-47b3-b497-023cf5c0ab85"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:
