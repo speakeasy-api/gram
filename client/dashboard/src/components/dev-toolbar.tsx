@@ -1,7 +1,8 @@
 import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import { Switch } from "./ui/switch";
-import { useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
   ChevronUp,
@@ -13,6 +14,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -21,8 +23,9 @@ import { createPortal } from "react-dom";
 const STORAGE_KEY = "gram-rbac-dev-override";
 const HIDDEN_KEY = "gram-dev-toolbar-hidden";
 const SUPER_ADMIN_KEY = "gram-dev-super-admin";
+const SHADOW_MCP_RULES_PAGE_SIZE = 200;
 
-type ResourceType = "org" | "project" | "environment" | "mcp";
+type ResourceType = "org" | "project" | "environment" | "mcp" | "shadow_mcp";
 
 const SCOPE_DEFS: {
   scope: string;
@@ -83,6 +86,12 @@ const SCOPE_DEFS: {
     label: "mcp:connect",
     resourceType: "mcp",
     description: "Execute MCP tool calls",
+  },
+  {
+    scope: "shadow_mcp:connect",
+    label: "shadow_mcp:connect",
+    resourceType: "shadow_mcp",
+    description: "Connect to approved Shadow MCP servers",
   },
 ];
 
@@ -158,6 +167,7 @@ const resourcesCacheKey = (orgId: string) => `gram-rbac-dev-resources:${orgId}`;
 type CachedResources = {
   projects: { id: string; label: string }[];
   mcps: { id: string; label: string }[];
+  shadowMcps?: { id: string; label: string }[];
 };
 
 function loadCachedResources(orgId: string): CachedResources | null {
@@ -197,6 +207,7 @@ const GROUP_ORDER: { key: ResourceType; label: string }[] = [
   { key: "project", label: "Project" },
   { key: "environment", label: "Environments" },
   { key: "mcp", label: "MCP" },
+  { key: "shadow_mcp", label: "Shadow MCP" },
 ];
 
 export function RBACDevToolbar() {
@@ -252,6 +263,7 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
     () => localStorage.getItem(SUPER_ADMIN_KEY) === "1",
   );
   const queryClient = useQueryClient();
+  const client = useSdkClient();
   const organization = useOrganization();
   const liveProjects = (organization?.projects ?? []).map((project) => ({
     id: project.id,
@@ -264,9 +276,59 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
     id: toolset.id,
     label: toolset.name,
   }));
+  const shadowMCPRulesQuery = useInfiniteQuery({
+    queryKey: ["dev-toolbar", "shadow-mcp", "access-rules", "allowed"],
+    queryFn: ({ pageParam }) =>
+      client.access.listShadowMCPAccessRules({
+        disposition: "allowed",
+        limit: SHADOW_MCP_RULES_PAGE_SIZE,
+        cursor: pageParam,
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: !state.enabled,
+    retry: false,
+  });
+  const {
+    data: shadowMCPRulesData,
+    fetchNextPage: fetchNextShadowMCPRulesPage,
+    hasNextPage: hasNextShadowMCPRulesPage,
+    isError: isShadowMCPRulesError,
+    isFetching: isFetchingShadowMCPRules,
+  } = shadowMCPRulesQuery;
+  const liveShadowMcps = useMemo(
+    () =>
+      shadowMCPRulesData?.pages
+        .flatMap((page) => page.rules)
+        .map((rule) => ({
+          id: rule.id,
+          label:
+            rule.displayName || rule.observedServerIdentity || rule.matchValue,
+        })) ?? [],
+    [shadowMCPRulesData?.pages],
+  );
+
+  useEffect(() => {
+    if (
+      state.enabled ||
+      isShadowMCPRulesError ||
+      !hasNextShadowMCPRulesPage ||
+      isFetchingShadowMCPRules
+    ) {
+      return;
+    }
+
+    void fetchNextShadowMCPRulesPage();
+  }, [
+    fetchNextShadowMCPRulesPage,
+    hasNextShadowMCPRulesPage,
+    isFetchingShadowMCPRules,
+    isShadowMCPRulesError,
+    state.enabled,
+  ]);
 
   // Cache the full resource list when overrides are off so the toolbar
-  // still shows all projects/MCPs after the user restricts scopes.
+  // still shows scoped options after the user restricts scopes.
   const orgProjects = organization?.projects;
   const toolsets = toolsetsData?.toolsets;
   const orgId = organization?.id ?? "";
@@ -282,16 +344,19 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
         {
           projects: orgProjects.map((p) => ({ id: p.id, label: p.slug })),
           mcps: toolsets.map((t) => ({ id: t.id, label: t.name })),
+          shadowMcps: liveShadowMcps,
         },
         orgId,
       );
     }
-  }, [state.enabled, orgId, orgProjects, toolsets]);
+  }, [state.enabled, orgId, orgProjects, toolsets, liveShadowMcps]);
 
   const cached = orgId ? loadCachedResources(orgId) : null;
   const projectResources =
     state.enabled && cached ? cached.projects : liveProjects;
   const mcpResources = state.enabled && cached ? cached.mcps : liveMcps;
+  const shadowMCPResources =
+    state.enabled && cached ? (cached.shadowMcps ?? []) : liveShadowMcps;
   const rootRef = useRef<HTMLDivElement>(null);
   const dragOffset = useRef<{
     ox: number;
@@ -621,6 +686,8 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
                             knownResources = projectResources;
                           } else if (def.resourceType === "mcp") {
                             knownResources = mcpResources;
+                          } else if (def.resourceType === "shadow_mcp") {
+                            knownResources = shadowMCPResources;
                           }
 
                           return (
