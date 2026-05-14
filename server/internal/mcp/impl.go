@@ -253,6 +253,8 @@ func NewService(
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.ErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.remoteChallengeMgr.HandleRemoteLoginCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.ServePublic).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", oops.ErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return service.HandleGetServer(w, r, metadataService)
@@ -745,28 +747,39 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 	return anySchemeSatisfied(schemes, mergedEnv, oauthToken), nil
 }
 
+// loadToolsetFromMcpSlug resolves the toolset for a route-driven request
+// (path mcpSlug + optional customdomains.Context). Distinct from
+// resolveMcp: when there is no customdomain context, it falls back to
+// GetToolsetByMcpSlug — which prefers a platform-domain toolset but
+// accepts a custom-domain toolset when no platform-only row exists. The
+// fallback is load-bearing (TestServePublic_CustomDomain_PlatformDomainStillWorks)
+// because customers attach custom domains to existing toolsets without
+// retiring the platform URL.
+//
+// resolveMcp, used by stored-state callbacks, is strict-platform on an
+// unset CustomDomainID — there the value is an explicit assertion
+// rather than a route inference.
 func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *customdomains.Context, error) {
-	var toolset toolsets_repo.Toolset
-	var toolsetErr error
-	var customDomainCtx *customdomains.Context
-	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
-		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
-			McpSlug:        conv.ToPGText(mcpSlug),
-			CustomDomainID: uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true},
+	customDomainCtx := customdomains.FromContext(ctx)
+	if customDomainCtx != nil {
+		toolset, err := s.resolveMcp(ctx, LegacyMcpEndpointRef{
+			McpSlug:        mcpSlug,
+			CustomDomainID: uuid.NullUUID{UUID: customDomainCtx.DomainID, Valid: true},
 		})
-		customDomainCtx = domainCtx
-	} else {
-		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
+		if err != nil {
+			return nil, nil, err
+		}
+		return toolset, customDomainCtx, nil
 	}
 
+	toolset, err := s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
 	switch {
-	case errors.Is(toolsetErr, pgx.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil, errToolsetNotFound
-	case toolsetErr != nil:
-		return nil, nil, fmt.Errorf("lookup toolset: %w", toolsetErr)
+	case err != nil:
+		return nil, nil, fmt.Errorf("lookup toolset: %w", err)
 	}
-
-	return &toolset, customDomainCtx, nil
+	return &toolset, nil, nil
 }
 
 // loadHeaderDisplayNames loads the header display names mapping from MCP metadata.

@@ -103,12 +103,19 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	challengeID := uuid.NewString()
+	customDomainID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if customDomainCtx != nil {
+		customDomainID = uuid.NullUUID{UUID: customDomainCtx.DomainID, Valid: true}
+	}
 
 	challengeState := AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		ToolsetID:           toolset.ID,
-		ClientID:            req.ClientID,
+		Endpoint: LegacyMcpEndpointRef{
+			McpSlug:        mcpSlug,
+			CustomDomainID: customDomainID,
+		},
+		ClientID: req.ClientID,
 		RedirectURI:         req.RedirectURI,
 		State:               req.State,
 		CodeChallenge:       req.CodeChallenge,
@@ -129,7 +136,7 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	if !toolset.McpIsPublic {
-		callbackURL := fmt.Sprintf("%s/mcp/%s/idp_callback", s.serverURL.String(), mcpSlug)
+		callbackURL := fmt.Sprintf("%s/mcp/idp_callback", s.serverURL.String())
 		idpURL, err := s.sessions.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
 			CallbackURL:     callbackURL,
 			Scope:           "",

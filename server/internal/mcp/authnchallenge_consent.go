@@ -126,8 +126,8 @@ func (s *Service) handleConsentGet(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").Log(ctx, logger)
 	}
-	if challengeState.ToolsetID != toolset.ID {
-		return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this MCP server").Log(ctx, logger)
+	if err := compareToolsetEndpoint(toolset, challengeState.Endpoint); err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").Log(ctx, logger)
 	}
 
 	client, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
@@ -230,8 +230,8 @@ func (s *Service) handleConsentPost(w http.ResponseWriter, r *http.Request) erro
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").Log(ctx, logger)
 	}
-	if challengeState.ToolsetID != toolset.ID {
-		return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this MCP server").Log(ctx, logger)
+	if err := compareToolsetEndpoint(toolset, challengeState.Endpoint); err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").Log(ctx, logger)
 	}
 
 	// Explicit action required: fail closed on missing / unknown values so

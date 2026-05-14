@@ -6,7 +6,7 @@
 //     and the picked remote_session_client, it mints a RemoteLoginState in
 //     Redis (carrying PKCE + parent binding) and returns the authorize URL
 //     to redirect the user to.
-//   - HandleRemoteLoginCallback is bound to `GET /mcp/{slug}/remote_login_callback`.
+//   - HandleRemoteLoginCallback is bound to `GET /mcp/remote_login_callback`.
 //     Reads ?code+?state, validates state, exchanges code for tokens at the
 //     upstream token endpoint, encrypts and persists the remote_sessions
 //     row, then redirects back to /mcp/{slug}/connect with the parent
@@ -216,7 +216,7 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		return "", fmt.Errorf("generate code verifier: %w", err)
 	}
 	codeChallenge := s256Challenge(verifier)
-	redirectURI := m.callbackURL(parent.McpSlug)
+	redirectURI := m.callbackURL()
 
 	state := RemoteLoginState{
 		ID:                    stateID,
@@ -254,17 +254,16 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 }
 
 // HandleRemoteLoginCallback is the GET handler for
-// /mcp/{mcpSlug}/remote_login_callback. Bound by mcp/ at route-mount time.
+// /mcp/remote_login_callback. Bound by mcp/ at route-mount time. The legacy
+// /mcp/{mcpSlug}/remote_login_callback route is still accepted, but the MCP
+// slug is resolved from the stored RemoteLoginState.
 // Coordinates code → token exchange at the upstream token endpoint and
 // persists the result in remote_sessions; on success redirects back to
 // /mcp/{slug}/connect?state={parent_challenge_id}.
 func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	mcpSlug := chi.URLParam(r, "mcpSlug")
-	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, m.logger)
-	}
-	logger := m.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
+	routeMcpSlug := chi.URLParam(r, "mcpSlug")
+	logger := m.logger
 
 	q := r.URL.Query()
 	if errCode := q.Get("error"); errCode != "" {
@@ -290,11 +289,24 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "remote login state not found or expired").Log(ctx, logger)
 	}
-	if state.McpSlug != mcpSlug {
+	mcpSlug := state.McpSlug
+	if mcpSlug == "" {
+		mcpSlug = routeMcpSlug
+	}
+	if mcpSlug == "" {
+		return oops.E(oops.CodeBadRequest, nil, "mcp slug is missing from remote login state").Log(ctx, logger)
+	}
+	if routeMcpSlug != "" && routeMcpSlug != mcpSlug {
+		return oops.E(oops.CodeUnauthorized, nil, "remote login state does not match this MCP server").Log(ctx, logger)
+	}
+	if state.McpSlug != "" && state.McpSlug != mcpSlug {
 		return oops.E(oops.CodeUnauthorized, nil, "remote login state does not match this MCP server").Log(ctx, logger)
 	}
 
-	logger = logger.With(attr.SlogProjectID(state.ProjectID.String()))
+	logger = logger.With(
+		attr.SlogToolsetMCPSlug(mcpSlug),
+		attr.SlogProjectID(state.ProjectID.String()),
+	)
 
 	queries := remotesessions_repo.New(m.db)
 	clientRow, err := queries.GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{
@@ -372,8 +384,8 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	return nil
 }
 
-func (m *ChallengeManager) callbackURL(mcpSlug string) string {
-	return strings.TrimRight(m.serverURL.String(), "/") + "/mcp/" + mcpSlug + "/remote_login_callback"
+func (m *ChallengeManager) callbackURL() string {
+	return strings.TrimRight(m.serverURL.String(), "/") + "/mcp/remote_login_callback"
 }
 
 // tokenResponse is the slice of the upstream /token reply we care about.
