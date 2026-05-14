@@ -1007,7 +1007,7 @@ type UpsertRemoteSessionParams struct {
 	Scopes                []string
 }
 
-// Used by /mcp/{slug}/remote_login_callback to materialise (or refresh) the
+// Used by /mcp/remote_login_callback to materialise (or refresh) the
 // remote_session for a (subject, client) pair. Conflict target matches the
 // partial unique index on (subject_urn, remote_session_client_id) WHERE
 // deleted IS FALSE; on conflict we overwrite every token field. A

@@ -24,7 +24,7 @@ import (
 func TestAuthorize_CustomDomainPrivateChallengeUsesGramIDPCallback(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti, _ := newTestMCPServiceWithDevIDP(t)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -62,12 +62,12 @@ func TestAuthorize_CustomDomainPrivateChallengeUsesGramIDPCallback(t *testing.T)
 
 	loc, err := url.Parse(w.Header().Get("Location"))
 	require.NoError(t, err)
-	returnURL, err := url.Parse(loc.Query().Get("return_url"))
+	redirectURI, err := url.Parse(loc.Query().Get("redirect_uri"))
 	require.NoError(t, err)
-	require.Equal(t, ti.serverURL.Scheme, returnURL.Scheme)
-	require.Equal(t, ti.serverURL.Host, returnURL.Host)
-	require.Equal(t, "/mcp/idp_callback", returnURL.Path)
-	require.NotEqual(t, domain.Domain, returnURL.Host)
+	require.Equal(t, ti.serverURL.Scheme, redirectURI.Scheme)
+	require.Equal(t, ti.serverURL.Host, redirectURI.Host)
+	require.Equal(t, "/mcp/idp_callback", redirectURI.Path)
+	require.NotEqual(t, domain.Domain, redirectURI.Host)
 
 	_, authnCache := buildChallengeManagerForTest(t, ti)
 	stored, err := authnCache.Get(ctx, "authnChallenge:"+loc.Query().Get("state"))

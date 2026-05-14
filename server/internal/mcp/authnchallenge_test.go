@@ -245,7 +245,10 @@ func TestHandleIDPCallback_ExchangesCodeAndRedirectsToConsent(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		ToolsetID:           toolset.ID,
+		Endpoint: mcp.LegacyMcpEndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
 		State:               "client-state",
@@ -298,7 +301,10 @@ func TestHandleIDPCallback_UserNotInOrg_ReturnsForbidden(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		ToolsetID:           toolset.ID,
+		Endpoint: mcp.LegacyMcpEndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
 		State:               "client-state",
@@ -354,7 +360,10 @@ func TestHandleIDPCallback_IDPError_ForwardsToClient(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		ToolsetID:           toolset.ID,
+		Endpoint: mcp.LegacyMcpEndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
 		State:               "client-state",
@@ -421,7 +430,10 @@ func TestHandleIDPCallback_ToolsetMismatch_ReturnsUnauthorized(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		ToolsetID:           uuid.New(), // wrong toolset
+		Endpoint: mcp.LegacyMcpEndpointRef{
+			McpSlug:        "wrong-toolset-slug",
+			CustomDomainID: uuid.NullUUID{Valid: false},
+		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
 		CodeChallenge:       "abc",
@@ -457,7 +469,10 @@ func TestHandleIDPCallback_MissingCode_ReturnsError(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		ToolsetID:           toolset.ID,
+		Endpoint: mcp.LegacyMcpEndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
 		CodeChallenge:       "abc",
@@ -497,7 +512,10 @@ func TestHandleIDPCallback_ExchangeFailure_ReturnsUnauthorized(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		ToolsetID:           toolset.ID,
+		Endpoint: mcp.LegacyMcpEndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
 		CodeChallenge:       "abc",
