@@ -234,7 +234,7 @@ WHERE ora.organization_id = @organization_id
   AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
 GROUP BY role_slug;
 
--- name: ReplaceOrganizationRoleAssignment :exec
+-- name: ReplaceOrganizationRoleAssignment :one
 WITH input_role_urn AS (
   SELECT 'role:organization:' || id::text AS role_urn
   FROM organization_roles
@@ -275,9 +275,13 @@ upserted AS (
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     updated_at = clock_timestamp()
   RETURNING role_urn
-)
+),
+deleted AS (
 DELETE FROM organization_role_assignments
 WHERE organization_role_assignments.organization_id = @organization_id
   AND organization_role_assignments.workos_user_id = @workos_user_id
   AND EXISTS (SELECT 1 FROM upserted)
-  AND organization_role_assignments.role_urn NOT IN (SELECT role_urn FROM upserted);
+  AND organization_role_assignments.role_urn NOT IN (SELECT role_urn FROM upserted)
+  RETURNING 1
+)
+SELECT COUNT(*)::bigint FROM upserted;

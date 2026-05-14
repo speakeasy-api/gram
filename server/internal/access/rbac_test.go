@@ -153,7 +153,8 @@ func TestService_CreateRole_AllowsOrgAdminGrant(t *testing.T) {
 
 	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{Name: "Allowed", Description: "Allowed"})
 	require.NoError(t, err)
-	require.Equal(t, "role_allowed", role.ID)
+	require.NotEmpty(t, role.ID)
+	require.NotEqual(t, "role_allowed", role.ID)
 }
 
 func TestService_UpdateRole_ForbiddenWithoutOrgAdminGrant(t *testing.T) {

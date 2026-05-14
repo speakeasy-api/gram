@@ -620,18 +620,18 @@ func (q *Queries) MarkOrganizationRoleDeleted(ctx context.Context, arg MarkOrgan
 	return result.RowsAffected(), nil
 }
 
-const replaceOrganizationRoleAssignment = `-- name: ReplaceOrganizationRoleAssignment :exec
+const replaceOrganizationRoleAssignment = `-- name: ReplaceOrganizationRoleAssignment :one
 WITH input_role_urn AS (
   SELECT 'role:organization:' || id::text AS role_urn
   FROM organization_roles
   WHERE organization_roles.organization_id = $1
-    AND organization_roles.workos_slug = $3
+    AND organization_roles.workos_slug = $2
     AND organization_roles.deleted IS FALSE
     AND organization_roles.workos_deleted IS FALSE
   UNION ALL
   SELECT 'role:global:' || id::text AS role_urn
   FROM global_roles
-  WHERE global_roles.workos_slug = $3
+  WHERE global_roles.workos_slug = $2
     AND global_roles.deleted IS FALSE
     AND global_roles.workos_deleted IS FALSE
 ),
@@ -647,7 +647,7 @@ upserted AS (
   )
   SELECT
     $1,
-    $2,
+    $3,
     $4,
     input_role_urn.role_urn,
     $5,
@@ -661,35 +661,41 @@ upserted AS (
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     updated_at = clock_timestamp()
   RETURNING role_urn
-)
+),
+deleted AS (
 DELETE FROM organization_role_assignments
 WHERE organization_role_assignments.organization_id = $1
-  AND organization_role_assignments.workos_user_id = $2
+  AND organization_role_assignments.workos_user_id = $3
   AND EXISTS (SELECT 1 FROM upserted)
   AND organization_role_assignments.role_urn NOT IN (SELECT role_urn FROM upserted)
+  RETURNING 1
+)
+SELECT COUNT(*)::bigint FROM upserted
 `
 
 type ReplaceOrganizationRoleAssignmentParams struct {
 	OrganizationID     string
-	WorkosUserID       string
 	WorkosRoleSlug     string
+	WorkosUserID       string
 	UserID             pgtype.Text
 	WorkosMembershipID pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz
 	WorkosLastEventID  pgtype.Text
 }
 
-func (q *Queries) ReplaceOrganizationRoleAssignment(ctx context.Context, arg ReplaceOrganizationRoleAssignmentParams) error {
-	_, err := q.db.Exec(ctx, replaceOrganizationRoleAssignment,
+func (q *Queries) ReplaceOrganizationRoleAssignment(ctx context.Context, arg ReplaceOrganizationRoleAssignmentParams) (int64, error) {
+	row := q.db.QueryRow(ctx, replaceOrganizationRoleAssignment,
 		arg.OrganizationID,
-		arg.WorkosUserID,
 		arg.WorkosRoleSlug,
+		arg.WorkosUserID,
 		arg.UserID,
 		arg.WorkosMembershipID,
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
 	)
-	return err
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const upsertGlobalRole = `-- name: UpsertGlobalRole :exec

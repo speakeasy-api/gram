@@ -486,7 +486,6 @@ func newWorkerCommand() *cli.Command {
 				rbacEnabled,
 				challengeLoggingEnabled,
 				workos.NewStubClient(),
-				cache.NewRedisCacheAdapter(redisClient),
 				authz.EngineOpts{DevMode: c.String("environment") == "local"},
 			)
 

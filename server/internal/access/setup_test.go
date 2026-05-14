@@ -95,7 +95,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, NewRoleManager(logger, conn, roles, authzEngine), authzEngine, noopFeatureCacheWriter{}, auditLogger)
 
 	return ctx, &testInstance{
@@ -187,7 +187,7 @@ func seedRoleAssignment(t *testing.T, ctx context.Context, conn *pgxpool.Pool, o
 		updatedAt = parsed
 	}
 
-	err := accessrepo.New(conn).ReplaceOrganizationRoleAssignment(ctx, accessrepo.ReplaceOrganizationRoleAssignmentParams{
+	replaced, err := accessrepo.New(conn).ReplaceOrganizationRoleAssignment(ctx, accessrepo.ReplaceOrganizationRoleAssignmentParams{
 		OrganizationID:     organizationID,
 		WorkosUserID:       member.UserID,
 		WorkosRoleSlug:     member.RoleSlug,
@@ -197,6 +197,7 @@ func seedRoleAssignment(t *testing.T, ctx context.Context, conn *pgxpool.Pool, o
 		WorkosLastEventID:  conv.ToPGTextEmpty(""),
 	})
 	require.NoError(t, err)
+	require.Equal(t, int64(1), replaced)
 }
 
 // seedDisconnectedUser creates a user in the users table with a workos_id but

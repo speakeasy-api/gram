@@ -5,16 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -31,28 +29,6 @@ type EngineOpts struct {
 	DevMode bool
 }
 
-// roleSlugCache is the Redis cache entry for a resolved role slug.
-// Key is org-first so DeleteByPrefix on "role-slug:{orgID}:" invalidates the whole org.
-type roleSlugCache struct {
-	UserID string
-	OrgID  string
-	Slug   string
-}
-
-var _ cache.CacheableObject[roleSlugCache] = (*roleSlugCache)(nil)
-
-func (r roleSlugCache) CacheKey() string {
-	return "role-slug:" + r.OrgID + ":" + r.UserID
-}
-
-func (r roleSlugCache) TTL() time.Duration {
-	return 5 * time.Minute
-}
-
-func (r roleSlugCache) AdditionalCacheKeys() []string {
-	return nil
-}
-
 // ChallengeLoggingEnabled checks whether authz challenge logging to ClickHouse
 // is enabled for a given organization. Same signature as IsRBACEnabled.
 type ChallengeLoggingEnabled func(ctx context.Context, organizationID string) (bool, error)
@@ -65,10 +41,9 @@ type Engine struct {
 	challengeLoggingEnabled ChallengeLoggingEnabled
 	isDev                   bool
 	membership              MembershipFetcher
-	roleCache               cache.TypedCacheObject[roleSlugCache]
 }
 
-func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEnabled IsRBACEnabled, challengeLogging ChallengeLoggingEnabled, membership MembershipFetcher, roleCache cache.Cache, opts ...EngineOpts) *Engine {
+func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEnabled IsRBACEnabled, challengeLogging ChallengeLoggingEnabled, membership MembershipFetcher, opts ...EngineOpts) *Engine {
 	var devMode bool
 	if len(opts) > 0 {
 		devMode = opts[0].DevMode
@@ -84,7 +59,6 @@ func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEn
 		challengeLoggingEnabled: challengeLogging,
 		isDev:                   devMode,
 		membership:              membership,
-		roleCache:               cache.NewTypedObjectCache[roleSlugCache](logger.With(attr.SlogCacheNamespace("authz-role-slug")), roleCache, cache.SuffixNone),
 	}
 }
 
@@ -179,76 +153,36 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 }
 
 func (e *Engine) resolveRoleSlug(ctx context.Context, userID, orgID string) (string, error) {
-	cacheKey := roleSlugCache{UserID: userID, OrgID: orgID, Slug: ""}.CacheKey()
-	if cached, err := e.roleCache.Get(ctx, cacheKey); err == nil {
-		return cached.Slug, nil
-	}
-
 	user, err := usersrepo.New(e.db).GetUser(ctx, userID)
 	if err != nil {
 		return "", fmt.Errorf("get user: %w", err)
 	}
 	if !user.WorkosID.Valid || user.WorkosID.String == "" {
-		e.storeRoleSlugCache(ctx, userID, orgID, "")
 		return "", nil
 	}
 
-	org, err := orgrepo.New(e.db).GetOrganizationMetadata(ctx, orgID)
+	roleSlugs, err := accessrepo.New(e.db).ListMemberRoleSlugsByWorkosUser(ctx, accessrepo.ListMemberRoleSlugsByWorkosUserParams{
+		OrganizationID: orgID,
+		WorkosUserID:   user.WorkosID.String,
+	})
 	if err != nil {
-		return "", fmt.Errorf("get org: %w", err)
+		return "", fmt.Errorf("list member role slugs: %w", err)
 	}
-	if !org.WorkosID.Valid || org.WorkosID.String == "" {
-		e.storeRoleSlugCache(ctx, userID, orgID, "")
+	if len(roleSlugs) == 0 {
 		return "", nil
 	}
 
-	member, err := e.membership.GetOrgMembership(ctx, user.WorkosID.String, org.WorkosID.String)
-	if err != nil {
-		return "", fmt.Errorf("get org membership: %w", err)
-	}
-	if member == nil {
-		e.storeRoleSlugCache(ctx, userID, orgID, "")
-		return "", nil
-	}
-
-	e.storeRoleSlugCache(ctx, userID, orgID, member.RoleSlug)
-
-	return member.RoleSlug, nil
+	return roleSlugs[0], nil
 }
 
-func (e *Engine) storeRoleSlugCache(ctx context.Context, userID, orgID, slug string) {
-	entry := roleSlugCache{UserID: userID, OrgID: orgID, Slug: slug}
-	if err := e.roleCache.Store(ctx, entry); err != nil {
-		e.logger.WarnContext(ctx, "failed to cache role slug",
-			attr.SlogUserID(userID),
-			attr.SlogOrganizationID(orgID),
-			attr.SlogError(err),
-		)
-	}
-}
-
-// InvalidateRoleCache removes the cached role slug for a single user. Call
-// this after updating a specific member's role via UpdateMemberRole.
+// InvalidateRoleCache is retained for callers that used to clear the Redis role cache.
+// Role resolution now reads Postgres directly, so this is intentionally a no-op.
 func (e *Engine) InvalidateRoleCache(ctx context.Context, userID, orgID string) {
-	entry := roleSlugCache{UserID: userID, OrgID: orgID, Slug: ""}
-	if err := e.roleCache.Delete(ctx, entry); err != nil {
-		e.logger.WarnContext(ctx, "failed to invalidate cached role slug",
-			attr.SlogUserID(userID),
-			attr.SlogOrganizationID(orgID),
-			attr.SlogError(err),
-		)
-	}
 }
 
-// InvalidateAllRoleCaches removes all cached role slugs for an org. Call this
-// after bulk role reassignments where individual user IDs aren't tracked.
+// InvalidateAllRoleCaches is retained for callers that used to clear the Redis role cache.
+// Role resolution now reads Postgres directly, so this is intentionally a no-op.
 func (e *Engine) InvalidateAllRoleCaches(ctx context.Context, orgID string) {
-	if err := e.roleCache.DeleteByPrefix(ctx, "role-slug:"+orgID+":"); err != nil {
-		e.logger.WarnContext(ctx, "failed to invalidate cached role slugs for org",
-			attr.SlogOrganizationID(orgID),
-			attr.SlogError(err),
-		)
-	}
 }
 
 func (e *Engine) Require(ctx context.Context, checks ...Check) error {

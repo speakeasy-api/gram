@@ -659,7 +659,6 @@ func newStartCommand() *cli.Command {
 				rbacEnabled,
 				challengeLoggingEnabled,
 				roleClient,
-				cache.NewRedisCacheAdapter(redisClient),
 				authz.EngineOpts{DevMode: c.String("environment") == "local"},
 			)
 

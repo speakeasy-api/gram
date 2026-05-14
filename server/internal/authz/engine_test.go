@@ -2,10 +2,7 @@ package authz
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -43,7 +39,7 @@ func TestEngineRequire_requiresAuthContext(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 
 	err = engine.Require(t.Context(), Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	var oopsErr *oops.ShareableError
@@ -56,7 +52,7 @@ func TestEngineRequire_skipsWhenRBACFeatureDisabled(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient())
 
 	err = engine.Require(enterpriseSessionCtx(t), Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	require.NoError(t, err)
@@ -67,7 +63,7 @@ func TestEngineRequire_mapsDeniedToForbidden(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), nil)
 
 	err = engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
@@ -81,7 +77,7 @@ func TestEngineRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 
 	err = engine.Require(enterpriseSessionCtx(t), Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	var oopsErr *oops.ShareableError
@@ -95,7 +91,7 @@ func TestEngineRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, failingRBAC(errors.New("boom")), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, failingRBAC(errors.New("boom")), staticChallengeLogging(true), workos.NewStubClient())
 
 	err = engine.Require(enterpriseSessionCtx(t), Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	var oopsErr *oops.ShareableError
@@ -103,7 +99,7 @@ func TestEngineRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 }
 
-func TestResolveRoleSlug_cachesEmptyMembershipResult(t *testing.T) {
+func TestResolveRoleSlug_readsLocalAssignmentsOnly(t *testing.T) {
 	t.Parallel()
 
 	ctx := enterpriseTestCtx(t.Context())
@@ -118,7 +114,7 @@ func TestResolveRoleSlug_cachesEmptyMembershipResult(t *testing.T) {
 	membership := &countingMembershipFetcher{}
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, staticRBAC(true), staticChallengeLogging(true), membership, newMapCache())
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, staticRBAC(true), staticChallengeLogging(true), membership)
 
 	roleSlug, err := engine.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
@@ -127,7 +123,7 @@ func TestResolveRoleSlug_cachesEmptyMembershipResult(t *testing.T) {
 	roleSlug, err = engine.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 	require.Empty(t, roleSlug)
-	require.Equal(t, 1, membership.calls)
+	require.Equal(t, 0, membership.calls)
 }
 
 func TestEngineRequireAny_mapsDeniedToForbidden(t *testing.T) {
@@ -135,7 +131,7 @@ func TestEngineRequireAny_mapsDeniedToForbidden(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeMCPConnect, "tool_a")})
 
 	err = engine.RequireAny(ctx,
@@ -152,7 +148,7 @@ func TestEngineFilter_returnsAllowedSubset(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, "proj_123")})
 
 	resourceIDs, err := engine.Filter(ctx, []Check{
@@ -170,7 +166,7 @@ func TestEngineFilter_logsSingleAggregateChallenge(t *testing.T) {
 	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, "proj_allowed")})
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 
 	resourceIDs, err := engine.Filter(ctx, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_allowed"},
@@ -219,7 +215,7 @@ func TestEngineFilter_logsDenyWhenNoMatches(t *testing.T) {
 	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, "proj_other")})
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 
 	resourceIDs, err := engine.Filter(ctx, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_a"},
@@ -262,7 +258,7 @@ func TestEngineFilter_skipsLogWhenNoChecks(t *testing.T) {
 	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 
 	resourceIDs, err := engine.Filter(ctx, nil)
 	require.NoError(t, err)
@@ -286,7 +282,7 @@ func TestEngineFilter_withDimensions(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		{Scope: ScopeMCPConnect, Selector: Selector{
 			"resource_kind": "mcp",
@@ -309,7 +305,7 @@ func TestEngineFilter_withDisposition(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		{Scope: ScopeMCPConnect, Selector: Selector{
 			"resource_kind": "mcp",
@@ -332,7 +328,7 @@ func TestEngineFilter_serverLevelGrantAllowsAllDimensions(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		NewGrant(ScopeMCPConnect, "toolsetA"),
 	})
@@ -351,7 +347,7 @@ func TestEngineFilter_projectScopedGrantMatchesServersInProject(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		{Scope: ScopeMCPConnect, Selector: Selector{
 			"resource_kind": "mcp",
@@ -374,7 +370,7 @@ func TestEngineRequire_projectScopedGrantAllowsToolsInProject(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		{Scope: ScopeMCPConnect, Selector: Selector{
 			"resource_kind": "mcp",
@@ -405,7 +401,7 @@ func TestEngineRequire_projectScopedMCPReadGrant(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		{Scope: ScopeMCPRead, Selector: Selector{
 			"resource_kind": "mcp",
@@ -430,7 +426,7 @@ func TestEngineFilter_projectAndServerGrantsCombine(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		// Project-scoped grant for proj_A
 		{Scope: ScopeMCPConnect, Selector: Selector{
@@ -456,7 +452,7 @@ func TestEngineRequire_rejectsInvalidCheck(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
 	err = engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: ""})
@@ -471,7 +467,7 @@ func TestEngineRequire_requiresChecks(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
 	err = engine.Require(ctx)
@@ -486,7 +482,7 @@ func TestEngineRequire_skipsForAPIKeyAuth(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	sessionID := "session_123"
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID:  "org_123",
@@ -513,7 +509,7 @@ func TestEngineFilter_skipsForNonEnterpriseAccount(t *testing.T) {
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	sessionID := "session_123"
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID:  "org_123",
@@ -546,60 +542,6 @@ type countingMembershipFetcher struct {
 func (c *countingMembershipFetcher) GetOrgMembership(context.Context, string, string) (*workos.Member, error) {
 	c.calls++
 	return nil, nil
-}
-
-type mapCache struct {
-	items map[string][]byte
-}
-
-func newMapCache() *mapCache {
-	return &mapCache{items: map[string][]byte{}}
-}
-
-func (m *mapCache) Get(_ context.Context, key string, value any) error {
-	item, ok := m.items[key]
-	if !ok {
-		return errors.New("cache miss")
-	}
-	if err := json.Unmarshal(item, value); err != nil {
-		return fmt.Errorf("unmarshal cache item: %w", err)
-	}
-	return nil
-}
-
-func (m *mapCache) Set(_ context.Context, key string, value any, _ time.Duration) error {
-	item, err := json.Marshal(value)
-	if err != nil {
-		return fmt.Errorf("marshal cache item: %w", err)
-	}
-	m.items[key] = item
-	return nil
-}
-
-func (m *mapCache) Update(ctx context.Context, key string, value any) error {
-	return m.Set(ctx, key, value, 0)
-}
-
-func (m *mapCache) Delete(_ context.Context, key string) error {
-	delete(m.items, key)
-	return nil
-}
-
-func (m *mapCache) ListAppend(context.Context, string, any, time.Duration) error {
-	return errors.New("not implemented")
-}
-
-func (m *mapCache) ListRange(context.Context, string, int64, int64, any) error {
-	return errors.New("not implemented")
-}
-
-func (m *mapCache) DeleteByPrefix(_ context.Context, prefix string) error {
-	for key := range m.items {
-		if strings.HasPrefix(key, prefix) {
-			delete(m.items, key)
-		}
-	}
-	return nil
 }
 
 func enterpriseSessionCtx(t *testing.T) context.Context {
@@ -654,7 +596,7 @@ func TestCanUseOverride_devPlusAdmin(t *testing.T) {
 	t.Parallel()
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache, EngineOpts{DevMode: true})
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient(), EngineOpts{DevMode: true})
 	ctx := scopeOverrideCtx(t, true, "pro")
 
 	enforce, err := engine.ShouldEnforce(ctx)
@@ -666,7 +608,7 @@ func TestCanUseOverride_devPlusNonAdmin(t *testing.T) {
 	t.Parallel()
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache, EngineOpts{DevMode: true})
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient(), EngineOpts{DevMode: true})
 	ctx := scopeOverrideCtx(t, false, "pro")
 
 	enforce, err := engine.ShouldEnforce(ctx)
@@ -678,7 +620,7 @@ func TestCanUseOverride_prodPlusAdmin(t *testing.T) {
 	t.Parallel()
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := scopeOverrideCtx(t, true, "pro")
 
 	enforce, err := engine.ShouldEnforce(ctx)
@@ -690,7 +632,7 @@ func TestCanUseOverride_prodPlusNonAdmin(t *testing.T) {
 	t.Parallel()
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := scopeOverrideCtx(t, false, "pro")
 
 	enforce, err := engine.ShouldEnforce(ctx)

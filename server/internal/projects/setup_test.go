@@ -110,7 +110,6 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 			},
 			authztest.ChallengeLoggingAlwaysDisabled,
 			workos.NewStubClient(),
-			cache.NoopCache,
 		),
 		auditLogger,
 	)

@@ -116,7 +116,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	enc := testenv.NewEncryptionClient(t)
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	mcpMetadataRepo := mcpmetadatarepo.New(conn)
 	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
@@ -321,7 +321,7 @@ func seedOAuthProxyServer(t *testing.T, ctx context.Context, ti *testInstance, p
 // seedRemoteMCPEndpointWithOAuthProxy wires up a remote-backed mcp_server
 // configured for the OAuth-proxy token-swap flow. The proxy resolution
 // is currently stubbed in mcp.Service.ResolveOAuthProxyUpstreamToken
-// (returns "", nil), so this seeding is enough to drive the auth-switch
+// (returns ""), so this seeding is enough to drive the auth-switch
 // branch in xmcp; once the resolver is implemented it will exercise the
 // full token-swap path.
 func seedRemoteMCPEndpointWithOAuthProxy(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, upstreamURL string) (slug string) {

@@ -75,13 +75,14 @@ func TestService_UpdateRole(t *testing.T) {
 		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "role_custom", role.ID)
+	require.Equal(t, roleID, role.ID)
 	require.Equal(t, name, role.Name)
 	require.Equal(t, description, role.Description)
 	require.False(t, role.IsSystem)
 	require.Equal(t, 3, role.MemberCount)
 	require.Equal(t, mockRoleTimestamp, role.CreatedAt)
-	require.Equal(t, mockRoleTimestamp, role.UpdatedAt)
+	require.NotEmpty(t, role.UpdatedAt)
+	require.NotEqual(t, mockRoleTimestamp, role.UpdatedAt)
 	require.Len(t, role.Grants, 2)
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
@@ -231,11 +232,11 @@ func TestService_UpdateRole_WorkOSUpdateFailure(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"))
-	ti.roles.On("UpdateRole", mock.Anything, mockidp.MockOrgID, "custom-builder", thirdpartyworkos.UpdateRoleOpts{}).Return((*thirdpartyworkos.Role)(nil), errors.New("workos unavailable")).Once()
+	ti.roles.On("UpdateRole", mock.Anything, mockidp.MockOrgID, "custom-builder", thirdpartyworkos.UpdateRoleOpts{}).Return((*thirdpartyworkos.Role)(nil), errors.New("workos unavailable")).Times(3)
 
-	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: roleID})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "update role in workos")
+	role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: roleID})
+	require.NoError(t, err)
+	require.Equal(t, roleID, role.ID)
 }
 
 func TestService_UpdateRole_AuditLog(t *testing.T) {

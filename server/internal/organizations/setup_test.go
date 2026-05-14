@@ -106,7 +106,7 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
 	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeatures{}, authzEngine)
 
 	return ctx, &testInstance{
@@ -155,7 +155,7 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
 	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeaturesEnabled{}, authzEngine)
 
 	return ctx, &testInstance{
@@ -168,11 +168,11 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 // expectWorkOSOrgAdminRole stubs a successful WorkOS admin membership check for the session user.
 func expectWorkOSOrgAdminRole(t *testing.T, orgs *MockOrganizationProvider) {
 	t.Helper()
-	orgs.On("GetOrgMembership", mock.Anything, testAuthUserWorkOSID, mockidp.MockOrgID).Return(&thirdpartyworkos.Member{RoleSlug: "admin"}, nil).Once()
+	orgs.On("GetOrgMembership", mock.Anything, testAuthUserWorkOSID, mockidp.MockOrgID).Return(&thirdpartyworkos.Member{RoleSlug: "admin"}).Once()
 }
 
 // expectWorkOSOrgNonAdminRole stubs WorkOS membership with a non-admin role.
 func expectWorkOSOrgNonAdminRole(t *testing.T, orgs *MockOrganizationProvider) {
 	t.Helper()
-	orgs.On("GetOrgMembership", mock.Anything, testAuthUserWorkOSID, mockidp.MockOrgID).Return(&thirdpartyworkos.Member{RoleSlug: "member"}, nil).Once()
+	orgs.On("GetOrgMembership", mock.Anything, testAuthUserWorkOSID, mockidp.MockOrgID).Return(&thirdpartyworkos.Member{RoleSlug: "member"}).Once()
 }

@@ -43,7 +43,7 @@ func TestService_ListMembers(t *testing.T) {
 	require.Equal(t, builderID, byID["local_user_2"].RoleID)
 }
 
-func TestService_ListMembers_ExcludesDisconnectedUsers(t *testing.T) {
+func TestService_ListMembers_IncludesWorkOSOnlyUsers(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -61,9 +61,15 @@ func TestService_ListMembers_ExcludesDisconnectedUsers(t *testing.T) {
 
 	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Members, 1, "disconnected user should be excluded")
-	require.Equal(t, "local_user_1", result.Members[0].ID)
-	require.Equal(t, "Ada Lovelace", result.Members[0].Name)
+	require.Len(t, result.Members, 2)
+
+	byID := map[string]*gen.AccessMember{}
+	for _, member := range result.Members {
+		byID[member.ID] = member
+	}
+	require.Equal(t, "Ada Lovelace", byID["local_user_1"].Name)
+	require.Equal(t, "user_2", byID["user_2"].ID)
+	require.Equal(t, "user_2", byID["user_2"].Name)
 }
 
 func TestService_ListMembers_UsesDatabaseOnly(t *testing.T) {
@@ -76,5 +82,6 @@ func TestService_ListMembers_UsesDatabaseOnly(t *testing.T) {
 
 	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
 	require.NoError(t, err)
-	require.Empty(t, result.Members)
+	require.Len(t, result.Members, 1)
+	require.Equal(t, "user_1", result.Members[0].ID)
 }

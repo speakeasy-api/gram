@@ -72,7 +72,7 @@ func TestRoleManager_MembersAndCounts(t *testing.T) {
 	manager := ti.service.roleMgr
 	members, err := manager.ListMembers(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
-	require.Len(t, members.Members, 2)
+	require.Len(t, members.Members, 3)
 
 	slugs, err := manager.MemberRoleSlugs(ctx, authCtx.ActiveOrganizationID, "user_2")
 	require.NoError(t, err)

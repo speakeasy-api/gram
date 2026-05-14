@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -28,6 +29,8 @@ var ErrRoleNotFound = errors.New("role not found")
 
 var validRoleNamePattern = regexp.MustCompile(`^[A-Za-z0-9 _-]+$`)
 
+const workOSSyncAttempts = 3
+
 type RoleProvider interface {
 	CreateRole(ctx context.Context, orgID string, opts workos.CreateRoleOpts) (*workos.Role, error)
 	UpdateRole(ctx context.Context, orgID string, roleSlug string, opts workos.UpdateRoleOpts) (*workos.Role, error)
@@ -36,7 +39,7 @@ type RoleProvider interface {
 	GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*workos.Member, error)
 }
 
-// RoleManager owns role reads from local records and role writes through WorkOS.
+// RoleManager owns role reads and writes against local records, then syncs successful writes to WorkOS.
 type RoleManager struct {
 	db     *pgxpool.Pool
 	logger *slog.Logger
@@ -149,6 +152,14 @@ func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.L
 	for _, assignment := range assignments {
 		user, ok := localUsers[assignment.UserID]
 		if !ok {
+			result = append(result, &gen.AccessMember{
+				ID:       assignment.WorkosUserID,
+				Name:     assignment.WorkosUserID,
+				Email:    "",
+				PhotoURL: nil,
+				RoleID:   roles[assignment.RoleSlug],
+				JoinedAt: assignment.CreatedAt,
+			})
 			continue
 		}
 
@@ -170,7 +181,8 @@ type roleCreateResult struct {
 	Slug string
 }
 
-// CreateRole creates a WorkOS role, upserts the local role record, syncs local grants, and optionally assigns members.
+// CreateRole creates the local role record, syncs local grants, optionally assigns members, and then best-effort syncs WorkOS.
+// Side effects: writes Postgres role/grant/assignment records, invalidates local authz state, and logs WorkOS sync failures after bounded retries.
 func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID string, payload *gen.CreateRolePayload) (roleCreateResult, error) {
 	roleSlug, err := slugify(payload.Name)
 	if err != nil {
@@ -178,42 +190,60 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 	}
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSlug(roleSlug))
 
-	wr, err := r.roles.CreateRole(ctx, workosOrgID, workos.CreateRoleOpts{
+	now := time.Now().UTC().Format(time.RFC3339)
+	if err := repo.New(r.db).UpsertOrganizationRole(ctx, organizationRoleParams(gramOrgID, workos.Role{
+		ID:          "",
 		Name:        payload.Name,
 		Slug:        roleSlug,
 		Description: payload.Description,
-	})
-	var apiErr *workos.APIError
-	switch {
-	case errors.As(err, &apiErr) && apiErr.StatusCode == 409:
-		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "create role in workos").Log(ctx, r.logger)
-	case err != nil:
-		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "create role in workos").Log(ctx, r.logger)
-	}
-	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleID(wr.ID))
-	if err := repo.New(r.db).UpsertOrganizationRole(ctx, organizationRoleParams(gramOrgID, *wr)); err != nil {
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	})); err != nil {
 		trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
-		_ = oops.E(oops.CodeUnexpected, err, "upsert local role record after workos write").Log(ctx, r.logger)
+		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "upsert local role record").Log(ctx, r.logger)
 	}
+	createdRole, err := r.getLocalRoleBySlug(ctx, gramOrgID, roleSlug)
+	if err != nil {
+		return roleCreateResult{}, err
+	}
+	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleID(createdRole.ID))
 
-	if err := authz.SyncGrants(ctx, r.logger, r.db, gramOrgID, wr.Slug, roleGrantPayloads(payload.Grants)); err != nil {
+	if err := authz.SyncGrants(ctx, r.logger, r.db, gramOrgID, roleSlug, roleGrantPayloads(payload.Grants)); err != nil {
 		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "sync grants for created role").Log(ctx, r.logger)
 	}
 
-	assignedCount := 0
+	r.syncWorkOS(ctx, "create role in workos", func() error {
+		_, err := r.roles.CreateRole(ctx, workosOrgID, workos.CreateRoleOpts{
+			Name:        payload.Name,
+			Slug:        roleSlug,
+			Description: payload.Description,
+		})
+		var apiErr *workos.APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == 409 {
+			return nil
+		}
+		if err == nil {
+			return nil
+		}
+		return fmt.Errorf("create role in workos: %w", err)
+	})
+
 	if len(payload.MemberIds) > 0 {
-		assignedCount, err = r.assignMembersToRole(ctx, gramOrgID, wr.Slug, payload.MemberIds)
-		if err != nil {
+		if _, err := r.assignMembersToRole(ctx, gramOrgID, roleSlug, payload.MemberIds); err != nil {
 			return roleCreateResult{}, err
 		}
 	}
 
-	role, err := r.roleViewFromLocalRole(ctx, gramOrgID, localRoleFromWorkOS(*wr), assignedCount)
+	memberCounts, err := r.memberCounts(ctx, gramOrgID)
+	if err != nil {
+		return roleCreateResult{}, err
+	}
+	role, err := r.roleViewFromLocalRole(ctx, gramOrgID, createdRole, memberCounts[createdRole.Slug])
 	if err != nil {
 		return roleCreateResult{}, err
 	}
 
-	return roleCreateResult{Role: role, Slug: wr.Slug}, nil
+	return roleCreateResult{Role: role, Slug: roleSlug}, nil
 }
 
 type localRole struct {
@@ -231,7 +261,8 @@ type roleUpdateResult struct {
 	Role   localRole
 }
 
-// UpdateRole updates an existing role and optionally replaces its assigned members.
+// UpdateRole updates an existing local role and optionally replaces its assigned members, then best-effort syncs WorkOS.
+// Side effects: writes Postgres role/grant/assignment records, invalidates local authz state, and logs WorkOS sync failures after bounded retries.
 func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID string, payload *gen.UpdateRolePayload) (roleUpdateResult, error) {
 	currentRole, err := r.getLocalRoleByID(ctx, gramOrgID, payload.ID)
 	if err != nil {
@@ -261,17 +292,28 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 
 	updatedRole := currentRole
 	if !sysRole {
-		wRole, err := r.roles.UpdateRole(ctx, workosOrgID, currentRole.Slug, workos.UpdateRoleOpts{
-			Name:        payload.Name,
-			Description: payload.Description,
-		})
-		if err != nil {
-			return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "update role in workos").Log(ctx, r.logger)
+		localRecord := currentRole
+		if payload.Name != nil {
+			localRecord.Name = *payload.Name
 		}
-		updatedRole = localRoleFromWorkOS(*wRole)
-		if err := repo.New(r.db).UpsertOrganizationRole(ctx, organizationRoleParams(gramOrgID, *wRole)); err != nil {
+		if payload.Description != nil {
+			localRecord.Description = *payload.Description
+		}
+		localRecord.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+		if err := repo.New(r.db).UpsertOrganizationRole(ctx, organizationRoleParams(gramOrgID, workos.Role{
+			ID:          "",
+			Name:        localRecord.Name,
+			Slug:        localRecord.Slug,
+			Description: localRecord.Description,
+			CreatedAt:   localRecord.CreatedAt,
+			UpdatedAt:   localRecord.UpdatedAt,
+		})); err != nil {
 			trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
-			_ = oops.E(oops.CodeUnexpected, err, "upsert local role record after workos write").Log(ctx, r.logger)
+			return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "upsert local role record").Log(ctx, r.logger)
+		}
+		updatedRole, err = r.getLocalRoleBySlug(ctx, gramOrgID, localRecord.Slug)
+		if err != nil {
+			return roleUpdateResult{}, err
 		}
 
 		if payload.Grants != nil {
@@ -279,6 +321,17 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 				return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "sync grants for updated role").Log(ctx, r.logger)
 			}
 		}
+
+		r.syncWorkOS(ctx, "update role in workos", func() error {
+			_, err := r.roles.UpdateRole(ctx, workosOrgID, currentRole.Slug, workos.UpdateRoleOpts{
+				Name:        payload.Name,
+				Description: payload.Description,
+			})
+			if err == nil {
+				return nil
+			}
+			return fmt.Errorf("update role in workos: %w", err)
+		})
 	}
 
 	if payload.MemberIds != nil {
@@ -299,8 +352,8 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 	return roleUpdateResult{Before: existingRole, After: updatedRoleView, Role: updatedRole}, nil
 }
 
-// DeleteRole deletes a custom role after moving assigned members to the default member role.
-// Side effects: reads local records; writes WorkOS membership reassignments before deleting the WorkOS role; upserts local assignment records, marks the local role deleted, invalidates role caches, and deletes local role grants.
+// DeleteRole deletes a custom local role after moving assigned members to the default member role, then best-effort syncs WorkOS.
+// Side effects: writes Postgres assignment/role/grant records, invalidates local authz state, and logs WorkOS sync failures after bounded retries.
 func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, roleID string) (localRole, error) {
 	currentRole, err := r.getLocalRoleByID(ctx, gramOrgID, roleID)
 	if err != nil {
@@ -316,33 +369,34 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 	}
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSource("db"))
 
-	reassigned := false
 	for _, row := range rows {
 		if row.RoleSlug != currentRole.Slug {
 			continue
 		}
 		membershipID := conv.FromPGTextOrEmpty[string](row.WorkosMembershipID)
-		if _, err := r.roles.UpdateMemberRole(ctx, membershipID, authz.SystemRoleMember); err != nil {
-			if reassigned {
-				r.authz.InvalidateAllRoleCaches(ctx, gramOrgID)
-			}
-			return localRole{}, oops.E(oops.CodeUnexpected, err, "reassign member to default role").Log(ctx, r.logger)
-		}
 		if row.WorkosUserID != "" {
-			if err := repo.New(r.db).ReplaceOrganizationRoleAssignment(ctx, replaceRoleAssignmentParams(gramOrgID, row.WorkosUserID, authz.SystemRoleMember, "", membershipID)); err != nil {
+			replaced, err := repo.New(r.db).ReplaceOrganizationRoleAssignment(ctx, replaceRoleAssignmentParams(gramOrgID, row.WorkosUserID, authz.SystemRoleMember, "", membershipID))
+			if err != nil {
 				trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
-				_ = oops.E(oops.CodeUnexpected, err, "upsert local role assignment record after workos write").Log(ctx, r.logger)
+				return localRole{}, oops.E(oops.CodeUnexpected, err, "upsert local role assignment record").Log(ctx, r.logger)
+			}
+			if replaced == 0 {
+				trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
+				return localRole{}, oops.E(oops.CodeUnexpected, nil, "upsert local role assignment record").Log(ctx, r.logger)
 			}
 		}
-		reassigned = true
-	}
-	if reassigned {
-		r.authz.InvalidateAllRoleCaches(ctx, gramOrgID)
+		if userID := conv.FromPGTextOrEmpty[string](row.UserID); userID != "" {
+			r.authz.InvalidateRoleCache(ctx, userID, gramOrgID)
+		}
+		r.syncWorkOS(ctx, "reassign member to default role in workos", func() error {
+			_, err := r.roles.UpdateMemberRole(ctx, membershipID, authz.SystemRoleMember)
+			if err == nil {
+				return nil
+			}
+			return fmt.Errorf("reassign member to default role in workos: %w", err)
+		})
 	}
 
-	if err := r.roles.DeleteRole(ctx, workosOrgID, currentRole.Slug); err != nil {
-		return localRole{}, oops.E(oops.CodeUnexpected, err, "delete role in workos").Log(ctx, r.logger)
-	}
 	if _, err := repo.New(r.db).MarkOrganizationRoleDeleted(ctx, repo.MarkOrganizationRoleDeletedParams{
 		OrganizationID:    gramOrgID,
 		WorkosSlug:        currentRole.Slug,
@@ -350,7 +404,7 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 		WorkosLastEventID: conv.ToPGTextEmpty(""),
 	}); err != nil {
 		trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
-		_ = oops.E(oops.CodeUnexpected, err, "mark local role record deleted after workos write").Log(ctx, r.logger)
+		return localRole{}, oops.E(oops.CodeUnexpected, err, "mark local role record deleted").Log(ctx, r.logger)
 	}
 
 	if _, err := repo.New(r.db).DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
@@ -359,6 +413,14 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 	}); err != nil {
 		return localRole{}, oops.E(oops.CodeUnexpected, err, "delete grants for deleted role").Log(ctx, r.logger)
 	}
+
+	r.authz.InvalidateAllRoleCaches(ctx, gramOrgID)
+	r.syncWorkOS(ctx, "delete role in workos", func() error {
+		if err := r.roles.DeleteRole(ctx, workosOrgID, currentRole.Slug); err != nil {
+			return fmt.Errorf("delete role in workos: %w", err)
+		}
+		return nil
+	})
 
 	return currentRole, nil
 }
@@ -372,8 +434,8 @@ type memberRoleUpdateContext struct {
 	After        *gen.AccessMember
 }
 
-// UpdateMemberRole changes one member's role assignment.
-// Side effects: reads local user, role, and local assignment records; writes the WorkOS membership first, upserts the local assignment record, and invalidates that member's role cache.
+// UpdateMemberRole changes one member's local role assignment, then best-effort syncs WorkOS.
+// Side effects: writes a Postgres assignment record, invalidates local authz state, and logs WorkOS sync failures after bounded retries.
 func (r *RoleManager) UpdateMemberRole(ctx context.Context, gramOrgID, userID, roleID string) (memberRoleUpdateContext, error) {
 	role, err := r.getLocalRoleByID(ctx, gramOrgID, roleID)
 	if err != nil {
@@ -423,17 +485,25 @@ func (r *RoleManager) UpdateMemberRole(ctx context.Context, gramOrgID, userID, r
 		return memberRoleUpdateContext{}, oops.E(oops.CodeNotFound, nil, "member not found").Log(ctx, r.logger)
 	}
 
-	updatedMember, err := r.roles.UpdateMemberRole(ctx, existing.MembershipID, role.Slug)
-	if err != nil {
-		return memberRoleUpdateContext{}, oops.E(oops.CodeUnexpected, err, "update member role in workos").Log(ctx, r.logger)
-	}
-	if updatedMember.UserID != "" && role.Slug != "" {
-		if err := repo.New(r.db).ReplaceOrganizationRoleAssignment(ctx, replaceRoleAssignmentParams(gramOrgID, updatedMember.UserID, role.Slug, connectedUser.ID, updatedMember.ID)); err != nil {
+	if existing.WorkosUserID != "" && role.Slug != "" {
+		replaced, err := repo.New(r.db).ReplaceOrganizationRoleAssignment(ctx, replaceRoleAssignmentParams(gramOrgID, existing.WorkosUserID, role.Slug, connectedUser.ID, existing.MembershipID))
+		if err != nil {
 			trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
-			_ = oops.E(oops.CodeUnexpected, err, "upsert local role assignment record after workos write").Log(ctx, r.logger)
+			return memberRoleUpdateContext{}, oops.E(oops.CodeUnexpected, err, "upsert local role assignment record").Log(ctx, r.logger)
+		}
+		if replaced == 0 {
+			trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
+			return memberRoleUpdateContext{}, oops.E(oops.CodeUnexpected, nil, "upsert local role assignment record").Log(ctx, r.logger)
 		}
 	}
 	r.authz.InvalidateRoleCache(ctx, userID, gramOrgID)
+	r.syncWorkOS(ctx, "update member role in workos", func() error {
+		_, err := r.roles.UpdateMemberRole(ctx, existing.MembershipID, role.Slug)
+		if err == nil {
+			return nil
+		}
+		return fmt.Errorf("update member role in workos: %w", err)
+	})
 
 	memberName := conv.Default(connectedUser.DisplayName, connectedUser.Email)
 	return memberRoleUpdateContext{
@@ -502,6 +572,26 @@ func (r *RoleManager) getLocalRoleByID(ctx context.Context, gramOrgID, id string
 	return localRoleFromRoleRow(row), nil
 }
 
+// getLocalRoleBySlug loads one local organization role record by WorkOS slug.
+// Side effects: reads Postgres local role records; does not call WorkOS.
+func (r *RoleManager) getLocalRoleBySlug(ctx context.Context, gramOrgID, slug string) (localRole, error) {
+	row, err := repo.New(r.db).GetOrganizationRoleBySlug(ctx, repo.GetOrganizationRoleBySlugParams{
+		OrganizationID: gramOrgID,
+		WorkosSlug:     slug,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return localRole{}, oops.E(oops.CodeNotFound, ErrRoleNotFound, "role not found").Log(ctx, r.logger)
+	case err != nil:
+		return localRole{}, oops.E(oops.CodeUnexpected, err, "get role").Log(ctx, r.logger)
+	case row.Deleted || row.WorkosDeleted:
+		return localRole{}, oops.E(oops.CodeNotFound, ErrRoleNotFound, "role not found").Log(ctx, r.logger)
+	}
+
+	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSource("db"))
+	return localRoleFromOrganizationRole(row), nil
+}
+
 type memberAssignmentTarget struct {
 	UserID       string
 	WorkosUserID string
@@ -512,6 +602,10 @@ type memberAssignmentTarget struct {
 func (r *RoleManager) memberAssignmentTargets(ctx context.Context, gramOrgID string, memberIDs []string) ([]memberAssignmentTarget, error) {
 	if len(memberIDs) == 0 {
 		return nil, nil
+	}
+	requested := make(map[string]struct{}, len(memberIDs))
+	for _, id := range memberIDs {
+		requested[id] = struct{}{}
 	}
 
 	users, err := usersrepo.New(r.db).GetUsersByIDs(ctx, memberIDs)
@@ -536,27 +630,38 @@ func (r *RoleManager) memberAssignmentTargets(ctx context.Context, gramOrgID str
 	}
 
 	targets := make([]memberAssignmentTarget, 0, len(memberIDs))
-	for _, gramID := range memberIDs {
-		workosID, ok := workosByGramID[gramID]
+	for _, row := range assignmentRows {
+		userID := conv.FromPGTextOrEmpty[string](row.UserID)
+		membershipID := conv.FromPGTextOrEmpty[string](row.WorkosMembershipID)
+		if _, ok := requested[row.WorkosUserID]; ok {
+			targets = append(targets, memberAssignmentTarget{
+				UserID:       userID,
+				WorkosUserID: row.WorkosUserID,
+				MembershipID: membershipID,
+			})
+			continue
+		}
+
+		workosID, ok := workosByGramID[userID]
 		if !ok {
 			continue
 		}
-		membershipID, ok := membershipByWorkosID[workosID]
-		if !ok {
-			continue
+		if _, ok := requested[userID]; ok {
+			if _, ok := membershipByWorkosID[workosID]; ok {
+				targets = append(targets, memberAssignmentTarget{
+					UserID:       userID,
+					WorkosUserID: workosID,
+					MembershipID: membershipID,
+				})
+			}
 		}
-		targets = append(targets, memberAssignmentTarget{
-			UserID:       gramID,
-			WorkosUserID: workosID,
-			MembershipID: membershipID,
-		})
 	}
 
 	return targets, nil
 }
 
-// assignMembersToRole moves each requested member to the given WorkOS role and mirrors the result locally.
-// Side effects: reads local users and assignments, writes WorkOS memberships, upserts local assignment records, and invalidates org role caches when any member is assigned.
+// assignMembersToRole moves each requested member to the given local role and best-effort syncs WorkOS.
+// Side effects: reads local users and assignments, writes Postgres assignment records, invalidates local authz state, and logs WorkOS sync failures after bounded retries.
 func (r *RoleManager) assignMembersToRole(ctx context.Context, gramOrgID, roleSlug string, memberIDs []string) (int, error) {
 	targets, err := r.memberAssignmentTargets(ctx, gramOrgID, memberIDs)
 	if err != nil {
@@ -565,22 +670,66 @@ func (r *RoleManager) assignMembersToRole(ctx context.Context, gramOrgID, roleSl
 
 	assignedCount := 0
 	for _, target := range targets {
-		if _, err := r.roles.UpdateMemberRole(ctx, target.MembershipID, roleSlug); err != nil {
-			return 0, oops.E(oops.CodeUnexpected, err, "assign members to role").Log(ctx, r.logger)
-		}
 		if target.WorkosUserID != "" && roleSlug != "" {
-			if err := repo.New(r.db).ReplaceOrganizationRoleAssignment(ctx, replaceRoleAssignmentParams(gramOrgID, target.WorkosUserID, roleSlug, target.UserID, target.MembershipID)); err != nil {
+			replaced, err := repo.New(r.db).ReplaceOrganizationRoleAssignment(ctx, replaceRoleAssignmentParams(gramOrgID, target.WorkosUserID, roleSlug, target.UserID, target.MembershipID))
+			if err != nil {
 				trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
-				_ = oops.E(oops.CodeUnexpected, err, "upsert local role assignment record after workos write").Log(ctx, r.logger)
+				return 0, oops.E(oops.CodeUnexpected, err, "upsert local role assignment record").Log(ctx, r.logger)
+			}
+			if replaced == 0 {
+				trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
+				return 0, oops.E(oops.CodeUnexpected, nil, "upsert local role assignment record").Log(ctx, r.logger)
 			}
 		}
 		assignedCount++
+		r.authz.InvalidateRoleCache(ctx, target.UserID, gramOrgID)
+		r.syncWorkOS(ctx, "assign member to role in workos", func() error {
+			_, err := r.roles.UpdateMemberRole(ctx, target.MembershipID, roleSlug)
+			if err == nil {
+				return nil
+			}
+			return fmt.Errorf("assign member to role in workos: %w", err)
+		})
 	}
 	if assignedCount > 0 {
 		r.authz.InvalidateAllRoleCaches(ctx, gramOrgID)
 	}
 
 	return assignedCount, nil
+}
+
+// syncWorkOS runs a bounded best-effort WorkOS write after the local database already accepted the change.
+// Side effects: calls WorkOS, waits briefly between retryable failures, and logs the final failure without returning it.
+func (r *RoleManager) syncWorkOS(ctx context.Context, operation string, fn func() error) {
+	var err error
+	for attempt := 1; attempt <= workOSSyncAttempts; attempt++ {
+		err = fn()
+		if err == nil {
+			return
+		}
+		if !retryWorkOSError(err) || attempt == workOSSyncAttempts {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			err = ctx.Err()
+			attempt = workOSSyncAttempts
+		case <-time.After(time.Duration(attempt) * 100 * time.Millisecond):
+		}
+	}
+
+	r.logger.ErrorContext(ctx, "workos sync failed: "+operation, attr.SlogError(err))
+}
+
+// retryWorkOSError reports whether a WorkOS sync failure is worth retrying in-process.
+// Side effects: none.
+func retryWorkOSError(err error) bool {
+	var apiErr *workos.APIError
+	if !errors.As(err, &apiErr) {
+		return true
+	}
+	return apiErr.StatusCode == 429 || apiErr.StatusCode >= 500
 }
 
 // memberCounts returns the number of locally connected members per role slug.
@@ -649,20 +798,20 @@ func localRoleFromRoleRow(row repo.GetOrganizationRoleByIDRow) localRole {
 	}
 }
 
-// localRoleFromWorkOS converts a WorkOS role response into the manager's internal local role record shape.
+// localRoleFromOrganizationRole converts an organization role row into the manager's internal local role record shape.
 // Side effects: none.
-func localRoleFromWorkOS(role workos.Role) localRole {
+func localRoleFromOrganizationRole(row repo.OrganizationRole) localRole {
 	return localRole{
-		ID:          role.ID,
-		Name:        role.Name,
-		Slug:        role.Slug,
-		Description: role.Description,
-		CreatedAt:   role.CreatedAt,
-		UpdatedAt:   role.UpdatedAt,
+		ID:          row.ID.String(),
+		Name:        row.WorkosName,
+		Slug:        row.WorkosSlug,
+		Description: conv.FromPGTextOrEmpty[string](row.WorkosDescription),
+		CreatedAt:   conv.FromPGTimestamptz(row.WorkosCreatedAt),
+		UpdatedAt:   conv.FromPGTimestamptz(row.WorkosUpdatedAt),
 	}
 }
 
-// organizationRoleParams builds the SQL parameters for storing a local role record from a WorkOS write response.
+// organizationRoleParams builds the SQL parameters for storing the authoritative local role record.
 // Side effects: reads the clock for updated_at and possibly created_at fallback.
 func organizationRoleParams(gramOrgID string, role workos.Role) repo.UpsertOrganizationRoleParams {
 	return repo.UpsertOrganizationRoleParams{
@@ -671,12 +820,12 @@ func organizationRoleParams(gramOrgID string, role workos.Role) repo.UpsertOrgan
 		WorkosName:        role.Name,
 		WorkosDescription: conv.ToPGTextEmpty(role.Description),
 		WorkosCreatedAt:   conv.ToPGTimestamptz(workosTimeOrNow(role.CreatedAt)),
-		WorkosUpdatedAt:   conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(workosTimeOrNow(role.UpdatedAt)),
 		WorkosLastEventID: conv.ToPGTextEmpty(""),
 	}
 }
 
-// replaceRoleAssignmentParams builds SQL parameters for storing the authoritative local role assignment after a WorkOS write.
+// replaceRoleAssignmentParams builds SQL parameters for storing the authoritative local role assignment.
 // Side effects: reads the clock for updated_at.
 func replaceRoleAssignmentParams(gramOrgID, workosUserID, roleSlug, userID, membershipID string) repo.ReplaceOrganizationRoleAssignmentParams {
 	return repo.ReplaceOrganizationRoleAssignmentParams{

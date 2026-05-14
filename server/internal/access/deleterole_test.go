@@ -71,7 +71,7 @@ func TestService_DeleteRole_ReassignsMembersToDefault(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestService_DeleteRole_ReassignFailureHaltsDelete(t *testing.T) {
+func TestService_DeleteRole_ReassignFailureDoesNotHaltDelete(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -80,20 +80,20 @@ func TestService_DeleteRole_ReassignFailureHaltsDelete(t *testing.T) {
 	require.NotNil(t, authCtx)
 
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"))
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_member", "Member", authz.SystemRoleMember))
 	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "", mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"))
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", authz.SystemRoleMember).Return((*thirdpartyworkos.Member)(nil), errors.New("workos unavailable")).Once()
+	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", authz.SystemRoleMember).Return((*thirdpartyworkos.Member)(nil), errors.New("workos unavailable")).Times(3)
+	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(nil).Once()
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: roleID})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "reassign member to default role")
+	require.NoError(t, err)
 
-	// Grants must remain since reassignment failed before grant cleanup ran.
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
-	require.Len(t, grants, 1)
+	require.Empty(t, grants)
 }
 
-func TestService_DeleteRole_PartialReassignFailureStopsLoop(t *testing.T) {
+func TestService_DeleteRole_PartialReassignFailureContinuesDelete(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -112,17 +112,15 @@ func TestService_DeleteRole_PartialReassignFailureStopsLoop(t *testing.T) {
 		RoleSlug:       authz.SystemRoleMember,
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_2", authz.SystemRoleMember).Return((*thirdpartyworkos.Member)(nil), errors.New("workos unavailable")).Once()
+	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_2", authz.SystemRoleMember).Return((*thirdpartyworkos.Member)(nil), errors.New("workos unavailable")).Times(3)
+	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(nil).Once()
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: roleID})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "reassign member to default role")
+	require.NoError(t, err)
 
-	// The mock's AssertExpectations (registered in newMockRoleProvider) verifies
-	// that DeleteRole was never called and the loop stopped at the first failure.
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
-	require.Len(t, grants, 1)
+	require.Empty(t, grants)
 }
 
 func TestService_DeleteRole_NotFound(t *testing.T) {
@@ -156,15 +154,14 @@ func TestService_DeleteRole_WorkOSDeleteFailure(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"))
-	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(errors.New("workos unavailable")).Once()
+	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(errors.New("workos unavailable")).Times(3)
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: roleID})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "delete role in workos")
+	require.NoError(t, err)
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
-	require.Len(t, grants, 1)
+	require.Empty(t, grants)
 }
 
 func TestService_DeleteRole_AuditLog(t *testing.T) {
