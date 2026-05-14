@@ -45,6 +45,12 @@ Match breadth:
 - `url_host` — broader match for all endpoints on the host.
 - `server_identity` — fallback for local, command-based, or non-URL MCP servers.
 
+Match values are normalized before storage and matching. The UI may show a
+human-friendly display name when one is available, but the stored
+`match_value` and matching evidence should use the normalized value. For
+example, a Claude MCP tool named `mcp__claude_ai_Calendly__authenticate`
+produces the server identity match value `claude_ai_calendly`.
+
 Audience:
 
 - `organization` — all users in the organization.
@@ -240,6 +246,28 @@ When a Shadow MCP connection/tool call is detected:
 9. Otherwise block with the configured Risk Policy message plus request-access guidance when enabled.
 
 Deny rule precedence applies across match breadth and audience. For example, a denied `url_host` project rule blocks that project even if a narrower `full_url` organization allow rule exists.
+
+### Evidence sources
+
+Access Rules should only be created from evidence the runtime actually
+observed. Do not infer a URL or hostname from a server label or brand name.
+
+- Cursor URL-based MCP execution can provide an MCP server URL. In that case,
+  runtime evidence should include normalized `full_url` and `url_host`, and
+  the review UI can default to `full_url`.
+- Claude Code `PreToolUse` payloads identify MCP calls by tool name, such as
+  `mcp__<server>__<tool>`, and may not provide URL or host evidence. In that
+  case, runtime evidence should include only normalized `server_identity`, and
+  approvals should create `server_identity` rules unless a future Claude hook
+  payload explicitly carries URL evidence.
+- Codex should follow the same rule: create URL or host rules only when the
+  hook payload carries URL or host evidence; otherwise fall back to normalized
+  `server_identity`.
+
+The initial implementation should not parse local LLM hook configuration files
+inside hook transport scripts to synthesize URL evidence. Hook scripts should
+stay lean and should forward only the payload available from the client plus
+explicitly designed metadata.
 
 ## Request-access link
 
