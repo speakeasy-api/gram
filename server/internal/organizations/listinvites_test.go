@@ -32,7 +32,7 @@ func TestService_ListInvites(t *testing.T) {
 	updatedAt := now.Format(time.RFC3339)
 
 	const workosInviterUserID = "user_01WORKOS_INVITER"
-	require.NoError(t, userrepo.New(ti.conn).SetUserWorkosID(ctx, userrepo.SetUserWorkosIDParams{
+	require.NoError(t, userrepo.New(ti.conn).OverwriteUserWorkosID(ctx, userrepo.OverwriteUserWorkosIDParams{
 		ID:       authCtx.UserID,
 		WorkosID: conv.ToPGText(workosInviterUserID),
 	}))

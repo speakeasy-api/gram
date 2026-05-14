@@ -179,7 +179,7 @@ func (s *InvitationsService) Resend(ctx context.Context, p *gen.ResendPayload) (
 // user for the invited email, and idempotently attaches a membership.
 // Mirrors the cascade in the workos-shaped accept handler — duplicated
 // rather than extracted because the shape is small and forcing a shared
-// helper across `service/` and `modes/localspeakeasy/` would smear the
+// helper across `service/` and `modes/mockworkos/` would smear the
 // boundary between management API and protocol surface.
 func (s *InvitationsService) Accept(ctx context.Context, p *gen.AcceptPayload) (*gen.Invitation, error) {
 	id, err := uuid.Parse(p.ID)

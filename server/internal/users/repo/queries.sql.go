@@ -257,6 +257,23 @@ func (q *Queries) GetUsersByWorkosIDs(ctx context.Context, workosIds []string) (
 	return items, nil
 }
 
+const overwriteUserWorkosID = `-- name: OverwriteUserWorkosID :exec
+UPDATE users
+SET workos_id = $1,
+  updated_at = clock_timestamp()
+WHERE id = $2
+`
+
+type OverwriteUserWorkosIDParams struct {
+	WorkosID pgtype.Text
+	ID       string
+}
+
+func (q *Queries) OverwriteUserWorkosID(ctx context.Context, arg OverwriteUserWorkosIDParams) error {
+	_, err := q.db.Exec(ctx, overwriteUserWorkosID, arg.WorkosID, arg.ID)
+	return err
+}
+
 const setUserWorkosID = `-- name: SetUserWorkosID :exec
 UPDATE users
 SET workos_id = $1,

@@ -1,6 +1,6 @@
-package localspeakeasy
+package mockworkos
 
-// WorkOS-shaped wire types served by the local-speakeasy mode's
+// WorkOS-shaped wire types served by the mock-workos mode's
 // /user_management/*, /organizations/*, and /authorization/* endpoints.
 // Field names + JSON tags mirror workos-go/v6 SDK types so Gram-side's
 // `*workos.Client` can decode our responses with zero changes when its

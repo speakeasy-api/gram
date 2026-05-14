@@ -364,8 +364,8 @@ export function OrgAdminSettingsInner() {
               return;
             }
 
-            document.cookie = `gram_admin_override=${val.trim()}; path=/; max-age=31536000;`;
             await client.auth.logout();
+            document.cookie = `gram_admin_override=${val.trim()}; path=/; max-age=31536000;`;
             window.location.href = "/login";
           }}
           className="ml-6 flex max-w-md gap-2"
