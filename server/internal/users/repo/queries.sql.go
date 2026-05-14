@@ -166,6 +166,33 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 	return i, err
 }
 
+const getUserByWorkosID = `-- name: GetUserByWorkosID :one
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at FROM users
+WHERE workos_id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetUserByWorkosID(ctx context.Context, workosID pgtype.Text) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByWorkosID, workosID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.DisplayName,
+		&i.PhotoUrl,
+		&i.Admin,
+		&i.LastLogin,
+		&i.WorkosID,
+		&i.WorkosCreatedAt,
+		&i.WorkosUpdatedAt,
+		&i.WorkosDeletedAt,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserIDByWorkosID = `-- name: GetUserIDByWorkosID :one
 SELECT id FROM users
 WHERE workos_id = $1
