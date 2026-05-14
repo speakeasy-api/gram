@@ -129,7 +129,7 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	if !toolset.McpIsPublic {
-		callbackURL := fmt.Sprintf("%s/mcp/%s/idp_callback", baseURL, mcpSlug)
+		callbackURL := fmt.Sprintf("%s/mcp/%s/idp_callback", s.serverURL.String(), mcpSlug)
 		idpURL, err := s.identityResolver.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
 			CallbackURL:     callbackURL,
 			Scope:           "",

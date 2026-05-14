@@ -34,6 +34,10 @@ type IssuerGatedToolsetOpts struct {
 	// issuer / authorization_endpoint / token_endpoint / registration_endpoint
 	// out of this document and DCR-registers a remote_session_client.
 	UpstreamMetadata []byte
+	// RemoteSessionCallbackBaseURL, when set, registers the Gram
+	// /remote_login_callback URL for the generated MCP slug. Tests that drive
+	// a real upstream authorize flow should set this to the Gram server URL.
+	RemoteSessionCallbackBaseURL string
 	// AuthnChallengeMode is "chain" or "interactive". Default "interactive".
 	AuthnChallengeMode string
 }
@@ -118,7 +122,11 @@ func CreateIssuerGatedToolset(
 	})
 	require.NoError(t, err)
 
-	clientID, clientSecret := dcrRegister(t, ctx, meta.RegistrationEndpoint, "test-issuer-gated-"+suffix)
+	redirectURIs := []string{"http://localhost/unused"}
+	if opts.RemoteSessionCallbackBaseURL != "" {
+		redirectURIs = []string{strings.TrimRight(opts.RemoteSessionCallbackBaseURL, "/") + "/mcp/" + slug + "/remote_login_callback"}
+	}
+	clientID, clientSecret := dcrRegister(t, ctx, meta.RegistrationEndpoint, "test-issuer-gated-"+suffix, redirectURIs)
 	encSecret, err := enc.Encrypt([]byte(clientSecret))
 	require.NoError(t, err)
 
@@ -178,12 +186,12 @@ func CreateIssuerGatedToolset(
 
 // dcrRegister POSTs an RFC 7591 client registration to the given endpoint
 // and returns the issued (client_id, client_secret).
-func dcrRegister(t *testing.T, ctx context.Context, endpoint, clientName string) (string, string) {
+func dcrRegister(t *testing.T, ctx context.Context, endpoint, clientName string, redirectURIs []string) (string, string) {
 	t.Helper()
 
 	body, err := json.Marshal(map[string]any{
 		"client_name":                clientName,
-		"redirect_uris":              []string{"http://localhost/unused"},
+		"redirect_uris":              redirectURIs,
 		"grant_types":                []string{"authorization_code", "refresh_token"},
 		"response_types":             []string{"code"},
 		"token_endpoint_auth_method": "client_secret_basic",

@@ -28,11 +28,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -52,9 +54,10 @@ func TestRemoteLoginCallback_AuthenticatedSubject(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	result := oauthtest.CreateIssuerGatedToolset(t, ctx, ti.conn, ti.enc, authCtx, oauthtest.IssuerGatedToolsetOpts{
-		Slug:             "issuer-auth",
-		IsPublic:         false,
-		UpstreamMetadata: idp.OAuth21Metadata(t),
+		Slug:                         "issuer-auth",
+		IsPublic:                     false,
+		UpstreamMetadata:             idp.OAuth21Metadata(t),
+		RemoteSessionCallbackBaseURL: ti.serverURL.String(),
 	})
 
 	mgr, authnCache := buildChallengeManagerForTest(t, ti)
@@ -92,9 +95,10 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	result := oauthtest.CreateIssuerGatedToolset(t, ctx, ti.conn, ti.enc, authCtx, oauthtest.IssuerGatedToolsetOpts{
-		Slug:             "issuer-anon",
-		IsPublic:         true,
-		UpstreamMetadata: idp.OAuth21Metadata(t),
+		Slug:                         "issuer-anon",
+		IsPublic:                     true,
+		UpstreamMetadata:             idp.OAuth21Metadata(t),
+		RemoteSessionCallbackBaseURL: ti.serverURL.String(),
 	})
 
 	mgr, authnCache := buildChallengeManagerForTest(t, ti)
@@ -132,6 +136,58 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 	require.Equal(t, urn.SessionSubjectKindAnonymous, stamped.Subject.Kind)
 
 	runRemoteLoginRoundTrip(t, ctx, ti, mgr, result, parentID, stamped.Subject)
+}
+
+func TestRemoteLoginChallenge_CustomDomainRegistersGramCallback(t *testing.T) {
+	t.Parallel()
+
+	idp := devidptest.Launch(t, devidptest.LaunchOpts{})
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	result := oauthtest.CreateIssuerGatedToolset(t, ctx, ti.conn, ti.enc, authCtx, oauthtest.IssuerGatedToolsetOpts{
+		Slug:                         "issuer-custom-domain",
+		IsPublic:                     false,
+		UpstreamMetadata:             idp.OAuth21Metadata(t),
+		RemoteSessionCallbackBaseURL: ti.serverURL.String(),
+	})
+	result.Toolset, _ = attachCustomDomainToToolset(t, ctx, ti, authCtx, result.Toolset, "remote-login-custom.example.com")
+
+	mgr, _ := buildChallengeManagerForTest(t, ti)
+	clients, err := mgr.ListClients(ctx, result.Toolset.ProjectID, result.UserSessionIssuer.ID)
+	require.NoError(t, err)
+	require.Len(t, clients, 1)
+
+	userSubject := urn.NewUserSubject(uuid.NewString())
+	authURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+		ID:                  uuid.NewString(),
+		ProjectID:           result.Toolset.ProjectID,
+		UserSessionIssuerID: result.UserSessionIssuer.ID,
+		Subject:             &userSubject,
+		McpSlug:             result.Toolset.McpSlug.String,
+	}, clients[0])
+	require.NoError(t, err)
+
+	parsed, err := url.Parse(authURL)
+	require.NoError(t, err)
+	gramCallback := ti.serverURL.String() + "/mcp/" + result.Toolset.McpSlug.String + "/remote_login_callback"
+	customCallback := "https://remote-login-custom.example.com/mcp/" + result.Toolset.McpSlug.String + "/remote_login_callback"
+	require.Equal(t, gramCallback, parsed.Query().Get("redirect_uri"))
+
+	upstreamResp := httpGetNoFollow(t, authURL)
+	defer func() { _ = upstreamResp.Body.Close() }()
+	require.Equal(t, http.StatusFound, upstreamResp.StatusCode, "registered Gram callback should be accepted by dev-idp")
+
+	badURL := *parsed
+	badQuery := badURL.Query()
+	badQuery.Set("redirect_uri", customCallback)
+	badURL.RawQuery = badQuery.Encode()
+	badResp := httpGetNoFollow(t, badURL.String())
+	defer func() { _ = badResp.Body.Close() }()
+	require.Equal(t, http.StatusBadRequest, badResp.StatusCode, "unregistered custom-domain callback should be rejected by dev-idp")
 }
 
 // runRemoteLoginRoundTrip drives BuildAuthorizationUrl → upstream
@@ -212,6 +268,51 @@ func insertUserSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.Po
 		ClientSecretExpiresAt: pgtype.Timestamptz{Valid: false},
 	})
 	require.NoError(t, err)
+}
+
+func attachCustomDomainToToolset(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	authCtx *contextvalues.AuthContext,
+	toolset toolsets_repo.Toolset,
+	domainName string,
+) (toolsets_repo.Toolset, customdomains_repo.CustomDomain) {
+	t.Helper()
+
+	domainsRepo := customdomains_repo.New(ti.conn)
+	domain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         domainName,
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	domain, err = domainsRepo.UpdateCustomDomain(ctx, customdomains_repo.UpdateCustomDomainParams{
+		ID:             domain.ID,
+		Verified:       true,
+		Activated:      true,
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	toolset, err = toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
+		Name:                   toolset.Name,
+		Description:            toolset.Description,
+		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
+		McpSlug:                toolset.McpSlug,
+		McpIsPublic:            toolset.McpIsPublic,
+		CustomDomainID:         uuid.NullUUID{UUID: domain.ID, Valid: true},
+		McpEnabled:             toolset.McpEnabled,
+		ToolSelectionMode:      toolset.ToolSelectionMode,
+		Slug:                   toolset.Slug,
+		ProjectID:              toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	return toolset, domain
 }
 
 // buildChallengeManagerForTest constructs a ChallengeManager wired to the
