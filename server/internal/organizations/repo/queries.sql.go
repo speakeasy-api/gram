@@ -783,7 +783,7 @@ INSERT INTO organization_metadata (
     $2,
     $3,
     $4,
-    COALESCE($5::boolean, TRUE)
+    COALESCE($5::boolean, FALSE)
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,

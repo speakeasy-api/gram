@@ -10,7 +10,7 @@ INSERT INTO organization_metadata (
     @name,
     @slug,
     @workos_id,
-    COALESCE(sqlc.narg('whitelisted')::boolean, TRUE)
+    COALESCE(sqlc.narg('whitelisted')::boolean, FALSE)
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
