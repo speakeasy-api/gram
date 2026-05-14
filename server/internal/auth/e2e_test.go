@@ -210,6 +210,7 @@ func TestE2E_Callback_NewUserWithWorkOSOrgMemberships(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, orgName, orgMeta.Name)
 	assert.Equal(t, workosOrgID, orgMeta.WorkosID.String)
+	assert.False(t, orgMeta.Whitelisted, "new org created via login must not be auto-whitelisted")
 }
 
 // TestE2E_Callback_NewUserJoiningExistingOrg verifies that when a new user
