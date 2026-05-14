@@ -569,10 +569,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			ProjectID:   authCtx.ProjectID.String(),
 		}
 		if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
-			metadata.ServiceName = cached.ServiceName
-			metadata.UserEmail = cached.UserEmail
-			metadata.UserID = cached.UserID
-			metadata.ClaudeOrgID = cached.ClaudeOrgID
+			metadata = mergeClaudeAuthContextMetadata(metadata, cached)
 		}
 	} else {
 		var err error
@@ -643,6 +640,16 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		output.PermissionDecision = &allow
 	}
 	return result, nil
+}
+
+func mergeClaudeAuthContextMetadata(metadata SessionMetadata, cached SessionMetadata) SessionMetadata {
+	metadata.ServiceName = cached.ServiceName
+	metadata.UserEmail = cached.UserEmail
+	if cached.UserID != "" {
+		metadata.UserID = cached.UserID
+	}
+	metadata.ClaudeOrgID = cached.ClaudeOrgID
+	return metadata
 }
 
 // claudeMCPToolName returns the bare tool name and true if rawName follows the

@@ -74,6 +74,38 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 		"missing x-gram-toolset-id should be denied once auth-context metadata is in play")
 }
 
+func TestMergeClaudeAuthContextMetadata_PreservesAuthUserIDWhenCacheIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	metadata := mergeClaudeAuthContextMetadata(
+		SessionMetadata{
+			SessionID:   "session_test",
+			ServiceName: "",
+			UserEmail:   "",
+			UserID:      "user_from_auth",
+			ClaudeOrgID: "",
+			GramOrgID:   "org_from_auth",
+			ProjectID:   "project_from_auth",
+		},
+		SessionMetadata{
+			SessionID:   "session_test",
+			ServiceName: "claude-code",
+			UserEmail:   "local-hook-testing@example.com",
+			UserID:      "",
+			ClaudeOrgID: "claude_org",
+			GramOrgID:   "org_from_cache",
+			ProjectID:   "project_from_cache",
+		},
+	)
+
+	assert.Equal(t, "user_from_auth", metadata.UserID)
+	assert.Equal(t, "org_from_auth", metadata.GramOrgID)
+	assert.Equal(t, "project_from_auth", metadata.ProjectID)
+	assert.Equal(t, "claude-code", metadata.ServiceName)
+	assert.Equal(t, "local-hook-testing@example.com", metadata.UserEmail)
+	assert.Equal(t, "claude_org", metadata.ClaudeOrgID)
+}
+
 // When plugin auth headers are present but the API key is invalid/expired,
 // Claude() must NOT return a 401 error — that causes the client-side hook
 // script to block ALL tool calls, deadlocking the user. Instead it should
