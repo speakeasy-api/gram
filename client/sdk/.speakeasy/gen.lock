@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 0af29334b330c66eee75cdf07387a787
+  docChecksum: 10ff8d14ff987657d0c9870c6ff3ab44
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -571,11 +571,7 @@ trackedFiles:
   docs/models/components/organizationentry.md:
     last_write_checksum: sha1:d25cab5c2265fb437653402838c61ed27f7dcbc7
   docs/models/components/organizationinvitation.md:
-    last_write_checksum: sha1:f475d1717d144a756f11e994e4196a9977855b9c
-  docs/models/components/organizationinvitationaccept.md:
-    last_write_checksum: sha1:2cd52404b964a1238080dc485fde3611ba39fbb5
-  docs/models/components/organizationinvitationstate.md:
-    last_write_checksum: sha1:21bf402c8b8a8af0667f469cda7adcd506d81ec1
+    last_write_checksum: sha1:1f75cd944a8e3e459e2700c8bf92adcd6d199600
   docs/models/components/organizationuser.md:
     last_write_checksum: sha1:982e7f6d036e03381dc82ff336ab5c6bf6a3f20e
   docs/models/components/otelattribute.md:
@@ -777,7 +773,7 @@ trackedFiles:
   docs/models/components/selector.md:
     last_write_checksum: sha1:c8d3fdbdb79801acc981d10b05dc72494794f9d0
   docs/models/components/sendinviterequestbody.md:
-    last_write_checksum: sha1:0e198484928f538a25089e08a8082cced7ed28fc
+    last_write_checksum: sha1:e433f2544bc88fdc779ca174ecf2b7ea969d6e9f
   docs/models/components/serveimageform.md:
     last_write_checksum: sha1:530060f0cc468c392b1fd32052fc990c4a5c17c5
   docs/models/components/servernameoverride.md:
@@ -1516,8 +1512,6 @@ trackedFiles:
     last_write_checksum: sha1:803c0fd53a2b7255e96c0fecd23e74368f54ee0d
   docs/models/operations/getinstancesecurityoption4.md:
     last_write_checksum: sha1:21c23e6f66303065b1f087dfcc3deadfa1cceb3b
-  docs/models/operations/getinvitebytokenrequest.md:
-    last_write_checksum: sha1:4db4affafe03f7e87f24d3de10a0d0b9dea050b2
   docs/models/operations/getlatestdeploymentrequest.md:
     last_write_checksum: sha1:5284ff5704acb1a861a4b80ad7f1566d38394256
   docs/models/operations/getlatestdeploymentsecurity.md:
@@ -2637,7 +2631,7 @@ trackedFiles:
   docs/sdks/mcpservers/README.md:
     last_write_checksum: sha1:6bc047a1c9d65f74458c6470ad024de4cf743307
   docs/sdks/organizations/README.md:
-    last_write_checksum: sha1:0348348364c7580f26d98a4a43808c021d571915
+    last_write_checksum: sha1:6b7ecd25efd629719a834ee29f303b21385746de
   docs/sdks/otelforwarding/README.md:
     last_write_checksum: sha1:9599fbb87a1e733dbaf6180a1602c3ed20e46953
   docs/sdks/packages/README.md:
@@ -3066,8 +3060,6 @@ trackedFiles:
     last_write_checksum: sha1:7f2651d52cb9292450a9b4c523e125ba854eee6d
   src/funcs/organizationsGet.ts:
     last_write_checksum: sha1:425caca4be11163b202d6b893f8daa868c224c29
-  src/funcs/organizationsGetInviteByToken.ts:
-    last_write_checksum: sha1:3aa386ba87041f8c80dba9c044e6d3116296083a
   src/funcs/organizationsListInvites.ts:
     last_write_checksum: sha1:4e5011ee86420b528cee3a45f41ba556a32962fb
   src/funcs/organizationsListUsers.ts:
@@ -3884,7 +3876,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:584db13d611b1f3d3dc7ae46f26420a78b064e86
+    last_write_checksum: sha1:cfcb91ffe3140e094d20c434708d7bd84ae076e3
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -4119,9 +4111,7 @@ trackedFiles:
     last_write_checksum: sha1:ea941bf60c94870745f97d87fe5084c860dc91b1
     pristine_git_object: f2f7295b4ead4d4db3f38f721e08e3aa294ddafd
   src/models/components/organizationinvitation.ts:
-    last_write_checksum: sha1:0fcf62d7978a20f641d6d96b6880857ae5b8a163
-  src/models/components/organizationinvitationaccept.ts:
-    last_write_checksum: sha1:61da98eda71adefdd4f4f6f80eb9f623bb957116
+    last_write_checksum: sha1:5b4db2f1d5d14f39989f6961487468a11ebd7caf
   src/models/components/organizationuser.ts:
     last_write_checksum: sha1:5fbeb489e54a940b59403d1576dcfe43266a72ea
   src/models/components/otelattribute.ts:
@@ -4331,7 +4321,7 @@ trackedFiles:
   src/models/components/selector.ts:
     last_write_checksum: sha1:6121febd6ff326d1b1431cb8f8fbeb6c690212ef
   src/models/components/sendinviterequestbody.ts:
-    last_write_checksum: sha1:7f8b96e7dbb98bd5d702627bb6ee08d3e4df36c3
+    last_write_checksum: sha1:4db10ad0000eeaf1021650d75cbb16501a3eeb42
   src/models/components/serveimageform.ts:
     id: 220ace29ab1d
     last_write_checksum: sha1:02556f1de78b6d7b643c4bee99807bd701536d2a
@@ -4836,8 +4826,6 @@ trackedFiles:
     id: 092f009f4915
     last_write_checksum: sha1:fa4f6c75644d7dca1021abd8c688ea1e53acf263
     pristine_git_object: 4ddefe66b75214871b981c9cd71f35e4b069c96b
-  src/models/operations/getinvitebytoken.ts:
-    last_write_checksum: sha1:5133e1c34fc88790d8b4fdc2883e93803816f0c8
   src/models/operations/getlatestdeployment.ts:
     id: 30c24354b615
     last_write_checksum: sha1:14645332c9374d7e925b4d32b800b809001c5ea1
@@ -4930,7 +4918,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:e5cc7956d5d89a183a23c475762a7c1a7de4e3e3
+    last_write_checksum: sha1:05b36cd7b7b00fafb4fb183a94972229ef670769
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -5584,10 +5572,6 @@ trackedFiles:
     last_write_checksum: sha1:fb5c3f66f6db70a6921f34d310d386e070ce658c
   src/react-query/getHooksSummary.ts:
     last_write_checksum: sha1:09132178e0f2e0358d80c1512f365b24a9c3d5cb
-  src/react-query/getInviteByToken.core.ts:
-    last_write_checksum: sha1:2e27c7ddfbcf7a2ca632286e2ba78043f62e0e83
-  src/react-query/getInviteByToken.ts:
-    last_write_checksum: sha1:692a8e93cfaeca41bee9e1ca6ad9c75353ac42b7
   src/react-query/getMcpEndpoint.core.ts:
     last_write_checksum: sha1:0a05abdba7e457b20b5488f5fc158af87aac10ad
   src/react-query/getMcpEndpoint.ts:
@@ -5692,7 +5676,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:e00971c04baff511fbbdffa7cca5cade536d37bc
+    last_write_checksum: sha1:264246565a6acb074224dcb1ab2758a384754172
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -6395,7 +6379,7 @@ trackedFiles:
   src/sdk/mcpservers.ts:
     last_write_checksum: sha1:b5e43f23c4b80274012c8394b507ba6f187ecb81
   src/sdk/organizations.ts:
-    last_write_checksum: sha1:91e1ad56121c9818b8d72d6839f5d626ed8561e4
+    last_write_checksum: sha1:adb37c689b7ce5bbde9a9d36190cb8eff4e872d9
   src/sdk/otelforwarding.ts:
     last_write_checksum: sha1:bdff0a0685140d557a23b72fe543fdc8dbd95996
   src/sdk/packages.ts:

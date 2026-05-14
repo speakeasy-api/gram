@@ -11792,86 +11792,6 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: Organization
-  /rpc/organizations.getInviteByToken:
-    get:
-      description: Resolve a WorkOS invitation from its token (e.g. accept-flow).
-      operationId: getInviteByToken
-      parameters:
-        - allowEmptyValue: true
-          description: Invitation token from the invite link.
-          in: query
-          name: token
-          required: true
-          schema:
-            description: Invitation token from the invite link.
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OrganizationInvitationAccept'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      summary: getInviteByToken organizations
-      tags:
-        - organizations
-      x-speakeasy-name-override: getInviteByToken
-      x-speakeasy-react-hook:
-        name: GetInviteByToken
   /rpc/organizations.listInvites:
     get:
       description: List pending WorkOS invitations for the active organization.
@@ -32085,6 +32005,9 @@ components:
     OrganizationInvitationAccept:
       type: object
       properties:
+        accept_invitation_url:
+          type: string
+          description: URL to complete acceptance in WorkOS (may be empty when not actionable).
         email:
           type: string
           description: Invitee email address.
@@ -32103,6 +32026,7 @@ components:
         - email
         - state
         - organization_name
+        - accept_invitation_url
     OrganizationUser:
       type: object
       properties:
@@ -34168,9 +34092,9 @@ components:
         email:
           type: string
           description: Email address to invite.
-        role_slug:
+        role_id:
           type: string
-          description: Optional WorkOS role slug for the invitee.
+          description: Optional role ID for the invitee.
       required:
         - email
     ServeChatAttachmentForm:
