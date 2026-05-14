@@ -3,12 +3,14 @@ package auth_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
 func TestService_Register(t *testing.T) {
@@ -347,5 +349,92 @@ func TestService_Register(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "workos-sid-register-456", stored.WorkOSSessionID, "WorkOSSessionID must survive Register")
 		require.NotEmpty(t, stored.ActiveOrganizationID, "should have an active org after Register")
+	})
+
+	t.Run("register uses base slug when no collision exists", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.Organizations = []MockOrganizationEntry{}
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+
+		session := sessions.Session{
+			SessionID:            "slug-no-collision",
+			UserID:               userInfo.UserID,
+			ActiveOrganizationID: "",
+		}
+		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+
+		ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+			SessionID:            &session.SessionID,
+			UserID:               session.UserID,
+			ActiveOrganizationID: "",
+			AccountType:          "test",
+			Email:                &userInfo.Email,
+		})
+
+		err := instance.service.Register(ctx, &gen.RegisterPayload{
+			OrgName: "Unique Org Name",
+		})
+		require.NoError(t, err)
+
+		// Verify the slug is the plain slugified version with no suffix.
+		orgQueries := orgRepo.New(instance.conn)
+		org, err := orgQueries.GetOrganizationMetadataBySlug(ctx, "unique-org-name")
+		require.NoError(t, err)
+		assert.Equal(t, "unique-org-name", org.Slug)
+		assert.Equal(t, "Unique Org Name", org.Name)
+	})
+
+	t.Run("register appends random suffix on slug collision", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.Organizations = []MockOrganizationEntry{}
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+
+		// Pre-create an org that occupies the slug "collide-me".
+		require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+			ID:   "existing-org-collide",
+			Name: "Collide Me",
+			Slug: "collide-me",
+		}, ""))
+
+		session := sessions.Session{
+			SessionID:            "slug-collision",
+			UserID:               userInfo.UserID,
+			ActiveOrganizationID: "",
+		}
+		require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+
+		ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+			SessionID:            &session.SessionID,
+			UserID:               session.UserID,
+			ActiveOrganizationID: "",
+			AccountType:          "test",
+			Email:                &userInfo.Email,
+		})
+
+		err := instance.service.Register(ctx, &gen.RegisterPayload{
+			OrgName: "Collide Me",
+		})
+		require.NoError(t, err)
+
+		// The new org must NOT have the bare slug — it should have a random suffix.
+		stored, err := instance.sessionManager.GetSession(ctx, session.SessionID)
+		require.NoError(t, err)
+		require.NotEmpty(t, stored.ActiveOrganizationID)
+
+		orgQueries := orgRepo.New(instance.conn)
+		newOrg, err := orgQueries.GetOrganizationMetadata(ctx, stored.ActiveOrganizationID)
+		require.NoError(t, err)
+
+		assert.NotEqual(t, "collide-me", newOrg.Slug, "slug must not collide with existing org")
+		assert.Contains(t, newOrg.Slug, "collide-me-", "slug should start with base and have a random suffix")
+		assert.Len(t, newOrg.Slug, len("collide-me-")+4, "suffix should be 4 hex chars")
 	})
 }

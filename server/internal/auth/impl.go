@@ -645,7 +645,11 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeInvalid, errors.New("organization name contains invalid characters"), "organization name contains invalid characters")
 	}
 
-	slug := slugify(payload.OrgName)
+	slug, err := s.findUniqueSlug(ctx, slugify(payload.OrgName))
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error finding unique slug").Log(ctx, s.logger)
+	}
+
 	gramOrgID := "org_" + uuid.New().String()
 
 	// Provision the WorkOS org first so it exists before we create the Gram org.
@@ -690,6 +694,12 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 
 func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sessions.CachedUserInfo, session *sessions.Session) (string, error) {
 	orgName := generateLegibleOrgName()
+
+	slug, err := s.findUniqueSlug(ctx, slugify(orgName))
+	if err != nil {
+		return "", fmt.Errorf("find unique slug: %w", err)
+	}
+
 	gramOrgID := "org_" + uuid.New().String()
 
 	// Provision the WorkOS org first so it exists before we create the Gram org.
@@ -701,7 +711,7 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sess
 	org, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:          gramOrgID,
 		Name:        orgName,
-		Slug:        slugify(orgName),
+		Slug:        slug,
 		WorkosID:    pgtype.Text{String: workosOrgID, Valid: workosOrgID != ""},
 		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
 	})
@@ -937,6 +947,36 @@ func slugify(name string) string {
 	s = slugifyRe.ReplaceAllString(s, "-")
 	s = strings.Trim(s, "-")
 	return s
+}
+
+const maxSlugAttempts = 10
+
+// findUniqueSlug checks the DB for an existing org with the given slug and
+// appends a random 4-character suffix until a unique one is found.
+func (s *Service) findUniqueSlug(ctx context.Context, base string) (string, error) {
+	candidate := base
+	for range maxSlugAttempts {
+		_, err := s.orgRepo.GetOrganizationMetadataBySlug(ctx, candidate)
+		if err != nil {
+			// No row found — slug is available.
+			return candidate, nil
+		}
+		suffix, err := randomHexSuffix(4)
+		if err != nil {
+			return "", fmt.Errorf("generate slug suffix: %w", err)
+		}
+		candidate = base + "-" + suffix
+	}
+	return "", errors.New("unable to find unique slug after max attempts")
+}
+
+// randomHexSuffix returns n random lowercase hex characters.
+func randomHexSuffix(n int) (string, error) {
+	b := make([]byte, (n+1)/2)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b)[:n], nil
 }
 
 // callbackRedirectURL determines the redirect location after authentication. It
