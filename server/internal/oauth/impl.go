@@ -385,6 +385,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 			State:           string(oauthReqInfoJSON),
 			ScopesSupported: provider.ScopesSupported,
 			ClientID:        "",
+			OrganizationID:  "",
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to build gram OAuth URL").Log(ctx, s.logger)

@@ -136,6 +136,7 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 			State:           challengeID,
 			ClientID:        "",
 			ScopesSupported: nil,
+			OrganizationID:  "",
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").Log(ctx, logger)
