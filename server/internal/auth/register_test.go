@@ -252,8 +252,8 @@ func TestService_Register(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				t.Parallel()
-
+				// Not parallel: subtests share the same Redis session and each
+				// Register call mutates it (sets ActiveOrganizationID).
 				payload := &gen.RegisterPayload{
 					OrgName:      tc.orgName,
 					SessionToken: nil,
