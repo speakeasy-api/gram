@@ -114,7 +114,7 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 	svixClient, err := svix.New("test-token", &svix.SvixOptions{ServerUrl: svixSrv.URL()})
 	require.NoError(t, err)
 
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeatures{}, authzEngine, nil, "http://localhost:5173", "http://localhost:35291", auditLogger, svixClient)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeatures{}, authzEngine, nil, "http://localhost:5173", auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service: svc,
@@ -170,7 +170,7 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 	svixClient, err := svix.New("test-token", &svix.SvixOptions{ServerUrl: svixSrv.URL()})
 	require.NoError(t, err)
 
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeaturesEnabled{}, authzEngine, nil, "http://localhost:5173", "http://localhost:35291", auditLogger, svixClient)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeaturesEnabled{}, authzEngine, nil, "http://localhost:5173", auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service: svc,

@@ -64,40 +64,40 @@ type orgFeatureChecker interface {
 }
 
 type Service struct {
-	logger      *slog.Logger
-	tracer      trace.Tracer
-	db          *pgxpool.Pool
-	auth        *auth.Auth
-	authz       *authz.Engine
-	orgs        OrganizationProvider
-	features    orgFeatureChecker
-	email       *email.Service
-	siteURL     string // dashboard URL; used for invite callback RedirectURI and post-callback redirect
-	registryURL string // registry (speakeasy server) URL; used to redirect invitees through OIDC login after accepting
-	audit       *audit.Logger
-	svix        *svix.Svix
+	logger   *slog.Logger
+	tracer   trace.Tracer
+	db       *pgxpool.Pool
+	auth     *auth.Auth
+	authz    *authz.Engine
+	sessions *sessions.Manager
+	orgs     OrganizationProvider
+	features orgFeatureChecker
+	email    *email.Service
+	siteURL  string // dashboard URL; used for invite callback RedirectURI and post-callback redirect
+	audit    *audit.Logger
+	svix     *svix.Svix
 }
 
 var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, orgs OrganizationProvider, features orgFeatureChecker, authzEngine *authz.Engine, emailService *email.Service, siteURL string, registryURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, features orgFeatureChecker, authzEngine *authz.Engine, emailService *email.Service, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 
 	return &Service{
-		logger:      logger,
-		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/organizations"),
-		db:          db,
-		auth:        auth.New(logger, db, sessions, authzEngine),
-		authz:       authzEngine,
-		orgs:        orgs,
-		features:    features,
-		email:       emailService,
-		siteURL:     siteURL,
-		registryURL: registryURL,
-		audit:       auditLogger,
-		svix:        svix,
+		logger:   logger,
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/organizations"),
+		db:       db,
+		auth:     auth.New(logger, db, sessionMgr, authzEngine),
+		authz:    authzEngine,
+		sessions: sessionMgr,
+		orgs:     orgs,
+		features: features,
+		email:    emailService,
+		siteURL:  siteURL,
+		audit:    auditLogger,
+		svix:     svix,
 	}
 }
 
@@ -762,7 +762,11 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Try to create the org-user relationship if the user already exists in Gram.
+	// If the user doesn't exist yet, they'll land on the dashboard with a
+	// session but no org — the normal auth flow handles org provisioning.
+	var gramUserID string
 	if user, err := userrepo.New(s.db).GetUserByEmail(ctx, inviteeEmail); err == nil {
+		gramUserID = user.ID
 		if _, err := repo.UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
 			OrganizationID: invite.OrganizationID,
 			UserID:         conv.ToPGText(user.ID),
@@ -771,13 +775,43 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Redirect through the registry's OIDC login so the invitee gets a Gram
-	// session in one step. The return_url tells the registry to redirect back
-	// to Gram's auth callback after authentication. If the user already has a
-	// WorkOS session (from the magic link click), this completes instantly.
-	loginParams := url.Values{}
-	loginParams.Set("return_url", strings.TrimRight(s.siteURL, "/")+"/rpc/auth.callback")
-	http.Redirect(w, r, s.registryURL+"/v1/speakeasy_provider/login?"+loginParams.Encode(), http.StatusTemporaryRedirect)
+	if gramUserID == "" {
+		// User doesn't exist in Gram yet — redirect to normal login so the
+		// IDP flow creates the user and establishes a session.
+		http.Redirect(w, r, s.siteURL, http.StatusTemporaryRedirect)
+		return
+	}
+
+	// Create a Gram session directly — no need to bounce through an external
+	// OIDC login. The invitee is already authenticated via the magic link.
+	sessionID := uuid.New().String()
+	session := sessions.Session{
+		SessionID:            sessionID,
+		UserID:               gramUserID,
+		ActiveOrganizationID: invite.OrganizationID,
+		WorkOSSessionID:      "",
+	}
+	if err := s.sessions.StoreSession(ctx, session); err != nil {
+		s.logger.ErrorContext(ctx, "invite callback: failed to store session", attr.SlogError(err))
+		redirectError("failed to create session")
+		return
+	}
+
+	// Invalidate cached user info so the session picks up fresh org memberships.
+	if err := s.sessions.InvalidateUserInfoCache(ctx, gramUserID); err != nil {
+		s.logger.WarnContext(ctx, "invite callback: failed to invalidate user info cache", attr.SlogError(err))
+	}
+
+	//nolint:exhaustruct // only desired fields — avoid unexpected zero-value behavior
+	http.SetCookie(w, &http.Cookie{
+		Name:     "gram_session",
+		Value:    sessionID,
+		MaxAge:   2592000,
+		Path:     "/",
+		Secure:   true,
+		HttpOnly: true,
+	})
+	http.Redirect(w, r, s.siteURL, http.StatusTemporaryRedirect)
 }
 
 func organizationUserToGen(row *orgrepo.ListOrganizationUsersRow) *gen.OrganizationUser {
