@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"log/slog"
+	"net/url"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -48,6 +49,8 @@ type Service struct {
 	riskScanner        risk.RiskScanner
 	shadowMCPClient    *shadowmcp.Client
 	writer             *chat.ChatMessageWriter
+	siteURL            *url.URL
+	jwtSecret          string
 }
 
 // SessionMetadata contains validated session information from the Logs endpoint
@@ -97,6 +100,8 @@ func NewService(
 	riskScanner risk.RiskScanner,
 	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
+	siteURL *url.URL,
+	jwtSecret string,
 ) *Service {
 	return &Service{
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
@@ -113,6 +118,8 @@ func NewService(
 		riskScanner:        riskScanner,
 		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
+		siteURL:            siteURL,
+		jwtSecret:          jwtSecret,
 	}
 }
 
