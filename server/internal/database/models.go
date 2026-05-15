@@ -854,6 +854,7 @@ type OrganizationRoleAssignment struct {
 	WorkosLastEventID  pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
 }
 
 type OrganizationUserRelationship struct {

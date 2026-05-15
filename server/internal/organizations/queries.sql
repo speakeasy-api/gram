@@ -257,7 +257,7 @@ upserted AS (
         @workos_updated_at,
         @workos_last_event_id
     FROM input_role_urns
-    ON CONFLICT (organization_id, workos_user_id, role_urn) DO UPDATE SET
+    ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL DO UPDATE SET
         -- COALESCE preserves a backfilled user_id if the sync fires before the Gram user exists.
         user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
         workos_membership_id = EXCLUDED.workos_membership_id,
