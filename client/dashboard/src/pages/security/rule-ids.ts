@@ -8,16 +8,56 @@ export function ruleIdToPresidioEntity(ruleId: string): string {
   return stripped.toUpperCase().replace(/-/g, "_");
 }
 
+// Acronyms we want to render uppercase rather than title-cased. Anything
+// that wouldn't read right as "Pii" or "Cli" goes here.
+const ACRONYMS = new Set([
+  "pii",
+  "cli",
+  "mcp",
+  "api",
+  "url",
+  "ip",
+  "mac",
+  "ssn",
+  "nric",
+  "fin",
+  "nhs",
+  "nino",
+  "nif",
+  "tfn",
+  "pan",
+  "mbi",
+  "npi",
+  "itin",
+  "iban",
+  "ml",
+  "us",
+  "uk",
+  "es",
+  "it",
+  "au",
+  "in",
+  "sg",
+  "aws",
+  "gcp",
+  "id",
+]);
+
 // Humanize a kebab/dotted rule id we don't have catalog metadata for.
-// "destructive.cli-rm-rf" -> "Destructive Cli Rm Rf"
-// "pii.credit-card"       -> "Pii Credit Card"
-// Used as a last-resort label so unknown findings render legibly instead of
-// as raw kebab.
+// "destructive.cli-rm-rf" -> "Destructive CLI Rm Rf"
+// "pii.credit-card"       -> "PII Credit Card"
+// "pii.us-ssn"            -> "PII US SSN"
+// Used as a last-resort label so unknown findings render legibly instead
+// of as raw kebab.
 export function humanizeRuleId(ruleId: string): string {
   if (!ruleId) return "";
   return ruleId
     .split(/[.-]/)
     .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .map((part) => {
+      const lower = part.toLowerCase();
+      if (ACRONYMS.has(lower)) return lower.toUpperCase();
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
     .join(" ");
 }
