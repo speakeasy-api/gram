@@ -440,7 +440,12 @@ ORDER BY (
 ) ASC;
 
 -- name: LookupActiveAssistantRuntimeV2 :one
-SELECT id
+-- Returns the live v2 row including its state so admit can distinguish
+-- starting/active (signal threads) from expiring (skip this cycle and wait
+-- for the warm-timer workflow's Stop to soft-delete the row, then re-admit
+-- on the next coordinator kick). The unique partial index keyed on
+-- (project_id, assistant_id) means there is at most one matching row.
+SELECT id, state
 FROM assistant_runtimes
 WHERE project_id = @project_id
   AND assistant_id = @assistant_id

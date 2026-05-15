@@ -1292,13 +1292,12 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
 	}
 
-	if _, err := queries.LookupActiveAssistantRuntimeV2(ctx, assistantrepo.LookupActiveAssistantRuntimeV2Params{
+	row, err := queries.LookupActiveAssistantRuntimeV2(ctx, assistantrepo.LookupActiveAssistantRuntimeV2Params{
 		ProjectID:   assistant.ProjectID,
 		AssistantID: assistant.ID,
-	}); err != nil {
-		if !errors.Is(err, pgx.ErrNoRows) {
-			return AdmitPendingThreadsResult{}, fmt.Errorf("lookup v2 runtime: %w", err)
-		}
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
 		if err := queries.ReserveAssistantRuntimeV2(ctx, assistantrepo.ReserveAssistantRuntimeV2Params{
 			AssistantThreadID: threads[0].ID,
 			AssistantID:       assistant.ID,
@@ -1308,6 +1307,17 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 		}); err != nil {
 			return AdmitPendingThreadsResult{}, fmt.Errorf("reserve v2 assistant runtime: %w", err)
 		}
+	case err != nil:
+		return AdmitPendingThreadsResult{}, fmt.Errorf("lookup v2 runtime: %w", err)
+	case row.State == runtimeStateExpiring:
+		// The warm-timer workflow has CASed the row to expiring and is
+		// driving Stop. Signalling threads now would race with that path:
+		// LoadThreadContextV2 only accepts starting/active and the partial
+		// unique index forbids inserting a replacement row until the
+		// current one is soft-deleted. Bail out — the thread workflow
+		// signals the coordinator after Stop completes, which retriggers
+		// admit under a clean slot.
+		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
 	}
 
 	if err := tx.Commit(ctx); err != nil {

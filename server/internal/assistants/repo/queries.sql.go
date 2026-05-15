@@ -1640,7 +1640,7 @@ func (q *Queries) LoadThreadContextV2(ctx context.Context, arg LoadThreadContext
 }
 
 const lookupActiveAssistantRuntimeV2 = `-- name: LookupActiveAssistantRuntimeV2 :one
-SELECT id
+SELECT id, state
 FROM assistant_runtimes
 WHERE project_id = $1
   AND assistant_id = $2
@@ -1655,11 +1655,21 @@ type LookupActiveAssistantRuntimeV2Params struct {
 	AssistantID uuid.UUID
 }
 
-func (q *Queries) LookupActiveAssistantRuntimeV2(ctx context.Context, arg LookupActiveAssistantRuntimeV2Params) (uuid.UUID, error) {
+type LookupActiveAssistantRuntimeV2Row struct {
+	ID    uuid.UUID
+	State string
+}
+
+// Returns the live v2 row including its state so admit can distinguish
+// starting/active (signal threads) from expiring (skip this cycle and wait
+// for the warm-timer workflow's Stop to soft-delete the row, then re-admit
+// on the next coordinator kick). The unique partial index keyed on
+// (project_id, assistant_id) means there is at most one matching row.
+func (q *Queries) LookupActiveAssistantRuntimeV2(ctx context.Context, arg LookupActiveAssistantRuntimeV2Params) (LookupActiveAssistantRuntimeV2Row, error) {
 	row := q.db.QueryRow(ctx, lookupActiveAssistantRuntimeV2, arg.ProjectID, arg.AssistantID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i LookupActiveAssistantRuntimeV2Row
+	err := row.Scan(&i.ID, &i.State)
+	return i, err
 }
 
 const markAssistantRuntimeReaped = `-- name: MarkAssistantRuntimeReaped :exec
