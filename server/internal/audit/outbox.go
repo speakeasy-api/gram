@@ -29,7 +29,7 @@ type outboxEntry struct {
 }
 
 func appendToOutbox(ctx context.Context, dbtx repo.DBTX, input repo.InsertAuditLogParams, result repo.InsertAuditLogRow) error {
-	if _, err := outbox.Append(ctx, dbtx, outbox.InsertParams{
+	if _, err := outbox.Append(ctx, dbtx, outbox.AppendParams{
 		OrganizationID: result.OrganizationID,
 		EventType:      outbox.EventTypeAuditLogCreated,
 		Payload: outboxEntry{
