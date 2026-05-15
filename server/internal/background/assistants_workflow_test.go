@@ -53,10 +53,7 @@ func TestAssistantThreadWorkflowBacksOffBeforeRetryAdmission(t *testing.T) {
 	require.GreaterOrEqual(t, signalTime.Sub(start), assistantRetryAdmissionBackoff)
 }
 
-// Pins the v1 expire-toctou-revert branch: when ExpireAssistantThreadRuntime
-// reports a turn slipped in past the warm timer, the workflow must re-arm and
-// retry instead of falling through to SignalAssistantCoordinator.
-func TestAssistantThreadWorkflowRearmsOnExpireRevert(t *testing.T) {
+func TestAssistantThreadWorkflowExitsOnWarmTimerWithoutExpire(t *testing.T) {
 	t.Parallel()
 
 	var suite testsuite.WorkflowTestSuite
@@ -82,10 +79,7 @@ func TestAssistantThreadWorkflowRearmsOnExpireRevert(t *testing.T) {
 	var expireCalls atomic.Int32
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, _ activities.ExpireAssistantThreadRuntimeInput) (*activities.ExpireAssistantThreadRuntimeResult, error) {
-			n := expireCalls.Add(1)
-			if n == 1 {
-				return &activities.ExpireAssistantThreadRuntimeResult{Stopped: false, RemainingSeconds: 30}, nil
-			}
+			expireCalls.Add(1)
 			return &activities.ExpireAssistantThreadRuntimeResult{Stopped: true}, nil
 		},
 		activity.RegisterOptions{Name: "ExpireAssistantThreadRuntime"},
@@ -107,6 +101,6 @@ func TestAssistantThreadWorkflowRearmsOnExpireRevert(t *testing.T) {
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
-	require.Equal(t, int32(2), expireCalls.Load(), "second expire must run after revert re-arm")
-	require.Equal(t, int32(1), signalCalls.Load(), "coordinator signal fires once after the runtime is finally stopped")
+	require.Equal(t, int32(0), expireCalls.Load(), "warm-timer exit must not call ExpireAssistantThreadRuntime")
+	require.Equal(t, int32(1), signalCalls.Load(), "ProcessedAnyEvent must kick the coordinator so held-back pending siblings get re-evaluated")
 }

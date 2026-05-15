@@ -216,6 +216,27 @@ func (q *Queries) GetActiveUserCountByMessages(ctx context.Context, arg GetActiv
 	return active_user_count, err
 }
 
+const getAssistantThreadAssistantIDByChatID = `-- name: GetAssistantThreadAssistantIDByChatID :one
+SELECT t.assistant_id
+FROM assistant_threads t
+WHERE t.chat_id = $1
+  AND t.project_id = $2
+  AND t.deleted IS FALSE
+LIMIT 1
+`
+
+type GetAssistantThreadAssistantIDByChatIDParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg GetAssistantThreadAssistantIDByChatIDParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getAssistantThreadAssistantIDByChatID, arg.ChatID, arg.ProjectID)
+	var assistant_id uuid.UUID
+	err := row.Scan(&assistant_id)
+	return assistant_id, err
+}
+
 const getChat = `-- name: GetChat :one
 SELECT id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1 AND deleted IS FALSE
 `

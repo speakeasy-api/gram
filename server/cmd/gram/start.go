@@ -761,8 +761,10 @@ func newStartCommand() *cli.Command {
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
+			triggerTools := platformtoolsruntime.TriggerExternalTools(db, triggerApp, auditLogger)
 			platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
-				AssistantMemoryTools: memoryTools,
+				AssistantMemoryTools:  memoryTools,
+				AssistantTriggerTools: triggerTools,
 			})
 
 			platformSvc := platformtoolsruntime.NewService(
