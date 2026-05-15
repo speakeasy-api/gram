@@ -1706,18 +1706,23 @@ func (s *ServiceCore) MintThreadScopedRuntimeToken(assistant assistantRecord, th
 // caller is responsible for confirming the requesting principal is
 // scoped to the thread's assistant before invoking this method.
 func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threadID, principalAssistantID uuid.UUID) (threadBootstrap, error) {
+	logAttrs := []slog.Attr{
+		attr.SlogProjectID(projectID.String()),
+		attr.SlogAssistantID(principalAssistantID.String()),
+		attr.SlogAssistantThreadID(threadID.String()),
+	}
 	row, err := assistantrepo.New(s.db).LoadAssistantThreadForBootstrap(ctx, assistantrepo.LoadAssistantThreadForBootstrapParams{
 		ThreadID:  threadID,
 		ProjectID: projectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return threadBootstrap{}, oops.E(oops.CodeNotFound, nil, "assistant thread not found")
+			return threadBootstrap{}, oops.E(oops.CodeNotFound, nil, "assistant thread not found").Log(ctx, s.logger, logAttrs...)
 		}
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant thread")
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant thread").Log(ctx, s.logger, logAttrs...)
 	}
 	if row.AssistantID != principalAssistantID {
-		return threadBootstrap{}, oops.E(oops.CodeForbidden, nil, "thread does not belong to assistant")
+		return threadBootstrap{}, oops.E(oops.CodeForbidden, nil, "thread does not belong to assistant").Log(ctx, s.logger, logAttrs...)
 	}
 
 	thread := assistantThreadRecord{
@@ -1748,28 +1753,29 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	}
 	toolsets, err := s.loadAssistantToolsets(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
 	if err != nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant toolsets")
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant toolsets").Log(ctx, s.logger, logAttrs...)
 	}
 	assistant.Toolsets = toolsets[assistant.ID]
 
 	runtimeServerURL := s.runtime.ServerURL()
 	if runtimeServerURL == nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, nil, "assistant runtime server url not configured")
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, nil, "assistant runtime server url not configured").Log(ctx, s.logger, logAttrs...)
 	}
 
-	mcpServers, err := resolveAssistantMCPServers(runtimeServerURL, assistant.Toolsets)
-	if err != nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "resolve assistant mcp servers")
-	}
+	// Misconfigured toolsets (no MCP slug, MCP disabled) are surfaced as
+	// best-effort URLs rather than aborting the whole bootstrap. The runner
+	// will discover the failure when it tries to list tools and the
+	// assistant can tell the user which integration is broken.
+	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.Toolsets)
 
 	instructions, err := composeInstructions(assistant.Instructions, thread)
 	if err != nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions")
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").Log(ctx, s.logger, logAttrs...)
 	}
 
 	history, err := s.loadChatHistory(ctx, thread.ChatID, thread.ProjectID)
 	if err != nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant chat history")
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant chat history").Log(ctx, s.logger, logAttrs...)
 	}
 
 	completionsEndpoint := runtimeServerURL.JoinPath("chat", "completions")
@@ -1820,15 +1826,22 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 	return strings.Join(parts, "\n\n"), nil
 }
 
-func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetRow) ([]runtimeMCPServer, error) {
+func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, serverURL *url.URL, toolsets []assistantToolsetRow) []runtimeMCPServer {
 	platformToolsets := []string{platformtools.AssistantsPlatformToolsetSlug}
 	servers := make([]runtimeMCPServer, 0, len(toolsets)+len(platformToolsets))
 	for _, t := range toolsets {
-		if !t.McpEnabled {
-			return nil, fmt.Errorf("toolset %q does not have MCP enabled", t.ToolsetSlug)
-		}
-		if !t.McpSlug.Valid || t.McpSlug.String == "" {
-			return nil, fmt.Errorf("toolset %q has no MCP slug", t.ToolsetSlug)
+		// Misconfiguration (no MCP slug, MCP disabled) is a tenant-side
+		// problem, not a server fault. Skip the broken toolset and let
+		// the rest of the thread admit — the assistant just won't see
+		// these tools.
+		if !t.McpEnabled || !t.McpSlug.Valid || t.McpSlug.String == "" {
+			logger.WarnContext(ctx, "skipping assistant toolset that is not MCP-reachable",
+				attr.SlogToolsetID(t.ToolsetID.String()),
+				attr.SlogToolsetSlug(t.ToolsetSlug),
+				attr.SlogToolsetMCPSlug(t.McpSlug.String),
+				attr.SlogToolsetMCPEnabled(t.McpEnabled),
+			)
+			continue
 		}
 
 		headers := map[string]string{}
@@ -1862,7 +1875,7 @@ func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetR
 		})
 	}
 
-	return servers, nil
+	return servers
 }
 
 func (s *ServiceCore) ProcessThreadEventsByThreadID(ctx context.Context, projectID, threadID uuid.UUID) (ProcessThreadEventsResult, error) {
