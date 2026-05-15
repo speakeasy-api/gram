@@ -2,7 +2,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { RULE_CATEGORY_META } from "./policy-data";
 import { getCategoryForFinding, getRuleTitleFallback} from "./risk-utils";
-import { humanizeRuleId } from "./rule-ids";
+import { Badge } from "@speakeasy-api/moonshine";
 
 export function CategoryLabel({
   source,
@@ -12,18 +12,25 @@ export function CategoryLabel({
   ruleId?: string;
 }) {
   const category = getCategoryForFinding(source, ruleId);
-  if (category) {
-    return (
-      <span className="font-mono text-xs">
-        {RULE_CATEGORY_META[category].label}
-      </span>
-    );
-  }
-  // Unknown source: title-case it so the table cell still reads cleanly
-  // (e.g. a future "presidio_pro" source renders as "Presidio Pro").
+  const label = category ? RULE_CATEGORY_META[category].label : null;
+  const shortLabel = category === "pii" ? "PII" : null;
   return (
-    <span className="font-mono text-xs">
-      {source ? humanizeRuleId(source.replace(/_/g, "-")) : "-"}
+    <span
+      className="risk-category-label"
+      data-short-label={shortLabel ? "true" : undefined}
+    >
+      <Badge variant="neutral" title={label ?? undefined}>
+        <Badge.Text>
+          {shortLabel ? (
+            <>
+              <span className="risk-category-label__long">{label}</span>
+              <span className="risk-category-label__short">{shortLabel}</span>
+            </>
+          ) : (
+            label
+          )}
+        </Badge.Text>
+      </Badge>
     </span>
   );
 }
