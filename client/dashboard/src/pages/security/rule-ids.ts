@@ -43,6 +43,25 @@ const ACRONYMS = new Set([
   "id",
 ]);
 
+// ruleIdCategoryLabel returns the uppercase category-prefix label for a
+// rule id (`pii.credit-card` → `PII`, `secret.anthropic-api-key` →
+// `SECRET`, `destructive.shell.rm-rf` → `DESTRUCTIVE`,
+// `shadow-mcp` → `SHADOW-MCP`, `prompt-injection` → `PROMPT-INJECTION`).
+// Use this for category badges instead of the raw `source`, which leaks
+// implementation detail (`presidio`, `gitleaks`) the policy author never
+// thinks in.
+//
+// For dotted canonical ids the category is the first dot-delimited
+// segment. For undotted canonical ids (`shadow-mcp`, `prompt-injection`)
+// the whole id is the category. Legacy non-canonical ids fall through to
+// the raw id uppercased — those rows will look noisy, which signals
+// "this row predates normalization."
+export function ruleIdCategoryLabel(ruleId: string | undefined | null): string {
+  if (!ruleId) return "";
+  const dot = ruleId.indexOf(".");
+  return (dot >= 0 ? ruleId.slice(0, dot) : ruleId).toUpperCase();
+}
+
 // Humanize a kebab/dotted rule id we don't have catalog metadata for.
 // Splits on every separator the dashboard might encounter — dots, hyphens,
 // underscores, and forward slashes — so canonical, UPPER_SNAKE Presidio,
