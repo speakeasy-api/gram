@@ -1,5 +1,14 @@
 # server
 
+## 0.52.1
+
+### Patch Changes
+
+- e129f0a: Assistant platform toolsets are now served from `/platform/mcp/{slug}` instead of `/x/platform-mcp/{slug}`, in line with `/mcp` prefix for MCP servers.
+- 89588d7: dedupe chat asset writes and idempotently upload to prevent GCS 429s
+- 5f00991: Make hook routes (Claude / Cursor / Codex / OTEL Logs / OTEL Metrics) filterable in Datadog by `gram.org.id`, `gram.project.id`, `gram.hook.source`, and `gram.hook.event`. Replace nested `value` payloads with top-level slog attrs attached via `slog.With`, and log on every early-return path — including unauthorized requests and missing-session-id branches — so a silent 401 or no-session request is still visible when debugging hook setup for a given org/project.
+- 1240c7a: fix: get stop hook working in cowork again
+
 ## 0.52.0
 
 ### Minor Changes
