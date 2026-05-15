@@ -168,33 +168,56 @@ const ENTRY_TYPE_META: Record<
   {
     label: string;
     icon: IconName;
+    avatarClassName: string;
     iconClassName: string;
+    contentClassName: string;
+    collapsedClassName: string;
   }
 > = {
   user: {
     label: "User",
     icon: "user",
+    avatarClassName: "bg-muted",
     iconClassName: "text-muted-foreground",
+    contentClassName: "border border-border p-3",
+    collapsedClassName:
+      "border-l-3 border-border bg-muted/10 hover:bg-muted/30",
   },
   assistant: {
     label: "Assistant",
     icon: "bot",
+    avatarClassName: "bg-information-softest",
     iconClassName: "text-default-information",
+    contentClassName: "border border-border p-3",
+    collapsedClassName:
+      "border-l-3 border-information-default bg-muted/10 hover:bg-muted/30",
   },
   tool_call: {
     label: "Tool Call",
     icon: "zap",
+    avatarClassName: "bg-warning-softest",
     iconClassName: "text-warning-default",
+    contentClassName: "border border-border",
+    collapsedClassName:
+      "border-l-3 border-warning-default bg-muted/10 hover:bg-muted/30",
   },
   tool_result: {
     label: "Tool Result",
     icon: "terminal",
+    avatarClassName: "bg-success-softest",
     iconClassName: "text-success-default",
+    contentClassName: "",
+    collapsedClassName:
+      "border-l-3 border-success-default bg-muted/10 hover:bg-muted/30",
   },
   system: {
     label: "System Prompt",
     icon: "settings",
+    avatarClassName: "bg-accent",
     iconClassName: "text-muted-foreground",
+    contentClassName: "border border-border p-3",
+    collapsedClassName:
+      "border-l-3 border-border bg-muted/10 hover:bg-muted/30",
   },
 };
 
@@ -371,7 +394,7 @@ function ChatMessagesList({
   // A single segment (no compaction has ever occurred) stays flat — no accordion.
   if (maxGeneration === 0) {
     return (
-      <Stack direction="vertical" gap={4}>
+      <Stack direction="vertical">
         {visibleMessages.map((message) => (
           <MessageItem
             key={message.id}
@@ -399,7 +422,7 @@ function ChatMessagesList({
             </div>
           </AccordionTrigger>
           <AccordionContent>
-            <Stack direction="vertical" gap={4}>
+            <Stack direction="vertical">
               {groupMessages.map((message) => (
                 <MessageItem
                   key={message.id}
@@ -437,29 +460,18 @@ function MessageItem({
   const [contentRevealed, setContentRevealed] = useState(false);
   const isCollapsed = collapseNonRisk && !hasRisk && !expanded;
 
-  const parsedToolCalls: ToolCall[] | null = useMemo(() => {
-    if (!message.toolCalls) return null;
-    try {
-      let parsed: unknown = JSON.parse(message.toolCalls);
-      // Handle double-encoded JSON strings
-      if (typeof parsed === "string") {
-        parsed = JSON.parse(parsed);
-      }
-      return Array.isArray(parsed) ? (parsed as ToolCall[]) : null;
-    } catch {
-      return null;
-    }
-  }, [message.toolCalls]);
+  const parsedToolCalls = useMemo(
+    () => parseToolCalls(message.toolCalls),
+    [message.toolCalls],
+  );
+  const entryType = getTraceEntryType(message, parsedToolCalls);
+  const entryMeta = ENTRY_TYPE_META[entryType];
 
   if (isCollapsed) {
     const label =
-      message.role === "tool"
-        ? "Tool Result"
-        : message.role === "system"
-          ? "System Prompt"
-          : parsedToolCalls
-            ? `Tool Call: ${parsedToolCalls[0]?.function?.name ?? "unknown"}`
-            : message.role;
+      entryType === "tool_call"
+        ? `Tool Call: ${parsedToolCalls?.[0]?.function?.name ?? "unknown"}`
+        : entryMeta.label;
     const preview =
       !parsedToolCalls && typeof message.content === "string"
         ? message.content.trim().slice(0, 80)
@@ -469,14 +481,24 @@ function MessageItem({
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        className="text-muted-foreground hover:bg-muted/50 flex w-full items-center gap-2 rounded px-1 py-1 text-xs transition-colors"
-      >
-        <Icon name="chevron-right" className="size-3 shrink-0" />
-        <span className="capitalize">{label}</span>
-        {message.createdAt && (
-          <span>{format(new Date(message.createdAt), "HH:mm:ss")}</span>
+        className={cn(
+          entryMeta.collapsedClassName,
+          "text-muted-foreground flex w-full items-center gap-3 truncate px-2 py-2 text-sm transition-colors",
+          "border-r-muted border-t-muted last:border-b-muted border border-b-transparent",
         )}
+      >
+        <Icon
+          name={entryMeta.icon}
+          className={cn("ml-1 size-4 shrink-0", entryMeta.iconClassName)}
+        />
+        {message.createdAt && (
+          <span className="font-mono text-xs">
+            {format(new Date(message.createdAt), "HH:mm:ss")}
+          </span>
+        )}
+        <span className="font-medium">{label}</span>
         {preview && <span className="truncate opacity-60">{preview}...</span>}
+        <Icon name="chevron-down" className="ml-auto size-3 shrink-0" />
       </button>
     );
   }
@@ -494,21 +516,29 @@ function MessageItem({
       {parsedToolCalls ? (
         parsedToolCalls.map((tc, idx: number) => (
           <div key={tc.id || idx} className="flex items-start gap-3">
-            <div className="bg-primary flex size-8 flex-shrink-0 items-center justify-center rounded-full">
-              <Icon name="zap" className="text-primary-foreground size-4" />
+            <div
+              className={cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-full",
+                entryMeta.avatarClassName,
+              )}
+            >
+              <Icon
+                name={entryMeta.icon}
+                className={cn("size-4", entryMeta.iconClassName)}
+              />
             </div>
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex items-center gap-2">
-                <span className="text-sm font-semibold">Tool Call</span>
+                <span className="text-muted-foreground font-mono text-xs">
+                  {message.createdAt &&
+                    format(new Date(message.createdAt), "HH:mm:ss")}
+                </span>
+                <span className="text-sm font-semibold">{entryMeta.label}</span>
                 {tc.id && (
                   <code className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
                     {tc.id}
                   </code>
                 )}
-                <span className="text-muted-foreground text-xs">
-                  {message.createdAt &&
-                    format(new Date(message.createdAt), "HH:mm:ss")}
-                </span>
                 {riskResults && riskResults.length > 0 && (
                   <RiskBadgePopover results={riskResults} />
                 )}
@@ -516,10 +546,18 @@ function MessageItem({
               {hasSensitiveContent && !contentRevealed ? (
                 <MaskedContent onReveal={() => setContentRevealed(true)} />
               ) : (
-                <div className="bg-background overflow-hidden rounded-lg border text-sm">
-                  <div className="bg-muted/30 border-b p-3">
+                <div
+                  className={cn(
+                    "overflow-hidden rounded-lg text-sm",
+                    entryMeta.contentClassName,
+                  )}
+                >
+                  <div className="bg-background/50 border-b p-3">
                     <div className="flex items-center gap-2">
-                      <Icon name="zap" className="text-primary size-4" />
+                      <Icon
+                        name={entryMeta.icon}
+                        className={cn("size-4", entryMeta.iconClassName)}
+                      />
                       <span className="font-semibold">
                         {tc.function?.name || tc.name || "Tool Call"}
                       </span>
@@ -542,53 +580,43 @@ function MessageItem({
         ))
       ) : (
         <div className="flex items-start gap-3">
-          {message.role === "user" && (
-            <div className="bg-primary/10 flex size-8 flex-shrink-0 items-center justify-center rounded-full">
-              <Icon name="user" className="text-primary size-4" />
-            </div>
-          )}
-          {message.role === "assistant" && (
-            <div className="bg-muted flex size-8 flex-shrink-0 items-center justify-center rounded-full">
-              <Icon name="bot" className="size-4" />
-            </div>
-          )}
-          {message.role === "tool" && (
-            <div className="bg-primary flex size-8 flex-shrink-0 items-center justify-center rounded-full">
-              <Icon name="zap" className="text-primary-foreground size-4" />
-            </div>
-          )}
-          {message.role === "system" && (
-            <div className="bg-muted flex size-8 flex-shrink-0 items-center justify-center rounded-full">
-              <Icon name="settings" className="size-4" />
-            </div>
-          )}
+          <div
+            className={cn(
+              "flex size-8 shrink-0 items-center justify-center rounded-full",
+              entryMeta.avatarClassName,
+            )}
+          >
+            <Icon
+              name={entryMeta.icon}
+              className={cn("size-4", entryMeta.iconClassName)}
+            />
+          </div>
 
           <div className="min-w-0 flex-1">
             <div className="mb-1 flex items-center gap-2">
-              <span className="text-sm font-semibold capitalize">
-                {message.role === "tool"
-                  ? "Tool Result"
-                  : message.role === "system"
-                    ? "System Prompt"
-                    : message.role}
+              <span className="text-muted-foreground font-mono text-xs">
+                {message.createdAt &&
+                  format(new Date(message.createdAt), "HH:mm:ss")}
               </span>
+              <span className="text-sm font-semibold">{entryMeta.label}</span>
               {message.toolCallId && (
                 <code className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
                   {message.toolCallId}
                 </code>
               )}
-              <span className="text-muted-foreground text-xs">
-                {message.createdAt &&
-                  format(new Date(message.createdAt), "HH:mm:ss")}
-              </span>
               {riskResults && riskResults.length > 0 && (
                 <RiskBadgePopover results={riskResults} />
               )}
             </div>
             {hasSensitiveContent && !contentRevealed ? (
               <MaskedContent onReveal={() => setContentRevealed(true)} />
-            ) : message.role === "system" ? (
-              <details className="bg-muted/30 group overflow-hidden rounded-lg border text-sm">
+            ) : entryType === "system" ? (
+              <details
+                className={cn(
+                  "group overflow-hidden rounded-lg text-sm",
+                  entryMeta.contentClassName,
+                )}
+              >
                 <summary className="text-muted-foreground hover:bg-muted/50 flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs select-none">
                   <Icon
                     name="chevron-right"
@@ -606,12 +634,10 @@ function MessageItem({
               <div
                 className={cn(
                   "overflow-hidden rounded-lg text-sm",
-                  message.role === "user" && "bg-primary/5 p-3",
-                  message.role === "assistant" && "bg-muted/50 p-3",
-                  message.role === "tool" && "bg-background border",
+                  entryMeta.contentClassName,
                 )}
               >
-                {message.role === "tool" ? (
+                {entryType === "tool_result" ? (
                   <CodeBlock content={message.content ?? ""} maxHeight={300} />
                 ) : (
                   <MessageContent
@@ -682,7 +708,7 @@ function TelemetryLogsTab({
               {log.severityText || "INFO"}
             </Badge>
             <div className="min-w-0 flex-1 space-y-1">
-              <div className="text-sm font-medium break-words">
+              <div className="text-sm font-medium wrap-break-word">
                 {log.body.trim()}
               </div>
               <div className="text-muted-foreground flex items-center gap-3 text-xs">
@@ -1111,7 +1137,7 @@ export function ChatDetailPanel({
             </button>
           </div>
         </div>
-        <div className="text-muted-foreground mb-3 text-sm">
+        <div className="text-muted-foreground mb-3 font-mono text-sm">
           {format(new Date(chat.createdAt), "yyyy-MM-dd HH:mm:ss")}
         </div>
         <div className="text-sm">{chat.title}</div>
