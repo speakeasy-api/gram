@@ -15,16 +15,13 @@ export function CategoryLabel({
   const label = category ? RULE_CATEGORY_META[category].label : null;
   const shortLabel = category === "pii" ? "PII" : null;
   return (
-    <span
-      className="risk-category-label"
-      data-short-label={shortLabel ? "true" : undefined}
-    >
+    <span className="@container block min-w-0 overflow-hidden whitespace-nowrap">
       <Badge variant="neutral" title={label ?? undefined}>
         <Badge.Text>
           {shortLabel ? (
             <>
-              <span className="risk-category-label__long">{label}</span>
-              <span className="risk-category-label__short">{shortLabel}</span>
+              <span className="@max-[220px]:hidden">{label}</span>
+              <span className="hidden @max-[220px]:inline">{shortLabel}</span>
             </>
           ) : (
             label
