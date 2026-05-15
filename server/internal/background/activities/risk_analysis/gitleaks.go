@@ -162,6 +162,7 @@ func ConvertFindings(content string, raw []report.Finding) []Finding {
 			Source:           "gitleaks",
 			Confidence:       1.0,
 			DeadLetterReason: "",
+			toolCallID:       "",
 		})
 	}
 	return out

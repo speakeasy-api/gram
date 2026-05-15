@@ -99,7 +99,8 @@ func TestClaude_PreToolUse_DeniesWhenMCPListNotCached(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	output := result.HookSpecificOutput.(*HookSpecificOutput)
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
 	require.NotNil(t, output.PermissionDecision)
 	assert.Equal(t, "deny", *output.PermissionDecision)
 	require.NotNil(t, output.PermissionDecisionReason)
@@ -137,7 +138,8 @@ func TestClaude_PreToolUse_DeniesWhenMatchedServerNotGramHosted(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	output := result.HookSpecificOutput.(*HookSpecificOutput)
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
 	require.NotNil(t, output.PermissionDecision)
 	assert.Equal(t, "deny", *output.PermissionDecision)
 }
@@ -172,7 +174,8 @@ func TestClaude_PreToolUse_DeniesLocalStdioServer(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	output := result.HookSpecificOutput.(*HookSpecificOutput)
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
 	require.NotNil(t, output.PermissionDecision)
 	assert.Equal(t, "deny", *output.PermissionDecision)
 }
@@ -213,7 +216,8 @@ func TestClaude_PreToolUse_AllowsApprovedLocalStdioServer(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	output := result.HookSpecificOutput.(*HookSpecificOutput)
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
 	require.NotNil(t, output.PermissionDecision)
 	assert.Equal(t, "allow", *output.PermissionDecision)
 }
@@ -245,7 +249,8 @@ func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	output := result.HookSpecificOutput.(*HookSpecificOutput)
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
 	require.NotNil(t, output.PermissionDecision)
 	assert.Equal(t, "allow", *output.PermissionDecision)
 }

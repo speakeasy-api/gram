@@ -16,19 +16,28 @@ import (
 // subdomain (e.g. via a CNAME mistake) could bypass the guard otherwise.
 const gramHostedMCPHost = "app.getgram.ai"
 
-// claudeMCPServerAndTool splits a Claude Code MCP tool name into its
+// parsedClaudeToolName is the result of splitting a Claude Code tool name
+// into its MCP "<server>" and "<tool>" parts. IsMCP is false for native
+// tools (Read, Edit, Bash, ...) and for malformed mcp__ names.
+type parsedClaudeToolName struct {
+	Server string
+	Tool   string
+	IsMCP  bool
+}
+
+// parseClaudeToolName splits a Claude Code MCP tool name into its
 // "<server>" and "<tool>" parts. Tools follow the "mcp__<server>__<tool>"
-// convention; native Claude Code tools (Read, Edit, Bash, ...) return
-// ("", "", false).
-func claudeMCPServerAndTool(rawName string) (string, string, bool) {
+// convention; native Claude Code tools (Read, Edit, Bash, ...) return a
+// zero-value result with IsMCP=false.
+func parseClaudeToolName(rawName string) parsedClaudeToolName {
 	if !strings.HasPrefix(rawName, "mcp__") {
-		return "", "", false
+		return parsedClaudeToolName{Server: "", Tool: "", IsMCP: false}
 	}
 	parts := strings.SplitN(rawName, "__", 3)
 	if len(parts) != 3 || parts[1] == "" || parts[2] == "" {
-		return "", "", false
+		return parsedClaudeToolName{Server: "", Tool: "", IsMCP: false}
 	}
-	return parts[1], parts[2], true
+	return parsedClaudeToolName{Server: parts[1], Tool: parts[2], IsMCP: true}
 }
 
 // mcpServerPrefix returns the tool-name prefix Claude Code derives for an
@@ -59,10 +68,10 @@ func sanitizeMCPName(name string) string {
 	var b strings.Builder
 	b.Grow(len(name))
 	for _, r := range name {
-		switch {
-		case r == ' ':
+		switch r {
+		case ' ':
 			b.WriteByte('_')
-		case r == '(' || r == ')':
+		case '(', ')':
 			// drop
 		default:
 			b.WriteRune(r)
@@ -140,7 +149,11 @@ func (s *Service) isMatchedMCPApproved(ctx context.Context, projectID, policyID,
 	if len(candidates) == 0 {
 		return false, nil
 	}
-	return shadowmcp.IsShadowMCPApproved(ctx, s.cache, projectID, policyID, candidates...)
+	approved, err := shadowmcp.IsShadowMCPApproved(ctx, s.cache, projectID, policyID, candidates...)
+	if err != nil {
+		return false, fmt.Errorf("check shadow mcp approval: %w", err)
+	}
+	return approved, nil
 }
 
 // getCachedMCPList retrieves the parsed `claude mcp list` snapshot stored

@@ -915,16 +915,16 @@ function ShadowMCPExclusionsSection({ policyId }: { policyId: string }) {
     <div className="space-y-2">
       <Label className="text-sm font-medium">Excluded MCP Servers</Label>
       <p className="text-muted-foreground text-xs">
-        Shadow-MCP servers approved for this policy. Calls to these servers
-        are allowed even when the policy would otherwise block them.
+        Shadow-MCP servers approved for this policy. Calls to these servers are
+        allowed even when the policy would otherwise block them.
       </p>
       <div className="border-border divide-border divide-y rounded-lg border">
         {isLoading ? (
           <div className="text-muted-foreground p-3 text-xs">Loading…</div>
         ) : approvals.length === 0 ? (
           <div className="text-muted-foreground p-3 text-xs">
-            No exclusions yet. Use the "Exclude" action on a finding in the
-            Risk Overview to add one.
+            No exclusions yet. Use the "Exclude" action on a finding in the Risk
+            Overview to add one.
           </div>
         ) : (
           approvals.map((a) => (
@@ -933,10 +933,7 @@ function ShadowMCPExclusionsSection({ policyId }: { policyId: string }) {
               className="flex items-center justify-between gap-2 p-3"
             >
               <div className="min-w-0 flex-1">
-                <div
-                  className="truncate font-mono text-xs"
-                  title={a.match}
-                >
+                <div className="truncate font-mono text-xs" title={a.match}>
                   {a.match}
                 </div>
                 {(a.serverName || a.approvedBy) && (

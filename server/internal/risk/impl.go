@@ -616,9 +616,9 @@ func encodeRiskResultsCursor(c riskResultsCursor) string {
 
 func cursorToParams(c *riskResultsCursor) (pgtype.Timestamptz, uuid.NullUUID) {
 	if c == nil {
-		return pgtype.Timestamptz{}, uuid.NullUUID{}
+		return pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	}
-	return pgtype.Timestamptz{Time: c.MessageCreatedAt, Valid: true}, uuid.NullUUID{UUID: c.ID, Valid: true}
+	return pgtype.Timestamptz{Time: c.MessageCreatedAt, InfinityModifier: pgtype.Finite, Valid: true}, uuid.NullUUID{UUID: c.ID, Valid: true}
 }
 
 func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResultsPayload) (*gen.ListRiskResultsResult, error) {

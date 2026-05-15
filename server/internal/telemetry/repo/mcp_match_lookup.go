@@ -54,7 +54,7 @@ func (q *Queries) LookupMCPMatchesByToolCallID(ctx context.Context, projectID uu
 	if err != nil {
 		return nil, fmt.Errorf("query mcp match by trace_id: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	out := make(map[string]string, len(traceIDs))
 	for rows.Next() {

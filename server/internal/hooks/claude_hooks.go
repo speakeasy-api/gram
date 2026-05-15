@@ -449,8 +449,6 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 		)
 		return
 	}
-	j, _ := json.Marshal(entries)
-	print(string(j))
 }
 
 // refreshMCPListTTL extends the MCP list cache TTL for the session if the
@@ -610,13 +608,14 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	if payload.ToolName != nil {
 		rawToolName = *payload.ToolName
 	}
-	serverPrefix, _, isMCP := claudeMCPServerAndTool(rawToolName)
-	if !isMCP {
+	parsed := parseClaudeToolName(rawToolName)
+	if !parsed.IsMCP {
 		if output != nil {
 			output.PermissionDecision = &allow
 		}
 		return result, nil
 	}
+	serverPrefix := parsed.Server
 
 	sessionID := ""
 	if payload.SessionID != nil {

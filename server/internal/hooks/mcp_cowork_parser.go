@@ -34,11 +34,15 @@ func ParseCoworkMCPInventory(raw any) []MCPServerEntry {
 		}
 
 		entries = append(entries, MCPServerEntry{
+			RawLine:       "",
 			Source:        source,
+			PluginName:    "",
 			Name:          name,
 			URL:           url,
+			Command:       "",
 			Transport:     "HTTP",
 			Status:        "unknown",
+			StatusRaw:     "",
 			ConnectorUUID: uuid,
 		})
 	}

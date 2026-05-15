@@ -120,6 +120,7 @@ func ForDeploymentProcessing(
 		WorkOSClient:        workos.NewStubClient(),
 		SvixClient:          nil,
 		ProductFeatures:     nil,
+		ClickhouseConn:      nil,
 	}
 }
 
@@ -161,6 +162,7 @@ func NewTemporalWorker(
 		WorkOSClient:        workos.NewStubClient(),
 		SvixClient:          nil,
 		ProductFeatures:     nil,
+		ClickhouseConn:      nil,
 	}
 
 	for _, o := range options {
@@ -195,6 +197,7 @@ func NewTemporalWorker(
 			WorkOSClient:        conv.Default(o.WorkOSClient, opts.WorkOSClient),
 			SvixClient:          conv.Default(o.SvixClient, opts.SvixClient),
 			ProductFeatures:     conv.Default(o.ProductFeatures, opts.ProductFeatures),
+			ClickhouseConn:      conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
 		}
 	}
 

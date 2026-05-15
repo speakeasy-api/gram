@@ -166,9 +166,9 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	// Best-effort — when the MCP list snapshot is missing the attribute
 	// just isn't set, and the scanner falls back to its server-prefix
 	// guess.
-	if serverPrefix, _, isMCP := claudeMCPServerAndTool(toolName); isMCP && payload.SessionID != nil && *payload.SessionID != "" {
+	if parsed := parseClaudeToolName(toolName); parsed.IsMCP && payload.SessionID != nil && *payload.SessionID != "" {
 		if entries, err := s.getCachedMCPList(ctx, *payload.SessionID); err == nil {
-			if v := resolvedMCPMatch(matchCachedMCPEntry(entries, serverPrefix), serverPrefix); v != "" {
+			if v := resolvedMCPMatch(matchCachedMCPEntry(entries, parsed.Server), parsed.Server); v != "" {
 				attrs[attr.MCPMatchKey] = v
 			}
 		}

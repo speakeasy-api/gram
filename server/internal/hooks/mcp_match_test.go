@@ -82,13 +82,13 @@ func TestIsGramHostedMCPURL(t *testing.T) {
 	}
 }
 
-func TestClaudeMCPServerAndTool(t *testing.T) {
+func TestParseClaudeToolName(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		raw      string
-		server   string
-		tool     string
-		isMCP    bool
+		raw    string
+		server string
+		tool   string
+		isMCP  bool
 	}{
 		{"mcp__gram__do_thing", "gram", "do_thing", true},
 		{"mcp__claude_ai_Linear_Speakeasy__list_issues", "claude_ai_Linear_Speakeasy", "list_issues", true},
@@ -101,10 +101,10 @@ func TestClaudeMCPServerAndTool(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.raw, func(t *testing.T) {
 			t.Parallel()
-			s, tn, ok := claudeMCPServerAndTool(tc.raw)
-			assert.Equal(t, tc.isMCP, ok)
-			assert.Equal(t, tc.server, s)
-			assert.Equal(t, tc.tool, tn)
+			got := parseClaudeToolName(tc.raw)
+			assert.Equal(t, tc.isMCP, got.IsMCP)
+			assert.Equal(t, tc.server, got.Server)
+			assert.Equal(t, tc.tool, got.Tool)
 		})
 	}
 }

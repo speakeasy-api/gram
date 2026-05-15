@@ -49,7 +49,7 @@ func ParseClaudeMCPList(out string) []MCPServerEntry {
 func parseClaudeMCPListLine(line string) (MCPServerEntry, bool) {
 	sepIdx := strings.LastIndex(line, " - ")
 	if sepIdx < 0 {
-		return MCPServerEntry{}, false
+		return MCPServerEntry{RawLine: "", Source: "", PluginName: "", Name: "", URL: "", Command: "", Transport: "", Status: "", StatusRaw: "", ConnectorUUID: ""}, false
 	}
 	head := strings.TrimSpace(line[:sepIdx])
 	statusRaw := strings.TrimSpace(line[sepIdx+3:])
@@ -67,19 +67,25 @@ func parseClaudeMCPListLine(line string) (MCPServerEntry, bool) {
 
 	colonIdx := strings.LastIndex(head, ": ")
 	if colonIdx < 0 {
-		return MCPServerEntry{}, false
+		return MCPServerEntry{RawLine: "", Source: "", PluginName: "", Name: "", URL: "", Command: "", Transport: "", Status: "", StatusRaw: "", ConnectorUUID: ""}, false
 	}
 	name := strings.TrimSpace(head[:colonIdx])
 	target := strings.TrimSpace(head[colonIdx+2:])
 	if name == "" || target == "" {
-		return MCPServerEntry{}, false
+		return MCPServerEntry{RawLine: "", Source: "", PluginName: "", Name: "", URL: "", Command: "", Transport: "", Status: "", StatusRaw: "", ConnectorUUID: ""}, false
 	}
 
 	e := MCPServerEntry{
-		RawLine:   line,
-		Transport: transport,
-		StatusRaw: statusRaw,
-		Status:    classifyMCPStatus(statusRaw),
+		RawLine:       line,
+		Source:        "",
+		PluginName:    "",
+		Name:          "",
+		URL:           "",
+		Command:       "",
+		Transport:     transport,
+		Status:        classifyMCPStatus(statusRaw),
+		StatusRaw:     statusRaw,
+		ConnectorUUID: "",
 	}
 	e.Source, e.PluginName, e.Name = classifyMCPName(name)
 
