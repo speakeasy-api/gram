@@ -29,6 +29,27 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
+// DescribeShadowMCP returns the canonical (rule_id, description) for an
+// unverified MCP tool call. Lives here because the writer
+// (scanMessageToolCalls) is the only caller.
+func DescribeShadowMCP(toolName string) (string, string) {
+	if toolName == "" {
+		return guard(RuleShadowMCP), "Detected an unverified MCP tool call."
+	}
+	return guard(RuleShadowMCP), fmt.Sprintf("Detected an unverified MCP tool call to %q.", toolName)
+}
+
+// DescribeDestructiveTool returns the canonical (rule_id, description) for
+// an MCP tool call whose resolved tool definition carries a destructive
+// annotation. Lives here because the writer
+// (scanMessageDestructiveToolCalls) is the only caller.
+func DescribeDestructiveTool(toolName string) (string, string) {
+	if toolName == "" {
+		return guard(RuleDestructiveTool), "Detected a call to a tool annotated as destructive by its MCP server."
+	}
+	return guard(RuleDestructiveTool), fmt.Sprintf("Detected a call to %q, which its MCP server annotates as destructive.", toolName)
+}
+
 // AnalyzeBatch scans a batch of messages against enabled detection sources
 // and writes the results back to the database.
 type AnalyzeBatch struct {

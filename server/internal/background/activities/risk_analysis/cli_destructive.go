@@ -1,10 +1,54 @@
 package risk_analysis
 
 import (
+	"fmt"
 	"regexp"
 	"sort"
 	"strings"
 )
+
+// DescribeCLIDestructive returns the canonical (rule_id, description) for
+// a cli_destructive pattern match. The pattern's FullName() is the
+// canonical rule id directly.
+func DescribeCLIDestructive(pattern cliDestructivePattern, toolName string) (string, string) {
+	ruleID := pattern.FullName()
+	cmd := cliCommandHumanForm[ruleID]
+	if cmd == "" {
+		if toolName == "" {
+			return guard(ruleID), "Detected a destructive command pattern in tool arguments."
+		}
+		return guard(ruleID), fmt.Sprintf("Detected a destructive command pattern in the arguments of tool %q.", toolName)
+	}
+	if toolName == "" {
+		return guard(ruleID), fmt.Sprintf("Detected a %q invocation in tool arguments.", cmd)
+	}
+	return guard(ruleID), fmt.Sprintf("Detected a %q invocation in the arguments of tool %q.", cmd, toolName)
+}
+
+// cliCommandHumanForm maps a cli_destructive canonical rule id to the
+// human form of the matched command, embedded in the description sentence.
+var cliCommandHumanForm = map[string]string{
+	"destructive.shell.rm-rf":                    "rm -rf",
+	"destructive.shell.dd":                       "dd",
+	"destructive.shell.mkfs":                     "mkfs",
+	"destructive.shell.fork-bomb":                "fork bomb",
+	"destructive.shell.chmod-recursive":          "chmod -R",
+	"destructive.shell.chown-recursive":          "chown -R",
+	"destructive.shell.sudo":                     "sudo",
+	"destructive.git.push-force":                 "git push --force",
+	"destructive.git.reset-hard":                 "git reset --hard",
+	"destructive.git.clean-force":                "git clean -f",
+	"destructive.git.branch-delete-force":        "git branch -D",
+	"destructive.database.drop":                  "DROP TABLE",
+	"destructive.database.truncate":              "TRUNCATE",
+	"destructive.database.delete-without-where":  "DELETE without WHERE",
+	"destructive.database.dropdb":                "dropdb",
+	"destructive.cloud.aws-ec2-terminate":        "aws ec2 terminate-instances",
+	"destructive.cloud.aws-s3-rb":                "aws s3 rb",
+	"destructive.cloud.gcloud-projects-delete":   "gcloud projects delete",
+	"destructive.cloud.kubectl-delete-namespace": "kubectl delete namespace",
+	"destructive.cloud.kubectl-delete-workload":  "kubectl delete workload",
+}
 
 // SourceCLIDestructive is the policy source value that flags tool calls whose
 // arguments contain a curated destructive CLI command pattern (rm -rf, git

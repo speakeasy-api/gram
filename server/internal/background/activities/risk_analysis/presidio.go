@@ -34,6 +34,71 @@ const SourcePresidio = "presidio"
 // canonical rule id constants. Keep the comment here as a pointer for
 // callers grepping presidio.go.
 
+// DescribePresidioEntity returns the canonical (rule_id, description) for
+// a Presidio finding. rawEntityType is Presidio's UPPER_SNAKE entity name.
+func DescribePresidioEntity(rawEntityType string) (string, string) {
+	ruleID := CanonicalPresidioRuleID(rawEntityType)
+	desc, ok := presidioEntityDescriptions[ruleID]
+	if !ok {
+		desc = "Identified potentially sensitive personal information."
+	}
+	return guard(ruleID), desc
+}
+
+// DescribePresidioDeadLetter returns the canonical (rule_id, description)
+// for a Presidio dead-letter sentinel row.
+func DescribePresidioDeadLetter() (string, string) {
+	return guard(DeadLetterRuleID), "Presidio could not analyze this message after exhausting its retry budget."
+}
+
+// presidioEntityDescriptions maps canonical Presidio rule ids to their
+// human-readable, source-agnostic description. Lookup miss falls through
+// to a generic PII string in DescribePresidioEntity.
+var presidioEntityDescriptions = map[string]string{
+	// Financial.
+	prefixPII + "credit-card":    "Identified a credit card number, which may expose cardholder data.",
+	prefixPII + "iban-code":      "Identified an International Bank Account Number, which may expose financial account data.",
+	prefixPII + "us-bank-number": "Identified a US bank account number, which may expose financial account data.",
+	prefixPII + "crypto":         "Identified a cryptocurrency wallet address.",
+
+	// PII.
+	prefixPII + "email-address": "Identified an email address.",
+	prefixPII + "phone-number":  "Identified a telephone number.",
+	prefixPII + "ip-address":    "Identified an IP address.",
+	prefixPII + "mac-address":   "Identified a network interface (MAC) address.",
+	prefixPII + "person":        "Identified a person name.",
+	prefixPII + "location":      "Identified a location reference.",
+	prefixPII + "date-time":     "Identified a date or time reference that may correlate with a person.",
+	prefixPII + "nrp":           "Identified a nationality, religious, or political reference.",
+	prefixPII + "url":           "Identified a URL that may carry sensitive context.",
+
+	// Government identifiers.
+	prefixPII + "us-ssn":            "Identified a US Social Security Number.",
+	prefixPII + "us-passport":       "Identified a US passport number.",
+	prefixPII + "us-driver-license": "Identified a US driver license number.",
+	prefixPII + "us-itin":           "Identified a US Individual Taxpayer Identification Number.",
+	prefixPII + "uk-nhs":            "Identified a UK National Health Service number.",
+	prefixPII + "uk-nino":           "Identified a UK National Insurance Number.",
+	prefixPII + "uk-passport":       "Identified a UK passport number.",
+	prefixPII + "es-nif":            "Identified a Spanish personal tax identifier (NIF).",
+	prefixPII + "it-fiscal-code":    "Identified an Italian personal fiscal code.",
+	prefixPII + "au-tfn":            "Identified an Australian Tax File Number.",
+	prefixPII + "in-pan":            "Identified an Indian Permanent Account Number.",
+	prefixPII + "in-aadhaar":        "Identified an Indian Aadhaar identifier.",
+	prefixPII + "sg-nric-fin":       "Identified a Singapore NRIC or FIN identifier.",
+
+	// Healthcare.
+	prefixPII + "medical-license":               "Identified a medical license number, which may expose protected health information.",
+	prefixPII + "us-mbi":                        "Identified a US Medicare Beneficiary Identifier.",
+	prefixPII + "us-npi":                        "Identified a US National Provider Identifier.",
+	prefixPII + "medical-disease-disorder":      "Identified a disease or disorder reference that may expose protected health information.",
+	prefixPII + "medical-medication":            "Identified a medication or drug reference that may expose protected health information.",
+	prefixPII + "medical-therapeutic-procedure": "Identified a treatment or diagnostic procedure that may expose protected health information.",
+	prefixPII + "medical-clinical-event":        "Identified a clinical event that may expose protected health information.",
+	prefixPII + "medical-biological-attribute":  "Identified a biological attribute that may expose protected health information.",
+	prefixPII + "medical-family-history":        "Identified a family medical history reference that may expose protected health information.",
+}
+
 // PIIScanner detects personally identifiable information in text.
 type PIIScanner interface {
 	// AnalyzeBatch sends multiple texts to the PII analyzer and returns

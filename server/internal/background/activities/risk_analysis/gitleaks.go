@@ -10,6 +10,13 @@ import (
 	"github.com/zricethezav/gitleaks/v8/report"
 )
 
+// DescribeGitleaks returns the canonical (rule_id, description) for a
+// gitleaks finding. Gitleaks ships a human-readable description per rule
+// that never echoes the matched secret, so it passes through unchanged.
+func DescribeGitleaks(rawRuleID, upstreamDescription string) (string, string) {
+	return guard(CanonicalGitleaksRuleID(rawRuleID)), upstreamDescription
+}
+
 // Finding represents a single secret or sensitive data match found in a message.
 // DeadLetterReason is populated only on synthetic "could not analyze" markers
 // emitted when a scanner exhausts its retry budget for a message; it is empty

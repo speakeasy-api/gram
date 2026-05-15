@@ -15,6 +15,13 @@ import (
 // action='block' policies).
 const SourcePromptInjection = "prompt_injection"
 
+// DescribePromptInjection returns the canonical (rule_id, description) for
+// any prompt-injection finding. The same rule id is emitted regardless of
+// whether the match came from the L1 classifier or an L0 heuristic.
+func DescribePromptInjection() (string, string) {
+	return guard(RulePromptInjection), "Detected a prompt injection attempt."
+}
+
 // PromptInjectionScanner combines two detection engines that emit the
 // same canonical rule_id (`prompt-injection`):
 //
