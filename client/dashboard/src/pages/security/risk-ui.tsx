@@ -1,7 +1,7 @@
 import { Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { RULE_CATEGORY_META } from "./policy-data";
-import { getCategoryForFinding, getRuleTitleFallback } from "./risk-finding-utils";
+import { getCategoryForFinding, getRuleTitleFallback} from "./risk-utils";
 import { humanizeRuleId } from "./rule-ids";
 
 export function CategoryLabel({
