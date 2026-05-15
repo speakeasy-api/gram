@@ -367,7 +367,7 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 		if !denied {
 			continue
 		}
-		ruleID, description := Normalize(shadowmcp.SourceShadowMCP, RuleShadowMCP, "", RuleContext{ToolName: toolName, MatchedPattern: ""})
+		ruleID, description := DescribeShadowMCP(toolName)
 		findings = append(findings, Finding{
 			Source:           shadowmcp.SourceShadowMCP,
 			RuleID:           ruleID,
@@ -423,7 +423,7 @@ func (a *AnalyzeBatch) scanMessageDestructiveToolCalls(ctx context.Context, orgI
 			continue
 		}
 
-		ruleID, description := Normalize(shadowmcp.SourceDestructiveTool, RuleDestructiveTool, "", RuleContext{ToolName: resolved.ToolName, MatchedPattern: ""})
+		ruleID, description := DescribeDestructiveTool(resolved.ToolName)
 		findings = append(findings, Finding{
 			Source:           shadowmcp.SourceDestructiveTool,
 			RuleID:           ruleID,
@@ -480,10 +480,7 @@ func (a *AnalyzeBatch) scanMessageDestructiveCLICalls(ctx context.Context, raw [
 			continue
 		}
 
-		ruleID, description := Normalize(SourceCLIDestructive, matched.FullName(), "", RuleContext{
-			ToolName:       toolName,
-			MatchedPattern: matched.FullName(),
-		})
+		ruleID, description := DescribeCLIDestructive(matched, toolName)
 		findings = append(findings, Finding{
 			Source:           SourceCLIDestructive,
 			RuleID:           ruleID,

@@ -30,10 +30,9 @@ import (
 // produced by the Presidio path, including dead-letter sentinels.
 const SourcePresidio = "presidio"
 
-// DeadLetterRuleID is set on the synthetic Finding emitted when a message
-// permanently fails analysis after exhausting the retry budget. buildRows
-// uses it as the rule_id for the dead-letter row.
-const DeadLetterRuleID = "pii.dead-letter"
+// DeadLetterRuleID was moved to rules.go to live alongside the other
+// canonical rule id constants. Keep the comment here as a pointer for
+// callers grepping presidio.go.
 
 // PIIScanner detects personally identifiable information in text.
 type PIIScanner interface {
@@ -388,7 +387,7 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 		p.deadLetters.Add(ctx, 1)
 	}
 
-	ruleID, description := Normalize(SourcePresidio, DeadLetterRuleID, "", RuleContext{ToolName: "", MatchedPattern: ""})
+	ruleID, description := DescribePresidioDeadLetter()
 	return []Finding{{
 		Source:           SourcePresidio,
 		RuleID:           ruleID,
@@ -527,7 +526,7 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 		startByte := len(string(runes[:start]))
 		endByte := len(string(runes[:end]))
 
-		ruleID, description := Normalize(SourcePresidio, CanonicalPresidioRuleID(r.EntityType), "", RuleContext{ToolName: "", MatchedPattern: ""})
+		ruleID, description := DescribePresidioEntity(r.EntityType)
 		findings = append(findings, Finding{
 			RuleID:           ruleID,
 			Description:      description,

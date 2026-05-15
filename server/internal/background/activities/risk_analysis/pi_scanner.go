@@ -15,11 +15,6 @@ import (
 // action='block' policies).
 const SourcePromptInjection = "prompt_injection"
 
-// promptInjectionClassifierFindingDescription is the human-readable
-// description carried on the Finding emitted when the L1 model flags a
-// text. Kept short — the dashboard renders this verbatim.
-const promptInjectionClassifierFindingDescription = "Detected a prompt injection attempt."
-
 // PromptInjectionScanner emits prompt-injection findings using one of two
 // engines:
 //   - L0 heuristic regex/keyword rules — the default
@@ -147,7 +142,7 @@ func (s *PromptInjectionScanner) findingFromResult(text string, r ClassifierResu
 	if r.Label != LabelInjection {
 		return nil
 	}
-	ruleID, description := Normalize(SourcePromptInjection, RulePromptInjection, promptInjectionClassifierFindingDescription, RuleContext{ToolName: "", MatchedPattern: ""})
+	ruleID, description := DescribePromptInjection()
 	return &Finding{
 		RuleID:           ruleID,
 		Description:      description,

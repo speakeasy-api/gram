@@ -151,7 +151,7 @@ func ConvertFindings(content string, raw []report.Finding) []Finding {
 		tags := parseTags(f.Tags)
 		startPos := lineColToBytePos(content, f.StartLine, f.StartColumn)
 		endPos := min(lineColToBytePos(content, f.EndLine, f.EndColumn)+1, len(content))
-		ruleID, description := Normalize("gitleaks", CanonicalGitleaksRuleID(f.RuleID), f.Description, RuleContext{ToolName: "", MatchedPattern: ""})
+		ruleID, description := DescribeGitleaks(f.RuleID, f.Description)
 		out = append(out, Finding{
 			RuleID:           ruleID,
 			Description:      description,

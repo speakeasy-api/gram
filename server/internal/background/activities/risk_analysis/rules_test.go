@@ -64,161 +64,147 @@ func TestValidateRuleID_RejectsMalformed(t *testing.T) {
 	}
 }
 
-// TestRuleCatalog_AllIDsAreCanonical confirms every entry in the catalog
-// passes ValidateRuleID, locking the grammar against accidental drift.
-func TestRuleCatalog_AllIDsAreCanonical(t *testing.T) {
+// TestDescribe_AllBuildersReturnCanonicalIDs locks in the contract that
+// every Describe* builder hands back an id matching the canonical grammar.
+// guard() in rules.go already panics in dev/test on a mismatch — calling
+// each builder here is the integration check that pins it.
+func TestDescribe_AllBuildersReturnCanonicalIDs(t *testing.T) {
 	t.Parallel()
 
-	for id := range ruleCatalog {
-		assert.NoError(t, ValidateRuleID(id), "catalog entry %q is not canonical", id)
+	cases := []struct {
+		name   string
+		ruleID string
+		fn     func() (string, string)
+	}{
+		{"shadow-mcp (no tool)", "shadow-mcp", func() (string, string) { return DescribeShadowMCP("") }},
+		{"shadow-mcp (with tool)", "shadow-mcp", func() (string, string) { return DescribeShadowMCP("mcp__db__delete") }},
+		{"destructive.tool", "destructive.tool", func() (string, string) { return DescribeDestructiveTool("delete_records") }},
+		{"destructive.shell.rm-rf", "destructive.shell.rm-rf", func() (string, string) {
+			return DescribeCLIDestructive(cliDestructivePattern{Category: "shell", Name: "rm-rf"}, "Bash")
+		}},
+		{"pii.credit-card", "pii.credit-card", func() (string, string) { return DescribePresidioEntity("CREDIT_CARD") }},
+		{"pii.dead-letter", "pii.dead-letter", DescribePresidioDeadLetter},
+		{"secret.anthropic-api-key", "secret.anthropic-api-key", func() (string, string) {
+			return DescribeGitleaks("anthropic-api-key", "Identified an Anthropic API Key.")
+		}},
+		{"prompt-injection", "prompt-injection", DescribePromptInjection},
+	}
+	for _, c := range cases {
+		id, desc := c.fn()
+		assert.Equal(t, c.ruleID, id, c.name)
+		assert.NotEmpty(t, desc, c.name)
+		assert.NoError(t, ValidateRuleID(id), c.name)
 	}
 }
 
-// TestNormalize_PanicsOnInvalidIDInDevTest exercises the dev/test-only
-// boundary check. testing.Testing() is true here, so the panic path is
-// active without needing GRAM_ENVIRONMENT to be set.
-func TestNormalize_PanicsOnInvalidIDInDevTest(t *testing.T) {
+func TestDescribeShadowMCP_DescriptionIncludesToolName(t *testing.T) {
 	t.Parallel()
 
-	assert.Panics(t, func() {
-		Normalize(SourcePresidio, "PII.CREDIT_CARD", "", RuleContext{ToolName: "", MatchedPattern: ""})
-	}, "Normalize should panic on a non-canonical rule id while testing")
+	_, desc := DescribeShadowMCP("mcp__db__delete")
+	assert.Contains(t, desc, "mcp__db__delete")
+	assert.NotContains(t, desc, "x-gram-toolset-id", "must not leak validator internals")
 }
 
+func TestDescribeDestructiveTool_DescriptionIncludesToolName(t *testing.T) {
+	t.Parallel()
+
+	_, desc := DescribeDestructiveTool("delete_records")
+	assert.Contains(t, desc, "delete_records")
+	assert.Contains(t, desc, "destructive")
+}
+
+func TestDescribeCLIDestructive_IncludesToolAndCommand(t *testing.T) {
+	t.Parallel()
+
+	_, desc := DescribeCLIDestructive(cliDestructivePattern{Category: "shell", Name: "rm-rf"}, "Bash")
+	assert.Contains(t, desc, "Bash", "description must include the tool name")
+	assert.Contains(t, desc, "rm -rf", "description must include the human-readable command")
+}
+
+func TestDescribePresidioEntity_UsesCatalogedDescription(t *testing.T) {
+	t.Parallel()
+
+	id, desc := DescribePresidioEntity("MEDICAL_LICENSE")
+	assert.Equal(t, "pii.medical-license", id)
+	assert.Equal(t, "Identified a medical license number, which may expose protected health information.", desc)
+	assert.NotContains(t, desc, "MEDICAL_LICENSE", "description must not echo the rule id")
+}
+
+func TestDescribePresidioEntity_UnknownEntityFallsBackToGeneric(t *testing.T) {
+	t.Parallel()
+
+	id, desc := DescribePresidioEntity("UNKNOWN_ENTITY")
+	assert.Equal(t, "pii.unknown-entity", id)
+	assert.Equal(t, "Identified potentially sensitive personal information.", desc)
+}
+
+func TestDescribeGitleaks_PassesThroughUpstreamDescription(t *testing.T) {
+	t.Parallel()
+
+	id, desc := DescribeGitleaks("some-new-gitleaks-rule", "Identified a Foo API key.")
+	assert.Equal(t, "secret.some-new-gitleaks-rule", id)
+	assert.Equal(t, "Identified a Foo API key.", desc)
+}
+
+func TestDescribeBuilders_NeverLeakSensitiveMatch(t *testing.T) {
+	t.Parallel()
+
+	// Sentinel values that resemble PII / secrets / attack phrases. The
+	// content scanners must never produce descriptions that echo them.
+	cases := []struct {
+		name     string
+		desc     string
+		sentinel string
+	}{
+		{
+			name: "presidio email",
+			desc: func() string {
+				_, d := DescribePresidioEntity("EMAIL_ADDRESS")
+				return d
+			}(),
+			sentinel: "alice@example.com",
+		},
+		{
+			name: "presidio medical",
+			desc: func() string {
+				_, d := DescribePresidioEntity("MEDICAL_LICENSE")
+				return d
+			}(),
+			sentinel: "real-medical-license-12345",
+		},
+		{
+			name: "prompt injection",
+			desc: func() string {
+				_, d := DescribePromptInjection()
+				return d
+			}(),
+			sentinel: "ignore previous instructions",
+		},
+	}
+	for _, c := range cases {
+		assert.NotContains(t, strings.ToLower(c.desc), strings.ToLower(c.sentinel),
+			"%s: description leaked sensitive sentinel", c.name)
+	}
+}
+
+// TestCLIDestructivePattern_FullNameProducesCanonicalRuleID verifies the
+// pattern type emits a canonical rule id directly, with no indirection
+// layer in rules.go.
 func TestCLIDestructivePattern_FullNameProducesCanonicalRuleID(t *testing.T) {
 	t.Parallel()
 
-	// FullName on the matched pattern is the canonical rule id — no
-	// indirection table. Verify the shape directly.
 	assert.Equal(t, "destructive.shell.rm-rf", (cliDestructivePattern{Category: "shell", Name: "rm-rf"}).FullName())
 	assert.Equal(t, "destructive.git.push-force", (cliDestructivePattern{Category: "git", Name: "push-force"}).FullName())
 	assert.Equal(t, "destructive.database.drop", (cliDestructivePattern{Category: "database", Name: "drop"}).FullName())
 	assert.Equal(t, "destructive.cloud.kubectl-delete-namespace", (cliDestructivePattern{Category: "cloud", Name: "kubectl-delete-namespace"}).FullName())
 }
 
-func TestNormalize_UsesCatalogDescriptionWhenPresent(t *testing.T) {
+func TestGuard_PanicsOnMalformedRuleIDInTest(t *testing.T) {
 	t.Parallel()
 
-	id, desc := Normalize(SourcePresidio, CanonicalPresidioRuleID("MEDICAL_LICENSE"), "PII detected: MEDICAL_LICENSE", RuleContext{ToolName: "", MatchedPattern: ""})
-	assert.Equal(t, "pii.medical-license", id)
-	assert.Equal(t, "Identified a medical license number, which may expose protected health information.", desc)
-	assert.NotContains(t, desc, "MEDICAL_LICENSE", "description must not echo the rule id")
-}
-
-func TestNormalize_FallsBackToProvidedDescription(t *testing.T) {
-	t.Parallel()
-
-	// gitleaks rules without a catalog entry keep the upstream description.
-	id, desc := Normalize("gitleaks", CanonicalGitleaksRuleID("some-new-gitleaks-rule"), "Identified a Foo API key.", RuleContext{ToolName: "", MatchedPattern: ""})
-	assert.Equal(t, "secret.some-new-gitleaks-rule", id)
-	assert.Equal(t, "Identified a Foo API key.", desc)
-}
-
-func TestNormalize_FallsBackToPerSourceDefault(t *testing.T) {
-	t.Parallel()
-
-	id, desc := Normalize(SourcePresidio, CanonicalPresidioRuleID("UNKNOWN_ENTITY"), "", RuleContext{ToolName: "", MatchedPattern: ""})
-	assert.Equal(t, "pii.unknown-entity", id)
-	assert.Equal(t, "Identified potentially sensitive personal information.", desc)
-
-	id, desc = Normalize("shadow_mcp", "shadow-mcp-novel", "", RuleContext{ToolName: "mcp__github__create_pr", MatchedPattern: ""})
-	assert.Equal(t, "shadow-mcp-novel", id)
-	assert.Contains(t, desc, "mcp__github__create_pr")
-}
-
-func TestNormalize_ShadowMCPDescriptionIncludesToolName(t *testing.T) {
-	t.Parallel()
-
-	_, desc := Normalize("shadow_mcp", RuleShadowMCP, "", RuleContext{ToolName: "mcp__db__delete", MatchedPattern: ""})
-	assert.Contains(t, desc, "mcp__db__delete", "shadow_mcp description must name the tool")
-	assert.NotContains(t, desc, "x-gram-toolset-id", "shadow_mcp description must not leak validator internals")
-}
-
-func TestNormalize_DestructiveToolDescriptionIncludesToolName(t *testing.T) {
-	t.Parallel()
-
-	_, desc := Normalize("destructive_tool", RuleDestructiveTool, "", RuleContext{ToolName: "delete_records", MatchedPattern: ""})
-	assert.Contains(t, desc, "delete_records")
-	assert.Contains(t, desc, "destructive")
-}
-
-func TestNormalize_CLIDestructiveDescriptionIncludesToolAndCommand(t *testing.T) {
-	t.Parallel()
-
-	_, desc := Normalize(SourceCLIDestructive, "destructive.shell.rm-rf", "", RuleContext{ToolName: "Bash", MatchedPattern: "destructive.shell.rm-rf"})
-	assert.Contains(t, desc, "Bash", "description must include the tool name")
-	assert.Contains(t, desc, "rm -rf", "description must include the human-readable command")
-}
-
-// TestRuleCatalog_ContentScannerDescriptionsNeverInterpolateContext guards
-// against regressions where a catalog entry for a content scanner (PII /
-// secret / prompt injection) slips in a placeholder that echoes
-// RuleContext. For these categories, `match` carries sensitive data (PII,
-// secrets, attack phrases) and descriptions must stay static.
-//
-// Tool-call categories (shadow-mcp, destructive.tool, destructive.cli-*)
-// intentionally interpolate ToolName because the tool name is not
-// sensitive — it is the contextual signal that makes the finding
-// actionable. They are excluded here.
-func TestRuleCatalog_ContentScannerDescriptionsNeverInterpolateContext(t *testing.T) {
-	t.Parallel()
-
-	sentinel := "SENSITIVE-MATCH-VALUE-DO-NOT-LEAK"
-
-	for id, spec := range ruleCatalog {
-		if !strings.HasPrefix(id, prefixPII) && !strings.HasPrefix(id, prefixSecret) && id != RulePromptInjection {
-			continue
-		}
-		desc := spec.description(RuleContext{ToolName: sentinel, MatchedPattern: sentinel})
-		require.NotContains(t, desc, sentinel, "catalog entry %q leaked sensitive context into a content-scanner description", id)
-	}
-}
-
-// TestRuleCatalog_ContainsExpectedAnchors locks in the rule ids the
-// dashboard and the public webhook contract will rely on once normalization
-// ships. If one of these disappears, the corresponding consumer breaks.
-func TestRuleCatalog_ContainsExpectedAnchors(t *testing.T) {
-	t.Parallel()
-
-	expected := []string{
-		"pii.credit-card",
-		"pii.email-address",
-		"pii.medical-license",
-		"pii.dead-letter",
-		RuleShadowMCP,
-		RuleDestructiveTool,
-		"destructive.shell.rm-rf",
-		"destructive.git.push-force",
-		"destructive.database.drop",
-		RulePromptInjection,
-	}
-
-	for _, id := range expected {
-		_, ok := ruleCatalog[id]
-		assert.True(t, ok, "catalog missing %s", id)
-	}
-}
-
-// TestNormalize_NoLeakageOfMatchInDescription guards content scanners
-// against echoing sensitive `match` values. PII, secrets, and attack
-// phrases must never end up in the public description. Tool-call sources
-// store the tool name in `match` and intentionally name it in the
-// description; they are out of scope here.
-func TestNormalize_NoLeakageOfMatchInDescription(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		source, canonicalID, fallback, sentinel string
-	}{
-		{SourcePresidio, CanonicalPresidioRuleID("MEDICAL_LICENSE"), "", "real-medical-license-12345"},
-		{SourcePresidio, CanonicalPresidioRuleID("EMAIL_ADDRESS"), "", "alice@example.com"},
-		{SourcePromptInjection, RulePromptInjection, "", "ignore previous instructions"},
-		{"gitleaks", CanonicalGitleaksRuleID("anthropic-api-key"), "Identified an Anthropic API Key.", "sk-ant-real-value"},
-	}
-
-	for _, c := range cases {
-		_, desc := Normalize(c.source, c.canonicalID, c.fallback, RuleContext{ToolName: "", MatchedPattern: ""})
-		assert.NotContains(t, strings.ToLower(desc), strings.ToLower(c.sentinel),
-			"description for %s/%s leaked sensitive match", c.source, c.canonicalID)
-	}
+	// testing.Testing() is true here so enforceRuleIDFormat is on. Wrap a
+	// known-bad id and assert it panics.
+	require.Panics(t, func() {
+		guard("UPPER_SNAKE_INVALID")
+	})
 }

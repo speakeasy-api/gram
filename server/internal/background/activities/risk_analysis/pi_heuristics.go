@@ -8,9 +8,11 @@ import (
 // heuristicRule is one named L0 detector. Each rule contributes findings
 // independently; the orchestrator filters by HeuristicEmitThreshold and the
 // per-policy family toggle (e.g. PromptInjectionConfig.DetectRoleHijack).
+// `id` and `description` are kept as diagnostic metadata only — the public
+// finding rule_id is always RulePromptInjection, emitted via
+// DescribePromptInjection().
 type heuristicRule struct {
 	id          string
-	canonicalID string
 	description string
 	family      ruleFamily
 	confidence  float64
@@ -42,7 +44,6 @@ func init() {
 	heuristicRules = []heuristicRule{
 		{
 			id:          "pi.role-hijack.you-are-now",
-			canonicalID: RulePromptInjection,
 			description: "Role hijack: 'you are now' assertion",
 			family:      familyRoleHijack,
 			confidence:  0.75,
@@ -50,7 +51,6 @@ func init() {
 		},
 		{
 			id:          "pi.role-hijack.act-as-privileged",
-			canonicalID: RulePromptInjection,
 			description: "Role hijack: 'act as <privileged role>'",
 			family:      familyRoleHijack,
 			confidence:  0.85,
@@ -58,7 +58,6 @@ func init() {
 		},
 		{
 			id:          "pi.system-prompt-leak",
-			canonicalID: RulePromptInjection,
 			description: "Attempt to elicit system prompt or initial instructions",
 			family:      familySystemPromptLeak,
 			confidence:  0.85,
@@ -66,7 +65,6 @@ func init() {
 		},
 		{
 			id:          "pi.encoded-payload",
-			canonicalID: RulePromptInjection,
 			description: "Long encoded blob with explicit decode/eval intent",
 			family:      familyEncodedPayload,
 			confidence:  0.7,
@@ -186,7 +184,7 @@ func runFamily(text string, fam ruleFamily) []Finding {
 		if loc == nil {
 			continue
 		}
-		ruleID, description := Normalize(SourcePromptInjection, rule.canonicalID, rule.description, RuleContext{ToolName: "", MatchedPattern: ""})
+		ruleID, description := DescribePromptInjection()
 		out = append(out, Finding{
 			RuleID:           ruleID,
 			Description:      description,
@@ -222,7 +220,7 @@ func detectInstructionOverrides(text string) []Finding {
 		if idx < 0 {
 			continue
 		}
-		ruleID, description := Normalize(SourcePromptInjection, RulePromptInjection, "", RuleContext{ToolName: "", MatchedPattern: ""})
+		ruleID, description := DescribePromptInjection()
 		out = append(out, Finding{
 			RuleID:           ruleID,
 			Description:      description,
@@ -247,7 +245,7 @@ func detectDelimiterInjection(text string) []Finding {
 	if loc == nil {
 		return nil
 	}
-	ruleID, description := Normalize(SourcePromptInjection, RulePromptInjection, "", RuleContext{ToolName: "", MatchedPattern: ""})
+	ruleID, description := DescribePromptInjection()
 	return []Finding{{
 		RuleID:           ruleID,
 		Description:      description,
