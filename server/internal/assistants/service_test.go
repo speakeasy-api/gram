@@ -65,6 +65,169 @@ func TestServiceCoreAdmitPendingThreadsUsesFlyBackend(t *testing.T) {
 	require.Equal(t, runtimeBackendFlyIO, runtime.Backend)
 }
 
+func TestServiceCoreAdmitPendingThreadsCapsFanOut(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_admit_cap")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	assistantID, pending := seedAssistantWithPendingThreads(t, conn, "assistants-cap", 2, 3)
+	preActivateV2Runtime(t, conn, assistantID, pending[0])
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	admitted, err := core.AdmitPendingThreads(ctx, assistantID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{pending[0], pending[1]}, admitted.ThreadIDs, "admit must release threads up to MaxConcurrency (2)")
+}
+
+func TestServiceCoreAdmitPendingThreadsBlocksWhenActiveAtCap(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_admit_blocked")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	assistantID, active, pending := seedAssistantWithActiveAndPending(t, conn, "assistants-blocked", 2, 2, 1)
+	require.NotEmpty(t, pending)
+	preActivateV2Runtime(t, conn, assistantID, active[0])
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	admitted, err := core.AdmitPendingThreads(ctx, assistantID)
+	require.NoError(t, err)
+	require.Empty(t, admitted.ThreadIDs, "admit must hold the pending thread when existing-active siblings saturate the cap")
+	require.NotContains(t, admitted.ThreadIDs, pending[0], "the held-back pending thread must not slip through")
+}
+
+func TestServiceCoreAdmitPendingThreadsReleasesPartialHeadroom(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_admit_partial")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	assistantID, active, _ := seedAssistantWithActiveAndPending(t, conn, "assistants-partial", 2, 1, 2)
+	preActivateV2Runtime(t, conn, assistantID, active[0])
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	admitted, err := core.AdmitPendingThreads(ctx, assistantID)
+	require.NoError(t, err)
+	require.Len(t, admitted.ThreadIDs, 1, "cap=2 with 1 existing-active sibling leaves headroom for 1 pending admit")
+}
+
+func seedAssistantWithPendingThreads(t *testing.T, conn *pgxpool.Pool, slug string, maxConcurrency int, pending int) (uuid.UUID, []uuid.UUID) {
+	t.Helper()
+	assistantID, _, pendingIDs := seedAssistantWithActiveAndPending(t, conn, slug, maxConcurrency, 0, pending)
+	return assistantID, pendingIDs
+}
+
+func seedAssistantWithActiveAndPending(t *testing.T, conn *pgxpool.Pool, slug string, maxConcurrency, active, pending int) (uuid.UUID, []uuid.UUID, []uuid.UUID) {
+	t.Helper()
+	assistantID, _ := seedAssistant(t, conn, slug, maxConcurrency)
+	activeIDs := make([]uuid.UUID, 0, active)
+	for i := range active {
+		activeIDs = append(activeIDs, seedThreadWithEvent(t, conn, assistantID, slug, fmt.Sprintf("active-%d", i), eventStatusCompleted))
+	}
+	pendingIDs := make([]uuid.UUID, 0, pending)
+	for i := range pending {
+		pendingIDs = append(pendingIDs, seedThreadWithEvent(t, conn, assistantID, slug, fmt.Sprintf("pending-%d", i), eventStatusPending))
+	}
+	return assistantID, activeIDs, pendingIDs
+}
+
+func seedAssistant(t *testing.T, conn *pgxpool.Pool, slug string, maxConcurrency int) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+	ctx := t.Context()
+	proj, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: "org-test",
+	})
+	require.NoError(t, err)
+	a, err := assistantsrepo.New(conn).CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{
+		ProjectID:       proj.ID,
+		OrganizationID:  "org-test",
+		CreatedByUserID: pgtype.Text{},
+		Name:            "Assistant",
+		Model:           "openai/gpt-4o-mini",
+		Instructions:    "",
+		WarmTtlSeconds:  300,
+		MaxConcurrency:  int64(maxConcurrency),
+		Status:          StatusActive,
+	})
+	require.NoError(t, err)
+	return a.ID, proj.ID
+}
+
+func seedThreadWithEvent(t *testing.T, conn *pgxpool.Pool, assistantID uuid.UUID, slugBase, correlation, status string) uuid.UUID {
+	t.Helper()
+	ctx := t.Context()
+	row, err := assistantsrepo.New(conn).GetAssistantForDispatch(ctx, assistantID)
+	require.NoError(t, err)
+	chatID := uuid.New()
+	require.NoError(t, assistantsrepo.New(conn).UpsertAssistantChat(ctx, assistantsrepo.UpsertAssistantChatParams{
+		ChatID:         chatID,
+		ProjectID:      row.ProjectID,
+		OrganizationID: "org-test",
+		Title:          pgtype.Text{},
+	}))
+	threadID, err := assistantsrepo.New(conn).UpsertAssistantThread(ctx, assistantsrepo.UpsertAssistantThreadParams{
+		AssistantID:   assistantID,
+		ProjectID:     row.ProjectID,
+		CorrelationID: correlation,
+		ChatID:        chatID,
+		SourceKind:    sourceKindSlack,
+		SourceRefJson: []byte("{}"),
+	})
+	require.NoError(t, err)
+	_, err = assistantsrepo.New(conn).InsertAssistantThreadEvent(ctx, assistantsrepo.InsertAssistantThreadEventParams{
+		AssistantThreadID:     threadID,
+		AssistantID:           assistantID,
+		ProjectID:             row.ProjectID,
+		TriggerInstanceID:     uuid.NullUUID{Valid: false},
+		EventID:               "evt-" + correlation,
+		CorrelationID:         correlation,
+		Status:                status,
+		NormalizedPayloadJson: []byte(`{"text":"hi"}`),
+		SourcePayloadJson:     []byte("{}"),
+	})
+	require.NoError(t, err)
+	return threadID
+}
+
+// preActivateV2Runtime reserves and then transitions the v2 runtime row to
+// `active` so admitPendingThreadsV2 bypasses the cold-start firstThreadOnly
+// guard and exercises the cap logic on its own. anchor must be a real
+// assistant_threads row id under this assistant (the column carries a
+// "who triggered cold admit" reference and is FK-checked).
+func preActivateV2Runtime(t *testing.T, conn *pgxpool.Pool, assistantID, anchor uuid.UUID) {
+	t.Helper()
+	ctx := t.Context()
+	row, err := assistantsrepo.New(conn).GetAssistantForDispatch(ctx, assistantID)
+	require.NoError(t, err)
+	require.NoError(t, assistantsrepo.New(conn).ReserveAssistantRuntimeV2(ctx, assistantsrepo.ReserveAssistantRuntimeV2Params{
+		AssistantThreadID: anchor,
+		AssistantID:       assistantID,
+		ProjectID:         row.ProjectID,
+		Backend:           runtimeBackendFlyIO,
+		State:             runtimeStateStarting,
+	}))
+	runtime, err := assistantsrepo.New(conn).LookupActiveAssistantRuntimeV2(ctx, assistantsrepo.LookupActiveAssistantRuntimeV2Params{
+		ProjectID:   row.ProjectID,
+		AssistantID: assistantID,
+	})
+	require.NoError(t, err)
+	require.NoError(t, assistantsrepo.New(conn).SetAssistantRuntimeActive(ctx, assistantsrepo.SetAssistantRuntimeActiveParams{
+		ActiveState: runtimeStateActive,
+		WarmUntil:   pgtype.Timestamptz{Time: time.Now().UTC().Add(10 * time.Minute), Valid: true},
+		RuntimeID:   runtime.ID,
+		ProjectID:   row.ProjectID,
+	}))
+}
+
 func TestWarmRemainingSecondsKeepsBusyRunnerAlive(t *testing.T) {
 	t.Parallel()
 

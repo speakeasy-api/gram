@@ -170,6 +170,17 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 			}).Get(ctx, nil); err != nil {
 				return err
 			}
+		} else if result.ProcessedAnyEvent {
+			// Active count dropped, so re-evaluate admission for any
+			// siblings the cap held back at the previous cycle.
+			v := workflow.GetVersion(ctx, "coordinator-kick-on-processed", workflow.DefaultVersion, 1)
+			if v == 1 {
+				if err := workflow.ExecuteActivity(ctx, a.SignalAssistantCoordinator, activities.SignalAssistantCoordinatorInput{
+					AssistantID: result.AssistantID,
+				}).Get(ctx, nil); err != nil {
+					return err
+				}
+			}
 		}
 
 		var waitFor time.Duration

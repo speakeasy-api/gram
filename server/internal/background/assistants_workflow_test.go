@@ -102,5 +102,5 @@ func TestAssistantThreadWorkflowExitsOnWarmTimerWithoutExpire(t *testing.T) {
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, int32(0), expireCalls.Load(), "warm-timer exit must not call ExpireAssistantThreadRuntime")
-	require.Equal(t, int32(0), signalCalls.Load(), "warm-timer exit must not signal the coordinator")
+	require.Equal(t, int32(1), signalCalls.Load(), "ProcessedAnyEvent must kick the coordinator so held-back pending siblings get re-evaluated")
 }

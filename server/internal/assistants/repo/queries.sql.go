@@ -269,6 +269,45 @@ func (q *Queries) CountActiveAssistantRuntimes(ctx context.Context, arg CountAct
 	return count, err
 }
 
+const countActiveAssistantThreads = `-- name: CountActiveAssistantThreads :one
+SELECT COUNT(*)::BIGINT AS active_threads
+FROM assistant_threads t
+WHERE t.project_id = $1
+  AND t.assistant_id = $2
+  AND t.deleted IS FALSE
+  AND t.last_event_at > $3
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_thread_events e
+    WHERE e.project_id = t.project_id
+      AND e.assistant_thread_id = t.id
+      AND e.deleted IS FALSE
+      AND e.status = $4
+  )
+`
+
+type CountActiveAssistantThreadsParams struct {
+	ProjectID     uuid.UUID
+	AssistantID   uuid.UUID
+	ActiveSince   pgtype.Timestamptz
+	PendingStatus string
+}
+
+// Threads with last_event_at inside the warm TTL window. Excludes threads
+// that themselves have a pending event so callers computing headroom for
+// a fresh pending admit don't double-count it.
+func (q *Queries) CountActiveAssistantThreads(ctx context.Context, arg CountActiveAssistantThreadsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveAssistantThreads,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.ActiveSince,
+		arg.PendingStatus,
+	)
+	var active_threads int64
+	err := row.Scan(&active_threads)
+	return active_threads, err
+}
+
 const createAssistant = `-- name: CreateAssistant :one
 INSERT INTO assistants (
   project_id,

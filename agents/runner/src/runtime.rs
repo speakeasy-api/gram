@@ -187,23 +187,44 @@ async fn sweep_idle(host: &Arc<RuntimeHost>) {
         }
     }
     for thread_id in to_evict {
-        if let Some((_, cell)) = host.threads.remove(&thread_id)
-            && let Some(thread) = cell.get()
+        evict_thread(host, &thread_id);
+    }
+}
+
+fn evict_thread(host: &RuntimeHost, thread_id: &str) {
+    if let Some((_, cell)) = host.threads.remove(thread_id)
+        && let Some(thread) = cell.get()
+    {
+        tracing::info!(thread_id = %thread_id, "evicting thread");
+        // Closing the inbox causes run_loop to return; abort the task
+        // for prompt teardown of any blocked compactor / model call.
+        if let Ok(mut handle_slot) = thread.task_handle.lock()
+            && let Some(handle) = handle_slot.take()
         {
-            tracing::info!(thread_id = %thread_id, "evicting idle thread");
-            // Closing the inbox causes run_loop to return; abort the task
-            // for prompt teardown of any blocked compactor / model call.
-            if let Ok(mut handle_slot) = thread.task_handle.lock()
-                && let Some(handle) = handle_slot.take()
-            {
-                handle.abort();
-            }
+            handle.abort();
         }
-        // Idempotency keys are scoped per thread (`{thread_id}:{event_id}`),
-        // so an evicted thread's keys can never match a future /turn. Drop
-        // them so `seen` does not grow without bound over the VM lifetime.
-        let prefix = format!("{thread_id}:");
-        host.seen.retain(|key, _| !key.starts_with(&prefix));
+    }
+    // Idempotency keys are scoped per thread (`{thread_id}:{event_id}`),
+    // so an evicted thread's keys can never match a future /turn. Drop
+    // them so `seen` does not grow without bound over the VM lifetime.
+    let prefix = format!("{thread_id}:");
+    host.seen.retain(|key, _| !key.starts_with(&prefix));
+}
+
+fn reap_oldest_idle(host: &RuntimeHost) {
+    let victim = host
+        .threads
+        .iter()
+        .filter_map(|entry| {
+            let thread = entry.value().get()?;
+            let guard = thread.idle_since.lock().ok()?;
+            let since = (*guard)?;
+            Some((thread.thread_id.clone(), since))
+        })
+        .min_by_key(|(_, since)| *since)
+        .map(|(id, _)| id);
+    if let Some(thread_id) = victim {
+        evict_thread(host, &thread_id);
     }
 }
 
@@ -229,6 +250,9 @@ pub async fn ensure_thread(
     let thread = cell
         .get_or_try_init(|| async {
             initialized = true;
+            // Reap skips busy threads and our own (still-uninitialized)
+            // OnceCell, so worst case is a no-op.
+            reap_oldest_idle(host);
             let tokens = TokenRegistry::new(bearer.clone());
             let bootstrap = host
                 .gram_client
@@ -624,4 +648,112 @@ fn normalize_history(history: &[RunnerMessage]) -> Result<Vec<Item>, RunnerError
         }
     }
     Ok(items)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+    use crate::http_layer::{TokenRegistry, build_bootstrap_client};
+
+    fn empty_host() -> Arc<RuntimeHost> {
+        let http_client = reqwest::Client::new();
+        let gram_client = GramBootstrapClient::new(
+            "http://localhost".to_string(),
+            build_bootstrap_client(http_client.clone()),
+        );
+        Arc::new(RuntimeHost {
+            assistant_id: "asst".to_string(),
+            started_at: Instant::now(),
+            seen: DashMap::new(),
+            threads: DashMap::new(),
+            gram_client,
+            thread_idle_ttl: Duration::from_secs(60 * 30),
+            http_client,
+            spill_root: PathBuf::from("/tmp/runtime-test-spill"),
+            initial_token: String::new(),
+        })
+    }
+
+    fn insert_thread(host: &RuntimeHost, thread_id: &str, idle_since: Option<Instant>) {
+        let (inbox_tx, _inbox_rx) = mpsc::unbounded_channel::<String>();
+        let (mcp_cmd_tx, _mcp_cmd_rx) = mpsc::channel::<McpCmd>(1);
+        let handle = tokio::spawn(async {});
+        let configured = Arc::new(ConfiguredThread {
+            thread_id: thread_id.to_string(),
+            chat_id: format!("chat-{thread_id}"),
+            idle_since: Arc::new(Mutex::new(idle_since)),
+            inbox_tx,
+            task_handle: Mutex::new(Some(handle)),
+            tokens: TokenRegistry::new(""),
+            mcp_cmd_tx,
+        });
+        let cell = Arc::new(OnceCell::new());
+        cell.set(configured)
+            .map_err(|_| ())
+            .expect("OnceCell should accept first set");
+        host.threads.insert(thread_id.to_string(), cell);
+    }
+
+    #[tokio::test]
+    async fn reap_oldest_idle_evicts_longest_idle_first() {
+        let host = empty_host();
+        let now = Instant::now();
+        insert_thread(&host, "recent", Some(now));
+        insert_thread(&host, "old", Some(now - Duration::from_secs(120)));
+        insert_thread(&host, "medium", Some(now - Duration::from_secs(30)));
+
+        reap_oldest_idle(&host);
+
+        assert!(
+            host.threads.get("old").is_none(),
+            "longest-idle thread must be reaped first"
+        );
+        assert!(host.threads.get("recent").is_some());
+        assert!(host.threads.get("medium").is_some());
+    }
+
+    #[tokio::test]
+    async fn reap_oldest_idle_skips_busy_threads() {
+        let host = empty_host();
+        insert_thread(&host, "busy", None);
+
+        reap_oldest_idle(&host);
+
+        assert!(
+            host.threads.get("busy").is_some(),
+            "busy thread (idle_since == None) must never be reaped"
+        );
+    }
+
+    #[tokio::test]
+    async fn reap_oldest_idle_noop_on_empty() {
+        let host = empty_host();
+        reap_oldest_idle(&host);
+        assert_eq!(host.threads.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn evict_thread_clears_seen_keys_with_prefix() {
+        let host = empty_host();
+        insert_thread(&host, "T", Some(Instant::now()));
+        host.seen
+            .insert("T:evt-1".to_string(), Arc::new(tokio::sync::Mutex::new(true)));
+        host.seen
+            .insert("T:evt-2".to_string(), Arc::new(tokio::sync::Mutex::new(true)));
+        host.seen.insert(
+            "other:evt-1".to_string(),
+            Arc::new(tokio::sync::Mutex::new(true)),
+        );
+
+        evict_thread(&host, "T");
+
+        assert!(host.threads.get("T").is_none());
+        assert!(host.seen.get("T:evt-1").is_none());
+        assert!(host.seen.get("T:evt-2").is_none());
+        assert!(
+            host.seen.get("other:evt-1").is_some(),
+            "unrelated idempotency keys must survive eviction"
+        );
+    }
 }

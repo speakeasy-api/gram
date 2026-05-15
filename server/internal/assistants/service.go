@@ -1266,9 +1266,12 @@ func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.
 }
 
 // admitPendingThreadsV2 reserves the assistant's single v2 runtime under
-// pg_advisory_xact_lock (which auto-releases at commit) and admits every
-// pending thread under the assistant. Skips MaxConcurrency entirely —
-// one VM serves them all, so the v1 cap doesn't apply.
+// pg_advisory_xact_lock (which auto-releases at commit) and admits pending
+// threads up to the assistant's MaxConcurrency. "Active" — for cap
+// accounting — is any thread whose last_event_at falls inside the
+// assistant's WarmTTLSeconds window (the same TTL that drives the warm-
+// wait workflow expiry); the count is taken inside the advisory tx so it
+// is consistent with the admit decision.
 func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assistantRecord) (AdmitPendingThreadsResult, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -1338,6 +1341,16 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
 	}
 
+	active, err := queries.CountActiveAssistantThreads(ctx, assistantrepo.CountActiveAssistantThreadsParams{
+		ProjectID:     assistant.ProjectID,
+		AssistantID:   assistant.ID,
+		ActiveSince:   conv.ToPGTimestamptz(time.Now().UTC().Add(-time.Duration(assistant.WarmTTLSeconds) * time.Second)),
+		PendingStatus: eventStatusPending,
+	})
+	if err != nil {
+		return AdmitPendingThreadsResult{}, fmt.Errorf("count active assistant threads: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return AdmitPendingThreadsResult{}, fmt.Errorf("commit assistant admit tx (v2): %w", err)
 	}
@@ -1345,6 +1358,15 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 	if firstThreadOnly {
 		threads = threads[:1]
 	}
+
+	headroom := assistant.MaxConcurrency - int(active)
+	if headroom <= 0 {
+		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
+	}
+	if len(threads) > headroom {
+		threads = threads[:headroom]
+	}
+
 	admitted := make([]uuid.UUID, 0, len(threads))
 	for _, t := range threads {
 		admitted = append(admitted, t.ID)

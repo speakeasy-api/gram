@@ -295,6 +295,25 @@ WHERE project_id = @project_id
     OR (state = @active_state AND (warm_until IS NULL OR warm_until > clock_timestamp()))
   );
 
+-- name: CountActiveAssistantThreads :one
+-- Threads with last_event_at inside the warm TTL window. Excludes threads
+-- that themselves have a pending event so callers computing headroom for
+-- a fresh pending admit don't double-count it.
+SELECT COUNT(*)::BIGINT AS active_threads
+FROM assistant_threads t
+WHERE t.project_id = @project_id
+  AND t.assistant_id = @assistant_id
+  AND t.deleted IS FALSE
+  AND t.last_event_at > @active_since
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_thread_events e
+    WHERE e.project_id = t.project_id
+      AND e.assistant_thread_id = t.id
+      AND e.deleted IS FALSE
+      AND e.status = @pending_status
+  );
+
 -- name: ListColdPendingThreadsForAdmit :many
 SELECT t.id, t.project_id
 FROM assistant_threads t
