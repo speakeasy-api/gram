@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	svix "github.com/svix/svix-webhooks/go"
@@ -33,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -112,6 +114,7 @@ func NewActivities(
 	mcpRegistryClient *externalmcp.RegistryClient,
 	temporalEnv *tenv.Environment,
 	telemetryLogger *telemetry.Logger,
+	chConn clickhouse.Conn,
 	triggerApp *bgtriggers.App,
 	cacheAdapter cache.Cache,
 	assistantsCore *assistants.ServiceCore,
@@ -154,7 +157,7 @@ func NewActivities(
 		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
-		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient),
+		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn)),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
 		processAssistantThread:          activities.NewProcessAssistantThread(assistantsCore),
 		expireAssistantThreadRuntime:    activities.NewExpireAssistantThreadRuntime(assistantsCore),

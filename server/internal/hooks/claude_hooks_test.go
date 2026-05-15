@@ -11,6 +11,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 // stubBlockingShadowMCPScanner is a RiskScanner that always reports a
@@ -139,6 +140,82 @@ func TestClaude_PreToolUse_DeniesWhenMatchedServerNotGramHosted(t *testing.T) {
 	output := result.HookSpecificOutput.(*HookSpecificOutput)
 	require.NotNil(t, output.PermissionDecision)
 	assert.Equal(t, "deny", *output.PermissionDecision)
+}
+
+// Local stdio MCP servers (no URL — Command-only entries from
+// `claude mcp list`) must be denied by the shadow-MCP guard for the same
+// reason a non-Gram-hosted HTTP server is: they're not under the org's
+// control. The deny reason should name the command so the user knows
+// which server to allowlist.
+func TestClaude_PreToolUse_DeniesLocalStdioServer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__mise__install_tool"
+	toolUseID := "toolu_local_stdio"
+
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
+		sessionMCPListTTL,
+	))
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision)
+}
+
+// Once a stdio command is explicitly approved for the active policy, the
+// guard must let calls to that server through — verifying the
+// Command-keyed allowlist actually wires into PreToolUse.
+func TestClaude_PreToolUse_AllowsApprovedLocalStdioServer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__mise__install_tool"
+	toolUseID := "toolu_local_stdio_approved"
+
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
+		sessionMCPListTTL,
+	))
+	require.NoError(t, shadowmcp.AddShadowMCPApproval(ctx, ti.service.cache, authCtx.ProjectID.String(), "stub-policy-id", shadowmcp.ShadowMCPApproval{
+		Match:      "mise mcp",
+		ServerName: "mise",
+	}))
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "allow", *output.PermissionDecision)
 }
 
 // Allow path: a cached entry that resolves the tool's server prefix and

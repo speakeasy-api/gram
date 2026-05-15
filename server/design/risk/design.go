@@ -296,7 +296,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("listShadowMCPApprovals", func() {
-		Description("List shadow-MCP URL approvals for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.")
+		Description("List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -326,7 +326,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("approveShadowMCP", func() {
-		Description("Approve a shadow-MCP URL so the named policy stops blocking calls to it.")
+		Description("Approve a shadow-MCP server so the named policy stops blocking calls to it. `match` is the same opaque server identifier surfaced in `RiskResult.match` — typically a server URL, stdio command, or `mcp__<server>__` prefix.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -335,9 +335,9 @@ var _ = Service("risk", func() {
 			Attribute("policy_id", String, "The risk policy ID.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("url", String, "The MCP server URL to approve.")
+			Attribute("match", String, "The MCP server identifier to approve.")
 			Attribute("server_name", String, "Display name of the MCP server (optional, for UI).")
-			Required("policy_id", "url")
+			Required("policy_id", "match")
 		})
 
 		Result(shared.ShadowMCPApproval)
@@ -357,7 +357,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("revokeShadowMCPApproval", func() {
-		Description("Remove a previously-approved shadow-MCP URL for a policy.")
+		Description("Remove a previously-approved shadow-MCP server for a policy.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -366,8 +366,8 @@ var _ = Service("risk", func() {
 			Attribute("policy_id", String, "The risk policy ID.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("url", String, "The MCP server URL to revoke.")
-			Required("policy_id", "url")
+			Attribute("match", String, "The MCP server identifier to revoke — exactly the value used to approve.")
+			Required("policy_id", "match")
 		})
 
 		HTTP(func() {
@@ -376,7 +376,7 @@ var _ = Service("risk", func() {
 			security.SessionHeader()
 			security.ProjectHeader()
 			Param("policy_id")
-			Param("url")
+			Param("match")
 			Response(StatusOK)
 		})
 
@@ -436,6 +436,6 @@ var ListRiskResultsByChatResult = Type("ListRiskResultsByChatResult", func() {
 })
 
 var ListShadowMCPApprovalsResult = Type("ListShadowMCPApprovalsResult", func() {
-	Attribute("approvals", ArrayOf(shared.ShadowMCPApproval), "The approved shadow-MCP URLs for the policy.")
+	Attribute("approvals", ArrayOf(shared.ShadowMCPApproval), "The approved shadow-MCP servers for the policy (URL- or command-keyed).")
 	Required("approvals")
 })

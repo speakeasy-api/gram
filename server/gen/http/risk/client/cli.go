@@ -516,7 +516,7 @@ func BuildApproveShadowMCPPayload(riskApproveShadowMCPBody string, riskApproveSh
 	{
 		err = json.Unmarshal([]byte(riskApproveShadowMCPBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_name\": \"abc123\",\n      \"url\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"match\": \"abc123\",\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_name\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", body.PolicyID, goa.FormatUUID))
 		if err != nil {
@@ -543,7 +543,7 @@ func BuildApproveShadowMCPPayload(riskApproveShadowMCPBody string, riskApproveSh
 	}
 	v := &risk.ApproveShadowMCPPayload{
 		PolicyID:   body.PolicyID,
-		URL:        body.URL,
+		Match:      body.Match,
 		ServerName: body.ServerName,
 	}
 	v.ApikeyToken = apikeyToken
@@ -555,7 +555,7 @@ func BuildApproveShadowMCPPayload(riskApproveShadowMCPBody string, riskApproveSh
 
 // BuildRevokeShadowMCPApprovalPayload builds the payload for the risk
 // revokeShadowMCPApproval endpoint from CLI flags.
-func BuildRevokeShadowMCPApprovalPayload(riskRevokeShadowMCPApprovalPolicyID string, riskRevokeShadowMCPApprovalURL string, riskRevokeShadowMCPApprovalApikeyToken string, riskRevokeShadowMCPApprovalSessionToken string, riskRevokeShadowMCPApprovalProjectSlugInput string) (*risk.RevokeShadowMCPApprovalPayload, error) {
+func BuildRevokeShadowMCPApprovalPayload(riskRevokeShadowMCPApprovalPolicyID string, riskRevokeShadowMCPApprovalMatch string, riskRevokeShadowMCPApprovalApikeyToken string, riskRevokeShadowMCPApprovalSessionToken string, riskRevokeShadowMCPApprovalProjectSlugInput string) (*risk.RevokeShadowMCPApprovalPayload, error) {
 	var err error
 	var policyID string
 	{
@@ -565,9 +565,9 @@ func BuildRevokeShadowMCPApprovalPayload(riskRevokeShadowMCPApprovalPolicyID str
 			return nil, err
 		}
 	}
-	var url_ string
+	var match string
 	{
-		url_ = riskRevokeShadowMCPApprovalURL
+		match = riskRevokeShadowMCPApprovalMatch
 	}
 	var apikeyToken *string
 	{
@@ -589,7 +589,7 @@ func BuildRevokeShadowMCPApprovalPayload(riskRevokeShadowMCPApprovalPolicyID str
 	}
 	v := &risk.RevokeShadowMCPApprovalPayload{}
 	v.PolicyID = policyID
-	v.URL = url_
+	v.Match = match
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

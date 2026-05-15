@@ -17739,7 +17739,7 @@ paths:
         name: ListResources
   /rpc/risk.approvals.create:
     post:
-      description: Approve a shadow-MCP URL so the named policy stops blocking calls to it.
+      description: Approve a shadow-MCP server so the named policy stops blocking calls to it. `match` is the same opaque server identifier surfaced in `RiskResult.match` — typically a server URL, stdio command, or `mcp__<server>__` prefix.
       operationId: approveShadowMCP
       parameters:
         - allowEmptyValue: true
@@ -17846,7 +17846,7 @@ paths:
         type: mutation
   /rpc/risk.approvals.delete:
     delete:
-      description: Remove a previously-approved shadow-MCP URL for a policy.
+      description: Remove a previously-approved shadow-MCP server for a policy.
       operationId: revokeShadowMCPApproval
       parameters:
         - allowEmptyValue: true
@@ -17859,12 +17859,12 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
-          description: The MCP server URL to revoke.
+          description: The MCP server identifier to revoke — exactly the value used to approve.
           in: query
-          name: url
+          name: match
           required: true
           schema:
-            description: The MCP server URL to revoke.
+            description: The MCP server identifier to revoke — exactly the value used to approve.
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -17957,7 +17957,7 @@ paths:
       x-speakeasy-name-override: delete
   /rpc/risk.approvals.list:
     get:
-      description: List shadow-MCP URL approvals for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.
+      description: List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.
       operationId: listShadowMCPApprovals
       parameters:
         - allowEmptyValue: true
@@ -26523,6 +26523,9 @@ components:
     ApproveShadowMCPRequestBody:
       type: object
       properties:
+        match:
+          type: string
+          description: The MCP server identifier to approve.
         policy_id:
           type: string
           description: The risk policy ID.
@@ -26530,12 +26533,9 @@ components:
         server_name:
           type: string
           description: Display name of the MCP server (optional, for UI).
-        url:
-          type: string
-          description: The MCP server URL to approve.
       required:
         - policy_id
-        - url
+        - match
     Asset:
       type: object
       properties:
@@ -31465,7 +31465,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ShadowMCPApproval'
-          description: The approved shadow-MCP URLs for the policy.
+          description: The approved shadow-MCP servers for the policy (URL- or command-keyed).
       required:
         - approvals
     ListSlackAppsResult:
@@ -35048,6 +35048,9 @@ components:
         approved_by:
           type: string
           description: User that recorded the approval.
+        match:
+          type: string
+          description: The MCP server identifier this approval covers — typically a server URL, stdio command, or `mcp__<server>__` prefix (the same value surfaced in `RiskResult.match`).
         policy_id:
           type: string
           description: The risk policy ID this approval is scoped to.
@@ -35055,12 +35058,9 @@ components:
         server_name:
           type: string
           description: Display name of the MCP server, when known.
-        url:
-          type: string
-          description: The approved MCP server URL.
       required:
         - policy_id
-        - url
+        - match
         - approved_at
     SkillBreakdownRow:
       type: object

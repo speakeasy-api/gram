@@ -2711,7 +2711,7 @@ func EncodeRevokeShadowMCPApprovalRequest(encoder func(*http.Request) goahttp.En
 		}
 		values := req.URL.Query()
 		values.Add("policy_id", p.PolicyID)
-		values.Add("url", p.URL)
+		values.Add("match", p.Match)
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -3220,7 +3220,7 @@ func unmarshalRiskChatSummaryResponseBodyToTypesRiskChatSummary(v *RiskChatSumma
 func unmarshalShadowMCPApprovalResponseBodyToTypesShadowMCPApproval(v *ShadowMCPApprovalResponseBody) *types.ShadowMCPApproval {
 	res := &types.ShadowMCPApproval{
 		PolicyID:   *v.PolicyID,
-		URL:        *v.URL,
+		Match:      *v.Match,
 		ServerName: v.ServerName,
 		ApprovedBy: v.ApprovedBy,
 		ApprovedAt: *v.ApprovedAt,

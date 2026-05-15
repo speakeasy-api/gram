@@ -51,7 +51,7 @@ export type RiskApproveShadowMCPMutationError =
  * approveShadowMCP risk
  *
  * @remarks
- * Approve a shadow-MCP URL so the named policy stops blocking calls to it.
+ * Approve a shadow-MCP server so the named policy stops blocking calls to it. `match` is the same opaque server identifier surfaced in `RiskResult.match` — typically a server URL, stdio command, or `mcp__<server>__` prefix.
  */
 export function useRiskApproveShadowMCPMutation(
   options?: MutationHookOptions<

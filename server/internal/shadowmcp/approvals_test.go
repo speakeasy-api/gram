@@ -19,26 +19,35 @@ func newCacheForApprovalsTest(t *testing.T) cache.Cache {
 	return cache.NewRedisCacheAdapter(redisClient)
 }
 
-func TestCanonicalizeApprovalURL(t *testing.T) {
+func TestCanonicalizeMatch(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name string
 		in   string
 		want string
 	}{
+		// URL forms — host/scheme lowercased, trailing slash dropped.
 		{"empty", "", ""},
 		{"whitespace", "   ", ""},
-		{"already canonical", "https://example.com/mcp", "https://example.com/mcp"},
-		{"upper host", "https://EXAMPLE.COM/mcp", "https://example.com/mcp"},
-		{"trailing slash", "https://example.com/mcp/", "https://example.com/mcp"},
-		{"bare host trailing slash", "https://example.com/", "https://example.com"},
-		{"upper scheme", "HTTPS://example.com/mcp", "https://example.com/mcp"},
-		{"malformed passes through", "not a url", "not a url"},
+		{"url canonical", "https://example.com/mcp", "https://example.com/mcp"},
+		{"url upper host", "https://EXAMPLE.COM/mcp", "https://example.com/mcp"},
+		{"url trailing slash", "https://example.com/mcp/", "https://example.com/mcp"},
+		{"url bare host trailing slash", "https://example.com/", "https://example.com"},
+		{"url upper scheme", "HTTPS://example.com/mcp", "https://example.com/mcp"},
+		// Command / prefix forms — whitespace folded, surrounding spaces stripped.
+		{"command canonical", "mise mcp", "mise mcp"},
+		{"command surrounding spaces", "  mise mcp  ", "mise mcp"},
+		{"command internal whitespace", "mise   mcp\t--flag", "mise mcp --flag"},
+		{"command newlines", "/opt/bin/foo\n--flag", "/opt/bin/foo --flag"},
+		{"server prefix", "mise", "mise"},
+		// Non-URL string with a colon (eg "MCP:foo") must fall through to the
+		// command branch, not be lossily reformatted by url.Parse.
+		{"prefix-like with colon", "MCP:foo", "MCP:foo"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, shadowmcp.CanonicalizeApprovalURL(tc.in))
+			assert.Equal(t, tc.want, shadowmcp.CanonicalizeMatch(tc.in))
 		})
 	}
 }
@@ -59,7 +68,7 @@ func TestAddAndListShadowMCPApprovals(t *testing.T) {
 	policyID := uuid.NewString()
 
 	first := shadowmcp.ShadowMCPApproval{
-		URL:        "https://mcp.example.com/server",
+		Match:      "https://mcp.example.com/server",
 		ServerName: "Example",
 		ApprovedBy: "tester",
 		ApprovedAt: time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC),
@@ -67,8 +76,8 @@ func TestAddAndListShadowMCPApprovals(t *testing.T) {
 	require.NoError(t, shadowmcp.AddShadowMCPApproval(t.Context(), c, projectID, policyID, first))
 
 	second := shadowmcp.ShadowMCPApproval{
-		URL:        "https://mcp.other.com/server",
-		ServerName: "Other",
+		Match:      "mise mcp",
+		ServerName: "mise",
 		ApprovedBy: "tester",
 	}
 	require.NoError(t, shadowmcp.AddShadowMCPApproval(t.Context(), c, projectID, policyID, second))
@@ -76,9 +85,9 @@ func TestAddAndListShadowMCPApprovals(t *testing.T) {
 	got, err := shadowmcp.ListShadowMCPApprovals(t.Context(), c, projectID, policyID)
 	require.NoError(t, err)
 	require.Len(t, got, 2)
-	assert.Equal(t, first.URL, got[0].URL)
+	assert.Equal(t, first.Match, got[0].Match)
 	assert.Equal(t, "Example", got[0].ServerName)
-	assert.Equal(t, second.URL, got[1].URL)
+	assert.Equal(t, second.Match, got[1].Match)
 	assert.False(t, got[1].ApprovedAt.IsZero(), "AddShadowMCPApproval must default ApprovedAt when zero")
 }
 
@@ -90,57 +99,100 @@ func TestAddShadowMCPApproval_IsIdempotent(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		require.NoError(t, shadowmcp.AddShadowMCPApproval(t.Context(), c, projectID, policyID, shadowmcp.ShadowMCPApproval{
-			URL:        "https://mcp.example.com/server",
+			Match:      "https://mcp.example.com/server",
 			ServerName: "Example",
 		}))
 	}
 
 	got, err := shadowmcp.ListShadowMCPApprovals(t.Context(), c, projectID, policyID)
 	require.NoError(t, err)
-	assert.Len(t, got, 1, "re-adding the same URL must not duplicate")
+	assert.Len(t, got, 1, "re-adding the same match must not duplicate")
 }
 
-func TestAddShadowMCPApproval_EmptyURLRejected(t *testing.T) {
+func TestAddShadowMCPApproval_EmptyMatchRejected(t *testing.T) {
 	t.Parallel()
 	c := newCacheForApprovalsTest(t)
 
-	err := shadowmcp.AddShadowMCPApproval(t.Context(), c, uuid.NewString(), uuid.NewString(), shadowmcp.ShadowMCPApproval{URL: "   "})
+	err := shadowmcp.AddShadowMCPApproval(t.Context(), c, uuid.NewString(), uuid.NewString(), shadowmcp.ShadowMCPApproval{Match: "   "})
 	require.Error(t, err)
 }
 
-func TestIsShadowMCPURLApproved(t *testing.T) {
+// IsShadowMCPApproved accepts multiple candidate identifiers for the same
+// call — the hook matcher supplies URL + Command + server-prefix at once so
+// an approval recorded against any one of them allows the call.
+func TestIsShadowMCPApproved_MatchesAnyCandidate(t *testing.T) {
 	t.Parallel()
 	c := newCacheForApprovalsTest(t)
 	projectID := uuid.NewString()
 	policyID := uuid.NewString()
 
 	require.NoError(t, shadowmcp.AddShadowMCPApproval(t.Context(), c, projectID, policyID, shadowmcp.ShadowMCPApproval{
-		URL: "https://mcp.example.com/server/",
+		Match: "mise",
+	}))
+
+	// Approval was keyed on the server prefix; a call that supplies a
+	// (URL, Command, prefix) triple should still resolve to approved.
+	ok, err := shadowmcp.IsShadowMCPApproved(t.Context(), c, projectID, policyID, "", "mise mcp", "mise")
+	require.NoError(t, err)
+	assert.True(t, ok)
+
+	// None of the candidates match a different server.
+	ok, err = shadowmcp.IsShadowMCPApproved(t.Context(), c, projectID, policyID, "https://other/", "other mcp", "other")
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
+func TestIsShadowMCPApproved_URLCanonicalization(t *testing.T) {
+	t.Parallel()
+	c := newCacheForApprovalsTest(t)
+	projectID := uuid.NewString()
+	policyID := uuid.NewString()
+
+	require.NoError(t, shadowmcp.AddShadowMCPApproval(t.Context(), c, projectID, policyID, shadowmcp.ShadowMCPApproval{
+		Match: "https://mcp.example.com/server/",
 	}))
 
 	cases := []struct {
-		name string
-		url  string
-		want bool
+		name      string
+		candidate string
+		want      bool
 	}{
 		{"exact", "https://mcp.example.com/server/", true},
 		{"no trailing slash matches", "https://mcp.example.com/server", true},
 		{"upper host matches", "https://MCP.EXAMPLE.COM/server", true},
 		{"different host", "https://other.example.com/server", false},
 		{"different path", "https://mcp.example.com/elsewhere", false},
-		{"empty", "", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := shadowmcp.IsShadowMCPURLApproved(t.Context(), c, projectID, policyID, tc.url)
+			got, err := shadowmcp.IsShadowMCPApproved(t.Context(), c, projectID, policyID, tc.candidate)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
 		})
 	}
 }
 
-func TestIsShadowMCPURLApproved_ScopedByPolicy(t *testing.T) {
+func TestIsShadowMCPApproved_CommandWhitespaceNormalization(t *testing.T) {
+	t.Parallel()
+	c := newCacheForApprovalsTest(t)
+	projectID := uuid.NewString()
+	policyID := uuid.NewString()
+
+	require.NoError(t, shadowmcp.AddShadowMCPApproval(t.Context(), c, projectID, policyID, shadowmcp.ShadowMCPApproval{
+		Match: "mise mcp",
+	}))
+
+	ok, err := shadowmcp.IsShadowMCPApproved(t.Context(), c, projectID, policyID, "  mise   mcp ")
+	require.NoError(t, err)
+	assert.True(t, ok, "whitespace-normalized command should match")
+
+	ok, err = shadowmcp.IsShadowMCPApproved(t.Context(), c, projectID, policyID, "mise mcp --extra")
+	require.NoError(t, err)
+	assert.False(t, ok, "different command must not match")
+}
+
+func TestIsShadowMCPApproved_ScopedByPolicy(t *testing.T) {
 	t.Parallel()
 	c := newCacheForApprovalsTest(t)
 	projectID := uuid.NewString()
@@ -148,19 +200,19 @@ func TestIsShadowMCPURLApproved_ScopedByPolicy(t *testing.T) {
 	policyB := uuid.NewString()
 
 	require.NoError(t, shadowmcp.AddShadowMCPApproval(t.Context(), c, projectID, policyA, shadowmcp.ShadowMCPApproval{
-		URL: "https://mcp.example.com/server",
+		Match: "https://mcp.example.com/server",
 	}))
 
-	gotA, err := shadowmcp.IsShadowMCPURLApproved(t.Context(), c, projectID, policyA, "https://mcp.example.com/server")
+	gotA, err := shadowmcp.IsShadowMCPApproved(t.Context(), c, projectID, policyA, "https://mcp.example.com/server")
 	require.NoError(t, err)
 	assert.True(t, gotA, "approval must apply to its own policy")
 
-	gotB, err := shadowmcp.IsShadowMCPURLApproved(t.Context(), c, projectID, policyB, "https://mcp.example.com/server")
+	gotB, err := shadowmcp.IsShadowMCPApproved(t.Context(), c, projectID, policyB, "https://mcp.example.com/server")
 	require.NoError(t, err)
 	assert.False(t, gotB, "approval for policyA must not leak to policyB")
 }
 
-func TestIsShadowMCPURLApproved_ScopedByProject(t *testing.T) {
+func TestIsShadowMCPApproved_ScopedByProject(t *testing.T) {
 	t.Parallel()
 	c := newCacheForApprovalsTest(t)
 	projectA := uuid.NewString()
@@ -168,14 +220,14 @@ func TestIsShadowMCPURLApproved_ScopedByProject(t *testing.T) {
 	policyID := uuid.NewString()
 
 	require.NoError(t, shadowmcp.AddShadowMCPApproval(t.Context(), c, projectA, policyID, shadowmcp.ShadowMCPApproval{
-		URL: "https://mcp.example.com/server",
+		Match: "https://mcp.example.com/server",
 	}))
 
-	gotA, err := shadowmcp.IsShadowMCPURLApproved(t.Context(), c, projectA, policyID, "https://mcp.example.com/server")
+	gotA, err := shadowmcp.IsShadowMCPApproved(t.Context(), c, projectA, policyID, "https://mcp.example.com/server")
 	require.NoError(t, err)
 	assert.True(t, gotA)
 
-	gotB, err := shadowmcp.IsShadowMCPURLApproved(t.Context(), c, projectB, policyID, "https://mcp.example.com/server")
+	gotB, err := shadowmcp.IsShadowMCPApproved(t.Context(), c, projectB, policyID, "https://mcp.example.com/server")
 	require.NoError(t, err)
 	assert.False(t, gotB, "approval for projectA must not leak to projectB")
 }
@@ -187,10 +239,10 @@ func TestRemoveShadowMCPApproval(t *testing.T) {
 	policyID := uuid.NewString()
 
 	require.NoError(t, shadowmcp.AddShadowMCPApproval(t.Context(), c, projectID, policyID, shadowmcp.ShadowMCPApproval{
-		URL: "https://mcp.example.com/keep",
+		Match: "https://mcp.example.com/keep",
 	}))
 	require.NoError(t, shadowmcp.AddShadowMCPApproval(t.Context(), c, projectID, policyID, shadowmcp.ShadowMCPApproval{
-		URL: "https://mcp.example.com/drop",
+		Match: "https://mcp.example.com/drop",
 	}))
 
 	require.NoError(t, shadowmcp.RemoveShadowMCPApproval(t.Context(), c, projectID, policyID, "https://mcp.example.com/drop"))
@@ -198,7 +250,7 @@ func TestRemoveShadowMCPApproval(t *testing.T) {
 	got, err := shadowmcp.ListShadowMCPApprovals(t.Context(), c, projectID, policyID)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	assert.Equal(t, "https://mcp.example.com/keep", got[0].URL)
+	assert.Equal(t, "https://mcp.example.com/keep", got[0].Match)
 }
 
 func TestRemoveShadowMCPApproval_MissingIsNoop(t *testing.T) {
@@ -208,7 +260,7 @@ func TestRemoveShadowMCPApproval_MissingIsNoop(t *testing.T) {
 	policyID := uuid.NewString()
 
 	err := shadowmcp.RemoveShadowMCPApproval(t.Context(), c, projectID, policyID, "https://mcp.example.com/never-approved")
-	require.NoError(t, err, "revoking a never-approved URL must be a no-op")
+	require.NoError(t, err, "revoking a never-approved match must be a no-op")
 }
 
 func TestRemoveShadowMCPApproval_LastEntryClearsKey(t *testing.T) {
@@ -218,7 +270,7 @@ func TestRemoveShadowMCPApproval_LastEntryClearsKey(t *testing.T) {
 	policyID := uuid.NewString()
 
 	require.NoError(t, shadowmcp.AddShadowMCPApproval(t.Context(), c, projectID, policyID, shadowmcp.ShadowMCPApproval{
-		URL: "https://mcp.example.com/only",
+		Match: "https://mcp.example.com/only",
 	}))
 	require.NoError(t, shadowmcp.RemoveShadowMCPApproval(t.Context(), c, projectID, policyID, "https://mcp.example.com/only"))
 
@@ -227,14 +279,14 @@ func TestRemoveShadowMCPApproval_LastEntryClearsKey(t *testing.T) {
 	assert.Empty(t, got, "removing the last approval should leave the list empty")
 }
 
-func TestRemoveShadowMCPApproval_NormalizesURL(t *testing.T) {
+func TestRemoveShadowMCPApproval_Normalizes(t *testing.T) {
 	t.Parallel()
 	c := newCacheForApprovalsTest(t)
 	projectID := uuid.NewString()
 	policyID := uuid.NewString()
 
 	require.NoError(t, shadowmcp.AddShadowMCPApproval(t.Context(), c, projectID, policyID, shadowmcp.ShadowMCPApproval{
-		URL: "https://mcp.example.com/server/",
+		Match: "https://mcp.example.com/server/",
 	}))
 	require.NoError(t, shadowmcp.RemoveShadowMCPApproval(t.Context(), c, projectID, policyID, "https://MCP.EXAMPLE.COM/server"))
 

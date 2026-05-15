@@ -18,6 +18,7 @@ plugin:slack:slack: https://mcp.slack.com/mcp (HTTP) - ! Needs authentication
 madprocs: https://localhost:35294/mcp (HTTP) - ✗ Failed to connect
 notion-local: http://localhost:8080/mcp/local-dev-org-rhviz (HTTP) - ✗ Failed to connect
 some-stdio: /opt/bin/foo --flag (STDIO) - ✓ Connected
+mise: mise mcp - ✓ Connected
 `
 
 func TestParseClaudeMCPList(t *testing.T) {
@@ -32,6 +33,9 @@ func TestParseClaudeMCPList(t *testing.T) {
 		{Source: "local", Name: "madprocs", URL: "https://localhost:35294/mcp", Transport: "HTTP", Status: "failed"},
 		{Source: "local", Name: "notion-local", URL: "http://localhost:8080/mcp/local-dev-org-rhviz", Transport: "HTTP", Status: "failed"},
 		{Source: "local", Name: "some-stdio", Command: "/opt/bin/foo --flag", Transport: "STDIO", Status: "connected"},
+		// No explicit "(STDIO)" suffix — the parser must still recognize a
+		// non-URL target as a stdio command and default Transport.
+		{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO", Status: "connected"},
 	}
 
 	if !assert.Len(t, entries, len(want)) {

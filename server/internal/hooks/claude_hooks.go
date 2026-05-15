@@ -26,7 +26,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -718,15 +717,28 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	switch {
 	case matched == nil:
 		detail = fmt.Sprintf("MCP server %q is not in the active configuration", serverPrefix)
-	case !isGramHostedMCPURL(matched.URL):
+	case matched.URL != "" && !isGramHostedMCPURL(matched.URL):
 		detail = fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverPrefix, matched.URL)
+	case matched.URL == "" && matched.Command != "":
+		// Local stdio servers have no URL, so the Gram-hosted check above
+		// can't apply. Treat them as shadow MCPs until explicitly approved
+		// by command.
+		detail = fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", serverPrefix, matched.Command)
+	case matched.URL == "" && matched.Command == "":
+		// Defensive: the parser populates either URL or Command for every
+		// real entry, but if a future format slips past it we'd rather
+		// fail closed with a clear reason than silently allow.
+		detail = fmt.Sprintf("MCP server %q has no recognizable target", serverPrefix)
 	}
-	// Allowlist check: if the user has explicitly approved this URL for
-	// this policy, override the would-be deny. Failures from the cache
-	// fall through to the deny path so a flaky Redis can't silently let a
-	// real shadow server through.
-	if detail != "" && matched != nil && matched.URL != "" {
-		approved, approvalErr := shadowmcp.IsShadowMCPURLApproved(ctx, s.cache, metadata.ProjectID, policy.ID, matched.URL)
+	// Allowlist check: if the user has explicitly approved any identifier
+	// for this call (URL, command, or server-prefix), override the would-be
+	// deny. Approvals are a flat list of match strings, so a single lookup
+	// covers all sources — hook-time URL/Command blocks and batch-scanner
+	// server-prefix findings dedupe naturally. Failures from the cache fall
+	// through to the deny path so a flaky Redis can't silently let a real
+	// shadow server through.
+	if detail != "" {
+		approved, approvalErr := s.isMatchedMCPApproved(ctx, metadata.ProjectID, policy.ID, serverPrefix, matched)
 		if approvalErr != nil {
 			s.logger.WarnContext(ctx, "shadow-mcp allowlist lookup failed; treating as not approved",
 				attr.SlogEvent("claude_hook_allowlist_lookup_failed"),
@@ -734,12 +746,19 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			)
 		}
 		if approved {
-			s.logger.InfoContext(ctx, "shadow-mcp call allowed via approved URL",
+			matchedURL, matchedCommand := "", ""
+			if matched != nil {
+				matchedURL = matched.URL
+				matchedCommand = matched.Command
+			}
+			s.logger.InfoContext(ctx, "shadow-mcp call allowed via approval",
 				attr.SlogEvent("claude_hook_allowlist_allow"),
 				attr.SlogToolName(rawToolName),
 				attr.SlogRiskPolicyID(policy.ID),
 				attr.SlogValueAny(map[string]any{
-					"matchedURL": matched.URL,
+					"serverPrefix":   serverPrefix,
+					"matchedURL":     matchedURL,
+					"matchedCommand": matchedCommand,
 				}),
 			)
 			detail = ""
@@ -781,7 +800,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		// alongside batch-scanner findings, with the URL in the match
 		// column so the dashboard can filter and offer "Exclude from
 		// policy" actions against the URL itself.
-		s.recordShadowMCPBlockFinding(ctx, payload, &metadata, policy, matched, detail)
+		s.recordShadowMCPBlockFinding(ctx, payload, &metadata, policy, matched, serverPrefix, detail)
 
 		// systemMessage renders as a warning in the user's terminal;
 		// permissionDecisionReason is what Claude itself sees and may quote
@@ -816,6 +835,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 	metadata *SessionMetadata,
 	policy *risk.ShadowMCPPolicy,
 	matched *MCPServerEntry,
+	serverPrefix string,
 	detail string,
 ) {
 	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil {
@@ -853,24 +873,51 @@ func (s *Service) recordShadowMCPBlockFinding(
 		return
 	}
 
-	matchURL := ""
+	// match identifies the server in the dashboard's Recent Findings row and
+	// is also the value the "Exclude from policy" action sends back to
+	// approveShadowMCP. Prefer the URL for HTTP/SSE entries, then the stdio
+	// Command for local servers, and finally fall back to the server-prefix
+	// portion of the tool name (e.g. "mise" from "mcp__mise__run_task") when
+	// the snapshot didn't yield a matched entry — anything but the raw tool
+	// name, which is too granular to allowlist on.
+	match := ""
 	if matched != nil {
-		matchURL = matched.URL
+		switch {
+		case matched.URL != "":
+			match = matched.URL
+		case matched.Command != "":
+			match = matched.Command
+		}
+	}
+	if match == "" {
+		match = serverPrefix
 	}
 	description := detail
 	if matched != nil && matched.Name != "" {
 		description = fmt.Sprintf("%s (server: %s)", detail, matched.Name)
 	}
 
+	// Use UUIDv7 so the row sorts in insertion order alongside scanner
+	// findings: ListRiskResultsByProjectFound paginates with ORDER BY id
+	// DESC, which only behaves as "most recent first" when every inserted
+	// id is time-ordered. uuid.New() (v4) is random and would interleave
+	// hook-time block rows at arbitrary positions in the Recent Findings
+	// table.
+	resultID, err := uuid.NewV7()
+	if err != nil {
+		s.logger.WarnContext(ctx, "shadow-mcp block: failed to generate uuidv7",
+			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
+		return
+	}
 	insertParams := repo.InsertShadowMCPBlockResultParams{
-		ID:                uuid.New(),
+		ID:                resultID,
 		ProjectID:         projectID,
 		OrganizationID:    metadata.GramOrgID,
 		RiskPolicyID:      policyID,
 		RiskPolicyVersion: policy.Version,
 		ChatMessageID:     msgID,
 		Description:       pgtype.Text{String: description, Valid: description != ""},
-		Match:             pgtype.Text{String: matchURL, Valid: matchURL != ""},
+		Match:             pgtype.Text{String: match, Valid: match != ""},
 		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
 	}
 	if err := s.repo.InsertShadowMCPBlockResult(ctx, insertParams); err != nil {

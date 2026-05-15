@@ -18,6 +18,10 @@ export type ShadowMCPApproval = {
    */
   approvedBy?: string | undefined;
   /**
+   * The MCP server identifier this approval covers — typically a server URL, stdio command, or `mcp__<server>__` prefix (the same value surfaced in `RiskResult.match`).
+   */
+  match: string;
+  /**
    * The risk policy ID this approval is scoped to.
    */
   policyId: string;
@@ -25,10 +29,6 @@ export type ShadowMCPApproval = {
    * Display name of the MCP server, when known.
    */
   serverName?: string | undefined;
-  /**
-   * The approved MCP server URL.
-   */
-  url: string;
 };
 
 /** @internal */
@@ -42,9 +42,9 @@ export const ShadowMCPApproval$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     approved_by: z.optional(z.string()),
+    match: z.string(),
     policy_id: z.string(),
     server_name: z.optional(z.string()),
-    url: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {

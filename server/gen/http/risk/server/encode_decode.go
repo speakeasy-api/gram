@@ -2601,7 +2601,7 @@ func DecodeRevokeShadowMCPApprovalRequest(mux goahttp.Muxer, decoder func(*http.
 		var payload *risk.RevokeShadowMCPApprovalPayload
 		var (
 			policyID         string
-			url_             string
+			match            string
 			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
@@ -2613,9 +2613,9 @@ func DecodeRevokeShadowMCPApprovalRequest(mux goahttp.Muxer, decoder func(*http.
 			err = goa.MergeErrors(err, goa.MissingFieldError("policy_id", "query string"))
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("policy_id", policyID, goa.FormatUUID))
-		url_ = qp.Get("url")
-		if url_ == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("url", "query string"))
+		match = qp.Get("match")
+		if match == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("match", "query string"))
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -2632,7 +2632,7 @@ func DecodeRevokeShadowMCPApprovalRequest(mux goahttp.Muxer, decoder func(*http.
 		if err != nil {
 			return payload, err
 		}
-		payload = NewRevokeShadowMCPApprovalPayload(policyID, url_, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewRevokeShadowMCPApprovalPayload(policyID, match, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3141,7 +3141,7 @@ func marshalTypesRiskChatSummaryToRiskChatSummaryResponseBody(v *types.RiskChatS
 func marshalTypesShadowMCPApprovalToShadowMCPApprovalResponseBody(v *types.ShadowMCPApproval) *ShadowMCPApprovalResponseBody {
 	res := &ShadowMCPApprovalResponseBody{
 		PolicyID:   v.PolicyID,
-		URL:        v.URL,
+		Match:      v.Match,
 		ServerName: v.ServerName,
 		ApprovedBy: v.ApprovedBy,
 		ApprovedAt: v.ApprovedAt,

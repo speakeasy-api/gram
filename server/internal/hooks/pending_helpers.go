@@ -156,6 +156,24 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		}
 	}
 
+	// Annotate every MCP-routed tool call with the resolved server
+	// identifier (HTTP/SSE URL, stdio command, or — when the snapshot
+	// didn't resolve — the `mcp__<server>__` prefix). This runs on every
+	// hook event regardless of policy state, because the offline risk
+	// batch scanner reads it back by trace_id to populate
+	// risk_results.match for shadow_mcp findings: the chat_message alone
+	// only carries the tool name, which is too granular to allowlist on.
+	// Best-effort — when the MCP list snapshot is missing the attribute
+	// just isn't set, and the scanner falls back to its server-prefix
+	// guess.
+	if serverPrefix, _, isMCP := claudeMCPServerAndTool(toolName); isMCP && payload.SessionID != nil && *payload.SessionID != "" {
+		if entries, err := s.getCachedMCPList(ctx, *payload.SessionID); err == nil {
+			if v := resolvedMCPMatch(matchCachedMCPEntry(entries, serverPrefix), serverPrefix); v != "" {
+				attrs[attr.MCPMatchKey] = v
+			}
+		}
+	}
+
 	// Hash toolUseID to create trace ID if available
 	if payload.ToolUseID != nil && *payload.ToolUseID != "" {
 		attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(*payload.ToolUseID)

@@ -50,7 +50,7 @@ export type RiskApprovalsDeleteMutationError =
  * revokeShadowMCPApproval risk
  *
  * @remarks
- * Remove a previously-approved shadow-MCP URL for a policy.
+ * Remove a previously-approved shadow-MCP server for a policy.
  */
 export function useRiskApprovalsDeleteMutation(
   options?: MutationHookOptions<

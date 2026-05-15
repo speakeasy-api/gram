@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * listShadowMCPApprovals risk
  *
  * @remarks
- * List shadow-MCP URL approvals for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.
+ * List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.
  */
 export function riskApprovalsList(
   client: GramCore,

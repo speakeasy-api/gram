@@ -181,13 +181,13 @@ function SecurityOverviewContent() {
 
   const approveMutation = useRiskApproveShadowMCPMutation();
   const handleExclude = useCallback(
-    (policyId: string, url: string, serverName?: string) => {
+    (policyId: string, match: string, serverName?: string) => {
       approveMutation.mutate(
         {
           request: {
             approveShadowMCPRequestBody: {
               policyId,
-              url,
+              match,
               serverName,
             },
           },
@@ -408,7 +408,7 @@ function SecurityOverviewContent() {
                         <TableHead className="w-1/12">User</TableHead>
                         <TableHead className="w-2/12">Match</TableHead>
                         <TableHead className="w-1/12">Policy Note</TableHead>
-                        <TableHead className="w-1/12">Detected</TableHead>
+                        <TableHead className="w-1/12">Occurred</TableHead>
                         <TableHead className="w-1/12 pr-4">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -473,7 +473,7 @@ function SecurityOverviewContent() {
                                 <RequireScope
                                   scope="org:admin"
                                   level="component"
-                                  reason="Only organization admins can exclude URLs from a policy."
+                                  reason="Only organization admins can exclude MCP servers from a policy."
                                 >
                                   <Button
                                     variant="ghost"
@@ -486,7 +486,7 @@ function SecurityOverviewContent() {
                                         result.match!,
                                       );
                                     }}
-                                    title="Exclude this URL from the policy"
+                                    title="Exclude this MCP server from the policy"
                                   >
                                     <ShieldOff className="mr-1 h-3 w-3" />
                                     <span className="text-xs">Exclude</span>

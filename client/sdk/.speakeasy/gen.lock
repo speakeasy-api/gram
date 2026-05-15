@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 4c2d5509b1def6a2252bc9d8bd59f18b
+  docChecksum: e3d92ee1b99d5355f9c5224a472bc1a3
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -97,7 +97,7 @@ trackedFiles:
   docs/models/components/allowedoriginstatus.md:
     last_write_checksum: sha1:42d4748288a2bfed0a1ca365006851a85d31d2ee
   docs/models/components/approveshadowmcprequestbody.md:
-    last_write_checksum: sha1:4311ca1d8386af76b6e922714f7e8637b03c11c3
+    last_write_checksum: sha1:8129a9ea2dd4e2bcac4d16ee98b724760a659fa5
   docs/models/components/asset.md:
     last_write_checksum: sha1:3da48f7c0a6c8e83a69059b082816228dd56dc70
   docs/models/components/assistant.md:
@@ -489,7 +489,7 @@ trackedFiles:
   docs/models/components/listserversresult.md:
     last_write_checksum: sha1:758c5f6b75d59ac510a99dcbbfc6aab3c5b51c8c
   docs/models/components/listshadowmcpapprovalsresult.md:
-    last_write_checksum: sha1:9f12c8f3b2dc0013aee8ec2f14b21845e3564742
+    last_write_checksum: sha1:eb0d324287bef612d6a1f734364a5b8c6b78bf77
   docs/models/components/listslackappsresult.md:
     last_write_checksum: sha1:4c7dbb20f77e5133f881ecdece1da810fd9c7bbc
   docs/models/components/listtoolsetsresult.md:
@@ -809,7 +809,7 @@ trackedFiles:
   docs/models/components/severitytext.md:
     last_write_checksum: sha1:15969d4a62e02ba012c6724258259371a0a81bbb
   docs/models/components/shadowmcpapproval.md:
-    last_write_checksum: sha1:8b49ff0b0bc06d97375c57ce35227a1c0460aa90
+    last_write_checksum: sha1:57d85c033e341c25323dd480af4f00e8b9a8409f
   docs/models/components/skillbreakdownrow.md:
     last_write_checksum: sha1:4a37e350016d376a6b095c115bb5c2a36c000ade
   docs/models/components/skillsummary.md:
@@ -1029,7 +1029,7 @@ trackedFiles:
   docs/models/operations/addpluginserversecurity.md:
     last_write_checksum: sha1:5dc9e273ba9eab30b9edbb75fdeccd3fd4ec59ec
   docs/models/operations/approveshadowmcprequest.md:
-    last_write_checksum: sha1:5e0e70b92e3d11c83612f6e0e93850bbd686291c
+    last_write_checksum: sha1:75eee90ee7f8b6a01e5fd1a3a03ae2f05def73de
   docs/models/operations/approveshadowmcpsecurity.md:
     last_write_checksum: sha1:e2e89549e0d71a579745cf1681aa5e8845f918d0
   docs/models/operations/approveshadowmcpsecurityoption1.md:
@@ -2259,7 +2259,7 @@ trackedFiles:
   docs/models/operations/revokeremotesessionsecurityoption2.md:
     last_write_checksum: sha1:6a889af9ea71a41902f767b6652c34dc47160fbc
   docs/models/operations/revokeshadowmcpapprovalrequest.md:
-    last_write_checksum: sha1:24f2ff354d2aecf11a60ac04d8d0c1858cd790e1
+    last_write_checksum: sha1:57547dea6b04163bce6cbba2393fa5578e119266
   docs/models/operations/revokeshadowmcpapprovalsecurity.md:
     last_write_checksum: sha1:9bfce7a07ad85610e7c6685a04b0fa43bb46e1e3
   docs/models/operations/revokeshadowmcpapprovalsecurityoption1.md:
@@ -2635,7 +2635,7 @@ trackedFiles:
   docs/sdks/access/README.md:
     last_write_checksum: sha1:c50ea3f9ce0e29ef04c31c8a4e4ef695d0c2fa30
   docs/sdks/approvals/README.md:
-    last_write_checksum: sha1:11d5a213765db34973802e33ae5ef74d6e8ad18a
+    last_write_checksum: sha1:db8e7e38d1bb7b98ece0f26752fc0b25cc20c5d0
   docs/sdks/assets/README.md:
     last_write_checksum: sha1:e1884c390454dd09faad4702a812833f9fdf068a
   docs/sdks/assistantmemories/README.md:
@@ -3253,11 +3253,11 @@ trackedFiles:
     last_write_checksum: sha1:d48b10df9ac7e7d3b9958550e24ee1ddb2eb7dc7
     pristine_git_object: c75bff9f54b25768e1da0efd25ad4c7e005d4e70
   src/funcs/riskApprovalsCreate.ts:
-    last_write_checksum: sha1:a4b460dca1d1d7f9a6eb563e320b8e2440a5ce09
+    last_write_checksum: sha1:cd3b09a173776eec197be36bc6f02c56785e9cc8
   src/funcs/riskApprovalsDelete.ts:
-    last_write_checksum: sha1:6646d25a25019647419e5518fbff095b6b71e620
+    last_write_checksum: sha1:d32e9e946900e8e03085fb9c58dce52f53f304ce
   src/funcs/riskApprovalsList.ts:
-    last_write_checksum: sha1:ebc40995eee444808398b9b3355b6dcc08bc31c4
+    last_write_checksum: sha1:43468cc19f1b23bcb72a06635452e53c1607fefb
   src/funcs/riskCapabilitiesGet.ts:
     last_write_checksum: sha1:a87b56bd3f8a7a5b473ee6d7a0f128aae3d8b22d
   src/funcs/riskPoliciesCreate.ts:
@@ -3587,7 +3587,7 @@ trackedFiles:
     last_write_checksum: sha1:09b19b8524236e2c90452d0539edff8f12f26872
     pristine_git_object: 11ca116616d2f9bdcb90e69b02ef5cded3218aa2
   src/models/components/approveshadowmcprequestbody.ts:
-    last_write_checksum: sha1:e91418c64cc373aa9ba4bd4c52b460fb5c24cf77
+    last_write_checksum: sha1:b2e6d64f3c1c5465e38753d318e694cb48100f06
   src/models/components/asset.ts:
     id: e5eeb706d6aa
     last_write_checksum: sha1:8acb541aa089a73038818ff795e737d854dd4060
@@ -4077,7 +4077,7 @@ trackedFiles:
   src/models/components/listserversresult.ts:
     last_write_checksum: sha1:e976567cbb0d062de15ed04f3d14dd77737c54ba
   src/models/components/listshadowmcpapprovalsresult.ts:
-    last_write_checksum: sha1:b653a4165dcd861a78037e5786d5a3b24300c7f7
+    last_write_checksum: sha1:0defd2560105119c5010afb548de34ddef2c5858
   src/models/components/listslackappsresult.ts:
     last_write_checksum: sha1:2068c9ccfec61f239632b4a9e20be1fe226b5a8f
   src/models/components/listtoolsetsresult.ts:
@@ -4433,7 +4433,7 @@ trackedFiles:
   src/models/components/setusersessionissuerrequestbody.ts:
     last_write_checksum: sha1:7c356da0075d8d9895abaa7cd04b5d9b2d6d3cb8
   src/models/components/shadowmcpapproval.ts:
-    last_write_checksum: sha1:32440bc24a3e5ecc6df6e4ec6b6f96f41cb66c13
+    last_write_checksum: sha1:e46372f2c565a2dea072ed50685f681e9d653820
   src/models/components/skillbreakdownrow.ts:
     last_write_checksum: sha1:553768c909bc6d4953baff1dfbf71111768c1bb5
   src/models/components/skillsummary.ts:
@@ -5207,7 +5207,7 @@ trackedFiles:
   src/models/operations/revokeremotesession.ts:
     last_write_checksum: sha1:b2f89066ad1c31946c052a4596329639fafc2ad9
   src/models/operations/revokeshadowmcpapproval.ts:
-    last_write_checksum: sha1:d1b7917109ad439fc71358d4681ad03142722d6a
+    last_write_checksum: sha1:9cf40a0205e3cb73d97bd5994a82960866d7f3ea
   src/models/operations/revokeusersession.ts:
     last_write_checksum: sha1:e22ea34e5054a0f044135774ecbd5b7c79da1917
   src/models/operations/revokeusersessionclient.ts:
@@ -6119,9 +6119,9 @@ trackedFiles:
   src/react-query/revokeUserSessionConsent.ts:
     last_write_checksum: sha1:cb138c999321ee925b80237b8bca8dccad5c4efc
   src/react-query/riskApprovalsDelete.ts:
-    last_write_checksum: sha1:ebddd8e7006c8745dd56d2e0b52aa39f3847453b
+    last_write_checksum: sha1:056611d549192568d88da37152dd7cef7c6846c4
   src/react-query/riskApproveShadowMCP.ts:
-    last_write_checksum: sha1:ae9e3292d3937222e72901ea16e671d3a8020957
+    last_write_checksum: sha1:f723a3c4684d2344af03390390fb6b60e99cdbb9
   src/react-query/riskCapabilities.core.ts:
     last_write_checksum: sha1:417446ccb33d455ae3dd7aed1290b1e94172371f
   src/react-query/riskCapabilities.ts:
@@ -6143,7 +6143,7 @@ trackedFiles:
   src/react-query/riskListShadowMCPApprovals.core.ts:
     last_write_checksum: sha1:6eb945acdc2cf91199aadf0272c87e8e2857741d
   src/react-query/riskListShadowMCPApprovals.ts:
-    last_write_checksum: sha1:374aeda083ec721801e25e88eb6bd61911170a55
+    last_write_checksum: sha1:1ca38168e0badfc7dbc0c1c9ee42b3c2b62fe07e
   src/react-query/riskPoliciesDelete.ts:
     last_write_checksum: sha1:7e8bc75739d2cd23efd3cd0fce3b7774fdfdb1cb
   src/react-query/riskPoliciesGet.core.ts:
@@ -6397,7 +6397,7 @@ trackedFiles:
   src/sdk/access.ts:
     last_write_checksum: sha1:37c912101f3dc622efcec2d90e0c48035f557057
   src/sdk/approvals.ts:
-    last_write_checksum: sha1:5b6231bf1c6091de112d4623cd5ca6577d5bf74d
+    last_write_checksum: sha1:68c71e868a290b10f34b3d86602af6ff6eda4da6
   src/sdk/assets.ts:
     id: 43fd5a73edb9
     last_write_checksum: sha1:60ccd4abcd9e1b51f7f5542c97336b5a5847b570
@@ -9699,10 +9699,10 @@ examples:
   approveShadowMCP:
     speakeasy-default-approve-shadow-MCP:
       requestBody:
-        application/json: {"policy_id": "49c3eb36-bd65-4005-bec3-5441067be406", "url": "https://dapper-trolley.org/"}
+        application/json: {"match": "<value>", "policy_id": "49c3eb36-bd65-4005-bec3-5441067be406"}
       responses:
         "200":
-          application/json: {"approved_at": "2024-02-20T21:31:07.843Z", "policy_id": "4c29c92c-fc85-4bfb-8f4c-4c6971d17241", "url": "https://sociable-contrail.com/"}
+          application/json: {"approved_at": "2024-02-20T21:31:07.843Z", "match": "<value>", "policy_id": "4c29c92c-fc85-4bfb-8f4c-4c6971d17241"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -9713,6 +9713,7 @@ examples:
         query:
           policy_id: "e0b73b9a-e478-4a4c-adc5-8a14f45770cd"
           url: "https://drab-editor.net/"
+          match: "<value>"
       responses:
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
@@ -9725,7 +9726,7 @@ examples:
           policy_id: "55963dea-075a-4573-8b4f-f1a1f30cdc72"
       responses:
         "200":
-          application/json: {"approvals": [{"approved_at": "2024-06-15T04:53:03.774Z", "policy_id": "c3fddd7e-7900-4b79-ab2c-6f0cd3dc56f5", "url": "https://assured-pop.biz"}]}
+          application/json: {"approvals": [{"approved_at": "2024-06-15T04:53:03.774Z", "match": "<value>", "policy_id": "c3fddd7e-7900-4b79-ab2c-6f0cd3dc56f5"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

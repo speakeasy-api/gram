@@ -1249,7 +1249,7 @@ func ParseEndpoint(
 
 		riskRevokeShadowMCPApprovalFlags                = flag.NewFlagSet("revoke-shadow-mcp-approval", flag.ExitOnError)
 		riskRevokeShadowMCPApprovalPolicyIDFlag         = riskRevokeShadowMCPApprovalFlags.String("policy-id", "REQUIRED", "")
-		riskRevokeShadowMCPApprovalURLFlag              = riskRevokeShadowMCPApprovalFlags.String("url", "REQUIRED", "")
+		riskRevokeShadowMCPApprovalMatchFlag            = riskRevokeShadowMCPApprovalFlags.String("match", "REQUIRED", "")
 		riskRevokeShadowMCPApprovalApikeyTokenFlag      = riskRevokeShadowMCPApprovalFlags.String("apikey-token", "", "")
 		riskRevokeShadowMCPApprovalSessionTokenFlag     = riskRevokeShadowMCPApprovalFlags.String("session-token", "", "")
 		riskRevokeShadowMCPApprovalProjectSlugInputFlag = riskRevokeShadowMCPApprovalFlags.String("project-slug-input", "", "")
@@ -3898,7 +3898,7 @@ func ParseEndpoint(
 				data, err = riskc.BuildApproveShadowMCPPayload(*riskApproveShadowMCPBodyFlag, *riskApproveShadowMCPApikeyTokenFlag, *riskApproveShadowMCPSessionTokenFlag, *riskApproveShadowMCPProjectSlugInputFlag)
 			case "revoke-shadow-mcp-approval":
 				endpoint = c.RevokeShadowMCPApproval()
-				data, err = riskc.BuildRevokeShadowMCPApprovalPayload(*riskRevokeShadowMCPApprovalPolicyIDFlag, *riskRevokeShadowMCPApprovalURLFlag, *riskRevokeShadowMCPApprovalApikeyTokenFlag, *riskRevokeShadowMCPApprovalSessionTokenFlag, *riskRevokeShadowMCPApprovalProjectSlugInputFlag)
+				data, err = riskc.BuildRevokeShadowMCPApprovalPayload(*riskRevokeShadowMCPApprovalPolicyIDFlag, *riskRevokeShadowMCPApprovalMatchFlag, *riskRevokeShadowMCPApprovalApikeyTokenFlag, *riskRevokeShadowMCPApprovalSessionTokenFlag, *riskRevokeShadowMCPApprovalProjectSlugInputFlag)
 			case "trigger-risk-analysis":
 				endpoint = c.TriggerRiskAnalysis()
 				data, err = riskc.BuildTriggerRiskAnalysisPayload(*riskTriggerRiskAnalysisBodyFlag, *riskTriggerRiskAnalysisApikeyTokenFlag, *riskTriggerRiskAnalysisSessionTokenFlag, *riskTriggerRiskAnalysisProjectSlugInputFlag)
@@ -8787,9 +8787,9 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    list-risk-results: List risk analysis results for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-by-chat: List risk results grouped by chat session for the current project.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-policy-status: Get the analysis status of a risk policy including progress and workflow state.`)
-	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-approvals: List shadow-MCP URL approvals for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.`)
-	fmt.Fprintln(os.Stderr, `    approve-shadow-mcp: Approve a shadow-MCP URL so the named policy stops blocking calls to it.`)
-	fmt.Fprintln(os.Stderr, `    revoke-shadow-mcp-approval: Remove a previously-approved shadow-MCP URL for a policy.`)
+	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-approvals: List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.`)
+	fmt.Fprintln(os.Stderr, `    approve-shadow-mcp: Approve a shadow-MCP server so the named policy stops blocking calls to it. `+"`"+`match`+"`"+` is the same opaque server identifier surfaced in `+"`"+`RiskResult.match`+"`"+` — typically a server URL, stdio command, or `+"`"+`mcp__<server>__`+"`"+` prefix.`)
+	fmt.Fprintln(os.Stderr, `    revoke-shadow-mcp-approval: Remove a previously-approved shadow-MCP server for a policy.`)
 	fmt.Fprintln(os.Stderr, `    trigger-risk-analysis: Manually trigger risk analysis for a policy, starting or signaling the drain workflow.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -9026,7 +9026,7 @@ func riskListShadowMCPApprovalsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List shadow-MCP URL approvals for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.`)
+	fmt.Fprintln(os.Stderr, `List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
@@ -9050,7 +9050,7 @@ func riskApproveShadowMCPUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Approve a shadow-MCP URL so the named policy stops blocking calls to it.`)
+	fmt.Fprintln(os.Stderr, `Approve a shadow-MCP server so the named policy stops blocking calls to it. `+"`"+`match`+"`"+` is the same opaque server identifier surfaced in `+"`"+`RiskResult.match`+"`"+` — typically a server URL, stdio command, or `+"`"+`mcp__<server>__`+"`"+` prefix.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -9060,14 +9060,14 @@ func riskApproveShadowMCPUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk approve-shadow-mcp --body '{\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_name\": \"abc123\",\n      \"url\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk approve-shadow-mcp --body '{\n      \"match\": \"abc123\",\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_name\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskRevokeShadowMCPApprovalUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] risk revoke-shadow-mcp-approval", os.Args[0])
 	fmt.Fprint(os.Stderr, " -policy-id STRING")
-	fmt.Fprint(os.Stderr, " -url STRING")
+	fmt.Fprint(os.Stderr, " -match STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -9075,18 +9075,18 @@ func riskRevokeShadowMCPApprovalUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Remove a previously-approved shadow-MCP URL for a policy.`)
+	fmt.Fprintln(os.Stderr, `Remove a previously-approved shadow-MCP server for a policy.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -url STRING: `)
+	fmt.Fprintln(os.Stderr, `    -match STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk revoke-shadow-mcp-approval --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --url \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk revoke-shadow-mcp-approval --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --match \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskTriggerRiskAnalysisUsage() {

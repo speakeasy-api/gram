@@ -13,7 +13,7 @@ import {
 
 export type ListShadowMCPApprovalsResult = {
   /**
-   * The approved shadow-MCP URLs for the policy.
+   * The approved shadow-MCP servers for the policy (URL- or command-keyed).
    */
   approvals: Array<ShadowMCPApproval>;
 };

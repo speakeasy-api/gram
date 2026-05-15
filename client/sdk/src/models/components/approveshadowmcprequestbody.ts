@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type ApproveShadowMCPRequestBody = {
   /**
+   * The MCP server identifier to approve.
+   */
+  match: string;
+  /**
    * The risk policy ID.
    */
   policyId: string;
@@ -14,17 +18,13 @@ export type ApproveShadowMCPRequestBody = {
    * Display name of the MCP server (optional, for UI).
    */
   serverName?: string | undefined;
-  /**
-   * The MCP server URL to approve.
-   */
-  url: string;
 };
 
 /** @internal */
 export type ApproveShadowMCPRequestBody$Outbound = {
+  match: string;
   policy_id: string;
   server_name?: string | undefined;
-  url: string;
 };
 
 /** @internal */
@@ -33,9 +33,9 @@ export const ApproveShadowMCPRequestBody$outboundSchema: z.ZodMiniType<
   ApproveShadowMCPRequestBody
 > = z.pipe(
   z.object({
+    match: z.string(),
     policyId: z.string(),
     serverName: z.optional(z.string()),
-    url: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {

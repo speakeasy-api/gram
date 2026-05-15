@@ -1096,6 +1096,7 @@ func newStartCommand() *cli.Command {
 						RagService:          ragService,
 						MCPRegistryClient:   mcpRegistryClient,
 						TelemetryLogger:     telemLogger,
+						ClickhouseConn:      chDB,
 						TriggersApp:         triggerApp,
 						CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
 						AssistantsCore:      assistantsCore,

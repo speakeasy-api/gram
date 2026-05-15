@@ -66,8 +66,8 @@ type UpdateRiskPolicyRequestBody struct {
 type ApproveShadowMCPRequestBody struct {
 	// The risk policy ID.
 	PolicyID string `form:"policy_id" json:"policy_id" xml:"policy_id"`
-	// The MCP server URL to approve.
-	URL string `form:"url" json:"url" xml:"url"`
+	// The MCP server identifier to approve.
+	Match string `form:"match" json:"match" xml:"match"`
 	// Display name of the MCP server (optional, for UI).
 	ServerName *string `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
 }
@@ -249,7 +249,7 @@ type GetRiskPolicyStatusResponseBody struct {
 // ListShadowMCPApprovalsResponseBody is the type of the "risk" service
 // "listShadowMCPApprovals" endpoint HTTP response body.
 type ListShadowMCPApprovalsResponseBody struct {
-	// The approved shadow-MCP URLs for the policy.
+	// The approved shadow-MCP servers for the policy (URL- or command-keyed).
 	Approvals []*ShadowMCPApprovalResponseBody `form:"approvals,omitempty" json:"approvals,omitempty" xml:"approvals,omitempty"`
 }
 
@@ -258,8 +258,10 @@ type ListShadowMCPApprovalsResponseBody struct {
 type ApproveShadowMCPResponseBody struct {
 	// The risk policy ID this approval is scoped to.
 	PolicyID *string `form:"policy_id,omitempty" json:"policy_id,omitempty" xml:"policy_id,omitempty"`
-	// The approved MCP server URL.
-	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// The MCP server identifier this approval covers — typically a server URL,
+	// stdio command, or `mcp__<server>__` prefix (the same value surfaced in
+	// `RiskResult.match`).
+	Match *string `form:"match,omitempty" json:"match,omitempty" xml:"match,omitempty"`
 	// Display name of the MCP server, when known.
 	ServerName *string `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
 	// User that recorded the approval.
@@ -2756,8 +2758,10 @@ type RiskChatSummaryResponseBody struct {
 type ShadowMCPApprovalResponseBody struct {
 	// The risk policy ID this approval is scoped to.
 	PolicyID *string `form:"policy_id,omitempty" json:"policy_id,omitempty" xml:"policy_id,omitempty"`
-	// The approved MCP server URL.
-	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// The MCP server identifier this approval covers — typically a server URL,
+	// stdio command, or `mcp__<server>__` prefix (the same value surfaced in
+	// `RiskResult.match`).
+	Match *string `form:"match,omitempty" json:"match,omitempty" xml:"match,omitempty"`
 	// Display name of the MCP server, when known.
 	ServerName *string `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
 	// User that recorded the approval.
@@ -2840,7 +2844,7 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 func NewApproveShadowMCPRequestBody(p *risk.ApproveShadowMCPPayload) *ApproveShadowMCPRequestBody {
 	body := &ApproveShadowMCPRequestBody{
 		PolicyID:   p.PolicyID,
-		URL:        p.URL,
+		Match:      p.Match,
 		ServerName: p.ServerName,
 	}
 	return body
@@ -4566,7 +4570,7 @@ func NewListShadowMCPApprovalsGatewayError(body *ListShadowMCPApprovalsGatewayEr
 func NewApproveShadowMCPShadowMCPApprovalOK(body *ApproveShadowMCPResponseBody) *types.ShadowMCPApproval {
 	v := &types.ShadowMCPApproval{
 		PolicyID:   *body.PolicyID,
-		URL:        *body.URL,
+		Match:      *body.Match,
 		ServerName: body.ServerName,
 		ApprovedBy: body.ApprovedBy,
 		ApprovedAt: *body.ApprovedAt,
@@ -5319,8 +5323,8 @@ func ValidateApproveShadowMCPResponseBody(body *ApproveShadowMCPResponseBody) (e
 	if body.PolicyID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("policy_id", "body"))
 	}
-	if body.URL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	if body.Match == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match", "body"))
 	}
 	if body.ApprovedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("approved_at", "body"))
@@ -8583,8 +8587,8 @@ func ValidateShadowMCPApprovalResponseBody(body *ShadowMCPApprovalResponseBody) 
 	if body.PolicyID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("policy_id", "body"))
 	}
-	if body.URL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	if body.Match == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match", "body"))
 	}
 	if body.ApprovedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("approved_at", "body"))

@@ -12,8 +12,10 @@ package types
 type ShadowMCPApproval struct {
 	// The risk policy ID this approval is scoped to.
 	PolicyID string
-	// The approved MCP server URL.
-	URL string
+	// The MCP server identifier this approval covers — typically a server URL,
+	// stdio command, or `mcp__<server>__` prefix (the same value surfaced in
+	// `RiskResult.match`).
+	Match string
 	// Display name of the MCP server, when known.
 	ServerName *string
 	// User that recorded the approval.

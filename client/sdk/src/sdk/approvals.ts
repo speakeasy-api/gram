@@ -15,7 +15,7 @@ export class Approvals extends ClientSDK {
    * approveShadowMCP risk
    *
    * @remarks
-   * Approve a shadow-MCP URL so the named policy stops blocking calls to it.
+   * Approve a shadow-MCP server so the named policy stops blocking calls to it. `match` is the same opaque server identifier surfaced in `RiskResult.match` — typically a server URL, stdio command, or `mcp__<server>__` prefix.
    */
   async create(
     request: operations.ApproveShadowMCPRequest,
@@ -34,7 +34,7 @@ export class Approvals extends ClientSDK {
    * revokeShadowMCPApproval risk
    *
    * @remarks
-   * Remove a previously-approved shadow-MCP URL for a policy.
+   * Remove a previously-approved shadow-MCP server for a policy.
    */
   async delete(
     request: operations.RevokeShadowMCPApprovalRequest,
@@ -53,7 +53,7 @@ export class Approvals extends ClientSDK {
    * listShadowMCPApprovals risk
    *
    * @remarks
-   * List shadow-MCP URL approvals for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.
+   * List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.
    */
   async list(
     request: operations.ListShadowMCPApprovalsRequest,

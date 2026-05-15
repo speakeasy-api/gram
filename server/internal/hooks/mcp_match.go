@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 // gramHostedMCPHost is the canonical host for Gram-managed MCP servers.
@@ -84,6 +86,24 @@ func matchCachedMCPEntry(entries []MCPServerEntry, serverPrefix string) *MCPServ
 	return nil
 }
 
+// resolvedMCPMatch returns the canonical server identifier for a matched
+// MCP list entry: the URL for HTTP/SSE servers, the command for stdio
+// servers, or — when the snapshot didn't resolve to an entry — the
+// server-prefix portion of the tool name as a degraded fallback. Same
+// priority used by recordShadowMCPBlockFinding when populating the
+// risk_results.match column.
+func resolvedMCPMatch(matched *MCPServerEntry, serverPrefix string) string {
+	if matched != nil {
+		switch {
+		case matched.URL != "":
+			return matched.URL
+		case matched.Command != "":
+			return matched.Command
+		}
+	}
+	return serverPrefix
+}
+
 // isGramHostedMCPURL reports whether rawURL points at a Gram-managed MCP
 // server. Exact host match, case-insensitive.
 func isGramHostedMCPURL(rawURL string) bool {
@@ -95,6 +115,32 @@ func isGramHostedMCPURL(rawURL string) bool {
 		return false
 	}
 	return strings.EqualFold(u.Hostname(), gramHostedMCPHost)
+}
+
+// isMatchedMCPApproved returns whether the call has been allowlisted
+// under (project, policy). The matcher passes every identifier the call
+// could reasonably be keyed on — URL, Command, server-prefix — so an
+// approval recorded against any one of them allows the call. The batch
+// scanner stores findings with serverPrefix as match, while hook-time
+// blocks store URL or Command; this unified lookup means a user who
+// excludes from either source covers both.
+func (s *Service) isMatchedMCPApproved(ctx context.Context, projectID, policyID, serverPrefix string, matched *MCPServerEntry) (bool, error) {
+	var candidates []string
+	if matched != nil {
+		if matched.URL != "" {
+			candidates = append(candidates, matched.URL)
+		}
+		if matched.Command != "" {
+			candidates = append(candidates, matched.Command)
+		}
+	}
+	if serverPrefix != "" {
+		candidates = append(candidates, serverPrefix)
+	}
+	if len(candidates) == 0 {
+		return false, nil
+	}
+	return shadowmcp.IsShadowMCPApproved(ctx, s.cache, projectID, policyID, candidates...)
 }
 
 // getCachedMCPList retrieves the parsed `claude mcp list` snapshot stored

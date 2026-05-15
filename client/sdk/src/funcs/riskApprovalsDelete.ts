@@ -30,7 +30,7 @@ import { Result } from "../types/fp.js";
  * revokeShadowMCPApproval risk
  *
  * @remarks
- * Remove a previously-approved shadow-MCP URL for a policy.
+ * Remove a previously-approved shadow-MCP server for a policy.
  */
 export function riskApprovalsDelete(
   client: GramCore,
@@ -96,8 +96,8 @@ async function $do(
   const path = pathToFunc("/rpc/risk.approvals.delete")();
 
   const query = encodeFormQuery({
+    "match": payload.match,
     "policy_id": payload.policy_id,
-    "url": payload.url,
   });
 
   const headers = new Headers(compactMap({

@@ -629,7 +629,7 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 }
 
 const listRiskResultsByChatFound = `-- name: ListRiskResultsByChatFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -637,16 +637,20 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND r
 WHERE cm.chat_id = $1
   AND rr.project_id = $2
   AND rr.found IS TRUE
-  AND ($3::uuid IS NULL OR rr.id <= $3::uuid)
-ORDER BY rr.id DESC
-LIMIT $4
+  AND (
+    $3::timestamptz IS NULL
+    OR (cm.created_at, rr.id) < ($3::timestamptz, $4::uuid)
+  )
+ORDER BY cm.created_at DESC, rr.id DESC
+LIMIT $5
 `
 
 type ListRiskResultsByChatFoundParams struct {
-	ChatID    uuid.UUID
-	ProjectID uuid.UUID
-	Cursor    uuid.NullUUID
-	PageLimit int32
+	ChatID                 uuid.UUID
+	ProjectID              uuid.UUID
+	CursorMessageCreatedAt pgtype.Timestamptz
+	CursorID               uuid.NullUUID
+	PageLimit              int32
 }
 
 type ListRiskResultsByChatFoundRow struct {
@@ -668,6 +672,7 @@ type ListRiskResultsByChatFoundRow struct {
 	DeadLetterReason  pgtype.Text
 	CreatedAt         pgtype.Timestamptz
 	ChatID            uuid.UUID
+	MessageCreatedAt  pgtype.Timestamptz
 	ChatTitle         pgtype.Text
 	ChatUserID        pgtype.Text
 }
@@ -676,7 +681,8 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 	rows, err := q.db.Query(ctx, listRiskResultsByChatFound,
 		arg.ChatID,
 		arg.ProjectID,
-		arg.Cursor,
+		arg.CursorMessageCreatedAt,
+		arg.CursorID,
 		arg.PageLimit,
 	)
 	if err != nil {
@@ -705,6 +711,7 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 			&i.DeadLetterReason,
 			&i.CreatedAt,
 			&i.ChatID,
+			&i.MessageCreatedAt,
 			&i.ChatTitle,
 			&i.ChatUserID,
 		); err != nil {
@@ -719,7 +726,7 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 }
 
 const listRiskResultsByProjectAndPolicy = `-- name: ListRiskResultsByProjectAndPolicy :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -727,16 +734,20 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND r
 WHERE rr.project_id = $1
   AND rr.risk_policy_id = $2
   AND rr.found IS TRUE
-  AND ($3::uuid IS NULL OR rr.id <= $3::uuid)
-ORDER BY rr.id DESC
-LIMIT $4
+  AND (
+    $3::timestamptz IS NULL
+    OR (cm.created_at, rr.id) < ($3::timestamptz, $4::uuid)
+  )
+ORDER BY cm.created_at DESC, rr.id DESC
+LIMIT $5
 `
 
 type ListRiskResultsByProjectAndPolicyParams struct {
-	ProjectID    uuid.UUID
-	RiskPolicyID uuid.UUID
-	Cursor       uuid.NullUUID
-	PageLimit    int32
+	ProjectID              uuid.UUID
+	RiskPolicyID           uuid.UUID
+	CursorMessageCreatedAt pgtype.Timestamptz
+	CursorID               uuid.NullUUID
+	PageLimit              int32
 }
 
 type ListRiskResultsByProjectAndPolicyRow struct {
@@ -758,6 +769,7 @@ type ListRiskResultsByProjectAndPolicyRow struct {
 	DeadLetterReason  pgtype.Text
 	CreatedAt         pgtype.Timestamptz
 	ChatID            uuid.UUID
+	MessageCreatedAt  pgtype.Timestamptz
 	ChatTitle         pgtype.Text
 	ChatUserID        pgtype.Text
 }
@@ -766,7 +778,8 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 	rows, err := q.db.Query(ctx, listRiskResultsByProjectAndPolicy,
 		arg.ProjectID,
 		arg.RiskPolicyID,
-		arg.Cursor,
+		arg.CursorMessageCreatedAt,
+		arg.CursorID,
 		arg.PageLimit,
 	)
 	if err != nil {
@@ -795,6 +808,7 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 			&i.DeadLetterReason,
 			&i.CreatedAt,
 			&i.ChatID,
+			&i.MessageCreatedAt,
 			&i.ChatTitle,
 			&i.ChatUserID,
 		); err != nil {
@@ -809,22 +823,26 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 }
 
 const listRiskResultsByProjectFound = `-- name: ListRiskResultsByProjectFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = $1
   AND rr.found IS TRUE
-  AND ($2::uuid IS NULL OR rr.id <= $2::uuid)
-ORDER BY rr.id DESC
-LIMIT $3
+  AND (
+    $2::timestamptz IS NULL
+    OR (cm.created_at, rr.id) < ($2::timestamptz, $3::uuid)
+  )
+ORDER BY cm.created_at DESC, rr.id DESC
+LIMIT $4
 `
 
 type ListRiskResultsByProjectFoundParams struct {
-	ProjectID uuid.UUID
-	Cursor    uuid.NullUUID
-	PageLimit int32
+	ProjectID              uuid.UUID
+	CursorMessageCreatedAt pgtype.Timestamptz
+	CursorID               uuid.NullUUID
+	PageLimit              int32
 }
 
 type ListRiskResultsByProjectFoundRow struct {
@@ -846,12 +864,24 @@ type ListRiskResultsByProjectFoundRow struct {
 	DeadLetterReason  pgtype.Text
 	CreatedAt         pgtype.Timestamptz
 	ChatID            uuid.UUID
+	MessageCreatedAt  pgtype.Timestamptz
 	ChatTitle         pgtype.Text
 	ChatUserID        pgtype.Text
 }
 
+// Sort by the underlying chat message's created_at (the event time), NOT
+// rr.created_at (the scan time). The background drain workflow analyzes
+// historical messages in arbitrary order, so rr.created_at can put a
+// finding for an old message ahead of one for a recent message — which is
+// exactly the "random-seeming" order users see in Recent Findings.
+// Cursor is (cm.created_at, rr.id) for stable pagination.
 func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRiskResultsByProjectFoundParams) ([]ListRiskResultsByProjectFoundRow, error) {
-	rows, err := q.db.Query(ctx, listRiskResultsByProjectFound, arg.ProjectID, arg.Cursor, arg.PageLimit)
+	rows, err := q.db.Query(ctx, listRiskResultsByProjectFound,
+		arg.ProjectID,
+		arg.CursorMessageCreatedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -878,6 +908,7 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 			&i.DeadLetterReason,
 			&i.CreatedAt,
 			&i.ChatID,
+			&i.MessageCreatedAt,
 			&i.ChatTitle,
 			&i.ChatUserID,
 		); err != nil {

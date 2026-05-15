@@ -26,9 +26,9 @@ export type RevokeShadowMCPApprovalRequest = {
    */
   policyId: string;
   /**
-   * The MCP server URL to revoke.
+   * The MCP server identifier to revoke — exactly the value used to approve.
    */
-  url: string;
+  match: string;
   /**
    * API Key header
    */
@@ -153,7 +153,7 @@ export function revokeShadowMCPApprovalSecurityToJSON(
 /** @internal */
 export type RevokeShadowMCPApprovalRequest$Outbound = {
   policy_id: string;
-  url: string;
+  match: string;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -166,7 +166,7 @@ export const RevokeShadowMCPApprovalRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     policyId: z.string(),
-    url: z.string(),
+    match: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),

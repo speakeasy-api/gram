@@ -36,12 +36,15 @@ type Service interface {
 	// Get the analysis status of a risk policy including progress and workflow
 	// state.
 	GetRiskPolicyStatus(context.Context, *GetRiskPolicyStatusPayload) (res *types.RiskPolicyStatus, err error)
-	// List shadow-MCP URL approvals for a policy. Temporary Redis-backed storage;
-	// will move to a dedicated table once the feature graduates.
+	// List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary
+	// Redis-backed storage; will move to a dedicated table once the feature
+	// graduates.
 	ListShadowMCPApprovals(context.Context, *ListShadowMCPApprovalsPayload) (res *ListShadowMCPApprovalsResult, err error)
-	// Approve a shadow-MCP URL so the named policy stops blocking calls to it.
+	// Approve a shadow-MCP server so the named policy stops blocking calls to it.
+	// `match` is the same opaque server identifier surfaced in `RiskResult.match`
+	// — typically a server URL, stdio command, or `mcp__<server>__` prefix.
 	ApproveShadowMCP(context.Context, *ApproveShadowMCPPayload) (res *types.ShadowMCPApproval, err error)
-	// Remove a previously-approved shadow-MCP URL for a policy.
+	// Remove a previously-approved shadow-MCP server for a policy.
 	RevokeShadowMCPApproval(context.Context, *RevokeShadowMCPApprovalPayload) (err error)
 	// Manually trigger risk analysis for a policy, starting or signaling the drain
 	// workflow.
@@ -78,8 +81,8 @@ type ApproveShadowMCPPayload struct {
 	ProjectSlugInput *string
 	// The risk policy ID.
 	PolicyID string
-	// The MCP server URL to approve.
-	URL string
+	// The MCP server identifier to approve.
+	Match string
 	// Display name of the MCP server (optional, for UI).
 	ServerName *string
 }
@@ -224,7 +227,7 @@ type ListShadowMCPApprovalsPayload struct {
 // ListShadowMCPApprovalsResult is the result type of the risk service
 // listShadowMCPApprovals method.
 type ListShadowMCPApprovalsResult struct {
-	// The approved shadow-MCP URLs for the policy.
+	// The approved shadow-MCP servers for the policy (URL- or command-keyed).
 	Approvals []*types.ShadowMCPApproval
 }
 
@@ -236,8 +239,8 @@ type RevokeShadowMCPApprovalPayload struct {
 	ProjectSlugInput *string
 	// The risk policy ID.
 	PolicyID string
-	// The MCP server URL to revoke.
-	URL string
+	// The MCP server identifier to revoke — exactly the value used to approve.
+	Match string
 }
 
 // RiskCapabilitiesResult is the result type of the risk service

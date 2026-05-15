@@ -892,9 +892,9 @@ function ShadowMCPExclusionsSection({ policyId }: { policyId: string }) {
   const approvals = data?.approvals ?? [];
 
   const handleRevoke = useCallback(
-    (url: string) => {
+    (match: string) => {
       revoke.mutate(
-        { request: { policyId, url } },
+        { request: { policyId, match } },
         {
           onSuccess: () => {
             toast.success("Exclusion removed");
@@ -913,10 +913,10 @@ function ShadowMCPExclusionsSection({ policyId }: { policyId: string }) {
 
   return (
     <div className="space-y-2">
-      <Label className="text-sm font-medium">Excluded MCP URLs</Label>
+      <Label className="text-sm font-medium">Excluded MCP Servers</Label>
       <p className="text-muted-foreground text-xs">
-        Shadow-MCP servers approved for this policy. Calls to these URLs are
-        allowed even when the policy would otherwise block them.
+        Shadow-MCP servers approved for this policy. Calls to these servers
+        are allowed even when the policy would otherwise block them.
       </p>
       <div className="border-border divide-border divide-y rounded-lg border">
         {isLoading ? (
@@ -929,15 +929,15 @@ function ShadowMCPExclusionsSection({ policyId }: { policyId: string }) {
         ) : (
           approvals.map((a) => (
             <div
-              key={a.url}
+              key={a.match}
               className="flex items-center justify-between gap-2 p-3"
             >
               <div className="min-w-0 flex-1">
                 <div
                   className="truncate font-mono text-xs"
-                  title={a.url}
+                  title={a.match}
                 >
-                  {a.url}
+                  {a.match}
                 </div>
                 {(a.serverName || a.approvedBy) && (
                   <div className="text-muted-foreground mt-0.5 truncate text-[11px]">
@@ -950,7 +950,7 @@ function ShadowMCPExclusionsSection({ policyId }: { policyId: string }) {
                 variant="ghost"
                 size="icon-sm"
                 disabled={revoke.isPending}
-                onClick={() => handleRevoke(a.url)}
+                onClick={() => handleRevoke(a.match)}
                 title="Remove exclusion"
               >
                 <X className="h-3 w-3" />
