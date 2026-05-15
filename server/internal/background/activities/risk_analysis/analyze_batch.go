@@ -617,6 +617,8 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 	ctx, writeSpan := a.tracer.Start(ctx, "risk.writeResults")
 	defer writeSpan.End()
 
+	rows = a.guardRuleIDs(ctx, rows)
+
 	tx, err := a.db.Begin(ctx)
 	if err != nil {
 		writeSpan.SetStatus(codes.Error, err.Error())
@@ -647,6 +649,37 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 		return fmt.Errorf("commit results: %w", err)
 	}
 	return nil
+}
+
+// guardRuleIDs is the last barrier before risk_results writes: every row
+// with a non-null rule_id must pass ValidateRuleID. In dev/test mode a
+// malformed id panics so writer drift fails CI immediately; in production
+// the offending row is dropped (and logged) so a single misbehaving
+// scanner cannot break the whole batch.
+//
+// Empty/null rule_ids are allowed — they represent the "analyzed, no
+// findings" sentinel row buildRows emits per message.
+func (a *AnalyzeBatch) guardRuleIDs(ctx context.Context, rows []repo.InsertRiskResultsParams) []repo.InsertRiskResultsParams {
+	out := rows[:0]
+	for _, row := range rows {
+		if !row.RuleID.Valid || row.RuleID.String == "" {
+			out = append(out, row)
+			continue
+		}
+		if err := ValidateRuleID(row.RuleID.String); err != nil {
+			if enforceRuleIDFormat {
+				panic(fmt.Sprintf("risk_analysis.writeResults: malformed rule_id %q from source %q: %v", row.RuleID.String, row.Source, err))
+			}
+			a.logger.ErrorContext(ctx, "dropping risk_result row with malformed rule_id",
+				attr.SlogError(err),
+				attr.SlogRiskSource(row.Source),
+				attr.SlogRiskRuleID(row.RuleID.String),
+			)
+			continue
+		}
+		out = append(out, row)
+	}
+	return out
 }
 
 func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID) repo.InsertRiskResultsParams {
