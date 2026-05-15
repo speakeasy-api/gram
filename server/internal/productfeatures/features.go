@@ -15,6 +15,7 @@ const (
 	FeatureRBAC                  Feature = "rbac"
 	FeatureSessionCapture        Feature = "session_capture"
 	FeatureAuthzChallengeLogging Feature = "authz_challenge_logging"
+	FeatureWebhooks              Feature = "webhooks"
 )
 
 type FeatureCache struct {

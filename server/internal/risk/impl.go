@@ -58,6 +58,7 @@ type Service struct {
 	completionClient openrouter.CompletionClient
 	shadowMCPClient  *shadowmcp.Client
 	audit            *audit.Logger
+	piClassifier     bool
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -84,6 +85,7 @@ func NewObserver(
 		completionClient: nil,
 		shadowMCPClient:  nil,
 		audit:            auditLogger,
+		piClassifier:     false,
 	}
 }
 
@@ -97,6 +99,7 @@ func NewService(
 	completionClient openrouter.CompletionClient,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
+	piClassifier bool,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -111,6 +114,7 @@ func NewService(
 		completionClient: completionClient,
 		shadowMCPClient:  shadowMCPClient,
 		audit:            auditLogger,
+		piClassifier:     piClassifier,
 	}
 }
 
@@ -126,6 +130,21 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+func (s *Service) GetRiskCapabilities(ctx context.Context, payload *gen.GetRiskCapabilitiesPayload) (*gen.RiskCapabilitiesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	return &gen.RiskCapabilitiesResult{
+		PiClassifierEnabled: s.piClassifier,
+	}, nil
 }
 
 // OnMessagesStored implements chat.MessageObserver. The caller
@@ -232,16 +251,17 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	row, err := repo.New(dbtx).CreateRiskPolicy(ctx, repo.CreateRiskPolicyParams{
-		ID:               id,
-		ProjectID:        *authCtx.ProjectID,
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		Name:             name,
-		Sources:          sources,
-		PresidioEntities: payload.PresidioEntities,
-		Enabled:          enabled,
-		Action:           action,
-		AutoName:         autoName,
-		UserMessage:      conv.PtrToPGTextEmpty(payload.UserMessage),
+		ID:                   id,
+		ProjectID:            *authCtx.ProjectID,
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		Name:                 name,
+		Sources:              sources,
+		PresidioEntities:     payload.PresidioEntities,
+		PromptInjectionRules: payload.PromptInjectionRules,
+		Enabled:              enabled,
+		Action:               action,
+		AutoName:             autoName,
+		UserMessage:          conv.PtrToPGTextEmpty(payload.UserMessage),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").Log(ctx, s.logger)
@@ -372,6 +392,11 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		presidioEntities = payload.PresidioEntities
 	}
 
+	promptInjectionRules := current.PromptInjectionRules
+	if payload.PromptInjectionRules != nil {
+		promptInjectionRules = payload.PromptInjectionRules
+	}
+
 	enabled := current.Enabled
 	if payload.Enabled != nil {
 		enabled = *payload.Enabled
@@ -428,15 +453,16 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	row, err := repo.New(dbtx).UpdateRiskPolicy(ctx, repo.UpdateRiskPolicyParams{
-		ID:               id,
-		ProjectID:        *authCtx.ProjectID,
-		Name:             name,
-		Sources:          sources,
-		PresidioEntities: presidioEntities,
-		Enabled:          enabled,
-		Action:           action,
-		AutoName:         autoName,
-		UserMessage:      userMessage,
+		ID:                   id,
+		ProjectID:            *authCtx.ProjectID,
+		Name:                 name,
+		Sources:              sources,
+		PresidioEntities:     presidioEntities,
+		PromptInjectionRules: promptInjectionRules,
+		Enabled:              enabled,
+		Action:               action,
+		AutoName:             autoName,
+		UserMessage:          userMessage,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").Log(ctx, s.logger)
@@ -825,20 +851,21 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	pendingMessages := max(totalMessages-analyzedMessages, 0)
 
 	return &types.RiskPolicy{
-		ID:               row.ID.String(),
-		ProjectID:        row.ProjectID.String(),
-		Name:             row.Name,
-		Sources:          row.Sources,
-		PresidioEntities: row.PresidioEntities,
-		Enabled:          row.Enabled,
-		Action:           row.Action,
-		AutoName:         row.AutoName,
-		UserMessage:      conv.FromPGText[string](row.UserMessage),
-		Version:          row.Version,
-		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:  pendingMessages,
-		TotalMessages:    totalMessages,
+		ID:                   row.ID.String(),
+		ProjectID:            row.ProjectID.String(),
+		Name:                 row.Name,
+		Sources:              row.Sources,
+		PresidioEntities:     row.PresidioEntities,
+		PromptInjectionRules: row.PromptInjectionRules,
+		Enabled:              row.Enabled,
+		Action:               row.Action,
+		AutoName:             row.AutoName,
+		UserMessage:          conv.FromPGText[string](row.UserMessage),
+		Version:              row.Version,
+		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:      pendingMessages,
+		TotalMessages:        totalMessages,
 	}, nil
 }
 
@@ -848,20 +875,21 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 // they were not computed.
 func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 	return &types.RiskPolicy{
-		ID:               row.ID.String(),
-		ProjectID:        row.ProjectID.String(),
-		Name:             row.Name,
-		Sources:          row.Sources,
-		PresidioEntities: row.PresidioEntities,
-		Enabled:          row.Enabled,
-		Action:           row.Action,
-		AutoName:         row.AutoName,
-		UserMessage:      conv.FromPGText[string](row.UserMessage),
-		Version:          row.Version,
-		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:  -1,
-		TotalMessages:    -1,
+		ID:                   row.ID.String(),
+		ProjectID:            row.ProjectID.String(),
+		Name:                 row.Name,
+		Sources:              row.Sources,
+		PresidioEntities:     row.PresidioEntities,
+		PromptInjectionRules: row.PromptInjectionRules,
+		Enabled:              row.Enabled,
+		Action:               row.Action,
+		AutoName:             row.AutoName,
+		UserMessage:          conv.FromPGText[string](row.UserMessage),
+		Version:              row.Version,
+		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:      -1,
+		TotalMessages:        -1,
 	}
 }
 

@@ -68,7 +68,7 @@ func (d ToolDescriptor) ToTool(projectID uuid.UUID) *types.Tool {
 
 func (d ToolDescriptor) ToToolEntry() *types.ToolEntry {
 	return &types.ToolEntry{
-		Type:        string(urn.ToolKindPlatform),
+		Type:        types.ToolType(urn.ToolKindPlatform),
 		ID:          d.SyntheticID(),
 		Name:        d.Name,
 		ToolUrn:     d.ToolURN().String(),

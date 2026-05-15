@@ -61,12 +61,19 @@ function SlackAppsEmptyState({ onCreate }: { onCreate: () => void }) {
         Create an assistant to let your team interact with Gram MCP servers
         directly.
       </Type>
-      <Button onClick={onCreate}>
-        <Button.LeftIcon>
-          <Icon name="plus" className="h-4 w-4" />
-        </Button.LeftIcon>
-        <Button.Text>Create new Assistant</Button.Text>
-      </Button>
+      <RequireScope
+        scope={["project:write", "mcp:write"]}
+        all
+        level="component"
+        reason="You don't have permission to create assistants."
+      >
+        <Button onClick={onCreate}>
+          <Button.LeftIcon>
+            <Icon name="plus" className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Create new Assistant</Button.Text>
+        </Button>
+      </RequireScope>
     </div>
   );
 }
@@ -264,12 +271,19 @@ function CreateSlackAppDialog({
           <Button variant="tertiary" onClick={() => handleOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            onClick={handleCreate}
-            disabled={!isValid || createMutation.isPending}
+          <RequireScope
+            scope={["project:write", "mcp:write"]}
+            all
+            level="component"
+            reason="You don't have permission to create assistants."
           >
-            {createMutation.isPending ? "Creating..." : "Create Assistant"}
-          </Button>
+            <Button
+              onClick={handleCreate}
+              disabled={!isValid || createMutation.isPending}
+            >
+              {createMutation.isPending ? "Creating..." : "Create Assistant"}
+            </Button>
+          </RequireScope>
         </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
@@ -313,12 +327,19 @@ function SlackAppsInner() {
         </Page.Section.Description>
         <Page.Section.CTA>
           {apps.length > 0 && (
-            <Button onClick={() => setDialogOpen(true)}>
-              <Button.LeftIcon>
-                <Icon name="plus" className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Create new Assistant</Button.Text>
-            </Button>
+            <RequireScope
+              scope={["project:write", "mcp:write"]}
+              all
+              level="component"
+              reason="You don't have permission to create assistants."
+            >
+              <Button onClick={() => setDialogOpen(true)}>
+                <Button.LeftIcon>
+                  <Icon name="plus" className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Create new Assistant</Button.Text>
+              </Button>
+            </RequireScope>
           )}
         </Page.Section.CTA>
         <Page.Section.Body>

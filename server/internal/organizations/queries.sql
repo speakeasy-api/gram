@@ -35,6 +35,11 @@ SELECT *
 FROM organization_metadata
 WHERE id = @id;
 
+-- name: GetOrganizationMetadataBySlug :one
+SELECT *
+FROM organization_metadata
+WHERE slug = @slug;
+
 -- name: GetOrganizationNameByWorkosID :one
 SELECT name
 FROM organization_metadata
@@ -159,9 +164,7 @@ VALUES (@id, @name, @slug);
 -- name: GetOrganizationByWorkosID :one
 SELECT *
 FROM organization_metadata
-WHERE workos_id = @workos_id
-ORDER BY id = @workos_id, created_at ASC
-LIMIT 1;
+WHERE workos_id = @workos_id;
 
 -- name: GetOrganizationRelationshipForUser :one
 SELECT *
@@ -273,6 +276,21 @@ DELETE FROM organization_role_assignments
 WHERE organization_id = @organization_id
   AND workos_user_id = @workos_user_id;
 
+-- name: LinkRoleAssignmentsToUser :exec
+UPDATE organization_role_assignments
+SET user_id = @user_id,
+    updated_at = clock_timestamp()
+WHERE workos_user_id = @workos_user_id
+  AND user_id IS NULL;
+
+-- name: GetRoleAssignmentLinkedToDifferentWorkOSUser :one
+SELECT id, workos_user_id
+FROM organization_role_assignments
+WHERE user_id = @user_id
+  AND workos_user_id <> @workos_user_id
+ORDER BY updated_at DESC
+LIMIT 1;
+
 -- name: ListOrganizationRoleAssignmentsByWorkOSUser :many
 SELECT *
 FROM organization_role_assignments
@@ -310,6 +328,14 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at = clock_timestamp()
 RETURNING *;
 
+-- name: ListOrganizationsForUser :many
+SELECT om.id, om.name, om.slug, om.workos_id
+FROM organization_user_relationships our
+JOIN organization_metadata om ON om.id = our.organization_id
+WHERE our.user_id = @user_id
+  AND our.deleted_at IS NULL
+  AND om.disabled_at IS NULL;
+
 -- name: DisableOrganizationByWorkosID :execrows
 -- Mark a WorkOS-linked organization as disabled. Append-only: keeps
 -- organization_user_relationships intact. Idempotent — disabled_at is only
@@ -319,3 +345,39 @@ SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
     workos_last_event_id = @workos_last_event_id,
     updated_at = clock_timestamp()
 WHERE workos_id = @workos_id;
+
+
+-- name: UpsertSvixAppID :one
+WITH previous AS (
+    SELECT prev.svix_app_id
+    FROM organization_metadata prev
+    WHERE
+        prev.id = @id
+        AND prev.disabled_at IS NULL
+)
+UPDATE organization_metadata om
+SET svix_app_id = @svix_app_id,
+    webhooks_enabled = TRUE,
+    updated_at = clock_timestamp()
+WHERE
+    om.id = @id
+    AND om.disabled_at IS NULL
+RETURNING
+    om.id,
+    om.svix_app_id,
+    (SELECT previous.svix_app_id FROM previous) AS previous_svix_app_id,
+    om.webhooks_enabled;
+
+-- name: SetWebhooksEnabled :one
+UPDATE organization_metadata
+SET webhooks_enabled = @enabled,
+    updated_at = clock_timestamp()
+WHERE
+    id = @id
+    AND COALESCE(webhooks_enabled, FALSE) IS DISTINCT FROM @enabled
+RETURNING id, svix_app_id, webhooks_enabled;
+
+-- name: GetSvixAppID :one
+SELECT svix_app_id
+FROM organization_metadata
+WHERE id = @id AND svix_app_id IS NOT NULL;

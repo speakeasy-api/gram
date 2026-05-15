@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -37,12 +38,12 @@ func TestService_RemoveUser(t *testing.T) {
 
 	_, err = orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		UserID:         testOtherUserID,
+		UserID:         conv.ToPGText(testOtherUserID),
 	})
 	require.NoError(t, err)
 	err = orgrepo.New(ti.conn).AttachWorkOSUserToOrg(ctx, orgrepo.AttachWorkOSUserToOrgParams{
 		OrganizationID:     authCtx.ActiveOrganizationID,
-		UserID:             testOtherUserID,
+		UserID:             conv.ToPGText(testOtherUserID),
 		WorkosMembershipID: pgtype.Text{String: testWorkosMembershipID, Valid: true},
 	})
 	require.NoError(t, err)
@@ -58,7 +59,8 @@ func TestService_RemoveUser(t *testing.T) {
 
 	rows, err := orgrepo.New(ti.conn).ListOrganizationUsers(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
-	require.Empty(t, rows, "expected soft-deleted user to no longer appear in organization list")
+	// The auth user (from InitAuthContext) remains; only the other user was removed.
+	require.Len(t, rows, 1, "expected only the auth user to remain after removing the other user")
 
 	ti.orgs.AssertExpectations(t)
 }
@@ -78,12 +80,12 @@ func TestService_RollsBackOnWorkOSError(t *testing.T) {
 
 	_, err = orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		UserID:         testOtherUserID,
+		UserID:         conv.ToPGText(testOtherUserID),
 	})
 	require.NoError(t, err)
 	err = orgrepo.New(ti.conn).AttachWorkOSUserToOrg(ctx, orgrepo.AttachWorkOSUserToOrgParams{
 		OrganizationID:     authCtx.ActiveOrganizationID,
-		UserID:             testOtherUserID,
+		UserID:             conv.ToPGText(testOtherUserID),
 		WorkosMembershipID: pgtype.Text{String: testWorkosMembershipID, Valid: true},
 	})
 	require.NoError(t, err)
@@ -101,8 +103,8 @@ func TestService_RollsBackOnWorkOSError(t *testing.T) {
 
 	rows, err := orgrepo.New(ti.conn).ListOrganizationUsers(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
-	require.Len(t, rows, 1, "transaction rollback should leave the organization_user_relationships row active")
-	require.Equal(t, testOtherUserID, rows[0].UserID)
+	// Auth user (from InitAuthContext) + other user (rollback preserved the row).
+	require.Len(t, rows, 2, "transaction rollback should leave the organization_user_relationships row active")
 
 	ti.orgs.AssertExpectations(t)
 }
@@ -159,7 +161,7 @@ func TestService_RemoveUser_AllowsOrgAdminGrant(t *testing.T) {
 	require.NoError(t, err)
 	_, err = orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		UserID:         testOtherUserID,
+		UserID:         conv.ToPGText(testOtherUserID),
 	})
 	require.NoError(t, err)
 

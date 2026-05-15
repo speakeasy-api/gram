@@ -22,6 +22,9 @@ type CreateRiskPolicyRequestBody struct {
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to detect.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Prompt-injection detection rule ids to enable in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier').
+	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -44,6 +47,9 @@ type UpdateRiskPolicyRequestBody struct {
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to detect.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Prompt-injection detection rule ids to enable in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier').
+	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -75,6 +81,9 @@ type CreateRiskPolicyResponseBody struct {
 	Sources []string `form:"sources" json:"sources" xml:"sources"`
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Prompt-injection detection rule ids enabled in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -104,6 +113,13 @@ type ListRiskPoliciesResponseBody struct {
 	Policies []*RiskPolicyResponseBody `form:"policies" json:"policies" xml:"policies"`
 }
 
+// GetRiskCapabilitiesResponseBody is the type of the "risk" service
+// "getRiskCapabilities" endpoint HTTP response body.
+type GetRiskCapabilitiesResponseBody struct {
+	// Whether the prompt-injection ML classifier is configured on this server.
+	PiClassifierEnabled bool `form:"pi_classifier_enabled" json:"pi_classifier_enabled" xml:"pi_classifier_enabled"`
+}
+
 // GetRiskPolicyResponseBody is the type of the "risk" service "getRiskPolicy"
 // endpoint HTTP response body.
 type GetRiskPolicyResponseBody struct {
@@ -117,6 +133,9 @@ type GetRiskPolicyResponseBody struct {
 	Sources []string `form:"sources" json:"sources" xml:"sources"`
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Prompt-injection detection rule ids enabled in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -152,6 +171,9 @@ type UpdateRiskPolicyResponseBody struct {
 	Sources []string `form:"sources" json:"sources" xml:"sources"`
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Prompt-injection detection rule ids enabled in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -562,6 +584,191 @@ type ListRiskPoliciesUnexpectedResponseBody struct {
 // ListRiskPoliciesGatewayErrorResponseBody is the type of the "risk" service
 // "listRiskPolicies" endpoint HTTP response body for the "gateway_error" error.
 type ListRiskPoliciesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskCapabilitiesUnauthorizedResponseBody is the type of the "risk"
+// service "getRiskCapabilities" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetRiskCapabilitiesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskCapabilitiesForbiddenResponseBody is the type of the "risk" service
+// "getRiskCapabilities" endpoint HTTP response body for the "forbidden" error.
+type GetRiskCapabilitiesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskCapabilitiesBadRequestResponseBody is the type of the "risk" service
+// "getRiskCapabilities" endpoint HTTP response body for the "bad_request"
+// error.
+type GetRiskCapabilitiesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskCapabilitiesNotFoundResponseBody is the type of the "risk" service
+// "getRiskCapabilities" endpoint HTTP response body for the "not_found" error.
+type GetRiskCapabilitiesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskCapabilitiesConflictResponseBody is the type of the "risk" service
+// "getRiskCapabilities" endpoint HTTP response body for the "conflict" error.
+type GetRiskCapabilitiesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskCapabilitiesUnsupportedMediaResponseBody is the type of the "risk"
+// service "getRiskCapabilities" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetRiskCapabilitiesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskCapabilitiesInvalidResponseBody is the type of the "risk" service
+// "getRiskCapabilities" endpoint HTTP response body for the "invalid" error.
+type GetRiskCapabilitiesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskCapabilitiesInvariantViolationResponseBody is the type of the "risk"
+// service "getRiskCapabilities" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetRiskCapabilitiesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskCapabilitiesUnexpectedResponseBody is the type of the "risk" service
+// "getRiskCapabilities" endpoint HTTP response body for the "unexpected" error.
+type GetRiskCapabilitiesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRiskCapabilitiesGatewayErrorResponseBody is the type of the "risk"
+// service "getRiskCapabilities" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetRiskCapabilitiesGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1875,6 +2082,9 @@ type RiskPolicyResponseBody struct {
 	Sources []string `form:"sources" json:"sources" xml:"sources"`
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Prompt-injection detection rule ids enabled in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -1978,6 +2188,12 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 			body.PresidioEntities[i] = val
 		}
 	}
+	if res.PromptInjectionRules != nil {
+		body.PromptInjectionRules = make([]string, len(res.PromptInjectionRules))
+		for i, val := range res.PromptInjectionRules {
+			body.PromptInjectionRules[i] = val
+		}
+	}
 	return body
 }
 
@@ -1996,6 +2212,15 @@ func NewListRiskPoliciesResponseBody(res *risk.ListRiskPoliciesResult) *ListRisk
 		}
 	} else {
 		body.Policies = []*RiskPolicyResponseBody{}
+	}
+	return body
+}
+
+// NewGetRiskCapabilitiesResponseBody builds the HTTP response body from the
+// result of the "getRiskCapabilities" endpoint of the "risk" service.
+func NewGetRiskCapabilitiesResponseBody(res *risk.RiskCapabilitiesResult) *GetRiskCapabilitiesResponseBody {
+	body := &GetRiskCapabilitiesResponseBody{
+		PiClassifierEnabled: res.PiClassifierEnabled,
 	}
 	return body
 }
@@ -2031,6 +2256,12 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 			body.PresidioEntities[i] = val
 		}
 	}
+	if res.PromptInjectionRules != nil {
+		body.PromptInjectionRules = make([]string, len(res.PromptInjectionRules))
+		for i, val := range res.PromptInjectionRules {
+			body.PromptInjectionRules[i] = val
+		}
+	}
 	return body
 }
 
@@ -2063,6 +2294,12 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 		body.PresidioEntities = make([]string, len(res.PresidioEntities))
 		for i, val := range res.PresidioEntities {
 			body.PresidioEntities[i] = val
+		}
+	}
+	if res.PromptInjectionRules != nil {
+		body.PromptInjectionRules = make([]string, len(res.PromptInjectionRules))
+		for i, val := range res.PromptInjectionRules {
+			body.PromptInjectionRules[i] = val
 		}
 	}
 	return body
@@ -2400,6 +2637,148 @@ func NewListRiskPoliciesUnexpectedResponseBody(res *goa.ServiceError) *ListRiskP
 // from the result of the "listRiskPolicies" endpoint of the "risk" service.
 func NewListRiskPoliciesGatewayErrorResponseBody(res *goa.ServiceError) *ListRiskPoliciesGatewayErrorResponseBody {
 	body := &ListRiskPoliciesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskCapabilitiesUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getRiskCapabilities" endpoint of the "risk" service.
+func NewGetRiskCapabilitiesUnauthorizedResponseBody(res *goa.ServiceError) *GetRiskCapabilitiesUnauthorizedResponseBody {
+	body := &GetRiskCapabilitiesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskCapabilitiesForbiddenResponseBody builds the HTTP response body
+// from the result of the "getRiskCapabilities" endpoint of the "risk" service.
+func NewGetRiskCapabilitiesForbiddenResponseBody(res *goa.ServiceError) *GetRiskCapabilitiesForbiddenResponseBody {
+	body := &GetRiskCapabilitiesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskCapabilitiesBadRequestResponseBody builds the HTTP response body
+// from the result of the "getRiskCapabilities" endpoint of the "risk" service.
+func NewGetRiskCapabilitiesBadRequestResponseBody(res *goa.ServiceError) *GetRiskCapabilitiesBadRequestResponseBody {
+	body := &GetRiskCapabilitiesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskCapabilitiesNotFoundResponseBody builds the HTTP response body
+// from the result of the "getRiskCapabilities" endpoint of the "risk" service.
+func NewGetRiskCapabilitiesNotFoundResponseBody(res *goa.ServiceError) *GetRiskCapabilitiesNotFoundResponseBody {
+	body := &GetRiskCapabilitiesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskCapabilitiesConflictResponseBody builds the HTTP response body
+// from the result of the "getRiskCapabilities" endpoint of the "risk" service.
+func NewGetRiskCapabilitiesConflictResponseBody(res *goa.ServiceError) *GetRiskCapabilitiesConflictResponseBody {
+	body := &GetRiskCapabilitiesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskCapabilitiesUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getRiskCapabilities" endpoint of the "risk"
+// service.
+func NewGetRiskCapabilitiesUnsupportedMediaResponseBody(res *goa.ServiceError) *GetRiskCapabilitiesUnsupportedMediaResponseBody {
+	body := &GetRiskCapabilitiesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskCapabilitiesInvalidResponseBody builds the HTTP response body from
+// the result of the "getRiskCapabilities" endpoint of the "risk" service.
+func NewGetRiskCapabilitiesInvalidResponseBody(res *goa.ServiceError) *GetRiskCapabilitiesInvalidResponseBody {
+	body := &GetRiskCapabilitiesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskCapabilitiesInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getRiskCapabilities" endpoint of the
+// "risk" service.
+func NewGetRiskCapabilitiesInvariantViolationResponseBody(res *goa.ServiceError) *GetRiskCapabilitiesInvariantViolationResponseBody {
+	body := &GetRiskCapabilitiesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskCapabilitiesUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getRiskCapabilities" endpoint of the "risk" service.
+func NewGetRiskCapabilitiesUnexpectedResponseBody(res *goa.ServiceError) *GetRiskCapabilitiesUnexpectedResponseBody {
+	body := &GetRiskCapabilitiesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRiskCapabilitiesGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getRiskCapabilities" endpoint of the "risk" service.
+func NewGetRiskCapabilitiesGatewayErrorResponseBody(res *goa.ServiceError) *GetRiskCapabilitiesGatewayErrorResponseBody {
+	body := &GetRiskCapabilitiesGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3432,6 +3811,12 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 			v.PresidioEntities[i] = val
 		}
 	}
+	if body.PromptInjectionRules != nil {
+		v.PromptInjectionRules = make([]string, len(body.PromptInjectionRules))
+		for i, val := range body.PromptInjectionRules {
+			v.PromptInjectionRules[i] = val
+		}
+	}
 	if body.Action == nil {
 		v.Action = "flag"
 	}
@@ -3446,6 +3831,17 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 // payload.
 func NewListRiskPoliciesPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskPoliciesPayload {
 	v := &risk.ListRiskPoliciesPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetRiskCapabilitiesPayload builds a risk service getRiskCapabilities
+// endpoint payload.
+func NewGetRiskCapabilitiesPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetRiskCapabilitiesPayload {
+	v := &risk.GetRiskCapabilitiesPayload{}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3485,6 +3881,12 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *
 		v.PresidioEntities = make([]string, len(body.PresidioEntities))
 		for i, val := range body.PresidioEntities {
 			v.PresidioEntities[i] = val
+		}
+	}
+	if body.PromptInjectionRules != nil {
+		v.PromptInjectionRules = make([]string, len(body.PromptInjectionRules))
+		for i, val := range body.PromptInjectionRules {
+			v.PromptInjectionRules[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken

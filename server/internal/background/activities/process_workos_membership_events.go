@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/workos/workos-go/v6/pkg/events"
 
@@ -45,10 +46,10 @@ type ProcessWorkOSMembershipEventsResult struct {
 type ProcessWorkOSMembershipEvents struct {
 	db           *pgxpool.Pool
 	logger       *slog.Logger
-	eventsClient EventsLister
+	eventsClient WorkOSClient
 }
 
-func NewProcessWorkOSMembershipEvents(logger *slog.Logger, db *pgxpool.Pool, eventsClient EventsLister) *ProcessWorkOSMembershipEvents {
+func NewProcessWorkOSMembershipEvents(logger *slog.Logger, db *pgxpool.Pool, eventsClient WorkOSClient) *ProcessWorkOSMembershipEvents {
 	return &ProcessWorkOSMembershipEvents{
 		db:           db,
 		logger:       logger,
@@ -61,7 +62,7 @@ func (p *ProcessWorkOSMembershipEvents) Do(ctx context.Context, params ProcessWo
 
 	sinceEventID := conv.PtrValOr(params.SinceEventID, "")
 	if sinceEventID == "" {
-		cursor, err := workosrepo.New(p.db).GetUserSyncLastEventID(ctx)
+		cursor, err := workosrepo.New(p.db).GetUserSyncLastEventID(ctx, pgtype.Text{Valid: false, String: ""})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			// No cursor yet: full sync from the beginning.
@@ -131,7 +132,10 @@ func (p *ProcessWorkOSMembershipEvents) handleEvent(ctx context.Context, logger 
 		return "", err
 	}
 
-	if _, err := workosrepo.New(dbtx).SetUserSyncLastEventID(ctx, event.ID); err != nil {
+	if _, err := workosrepo.New(dbtx).SetUserSyncLastEventID(ctx, workosrepo.SetUserSyncLastEventIDParams{
+		WorkosUserID: pgtype.Text{Valid: false, String: ""},
+		LastEventID:  event.ID,
+	}); err != nil {
 		return "", fmt.Errorf("set user sync last event ID: %w", err)
 	}
 
@@ -195,7 +199,7 @@ func handleOrganizationMembershipUpsert(ctx context.Context, logger *slog.Logger
 	if gramUserID != "" {
 		existing, err := orgrepo.New(dbtx).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
 			OrganizationID: org.ID,
-			UserID:         gramUserID,
+			UserID:         conv.ToPGText(gramUserID),
 		})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
@@ -215,7 +219,7 @@ func handleOrganizationMembershipUpsert(ctx context.Context, logger *slog.Logger
 		}
 		if err := orgrepo.New(dbtx).UpsertOrganizationUserRelationshipFromWorkOS(ctx, orgrepo.UpsertOrganizationUserRelationshipFromWorkOSParams{
 			OrganizationID:     org.ID,
-			UserID:             gramUserID,
+			UserID:             conv.ToPGText(gramUserID),
 			WorkosMembershipID: conv.ToPGText(payload.ID),
 			WorkosUpdatedAt:    conv.ToPGTimestamptz(payload.UpdatedAt),
 			WorkosLastEventID:  conv.ToPGText(event.ID),
@@ -266,7 +270,7 @@ func handleOrganizationMembershipDeleted(ctx context.Context, logger *slog.Logge
 	if gramUserID != "" {
 		existing, err := orgrepo.New(dbtx).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
 			OrganizationID: org.ID,
-			UserID:         gramUserID,
+			UserID:         conv.ToPGText(gramUserID),
 		})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
@@ -286,7 +290,7 @@ func handleOrganizationMembershipDeleted(ctx context.Context, logger *slog.Logge
 		}
 		if err := orgrepo.New(dbtx).MarkOrganizationUserRelationshipAsDeleted(ctx, orgrepo.MarkOrganizationUserRelationshipAsDeletedParams{
 			OrganizationID:     org.ID,
-			UserID:             gramUserID,
+			UserID:             conv.ToPGText(gramUserID),
 			WorkosMembershipID: conv.ToPGText(payload.ID),
 			WorkosUpdatedAt:    conv.ToPGTimestamptz(payload.UpdatedAt),
 			WorkosLastEventID:  conv.ToPGText(event.ID),

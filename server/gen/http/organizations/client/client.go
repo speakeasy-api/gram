@@ -17,6 +17,9 @@ import (
 
 // Client lists the organizations service endpoint HTTP clients.
 type Client struct {
+	// Get Doer is the HTTP client used to make requests to the get endpoint.
+	GetDoer goahttp.Doer
+
 	// SendInvite Doer is the HTTP client used to make requests to the sendInvite
 	// endpoint.
 	SendInviteDoer goahttp.Doer
@@ -41,6 +44,18 @@ type Client struct {
 	// endpoint.
 	RemoveUserDoer goahttp.Doer
 
+	// EnableWebhooks Doer is the HTTP client used to make requests to the
+	// enableWebhooks endpoint.
+	EnableWebhooksDoer goahttp.Doer
+
+	// DisableWebhooks Doer is the HTTP client used to make requests to the
+	// disableWebhooks endpoint.
+	DisableWebhooksDoer goahttp.Doer
+
+	// CreatePortalSession Doer is the HTTP client used to make requests to the
+	// createPortalSession endpoint.
+	CreatePortalSessionDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -62,17 +77,45 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		SendInviteDoer:       doer,
-		RevokeInviteDoer:     doer,
-		ListInvitesDoer:      doer,
-		GetInviteByTokenDoer: doer,
-		ListUsersDoer:        doer,
-		RemoveUserDoer:       doer,
-		RestoreResponseBody:  restoreBody,
-		scheme:               scheme,
-		host:                 host,
-		decoder:              dec,
-		encoder:              enc,
+		GetDoer:                 doer,
+		SendInviteDoer:          doer,
+		RevokeInviteDoer:        doer,
+		ListInvitesDoer:         doer,
+		GetInviteByTokenDoer:    doer,
+		ListUsersDoer:           doer,
+		RemoveUserDoer:          doer,
+		EnableWebhooksDoer:      doer,
+		DisableWebhooksDoer:     doer,
+		CreatePortalSessionDoer: doer,
+		RestoreResponseBody:     restoreBody,
+		scheme:                  scheme,
+		host:                    host,
+		decoder:                 dec,
+		encoder:                 enc,
+	}
+}
+
+// Get returns an endpoint that makes HTTP requests to the organizations
+// service get server.
+func (c *Client) Get() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRequest(c.encoder)
+		decodeResponse = DecodeGetResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "get", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 
@@ -215,6 +258,78 @@ func (c *Client) RemoveUser() goa.Endpoint {
 		resp, err := c.RemoveUserDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizations", "removeUser", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// EnableWebhooks returns an endpoint that makes HTTP requests to the
+// organizations service enableWebhooks server.
+func (c *Client) EnableWebhooks() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeEnableWebhooksRequest(c.encoder)
+		decodeResponse = DecodeEnableWebhooksResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildEnableWebhooksRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.EnableWebhooksDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "enableWebhooks", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DisableWebhooks returns an endpoint that makes HTTP requests to the
+// organizations service disableWebhooks server.
+func (c *Client) DisableWebhooks() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDisableWebhooksRequest(c.encoder)
+		decodeResponse = DecodeDisableWebhooksResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDisableWebhooksRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DisableWebhooksDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "disableWebhooks", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreatePortalSession returns an endpoint that makes HTTP requests to the
+// organizations service createPortalSession server.
+func (c *Client) CreatePortalSession() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreatePortalSessionRequest(c.encoder)
+		decodeResponse = DecodeCreatePortalSessionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreatePortalSessionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreatePortalSessionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "createPortalSession", err)
 		}
 		return decodeResponse(resp)
 	}

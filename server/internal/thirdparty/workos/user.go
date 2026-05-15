@@ -27,6 +27,7 @@ type User struct {
 	LastName          string
 	Email             string
 	ProfilePictureURL string
+	ExternalID        string
 }
 
 // ListMembers lists all active organization memberships for the given org.
@@ -123,6 +124,25 @@ func (wc *Client) GetUser(ctx context.Context, userID string) (*User, error) {
 
 	user := convertUser(u)
 	return &user, nil
+}
+
+func (wc *Client) UpdateUserExternalID(ctx context.Context, workosUserID, externalID string) error {
+	if _, err := wc.um.UpdateUser(ctx, usermanagement.UpdateUserOpts{
+		User:             workosUserID,
+		Email:            "",
+		FirstName:        "",
+		LastName:         "",
+		EmailVerified:    false,
+		Password:         "",
+		PasswordHash:     "",
+		PasswordHashType: "",
+		ExternalID:       externalID,
+		Metadata:         nil,
+	}); err != nil {
+		return fmt.Errorf("update user external ID: %w", err)
+	}
+
+	return nil
 }
 
 // ListUserMemberships returns all organization memberships for a user across all orgs.

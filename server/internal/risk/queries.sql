@@ -6,6 +6,7 @@ INSERT INTO risk_policies (
   , name
   , sources
   , presidio_entities
+  , prompt_injection_rules
   , enabled
   , action
   , auto_name
@@ -19,6 +20,7 @@ VALUES (
   , @name
   , @sources
   , @presidio_entities
+  , @prompt_injection_rules
   , @enabled
   , @action
   , @auto_name
@@ -53,6 +55,7 @@ UPDATE risk_policies
 SET name = @name
   , sources = @sources
   , presidio_entities = @presidio_entities
+  , prompt_injection_rules = @prompt_injection_rules
   , enabled = @enabled
   , action = @action
   , auto_name = @auto_name
@@ -60,6 +63,7 @@ SET name = @name
   , version = CASE
       WHEN sources IS DISTINCT FROM @sources
         OR presidio_entities IS DISTINCT FROM @presidio_entities
+        OR prompt_injection_rules IS DISTINCT FROM @prompt_injection_rules
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
       THEN version + 1
@@ -153,6 +157,7 @@ INSERT INTO risk_results (
   , end_pos
   , confidence
   , tags
+  , dead_letter_reason
 )
 VALUES (
     @id
@@ -170,6 +175,7 @@ VALUES (
   , @end_pos
   , @confidence
   , @tags
+  , @dead_letter_reason
 );
 
 -- name: DeleteRiskResultsForMessages :exec

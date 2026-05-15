@@ -59,6 +59,10 @@ export type RiskPolicy = {
    */
   projectId: string;
   /**
+   * Prompt-injection detection rule ids enabled in addition to the heuristic baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+   */
+  promptInjectionRules?: Array<string> | undefined;
+  /**
    * Detection sources enabled for this policy.
    */
   sources: Array<string>;
@@ -101,6 +105,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       pending_messages: z.int(),
       presidio_entities: z.optional(z.array(z.string())),
       project_id: z.string(),
+      prompt_injection_rules: z.optional(z.array(z.string())),
       sources: z.array(z.string()),
       total_messages: z.int(),
       updated_at: z.pipe(
@@ -117,6 +122,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         "pending_messages": "pendingMessages",
         "presidio_entities": "presidioEntities",
         "project_id": "projectId",
+        "prompt_injection_rules": "promptInjectionRules",
         "total_messages": "totalMessages",
         "updated_at": "updatedAt",
         "user_message": "userMessage",

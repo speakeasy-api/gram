@@ -208,7 +208,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	var userInfo *sessions.CachedUserInfo
 	var err error
 	if authCtx.SessionID != nil {
-		userInfo, _, err = s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+		userInfo, _, err = s.sessions.GetUserInfo(ctx, authCtx.UserID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
 		}
@@ -662,6 +662,33 @@ func (s *Service) checkCreditBalance(ctx context.Context, orgID, accountType str
 	return nil
 }
 
+// historyCorruptedMarker rides on /chat/completions 4xx response bodies and
+// survives the runner's "provider error: <body>" wrap so the assistant
+// runtime can detect upstream history rejection without sniffing each
+// provider's evolving wording. Detection is exposed via IsHistoryCorrupted.
+const historyCorruptedMarker = "history corrupted: upstream provider rejected the replayed transcript"
+
+// IsHistoryCorrupted reports whether err carries the upstream-history-rejected
+// marker stamped by HandleCompletion on a 400/422 from OpenRouter. Callers
+// (assistant runtime) self-heal by trimming history and retrying.
+func IsHistoryCorrupted(err error) bool {
+	return err != nil && strings.Contains(err.Error(), historyCorruptedMarker)
+}
+
+// classifyCompletionError maps an upstream OpenRouter error returned by the
+// completion client into the oops code that should flow back to the caller
+// (and through the runner to the assistant runtime).
+func (s *Service) classifyCompletionError(ctx context.Context, label string, err error) error {
+	switch {
+	case openrouter.IsInsufficientCredits(err):
+		return oops.C(oops.CodeInsufficientCredits).Log(ctx, s.logger)
+	case openrouter.IsHistoryCorruptionCandidate(err):
+		return oops.E(oops.CodeInvalid, err, historyCorruptedMarker).Log(ctx, s.logger)
+	default:
+		return oops.E(oops.CodeGatewayError, err, "%s", label).Log(ctx, s.logger)
+	}
+}
+
 // HandleCompletion is a proxy to the OpenAI API that logs request and response data.
 func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error {
 	ctx, authCtx, err := s.directAuthorize(r.Context(), r)
@@ -828,10 +855,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	if isStreaming {
 		streamBody, err := s.completionClient.GetCompletionStream(ctx, completionReq)
 		if err != nil {
-			if openrouter.IsInsufficientCredits(err) {
-				return oops.C(oops.CodeInsufficientCredits).Log(ctx, s.logger)
-			}
-			return oops.E(oops.CodeGatewayError, err, "get completion stream").Log(ctx, s.logger)
+			return s.classifyCompletionError(ctx, "get completion stream", err)
 		}
 		defer o11y.NoLogDefer(func() error { return streamBody.Close() })
 
@@ -852,10 +876,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	 */
 	response, err := s.completionClient.GetCompletion(ctx, completionReq)
 	if err != nil {
-		if openrouter.IsInsufficientCredits(err) {
-			return oops.C(oops.CodeInsufficientCredits).Log(ctx, s.logger)
-		}
-		return oops.E(oops.CodeGatewayError, err, "completion failed").Log(ctx, s.logger)
+		return s.classifyCompletionError(ctx, "completion failed", err)
 	}
 
 	var gramMetadata *openrouter.GramMetadata

@@ -2,6 +2,7 @@ package slack
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -52,4 +53,46 @@ func TestSendMessageTool_PassesOptionalFields(t *testing.T) {
 	require.Equal(t, "false", requestPayload.Get("unfurl_links"))
 	require.Equal(t, "false", requestPayload.Get("unfurl_media"))
 	require.JSONEq(t, `{"ok":true,"channel":"C123","ts":"123.456"}`, out.String())
+}
+
+func TestSendMessageTool_PassesBlockKitBlocks(t *testing.T) {
+	t.Parallel()
+
+	var requestPayload url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestPayload = readForm(t, r)
+		w.Header().Set("Content-Type", "application/json")
+		_, err := w.Write([]byte(`{"ok":true,"channel":"C123","ts":"1.0"}`))
+		if err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	tool := &slackTool{
+		descriptor: NewSendMessageTool(nil).Descriptor(),
+		client:     newAPIClient(server.URL, server.Client()),
+		callFn:     callSendMessage,
+	}
+
+	var out bytes.Buffer
+	err := tool.Call(t.Context(), testSlackEnv(), bytes.NewBufferString(`{
+		"channel_id":"C123",
+		"text":"approve this?",
+		"blocks":[
+			{"type":"section","text":{"type":"mrkdwn","text":"approve this?"}},
+			{"type":"actions","block_id":"approval","elements":[{"type":"button","action_id":"yes","text":{"type":"plain_text","text":"Yes"},"value":"approved"}]}
+		]
+	}`), &out)
+	require.NoError(t, err)
+
+	require.Equal(t, "C123", requestPayload.Get("channel"))
+	require.Equal(t, "approve this?", requestPayload.Get("text"))
+
+	var blocks []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(requestPayload.Get("blocks")), &blocks))
+	require.Len(t, blocks, 2)
+	require.Equal(t, "section", blocks[0]["type"])
+	require.Equal(t, "actions", blocks[1]["type"])
+	require.Equal(t, "approval", blocks[1]["block_id"])
 }

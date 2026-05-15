@@ -11,7 +11,7 @@ import (
 	"context"
 )
 
-// Dev-idp organizations CRUD. Backs both local-speakeasy and oauth2 modes' org
+// Dev-idp organizations CRUD. Backs both mock-workos and oauth2 modes' org
 // metadata. Permanently unauthenticated (idp-design.md §6).
 type Service interface {
 	// Create an organization.
@@ -48,7 +48,7 @@ type CreatePayload struct {
 	Slug string
 	// Plan tier; defaults to `free`.
 	AccountType *string
-	// Optional WorkOS organization id echoed by local-speakeasy validate.
+	// Optional WorkOS organization id.
 	WorkosID *string
 }
 
@@ -85,7 +85,7 @@ type Organization struct {
 	Slug string
 	// Plan tier (`free`, etc.).
 	AccountType string
-	// Optional WorkOS organization id echoed by local-speakeasy validate.
+	// Optional WorkOS organization id.
 	WorkosID  *string
 	CreatedAt string
 	UpdatedAt string

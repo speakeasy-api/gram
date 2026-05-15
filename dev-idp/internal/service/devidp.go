@@ -22,14 +22,14 @@ import (
 // (idp-design.md §3): the three "local" modes resolve subject_ref as a UUID
 // into the local users table; workos resolves it as an external WorkOS sub.
 const (
-	modeMockSpeakeasy = "local-speakeasy"
-	modeOAuth21       = "oauth2-1"
-	modeOAuth2        = "oauth2"
-	modeWorkos        = "workos"
+	modeMockWorkos = "mock-workos"
+	modeOAuth21    = "oauth2-1"
+	modeOAuth2     = "oauth2"
+	modeWorkos     = "workos"
 )
 
 func isLocalMode(mode string) bool {
-	return mode == modeMockSpeakeasy || mode == modeOAuth21 || mode == modeOAuth2
+	return mode == modeMockWorkos || mode == modeOAuth21 || mode == modeOAuth2
 }
 
 // DevIdpService is the dev-idp /rpc/devIdp.* implementation.
@@ -124,7 +124,7 @@ func (s *DevIdpService) subjectRefForSet(ctx context.Context, p *gen.SetCurrentU
 	}
 
 	// Pre-validate the user exists. Without this, a typo would silently set a
-	// stale currentUser that local-speakeasy /validate would later refuse.
+	// stale currentUser that the mock-workos mode would later refuse.
 	if _, err := repo.New(s.db).GetUser(ctx, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", oops.E(oops.CodeNotFound, nil, "user %s not found", id)

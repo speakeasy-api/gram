@@ -1,10 +1,13 @@
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ChartCard } from "@/components/chart/ChartCard";
-import { formatChartLabel } from "@/components/chart/chartUtils";
+import { formatChartLabel, smoothData } from "@/components/chart/chartUtils";
 import { MetricCard } from "@/components/chart/MetricCard";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { InsightsConfig } from "@/components/insights-sidebar";
+import { useInsightsState } from "@/components/insights-context";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { ErrorAlert } from "@/components/ui/alert";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -14,14 +17,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { dateTimeFormatters } from "@/lib/dates";
+import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
-import { telemetryGetUserMetricsSummary } from "@gram/client/funcs/telemetryGetUserMetricsSummary";
+import { telemetryGetProjectMetricsSummary } from "@gram/client/funcs/telemetryGetProjectMetricsSummary";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
 import type {
-  AccessMember,
   GetObservabilityOverviewResult,
+  ModelUsage,
   ProjectSummary,
   TimeSeriesBucket,
   UserSummary,
@@ -29,386 +32,724 @@ import type {
 import { useGramContext, useMembers } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import {
+  TimeRangePicker,
+  type DateRangePreset,
+  getPresetRange,
+} from "@gram-ai/elements";
+import { useQuery } from "@tanstack/react-query";
+import {
+  BarElement,
   CategoryScale,
   Chart as ChartJS,
   Filler,
   Legend,
-  LinearScale,
   LineElement,
+  LinearScale,
   PointElement,
   Tooltip,
   type ChartOptions,
 } from "chart.js";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
-import { Line } from "react-chartjs-2";
-import { useSearchParams } from "react-router";
-import { useQuery } from "@tanstack/react-query";
-import {
-  InsightsOverviewShell,
-  type InsightsContentProps,
-} from "./InsightsMCP";
+import { Button } from "@speakeasy-api/moonshine";
+import { useMemo, useState } from "react";
+import { Bar } from "react-chartjs-2";
+import { toast } from "sonner";
 
 ChartJS.register(
   CategoryScale,
   LinearScale,
-  PointElement,
+  BarElement,
   LineElement,
+  PointElement,
   Filler,
   Tooltip,
   Legend,
 );
 
-const PAGE_SIZE = 25;
-const CHART_COLOR = "#60a5fa";
-const USER_SOURCE_COLORS = [
-  "#60a5fa",
-  "#fb923c",
-  "#34d399",
-  "#f87171",
-  "#a78bfa",
-  "#facc15",
-  "#22d3ee",
-  "#f472b6",
-  "#a3e635",
+type ValueMode = "tokens" | "cost";
+
+const PRESET_RANGE_LABELS: Record<DateRangePreset, string> = {
+  "15m": "the last 15 minutes",
+  "1h": "the last hour",
+  "4h": "the last 4 hours",
+  "1d": "the last day",
+  "2d": "the last 2 days",
+  "3d": "the last 3 days",
+  "7d": "the last 7 days",
+  "15d": "the last 15 days",
+  "30d": "the last 30 days",
+  "90d": "the last 90 days",
+};
+
+const CHART_COLORS = [
+  "#60a5fa", // blue
+  "#34d399", // emerald
+  "#f97316", // orange
+  "#a78bfa", // violet
+  "#fb7185", // rose
+  "#facc15", // yellow
+  "#38bdf8", // sky
+  "#c084fc", // purple
+  "#4ade80", // green
+  "#f472b6", // pink
 ];
-const LINE_CHART_HEIGHT = { collapsed: 250, expanded: 600 };
-const MAX_CHART_USERS = USER_SOURCE_COLORS.length;
 
-export function InsightsAgentsContent() {
-  const {
-    data: membersData,
-    isLoading: membersLoading,
-    error: membersError,
-  } = useMembers();
-  const members = useMemo(() => membersData?.members ?? [], [membersData]);
-  const memberById = useMemo(
-    () => new Map(members.map((member) => [member.id, member])),
-    [members],
-  );
-  const mapFilterOptions = useCallback(
-    (
-      options: Array<{ id: string; label: string; count: number }>,
-      dimension: string,
-    ) => {
-      if (dimension !== "user") return options;
+function formatCost(value: number): string {
+  if (value >= 1) return `$${value.toFixed(2)}`;
+  if (value >= 0.01) return `$${value.toFixed(3)}`;
+  if (value > 0) return `$${value.toFixed(4)}`;
+  return "$0.00";
+}
 
-      return options.map((option) => {
-        const member = memberById.get(option.id);
-        return member
-          ? { ...option, label: member.name || member.email || option.label }
-          : option;
-      });
-    },
-    [memberById],
-  );
+function formatTokens(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return value.toLocaleString();
+}
 
+function formatValue(value: number, mode: ValueMode): string {
+  return mode === "cost" ? formatCost(value) : formatTokens(value);
+}
+
+function formatPlatform(value: string): string {
+  return value
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((part) => part[0]!.toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function initials(name: string): string {
+  const parts = name.split(/[\s-]+/).filter(Boolean);
+  if (parts.length >= 2)
+    return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
+  return (name[0] ?? "?").toUpperCase();
+}
+
+function unixNanoToDate(value: string): Date {
+  const nanos = BigInt(value);
+  const millis = Number(nanos / 1_000_000n);
+  return new Date(millis);
+}
+
+function ValueModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: ValueMode;
+  onChange: (mode: ValueMode) => void;
+}) {
   return (
-    <InsightsOverviewShell
-      noDataKind="agent_sessions"
-      showMcpFilter={false}
-      filterDimensions={["all", "user", "agent"]}
-      userFilterType="internal"
-      fixedEventSource="hook"
-      mapFilterOptions={mapFilterOptions}
-      showSetupRequiredModal={false}
-      title="Agent Session Usage Overview"
-      subtitle="Monitor token consumption and tool usage across your team's agent sessions"
-    >
-      {(props) => (
-        <InsightsAgentsInner
-          {...props}
-          members={members}
-          membersLoading={membersLoading}
-          membersError={membersError}
-        />
-      )}
-    </InsightsOverviewShell>
+    <div className="border-border flex h-[34px] items-center rounded-md border p-0.5">
+      {(["tokens", "cost"] as const).map((option) => (
+        <button
+          key={option}
+          onClick={() => onChange(option)}
+          className={cn(
+            "h-7 rounded px-3 text-xs font-medium transition-all duration-150",
+            mode === option
+              ? "text-foreground bg-white shadow-sm dark:bg-gray-900"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {option === "tokens" ? "Tokens" : "Cost ($)"}
+        </button>
+      ))}
+    </div>
   );
 }
 
-function InsightsAgentsInner({
-  summary,
-  comparison,
-  comparisonLabel,
-  isInsightsOpen,
-  effectiveFrom,
-  effectiveTo,
-  timeRangeMs,
-  filterDimension,
-  selectedFilterValue,
-  members,
-  membersLoading,
-  membersError,
-}: InsightsContentProps & {
-  members: AccessMember[];
-  membersLoading: boolean;
-  membersError: unknown;
-}) {
+export function InsightsAgentsContent() {
   const client = useGramContext();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [search, setSearch] = useState("");
+  const { isExpanded: isInsightsOpen } = useInsightsState();
+  const mcpConfig = useObservabilityMcpConfig({
+    toolsToInclude: ["gram_search_users", "gram_list_organization_users"],
+  });
+
+  const [dateRange, setDateRange] = useState<DateRangePreset>("30d");
+  const [customRange, setCustomRange] = useState<{
+    from: Date;
+    to: Date;
+  } | null>(null);
+  const [customRangeLabel, setCustomRangeLabel] = useState<string | null>(null);
+  const [valueMode, setValueMode] = useState<ValueMode>("tokens");
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
-  const selectedUserId = searchParams.get("user");
-  const selectedTopLevelUserId =
-    filterDimension === "user" ? selectedFilterValue : null;
-  const selectedAgent =
-    filterDimension === "agent" ? selectedFilterValue : null;
+  const [clientFilter, setClientFilter] = useState<string>("all");
+
+  const { from, to, timeRangeMs } = useMemo(() => {
+    const range = customRange ?? getPresetRange(dateRange);
+    return {
+      from: range.from,
+      to: range.to,
+      timeRangeMs: range.to.getTime() - range.from.getTime(),
+    };
+  }, [customRange, dateRange]);
+
+  const rangeLabel = useMemo(() => {
+    if (customRange) return customRangeLabel ?? "the selected range";
+    return PRESET_RANGE_LABELS[dateRange] ?? "the selected range";
+  }, [customRange, customRangeLabel, dateRange]);
+
+  const { data: membersData, isLoading: membersLoading } = useMembers();
+  const memberMap = useMemo(
+    () => new Map((membersData?.members ?? []).map((m) => [m.id, m])),
+    [membersData],
+  );
+
   const usersQuery = useQuery({
     queryKey: [
       "insights",
       "agents",
       "users",
-      effectiveFrom.toISOString(),
-      effectiveTo.toISOString(),
-      selectedTopLevelUserId,
-      selectedAgent,
+      from.toISOString(),
+      to.toISOString(),
     ],
-    queryFn: () =>
-      fetchUserSummaries(client, effectiveFrom, effectiveTo, {
-        userId: selectedTopLevelUserId,
-        hookSource: selectedAgent,
-      }),
+    queryFn: () => fetchAllUsers(client, from, to),
     throwOnError: false,
   });
-  const userRows = useMemo(
-    () => buildUserRows(usersQuery.data ?? [], members),
-    [usersQuery.data, members],
-  );
-  const chartUsers = useMemo(() => selectChartUsers(userRows), [userRows]);
-  const userTimeSeriesQuery = useQuery({
+
+  const projectQuery = useQuery({
     queryKey: [
       "insights",
       "agents",
-      "user-time-series",
-      effectiveFrom.toISOString(),
-      effectiveTo.toISOString(),
-      chartUsers.map((user) => user.id),
-      selectedAgent,
+      "project",
+      from.toISOString(),
+      to.toISOString(),
     ],
-    queryFn: () =>
-      fetchUserTimeSeries(
-        client,
-        effectiveFrom,
-        effectiveTo,
-        chartUsers,
-        selectedAgent,
-      ),
-    enabled: chartUsers.length > 0,
+    queryFn: () => fetchProjectMetrics(client, from, to),
     throwOnError: false,
   });
-  const filteredUsers = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return userRows;
 
-    return userRows.filter((row) =>
-      [row.name, row.email, row.id, row.platforms.join(" ")]
-        .join(" ")
-        .toLowerCase()
-        .includes(term),
-    );
-  }, [search, userRows]);
-  const selectedUser = useMemo(
-    () => getSelectedUserRow(selectedUserId, userRows, members),
-    [selectedUserId, userRows, members],
+  const overviewQuery = useQuery({
+    queryKey: [
+      "insights",
+      "agents",
+      "overview",
+      from.toISOString(),
+      to.toISOString(),
+      clientFilter,
+    ],
+    queryFn: () =>
+      fetchOverview(
+        client,
+        from,
+        to,
+        clientFilter !== "all" ? clientFilter : undefined,
+      ),
+    throwOnError: false,
+  });
+
+  const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data]);
+  const projectMetrics = projectQuery.data ?? null;
+  const timeSeries = overviewQuery.data?.timeSeries ?? [];
+
+  // Derive total tokens from input + output — the API's totalTokens field
+  // is not populated by many providers (only Anthropic reports it reliably).
+  const effectiveTokens = (u: UserSummary) =>
+    u.totalInputTokens + u.totalOutputTokens;
+
+  const totalTokens = users.reduce((s, u) => s + effectiveTokens(u), 0);
+  const totalCost = users.reduce((s, u) => s + u.totalCost, 0);
+  const activeUsers = users.filter((u) => effectiveTokens(u) > 0).length;
+
+  const clientBreakdown = useMemo(() => {
+    const map = new Map<
+      string,
+      { tokens: number; cost: number; users: Set<string> }
+    >();
+    for (const user of users) {
+      const userTotalEvents = user.hookSources.reduce(
+        (s, hs) => s + hs.eventCount,
+        0,
+      );
+      for (const hs of user.hookSources) {
+        const entry = map.get(hs.source) ?? {
+          tokens: 0,
+          cost: 0,
+          users: new Set<string>(),
+        };
+        entry.tokens += hs.eventCount;
+        // Distribute user cost proportionally across hook sources
+        if (userTotalEvents > 0) {
+          entry.cost += user.totalCost * (hs.eventCount / userTotalEvents);
+        }
+        entry.users.add(user.userId);
+        map.set(hs.source, entry);
+      }
+    }
+    return Array.from(map.entries())
+      .map(([source, data]) => ({
+        source,
+        label: formatPlatform(source),
+        tokens: data.tokens,
+        cost: data.cost,
+        userCount: data.users.size,
+      }))
+      .sort((a, b) => b.tokens - a.tokens);
+  }, [users]);
+
+  const modelBreakdown = useMemo<ModelUsage[]>(
+    () =>
+      (projectMetrics?.models ?? []).slice().sort((a, b) => b.count - a.count),
+    [projectMetrics],
   );
-  const isLoading = usersQuery.isLoading || membersLoading;
-  const membersErrorMessage =
-    membersError instanceof Error || typeof membersError === "string"
-      ? membersError
-      : null;
-  const error = usersQuery.error ?? membersErrorMessage;
-  const userTimeSeries = userTimeSeriesQuery.data ?? [];
-  const isUserTimeSeriesLoading =
-    usersQuery.isLoading || userTimeSeriesQuery.isLoading;
 
-  const openUser = (userId: string) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.set("user", userId);
-      return next;
-    });
+  const userRows = useMemo(
+    () =>
+      users
+        .slice()
+        .sort((a, b) =>
+          valueMode === "cost"
+            ? b.totalCost - a.totalCost
+            : effectiveTokens(b) - effectiveTokens(a),
+        )
+        .map((u) => {
+          const member = memberMap.get(u.userId);
+          const uTokens = effectiveTokens(u);
+          return {
+            ...u,
+            totalTokens: uTokens,
+            displayName: member?.name ?? u.userId,
+            email: member?.email ?? "",
+            photoUrl: member?.photoUrl ?? null,
+            costPerSession: u.totalChats > 0 ? u.totalCost / u.totalChats : 0,
+            costShare: totalCost > 0 ? (u.totalCost / totalCost) * 100 : 0,
+            tokenShare: totalTokens > 0 ? (uTokens / totalTokens) * 100 : 0,
+            clients:
+              u.hookSources.length > 0
+                ? u.hookSources
+                    .slice()
+                    .sort((a, b) => b.eventCount - a.eventCount)
+                    .map((hs) => formatPlatform(hs.source))
+                : [],
+          };
+        }),
+    [users, memberMap, valueMode, totalCost, totalTokens],
+  );
+
+  // Unique client sources for filter dropdown
+  const availableClients = useMemo(() => {
+    const sources = new Set<string>();
+    for (const u of users) {
+      for (const hs of u.hookSources) sources.add(hs.source);
+    }
+    return Array.from(sources)
+      .sort()
+      .map((s) => ({ value: s, label: formatPlatform(s) }));
+  }, [users]);
+
+  // Filtered rows: when a client is selected, proportionally attribute cost/tokens
+  const filteredUserRows = useMemo(() => {
+    if (clientFilter === "all") return userRows;
+
+    return userRows
+      .filter((u) => u.hookSources.some((hs) => hs.source === clientFilter))
+      .map((u) => {
+        const totalEvents = u.hookSources.reduce(
+          (s, hs) => s + hs.eventCount,
+          0,
+        );
+        const clientEvents =
+          u.hookSources.find((hs) => hs.source === clientFilter)?.eventCount ??
+          0;
+        const ratio = totalEvents > 0 ? clientEvents / totalEvents : 0;
+        const adjInput = Math.round(u.totalInputTokens * ratio);
+        const adjOutput = Math.round(u.totalOutputTokens * ratio);
+        const adjTokens = adjInput + adjOutput;
+        const adjCost = u.totalCost * ratio;
+        const adjSessions = Math.round(u.totalChats * ratio);
+        return {
+          ...u,
+          totalTokens: adjTokens,
+          totalInputTokens: adjInput,
+          totalOutputTokens: adjOutput,
+          totalCost: adjCost,
+          totalChats: adjSessions,
+          costPerSession: adjSessions > 0 ? adjCost / adjSessions : 0,
+          costShare: totalCost > 0 ? (adjCost / totalCost) * 100 : 0,
+          tokenShare: totalTokens > 0 ? (adjTokens / totalTokens) * 100 : 0,
+        };
+      })
+      .sort((a, b) =>
+        valueMode === "cost"
+          ? b.totalCost - a.totalCost
+          : b.totalTokens - a.totalTokens,
+      );
+  }, [userRows, clientFilter, valueMode, totalCost, totalTokens]);
+
+  // Filtered aggregates for metric cards when a client is selected
+  const filteredTotalTokens = filteredUserRows.reduce(
+    (s, u) => s + u.totalTokens,
+    0,
+  );
+  const filteredTotalCost = filteredUserRows.reduce(
+    (s, u) => s + u.totalCost,
+    0,
+  );
+  const filteredTotalSessions = filteredUserRows.reduce(
+    (s, u) => s + u.totalChats,
+    0,
+  );
+  const filteredActiveUsers = filteredUserRows.filter(
+    (u) => u.totalTokens > 0,
+  ).length;
+
+  const isLoading =
+    membersLoading || usersQuery.isLoading || projectQuery.isLoading;
+  const error = usersQuery.error ?? projectQuery.error;
+
+  const handlePresetChange = (preset: DateRangePreset) => {
+    setDateRange(preset);
+    setCustomRange(null);
+    setCustomRangeLabel(null);
   };
-
-  const closeUser = () => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete("user");
-      return next;
-    });
+  const handleCustomRangeChange = (
+    rangeFrom: Date,
+    rangeTo: Date,
+    label?: string,
+  ) => {
+    setCustomRange({ from: rangeFrom, to: rangeTo });
+    setCustomRangeLabel(label ?? null);
+  };
+  const handleClearCustomRange = () => {
+    setCustomRange(null);
+    setCustomRangeLabel(null);
   };
 
   return (
     <>
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Usage Summary</h2>
-        <div
-          className={cn(
-            "grid gap-4 transition-all duration-300",
-            isInsightsOpen
-              ? "grid-cols-1 md:grid-cols-2"
-              : "grid-cols-1 md:grid-cols-3",
-          )}
-        >
-          <MetricCard
-            title="Total Sessions"
-            value={summary?.totalChats ?? 0}
-            previousValue={comparison?.totalChats ?? 0}
-            icon="message-circle"
-            comparisonLabel={comparisonLabel}
-          />
-          <MetricCard
-            title="Total Tokens"
-            value={summary?.totalTokens ?? 0}
-            previousValue={comparison?.totalTokens ?? 0}
-            icon="gauge"
-            comparisonLabel={comparisonLabel}
-          />
-          <MetricCard
-            title="Total Tool Calls"
-            value={summary?.totalToolCalls ?? 0}
-            previousValue={comparison?.totalToolCalls ?? 0}
-            icon="wrench"
-            comparisonLabel={comparisonLabel}
-          />
-        </div>
-      </section>
-
-      <div
-        className={cn(
-          "grid gap-4",
-          expandedChart || isInsightsOpen
-            ? "grid-cols-1"
-            : "grid-cols-1 lg:grid-cols-2",
-        )}
-      >
-        <UserBreakdownTimeSeriesChart
-          title="Token Use Over Time"
-          chartId="tokens-over-time"
-          userTimeSeries={userTimeSeries}
-          users={chartUsers}
-          timeRangeMs={timeRangeMs}
-          valueKey="totalTokens"
-          valueLabel="Tokens"
-          isLoading={isUserTimeSeriesLoading}
-          error={userTimeSeriesQuery.error}
-          expandedChart={expandedChart}
-          onExpand={setExpandedChart}
-        />
-        <UserBreakdownTimeSeriesChart
-          title="Tool Calls Over Time"
-          chartId="tool-calls-over-time"
-          userTimeSeries={userTimeSeries}
-          users={chartUsers}
-          timeRangeMs={timeRangeMs}
-          valueKey="totalToolCalls"
-          valueLabel="Tool calls"
-          isLoading={isUserTimeSeriesLoading}
-          error={userTimeSeriesQuery.error}
-          expandedChart={expandedChart}
-          onExpand={setExpandedChart}
-        />
-      </div>
-
-      <section className="space-y-3">
-        <div
-          className={cn(
-            "flex gap-3",
-            isInsightsOpen
-              ? "flex-col items-stretch"
-              : "flex-col sm:flex-row sm:items-center sm:justify-between",
-          )}
-        >
-          <div>
-            <h2 className="text-lg font-semibold">Usage by Employee</h2>
-            <p className="text-muted-foreground text-sm">
-              External user IDs are matched to organization members by email
-              when possible.
-            </p>
-          </div>
-          <Input
-            value={search}
-            onChange={setSearch}
-            placeholder="Search employees or platforms"
-            className="sm:w-80"
-          />
-        </div>
-
-        {error ? (
-          <ErrorAlert title="Unable to load employee usage" error={error} />
-        ) : isLoading ? (
-          <UsersLoadingState />
-        ) : (
-          <UserUsageTable users={filteredUsers} onOpenUser={openUser} />
-        )}
-      </section>
-
-      <UserDetailDialog
-        user={selectedUser}
-        from={effectiveFrom}
-        to={effectiveTo}
-        timeRangeMs={timeRangeMs}
-        hookSource={selectedAgent}
-        onClose={closeUser}
+      <InsightsConfig
+        mcpConfig={mcpConfig}
+        title="What would you like to know about AI agent costs?"
+        subtitle="Ask about token spend, model costs, and usage by team or client"
+        contextInfo={`Agents tab: ${activeUsers} active users, ${formatTokens(totalTokens)} tokens, ${formatCost(totalCost)} total cost in ${rangeLabel}. ${clientBreakdown.length} client types, ${modelBreakdown.length} models.`}
+        suggestions={[
+          {
+            title: "Cost Summary",
+            label: "Summarize costs",
+            prompt:
+              "Summarize AI agent costs across all users, broken down by client type and model.",
+          },
+          {
+            title: "Top Spenders",
+            label: "Who spends most?",
+            prompt:
+              "Which users have the highest token usage and cost? Show a breakdown.",
+          },
+          {
+            title: "Model Costs",
+            label: "Cost by model",
+            prompt:
+              "Break down token usage and cost by model. Which models are most expensive?",
+          },
+          {
+            title: "Client Comparison",
+            label: "Compare clients",
+            prompt:
+              "Compare usage across different AI coding clients (Claude Code, Cursor, etc). Which is most popular?",
+          },
+        ]}
       />
+      <div className="min-h-0 w-full flex-1 overflow-y-auto p-8 pb-24">
+        <div className="mx-auto flex max-w-7xl flex-col gap-6">
+          <div
+            className={cn(
+              "flex gap-4 transition-all duration-300",
+              isInsightsOpen
+                ? "flex-col items-stretch"
+                : "flex-row items-center justify-between",
+            )}
+          >
+            <div className="flex min-w-0 flex-col gap-1">
+              <h1 className="text-xl font-semibold">AI Agent Costs</h1>
+              <p className="text-muted-foreground text-sm">
+                Track token consumption and costs across users, clients, and
+                models over {rangeLabel}.
+              </p>
+            </div>
+            <div
+              className={cn(
+                "flex flex-wrap items-center gap-3",
+                isInsightsOpen ? "justify-start" : "shrink-0",
+              )}
+            >
+              <ValueModeToggle mode={valueMode} onChange={setValueMode} />
+              <select
+                value={clientFilter}
+                onChange={(e) => setClientFilter(e.target.value)}
+                className="border-border bg-background text-foreground h-[34px] rounded-md border px-2.5 text-xs"
+              >
+                <option value="all">All Agents</option>
+                {availableClients.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+              <TimeRangePicker
+                preset={customRange ? null : dateRange}
+                customRange={customRange}
+                customRangeLabel={customRangeLabel}
+                onPresetChange={handlePresetChange}
+                onCustomRangeChange={handleCustomRangeChange}
+                onClearCustomRange={handleClearCustomRange}
+                disabled={isLoading}
+              />
+            </div>
+          </div>
+
+          {error ? (
+            <ErrorAlert title="Unable to load agent usage data" error={error} />
+          ) : isLoading ? (
+            <AgentsLoadingState isInsightsOpen={isInsightsOpen} />
+          ) : (
+            <>
+              <section
+                className={cn(
+                  "grid gap-4 transition-all duration-300",
+                  isInsightsOpen
+                    ? "grid-cols-1 md:grid-cols-2"
+                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
+                )}
+              >
+                <MetricCard
+                  title="Total Tokens"
+                  value={filteredTotalTokens}
+                  icon="gauge"
+                  accentColor="blue"
+                  subtext={`${formatTokens(filteredTotalTokens)} across ${filteredTotalSessions.toLocaleString()} sessions`}
+                />
+                <MetricCard
+                  title="Total Cost"
+                  value={filteredTotalCost}
+                  format="number"
+                  icon="credit-card"
+                  accentColor="purple"
+                  subtext={
+                    filteredTotalCost > 0
+                      ? formatCost(filteredTotalCost)
+                      : "No cost data reported"
+                  }
+                />
+                <MetricCard
+                  title="Active Users"
+                  value={filteredActiveUsers}
+                  icon="user"
+                  accentColor="green"
+                  subtext={`of ${(membersData?.members ?? []).length} org members`}
+                />
+                <MetricCard
+                  title="AI Clients"
+                  value={clientBreakdown.length}
+                  icon="terminal"
+                  accentColor="orange"
+                  subtext={
+                    clientBreakdown.length > 0
+                      ? clientBreakdown.map((c) => c.label).join(", ")
+                      : "No client data"
+                  }
+                />
+              </section>
+
+              <section
+                className={cn(
+                  "grid gap-4 transition-all duration-300",
+                  isInsightsOpen || expandedChart
+                    ? "grid-cols-1"
+                    : "grid-cols-1 lg:grid-cols-2",
+                )}
+              >
+                <TokenTimeSeriesChart
+                  title={
+                    valueMode === "cost" ? "Cost Over Time" : "Tokens Over Time"
+                  }
+                  chartId="tokens-over-time"
+                  timeSeries={timeSeries}
+                  timeRangeMs={timeRangeMs}
+                  valueMode={valueMode}
+                  expandedChart={expandedChart}
+                  onExpand={setExpandedChart}
+                />
+                <ClientBreakdownChart
+                  title="Usage by Client"
+                  chartId="client-breakdown"
+                  data={
+                    clientFilter === "all"
+                      ? clientBreakdown
+                      : clientBreakdown.filter((c) => c.source === clientFilter)
+                  }
+                  valueMode={valueMode}
+                  expandedChart={expandedChart}
+                  onExpand={setExpandedChart}
+                />
+              </section>
+
+              <ModelBreakdownCard
+                models={modelBreakdown}
+                valueMode={valueMode}
+              />
+
+              <EmployeeCostTable
+                users={filteredUserRows}
+                valueMode={valueMode}
+                clientFilter={clientFilter}
+              />
+
+              <CostDisclaimer providers={clientBreakdown.map((c) => c.label)} />
+            </>
+          )}
+        </div>
+      </div>
     </>
   );
 }
 
-type UserUsageRow = {
-  id: string;
-  name: string;
-  email: string;
-  platforms: string[];
-  totalTokens: number;
-  totalToolCalls: number;
-  toolCallSuccess: number;
-  toolCallFailure: number;
-  lastActivity: string;
-  firstActivity: string;
-  summary: UserSummary;
-};
-
-type UserTimeSeries = {
-  userId: string;
-  timeSeries: TimeSeriesBucket[];
-};
-
-type TimeSeriesDataset = {
-  label: string;
-  data: number[];
-  borderColor: string;
-  backgroundColor: string;
-  pointBackgroundColor: string;
-  fill: boolean;
-  tension: number;
-  borderWidth: number;
-  pointRadius: number;
-  pointHoverRadius: number;
-};
-
 function TokenTimeSeriesChart({
   title,
+  subtitle,
   chartId,
   timeSeries,
   timeRangeMs,
-  valueKey = "totalTokens",
-  label = "Tokens",
-  hasData,
+  valueMode,
   expandedChart,
   onExpand,
 }: {
   title: string;
+  subtitle?: string;
   chartId: string;
   timeSeries: TimeSeriesBucket[];
   timeRangeMs: number;
-  valueKey?: "totalTokens" | "totalToolCalls";
-  label?: string;
-  hasData: boolean;
+  valueMode: ValueMode;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
 }) {
   const isExpanded = expandedChart === chartId;
+  const height = isExpanded ? 420 : 260;
+  const hasData = timeSeries.some(
+    (b) =>
+      (valueMode === "cost"
+        ? b.totalCost
+        : b.totalInputTokens + b.totalOutputTokens) > 0,
+  );
+
+  const chartData = useMemo(() => {
+    const labels = timeSeries.map((b) =>
+      formatChartLabel(unixNanoToDate(b.bucketTimeUnixNano), timeRangeMs),
+    );
+
+    // Raw bar datasets
+    const barDatasets =
+      valueMode === "cost"
+        ? [
+            {
+              label: "Cost",
+              data: timeSeries.map((b) => b.totalCost),
+              backgroundColor: "rgba(96, 165, 250, 0.35)",
+              stack: "stack",
+              order: 2,
+            },
+          ]
+        : [
+            {
+              label: "Input Tokens",
+              data: timeSeries.map((b) => b.totalInputTokens),
+              backgroundColor: "rgba(96, 165, 250, 0.35)",
+              stack: "stack",
+              order: 2,
+            },
+            {
+              label: "Output Tokens",
+              data: timeSeries.map((b) => b.totalOutputTokens),
+              backgroundColor: "rgba(52, 211, 153, 0.35)",
+              stack: "stack",
+              order: 2,
+            },
+            {
+              label: "Cache Read",
+              data: timeSeries.map((b) => b.cacheReadInputTokens),
+              backgroundColor: "rgba(167, 139, 250, 0.35)",
+              stack: "stack",
+              order: 2,
+            },
+          ];
+
+    // Smoothed trend line (total across all stacked values)
+    const rawTotal = timeSeries.map((b) =>
+      valueMode === "cost"
+        ? b.totalCost
+        : b.totalInputTokens + b.totalOutputTokens + b.cacheReadInputTokens,
+    );
+    const trendData = smoothData(rawTotal);
+
+    const trendDataset = {
+      label: valueMode === "cost" ? "Cost Trend" : "Token Trend",
+      data: trendData,
+      type: "line" as const,
+      borderColor: valueMode === "cost" ? "#818cf8" : "#3b82f6",
+      backgroundColor: "transparent",
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      borderWidth: 2,
+      tension: 0.4,
+      fill: false,
+      order: 1,
+    };
+
+    return {
+      labels,
+      datasets: [...barDatasets, trendDataset],
+    };
+  }, [timeSeries, timeRangeMs, valueMode]);
+
+  const options = useMemo<ChartOptions<"bar">>(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            boxWidth: 12,
+            usePointStyle: true,
+            padding: 16,
+            font: { size: 11 },
+          },
+        },
+        tooltip: {
+          backgroundColor: "rgba(0, 0, 0, 0.85)",
+          titleColor: "#fff",
+          bodyColor: "#e5e7eb",
+          borderColor: "rgba(255, 255, 255, 0.1)",
+          borderWidth: 1,
+          padding: 12,
+          boxPadding: 4,
+          usePointStyle: true,
+          callbacks: {
+            label: (item) => {
+              const val = Number(item.parsed.y ?? 0);
+              return ` ${item.dataset.label}: ${formatValue(val, valueMode)}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          stacked: true,
+          grid: { display: true, color: "rgba(128, 128, 128, 0.08)" },
+          ticks: { maxTicksLimit: 8 },
+        },
+        y: {
+          stacked: true,
+          beginAtZero: true,
+          grid: { color: "rgba(128, 128, 128, 0.15)" },
+          ticks: {
+            callback: (value) => formatValue(Number(value), valueMode),
+          },
+        },
+      },
+    }),
+    [valueMode],
+  );
 
   return (
     <ChartCard
@@ -418,59 +759,94 @@ function TokenTimeSeriesChart({
       onExpand={onExpand}
       hasData={hasData}
     >
-      <SimpleLineChart
-        timeSeries={timeSeries}
-        timeRangeMs={timeRangeMs}
-        valueKey={valueKey}
-        label={label}
-        hasData={hasData}
-        height={isExpanded ? 420 : 220}
-      />
+      {subtitle && (
+        <p className="text-muted-foreground -mt-3 mb-2 text-xs">{subtitle}</p>
+      )}
+      {!hasData ? (
+        <div className="text-muted-foreground flex h-[260px] items-center justify-center text-sm">
+          No data for selected time range
+        </div>
+      ) : (
+        <div style={{ height }}>
+          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- mixed bar+line chart requires type widening */}
+          <Bar data={chartData as any} options={options} />
+        </div>
+      )}
     </ChartCard>
   );
 }
 
-function UserBreakdownTimeSeriesChart({
+function ClientBreakdownChart({
   title,
   chartId,
-  userTimeSeries,
-  users,
-  timeRangeMs,
-  valueKey,
-  valueLabel,
-  isLoading,
-  error,
+  data,
+  valueMode,
   expandedChart,
   onExpand,
 }: {
   title: string;
   chartId: string;
-  userTimeSeries: UserTimeSeries[];
-  users: UserUsageRow[];
-  timeRangeMs: number;
-  valueKey: "totalTokens" | "totalToolCalls";
-  valueLabel: string;
-  isLoading: boolean;
-  error: Error | null;
+  data: Array<{
+    label: string;
+    tokens: number;
+    cost: number;
+    userCount: number;
+  }>;
+  valueMode: ValueMode;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
 }) {
   const isExpanded = expandedChart === chartId;
-  const userLabels = useMemo(
-    () => new Map(users.map((user) => [user.id, user.name || user.email])),
-    [users],
-  );
+  const height = isExpanded ? 420 : 260;
+  const hasData = data.length > 0;
+
   const chartData = useMemo(
-    () =>
-      buildUserTimeSeriesChartData(
-        userTimeSeries,
-        userLabels,
-        timeRangeMs,
-        valueKey,
-      ),
-    [userTimeSeries, userLabels, timeRangeMs, valueKey],
+    () => ({
+      labels: data.map((d) => d.label),
+      datasets: [
+        {
+          label: valueMode === "cost" ? "Cost" : "Events",
+          data: data.map((d) => (valueMode === "cost" ? d.cost : d.tokens)),
+          backgroundColor: data.map(
+            (_, i) => CHART_COLORS[i % CHART_COLORS.length]!,
+          ),
+        },
+      ],
+    }),
+    [data, valueMode],
   );
-  const hasData = chartData.datasets.length > 0;
+
+  const options = useMemo<ChartOptions<"bar">>(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: "y",
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            afterLabel: (item) => {
+              const entry = data[item.dataIndex];
+              return entry
+                ? `${entry.userCount} user${entry.userCount !== 1 ? "s" : ""}`
+                : "";
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          grid: { color: "rgba(128, 128, 128, 0.15)" },
+          ticks: {
+            callback: (value) => formatValue(Number(value), valueMode),
+          },
+        },
+        y: { grid: { display: false } },
+      },
+    }),
+    [data, valueMode],
+  );
 
   return (
     <ChartCard
@@ -478,731 +854,575 @@ function UserBreakdownTimeSeriesChart({
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
-      hasData={hasData || isLoading}
+      hasData={hasData}
     >
-      {error ? (
-        <ErrorAlert
-          title={`Unable to load ${title.toLowerCase()}`}
-          error={error}
-        />
-      ) : isLoading ? (
-        <Skeleton
-          className="rounded-lg"
-          style={{
-            height: isExpanded
-              ? LINE_CHART_HEIGHT.expanded
-              : LINE_CHART_HEIGHT.collapsed,
-          }}
-        />
+      {!hasData ? (
+        <div className="text-muted-foreground flex h-[260px] items-center justify-center text-sm">
+          No client data available
+        </div>
       ) : (
-        <MultiLineChart
-          labels={chartData.labels}
-          tooltipLabels={chartData.tooltipLabels}
-          datasets={chartData.datasets}
-          valueLabel={valueLabel}
-          height={
-            isExpanded
-              ? LINE_CHART_HEIGHT.expanded
-              : LINE_CHART_HEIGHT.collapsed
-          }
-        />
+        <div style={{ height }}>
+          <Bar data={chartData} options={options} />
+        </div>
       )}
     </ChartCard>
   );
 }
 
-function MultiLineChart({
-  labels,
-  tooltipLabels,
-  datasets,
-  valueLabel,
-  height = LINE_CHART_HEIGHT.collapsed,
+function ModelBreakdownCard({
+  models,
+  valueMode,
 }: {
-  labels: string[];
-  tooltipLabels: string[];
-  datasets: TimeSeriesDataset[];
-  valueLabel: string;
-  height?: number;
+  models: ModelUsage[];
+  valueMode: ValueMode;
 }) {
-  const options = useMemo<ChartOptions<"line">>(
-    () => ({
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: "index", intersect: false },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            title: (items) => tooltipLabels[items[0]?.dataIndex ?? 0] ?? "",
-            label: (item) => {
-              if ((item.parsed.y ?? 0) === 0) return undefined;
-              return `${item.dataset.label}: ${Number(
-                item.parsed.y ?? 0,
-              ).toLocaleString()} ${valueLabel.toLowerCase()}`;
-            },
-          },
-        },
-      },
-      scales: {
-        x: {
-          grid: { display: true, color: "rgba(128, 128, 128, 0.1)" },
-          ticks: { maxTicksLimit: 8 },
-        },
-        y: {
-          beginAtZero: true,
-          grid: { color: "rgba(128, 128, 128, 0.2)" },
-          ticks: { precision: 0 },
-        },
-      },
-      transitions: {
-        resize: { animation: { duration: 0 } },
-      },
-    }),
-    [tooltipLabels, valueLabel],
-  );
-
-  if (labels.length === 0 || datasets.length === 0) {
-    return (
-      <div className="text-muted-foreground flex h-[220px] items-center justify-center text-sm">
-        No data for selected time range
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ height }}>
-      <Line data={{ labels, datasets }} options={options} />
-    </div>
-  );
-}
-
-function SimpleLineChart({
-  timeSeries,
-  timeRangeMs,
-  valueKey,
-  label,
-  hasData,
-  height = 220,
-}: {
-  timeSeries: TimeSeriesBucket[];
-  timeRangeMs: number;
-  valueKey: "totalTokens" | "totalToolCalls";
-  label: string;
-  hasData: boolean;
-  height?: number;
-}) {
-  const chartData = useMemo(() => {
-    const points = timeSeries.map((point) => {
-      const date = unixNanoToDate(point.bucketTimeUnixNano);
-      return {
-        label: formatChartLabel(date, timeRangeMs),
-        tooltipLabel: date.toLocaleString([], {
-          month: "short",
-          day: "numeric",
-          hour: "numeric",
-          minute: "2-digit",
-        }),
-        value: point[valueKey],
-      };
-    });
-
-    return {
-      labels: points.map((point) => point.label),
-      tooltipLabels: points.map((point) => point.tooltipLabel),
-      values: points.map((point) => point.value),
-    };
-  }, [timeSeries, timeRangeMs, valueKey]);
-
-  const options = useMemo<ChartOptions<"line">>(
-    () => ({
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: "index", intersect: false },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            title: (items) =>
-              chartData.tooltipLabels[items[0]?.dataIndex ?? 0] ?? "",
-            label: (item) =>
-              `${label}: ${Number(item.parsed.y ?? 0).toLocaleString()}`,
-          },
-        },
-      },
-      scales: {
-        x: {
-          grid: { display: true, color: "rgba(128, 128, 128, 0.1)" },
-          ticks: { maxTicksLimit: 8 },
-        },
-        y: {
-          beginAtZero: true,
-          grid: { color: "rgba(128, 128, 128, 0.2)" },
-          ticks: { precision: 0 },
-        },
-      },
-    }),
-    [chartData.tooltipLabels, label],
-  );
-
-  if (!hasData) {
-    return (
-      <div className="text-muted-foreground flex h-[220px] items-center justify-center text-sm">
-        No data for selected time range
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ height }}>
-      <Line
-        data={{
-          labels: chartData.labels,
-          datasets: [
-            {
-              label,
-              data: chartData.values,
-              borderColor: CHART_COLOR,
-              backgroundColor: `${CHART_COLOR}1a`,
-              pointBackgroundColor: CHART_COLOR,
-              fill: true,
-              tension: 0.45,
-              borderWidth: 1.5,
-              pointRadius: 0,
-              pointHoverRadius: 4,
-            },
-          ],
-        }}
-        options={options}
-      />
-    </div>
-  );
-}
-
-function UserUsageTable({
-  users,
-  onOpenUser,
-}: {
-  users: UserUsageRow[];
-  onOpenUser: (userId: string) => void;
-}) {
-  const [page, setPage] = useState(0);
-  const totalPages = Math.ceil(users.length / PAGE_SIZE);
-  const safePage = totalPages > 0 ? Math.min(page, totalPages - 1) : 0;
-  const pageUsers = users.slice(
-    safePage * PAGE_SIZE,
-    (safePage + 1) * PAGE_SIZE,
-  );
-
-  return (
-    <section className="bg-card rounded-xl border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Employee</TableHead>
-            <TableHead>Platform(s)</TableHead>
-            <TableHead>Tokens</TableHead>
-            <TableHead>Tool Calls</TableHead>
-            <TableHead>Last Activity</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {pageUsers.length > 0 ? (
-            pageUsers.map((user) => (
-              <TableRow
-                key={user.id}
-                className="cursor-pointer"
-                onClick={() => onOpenUser(user.id)}
-              >
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <div className="bg-muted flex size-9 items-center justify-center rounded-full text-sm font-semibold">
-                      {getInitials(user.name)}
-                    </div>
-                    <div>
-                      <p className="font-medium">{user.name}</p>
-                      <p className="text-muted-foreground text-xs">
-                        {user.email}
-                      </p>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <PlatformList platforms={user.platforms} />
-                </TableCell>
-                <TableCell className="font-mono text-sm">
-                  {user.totalTokens.toLocaleString()}
-                </TableCell>
-                <TableCell className="text-sm">
-                  <span className="font-mono">
-                    {user.totalToolCalls.toLocaleString()}
-                  </span>
-                  <span className="text-muted-foreground ml-2 text-xs">
-                    {user.toolCallSuccess.toLocaleString()} ok /{" "}
-                    {user.toolCallFailure.toLocaleString()} blocked
-                  </span>
-                </TableCell>
-                <TableCell className="text-muted-foreground text-sm">
-                  {user.lastActivity}
-                </TableCell>
-              </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell
-                colSpan={5}
-                className="text-muted-foreground py-10 text-center text-sm"
-              >
-                No employees found for the selected filters.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between border-t px-4 py-3">
-          <p className="text-muted-foreground text-sm">
-            {safePage * PAGE_SIZE + 1}–
-            {Math.min((safePage + 1) * PAGE_SIZE, users.length)} of{" "}
-            {users.length}
-          </p>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setPage((p) => Math.max(p - 1, 0))}
-              disabled={safePage === 0}
-            >
-              <ChevronLeft className="size-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setPage((p) => Math.min(p + 1, totalPages - 1))}
-              disabled={safePage >= totalPages - 1}
-            >
-              <ChevronRight className="size-4" />
-            </Button>
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function UserDetailDialog({
-  user,
-  from,
-  to,
-  timeRangeMs,
-  hookSource,
-  onClose,
-}: {
-  user: UserUsageRow | null;
-  from: Date;
-  to: Date;
-  timeRangeMs: number;
-  hookSource: string | null;
-  onClose: () => void;
-}) {
-  const client = useGramContext();
-  const metricsQuery = useQuery({
-    queryKey: [
-      "insights",
-      "agents",
-      "user-metrics",
-      user?.id,
-      from.toISOString(),
-      to.toISOString(),
-      hookSource,
-    ],
-    queryFn: () => fetchUserMetrics(client, from, to, user!.id, hookSource),
-    enabled: user != null,
-    throwOnError: false,
-  });
-  const overviewQuery = useQuery({
-    queryKey: [
-      "insights",
-      "agents",
-      "user-overview",
-      user?.id,
-      from.toISOString(),
-      to.toISOString(),
-      hookSource,
-    ],
-    queryFn: () => fetchUserOverview(client, from, to, user!.id, hookSource),
-    enabled: user != null,
-    throwOnError: false,
-  });
-  const metrics = metricsQuery.data;
-  const overview = overviewQuery.data;
-  const detailTimeSeries = overview?.timeSeries ?? [];
-  const [detailExpandedChart, setDetailExpandedChart] = useState<string | null>(
-    null,
-  );
-
-  return (
-    <Dialog open={user != null} onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Content className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-4xl">
-        <Dialog.Header>
-          <Dialog.Title>{user?.name ?? "Employee Usage"}</Dialog.Title>
-          <Dialog.Description>
-            {user?.email ?? "Detailed token and tool usage for this employee."}
-          </Dialog.Description>
-        </Dialog.Header>
-        {user && (
-          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <DetailStat label="Join Date" value={user.firstActivity} />
-              <DetailStat
-                label="Tokens"
-                value={user.totalTokens.toLocaleString()}
-              />
-              <DetailStat
-                label="Tool Calls"
-                value={`${user.toolCallSuccess.toLocaleString()} ok / ${user.toolCallFailure.toLocaleString()} blocked`}
-              />
-            </div>
-
-            <section className="grid gap-4 lg:grid-cols-2">
-              <BreakdownCard
-                title="Platform Breakdown"
-                rows={user.summary.hookSources.map((source) => ({
-                  label: formatPlatform(source.source),
-                  value: source.eventCount,
-                  valueLabel: `${source.eventCount.toLocaleString()} events`,
-                }))}
-                emptyLabel="No platform data"
-              />
-              <BreakdownCard
-                title="Top Used Tools"
-                rows={user.summary.tools
-                  .slice()
-                  .sort((a, b) => b.count - a.count)
-                  .slice(0, 8)
-                  .map((tool) => ({
-                    label: formatToolUrn(tool.urn),
-                    value: tool.count,
-                    valueLabel: `${tool.count.toLocaleString()} calls (${tool.successCount.toLocaleString()} ok / ${tool.failureCount.toLocaleString()} blocked)`,
-                  }))}
-                emptyLabel="No tool calls"
-              />
-            </section>
-
-            {metricsQuery.error ? (
-              <ErrorAlert
-                title="Unable to load model metrics"
-                error={metricsQuery.error}
-              />
-            ) : metricsQuery.isLoading ? (
-              <Skeleton className="h-40 rounded-lg" />
-            ) : (
-              <BreakdownCard
-                title="Model Usage"
-                rows={(metrics?.models ?? [])
-                  .slice()
-                  .sort((a, b) => b.count - a.count)
-                  .map((model) => ({
-                    label: model.name,
-                    value: model.count,
-                    valueLabel: `${model.count.toLocaleString()} requests`,
-                  }))}
-                emptyLabel="No model usage"
-              />
-            )}
-
-            {overviewQuery.error ? (
-              <ErrorAlert
-                title="Unable to load user time series"
-                error={overviewQuery.error}
-              />
-            ) : overviewQuery.isLoading ? (
-              <Skeleton className="h-72 rounded-lg" />
-            ) : (
-              <TokenTimeSeriesChart
-                title="User Token Use Over Time"
-                chartId="user-tokens-over-time"
-                timeSeries={detailTimeSeries}
-                timeRangeMs={timeRangeMs}
-                hasData={detailTimeSeries.some(
-                  (point) => point.totalTokens > 0,
-                )}
-                expandedChart={detailExpandedChart}
-                onExpand={setDetailExpandedChart}
-              />
-            )}
-          </div>
-        )}
-      </Dialog.Content>
-    </Dialog>
-  );
-}
-
-function DetailStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border p-4">
-      <p className="text-muted-foreground text-xs font-medium uppercase">
-        {label}
-      </p>
-      <p className="mt-1 text-sm font-semibold">{value}</p>
-    </div>
-  );
-}
-
-function BreakdownCard({
-  title,
-  rows,
-  emptyLabel,
-}: {
-  title: string;
-  rows: Array<{ label: string; value: number; valueLabel: string }>;
-  emptyLabel: string;
-}) {
-  const total = rows.reduce((sum, row) => sum + row.value, 0);
+  const total = models.reduce((s, m) => s + m.count, 0);
 
   return (
     <section className="rounded-lg border p-4">
-      <h3 className="font-semibold">{title}</h3>
+      <h3 className="font-semibold">
+        {valueMode === "cost" ? "Requests by Model" : "Requests by Model"}
+      </h3>
       <div className="mt-4 space-y-3">
-        {rows.length > 0 ? (
-          rows.map((row) => (
-            <div key={row.label} className="space-y-1.5">
+        {models.length > 0 ? (
+          models.map((model) => (
+            <div key={model.name} className="space-y-1.5">
               <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="truncate">{row.label}</span>
+                <span className="truncate font-mono text-xs">{model.name}</span>
                 <span className="text-muted-foreground shrink-0">
-                  {row.valueLabel}
+                  {model.count.toLocaleString()} requests (
+                  {total > 0 ? ((model.count / total) * 100).toFixed(1) : 0}%)
                 </span>
               </div>
               <div className="bg-muted h-2 overflow-hidden rounded-full">
                 <div
                   className="bg-primary h-full rounded-full"
                   style={{
-                    width: `${total > 0 ? Math.max((row.value / total) * 100, 4) : 0}%`,
+                    width: `${total > 0 ? Math.max((model.count / total) * 100, 4) : 0}%`,
                   }}
                 />
               </div>
             </div>
           ))
         ) : (
-          <p className="text-muted-foreground text-sm">{emptyLabel}</p>
+          <p className="text-muted-foreground text-sm">No model usage data</p>
         )}
       </div>
     </section>
   );
 }
 
-function PlatformList({ platforms }: { platforms: string[] }) {
-  if (platforms.length === 0) {
-    return <span className="text-muted-foreground text-sm">Unknown</span>;
-  }
+type EmployeeRow = UserSummary & {
+  displayName: string;
+  email: string;
+  photoUrl: string | null;
+  clients: string[];
+  costPerSession: number;
+  costShare: number;
+  tokenShare: number;
+};
 
+type SortField =
+  | "employee"
+  | "input"
+  | "output"
+  | "totalTokens"
+  | "cost"
+  | "costPerSession"
+  | "sessions"
+  | "share";
+
+function SortableHead({
+  field,
+  activeField,
+  direction,
+  onSort,
+  className,
+  children,
+}: {
+  field: SortField;
+  activeField: SortField | null;
+  direction: "asc" | "desc";
+  onSort: (field: SortField) => void;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const isActive = activeField === field;
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {platforms.map((platform) => (
-        <span
-          key={platform}
-          className="bg-muted rounded-full px-2 py-0.5 text-xs font-medium"
-        >
-          {formatPlatform(platform)}
+    <TableHead
+      className={cn("cursor-pointer select-none", className)}
+      onClick={() => onSort(field)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {children}
+        <span className="text-muted-foreground text-[10px]">
+          {isActive ? (direction === "asc" ? "▲" : "▼") : "⇅"}
         </span>
-      ))}
-    </div>
+      </span>
+    </TableHead>
   );
 }
 
-function UsersLoadingState() {
+function EmployeeCostTable({
+  users,
+  valueMode,
+  clientFilter,
+}: {
+  users: EmployeeRow[];
+  valueMode: ValueMode;
+  clientFilter: string;
+}) {
+  const PAGE_SIZE = 10;
+  const [page, setPage] = useState(0);
+  const isCost = valueMode === "cost";
+
+  // Default sort follows the value mode; clicking a column overrides
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setSortField(field);
+      setSortDirection("desc");
+    }
+    setPage(0);
+  };
+
+  const effectiveSortField = sortField ?? (isCost ? "cost" : "totalTokens");
+  const effectiveSortDir = sortField ? sortDirection : "desc";
+
+  const sortedUsers = useMemo(() => {
+    const getValue = (u: EmployeeRow): number | string => {
+      switch (effectiveSortField) {
+        case "employee":
+          return u.displayName.toLowerCase();
+        case "input":
+          return u.totalInputTokens;
+        case "output":
+          return u.totalOutputTokens;
+        case "totalTokens":
+          return u.totalTokens;
+        case "cost":
+          return u.totalCost;
+        case "costPerSession":
+          return u.costPerSession;
+        case "sessions":
+          return u.totalChats;
+        case "share":
+          return isCost ? u.costShare : u.tokenShare;
+        default:
+          return 0;
+      }
+    };
+    return users.slice().sort((a, b) => {
+      const va = getValue(a);
+      const vb = getValue(b);
+      const cmp =
+        typeof va === "string" && typeof vb === "string"
+          ? va.localeCompare(vb)
+          : (va as number) - (vb as number);
+      return effectiveSortDir === "asc" ? cmp : -cmp;
+    });
+  }, [users, effectiveSortField, effectiveSortDir, isCost]);
+
+  const totalPages = Math.ceil(sortedUsers.length / PAGE_SIZE);
+  const safePage = Math.min(page, Math.max(totalPages - 1, 0));
+  const pageUsers = sortedUsers.slice(
+    safePage * PAGE_SIZE,
+    (safePage + 1) * PAGE_SIZE,
+  );
+
   return (
-    <section className="bg-card rounded-xl border p-5">
-      <Skeleton className="h-5 w-44" />
-      <Skeleton className="mt-2 h-4 w-80" />
-      <div className="mt-6 space-y-3">
-        {Array.from({ length: 5 }).map((_, index) => (
-          <Skeleton key={index} className="h-12 w-full" />
-        ))}
+    <section className="bg-card flex flex-col gap-4 rounded-xl border p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-semibold">
+            {isCost ? "Cost" : "Usage"} by Employee
+          </h3>
+          <p className="text-muted-foreground text-xs">
+            {clientFilter !== "all" &&
+              `Filtered to ${formatPlatform(clientFilter)} · `}
+            {sortedUsers.length} employee
+            {sortedUsers.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <SortableHead
+                field="employee"
+                activeField={sortField}
+                direction={effectiveSortDir}
+                onSort={handleSort}
+                className="pl-6"
+              >
+                Employee
+              </SortableHead>
+              <SortableHead
+                field="input"
+                activeField={sortField}
+                direction={effectiveSortDir}
+                onSort={handleSort}
+              >
+                Input
+              </SortableHead>
+              <SortableHead
+                field="output"
+                activeField={sortField}
+                direction={effectiveSortDir}
+                onSort={handleSort}
+              >
+                Output
+              </SortableHead>
+              <SortableHead
+                field="totalTokens"
+                activeField={sortField}
+                direction={effectiveSortDir}
+                onSort={handleSort}
+              >
+                Total Tokens
+              </SortableHead>
+              <SortableHead
+                field="cost"
+                activeField={sortField}
+                direction={effectiveSortDir}
+                onSort={handleSort}
+              >
+                Cost
+              </SortableHead>
+              <SortableHead
+                field="costPerSession"
+                activeField={sortField}
+                direction={effectiveSortDir}
+                onSort={handleSort}
+              >
+                $/Session
+              </SortableHead>
+              <SortableHead
+                field="sessions"
+                activeField={sortField}
+                direction={effectiveSortDir}
+                onSort={handleSort}
+              >
+                Sessions
+              </SortableHead>
+              <SortableHead
+                field="share"
+                activeField={sortField}
+                direction={effectiveSortDir}
+                onSort={handleSort}
+                className="pr-6"
+              >
+                Share
+              </SortableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {pageUsers.length > 0 ? (
+              pageUsers.map((user) => (
+                <TableRow key={user.userId}>
+                  <TableCell className="pl-6">
+                    <div className="flex min-w-[200px] items-center gap-3">
+                      <Avatar className="size-8 shrink-0">
+                        {user.photoUrl ? (
+                          <AvatarImage
+                            src={user.photoUrl}
+                            alt={user.displayName}
+                          />
+                        ) : null}
+                        <AvatarFallback className="text-xs">
+                          {initials(user.displayName)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          {user.displayName}
+                        </p>
+                        {user.email ? (
+                          <p className="text-muted-foreground truncate text-xs">
+                            {user.email}
+                          </p>
+                        ) : null}
+                        {clientFilter === "all" && user.clients.length > 0 && (
+                          <p className="text-muted-foreground/70 mt-0.5 text-[10px]">
+                            {user.clients.join(", ")}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="font-mono text-xs tabular-nums">
+                    {formatTokens(user.totalInputTokens)}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs tabular-nums">
+                    {formatTokens(user.totalOutputTokens)}
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className={cn(
+                        "font-mono text-sm tabular-nums",
+                        !isCost && "font-semibold",
+                      )}
+                    >
+                      {formatTokens(user.totalTokens)}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className={cn(
+                        "font-mono text-sm tabular-nums",
+                        isCost && "font-semibold",
+                      )}
+                    >
+                      {formatCost(user.totalCost)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground font-mono text-xs tabular-nums">
+                    {formatCost(user.costPerSession)}
+                  </TableCell>
+                  <TableCell className="font-mono text-sm tabular-nums">
+                    {user.totalChats.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="pr-6">
+                    <div className="flex items-center gap-2">
+                      <div className="bg-muted h-1.5 w-12 overflow-hidden rounded-full">
+                        <div
+                          className="bg-primary h-full rounded-full"
+                          style={{
+                            width: `${Math.max(isCost ? user.costShare : user.tokenShare, 3)}%`,
+                          }}
+                        />
+                      </div>
+                      <span className="text-muted-foreground font-mono text-xs tabular-nums">
+                        {(isCost ? user.costShare : user.tokenShare).toFixed(1)}
+                        %
+                      </span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell
+                  colSpan={8}
+                  className="text-muted-foreground py-10 text-center text-sm"
+                >
+                  No employee activity found for this time range.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t px-4 py-3">
+            <p className="text-muted-foreground text-sm">
+              {safePage * PAGE_SIZE + 1}–
+              {Math.min((safePage + 1) * PAGE_SIZE, sortedUsers.length)} of{" "}
+              {sortedUsers.length}
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                className="hover:bg-muted rounded p-1 text-sm disabled:opacity-40"
+                onClick={() => setPage((p) => p - 1)}
+                disabled={safePage === 0}
+              >
+                Prev
+              </button>
+              <button
+                className="hover:bg-muted rounded p-1 text-sm disabled:opacity-40"
+                onClick={() => setPage((p) => p + 1)}
+                disabled={safePage >= totalPages - 1}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );
 }
 
-function selectChartUsers(users: UserUsageRow[]): UserUsageRow[] {
-  const selected = new Map<string, UserUsageRow>();
-  const byTokens = users.slice().sort((a, b) => b.totalTokens - a.totalTokens);
-  const byToolCalls = users
-    .slice()
-    .sort((a, b) => b.totalToolCalls - a.totalToolCalls);
+function CostDisclaimer({ providers }: { providers: string[] }) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState("");
+  const [otherProvider, setOtherProvider] = useState("");
+  const telemetry = useTelemetry();
 
-  for (const user of byTokens.slice(0, 5)) {
-    if (user.totalTokens > 0) selected.set(user.id, user);
-  }
+  const providerOptions = useMemo(() => {
+    const unique = Array.from(new Set(providers));
+    return unique;
+  }, [providers]);
 
-  for (const user of byToolCalls) {
-    if (selected.size >= MAX_CHART_USERS) break;
-    if (user.totalToolCalls > 0) selected.set(user.id, user);
-  }
+  const handleSubmit = () => {
+    const provider =
+      selectedProvider === "__other__" ? otherProvider : selectedProvider;
+    if (!provider) return;
+    telemetry.capture("feature_requested", {
+      action: "provider_cost_support",
+      provider,
+    });
+    toast.success("Request submitted — thanks for the feedback!");
+    setDialogOpen(false);
+    setSelectedProvider("");
+    setOtherProvider("");
+  };
 
-  for (const user of byTokens) {
-    if (selected.size >= MAX_CHART_USERS) break;
-    if (user.totalTokens > 0 || user.totalToolCalls > 0) {
-      selected.set(user.id, user);
-    }
-  }
+  return (
+    <section className="bg-muted/40 border-border rounded-xl border p-5">
+      <div className="max-w-3xl space-y-1">
+        <h2 className="text-sm font-semibold">About cost data</h2>
+        <p className="text-muted-foreground text-sm">
+          Dollar costs are reported by the AI provider. Currently only Anthropic
+          (Claude) reports cost data. For other providers, use token counts to
+          estimate costs. Token counts are always available regardless of
+          provider.
+        </p>
+        <p className="text-muted-foreground pt-1 text-sm">
+          Missing cost data for your provider?{" "}
+          <button
+            type="button"
+            onClick={() => setDialogOpen(true)}
+            className="text-primary hover:text-primary/80 cursor-pointer font-medium underline underline-offset-2"
+          >
+            Request provider support
+          </button>
+        </p>
+      </div>
 
-  return Array.from(selected.values());
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog.Content className="sm:max-w-md">
+          <Dialog.Header>
+            <Dialog.Title>Request cost support</Dialog.Title>
+            <Dialog.Description>
+              Which provider are you missing cost data for?
+            </Dialog.Description>
+          </Dialog.Header>
+
+          <RadioGroup
+            value={selectedProvider}
+            onValueChange={setSelectedProvider}
+            className="gap-3 py-2"
+          >
+            {providerOptions.map((p) => (
+              <label
+                key={p}
+                className="flex cursor-pointer items-center gap-3 text-sm"
+              >
+                <RadioGroupItem value={p} />
+                {p}
+              </label>
+            ))}
+            <label className="flex cursor-pointer items-center gap-3 text-sm">
+              <RadioGroupItem value="__other__" />
+              Other
+            </label>
+          </RadioGroup>
+
+          {selectedProvider === "__other__" && (
+            <input
+              type="text"
+              placeholder="Provider name"
+              value={otherProvider}
+              onChange={(e) => setOtherProvider(e.target.value)}
+              className="border-input bg-background ring-ring/20 focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+            />
+          )}
+
+          <Dialog.Footer>
+            <Button
+              variant="brand"
+              disabled={
+                !selectedProvider ||
+                (selectedProvider === "__other__" && !otherProvider.trim())
+              }
+              onClick={handleSubmit}
+            >
+              Submit request
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+    </section>
+  );
 }
 
-function buildUserTimeSeriesChartData(
-  userTimeSeries: UserTimeSeries[],
-  userLabels: Map<string, string>,
-  timeRangeMs: number,
-  valueKey: "totalTokens" | "totalToolCalls",
-) {
-  if (userTimeSeries.length === 0) {
-    return { labels: [], tooltipLabels: [], datasets: [] };
-  }
-
-  const allTimestamps = new Set<number>();
-  const valuesByUser = new Map<string, Map<number, number>>();
-
-  for (const series of userTimeSeries) {
-    const values = new Map<number, number>();
-    for (const point of series.timeSeries) {
-      const date = unixNanoToDate(point.bucketTimeUnixNano);
-      const timestamp = date.getTime();
-      allTimestamps.add(timestamp);
-      values.set(timestamp, (values.get(timestamp) ?? 0) + point[valueKey]);
-    }
-    valuesByUser.set(series.userId, values);
-  }
-
-  const sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b);
-  const labels = sortedTimestamps.map((timestamp) =>
-    formatChartLabel(new Date(timestamp), timeRangeMs),
+function AgentsLoadingState({ isInsightsOpen }: { isInsightsOpen: boolean }) {
+  return (
+    <>
+      <section
+        className={cn(
+          "grid gap-4 transition-all duration-300",
+          isInsightsOpen
+            ? "grid-cols-1 md:grid-cols-2"
+            : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
+        )}
+      >
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="bg-card rounded-lg border p-5">
+            <Skeleton className="mb-4 h-4 w-28" />
+            <Skeleton className="h-9 w-20" />
+            <Skeleton className="mt-3 h-3 w-36" />
+          </div>
+        ))}
+      </section>
+      <section className="grid gap-4 lg:grid-cols-2">
+        <Skeleton className="h-72 rounded-lg" />
+        <Skeleton className="h-72 rounded-lg" />
+      </section>
+      <Skeleton className="h-40 rounded-lg" />
+      <Skeleton className="h-64 rounded-lg" />
+    </>
   );
-  const tooltipLabels = sortedTimestamps.map((timestamp) =>
-    new Date(timestamp).toLocaleString([], {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }),
-  );
-
-  const datasets = userTimeSeries
-    .map((series, index) => {
-      const values = valuesByUser.get(series.userId) ?? new Map();
-      const data = sortedTimestamps.map(
-        (timestamp) => values.get(timestamp) ?? 0,
-      );
-      const total = data.reduce((sum, value) => sum + value, 0);
-      if (total === 0) return null;
-
-      const color = USER_SOURCE_COLORS[index % USER_SOURCE_COLORS.length]!;
-      return {
-        label: userLabels.get(series.userId) ?? series.userId,
-        data,
-        borderColor: color,
-        backgroundColor: `${color}1a`,
-        pointBackgroundColor: color,
-        fill: false,
-        tension: 0.45,
-        borderWidth: 1.5,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-      };
-    })
-    .filter((dataset): dataset is TimeSeriesDataset => dataset != null);
-
-  return { labels, tooltipLabels, datasets };
 }
 
-async function fetchUserSummaries(
+async function fetchAllUsers(
   client: Parameters<typeof telemetrySearchUsers>[0],
   from: Date,
   to: Date,
-  filters: { userId: string | null; hookSource: string | null },
 ): Promise<UserSummary[]> {
   const users: UserSummary[] = [];
   let cursor: string | undefined;
-
   do {
     const result = await unwrapAsync(
       telemetrySearchUsers(client, {
         searchUsersPayload: {
           cursor,
-          filter: {
-            from,
-            to,
-            eventSource: "hook",
-            hookSource: filters.hookSource ?? undefined,
-            userIds: filters.userId ? [filters.userId] : undefined,
-          },
+          filter: { from, to, eventSource: "hook" },
           limit: 1000,
           sort: "desc",
           userType: "internal",
         },
       }),
     );
-
     users.push(...result.users);
     cursor = result.nextCursor;
   } while (cursor);
-
   return users;
 }
 
-async function fetchUserMetrics(
-  client: Parameters<typeof telemetryGetUserMetricsSummary>[0],
+async function fetchProjectMetrics(
+  client: Parameters<typeof telemetryGetProjectMetricsSummary>[0],
   from: Date,
   to: Date,
-  userId: string,
-  hookSource: string | null = null,
 ): Promise<ProjectSummary> {
   const result = await unwrapAsync(
-    telemetryGetUserMetricsSummary(client, {
-      getUserMetricsSummaryPayload: {
-        from,
-        to,
-        userId,
-        eventSource: "hook",
-        hookSource: hookSource ?? undefined,
-      },
+    telemetryGetProjectMetricsSummary(client, {
+      getProjectMetricsSummaryPayload: { from, to },
     }),
   );
-
   return result.metrics;
 }
 
-async function fetchUserTimeSeries(
+async function fetchOverview(
   client: Parameters<typeof telemetryGetObservabilityOverview>[0],
   from: Date,
   to: Date,
-  users: UserUsageRow[],
-  hookSource: string | null,
-): Promise<UserTimeSeries[]> {
-  const result: UserTimeSeries[] = [];
-
-  for (const user of users) {
-    const overview = await fetchUserOverview(
-      client,
-      from,
-      to,
-      user.id,
-      hookSource,
-    );
-    result.push({
-      userId: user.id,
-      timeSeries: overview.timeSeries,
-    });
-  }
-
-  return result;
-}
-
-async function fetchUserOverview(
-  client: Parameters<typeof telemetryGetObservabilityOverview>[0],
-  from: Date,
-  to: Date,
-  userId: string,
-  hookSource: string | null = null,
+  hookSource?: string,
 ): Promise<GetObservabilityOverviewResult> {
   return unwrapAsync(
     telemetryGetObservabilityOverview(client, {
@@ -1210,123 +1430,9 @@ async function fetchUserOverview(
         from,
         to,
         includeTimeSeries: true,
-        userId,
         eventSource: "hook",
-        hookSource: hookSource ?? undefined,
+        hookSource,
       },
     }),
   );
-}
-
-function buildUserRows(
-  summaries: UserSummary[],
-  members: AccessMember[],
-): UserUsageRow[] {
-  const memberById = new Map(members.map((member) => [member.id, member]));
-
-  return summaries
-    .map((summary) => {
-      const member = memberById.get(summary.userId);
-      const displayId = summary.userId;
-
-      return {
-        id: displayId,
-        name: member?.name ?? displayId,
-        email: member?.email ?? "Unknown email",
-        platforms: summary.hookSources.map((source) => source.source),
-        totalTokens: summary.totalTokens,
-        totalToolCalls: summary.totalToolCalls,
-        toolCallSuccess: summary.toolCallSuccess,
-        toolCallFailure: summary.toolCallFailure,
-        firstActivity: formatUnixNano(summary.firstSeenUnixNano),
-        lastActivity: formatUnixNano(summary.lastSeenUnixNano),
-        summary,
-      };
-    })
-    .sort((a, b) => b.totalTokens - a.totalTokens);
-}
-
-function getSelectedUserRow(
-  selectedUserId: string | null,
-  userRows: UserUsageRow[],
-  members: AccessMember[],
-): UserUsageRow | null {
-  if (!selectedUserId) return null;
-
-  const usageRow = userRows.find((row) => row.id === selectedUserId);
-  if (usageRow) return usageRow;
-
-  const member = members.find((item) => item.id === selectedUserId);
-  if (!member) return null;
-
-  return {
-    id: member.id,
-    name: member.name,
-    email: member.email,
-    platforms: [],
-    totalTokens: 0,
-    totalToolCalls: 0,
-    toolCallSuccess: 0,
-    toolCallFailure: 0,
-    firstActivity: "No activity found",
-    lastActivity: "No activity found",
-    summary: emptyUserSummary(member.id),
-  };
-}
-
-function emptyUserSummary(userId: string): UserSummary {
-  return {
-    userId,
-    avgTokensPerRequest: 0,
-    cacheCreationInputTokens: 0,
-    cacheReadInputTokens: 0,
-    firstSeenUnixNano: "0",
-    hookSources: [],
-    lastSeenUnixNano: "0",
-    toolCallFailure: 0,
-    toolCallSuccess: 0,
-    tools: [],
-    totalChatRequests: 0,
-    totalChats: 0,
-    totalCost: 0,
-    totalInputTokens: 0,
-    totalOutputTokens: 0,
-    totalTokens: 0,
-    totalToolCalls: 0,
-  };
-}
-
-function getInitials(name: string) {
-  return name
-    .split(/[ @._-]+/)
-    .filter(Boolean)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
-function formatUnixNano(value: string) {
-  return dateTimeFormatters.humanize(unixNanoToDate(value));
-}
-
-function unixNanoToDate(value: string) {
-  const nanos = BigInt(value);
-  const millis = Number(nanos / 1_000_000n);
-
-  return new Date(millis);
-}
-
-function formatPlatform(value: string) {
-  return value
-    .split(/[-_]/)
-    .filter(Boolean)
-    .map((part) => part[0]!.toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function formatToolUrn(value: string) {
-  const parts = value.split(/[/:]/).filter(Boolean);
-
-  return parts[parts.length - 1] ?? value;
 }

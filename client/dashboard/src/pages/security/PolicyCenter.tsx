@@ -49,6 +49,7 @@ import {
   useRiskPoliciesUpdateMutation,
   useRiskPoliciesDeleteMutation,
   useRiskPoliciesTriggerMutation,
+  useRiskCapabilities,
   invalidateAllRiskListPolicies,
 } from "@gram/client/react-query/index.js";
 import {
@@ -111,14 +112,29 @@ function policyToCategories(
   return cats;
 }
 
-/** Derive sources + presidioEntities from selected categories. */
-function categoriesToPayload(cats: Set<RuleCategory>) {
+/** Derive sources, presidioEntities, and promptInjectionRules from selected
+ * categories and per-category rule selections. promptInjectionRules is the
+ * subset of rule ids the user has ticked under the prompt_injection category;
+ * the source itself is enabled by the category-level checkbox (heuristics are
+ * the always-on baseline). */
+function categoriesToPayload(
+  cats: Set<RuleCategory>,
+  promptInjectionRuleSelection: Set<string>,
+) {
   const sources: string[] = [];
   const presidioEntities: string[] = [];
+  const promptInjectionRules: string[] = [];
   if (cats.has("secrets")) sources.push("gitleaks");
   if (cats.has("shadow_mcp")) sources.push("shadow_mcp");
   if (cats.has("destructive_tool")) sources.push("destructive_tool");
-  if (cats.has("prompt_injection")) sources.push("prompt_injection");
+  if (cats.has("prompt_injection")) {
+    sources.push("prompt_injection");
+    for (const rule of DETECTION_RULES.prompt_injection) {
+      if (promptInjectionRuleSelection.has(rule.id)) {
+        promptInjectionRules.push(rule.id);
+      }
+    }
+  }
   for (const cat of PRESIDIO_CATEGORIES) {
     if (cats.has(cat)) {
       for (const rule of DETECTION_RULES[cat]) {
@@ -127,7 +143,7 @@ function categoriesToPayload(cats: Set<RuleCategory>) {
     }
   }
   if (presidioEntities.length > 0) sources.push("presidio");
-  return { sources, presidioEntities };
+  return { sources, presidioEntities, promptInjectionRules };
 }
 
 /** Map sources to display categories for the table row badges. */
@@ -149,7 +165,10 @@ export default function PolicyCenter() {
 function PolicyCenterContent() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useRiskListPolicies();
+  const { data: riskCapabilities, isLoading: isCapabilitiesLoading } =
+    useRiskCapabilities();
   const policies = data?.policies ?? [];
+  const piClassifierEnabled = riskCapabilities?.piClassifierEnabled === true;
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<RiskPolicy | null>(null);
@@ -161,6 +180,9 @@ function PolicyCenterContent() {
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
   const [formAutoName, setFormAutoName] = useState(true);
   const [formUserMessage, setFormUserMessage] = useState("");
+  const [formPromptInjectionRules, setFormPromptInjectionRules] = useState<
+    Set<string>
+  >(new Set<string>());
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
@@ -199,6 +221,7 @@ function PolicyCenterContent() {
     setFormAction("flag");
     setFormAutoName(true);
     setFormUserMessage("");
+    setFormPromptInjectionRules(new Set<string>());
     setSheetOpen(true);
   };
 
@@ -212,12 +235,15 @@ function PolicyCenterContent() {
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
     setFormUserMessage(policy.userMessage ?? "");
+    setFormPromptInjectionRules(
+      new Set<string>(policy.promptInjectionRules ?? []),
+    );
     setSheetOpen(true);
   };
 
   const handleSave = () => {
-    const { sources, presidioEntities } =
-      categoriesToPayload(selectedCategories);
+    const { sources, presidioEntities, promptInjectionRules } =
+      categoriesToPayload(selectedCategories, formPromptInjectionRules);
     const action =
       sources.includes("destructive_tool") && formAction === "block"
         ? "flag"
@@ -231,6 +257,7 @@ function PolicyCenterContent() {
             enabled: formEnabled,
             sources,
             presidioEntities,
+            promptInjectionRules,
             action,
             autoName: formAutoName,
             userMessage: formUserMessage,
@@ -245,6 +272,7 @@ function PolicyCenterContent() {
             enabled: formEnabled,
             sources,
             presidioEntities,
+            promptInjectionRules,
             action,
             autoName: formAutoName,
             ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
@@ -276,7 +304,7 @@ function PolicyCenterContent() {
     });
   };
 
-  if (isLoading) {
+  if (isLoading || isCapabilitiesLoading) {
     return (
       <Page>
         <Page.Header>
@@ -311,9 +339,11 @@ function PolicyCenterContent() {
             </Type>
             <Button
               onClick={() => {
-                const { sources, presidioEntities } = categoriesToPayload(
-                  new Set<RuleCategory>(["secrets", "pii"]),
-                );
+                const { sources, presidioEntities, promptInjectionRules } =
+                  categoriesToPayload(
+                    new Set<RuleCategory>(["secrets", "pii"]),
+                    new Set<string>(),
+                  );
                 createMutation.mutate({
                   request: {
                     createRiskPolicyRequestBody: {
@@ -321,6 +351,7 @@ function PolicyCenterContent() {
                       enabled: true,
                       sources,
                       presidioEntities,
+                      promptInjectionRules,
                     },
                   },
                 });
@@ -480,6 +511,9 @@ function PolicyCenterContent() {
                 setFormAutoName={setFormAutoName}
                 formUserMessage={formUserMessage}
                 setFormUserMessage={setFormUserMessage}
+                formPromptInjectionRules={formPromptInjectionRules}
+                setFormPromptInjectionRules={setFormPromptInjectionRules}
+                piClassifierEnabled={piClassifierEnabled}
               />
             </div>
             <SheetFooter className="px-6 pb-6">
@@ -545,6 +579,9 @@ function PolicySheetBody({
   setFormAutoName,
   formUserMessage,
   setFormUserMessage,
+  formPromptInjectionRules,
+  setFormPromptInjectionRules,
+  piClassifierEnabled,
 }: {
   formName: string;
   setFormName: (v: string) => void;
@@ -558,6 +595,9 @@ function PolicySheetBody({
   setFormAutoName: (v: boolean) => void;
   formUserMessage: string;
   setFormUserMessage: (v: string) => void;
+  formPromptInjectionRules: Set<string>;
+  setFormPromptInjectionRules: (v: Set<string>) => void;
+  piClassifierEnabled: boolean;
 }) {
   const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
     null,
@@ -677,24 +717,67 @@ function PolicySheetBody({
                 {isAvailable && isExpanded && rules.length > 0 && (
                   <div className="bg-muted/30 border-border border-t px-4 py-2">
                     <div className="space-y-2 py-1">
-                      {rules.map((rule) => (
-                        <div
-                          key={rule.id}
-                          className="flex items-center gap-3 py-1 pl-8"
-                        >
-                          <Checkbox
-                            id={rule.id}
-                            checked={selectedCategories.has(cat)}
-                            disabled={true}
-                          />
-                          <label
-                            htmlFor={rule.id}
-                            className="text-muted-foreground text-xs"
+                      {rules.map((rule) => {
+                        // Only the prompt_injection category supports per-rule
+                        // selection today; heuristics are the always-on
+                        // baseline and the listed rules are opt-in augments.
+                        // Other categories continue to bundle all rules under
+                        // the category-level checkbox.
+                        const interactive = cat === "prompt_injection";
+                        const checked = interactive
+                          ? selectedCategories.has(cat) &&
+                            formPromptInjectionRules.has(rule.id)
+                          : selectedCategories.has(cat);
+                        const isClassifierRule =
+                          rule.id === "deberta-v3-classifier";
+                        const isRuleAvailable =
+                          !isClassifierRule || piClassifierEnabled;
+                        return (
+                          <div
+                            key={rule.id}
+                            className="flex items-center gap-3 py-1 pl-8"
                           >
-                            {rule.title}
-                          </label>
-                        </div>
-                      ))}
+                            <Checkbox
+                              id={rule.id}
+                              checked={checked}
+                              disabled={
+                                !interactive ||
+                                !selectedCategories.has(cat) ||
+                                !isRuleAvailable
+                              }
+                              onCheckedChange={
+                                interactive
+                                  ? (next) => {
+                                      const updated = new Set(
+                                        formPromptInjectionRules,
+                                      );
+                                      if (next) {
+                                        updated.add(rule.id);
+                                      } else {
+                                        updated.delete(rule.id);
+                                      }
+                                      setFormPromptInjectionRules(updated);
+                                    }
+                                  : undefined
+                              }
+                            />
+                            <label
+                              htmlFor={rule.id}
+                              className={cn(
+                                "text-muted-foreground text-xs",
+                                !isRuleAvailable && "cursor-not-allowed",
+                              )}
+                            >
+                              {rule.title}
+                            </label>
+                            {!isRuleAvailable && (
+                              <Badge variant="outline" className="text-[10px]">
+                                Unavailable
+                              </Badge>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

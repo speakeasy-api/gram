@@ -1151,7 +1151,7 @@ func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 func connectedUser(ctx context.Context, db *pgxpool.Pool, organizationID string, userID string) (usersrepo.User, error) {
 	hasRelationship, err := orgrepo.New(db).HasOrganizationUserRelationship(ctx, orgrepo.HasOrganizationUserRelationshipParams{
 		OrganizationID: organizationID,
-		UserID:         userID,
+		UserID:         conv.ToPGText(userID),
 	})
 	if err != nil {
 		return usersrepo.User{}, fmt.Errorf("check organization user relationship: %w", err)

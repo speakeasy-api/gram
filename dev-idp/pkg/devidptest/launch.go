@@ -1,7 +1,7 @@
 // Package devidptest spins up a real dev-idp HTTP server inside a test.
 //
 // Launch wires bootstrap.Open + keystore.New + the oauth2 / oauth2-1 (and
-// optionally local-speakeasy) mode handlers under an httptest.NewServer,
+// optionally mock-workos) mode handlers under an httptest.NewServer,
 // returning an Instance with the addressable issuer URLs, a *sql.DB handle,
 // a *repo.Queries for direct sqlc seeding, and helpers for fetching
 // authorization-server metadata and seeding refresh tokens.
@@ -30,16 +30,15 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/internal/config"
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
-	"github.com/speakeasy-api/gram/dev-idp/internal/modes/localspeakeasy"
+	"github.com/speakeasy-api/gram/dev-idp/internal/modes/mockworkos"
 	"github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth2"
 	"github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"
 	"github.com/speakeasy-api/gram/plog"
 )
 
 const (
-	defaultLocalSpeakeasySecret = "test-secret"
-	defaultUserEmail            = "test@devidptest.local"
-	defaultUserDisplayName      = "Test User"
+	defaultUserEmail       = "test@devidptest.local"
+	defaultUserDisplayName = "Test User"
 )
 
 // Mode discriminator strings persisted by dev-idp on its auth_codes,
@@ -51,9 +50,8 @@ const (
 	// OAuth21Mode is the discriminator for OAuth 2.1 mode rows.
 	OAuth21Mode = oauth21.Mode
 
-	// LocalSpeakeasyMode is the discriminator for local-speakeasy mode
-	// rows.
-	LocalSpeakeasyMode = localspeakeasy.Mode
+	// MockWorkosMode is the discriminator for mock-workos mode rows.
+	MockWorkosMode = mockworkos.Mode
 )
 
 // Instance is a running dev-idp server with everything tests need to drive
@@ -76,10 +74,10 @@ type Instance struct {
 	// 2.1 authorization server.
 	OAuth21URL string
 
-	// LocalSpeakeasyURL is the prefix mounted for the local-speakeasy
-	// mode (Issuer + "/local-speakeasy"). Empty when
-	// LaunchOpts.EnableLocalSpeakeasy is false.
-	LocalSpeakeasyURL string
+	// MockWorkosURL is the prefix mounted for the mock-workos mode
+	// (Issuer + "/mock-workos"). Empty when
+	// LaunchOpts.EnableMockWorkos is false.
+	MockWorkosURL string
 
 	// DB is the dev-idp's in-memory SQLite handle. Most tests should
 	// reach for Repo instead; DB is exposed for tests that need to drop
@@ -103,22 +101,17 @@ type Instance struct {
 }
 
 // LaunchOpts configures Launch. The zero value is valid: oauth2 + oauth2-1
-// mounted, local-speakeasy disabled, shared package-level RSA key.
+// mounted, mock-workos disabled, shared package-level RSA key.
 type LaunchOpts struct {
-	// EnableLocalSpeakeasy mounts the local-speakeasy mode under
-	// Instance.LocalSpeakeasyURL. Disabled by default — most OAuth flow
+	// EnableMockWorkos mounts the mock-workos mode under
+	// Instance.MockWorkosURL. Disabled by default — most OAuth flow
 	// tests don't need it.
-	EnableLocalSpeakeasy bool
+	EnableMockWorkos bool
 
 	// Key, when non-nil, overrides the shared package-level RSA key. Use
 	// this for tests that need a distinct signing key (JWKS rotation,
 	// kid-mismatch). Most tests should leave this nil.
 	Key *rsa.PrivateKey
-
-	// LocalSpeakeasySecret overrides the SecretKey expected by the
-	// local-speakeasy /exchange / /validate endpoints. Defaults to
-	// "test-secret".
-	LocalSpeakeasySecret string
 }
 
 // Launch starts a fresh dev-idp HTTP server on a random loopback port. The
@@ -156,11 +149,6 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	ks, err := keystore.New(pemBytes, logger)
 	require.NoError(t, err, "init dev-idp keystore")
 
-	secret := opts.LocalSpeakeasySecret
-	if secret == "" {
-		secret = defaultLocalSpeakeasySecret
-	}
-
 	// Use NewUnstartedServer so we can read the bound listener address
 	// before constructing handlers — the mode handlers stamp the issuer
 	// URL into their JWT claims and discovery documents at construction
@@ -175,11 +163,11 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	oauth2H := oauth2.NewHandler(oauth2.Config{ExternalURL: pubURL}, ks, logger, tp, db)
 	outer.Handle(oauth2.Prefix+"/", http.StripPrefix(oauth2.Prefix, oauth2H.Handler()))
 
-	var localSpeakeasyURL string
-	if opts.EnableLocalSpeakeasy {
-		lsH := localspeakeasy.NewHandler(localspeakeasy.Config{SecretKey: secret}, logger, tp, db)
-		outer.Handle(localspeakeasy.Prefix+"/", http.StripPrefix(localspeakeasy.Prefix, lsH.Handler()))
-		localSpeakeasyURL = pubURL + localspeakeasy.Prefix
+	var mockWorkosURL string
+	if opts.EnableMockWorkos {
+		mwH := mockworkos.NewHandler(logger, tp, db)
+		outer.Handle(mockworkos.Prefix+"/", http.StripPrefix(mockworkos.Prefix, mwH.Handler()))
+		mockWorkosURL = pubURL + mockworkos.Prefix
 	}
 
 	server.Start()
@@ -198,7 +186,7 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	})
 	require.NoError(t, err, "seed default user")
 
-	for _, mode := range currentUserModes(opts.EnableLocalSpeakeasy) {
+	for _, mode := range currentUserModes(opts.EnableMockWorkos) {
 		_, err := queries.UpsertCurrentUser(ctx, repo.UpsertCurrentUserParams{
 			Mode:       mode,
 			SubjectRef: user.ID.String(),
@@ -208,15 +196,15 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	}
 
 	return &Instance{
-		Issuer:            pubURL,
-		OAuth20URL:        pubURL + oauth2.Prefix,
-		OAuth21URL:        pubURL + oauth21.Prefix,
-		LocalSpeakeasyURL: localSpeakeasyURL,
-		DB:                db,
-		Repo:              queries,
-		DefaultUser:       user,
-		server:            server,
-		rsaKey:            rsaKey,
+		Issuer:        pubURL,
+		OAuth20URL:    pubURL + oauth2.Prefix,
+		OAuth21URL:    pubURL + oauth21.Prefix,
+		MockWorkosURL: mockWorkosURL,
+		DB:            db,
+		Repo:          queries,
+		DefaultUser:   user,
+		server:        server,
+		rsaKey:        rsaKey,
 	}
 }
 
@@ -259,10 +247,10 @@ func fetchMetadata(t *testing.T, modeURL string) []byte {
 // currentUserModes lists the per-mode discriminator strings whose
 // current_users rows need to point at Instance.DefaultUser. Mirrors the
 // modes Launch actually mounts.
-func currentUserModes(enableLocalSpeakeasy bool) []string {
+func currentUserModes(enableMockWorkos bool) []string {
 	modes := []string{oauth21.Mode, oauth2.Mode}
-	if enableLocalSpeakeasy {
-		modes = append(modes, localspeakeasy.Mode)
+	if enableMockWorkos {
+		modes = append(modes, mockworkos.Mode)
 	}
 	return modes
 }
