@@ -83,7 +83,9 @@ export const useExternalMcpOAuthConfigStatus = (
 
     if (authType !== "oauth") return "not-required";
 
-    return toolset.externalOauthServer || toolset.oauthProxyServer
+    return toolset.externalOauthServer ||
+      toolset.oauthProxyServer ||
+      toolset.userSessionIssuerSlug
       ? "configured"
       : "required-unconfigured";
   }, [toolset, deploymentResult, serverAuthMap]);

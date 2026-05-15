@@ -593,6 +593,10 @@ func (m *mapCache) Delete(_ context.Context, key string) error {
 	return nil
 }
 
+func (m *mapCache) Expire(_ context.Context, _ string, _ time.Duration) error {
+	return nil
+}
+
 func (m *mapCache) ListAppend(context.Context, string, any, time.Duration) error {
 	return errors.New("not implemented")
 }

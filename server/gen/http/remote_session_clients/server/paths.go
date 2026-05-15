@@ -12,6 +12,11 @@ func CreateRemoteSessionClientRemoteSessionClientsPath() string {
 	return "/rpc/remoteSessionClients.create"
 }
 
+// CloneClientFromOAuthProxyProviderRemoteSessionClientsPath returns the URL path to the remoteSessionClients service cloneClientFromOAuthProxyProvider HTTP endpoint.
+func CloneClientFromOAuthProxyProviderRemoteSessionClientsPath() string {
+	return "/rpc/remoteSessionClients.cloneClientFromOAuthProxyProvider"
+}
+
 // UpdateRemoteSessionClientRemoteSessionClientsPath returns the URL path to the remoteSessionClients service updateRemoteSessionClient HTTP endpoint.
 func UpdateRemoteSessionClientRemoteSessionClientsPath() string {
 	return "/rpc/remoteSessionClients.update"

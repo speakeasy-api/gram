@@ -18,6 +18,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -391,6 +393,180 @@ func TestDeleteRemoteSessionClient(t *testing.T) {
 	activeSessions, err := repo.New(ti.conn).CountActiveRemoteSessionsByClientID(ctx, clientUUID)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), activeSessions)
+}
+
+// withAdmin returns ctx with the auth context's IsAdmin flag flipped to true.
+// Tests for admin-only endpoints opt in explicitly so non-admin paths exercise
+// the realistic default produced by testenv.InitAuthContext.
+func withAdmin(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	authCtx.IsAdmin = true
+	return contextvalues.SetAuthContext(ctx, authCtx)
+}
+
+// insertProxyProvider seeds an oauth_proxy_server + oauth_proxy_provider row
+// with the supplied secrets JSONB for the clone tests.
+func insertProxyProvider(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug, providerType string, secrets []byte) uuid.UUID {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	q := oauthrepo.New(conn)
+	srv, err := q.UpsertOAuthProxyServer(ctx, oauthrepo.UpsertOAuthProxyServerParams{
+		ProjectID: *authCtx.ProjectID,
+		Slug:      "srv-" + slug,
+		Audience:  conv.ToPGText("https://example.com"),
+	})
+	require.NoError(t, err)
+
+	prov, err := q.UpsertOAuthProxyProvider(ctx, oauthrepo.UpsertOAuthProxyProviderParams{
+		ProjectID:                         *authCtx.ProjectID,
+		OauthProxyServerID:                srv.ID,
+		Slug:                              slug,
+		ProviderType:                      providerType,
+		AuthorizationEndpoint:             conv.ToPGText("https://idp.example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://idp.example.com/token"),
+		RegistrationEndpoint:              conv.ToPGText("https://idp.example.com/register"),
+		ScopesSupported:                   []string{"openid"},
+		ResponseTypesSupported:            []string{"code"},
+		ResponseModesSupported:            []string{"query"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+		SecurityKeyNames:                  []string{},
+		Secrets:                           secrets,
+	})
+	require.NoError(t, err)
+	return prov.ID
+}
+
+func TestCloneClientFromOAuthProxyProvider_HappyPath(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	secrets := []byte(`{"client_id":"upstream-cid","client_secret":"upstream-shhh"}`)
+	proxyProviderID := insertProxyProvider(t, ctx, ti.conn, "clone-happy", "custom", secrets)
+	issuerID := createRemoteIssuer(t, ctx, ti, "clone-happy", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "clone-happy").String()
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
+	require.NoError(t, err)
+
+	result, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
+		OauthProxyProviderID:  proxyProviderID.String(),
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerID:   userIssuerID,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "upstream-cid", result.ClientID, "preserves upstream client_id so existing registrations keep working")
+	require.Equal(t, issuerID, result.RemoteSessionIssuerID)
+	require.Equal(t, userIssuerID, result.UserSessionIssuerID)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestCloneClientFromOAuthProxyProvider_NonAdminRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	// No withAdmin: the realistic default user is not an admin.
+
+	secrets := []byte(`{"client_id":"upstream-cid","client_secret":"upstream-shhh"}`)
+	proxyProviderID := insertProxyProvider(t, ctx, ti.conn, "clone-non-admin", "custom", secrets)
+	issuerID := createRemoteIssuer(t, ctx, ti, "clone-non-admin", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "clone-non-admin").String()
+
+	_, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
+		OauthProxyProviderID:  proxyProviderID.String(),
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerID:   userIssuerID,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestCloneClientFromOAuthProxyProvider_RejectsGramProvider(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	// "gram" providers don't store a usable upstream client; clone should refuse.
+	secrets := []byte(`{}`)
+	proxyProviderID := insertProxyProvider(t, ctx, ti.conn, "clone-gram", "gram", secrets)
+	issuerID := createRemoteIssuer(t, ctx, ti, "clone-gram", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "clone-gram").String()
+
+	_, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
+		OauthProxyProviderID:  proxyProviderID.String(),
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerID:   userIssuerID,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestCloneClientFromOAuthProxyProvider_RejectsEnvBackedSecrets(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	// Env-backed credentials: the proxy resolves these at runtime via the
+	// environments service. Clone explicitly refuses so the migration trail
+	// stays auditable and operators inline credentials before cloning.
+	secrets := []byte(`{"environment_slug":"prod"}`)
+	proxyProviderID := insertProxyProvider(t, ctx, ti.conn, "clone-envback", "custom", secrets)
+	issuerID := createRemoteIssuer(t, ctx, ti, "clone-envback", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "clone-envback").String()
+
+	_, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
+		OauthProxyProviderID:  proxyProviderID.String(),
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerID:   userIssuerID,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestCloneClientFromOAuthProxyProvider_ProviderNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "clone-missing", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "clone-missing").String()
+
+	_, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
+		OauthProxyProviderID:  uuid.NewString(),
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerID:   userIssuerID,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
 func TestDeleteRemoteSessionClient_NotFound(t *testing.T) {

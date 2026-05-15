@@ -36,7 +36,7 @@ var _ = Service("organizations", func() {
 
 		Payload(func() {
 			Attribute("email", String, "Email address to invite.")
-			Attribute("role_slug", String, "Optional WorkOS role slug for the invitee.")
+			Attribute("role_id", String, "Optional role ID for the invitee.")
 			Required("email")
 			security.SessionPayload()
 		})
@@ -93,29 +93,6 @@ var _ = Service("organizations", func() {
 		Meta("openapi:operationId", "listInvites")
 		Meta("openapi:extension:x-speakeasy-name-override", "listInvites")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListInvites"}`)
-	})
-
-	Method("getInviteByToken", func() {
-		Description("Resolve a WorkOS invitation from its token (e.g. accept-flow).")
-
-		NoSecurity()
-
-		Payload(func() {
-			Attribute("token", String, "Invitation token from the invite link.")
-			Required("token")
-		})
-
-		Result(OrganizationInvitationAccept)
-
-		HTTP(func() {
-			GET("/rpc/organizations.getInviteByToken")
-			Param("token")
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "getInviteByToken")
-		Meta("openapi:extension:x-speakeasy-name-override", "getInviteByToken")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetInviteByToken"}`)
 	})
 
 	Method("listUsers", func() {
@@ -268,6 +245,9 @@ var OrganizationUser = Type("OrganizationUser", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("updated_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_login", String, "Timestamp of the user's most recent login.", func() {
 		Format(FormatDateTime)
 	})
 

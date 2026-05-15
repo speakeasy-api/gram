@@ -216,7 +216,7 @@ export default function Plugins() {
                     ? "Publishing..."
                     : publishStatus.connected
                       ? "Re-publish"
-                      : "Publish to GitHub"}
+                      : "Publish Private Marketplace"}
                 </Button.Text>
               </Button>
             )}

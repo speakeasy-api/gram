@@ -24,6 +24,11 @@ type Finding struct {
 	Source           string  // Detection source (e.g. "gitleaks", "presidio")
 	Confidence       float64 // 0.0-1.0 confidence score
 	DeadLetterReason string  // Non-empty => dead-letter sentinel, not a real finding
+	// toolCallID is an internal correlation key used by scanShadowMCP to
+	// patch the resolved MCP server identifier onto findings via the
+	// telemetry CH lookup. Not persisted — converters that map Finding
+	// into repo.InsertRiskResultParams ignore it.
+	toolCallID string
 }
 
 // detectorInitMu serializes gitleaks detector creation process-wide.
@@ -157,6 +162,7 @@ func ConvertFindings(content string, raw []report.Finding) []Finding {
 			Source:           "gitleaks",
 			Confidence:       1.0,
 			DeadLetterReason: "",
+			toolCallID:       "",
 		})
 	}
 	return out

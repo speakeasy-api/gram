@@ -148,6 +148,14 @@ export type Toolset = {
    * When the toolset was last updated.
    */
   updatedAt: Date;
+  /**
+   * The id of the user_session_issuer wired to this toolset. Set via toolsets.setUserSessionIssuer; null when no USI is linked.
+   */
+  userSessionIssuerId?: string | undefined;
+  /**
+   * A short url-friendly label that uniquely identifies a resource.
+   */
+  userSessionIssuerSlug?: string | undefined;
 };
 
 /** @internal */
@@ -192,6 +200,8 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    user_session_issuer_id: z.optional(z.string()),
+    user_session_issuer_slug: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -217,6 +227,8 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
       "tool_urns": "toolUrns",
       "toolset_version": "toolsetVersion",
       "updated_at": "updatedAt",
+      "user_session_issuer_id": "userSessionIssuerId",
+      "user_session_issuer_slug": "userSessionIssuerSlug",
     });
   }),
 );

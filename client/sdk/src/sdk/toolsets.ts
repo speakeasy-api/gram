@@ -12,6 +12,7 @@ import { toolsetsGetBySlug } from "../funcs/toolsetsGetBySlug.js";
 import { toolsetsList } from "../funcs/toolsetsList.js";
 import { toolsetsListForOrg } from "../funcs/toolsetsListForOrg.js";
 import { toolsetsRemoveOAuthServer } from "../funcs/toolsetsRemoveOAuthServer.js";
+import { toolsetsSetUserSessionIssuer } from "../funcs/toolsetsSetUserSessionIssuer.js";
 import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
 import { toolsetsUpdateOAuthProxyServer } from "../funcs/toolsetsUpdateOAuthProxyServer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -203,6 +204,25 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Toolset> {
     return unwrapAsync(toolsetsRemoveOAuthServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setUserSessionIssuer toolsets
+   *
+   * @remarks
+   * Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
+   */
+  async setUserSessionIssuer(
+    request: operations.SetToolsetUserSessionIssuerRequest,
+    security?: operations.SetToolsetUserSessionIssuerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Toolset> {
+    return unwrapAsync(toolsetsSetUserSessionIssuer(
       this,
       request,
       security,

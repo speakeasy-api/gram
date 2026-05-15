@@ -45,6 +45,10 @@ func (m *mockProvisioner) GetCreditsUsed(ctx context.Context, orgID string) (flo
 	return 0, 0, nil
 }
 
+func (m *mockProvisioner) GetKeyUsage(ctx context.Context, apiKey string) (float64, error) {
+	return 0, nil
+}
+
 func (m *mockProvisioner) GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error) {
 	return nil, nil
 }

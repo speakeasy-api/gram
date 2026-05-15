@@ -8,6 +8,7 @@
 //	GET  /user_management/users                                              (?email, ?organization_id, ?after, ?limit)
 //	GET  /organizations/{id}
 //	GET  /user_management/organization_memberships                           (?user_id, ?organization_id, ?after, ?limit)
+//	POST /user_management/organization_memberships                          ({user_id, organization_id, role_slug})
 //	PUT  /user_management/organization_memberships/{id}                      ({role_slug})
 //	DELETE /user_management/organization_memberships/{id}
 //	POST   /user_management/invitations                                      (send)
@@ -17,6 +18,9 @@
 //	POST   /user_management/invitations/{id}/revoke
 //	POST   /user_management/invitations/{id}/send                            (resend; no-op apart from updated_at)
 //	POST   /user_management/invitations/{id}/accept                          (dev-idp only — dashboard accept flow)
+//	POST   /passwordless/sessions                                            (create magic-link session)
+//	GET    /passwordless/sessions/{id}/authorize                             (simulate magic-link click)
+//	POST   /sso/token                                                        (exchange code for SSO profile)
 //	GET    /organizations/{id}/roles
 //	POST   /authorization/organizations/{id}/roles
 //	PATCH  /authorization/organizations/{id}/roles/{slug}
@@ -68,6 +72,7 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /organizations/{id}", h.handleWorkosGetOrganization)
 
 	mux.HandleFunc("GET /user_management/organization_memberships", h.handleWorkosListMemberships)
+	mux.HandleFunc("POST /user_management/organization_memberships", h.handleWorkosCreateMembership)
 	mux.HandleFunc("PUT /user_management/organization_memberships/{id}", h.handleWorkosUpdateMembership)
 	mux.HandleFunc("DELETE /user_management/organization_memberships/{id}", h.handleWorkosDeleteMembership)
 
@@ -78,6 +83,10 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /user_management/invitations/{id}/revoke", h.handleWorkosRevokeInvitation)
 	mux.HandleFunc("POST /user_management/invitations/{id}/send", h.handleWorkosResendInvitation)
 	mux.HandleFunc("POST /user_management/invitations/{id}/accept", h.handleWorkosAcceptInvitation)
+
+	mux.HandleFunc("POST /passwordless/sessions", h.handlePasswordlessCreateSession)
+	mux.HandleFunc("GET /passwordless/sessions/{id}/authorize", h.handlePasswordlessAuthorize)
+	mux.HandleFunc("POST /sso/token", h.handleSSOToken)
 
 	mux.HandleFunc("GET /organizations/{id}/roles", h.handleWorkosListRoles)
 	mux.HandleFunc("POST /authorization/organizations/{id}/roles", h.handleWorkosCreateRole)
@@ -129,11 +138,29 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Look up the user's first org membership so we can return organization_id.
+	// This mirrors production WorkOS which includes the org ID in the auth response,
+	// triggering SyncMembershipsFromWorkOS on the Gram side.
+	var orgID string
+	memberships, err := queries.ListMembershipsWithOrgName(ctx, repo.ListMembershipsWithOrgNameParams{
+		After:   uuid.Nil,
+		UserID:  uuid.NullUUID{UUID: user.ID, Valid: true},
+		MaxRows: 1,
+	})
+	if err == nil && len(memberships) > 0 {
+		m := memberships[0]
+		if m.OrgWorkosID.Valid && m.OrgWorkosID.String != "" {
+			orgID = m.OrgWorkosID.String
+		} else {
+			orgID = m.OrganizationID.String()
+		}
+	}
+
 	first, last := splitName(user.DisplayName)
 	sessionID := "mock_session_" + randomToken()
-	writeJSON(w, http.StatusOK, map[string]any{
+	resp := map[string]any{
 		"user": map[string]any{
-			"id":                  user.ID.String(),
+			"id":                  workosUserID(user.ID),
 			"first_name":          first,
 			"last_name":           last,
 			"email":               user.Email,
@@ -145,7 +172,11 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 		},
 		"access_token":  mockJWT(sessionID),
 		"refresh_token": randomToken(),
-	})
+	}
+	if orgID != "" {
+		resp["organization_id"] = orgID
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // handleWorkosRevokeSession is a no-op mock of POST /user_management/sessions/revoke.
@@ -163,12 +194,215 @@ func mockJWT(sessionID string) string {
 }
 
 // =============================================================================
+// Passwordless magic-link sessions
+// =============================================================================
+
+// handlePasswordlessCreateSession implements POST /passwordless/sessions.
+// The WorkOS SDK sends JSON: {email, type, redirect_uri, expires_in, state}.
+// We store the session in-memory, generate an auth code, and return
+// {id, email, expires_at, link} where link points to our authorize endpoint.
+func (h *Handler) handlePasswordlessCreateSession(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Email       string `json:"email"`
+		Type        string `json:"type"`
+		RedirectURI string `json:"redirect_uri"`
+		ExpiresIn   int    `json:"expires_in"`
+		State       string `json:"state"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeWorkosError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.Email == "" {
+		writeWorkosError(w, http.StatusBadRequest, "email is required")
+		return
+	}
+
+	sessionID := uuid.New().String()
+	code := randomToken()
+	expiresIn := body.ExpiresIn
+	if expiresIn <= 0 {
+		expiresIn = 300
+	}
+	expiresAt := time.Now().Add(time.Duration(expiresIn) * time.Second)
+
+	h.pwlMu.Lock()
+	h.pwlSessions[sessionID] = &passwordlessState{
+		email:       body.Email,
+		redirectURI: body.RedirectURI,
+		state:       body.State,
+		code:        code,
+		expiresAt:   expiresAt,
+	}
+	h.pwlMu.Unlock()
+
+	// Build the authorize link. The caller (Gram server) will embed this
+	// in the invite email; clicking it simulates the magic-link flow.
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	link := fmt.Sprintf("%s://%s%s/passwordless/sessions/%s/authorize",
+		scheme, r.Host, Prefix, sessionID)
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"id":         sessionID,
+		"email":      body.Email,
+		"expires_at": expiresAt.UTC().Format(time.RFC3339),
+		"link":       link,
+	})
+}
+
+// handlePasswordlessAuthorize implements GET /passwordless/sessions/{id}/authorize.
+// Simulates clicking the magic link: redirects to redirect_uri?code={code}&state={state}.
+func (h *Handler) handlePasswordlessAuthorize(w http.ResponseWriter, r *http.Request) {
+	sessionID := r.PathValue("id")
+
+	h.pwlMu.Lock()
+	sess, ok := h.pwlSessions[sessionID]
+	h.pwlMu.Unlock()
+
+	if !ok {
+		writeWorkosError(w, http.StatusNotFound, "passwordless session not found or already used")
+		return
+	}
+	if time.Now().After(sess.expiresAt) {
+		writeWorkosError(w, http.StatusGone, "passwordless session expired")
+		return
+	}
+
+	target := sess.redirectURI
+	if strings.Contains(target, "?") {
+		target += "&"
+	} else {
+		target += "?"
+	}
+	target += "code=" + sess.code
+	if sess.state != "" {
+		target += "&state=" + sess.state
+	}
+	http.Redirect(w, r, target, http.StatusTemporaryRedirect)
+}
+
+// handleSSOToken implements POST /sso/token. The WorkOS SSO SDK sends
+// form-encoded body: client_id, client_secret, grant_type, code.
+// Returns {access_token, profile: {id, email, first_name, last_name, ...}}.
+func (h *Handler) handleSSOToken(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if err := r.ParseForm(); err != nil {
+		writeWorkosError(w, http.StatusBadRequest, "invalid form body")
+		return
+	}
+	code := r.FormValue("code")
+	grantType := r.FormValue("grant_type")
+	if code == "" || grantType != "authorization_code" {
+		writeWorkosError(w, http.StatusBadRequest, "code and grant_type=authorization_code required")
+		return
+	}
+
+	// Find and consume the passwordless session that issued this code.
+	h.pwlMu.Lock()
+	var matched *passwordlessState
+	for id, sess := range h.pwlSessions {
+		if sess.code == code {
+			matched = sess
+			delete(h.pwlSessions, id) // single-use
+			break
+		}
+	}
+	h.pwlMu.Unlock()
+
+	if matched != nil {
+		// Code from a passwordless session — resolve the user by email.
+		queries := repo.New(h.db)
+		user, err := queries.UpsertUserByEmail(ctx, repo.UpsertUserByEmailParams{
+			ID:          defaultuser.DeterministicUserID(matched.email),
+			Email:       matched.email,
+			DisplayName: emailLocalPart(matched.email),
+		})
+		if err != nil {
+			h.logger.ErrorContext(ctx, "sso token: upsert user", slog.Any("error", err))
+			writeWorkosError(w, http.StatusInternalServerError, "failed to resolve user")
+			return
+		}
+
+		// Simulate what real WorkOS does on invite acceptance: create the
+		// membership so ListMembers returns the invited user with a role.
+		orgs, err := queries.ListOrganizations(ctx, repo.ListOrganizationsParams{
+			After:   uuid.Nil,
+			MaxRows: 1,
+		})
+		if err == nil && len(orgs) > 0 {
+			if _, err := queries.CreateMembership(ctx, repo.CreateMembershipParams{
+				ID:             uuid.New(),
+				UserID:         user.ID,
+				OrganizationID: orgs[0].ID,
+				Role:           sql.NullString{String: "member", Valid: true},
+			}); err != nil {
+				h.logger.WarnContext(ctx, "sso token: failed to create membership for passwordless user", slog.Any("error", err))
+			}
+		}
+
+		first, last := splitName(user.DisplayName)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"access_token": randomToken(),
+			"profile": map[string]any{
+				"id":              workosUserID(user.ID),
+				"email":           user.Email,
+				"first_name":      first,
+				"last_name":       last,
+				"connection_id":   "",
+				"connection_type": "passwordless",
+				"idp_id":          workosUserID(user.ID),
+				"organization_id": "",
+				"raw_attributes":  map[string]string{},
+			},
+		})
+		return
+	}
+
+	// Fallback: try consuming as an oauth2-mode auth code (for SSO login flows).
+	queries := repo.New(h.db)
+	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{
+		Code: code,
+		Mode: "oauth2",
+		Ts:   time.Now(),
+	})
+	if err != nil {
+		writeWorkosError(w, http.StatusBadRequest, "auth code is unknown, consumed, or expired")
+		return
+	}
+	user, err := queries.GetUser(ctx, stored.UserID)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "sso token: load user", slog.Any("error", err))
+		writeWorkosError(w, http.StatusInternalServerError, "failed to load user")
+		return
+	}
+	first, last := splitName(user.DisplayName)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"access_token": randomToken(),
+		"profile": map[string]any{
+			"id":              workosUserID(user.ID),
+			"email":           user.Email,
+			"first_name":      first,
+			"last_name":       last,
+			"connection_id":   "",
+			"connection_type": "passwordless",
+			"idp_id":          workosUserID(user.ID),
+			"organization_id": "",
+			"raw_attributes":  map[string]string{},
+		},
+	})
+}
+
+// =============================================================================
 // Users
 // =============================================================================
 
 func (h *Handler) handleWorkosGetUser(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id, err := uuid.Parse(r.PathValue("id"))
+	id, err := resolveUserID(r.PathValue("id"))
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, "invalid user id")
 		return
@@ -218,7 +452,7 @@ func (h *Handler) handleWorkosListUsers(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	page, nextCursor := trimPage(rows, limit, func(u repo.User) string { return u.ID.String() })
+	page, nextCursor := trimPage(rows, limit, func(u repo.User) string { return workosUserID(u.ID) })
 
 	out := workosUserList{
 		Data:         make([]workosUser, 0, len(page)),
@@ -236,9 +470,9 @@ func (h *Handler) handleWorkosListUsers(w http.ResponseWriter, r *http.Request) 
 
 func (h *Handler) handleWorkosGetOrganization(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id, err := uuid.Parse(r.PathValue("id"))
+	id, err := h.resolveOrgID(ctx, r.PathValue("id"))
 	if err != nil {
-		writeWorkosError(w, http.StatusBadRequest, "invalid organization id")
+		writeWorkosError(w, http.StatusNotFound, "organization not found")
 		return
 	}
 	org, err := repo.New(h.db).GetOrganization(ctx, id)
@@ -302,6 +536,77 @@ func (h *Handler) handleWorkosListMemberships(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (h *Handler) handleWorkosCreateMembership(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	h.logger.InfoContext(ctx, "workos create membership: request received")
+
+	var body struct {
+		UserID         string `json:"user_id"`
+		OrganizationID string `json:"organization_id"`
+		RoleSlug       string `json:"role_slug"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		h.logger.ErrorContext(ctx, "workos create membership: invalid body", slog.Any("error", err))
+		writeWorkosError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	h.logger.InfoContext(ctx, "workos create membership: parsed body",
+		slog.String("user_id", body.UserID),
+		slog.String("organization_id", body.OrganizationID),
+		slog.String("role_slug", body.RoleSlug),
+	)
+
+	if body.UserID == "" || body.OrganizationID == "" {
+		h.logger.WarnContext(ctx, "workos create membership: missing required fields")
+		writeWorkosError(w, http.StatusBadRequest, "user_id and organization_id are required")
+		return
+	}
+	userID, err := resolveUserID(body.UserID)
+	if err != nil {
+		h.logger.WarnContext(ctx, "workos create membership: invalid user_id", slog.String("raw", body.UserID), slog.Any("error", err))
+		writeWorkosError(w, http.StatusBadRequest, "invalid user_id")
+		return
+	}
+	orgID, err := h.resolveOrgID(ctx, body.OrganizationID)
+	if err != nil {
+		h.logger.WarnContext(ctx, "workos create membership: invalid organization_id", slog.String("raw", body.OrganizationID), slog.Any("error", err))
+		writeWorkosError(w, http.StatusBadRequest, "invalid organization_id")
+		return
+	}
+	role := body.RoleSlug
+	if role == "" {
+		role = "member"
+	}
+
+	h.logger.InfoContext(ctx, "workos create membership: resolved IDs",
+		slog.String("user_uuid", userID.String()),
+		slog.String("org_uuid", orgID.String()),
+		slog.String("role", role),
+	)
+
+	queries := repo.New(h.db)
+	m, err := queries.CreateMembership(ctx, repo.CreateMembershipParams{
+		ID:             uuid.New(),
+		UserID:         userID,
+		OrganizationID: orgID,
+		Role:           sql.NullString{String: role, Valid: true},
+	})
+	if err != nil {
+		h.logger.ErrorContext(ctx, "workos create membership: db insert failed", slog.Any("error", err))
+		writeWorkosError(w, http.StatusInternalServerError, "failed to create membership")
+		return
+	}
+	h.logger.InfoContext(ctx, "workos create membership: created", slog.String("membership_id", m.ID.String()))
+
+	row, err := queries.GetMembershipWithOrgName(ctx, m.ID)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "workos create membership: refetch failed", slog.Any("error", err))
+		writeWorkosError(w, http.StatusInternalServerError, "failed to load membership")
+		return
+	}
+	writeJSON(w, http.StatusCreated, workosMembershipView(repo.ListMembershipsWithOrgNameRow(row)))
+}
+
 func (h *Handler) handleWorkosUpdateMembership(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := uuid.Parse(r.PathValue("id"))
@@ -344,7 +649,9 @@ func (h *Handler) handleWorkosDeleteMembership(w http.ResponseWriter, r *http.Re
 	ctx := r.Context()
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
-		writeWorkosError(w, http.StatusBadRequest, "invalid membership id")
+		// Gram may store KSUID-style membership IDs (e.g. "om_01KPD...") that
+		// don't exist in dev-idp's SQLite. Treat as already-deleted.
+		w.WriteHeader(http.StatusAccepted)
 		return
 	}
 	if err := repo.New(h.db).DeleteMembership(ctx, id); err != nil {
@@ -383,7 +690,7 @@ func (h *Handler) handleWorkosSendInvitation(w http.ResponseWriter, r *http.Requ
 
 	inviterNarg := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if body.InviterUserID != "" {
-		inv, err := uuid.Parse(body.InviterUserID)
+		inv, err := resolveUserID(body.InviterUserID)
 		if err != nil {
 			writeWorkosError(w, http.StatusBadRequest, "invalid inviter_user_id")
 			return
@@ -761,7 +1068,7 @@ func (h *Handler) handleWorkosDeleteRole(w http.ResponseWriter, r *http.Request)
 func workosUserView(u repo.User) workosUser {
 	first, last := splitName(u.DisplayName)
 	return workosUser{
-		ID:                u.ID.String(),
+		ID:                workosUserID(u.ID),
 		FirstName:         first,
 		LastName:          last,
 		Email:             u.Email,
@@ -775,24 +1082,40 @@ func workosUserView(u repo.User) workosUser {
 	}
 }
 
+// workosOrgID returns the external-facing WorkOS org ID. When the org has a
+// WorkOS-style workos_id set (e.g. "org_devidp_speakeasy"), that is used as
+// the org ID in all WorkOS-shaped responses. This matches production where
+// org IDs are "org_01J..." strings, not UUIDs. Falls back to the internal
+// UUID for orgs that don't have a workos_id stamped.
+func workosOrgID(o repo.Organization) string {
+	if o.WorkosID.Valid && o.WorkosID.String != "" {
+		return o.WorkosID.String
+	}
+	return o.ID.String()
+}
+
 func workosOrganizationView(o repo.Organization) workosOrganization {
 	return workosOrganization{
-		ID:                               o.ID.String(),
+		ID:                               workosOrgID(o),
 		Name:                             o.Name,
 		AllowProfilesOutsideOrganization: false,
 		Domains:                          []workosOrganizationDomain{},
 		StripeCustomerID:                 "",
 		CreatedAt:                        o.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:                        o.UpdatedAt.UTC().Format(time.RFC3339),
-		ExternalID:                       pgTextOrEmpty(o.WorkosID),
+		ExternalID:                       "",
 	}
 }
 
 func workosMembershipView(m repo.ListMembershipsWithOrgNameRow) workosOrganizationMembership {
+	orgID := m.OrganizationID.String()
+	if m.OrgWorkosID.Valid && m.OrgWorkosID.String != "" {
+		orgID = m.OrgWorkosID.String
+	}
 	return workosOrganizationMembership{
 		ID:               m.ID.String(),
-		UserID:           m.UserID.String(),
-		OrganizationID:   m.OrganizationID.String(),
+		UserID:           workosUserID(m.UserID),
+		OrganizationID:   orgID,
 		OrganizationName: m.OrganizationName,
 		Role:             workosRoleSlug{Slug: m.Role},
 		Status:           "active",
@@ -861,7 +1184,7 @@ func parsePageParams(q map[string][]string) (limit int, after uuid.UUID, err err
 	}
 	after = uuid.Nil
 	if raw := firstQuery(q, "after"); raw != "" {
-		parsed, perr := uuid.Parse(raw)
+		parsed, perr := resolveUserID(raw)
 		if perr != nil {
 			return 0, uuid.Nil, errors.New("invalid after cursor")
 		}
@@ -876,7 +1199,7 @@ func optionalQueryUUID(q map[string][]string, key string) (uuid.NullUUID, error)
 	if raw == "" {
 		return none, nil
 	}
-	parsed, err := uuid.Parse(raw)
+	parsed, err := resolveUserID(raw)
 	if err != nil {
 		return none, fmt.Errorf("invalid %s", key)
 	}
@@ -928,7 +1251,7 @@ func nullUUIDOrEmpty(u uuid.NullUUID) string {
 	if !u.Valid {
 		return ""
 	}
-	return u.UUID.String()
+	return workosUserID(u.UUID)
 }
 
 func ptrToNullString(p *string) sql.NullString {
@@ -936,6 +1259,27 @@ func ptrToNullString(p *string) sql.NullString {
 		return sql.NullString{}
 	}
 	return sql.NullString{String: *p, Valid: true}
+}
+
+const workosUserIDPrefix = "user_devidp_"
+
+// workosUserID formats an internal UUID as a WorkOS-style user ID.
+// Real WorkOS returns IDs like "user_01J5C09..."; we use "user_devidp_<hex>".
+func workosUserID(id uuid.UUID) string {
+	return workosUserIDPrefix + strings.ReplaceAll(id.String(), "-", "")
+}
+
+// resolveUserID parses a WorkOS-style user ID back to a UUID.
+// Accepts both "user_devidp_<hex>" and plain UUIDs for backward compat.
+func resolveUserID(raw string) (uuid.UUID, error) {
+	if strings.HasPrefix(raw, workosUserIDPrefix) {
+		hex := raw[len(workosUserIDPrefix):]
+		if len(hex) == 32 {
+			hex = hex[:8] + "-" + hex[8:12] + "-" + hex[12:16] + "-" + hex[16:20] + "-" + hex[20:]
+		}
+		return uuid.Parse(hex)
+	}
+	return uuid.Parse(raw)
 }
 
 // writeWorkosError follows the WorkOS error envelope shape closely enough

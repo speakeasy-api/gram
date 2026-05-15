@@ -475,6 +475,7 @@ func workosClientOpts(c *cli.Context) workos.ClientOpts {
 	return workos.ClientOpts{
 		Endpoint:   c.String("workos-endpoint"),
 		HTTPClient: nil,
+		ClientID:   c.String("idp-client-id"),
 	}
 }
 

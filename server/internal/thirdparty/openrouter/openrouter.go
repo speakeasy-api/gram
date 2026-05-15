@@ -124,6 +124,7 @@ type Provisioner interface {
 	ProvisionAPIKey(ctx context.Context, orgID string) (string, error)
 	RefreshAPIKeyLimit(ctx context.Context, orgID string, limit *int) (int, error)
 	GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error)
+	GetKeyUsage(ctx context.Context, apiKey string) (float64, error)
 	GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error)
 }
 
@@ -283,19 +284,32 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64,
 		return 0, limit, nil // the key doesn't exist yet
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", OpenRouterBaseURL+"/v1/key", nil)
+	used, err := o.GetKeyUsage(ctx, key.Key)
 	if err != nil {
-		o.logger.ErrorContext(ctx, "failed to get openrouter key HTTP request", attr.SlogError(err))
-		return 0, limit, fmt.Errorf("failed to get key request: %w", err)
+		return 0, limit, err
 	}
 
-	req.Header.Set("Authorization", "Bearer "+key.Key)
+	return used, limit, nil
+}
+
+// GetKeyUsage issues the upstream `/v1/key` call with the given API key and
+// returns the rounded monthly usage. Callers that already have the key (e.g.
+// the credits monitoring activity, which joins openrouter_api_keys in a
+// single SQL query) can skip the org/key DB lookups in GetCreditsUsed.
+func (o *OpenRouter) GetKeyUsage(ctx context.Context, apiKey string) (float64, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", OpenRouterBaseURL+"/v1/key", nil)
+	if err != nil {
+		o.logger.ErrorContext(ctx, "failed to build openrouter key usage request", attr.SlogError(err))
+		return 0, fmt.Errorf("build key usage request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := o.orClient.Do(req)
 	if err != nil {
-		o.logger.ErrorContext(ctx, "failed to send HTTP request", attr.SlogError(err))
-		return 0, limit, fmt.Errorf("failed to send update key request: %w", err)
+		o.logger.ErrorContext(ctx, "failed to send openrouter key usage request", attr.SlogError(err))
+		return 0, fmt.Errorf("send key usage request: %w", err)
 	}
 
 	defer o11y.NoLogDefer(func() error {
@@ -303,13 +317,13 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64,
 	})
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, limit, errors.New("failed to update OpenRouter API key: " + resp.Status)
+		return 0, errors.New("fetch OpenRouter key usage: " + resp.Status)
 	}
 
 	var usageResp keyUsageResponse
 	if err := json.NewDecoder(resp.Body).Decode(&usageResp); err != nil {
 		o.logger.ErrorContext(ctx, "failed to decode key usage response", attr.SlogError(err))
-		return 0, limit, fmt.Errorf("failed to decode key usage response: %w", err)
+		return 0, fmt.Errorf("decode key usage response: %w", err)
 	}
 
 	var creditsUsed float64
@@ -317,7 +331,7 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64,
 		creditsUsed = math.Round(*usageResp.Data.UsageMonthly*100) / 100
 	}
 
-	return creditsUsed, limit, nil
+	return creditsUsed, nil
 }
 
 func (o *OpenRouter) getLimitForOrg(org orgRepo.OrganizationMetadatum) int {

@@ -110,6 +110,22 @@ var RiskChatSummary = Type("RiskChatSummary", func() {
 	Required("chat_id", "findings_count", "latest_detected")
 })
 
+var ShadowMCPApproval = Type("ShadowMCPApproval", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("policy_id", String, "The risk policy ID this approval is scoped to.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("match", String, "The MCP server identifier this approval covers — typically a server URL, stdio command, or `mcp__<server>__` prefix (the same value surfaced in `RiskResult.match`).")
+	Attribute("server_name", String, "Display name of the MCP server, when known.")
+	Attribute("approved_by", String, "User that recorded the approval.")
+	Attribute("approved_at", String, "When the approval was recorded.", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("policy_id", "match", "approved_at")
+})
+
 var RiskPolicyStatus = Type("RiskPolicyStatus", func() {
 	Meta("struct:pkg:path", "types")
 

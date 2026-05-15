@@ -24,6 +24,12 @@ type Service interface {
 	// triggers an outbound RFC 7591 registration against the issuer's
 	// registration_endpoint).
 	CreateRemoteSessionClient(context.Context, *CreateRemoteSessionClientPayload) (res *types.RemoteSessionClient, err error)
+	// Platform-admin-only. Clone the client_id / client_secret from an existing
+	// oauth_proxy_provider into a new remote_session_client paired with the
+	// supplied issuers. The upstream secret stays server-side: it is read from the
+	// proxy provider's stored secrets, re-encrypted, and persisted on the
+	// remote_session_client row without ever crossing the wire.
+	CloneClientFromOAuthProxyProvider(context.Context, *CloneClientFromOAuthProxyProviderPayload) (res *types.RemoteSessionClient, err error)
 	// Rotate the client_secret or change the user_session_issuer_id linkage on an
 	// existing remote_session_client.
 	UpdateRemoteSessionClient(context.Context, *UpdateRemoteSessionClientPayload) (res *types.RemoteSessionClient, err error)
@@ -56,7 +62,22 @@ const ServiceName = "remoteSessionClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"createRemoteSessionClient", "updateRemoteSessionClient", "listRemoteSessionClients", "getRemoteSessionClient", "deleteRemoteSessionClient"}
+var MethodNames = [6]string{"createRemoteSessionClient", "cloneClientFromOAuthProxyProvider", "updateRemoteSessionClient", "listRemoteSessionClients", "getRemoteSessionClient", "deleteRemoteSessionClient"}
+
+// CloneClientFromOAuthProxyProviderPayload is the payload type of the
+// remoteSessionClients service cloneClientFromOAuthProxyProvider method.
+type CloneClientFromOAuthProxyProviderPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The oauth_proxy_provider to read client_id / client_secret from. Must live
+	// in the caller's project.
+	OauthProxyProviderID string
+	// The remote_session_issuer the new client is registered with.
+	RemoteSessionIssuerID string
+	// The user_session_issuer the new client is paired with.
+	UserSessionIssuerID string
+}
 
 // CreateRemoteSessionClientPayload is the payload type of the
 // remoteSessionClients service createRemoteSessionClient method.
