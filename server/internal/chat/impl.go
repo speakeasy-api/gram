@@ -820,6 +820,12 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// "summarise this transcript" turn does not persist as divergence on
 	// the user's chat; zero the ChatID so the capture strategy (which
 	// keys off ChatID) treats the call as anonymous.
+	//
+	// TODO(daniel): the header is client-trustable today and any caller
+	// with /chat/completions access can suppress persistence. Acceptable
+	// while the assistant runner is the sole producer; gate behind an
+	// assistant-principal check before any non-assistant caller adopts
+	// it.
 	completionChatID := chatID
 	if r.Header.Get("Gram-Skip-Capture") == "1" {
 		completionChatID = uuid.Nil

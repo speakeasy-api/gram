@@ -97,34 +97,54 @@ type listTriggersResult struct {
 }
 
 type ListTriggers struct {
-	db  *pgxpool.Pool
-	app *bgtriggers.App
+	db                  *pgxpool.Pool
+	app                 *bgtriggers.App
+	assistantSelfScoped bool
 }
 
 type ConfigureTrigger struct {
-	db          *pgxpool.Pool
-	app         *bgtriggers.App
-	inputSchema []byte
-	audit       *audit.Logger
+	db                  *pgxpool.Pool
+	app                 *bgtriggers.App
+	inputSchema         []byte
+	audit               *audit.Logger
+	assistantSelfScoped bool
 }
 
 func NewListTriggersTool(db *pgxpool.Pool, app *bgtriggers.App) *ListTriggers {
-	return &ListTriggers{
-		db:  db,
-		app: app,
-	}
+	return &ListTriggers{db: db, app: app, assistantSelfScoped: false}
+}
+
+// NewAssistantListTriggersTool returns a ListTriggers that filters the result
+// to triggers whose target is the calling assistant principal.
+func NewAssistantListTriggersTool(db *pgxpool.Pool, app *bgtriggers.App) *ListTriggers {
+	return &ListTriggers{db: db, app: app, assistantSelfScoped: true}
 }
 
 func NewConfigureTriggerTool(db *pgxpool.Pool, app *bgtriggers.App, audit *audit.Logger) *ConfigureTrigger {
 	return &ConfigureTrigger{
-		db:          db,
-		app:         app,
-		inputSchema: buildConfigureTriggerInputSchema(),
-		audit:       audit,
+		db:                  db,
+		app:                 app,
+		inputSchema:         buildConfigureTriggerInputSchema(false),
+		audit:               audit,
+		assistantSelfScoped: false,
 	}
 }
 
-func buildConfigureTriggerInputSchema() []byte {
+// NewAssistantConfigureTriggerTool returns a ConfigureTrigger that pins
+// target_kind/target_ref to the calling assistant principal and strips them
+// from the visible schema, so the LLM cannot redirect a trigger at a sibling
+// assistant in the same project.
+func NewAssistantConfigureTriggerTool(db *pgxpool.Pool, app *bgtriggers.App, audit *audit.Logger) *ConfigureTrigger {
+	return &ConfigureTrigger{
+		db:                  db,
+		app:                 app,
+		inputSchema:         buildConfigureTriggerInputSchema(true),
+		audit:               audit,
+		assistantSelfScoped: true,
+	}
+}
+
+func buildConfigureTriggerInputSchema(assistantSelfScoped bool) []byte {
 	definitionSlugs := listDefinitionSlugs()
 	inner := schemaBytesToMap(core.BuildInputSchema[configureTriggerSharedInput](
 		core.WithPropertyFormat("trigger_id", "uuid"),
@@ -140,6 +160,22 @@ func buildConfigureTriggerInputSchema() []byte {
 	}
 
 	required := append(getStringSlice(inner, "required"), "config")
+	if assistantSelfScoped {
+		// Target binds to the calling assistant principal; do not let the LLM
+		// see, supply, or override it.
+		stripSchemaProperty(inner, "target_kind")
+		stripSchemaProperty(inner, "target_ref")
+		stripSchemaProperty(inner, "target_display")
+		filtered := required[:0]
+		for _, name := range required {
+			switch name {
+			case "target_kind", "target_ref", "target_display":
+				continue
+			}
+			filtered = append(filtered, name)
+		}
+		required = filtered
+	}
 	inner["required"] = dedupeStrings(required)
 
 	branches := make([]any, 0, len(definitionSlugs))
@@ -303,6 +339,15 @@ func (t *ListTriggers) Call(ctx context.Context, _ toolconfig.ToolCallEnv, paylo
 		return err
 	}
 
+	var selfTargetRef string
+	if t.assistantSelfScoped {
+		principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+		if !ok {
+			return fmt.Errorf("assistant list-triggers requires an assistant principal")
+		}
+		selfTargetRef = principal.AssistantID.String()
+	}
+
 	input := listTriggersInput{DefinitionSlug: nil}
 	if err := decodePayload(payload, &input); err != nil {
 		return err
@@ -318,6 +363,9 @@ func (t *ListTriggers) Call(ctx context.Context, _ toolconfig.ToolCallEnv, paylo
 	result := listTriggersResult{Triggers: make([]triggerToolView, 0, len(items))}
 	for _, item := range items {
 		if input.DefinitionSlug != nil && *input.DefinitionSlug != "" && item.DefinitionSlug != *input.DefinitionSlug {
+			continue
+		}
+		if t.assistantSelfScoped && (item.TargetKind != targetKindAssistant || item.TargetRef != selfTargetRef) {
 			continue
 		}
 
@@ -406,6 +454,17 @@ func (t *ConfigureTrigger) upsertTrigger(
 	if params.DefinitionSlug == bgtriggers.DefinitionSlugWake {
 		return t.upsertWake(ctx, authCtx, params)
 	}
+	if t.assistantSelfScoped {
+		principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+		if !ok {
+			return nil, fmt.Errorf("assistant configure-trigger requires an assistant principal")
+		}
+		params.TargetKind = targetKindAssistant
+		params.TargetRef = principal.AssistantID.String()
+		if strings.TrimSpace(params.TargetDisplay) == "" {
+			params.TargetDisplay = strings.TrimSpace(params.Name)
+		}
+	}
 	if strings.TrimSpace(params.Name) == "" {
 		return nil, fmt.Errorf("name is required")
 	}
@@ -484,6 +543,9 @@ func (t *ConfigureTrigger) upsertTrigger(
 		}
 		if existing.DefinitionSlug != params.DefinitionSlug {
 			return nil, fmt.Errorf("trigger %s is %q, expected %q", existing.ID.String(), existing.DefinitionSlug, params.DefinitionSlug)
+		}
+		if t.assistantSelfScoped && (existing.TargetKind != targetKindAssistant || existing.TargetRef != params.TargetRef) {
+			return nil, fmt.Errorf("trigger does not belong to the calling assistant")
 		}
 
 		beforeView, err := buildTriggerInstanceSnapshot(existing, t.app.WebhookURL(existing))

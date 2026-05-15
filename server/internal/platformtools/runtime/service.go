@@ -111,14 +111,13 @@ func MemoryExternalTools(svc *memory.MemoryService) []platformtools.ExternalTool
 }
 
 // TriggerExternalTools returns the assistant self-config trigger tools
-// (list + configure) for inclusion in the assistants platform toolset. The
-// runtime executor map already registers these via the built-in registry, so
-// these instances only surface in toolset listings — dispatch routes through
-// the shared registry executors.
+// (list + configure). Both variants pin target_kind/target_ref to the calling
+// assistant principal and strip those fields from the schema so the LLM
+// cannot redirect a trigger at a sibling assistant in the same project.
 func TriggerExternalTools(db *pgxpool.Pool, app *bgtriggers.App, auditLogger *audit.Logger) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
-		{Executor: platformtriggers.NewListTriggersTool(db, app), RequiredFeature: ""},
-		{Executor: platformtriggers.NewConfigureTriggerTool(db, app, auditLogger), RequiredFeature: ""},
+		{Executor: platformtriggers.NewAssistantListTriggersTool(db, app), RequiredFeature: ""},
+		{Executor: platformtriggers.NewAssistantConfigureTriggerTool(db, app, auditLogger), RequiredFeature: ""},
 	}
 }
 
