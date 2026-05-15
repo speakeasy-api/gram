@@ -26,7 +26,7 @@ import (
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil)
+	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil)
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
@@ -69,6 +69,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		testenv.NewMeterProvider(t),
 		conn,
 		piiScanner,
+		nil,
 		nil,
 		nil,
 	)
@@ -129,7 +130,7 @@ func TestAnalyzeBatch_DestructiveToolAnnotationFinding(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		Cursor:       uuid.NullUUID{},
+		CursorID:               uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
@@ -174,7 +175,7 @@ func TestAnalyzeBatch_CLIDestructive_BashRmRf(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		Cursor:       uuid.NullUUID{},
+		CursorID:               uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
@@ -199,7 +200,7 @@ func TestAnalyzeBatch_CLIDestructive_GitForcePush(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		Cursor:       uuid.NullUUID{},
+		CursorID:               uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
@@ -225,7 +226,7 @@ func TestAnalyzeBatch_CLIDestructive_MCPArgsDropTable(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		Cursor:       uuid.NullUUID{},
+		CursorID:               uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
@@ -256,7 +257,7 @@ func TestAnalyzeBatch_CLIDestructive_StableRuleIDAcrossKeys(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		Cursor:       uuid.NullUUID{},
+		CursorID:               uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
@@ -292,7 +293,7 @@ func TestAnalyzeBatch_BothSources_OnSameMCPCall(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		Cursor:       uuid.NullUUID{},
+		CursorID:               uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
@@ -392,6 +393,7 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		&risk_analysis.StubPIIScanner{},
 		nil,
 		shadowMCPClient,
+		nil,
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -606,7 +608,7 @@ func TestAnalyzeBatch_SkipsWhenPolicyDisabled(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		Cursor:       uuid.NullUUID{},
+		CursorID:               uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)

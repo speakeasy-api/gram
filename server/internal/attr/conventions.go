@@ -265,6 +265,14 @@ const (
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
 	HookBlockReasonKey = attribute.Key("gram.hook.block_reason")
+	// MCPMatchKey carries the server-level identifier the matcher resolved
+	// for a hook-time MCP tool call — an HTTP/SSE URL, a stdio command, or
+	// (as fallback) the `mcp__<server>__` prefix from the tool name. Set on
+	// the PreToolUse log so the offline risk batch scanner can read the
+	// same identifier the hook saw, instead of trying to re-derive it from
+	// the stored chat_message alone. Mirrors the value written to the
+	// risk_results.match column by hook-time blocks.
+	MCPMatchKey = attribute.Key("gram.mcp.match")
 
 	PaginationTsStartKey     = attribute.Key("gram.pagination.ts_start")
 	PaginationTsEndKey       = attribute.Key("gram.pagination.ts_end")

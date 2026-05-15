@@ -40,6 +40,7 @@ import {
   Loader2,
   ChevronRight,
   RefreshCw,
+  X,
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -50,8 +51,12 @@ import {
   useRiskPoliciesDeleteMutation,
   useRiskPoliciesTriggerMutation,
   useRiskCapabilities,
+  useRiskListShadowMCPApprovals,
+  useRiskApprovalsDeleteMutation,
   invalidateAllRiskListPolicies,
+  invalidateAllRiskListShadowMCPApprovals,
 } from "@gram/client/react-query/index.js";
+import { toast } from "sonner";
 import {
   useRiskPoliciesStatus,
   invalidateAllRiskPoliciesStatus,
@@ -514,6 +519,7 @@ function PolicyCenterContent() {
                 formPromptInjectionRules={formPromptInjectionRules}
                 setFormPromptInjectionRules={setFormPromptInjectionRules}
                 piClassifierEnabled={piClassifierEnabled}
+                editingPolicyId={editingPolicy?.id ?? null}
               />
             </div>
             <SheetFooter className="px-6 pb-6">
@@ -582,6 +588,7 @@ function PolicySheetBody({
   formPromptInjectionRules,
   setFormPromptInjectionRules,
   piClassifierEnabled,
+  editingPolicyId,
 }: {
   formName: string;
   setFormName: (v: string) => void;
@@ -598,6 +605,7 @@ function PolicySheetBody({
   formPromptInjectionRules: Set<string>;
   setFormPromptInjectionRules: (v: Set<string>) => void;
   piClassifierEnabled: boolean;
+  editingPolicyId: string | null;
 }) {
   const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
     null,
@@ -866,6 +874,87 @@ function PolicySheetBody({
           </p>
         </div>
         <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
+      </div>
+
+      {/* Shadow MCP exclusions — only when editing a policy that includes shadow_mcp. */}
+      {editingPolicyId && selectedCategories.has("shadow_mcp") && (
+        <ShadowMCPExclusionsSection policyId={editingPolicyId} />
+      )}
+    </div>
+  );
+}
+
+function ShadowMCPExclusionsSection({ policyId }: { policyId: string }) {
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useRiskListShadowMCPApprovals({ policyId });
+  const revoke = useRiskApprovalsDeleteMutation();
+
+  const approvals = data?.approvals ?? [];
+
+  const handleRevoke = useCallback(
+    (match: string) => {
+      revoke.mutate(
+        { request: { policyId, match } },
+        {
+          onSuccess: () => {
+            toast.success("Exclusion removed");
+            invalidateAllRiskListShadowMCPApprovals(queryClient);
+            queryClient.invalidateQueries({
+              queryKey: ["risk", "results", "list"],
+            });
+          },
+          onError: (err) =>
+            toast.error(`Failed to remove: ${err.message ?? "unknown error"}`),
+        },
+      );
+    },
+    [revoke, policyId, queryClient],
+  );
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm font-medium">Excluded MCP Servers</Label>
+      <p className="text-muted-foreground text-xs">
+        Shadow-MCP servers approved for this policy. Calls to these servers are
+        allowed even when the policy would otherwise block them.
+      </p>
+      <div className="border-border divide-border divide-y rounded-lg border">
+        {isLoading ? (
+          <div className="text-muted-foreground p-3 text-xs">Loading…</div>
+        ) : approvals.length === 0 ? (
+          <div className="text-muted-foreground p-3 text-xs">
+            No exclusions yet. Use the "Exclude" action on a finding in the Risk
+            Overview to add one.
+          </div>
+        ) : (
+          approvals.map((a) => (
+            <div
+              key={a.match}
+              className="flex items-center justify-between gap-2 p-3"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-mono text-xs" title={a.match}>
+                  {a.match}
+                </div>
+                {(a.serverName || a.approvedBy) && (
+                  <div className="text-muted-foreground mt-0.5 truncate text-[11px]">
+                    {a.serverName ?? "Unknown server"}
+                    {a.approvedBy ? ` · ${a.approvedBy}` : ""}
+                  </div>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                disabled={revoke.isPending}
+                onClick={() => handleRevoke(a.match)}
+                title="Remove exclusion"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

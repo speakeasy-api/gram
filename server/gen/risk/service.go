@@ -36,6 +36,16 @@ type Service interface {
 	// Get the analysis status of a risk policy including progress and workflow
 	// state.
 	GetRiskPolicyStatus(context.Context, *GetRiskPolicyStatusPayload) (res *types.RiskPolicyStatus, err error)
+	// List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary
+	// Redis-backed storage; will move to a dedicated table once the feature
+	// graduates.
+	ListShadowMCPApprovals(context.Context, *ListShadowMCPApprovalsPayload) (res *ListShadowMCPApprovalsResult, err error)
+	// Approve a shadow-MCP server so the named policy stops blocking calls to it.
+	// `match` is the same opaque server identifier surfaced in `RiskResult.match`
+	// — typically a server URL, stdio command, or `mcp__<server>__` prefix.
+	ApproveShadowMCP(context.Context, *ApproveShadowMCPPayload) (res *types.ShadowMCPApproval, err error)
+	// Remove a previously-approved shadow-MCP server for a policy.
+	RevokeShadowMCPApproval(context.Context, *RevokeShadowMCPApprovalPayload) (err error)
 	// Manually trigger risk analysis for a policy, starting or signaling the drain
 	// workflow.
 	TriggerRiskAnalysis(context.Context, *TriggerRiskAnalysisPayload) (err error)
@@ -61,7 +71,21 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskPolicyStatus", "triggerRiskAnalysis"}
+var MethodNames = [13]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis"}
+
+// ApproveShadowMCPPayload is the payload type of the risk service
+// approveShadowMCP method.
+type ApproveShadowMCPPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The risk policy ID.
+	PolicyID string
+	// The MCP server identifier to approve.
+	Match string
+	// Display name of the MCP server (optional, for UI).
+	ServerName *string
+}
 
 // CreateRiskPolicyPayload is the payload type of the risk service
 // createRiskPolicy method.
@@ -188,6 +212,35 @@ type ListRiskResultsResult struct {
 	TotalCount int64
 	// Cursor for the next page of results.
 	NextCursor *string
+}
+
+// ListShadowMCPApprovalsPayload is the payload type of the risk service
+// listShadowMCPApprovals method.
+type ListShadowMCPApprovalsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The risk policy ID.
+	PolicyID string
+}
+
+// ListShadowMCPApprovalsResult is the result type of the risk service
+// listShadowMCPApprovals method.
+type ListShadowMCPApprovalsResult struct {
+	// The approved shadow-MCP servers for the policy (URL- or command-keyed).
+	Approvals []*types.ShadowMCPApproval
+}
+
+// RevokeShadowMCPApprovalPayload is the payload type of the risk service
+// revokeShadowMCPApproval method.
+type RevokeShadowMCPApprovalPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The risk policy ID.
+	PolicyID string
+	// The MCP server identifier to revoke — exactly the value used to approve.
+	Match string
 }
 
 // RiskCapabilitiesResult is the result type of the risk service
