@@ -152,6 +152,7 @@ export function InsightsEmployeeDetailContent() {
     (resolvedUserId?.includes("@") ? resolvedUserId : "Unknown email");
 
   const totalTokens = getTotalTokens(summary);
+  const totalCost = summary?.totalCost ?? 0;
   const isLoading =
     membersLoading ||
     (member == null && fallbackUserQuery.isLoading) ||
@@ -208,7 +209,7 @@ export function InsightsEmployeeDetailContent() {
                   "grid gap-4 transition-all duration-300",
                   isInsightsOpen
                     ? "grid-cols-1 md:grid-cols-2"
-                    : "grid-cols-1 md:grid-cols-3",
+                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
                 )}
               >
                 <FirstActivityCard
@@ -218,6 +219,17 @@ export function InsightsEmployeeDetailContent() {
                   title="Total Tokens"
                   value={totalTokens}
                   icon="gauge"
+                />
+                <MetricCard
+                  title="Total Cost"
+                  value={totalCost}
+                  format="currency"
+                  icon="credit-card"
+                  subtext={
+                    totalCost > 0
+                      ? `Last ${LOOKBACK_DAYS} days`
+                      : "No cost data reported"
+                  }
                 />
                 <MetricCard
                   title="Tool Calls"
@@ -359,10 +371,10 @@ function DetailLoadingState({ isInsightsOpen }: { isInsightsOpen: boolean }) {
           "grid gap-4 transition-all duration-300",
           isInsightsOpen
             ? "grid-cols-1 md:grid-cols-2"
-            : "grid-cols-1 md:grid-cols-3",
+            : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
         )}
       >
-        {Array.from({ length: 3 }).map((_, index) => (
+        {Array.from({ length: 4 }).map((_, index) => (
           <div key={index} className="bg-card rounded-lg border p-5">
             <Skeleton className="mb-4 h-4 w-28" />
             <Skeleton className="h-9 w-20" />

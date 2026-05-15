@@ -7,7 +7,6 @@ import { ShieldAlert } from "lucide-react";
 import { Stack } from "@speakeasy-api/moonshine";
 import { SettingsDangerZone } from "./SettingsDangerZone";
 import { RegistryCacheSection } from "./RegistryCacheSection";
-import { CursorIntegrationSection } from "./CursorIntegrationSection";
 
 export default function Settings() {
   const isAdmin = useIsAdmin();
@@ -28,8 +27,7 @@ export default function Settings() {
             Manage your project configuration and perform administrative
             actions.
           </Type>
-          <CursorIntegrationSection />
-          <div className="mt-8">
+          <div>
             <SettingsDangerZone />
           </div>
 

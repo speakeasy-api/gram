@@ -247,8 +247,8 @@ func (a *Activities) FreeTierReportingUsageMetrics(ctx context.Context, orgIDs [
 	return a.freeTierReportingUsageMetrics.Do(ctx, orgIDs)
 }
 
-func (a *Activities) ListCursorIntegrationConfigs(ctx context.Context) ([]activities.CursorIntegrationConfig, error) {
-	return a.cursorUsageMetrics.ListCursorIntegrationConfigs(ctx)
+func (a *Activities) ListCursorAIIntegrationConfigs(ctx context.Context) ([]activities.CursorAIIntegrationConfig, error) {
+	return a.cursorUsageMetrics.ListCursorAIIntegrationConfigs(ctx)
 }
 
 func (a *Activities) PollCursorUsageEventsPage(ctx context.Context, input activities.PollCursorUsageEventsPageInput) (*activities.PollCursorUsageEventsPageOutput, error) {

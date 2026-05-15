@@ -14,8 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.temporal.io/sdk/temporal"
 
+	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/cursorintegration"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -36,7 +36,7 @@ var (
 type CursorUsageMetrics struct {
 	logger          *slog.Logger
 	db              *pgxpool.Pool
-	cursorClient    *cursorintegration.Client
+	integrations    *aiintegrations.Client
 	apiClient       *cursorapi.Client
 	telemetryLogger *telemetry.Logger
 	telemetryRepo   *telemetryrepo.Queries
@@ -46,14 +46,14 @@ func NewCursorUsageMetrics(logger *slog.Logger, db *pgxpool.Pool, encryptionClie
 	return &CursorUsageMetrics{
 		logger:          logger.With(attr.SlogComponent("cursor_usage_metrics")),
 		db:              db,
-		cursorClient:    cursorintegration.NewClient(logger, db, encryptionClient),
+		integrations:    aiintegrations.NewClient(logger, db, encryptionClient),
 		apiClient:       cursorapi.New(),
 		telemetryLogger: telemetryLogger,
 		telemetryRepo:   telemetryRepo,
 	}
 }
 
-type CursorIntegrationConfig struct {
+type CursorAIIntegrationConfig struct {
 	ID             string
 	OrganizationID string
 	ProjectID      string
@@ -64,7 +64,7 @@ type CursorIntegrationConfig struct {
 type CursorUsageEvent = cursorapi.UsageEvent
 
 type PollCursorUsageEventsPageInput struct {
-	Config  CursorIntegrationConfig
+	Config  CursorAIIntegrationConfig
 	EndTime time.Time
 	Page    int
 }
@@ -75,7 +75,7 @@ type PollCursorUsageEventsPageOutput struct {
 }
 
 type DeduplicateAndWriteCursorEventsInput struct {
-	Config  CursorIntegrationConfig
+	Config  CursorAIIntegrationConfig
 	EndTime time.Time
 	Events  []CursorUsageEvent
 }
@@ -85,15 +85,15 @@ type UpdateCursorPollWatermarkInput struct {
 	At       time.Time
 }
 
-func (c *CursorUsageMetrics) ListCursorIntegrationConfigs(ctx context.Context) ([]CursorIntegrationConfig, error) {
-	configs, err := c.cursorClient.ListEnabledConfigs(ctx)
+func (c *CursorUsageMetrics) ListCursorAIIntegrationConfigs(ctx context.Context) ([]CursorAIIntegrationConfig, error) {
+	configs, err := c.integrations.ListEnabledConfigsByProvider(ctx, aiintegrations.ProviderCursor)
 	if err != nil {
 		return nil, err
 	}
 
-	out := make([]CursorIntegrationConfig, 0, len(configs))
+	out := make([]CursorAIIntegrationConfig, 0, len(configs))
 	for _, cfg := range configs {
-		out = append(out, CursorIntegrationConfig{
+		out = append(out, CursorAIIntegrationConfig{
 			ID:             cfg.ID.String(),
 			OrganizationID: cfg.OrganizationID,
 			ProjectID:      cfg.ProjectID.String(),
@@ -203,9 +203,9 @@ func (c *CursorUsageMetrics) DeduplicateAndWriteCursorEvents(ctx context.Context
 func (c *CursorUsageMetrics) UpdateCursorPollWatermark(ctx context.Context, input UpdateCursorPollWatermarkInput) error {
 	id, err := uuid.Parse(input.ConfigID)
 	if err != nil {
-		return oops.E(oops.CodeInvalid, err, "invalid cursor integration config id")
+		return oops.E(oops.CodeInvalid, err, "invalid ai integration config id")
 	}
-	return c.cursorClient.UpdateLastPolledAt(ctx, id, input.At)
+	return c.integrations.UpdateSyncLastPolledAt(ctx, id, input.At)
 }
 
 func CursorEventHash(event CursorUsageEvent) string {

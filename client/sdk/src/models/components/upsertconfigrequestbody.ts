@@ -7,19 +7,24 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type UpsertConfigRequestBody = {
   /**
-   * Cursor team Admin API key. Stored encrypted at rest; never returned on reads.
+   * Provider API key. Stored encrypted at rest; never returned on reads.
    */
   apiKey: string;
   /**
-   * Whether Cursor usage polling should be active.
+   * Whether the integration should be active.
    */
   enabled: boolean;
+  /**
+   * AI provider identifier. Initially only cursor is supported.
+   */
+  provider: string;
 };
 
 /** @internal */
 export type UpsertConfigRequestBody$Outbound = {
   api_key: string;
   enabled: boolean;
+  provider: string;
 };
 
 /** @internal */
@@ -30,6 +35,7 @@ export const UpsertConfigRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     apiKey: z.string(),
     enabled: z.boolean(),
+    provider: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {

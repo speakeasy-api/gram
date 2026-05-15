@@ -1539,6 +1539,289 @@ paths:
             x-speakeasy-name-override: updateRole
             x-speakeasy-react-hook:
                 name: UpdateRole
+    /rpc/aiIntegrations.deleteConfig:
+        post:
+            description: Delete the org-wide AI integration config for a provider.
+            operationId: deleteAIIntegrationConfig
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteConfigRequestBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: deleteConfig aiIntegrations
+            tags:
+                - aiIntegrations
+            x-speakeasy-name-override: deleteConfig
+            x-speakeasy-react-hook:
+                name: DeleteAIIntegrationConfig
+    /rpc/aiIntegrations.getConfig:
+        get:
+            description: Get the org-wide AI integration config for a provider. Returns an empty config (enabled=false, has_api_key=false) when none is set.
+            operationId: getAIIntegrationConfig
+            parameters:
+                - allowEmptyValue: true
+                  description: AI provider identifier. Initially only cursor is supported.
+                  in: query
+                  name: provider
+                  required: true
+                  schema:
+                    description: AI provider identifier. Initially only cursor is supported.
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AIIntegrationConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: getConfig aiIntegrations
+            tags:
+                - aiIntegrations
+            x-speakeasy-name-override: getConfig
+            x-speakeasy-react-hook:
+                name: AIIntegrationConfig
+    /rpc/aiIntegrations.upsertConfig:
+        post:
+            description: Create or update the org-wide AI integration config for a provider.
+            operationId: upsertAIIntegrationConfig
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpsertConfigRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AIIntegrationConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: upsertConfig aiIntegrations
+            tags:
+                - aiIntegrations
+            x-speakeasy-name-override: upsertConfig
+            x-speakeasy-react-hook:
+                name: UpsertAIIntegrationConfig
     /rpc/assets.createSignedChatAttachmentURL:
         post:
             description: Create a time-limited signed URL to access a chat attachment without authentication.
@@ -6010,302 +6293,6 @@ paths:
             tags:
                 - collections
             x-speakeasy-name-override: update
-    /rpc/cursorIntegration.deleteConfig:
-        post:
-            description: Delete the current project's Cursor integration config.
-            operationId: deleteCursorIntegrationConfig
-            parameters:
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "204":
-                    description: No Content response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: deleteConfig cursorIntegration
-            tags:
-                - cursorIntegration
-            x-speakeasy-name-override: deleteConfig
-            x-speakeasy-react-hook:
-                name: DeleteCursorIntegrationConfig
-    /rpc/cursorIntegration.getConfig:
-        get:
-            description: Get the current project's Cursor integration config. Returns an empty config (enabled=false, has_api_key=false) when none is set.
-            operationId: getCursorIntegrationConfig
-            parameters:
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/CursorIntegrationConfig'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: getConfig cursorIntegration
-            tags:
-                - cursorIntegration
-            x-speakeasy-name-override: getConfig
-            x-speakeasy-react-hook:
-                name: CursorIntegrationConfig
-    /rpc/cursorIntegration.upsertConfig:
-        post:
-            description: Create or update the current project's Cursor integration config.
-            operationId: upsertCursorIntegrationConfig
-            parameters:
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/UpsertConfigRequestBody'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/CursorIntegrationConfig'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: upsertConfig cursorIntegration
-            tags:
-                - cursorIntegration
-            x-speakeasy-name-override: upsertConfig
-            x-speakeasy-react-hook:
-                name: UpsertCursorIntegrationConfig
     /rpc/deployments.active:
         get:
             description: Get the active deployment for a project.
@@ -24010,6 +23997,45 @@ paths:
                 name: UpsertGlobalVariation
 components:
     schemas:
+        AIIntegrationConfig:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: ISO 8601 timestamp when the config was created. Omitted when no config is set.
+                    format: date-time
+                enabled:
+                    type: boolean
+                    description: Whether the provider integration is active.
+                has_api_key:
+                    type: boolean
+                    description: Whether an API key is currently stored. The key itself is never returned.
+                id:
+                    type: string
+                    description: Config ID. Omitted when no config is set for the provider.
+                last_polled_at:
+                    type: string
+                    description: ISO 8601 timestamp for the usage sync high-water mark. Omitted when no config is set.
+                    format: date-time
+                organization_id:
+                    type: string
+                    description: Organization the config belongs to.
+                project_id:
+                    type: string
+                    description: Project used as the telemetry write target. Omitted when no config is set.
+                provider:
+                    type: string
+                    description: AI provider identifier. Initially only cursor is supported.
+                updated_at:
+                    type: string
+                    description: ISO 8601 timestamp of the most recent change. Omitted when no config is set.
+                    format: date-time
+            description: Per-organization AI provider integration config. The provider API key is write-only; reads only expose whether a key is configured.
+            required:
+                - organization_id
+                - provider
+                - enabled
+                - has_api_key
         AccessMember:
             type: object
             properties:
@@ -26350,42 +26376,6 @@ components:
                     type: string
                     description: Message to display to the user
             description: Result for Cursor hook events
-        CursorIntegrationConfig:
-            type: object
-            properties:
-                created_at:
-                    type: string
-                    description: ISO 8601 timestamp when the config was created. Omitted when no config is set.
-                    format: date-time
-                enabled:
-                    type: boolean
-                    description: Whether Cursor usage polling is active.
-                has_api_key:
-                    type: boolean
-                    description: Whether a Cursor API key is currently stored. The key itself is never returned.
-                id:
-                    type: string
-                    description: Config ID. Omitted when no config is set for the project.
-                last_polled_at:
-                    type: string
-                    description: ISO 8601 timestamp for the polling high-water mark. Omitted when no config is set.
-                    format: date-time
-                organization_id:
-                    type: string
-                    description: Organization the config belongs to.
-                project_id:
-                    type: string
-                    description: Project the config belongs to.
-                updated_at:
-                    type: string
-                    description: ISO 8601 timestamp of the most recent change. Omitted when no config is set.
-                    format: date-time
-            description: Per-project config that controls polling Cursor Admin API usage events. The API key is write-only; reads only expose whether a key is configured.
-            required:
-                - organization_id
-                - project_id
-                - enabled
-                - has_api_key
         CustomDomain:
             type: object
             properties:
@@ -26424,6 +26414,14 @@ components:
                 - created_at
                 - updated_at
                 - is_updating
+        DeleteConfigRequestBody:
+            type: object
+            properties:
+                provider:
+                    type: string
+                    description: AI provider identifier. Initially only cursor is supported.
+            required:
+                - provider
         DeleteGlobalToolVariationForm:
             type: object
             properties:
@@ -34173,11 +34171,15 @@ components:
             properties:
                 api_key:
                     type: string
-                    description: Cursor team Admin API key. Stored encrypted at rest; never returned on reads.
+                    description: Provider API key. Stored encrypted at rest; never returned on reads.
                 enabled:
                     type: boolean
-                    description: Whether Cursor usage polling should be active.
+                    description: Whether the integration should be active.
+                provider:
+                    type: string
+                    description: AI provider identifier. Initially only cursor is supported.
             required:
+                - provider
                 - api_key
                 - enabled
         UpsertConfigRequestBody2:
@@ -34645,6 +34647,8 @@ tags:
       description: Manage roles, team member access control, and authorization challenge events.
     - name: admin
       description: Operational endpoints for administrative tasks.
+    - name: aiIntegrations
+      description: Manage organization-level AI provider integrations.
     - name: assets
       description: Manages assets used by Gram projects.
     - name: assistantMemories
@@ -34659,8 +34663,6 @@ tags:
       description: Managed chats for gram AI consumers.
     - name: chatSessions
       description: Manages chat session tokens for client-side authentication
-    - name: cursorIntegration
-      description: Manage per-project Cursor Admin API usage polling.
     - name: deployments
       description: Manages deployments of tools from upstream sources.
     - name: domains

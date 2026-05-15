@@ -51,9 +51,9 @@ func CursorUsageMetricsWorkflow(ctx workflow.Context) error {
 	})
 
 	var a *Activities
-	var configs []activities.CursorIntegrationConfig
-	if err := workflow.ExecuteActivity(ctx, a.ListCursorIntegrationConfigs).Get(ctx, &configs); err != nil {
-		return fmt.Errorf("list cursor integration configs: %w", err)
+	var configs []activities.CursorAIIntegrationConfig
+	if err := workflow.ExecuteActivity(ctx, a.ListCursorAIIntegrationConfigs).Get(ctx, &configs); err != nil {
+		return fmt.Errorf("list cursor ai integration configs: %w", err)
 	}
 	if len(configs) == 0 {
 		logger.Info("No Cursor integration config to poll")
@@ -71,7 +71,7 @@ func CursorUsageMetricsWorkflow(ctx workflow.Context) error {
 	return nil
 }
 
-func pollCursorUsageMetricsForConfig(ctx workflow.Context, a *Activities, cfg activities.CursorIntegrationConfig, endTime time.Time) error {
+func pollCursorUsageMetricsForConfig(ctx workflow.Context, a *Activities, cfg activities.CursorAIIntegrationConfig, endTime time.Time) error {
 	for page := 1; ; page++ {
 		var result activities.PollCursorUsageEventsPageOutput
 		if err := workflow.ExecuteActivity(ctx, a.PollCursorUsageEventsPage, activities.PollCursorUsageEventsPageInput{

@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   workos_id TEXT, -- links to an organization in WorkOS to sync metadata like users and groups
   workos_updated_at timestamptz,
   workos_last_event_id TEXT,
-  
+
   svix_app_id TEXT, -- links to a svix consumer application for sending webhooks
   webhooks_enabled boolean,
 
@@ -2196,26 +2196,41 @@ CREATE UNIQUE INDEX IF NOT EXISTS otel_forwarding_configs_org_project_key
   ON otel_forwarding_configs (organization_id, project_id)
   WHERE project_id IS NOT NULL AND deleted IS FALSE;
 
--- Cursor integration configs: encrypted team Admin API keys used by the
--- hourly polling workflow to ingest usage and cost metrics.
-CREATE TABLE IF NOT EXISTS cursor_integration_configs (
+-- AI integration configs: encrypted provider credentials and activation
+-- metadata. Provider-specific sync state lives in ai_integration_syncs.
+CREATE TABLE IF NOT EXISTS ai_integration_configs (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   organization_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
   project_id uuid NOT NULL,
   api_key_encrypted TEXT,
   enabled boolean NOT NULL DEFAULT true,
-  last_polled_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT cursor_integration_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT ai_integration_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS cursor_integration_configs_org_project_key
-  ON cursor_integration_configs (organization_id, project_id)
+CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_configs_org_provider_key
+  ON ai_integration_configs (organization_id, provider)
   WHERE deleted IS FALSE;
+
+-- AI integration syncs: provider-specific high-water marks and future sync
+-- metadata. Cursor usage polling uses last_polled_at as its watermark.
+CREATE TABLE IF NOT EXISTS ai_integration_syncs (
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  ai_integration_config_id uuid NOT NULL,
+  last_polled_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+
+  CONSTRAINT ai_integration_syncs_config_id_fkey FOREIGN KEY (ai_integration_config_id) REFERENCES ai_integration_configs (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_syncs_config_id_key
+  ON ai_integration_syncs (ai_integration_config_id);
 
 CREATE TABLE IF NOT EXISTS principal_grants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -2264,7 +2279,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   actor_type TEXT NOT NULL,
   actor_display_name TEXT,
   actor_slug TEXT,
-  
+
   action TEXT NOT NULL,
 
   subject_id TEXT NOT NULL,

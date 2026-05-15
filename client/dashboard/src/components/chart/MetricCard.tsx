@@ -8,7 +8,7 @@ export type MetricCardProps = {
   title: string;
   value: number;
   previousValue?: number;
-  format?: "number" | "percent" | "ms" | "seconds";
+  format?: "number" | "currency" | "percent" | "ms" | "seconds";
   icon?: IconName;
   invertDelta?: boolean;
   thresholds?: ThresholdConfig;
@@ -44,6 +44,11 @@ export function MetricCard(props: MetricCardProps) {
           return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
         }
         return `${v.toFixed(1)}s`;
+      case "currency":
+        if (v >= 1) return `$${v.toFixed(2)}`;
+        if (v >= 0.01) return `$${v.toFixed(3)}`;
+        if (v > 0) return `$${v.toFixed(4)}`;
+        return "$0.00";
       default:
         return v.toLocaleString();
     }

@@ -1,6 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ChartCard } from "@/components/chart/ChartCard";
-import { formatChartLabel, smoothData } from "@/components/chart/chartUtils";
+import { formatChartLabel } from "@/components/chart/chartUtils";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
@@ -242,8 +242,6 @@ export function InsightsAgentsContent() {
   const projectMetrics = projectQuery.data ?? null;
   const timeSeries = overviewQuery.data?.timeSeries ?? [];
 
-  // Derive total tokens from input + output — the API's totalTokens field
-  // is not populated by many providers (only Anthropic reports it reliably).
   const effectiveTokens = (u: UserSummary) =>
     u.totalInputTokens + u.totalOutputTokens;
 
@@ -521,12 +519,12 @@ export function InsightsAgentsContent() {
                 <MetricCard
                   title="Total Cost"
                   value={filteredTotalCost}
-                  format="number"
+                  format="currency"
                   icon="credit-card"
                   accentColor="purple"
                   subtext={
                     filteredTotalCost > 0
-                      ? formatCost(filteredTotalCost)
+                      ? "Reported by Claude Code and Cursor"
                       : "No cost data reported"
                   }
                 />
@@ -605,7 +603,6 @@ export function InsightsAgentsContent() {
 
 function TokenTimeSeriesChart({
   title,
-  subtitle,
   chartId,
   timeSeries,
   timeRangeMs,
@@ -614,7 +611,6 @@ function TokenTimeSeriesChart({
   onExpand,
 }: {
   title: string;
-  subtitle?: string;
   chartId: string;
   timeSeries: TimeSeriesBucket[];
   timeRangeMs: number;
@@ -636,67 +632,38 @@ function TokenTimeSeriesChart({
       formatChartLabel(unixNanoToDate(b.bucketTimeUnixNano), timeRangeMs),
     );
 
-    // Raw bar datasets
-    const barDatasets =
-      valueMode === "cost"
-        ? [
-            {
-              label: "Cost",
-              data: timeSeries.map((b) => b.totalCost),
-              backgroundColor: "rgba(96, 165, 250, 0.35)",
-              stack: "stack",
-              order: 2,
-            },
-          ]
-        : [
-            {
-              label: "Input Tokens",
-              data: timeSeries.map((b) => b.totalInputTokens),
-              backgroundColor: "rgba(96, 165, 250, 0.35)",
-              stack: "stack",
-              order: 2,
-            },
-            {
-              label: "Output Tokens",
-              data: timeSeries.map((b) => b.totalOutputTokens),
-              backgroundColor: "rgba(52, 211, 153, 0.35)",
-              stack: "stack",
-              order: 2,
-            },
-            {
-              label: "Cache Read",
-              data: timeSeries.map((b) => b.cacheReadInputTokens),
-              backgroundColor: "rgba(167, 139, 250, 0.35)",
-              stack: "stack",
-              order: 2,
-            },
-          ];
-
-    // Smoothed trend line (total across all stacked values)
-    const rawTotal = timeSeries.map((b) =>
-      valueMode === "cost"
-        ? b.totalCost
-        : b.totalInputTokens + b.totalOutputTokens + b.cacheReadInputTokens,
-    );
-    const trendData = smoothData(rawTotal);
-
-    const trendDataset = {
-      label: valueMode === "cost" ? "Cost Trend" : "Token Trend",
-      data: trendData,
-      type: "line" as const,
-      borderColor: valueMode === "cost" ? "#818cf8" : "#3b82f6",
-      backgroundColor: "transparent",
-      pointRadius: 0,
-      pointHoverRadius: 4,
-      borderWidth: 2,
-      tension: 0.4,
-      fill: false,
-      order: 1,
-    };
-
     return {
       labels,
-      datasets: [...barDatasets, trendDataset],
+      datasets:
+        valueMode === "cost"
+          ? [
+              {
+                label: "Cost",
+                data: timeSeries.map((b) => b.totalCost),
+                backgroundColor: "rgba(96, 165, 250, 0.35)",
+                stack: "stack",
+              },
+            ]
+          : [
+              {
+                label: "Input Tokens",
+                data: timeSeries.map((b) => b.totalInputTokens),
+                backgroundColor: "rgba(96, 165, 250, 0.35)",
+                stack: "stack",
+              },
+              {
+                label: "Output Tokens",
+                data: timeSeries.map((b) => b.totalOutputTokens),
+                backgroundColor: "rgba(52, 211, 153, 0.35)",
+                stack: "stack",
+              },
+              {
+                label: "Cache Read",
+                data: timeSeries.map((b) => b.cacheReadInputTokens),
+                backgroundColor: "rgba(167, 139, 250, 0.35)",
+                stack: "stack",
+              },
+            ],
     };
   }, [timeSeries, timeRangeMs, valueMode]);
 
@@ -759,17 +726,13 @@ function TokenTimeSeriesChart({
       onExpand={onExpand}
       hasData={hasData}
     >
-      {subtitle && (
-        <p className="text-muted-foreground -mt-3 mb-2 text-xs">{subtitle}</p>
-      )}
       {!hasData ? (
         <div className="text-muted-foreground flex h-[260px] items-center justify-center text-sm">
           No data for selected time range
         </div>
       ) : (
         <div style={{ height }}>
-          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- mixed bar+line chart requires type widening */}
-          <Bar data={chartData as any} options={options} />
+          <Bar data={chartData} options={options} />
         </div>
       )}
     </ChartCard>
@@ -1275,10 +1238,10 @@ function CostDisclaimer({ providers }: { providers: string[] }) {
       <div className="max-w-3xl space-y-1">
         <h2 className="text-sm font-semibold">About cost data</h2>
         <p className="text-muted-foreground text-sm">
-          Dollar costs are reported by the AI provider. Currently only Anthropic
-          (Claude) reports cost data. For other providers, use token counts to
-          estimate costs. Token counts are always available regardless of
-          provider.
+          Dollar costs are reported by the AI provider. Cost data is currently
+          available for Claude Code and Cursor. For providers without cost data,
+          use token counts to estimate costs. Token counts are always available
+          regardless of provider.
         </p>
         <p className="text-muted-foreground pt-1 text-sm">
           Missing cost data for your provider?{" "}

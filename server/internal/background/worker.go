@@ -266,7 +266,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FreeTierReportingUsageMetrics)
-	temporalWorker.RegisterActivity(activities.ListCursorIntegrationConfigs)
+	temporalWorker.RegisterActivity(activities.ListCursorAIIntegrationConfigs)
 	temporalWorker.RegisterActivity(activities.PollCursorUsageEventsPage)
 	temporalWorker.RegisterActivity(activities.DeduplicateAndWriteCursorEvents)
 	temporalWorker.RegisterActivity(activities.UpdateCursorPollWatermark)

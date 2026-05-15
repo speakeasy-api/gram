@@ -4,6 +4,7 @@
 
 import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
+import { AiIntegrations } from "./aiintegrations.js";
 import { Assets } from "./assets.js";
 import { AssistantMemories } from "./assistantmemories.js";
 import { Assistants } from "./assistants.js";
@@ -12,7 +13,6 @@ import { Auth } from "./auth.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
 import { Collections } from "./collections.js";
-import { CursorIntegration } from "./cursorintegration.js";
 import { Deployments } from "./deployments.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
@@ -54,6 +54,11 @@ export class Gram extends ClientSDK {
     return (this._access ??= new Access(this._options));
   }
 
+  private _aiIntegrations?: AiIntegrations;
+  get aiIntegrations(): AiIntegrations {
+    return (this._aiIntegrations ??= new AiIntegrations(this._options));
+  }
+
   private _assets?: Assets;
   get assets(): Assets {
     return (this._assets ??= new Assets(this._options));
@@ -92,11 +97,6 @@ export class Gram extends ClientSDK {
   private _collections?: Collections;
   get collections(): Collections {
     return (this._collections ??= new Collections(this._options));
-  }
-
-  private _cursorIntegration?: CursorIntegration;
-  get cursorIntegration(): CursorIntegration {
-    return (this._cursorIntegration ??= new CursorIntegration(this._options));
   }
 
   private _deployments?: Deployments;
