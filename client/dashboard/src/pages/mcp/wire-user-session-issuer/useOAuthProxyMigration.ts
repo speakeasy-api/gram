@@ -184,7 +184,7 @@ export function useOAuthProxyMigration(
       cloneCallbackConfirmed: false,
       manualClientId: "",
       manualClientSecret: "",
-      manualClientName: "Gram",
+      manualClientName: "Speakeasy",
     }),
     [defaults],
   );
@@ -460,7 +460,7 @@ export function useOAuthProxyMigration(
                   registerRemoteSessionIssuerForm: {
                     remoteSessionIssuerId: existingRemoteIssuer.id,
                     userSessionIssuerId: existingUserIssuer.id,
-                    clientName: state.form.manualClientName || "Gram",
+                    clientName: state.form.manualClientName || "Speakeasy",
                     // RFC 7591 issuers (e.g. Notion) reject a registration
                     // request with no redirect_uris. Send Gram's
                     // user-session callback so the issued client is usable
