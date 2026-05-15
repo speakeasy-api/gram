@@ -32,6 +32,12 @@ type ProcessAssistantThreadResult struct {
 	RuntimeActive     bool
 	RetryAdmission    bool
 	ProcessedAnyEvent bool
+	// BootstrappedRuntime is true when this run brought the v2 runtime row
+	// from `starting` to `active`. Cold v2 admit only fans out the first
+	// pending thread to avoid two thread workflows racing the Fly machine
+	// launch; the workflow signals the coordinator on this flag so the
+	// remaining pending threads get admitted against the now-active row.
+	BootstrappedRuntime bool
 }
 
 type ExpireAssistantThreadRuntimeInput struct {
@@ -162,12 +168,13 @@ func (a *ProcessAssistantThread) Do(ctx context.Context, input ProcessAssistantT
 		return nil, fmt.Errorf("process assistant thread: %w", err)
 	}
 	out := &ProcessAssistantThreadResult{
-		AssistantID:       result.AssistantID.String(),
-		WarmUntil:         "",
-		WarmTTLSeconds:    result.WarmTTLSeconds,
-		RuntimeActive:     result.RuntimeActive,
-		RetryAdmission:    result.RetryAdmission,
-		ProcessedAnyEvent: result.ProcessedAnyEvent,
+		AssistantID:         result.AssistantID.String(),
+		WarmUntil:           "",
+		WarmTTLSeconds:      result.WarmTTLSeconds,
+		RuntimeActive:       result.RuntimeActive,
+		RetryAdmission:      result.RetryAdmission,
+		ProcessedAnyEvent:   result.ProcessedAnyEvent,
+		BootstrappedRuntime: result.BootstrappedRuntime,
 	}
 	if !result.WarmUntil.IsZero() {
 		out.WarmUntil = result.WarmUntil.UTC().Format(time.RFC3339Nano)

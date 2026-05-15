@@ -1,8 +1,8 @@
 mod clip;
 mod compaction;
 mod errors;
+mod gram_client;
 mod http_layer;
-mod idempotency;
 mod runtime;
 mod server;
 mod tools;
@@ -14,6 +14,8 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
+use crate::server::ServeConfig;
+
 #[derive(Parser, Debug)]
 #[command(name = "gram-assistant-runner", version)]
 struct Cli {
@@ -23,10 +25,29 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Mode {
-    /// Run the HTTP server that hosts /configure and /turn.
+    /// Run the HTTP server hosting `/threads/{thread_id}/turn` and `/state`.
+    /// One VM per assistant; per-thread state is created lazily on first
+    /// /turn via the bootstrap callback to the management API.
     Serve {
         #[arg(long, default_value = "0.0.0.0:8081", env = "GRAM_RUNNER_ADDR")]
         addr: SocketAddr,
+
+        /// The assistant id this VM serves. Stamped into /state for the
+        /// reaper's belt-and-suspenders identity check.
+        #[arg(long, env = "GRAM_ASSISTANT_ID")]
+        assistant_id: String,
+
+        /// Base URL of the management API the runner calls back into for
+        /// bootstrap, completions, and MCP traffic.
+        #[arg(long, env = "GRAM_SERVER_URL")]
+        server_url: String,
+
+        /// Initial bearer token. The first /turn rotates it; included only
+        /// to satisfy the bootstrap call before any /turn lands. In normal
+        /// admit the backend stamps an empty value here and the very first
+        /// /turn brings the live token.
+        #[arg(long, env = "GRAM_INITIAL_TOKEN", default_value = "")]
+        initial_token: String,
     },
 }
 
@@ -36,7 +57,19 @@ async fn main() -> ExitCode {
 
     let cli = Cli::parse();
     let result = match cli.mode {
-        Mode::Serve { addr } => server::serve(addr).await.map_err(|e| e.to_string()),
+        Mode::Serve {
+            addr,
+            assistant_id,
+            server_url,
+            initial_token,
+        } => server::serve(ServeConfig {
+            addr,
+            assistant_id,
+            server_url,
+            initial_token,
+        })
+        .await
+        .map_err(|e| e.to_string()),
     };
 
     match result {
@@ -49,9 +82,6 @@ async fn main() -> ExitCode {
 }
 
 fn init_tracing() {
-    // Route tracing events (including agentkit's TracingReporter output) to
-    // stderr so they flow through the guest's serial console into the
-    // `assistant-runtime` log. RUST_LOG tunes the filter; default shows info+.
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
