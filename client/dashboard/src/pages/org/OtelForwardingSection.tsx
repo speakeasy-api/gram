@@ -175,7 +175,7 @@ export function OtelForwardingSection() {
           <Label htmlFor="otel-forwarding-url">Endpoint URL</Label>
           <Input
             id="otel-forwarding-url"
-            placeholder="https://collector.example.com/v1/logs"
+            placeholder="https://collector.example.com"
             value={url}
             onChange={setUrl}
             disabled={isLoading || isMutating}

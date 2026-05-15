@@ -52,6 +52,21 @@ func GetRiskPolicyStatusRiskPath() string {
 	return "/rpc/risk.policies.status"
 }
 
+// ListShadowMCPApprovalsRiskPath returns the URL path to the risk service listShadowMCPApprovals HTTP endpoint.
+func ListShadowMCPApprovalsRiskPath() string {
+	return "/rpc/risk.approvals.list"
+}
+
+// ApproveShadowMCPRiskPath returns the URL path to the risk service approveShadowMCP HTTP endpoint.
+func ApproveShadowMCPRiskPath() string {
+	return "/rpc/risk.approvals.create"
+}
+
+// RevokeShadowMCPApprovalRiskPath returns the URL path to the risk service revokeShadowMCPApproval HTTP endpoint.
+func RevokeShadowMCPApprovalRiskPath() string {
+	return "/rpc/risk.approvals.delete"
+}
+
 // TriggerRiskAnalysisRiskPath returns the URL path to the risk service triggerRiskAnalysis HTTP endpoint.
 func TriggerRiskAnalysisRiskPath() string {
 	return "/rpc/risk.policies.trigger"

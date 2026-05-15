@@ -295,6 +295,96 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "status")
 	})
 
+	Method("listShadowMCPApprovals", func() {
+		Description("List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("policy_id", String, "The risk policy ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("policy_id")
+		})
+
+		Result(ListShadowMCPApprovalsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.approvals.list")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("policy_id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listShadowMCPApprovals")
+		Meta("openapi:extension:x-speakeasy-group", "risk.approvals")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListShadowMCPApprovals"}`)
+	})
+
+	Method("approveShadowMCP", func() {
+		Description("Approve a shadow-MCP server so the named policy stops blocking calls to it. `match` is the same opaque server identifier surfaced in `RiskResult.match` — typically a server URL, stdio command, or `mcp__<server>__` prefix.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("policy_id", String, "The risk policy ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("match", String, "The MCP server identifier to approve.")
+			Attribute("server_name", String, "Display name of the MCP server (optional, for UI).")
+			Required("policy_id", "match")
+		})
+
+		Result(shared.ShadowMCPApproval)
+
+		HTTP(func() {
+			POST("/rpc/risk.approvals.create")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "approveShadowMCP")
+		Meta("openapi:extension:x-speakeasy-group", "risk.approvals")
+		Meta("openapi:extension:x-speakeasy-name-override", "create")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskApproveShadowMCP", "type": "mutation"}`)
+	})
+
+	Method("revokeShadowMCPApproval", func() {
+		Description("Remove a previously-approved shadow-MCP server for a policy.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("policy_id", String, "The risk policy ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("match", String, "The MCP server identifier to revoke — exactly the value used to approve.")
+			Required("policy_id", "match")
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/risk.approvals.delete")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("policy_id")
+			Param("match")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "revokeShadowMCPApproval")
+		Meta("openapi:extension:x-speakeasy-group", "risk.approvals")
+		Meta("openapi:extension:x-speakeasy-name-override", "delete")
+	})
+
 	Method("triggerRiskAnalysis", func() {
 		Description("Manually trigger risk analysis for a policy, starting or signaling the drain workflow.")
 
@@ -343,4 +433,9 @@ var ListRiskResultsByChatResult = Type("ListRiskResultsByChatResult", func() {
 	Attribute("chats", ArrayOf(shared.RiskChatSummary), "Risk results grouped by chat.")
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 	Required("chats")
+})
+
+var ListShadowMCPApprovalsResult = Type("ListShadowMCPApprovalsResult", func() {
+	Attribute("approvals", ArrayOf(shared.ShadowMCPApproval), "The approved shadow-MCP servers for the policy (URL- or command-keyed).")
+	Required("approvals")
 })
