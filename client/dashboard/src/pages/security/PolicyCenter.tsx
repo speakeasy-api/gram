@@ -49,7 +49,6 @@ import {
   useRiskPoliciesUpdateMutation,
   useRiskPoliciesDeleteMutation,
   useRiskPoliciesTriggerMutation,
-  useRiskCapabilities,
   invalidateAllRiskListPolicies,
 } from "@gram/client/react-query/index.js";
 import {
@@ -164,10 +163,7 @@ export default function PolicyCenter() {
 function PolicyCenterContent() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useRiskListPolicies();
-  const { data: riskCapabilities, isLoading: isCapabilitiesLoading } =
-    useRiskCapabilities();
   const policies = data?.policies ?? [];
-  const piClassifierEnabled = riskCapabilities?.piClassifierEnabled === true;
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<RiskPolicy | null>(null);
@@ -179,9 +175,6 @@ function PolicyCenterContent() {
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
   const [formAutoName, setFormAutoName] = useState(true);
   const [formUserMessage, setFormUserMessage] = useState("");
-  const [formPromptInjectionRules, setFormPromptInjectionRules] = useState<
-    Set<string>
-  >(new Set<string>());
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
@@ -220,7 +213,6 @@ function PolicyCenterContent() {
     setFormAction("flag");
     setFormAutoName(true);
     setFormUserMessage("");
-    setFormPromptInjectionRules(new Set<string>());
     setSheetOpen(true);
   };
 
@@ -234,9 +226,6 @@ function PolicyCenterContent() {
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
     setFormUserMessage(policy.userMessage ?? "");
-    setFormPromptInjectionRules(
-      new Set<string>(policy.promptInjectionRules ?? []),
-    );
     setSheetOpen(true);
   };
 
@@ -303,7 +292,7 @@ function PolicyCenterContent() {
     });
   };
 
-  if (isLoading || isCapabilitiesLoading) {
+  if (isLoading) {
     return (
       <Page>
         <Page.Header>
@@ -509,9 +498,6 @@ function PolicyCenterContent() {
                 setFormAutoName={setFormAutoName}
                 formUserMessage={formUserMessage}
                 setFormUserMessage={setFormUserMessage}
-                formPromptInjectionRules={formPromptInjectionRules}
-                setFormPromptInjectionRules={setFormPromptInjectionRules}
-                piClassifierEnabled={piClassifierEnabled}
               />
             </div>
             <SheetFooter className="px-6 pb-6">
@@ -577,9 +563,6 @@ function PolicySheetBody({
   setFormAutoName,
   formUserMessage,
   setFormUserMessage,
-  formPromptInjectionRules,
-  setFormPromptInjectionRules,
-  piClassifierEnabled,
 }: {
   formName: string;
   setFormName: (v: string) => void;
@@ -593,9 +576,6 @@ function PolicySheetBody({
   setFormAutoName: (v: boolean) => void;
   formUserMessage: string;
   setFormUserMessage: (v: string) => void;
-  formPromptInjectionRules: Set<string>;
-  setFormPromptInjectionRules: (v: Set<string>) => void;
-  piClassifierEnabled: boolean;
 }) {
   const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
     null,
@@ -711,71 +691,29 @@ function PolicySheetBody({
                   />
                 </div>
 
-                {/* Expanded rules list */}
+                {/* Expanded rules list — category-level toggle is the only
+                    user-facing control; sub-rules ride along with it. */}
                 {isAvailable && isExpanded && rules.length > 0 && (
                   <div className="bg-muted/30 border-border border-t px-4 py-2">
                     <div className="space-y-2 py-1">
-                      {rules.map((rule) => {
-                        // Only the prompt_injection category supports per-rule
-                        // selection today; heuristics are the always-on
-                        // baseline and the listed rules are opt-in augments.
-                        // Other categories continue to bundle all rules under
-                        // the category-level checkbox.
-                        const interactive = cat === "prompt_injection";
-                        const checked = interactive
-                          ? selectedCategories.has(cat) &&
-                            formPromptInjectionRules.has(rule.id)
-                          : selectedCategories.has(cat);
-                        const isClassifierRule =
-                          rule.id === "deberta-v3-classifier";
-                        const isRuleAvailable =
-                          !isClassifierRule || piClassifierEnabled;
-                        return (
-                          <div
-                            key={rule.id}
-                            className="flex items-center gap-3 py-1 pl-8"
+                      {rules.map((rule) => (
+                        <div
+                          key={rule.id}
+                          className="flex items-center gap-3 py-1 pl-8"
+                        >
+                          <Checkbox
+                            id={rule.id}
+                            checked={selectedCategories.has(cat)}
+                            disabled
+                          />
+                          <label
+                            htmlFor={rule.id}
+                            className="text-muted-foreground text-xs"
                           >
-                            <Checkbox
-                              id={rule.id}
-                              checked={checked}
-                              disabled={
-                                !interactive ||
-                                !selectedCategories.has(cat) ||
-                                !isRuleAvailable
-                              }
-                              onCheckedChange={
-                                interactive
-                                  ? (next) => {
-                                      const updated = new Set(
-                                        formPromptInjectionRules,
-                                      );
-                                      if (next) {
-                                        updated.add(rule.id);
-                                      } else {
-                                        updated.delete(rule.id);
-                                      }
-                                      setFormPromptInjectionRules(updated);
-                                    }
-                                  : undefined
-                              }
-                            />
-                            <label
-                              htmlFor={rule.id}
-                              className={cn(
-                                "text-muted-foreground text-xs",
-                                !isRuleAvailable && "cursor-not-allowed",
-                              )}
-                            >
-                              {rule.title}
-                            </label>
-                            {!isRuleAvailable && (
-                              <Badge variant="outline" className="text-[10px]">
-                                Unavailable
-                              </Badge>
-                            )}
-                          </div>
-                        );
-                      })}
+                            {rule.title}
+                          </label>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -839,21 +777,24 @@ function PolicySheetBody({
         </RadioGroup>
       </div>
 
-      {/* Custom message */}
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">Custom Message</Label>
-        <p className="text-muted-foreground text-xs">
-          {formAction === "block"
-            ? "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message."
-            : "Shown alongside flagged findings in the dashboard. Leave blank to use the default message."}
-        </p>
-        <TextArea
-          value={formUserMessage}
-          onChange={setFormUserMessage}
-          placeholder="e.g. This action was blocked by your organization's security policy. Contact your admin for help."
-          rows={3}
-        />
-      </div>
+      {/* Custom message — only relevant for block-action policies that
+          surface a user-facing reason at deny time. Flag-action policies
+          record findings silently, so no message is needed. */}
+      {formAction === "block" && (
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Custom Message</Label>
+          <p className="text-muted-foreground text-xs">
+            Shown to the user when this policy blocks a tool call or prompt.
+            Leave blank to use the default message.
+          </p>
+          <TextArea
+            value={formUserMessage}
+            onChange={setFormUserMessage}
+            placeholder="e.g. This action was blocked by your organization's security policy. Contact your admin for help."
+            rows={3}
+          />
+        </div>
+      )}
 
       {/* Enabled toggle */}
       <div className="flex items-center justify-between">
