@@ -12,6 +12,7 @@ import { Auth } from "./auth.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
 import { Collections } from "./collections.js";
+import { CursorIntegration } from "./cursorintegration.js";
 import { Deployments } from "./deployments.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
@@ -91,6 +92,11 @@ export class Gram extends ClientSDK {
   private _collections?: Collections;
   get collections(): Collections {
     return (this._collections ??= new Collections(this._options));
+  }
+
+  private _cursorIntegration?: CursorIntegration;
+  get cursorIntegration(): CursorIntegration {
+    return (this._cursorIntegration ??= new CursorIntegration(this._options));
   }
 
   private _deployments?: Deployments;

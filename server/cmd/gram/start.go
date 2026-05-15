@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/collections"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/cursorintegration"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -86,6 +87,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -817,6 +819,7 @@ func newStartCommand() *cli.Command {
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
 			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
 
+			cursorIntegrationClient := cursorintegration.NewClient(logger, db, encryptionClient)
 			otelForwardClient := otelforwarding.NewClient(logger, db, encryptionClient, cache.NewRedisCacheAdapter(redisClient))
 			otelForwarder := otelforwarding.NewForwarder(logger, tracerProvider, meterProvider, guardianPolicy)
 			otelForwarder.Start(ctx)
@@ -937,6 +940,7 @@ func newStartCommand() *cli.Command {
 				memorySvc,
 			))
 			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, riskScanner, shadowMCPClient, chatWriter))
+			cursorintegration.Attach(mux, cursorintegration.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, cursorIntegrationClient))
 			otelforwarding.Attach(mux, otelforwarding.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, otelForwardClient))
 			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			auth.Attach(mux, auth.NewService(
@@ -1074,6 +1078,7 @@ func newStartCommand() *cli.Command {
 						RagService:          ragService,
 						MCPRegistryClient:   mcpRegistryClient,
 						TelemetryLogger:     telemLogger,
+						TelemetryRepo:       telemetryrepo.New(chDB),
 						TriggersApp:         triggerApp,
 						CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
 						AssistantsCore:      assistantsCore,

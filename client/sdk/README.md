@@ -218,6 +218,12 @@ run();
 * [listServers](docs/sdks/collections/README.md#listservers) - listServers collections
 * [update](docs/sdks/collections/README.md#update) - update collections
 
+### [CursorIntegration](docs/sdks/cursorintegration/README.md)
+
+* [deleteConfig](docs/sdks/cursorintegration/README.md#deleteconfig) - deleteConfig cursorIntegration
+* [getConfig](docs/sdks/cursorintegration/README.md#getconfig) - getConfig cursorIntegration
+* [upsertConfig](docs/sdks/cursorintegration/README.md#upsertconfig) - upsertConfig cursorIntegration
+
 ### [Deployments](docs/sdks/deployments/README.md)
 
 * [active](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
@@ -580,6 +586,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`collectionsList`](docs/sdks/collections/README.md#list) - list collections
 - [`collectionsListServers`](docs/sdks/collections/README.md#listservers) - listServers collections
 - [`collectionsUpdate`](docs/sdks/collections/README.md#update) - update collections
+- [`cursorIntegrationDeleteConfig`](docs/sdks/cursorintegration/README.md#deleteconfig) - deleteConfig cursorIntegration
+- [`cursorIntegrationGetConfig`](docs/sdks/cursorintegration/README.md#getconfig) - getConfig cursorIntegration
+- [`cursorIntegrationUpsertConfig`](docs/sdks/cursorintegration/README.md#upsertconfig) - upsertConfig cursorIntegration
 - [`deploymentsActive`](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 - [`deploymentsCreate`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`deploymentsEvolveDeployment`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
@@ -831,6 +840,8 @@ To learn about this feature and how to get started, check
 - [`useCreateTopUpCheckoutMutation`](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
 - [`useCreateTriggerMutation`](docs/sdks/triggers/README.md#create) - createTriggerInstance triggers
 - [`useCreateUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#create) - createUserSessionIssuer userSessionIssuers
+- [`useCursorIntegrationConfig`](docs/sdks/cursorintegration/README.md#getconfig) - getConfig cursorIntegration
+- [`useDeleteCursorIntegrationConfigMutation`](docs/sdks/cursorintegration/README.md#deleteconfig) - deleteConfig cursorIntegration
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
@@ -1006,6 +1017,7 @@ To learn about this feature and how to get started, check
 - [`useUploadImageMutation`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 - [`useUpsertAllowedOriginMutation`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
+- [`useUpsertCursorIntegrationConfigMutation`](docs/sdks/cursorintegration/README.md#upsertconfig) - upsertConfig cursorIntegration
 - [`useUpsertGlobalVariationMutation`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
 - [`useUpsertOtelForwardingConfigMutation`](docs/sdks/otelforwarding/README.md#upsertconfig) - upsertConfig otelForwarding
 - [`useUserSessionClient`](docs/sdks/usersessionclients/README.md#get) - getUserSessionClient userSessionClients

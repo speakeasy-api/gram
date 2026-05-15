@@ -2196,6 +2196,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS otel_forwarding_configs_org_project_key
   ON otel_forwarding_configs (organization_id, project_id)
   WHERE project_id IS NOT NULL AND deleted IS FALSE;
 
+-- Cursor integration configs: encrypted team Admin API keys used by the
+-- hourly polling workflow to ingest usage and cost metrics.
+CREATE TABLE IF NOT EXISTS cursor_integration_configs (
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  api_key_encrypted TEXT,
+  enabled boolean NOT NULL DEFAULT true,
+  last_polled_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT cursor_integration_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS cursor_integration_configs_org_project_key
+  ON cursor_integration_configs (organization_id, project_id)
+  WHERE deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS principal_grants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,

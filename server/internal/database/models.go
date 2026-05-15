@@ -269,6 +269,19 @@ type ChatUserFeedback struct {
 	CreatedAt           pgtype.Timestamptz
 }
 
+type CursorIntegrationConfig struct {
+	CreatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	ApiKeyEncrypted pgtype.Text
+	Enabled         bool
+	LastPolledAt    pgtype.Timestamptz
+	ID              uuid.UUID
+	Deleted         bool
+}
+
 type CustomDomain struct {
 	ID             uuid.UUID
 	OrganizationID string

@@ -24,6 +24,7 @@ import (
 	chatc "github.com/speakeasy-api/gram/server/gen/http/chat/client"
 	chatsessionsc "github.com/speakeasy-api/gram/server/gen/http/chat_sessions/client"
 	collectionsc "github.com/speakeasy-api/gram/server/gen/http/collections/client"
+	cursorintegrationc "github.com/speakeasy-api/gram/server/gen/http/cursor_integration/client"
 	deploymentsc "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
 	domainsc "github.com/speakeasy-api/gram/server/gen/http/domains/client"
 	environmentsc "github.com/speakeasy-api/gram/server/gen/http/environments/client"
@@ -79,6 +80,7 @@ func UsageCommands() []string {
 		"auth (callback|login|switch-scopes|logout|register|info)",
 		"chat (list-chats|load-chat|generate-title|credit-usage|list-chats-with-resolutions|delete-chat|submit-feedback)",
 		"chat-sessions (create|revoke)",
+		"cursor-integration (get-config|upsert-config|delete-config)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"domains (get-domain|create-domain|delete-domain)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
@@ -455,6 +457,24 @@ func ParseEndpoint(
 		chatSessionsRevokeSessionTokenFlag     = chatSessionsRevokeFlags.String("session-token", "", "")
 		chatSessionsRevokeApikeyTokenFlag      = chatSessionsRevokeFlags.String("apikey-token", "", "")
 		chatSessionsRevokeProjectSlugInputFlag = chatSessionsRevokeFlags.String("project-slug-input", "", "")
+
+		cursorIntegrationFlags = flag.NewFlagSet("cursor-integration", flag.ContinueOnError)
+
+		cursorIntegrationGetConfigFlags                = flag.NewFlagSet("get-config", flag.ExitOnError)
+		cursorIntegrationGetConfigApikeyTokenFlag      = cursorIntegrationGetConfigFlags.String("apikey-token", "", "")
+		cursorIntegrationGetConfigSessionTokenFlag     = cursorIntegrationGetConfigFlags.String("session-token", "", "")
+		cursorIntegrationGetConfigProjectSlugInputFlag = cursorIntegrationGetConfigFlags.String("project-slug-input", "", "")
+
+		cursorIntegrationUpsertConfigFlags                = flag.NewFlagSet("upsert-config", flag.ExitOnError)
+		cursorIntegrationUpsertConfigBodyFlag             = cursorIntegrationUpsertConfigFlags.String("body", "REQUIRED", "")
+		cursorIntegrationUpsertConfigApikeyTokenFlag      = cursorIntegrationUpsertConfigFlags.String("apikey-token", "", "")
+		cursorIntegrationUpsertConfigSessionTokenFlag     = cursorIntegrationUpsertConfigFlags.String("session-token", "", "")
+		cursorIntegrationUpsertConfigProjectSlugInputFlag = cursorIntegrationUpsertConfigFlags.String("project-slug-input", "", "")
+
+		cursorIntegrationDeleteConfigFlags                = flag.NewFlagSet("delete-config", flag.ExitOnError)
+		cursorIntegrationDeleteConfigApikeyTokenFlag      = cursorIntegrationDeleteConfigFlags.String("apikey-token", "", "")
+		cursorIntegrationDeleteConfigSessionTokenFlag     = cursorIntegrationDeleteConfigFlags.String("session-token", "", "")
+		cursorIntegrationDeleteConfigProjectSlugInputFlag = cursorIntegrationDeleteConfigFlags.String("project-slug-input", "", "")
 
 		deploymentsFlags = flag.NewFlagSet("deployments", flag.ContinueOnError)
 
@@ -1609,6 +1629,11 @@ func ParseEndpoint(
 	chatSessionsCreateFlags.Usage = chatSessionsCreateUsage
 	chatSessionsRevokeFlags.Usage = chatSessionsRevokeUsage
 
+	cursorIntegrationFlags.Usage = cursorIntegrationUsage
+	cursorIntegrationGetConfigFlags.Usage = cursorIntegrationGetConfigUsage
+	cursorIntegrationUpsertConfigFlags.Usage = cursorIntegrationUpsertConfigUsage
+	cursorIntegrationDeleteConfigFlags.Usage = cursorIntegrationDeleteConfigUsage
+
 	deploymentsFlags.Usage = deploymentsUsage
 	deploymentsGetDeploymentFlags.Usage = deploymentsGetDeploymentUsage
 	deploymentsGetLatestDeploymentFlags.Usage = deploymentsGetLatestDeploymentUsage
@@ -1900,6 +1925,8 @@ func ParseEndpoint(
 			svcf = chatFlags
 		case "chat-sessions":
 			svcf = chatSessionsFlags
+		case "cursor-integration":
+			svcf = cursorIntegrationFlags
 		case "deployments":
 			svcf = deploymentsFlags
 		case "domains":
@@ -2191,6 +2218,19 @@ func ParseEndpoint(
 
 			case "revoke":
 				epf = chatSessionsRevokeFlags
+
+			}
+
+		case "cursor-integration":
+			switch epn {
+			case "get-config":
+				epf = cursorIntegrationGetConfigFlags
+
+			case "upsert-config":
+				epf = cursorIntegrationUpsertConfigFlags
+
+			case "delete-config":
+				epf = cursorIntegrationDeleteConfigFlags
 
 			}
 
@@ -3127,6 +3167,19 @@ func ParseEndpoint(
 			case "revoke":
 				endpoint = c.Revoke()
 				data, err = chatsessionsc.BuildRevokePayload(*chatSessionsRevokeTokenFlag, *chatSessionsRevokeSessionTokenFlag, *chatSessionsRevokeApikeyTokenFlag, *chatSessionsRevokeProjectSlugInputFlag)
+			}
+		case "cursor-integration":
+			c := cursorintegrationc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-config":
+				endpoint = c.GetConfig()
+				data, err = cursorintegrationc.BuildGetConfigPayload(*cursorIntegrationGetConfigApikeyTokenFlag, *cursorIntegrationGetConfigSessionTokenFlag, *cursorIntegrationGetConfigProjectSlugInputFlag)
+			case "upsert-config":
+				endpoint = c.UpsertConfig()
+				data, err = cursorintegrationc.BuildUpsertConfigPayload(*cursorIntegrationUpsertConfigBodyFlag, *cursorIntegrationUpsertConfigApikeyTokenFlag, *cursorIntegrationUpsertConfigSessionTokenFlag, *cursorIntegrationUpsertConfigProjectSlugInputFlag)
+			case "delete-config":
+				endpoint = c.DeleteConfig()
+				data, err = cursorintegrationc.BuildDeleteConfigPayload(*cursorIntegrationDeleteConfigApikeyTokenFlag, *cursorIntegrationDeleteConfigSessionTokenFlag, *cursorIntegrationDeleteConfigProjectSlugInputFlag)
 			}
 		case "deployments":
 			c := deploymentsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -5238,6 +5291,87 @@ func chatSessionsRevokeUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat-sessions revoke --token \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// cursorIntegrationUsage displays the usage of the cursor-integration command
+// and its subcommands.
+func cursorIntegrationUsage() {
+	fmt.Fprintln(os.Stderr, `Manage per-project Cursor Admin API usage polling.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] cursor-integration COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-config: Get the current project's Cursor integration config. Returns an empty config (enabled=false, has_api_key=false) when none is set.`)
+	fmt.Fprintln(os.Stderr, `    upsert-config: Create or update the current project's Cursor integration config.`)
+	fmt.Fprintln(os.Stderr, `    delete-config: Delete the current project's Cursor integration config.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s cursor-integration COMMAND --help\n", os.Args[0])
+}
+func cursorIntegrationGetConfigUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] cursor-integration get-config", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the current project's Cursor integration config. Returns an empty config (enabled=false, has_api_key=false) when none is set.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "cursor-integration get-config --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func cursorIntegrationUpsertConfigUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] cursor-integration upsert-config", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or update the current project's Cursor integration config.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "cursor-integration upsert-config --body '{\n      \"api_key\": \"abc123\",\n      \"enabled\": false\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func cursorIntegrationDeleteConfigUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] cursor-integration delete-config", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete the current project's Cursor integration config.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "cursor-integration delete-config --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // deploymentsUsage displays the usage of the deployments command and its

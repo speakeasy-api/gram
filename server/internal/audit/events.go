@@ -18,6 +18,7 @@ const (
 	subjectTypeEnvironment        subjectType = "environment"
 	subjectTypeMcpEndpoint        subjectType = "mcp_endpoint"
 	subjectTypeMcpServer          subjectType = "mcp_server"
+	subjectTypeCursorIntegration  subjectType = "cursor_integration_config"
 	subjectTypeOtelForwarding     subjectType = "otel_forwarding_config"
 	subjectTypePlugin             subjectType = "plugin"
 	subjectTypeProject            subjectType = "project"

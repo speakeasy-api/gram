@@ -15,6 +15,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/chat"
 	_ "github.com/speakeasy-api/gram/server/design/chatsessions"
 	_ "github.com/speakeasy-api/gram/server/design/collections"
+	_ "github.com/speakeasy-api/gram/server/design/cursorintegration"
 	_ "github.com/speakeasy-api/gram/server/design/deployments"
 	_ "github.com/speakeasy-api/gram/server/design/domains"
 	_ "github.com/speakeasy-api/gram/server/design/environments"

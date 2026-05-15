@@ -309,7 +309,7 @@ export function InsightsAgentsContent() {
             ...u,
             totalTokens: uTokens,
             displayName: member?.name ?? u.userId,
-            email: member?.email ?? "",
+            email: member?.email ?? (u.userId.includes("@") ? u.userId : ""),
             photoUrl: member?.photoUrl ?? null,
             costPerSession: u.totalChats > 0 ? u.totalCost / u.totalChats : 0,
             costShare: totalCost > 0 ? (u.totalCost / totalCost) * 100 : 0,
@@ -535,7 +535,7 @@ export function InsightsAgentsContent() {
                   value={filteredActiveUsers}
                   icon="user"
                   accentColor="green"
-                  subtext={`of ${(membersData?.members ?? []).length} org members`}
+                  subtext={`includes unmatched users outside org members`}
                 />
                 <MetricCard
                   title="AI Clients"
@@ -1038,13 +1038,11 @@ function EmployeeCostTable({
     <section className="bg-card flex flex-col gap-4 rounded-xl border p-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="font-semibold">
-            {isCost ? "Cost" : "Usage"} by Employee
-          </h3>
+          <h3 className="font-semibold">{isCost ? "Cost" : "Usage"} by User</h3>
           <p className="text-muted-foreground text-xs">
             {clientFilter !== "all" &&
               `Filtered to ${formatPlatform(clientFilter)} · `}
-            {sortedUsers.length} employee
+            {sortedUsers.length} user
             {sortedUsers.length !== 1 ? "s" : ""}
           </p>
         </div>
@@ -1060,7 +1058,7 @@ function EmployeeCostTable({
                 onSort={handleSort}
                 className="pl-6"
               >
-                Employee
+                User
               </SortableHead>
               <SortableHead
                 field="input"
@@ -1392,7 +1390,7 @@ async function fetchAllUsers(
       telemetrySearchUsers(client, {
         searchUsersPayload: {
           cursor,
-          filter: { from, to, eventSource: "hook" },
+          filter: { from, to },
           limit: 1000,
           sort: "desc",
           userType: "internal",
@@ -1430,7 +1428,6 @@ async function fetchOverview(
         from,
         to,
         includeTimeSeries: true,
-        eventSource: "hook",
         hookSource,
       },
     }),

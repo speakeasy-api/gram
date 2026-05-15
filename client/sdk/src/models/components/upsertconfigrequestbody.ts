@@ -4,32 +4,22 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import {
-  OtelForwardingHeaderInput,
-  OtelForwardingHeaderInput$Outbound,
-  OtelForwardingHeaderInput$outboundSchema,
-} from "./otelforwardingheaderinput.js";
 
 export type UpsertConfigRequestBody = {
   /**
-   * Whether forwarding should be active.
+   * Cursor team Admin API key. Stored encrypted at rest; never returned on reads.
+   */
+  apiKey: string;
+  /**
+   * Whether Cursor usage polling should be active.
    */
   enabled: boolean;
-  /**
-   * URL to forward OTEL payloads to.
-   */
-  endpointUrl: string;
-  /**
-   * Full set of headers to attach. Replaces any existing headers.
-   */
-  headers?: Array<OtelForwardingHeaderInput> | undefined;
 };
 
 /** @internal */
 export type UpsertConfigRequestBody$Outbound = {
+  api_key: string;
   enabled: boolean;
-  endpoint_url: string;
-  headers?: Array<OtelForwardingHeaderInput$Outbound> | undefined;
 };
 
 /** @internal */
@@ -38,13 +28,12 @@ export const UpsertConfigRequestBody$outboundSchema: z.ZodMiniType<
   UpsertConfigRequestBody
 > = z.pipe(
   z.object({
+    apiKey: z.string(),
     enabled: z.boolean(),
-    endpointUrl: z.string(),
-    headers: z.optional(z.array(OtelForwardingHeaderInput$outboundSchema)),
   }),
   z.transform((v) => {
     return remap$(v, {
-      endpointUrl: "endpoint_url",
+      apiKey: "api_key",
     });
   }),
 );
