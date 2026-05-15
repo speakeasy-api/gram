@@ -420,8 +420,13 @@ export function ChallengesTab() {
         <div className="border-border mx-1 h-6 border-l" />
 
         <Select value={principalFilter} onValueChange={setPrincipalFilter}>
-          <SelectTrigger size="sm" className="h-8 w-[180px]">
-            <SelectValue placeholder="All users" />
+          <SelectTrigger
+            size="sm"
+            className="h-8 w-auto max-w-[280px] min-w-fit"
+          >
+            <SelectValue>
+              {principalFilter === "all" ? "All users" : principalFilter}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All users</SelectItem>

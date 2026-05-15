@@ -13,6 +13,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"sync"
+	"time"
 
 	"go.opentelemetry.io/otel/trace"
 )
@@ -23,18 +25,33 @@ const Mode = "mock-workos"
 // Prefix is the URL prefix the dev-idp listener mounts this handler under.
 const Prefix = "/mock-workos"
 
+// passwordlessState holds the in-memory state for a passwordless magic-link
+// session. Ephemeral — only needs to survive long enough for the local-dev
+// user to click the link and complete the code exchange.
+type passwordlessState struct {
+	email       string
+	redirectURI string
+	state       string
+	code        string
+	expiresAt   time.Time
+}
+
 // Handler serves the mock-workos mode's HTTP routes.
 type Handler struct {
 	tracer trace.Tracer
 	logger *slog.Logger
 	db     *sql.DB
+
+	pwlMu       sync.Mutex
+	pwlSessions map[string]*passwordlessState // keyed by session ID
 }
 
 func NewHandler(logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *Handler {
 	return &Handler{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/modes/mockworkos"),
-		logger: logger.With(slog.String("component", "devidp."+Mode)),
-		db:     db,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/modes/mockworkos"),
+		logger:      logger.With(slog.String("component", "devidp."+Mode)),
+		db:          db,
+		pwlSessions: make(map[string]*passwordlessState),
 	}
 }
 

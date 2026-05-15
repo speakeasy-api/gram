@@ -215,6 +215,12 @@ func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, logger *
 	}); err != nil {
 		return nil, fmt.Errorf("link role assignments to user: %w", err)
 	}
+	if err := organizationQueries.LinkRelationshipsToUser(ctx, organizationsrepo.LinkRelationshipsToUserParams{
+		UserID:       conv.ToPGText(gramUserID),
+		WorkosUserID: conv.ToPGText(payload.ID),
+	}); err != nil {
+		return nil, fmt.Errorf("link organization relationships to user: %w", err)
+	}
 	if err := logRoleAssignmentLinkedToDifferentWorkOSUser(ctx, logger, organizationQueries, gramUserID, payload.ID); err != nil {
 		return nil, err
 	}

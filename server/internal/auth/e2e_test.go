@@ -72,9 +72,9 @@ func (m *mockWorkOSFetcher) CreateOrganization(_ context.Context, name, gramOrgI
 	return "workos_org_" + gramOrgID, nil
 }
 
-func (m *mockWorkOSFetcher) CreateOrganizationMembership(_ context.Context, workosUserID, workosOrgID string) error {
+func (m *mockWorkOSFetcher) CreateOrganizationMembership(_ context.Context, workosUserID, workosOrgID, _ string) (string, error) {
 	m.createdMemberships = append(m.createdMemberships, createdMembershipRecord{WorkOSUserID: workosUserID, WorkOSOrgID: workosOrgID})
-	return nil
+	return "om_mock_" + workosUserID, nil
 }
 
 // --- test setup that wires a WorkOSMembershipFetcher into the session manager ---

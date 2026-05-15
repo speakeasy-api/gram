@@ -25,8 +25,6 @@ type Service interface {
 	RevokeInvite(context.Context, *RevokeInvitePayload) (err error)
 	// List pending WorkOS invitations for the active organization.
 	ListInvites(context.Context, *ListInvitesPayload) (res *ListInvitesResult, err error)
-	// Resolve a WorkOS invitation from its token (e.g. accept-flow).
-	GetInviteByToken(context.Context, *GetInviteByTokenPayload) (res *OrganizationInvitationAccept, err error)
 	// List users in the active organization from Gram
 	// organization_user_relationships.
 	ListUsers(context.Context, *ListUsersPayload) (res *ListUsersResult, err error)
@@ -61,7 +59,7 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"get", "sendInvite", "revokeInvite", "listInvites", "getInviteByToken", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession"}
+var MethodNames = [9]string{"get", "sendInvite", "revokeInvite", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession"}
 
 // CreatePortalSessionPayload is the payload type of the organizations service
 // createPortalSession method.
@@ -88,13 +86,6 @@ type DisableWebhooksPayload struct {
 // enableWebhooks method.
 type EnableWebhooksPayload struct {
 	SessionToken *string
-}
-
-// GetInviteByTokenPayload is the payload type of the organizations service
-// getInviteByToken method.
-type GetInviteByTokenPayload struct {
-	// Invitation token from the invite link.
-	Token string
 }
 
 // GetPayload is the payload type of the organizations service get method.
@@ -170,20 +161,6 @@ type OrganizationInvitation struct {
 	UpdatedAt string
 }
 
-// OrganizationInvitationAccept is the result type of the organizations service
-// getInviteByToken method.
-type OrganizationInvitationAccept struct {
-	// Invitee email address.
-	Email string
-	// Invitation lifecycle state.
-	State string
-	// Gram organization display name when the org is linked in Gram; empty if
-	// unknown.
-	OrganizationName string
-	// URL to complete acceptance in WorkOS (may be empty when not actionable).
-	AcceptInvitationURL string
-}
-
 type OrganizationUser struct {
 	// Gram relationship row ID.
 	ID string
@@ -201,6 +178,8 @@ type OrganizationUser struct {
 	WorkosMembershipID *string
 	CreatedAt          string
 	UpdatedAt          string
+	// Timestamp of the user's most recent login.
+	LastLogin *string
 }
 
 // RemoveUserPayload is the payload type of the organizations service
@@ -224,8 +203,8 @@ type RevokeInvitePayload struct {
 type SendInvitePayload struct {
 	// Email address to invite.
 	Email string
-	// Optional WorkOS role slug for the invitee.
-	RoleSlug     *string
+	// Optional role ID for the invitee.
+	RoleID       *string
 	SessionToken *string
 }
 

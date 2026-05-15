@@ -148,4 +148,3 @@ func TestAuthorizeRejectsNonS256Challenge(t *testing.T) {
 	require.Equal(t, "invalid_request", body["error"])
 	require.Contains(t, body["error_description"], "S256")
 }
-

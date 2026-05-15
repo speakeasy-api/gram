@@ -17,8 +17,8 @@ import (
 type SendInviteRequestBody struct {
 	// Email address to invite.
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
-	// Optional WorkOS role slug for the invitee.
-	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
+	// Optional role ID for the invitee.
+	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
 }
 
 // GetResponseBody is the type of the "organizations" service "get" endpoint
@@ -69,20 +69,6 @@ type ListInvitesResponseBody struct {
 	// Pending invitations for the organization only; accepted, expired, and
 	// revoked invitations are omitted.
 	Invitations []*OrganizationInvitationResponseBody `form:"invitations" json:"invitations" xml:"invitations"`
-}
-
-// GetInviteByTokenResponseBody is the type of the "organizations" service
-// "getInviteByToken" endpoint HTTP response body.
-type GetInviteByTokenResponseBody struct {
-	// Invitee email address.
-	Email string `form:"email" json:"email" xml:"email"`
-	// Invitation lifecycle state.
-	State string `form:"state" json:"state" xml:"state"`
-	// Gram organization display name when the org is linked in Gram; empty if
-	// unknown.
-	OrganizationName string `form:"organization_name" json:"organization_name" xml:"organization_name"`
-	// URL to complete acceptance in WorkOS (may be empty when not actionable).
-	AcceptInvitationURL string `form:"accept_invitation_url" json:"accept_invitation_url" xml:"accept_invitation_url"`
 }
 
 // ListUsersResponseBody is the type of the "organizations" service "listUsers"
@@ -820,196 +806,6 @@ type ListInvitesUnexpectedResponseBody struct {
 // service "listInvites" endpoint HTTP response body for the "gateway_error"
 // error.
 type ListInvitesGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetInviteByTokenUnauthorizedResponseBody is the type of the "organizations"
-// service "getInviteByToken" endpoint HTTP response body for the
-// "unauthorized" error.
-type GetInviteByTokenUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetInviteByTokenForbiddenResponseBody is the type of the "organizations"
-// service "getInviteByToken" endpoint HTTP response body for the "forbidden"
-// error.
-type GetInviteByTokenForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetInviteByTokenBadRequestResponseBody is the type of the "organizations"
-// service "getInviteByToken" endpoint HTTP response body for the "bad_request"
-// error.
-type GetInviteByTokenBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetInviteByTokenNotFoundResponseBody is the type of the "organizations"
-// service "getInviteByToken" endpoint HTTP response body for the "not_found"
-// error.
-type GetInviteByTokenNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetInviteByTokenConflictResponseBody is the type of the "organizations"
-// service "getInviteByToken" endpoint HTTP response body for the "conflict"
-// error.
-type GetInviteByTokenConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetInviteByTokenUnsupportedMediaResponseBody is the type of the
-// "organizations" service "getInviteByToken" endpoint HTTP response body for
-// the "unsupported_media" error.
-type GetInviteByTokenUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetInviteByTokenInvalidResponseBody is the type of the "organizations"
-// service "getInviteByToken" endpoint HTTP response body for the "invalid"
-// error.
-type GetInviteByTokenInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetInviteByTokenInvariantViolationResponseBody is the type of the
-// "organizations" service "getInviteByToken" endpoint HTTP response body for
-// the "invariant_violation" error.
-type GetInviteByTokenInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetInviteByTokenUnexpectedResponseBody is the type of the "organizations"
-// service "getInviteByToken" endpoint HTTP response body for the "unexpected"
-// error.
-type GetInviteByTokenUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetInviteByTokenGatewayErrorResponseBody is the type of the "organizations"
-// service "getInviteByToken" endpoint HTTP response body for the
-// "gateway_error" error.
-type GetInviteByTokenGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1999,6 +1795,8 @@ type OrganizationUserResponseBody struct {
 	WorkosMembershipID *string `form:"workos_membership_id,omitempty" json:"workos_membership_id,omitempty" xml:"workos_membership_id,omitempty"`
 	CreatedAt          string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt          string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Timestamp of the user's most recent login.
+	LastLogin *string `form:"last_login,omitempty" json:"last_login,omitempty" xml:"last_login,omitempty"`
 }
 
 // NewGetResponseBody builds the HTTP response body from the result of the
@@ -2049,18 +1847,6 @@ func NewListInvitesResponseBody(res *organizations.ListInvitesResult) *ListInvit
 		}
 	} else {
 		body.Invitations = []*OrganizationInvitationResponseBody{}
-	}
-	return body
-}
-
-// NewGetInviteByTokenResponseBody builds the HTTP response body from the
-// result of the "getInviteByToken" endpoint of the "organizations" service.
-func NewGetInviteByTokenResponseBody(res *organizations.OrganizationInvitationAccept) *GetInviteByTokenResponseBody {
-	body := &GetInviteByTokenResponseBody{
-		Email:               res.Email,
-		State:               res.State,
-		OrganizationName:    res.OrganizationName,
-		AcceptInvitationURL: res.AcceptInvitationURL,
 	}
 	return body
 }
@@ -2646,150 +2432,6 @@ func NewListInvitesUnexpectedResponseBody(res *goa.ServiceError) *ListInvitesUne
 // the result of the "listInvites" endpoint of the "organizations" service.
 func NewListInvitesGatewayErrorResponseBody(res *goa.ServiceError) *ListInvitesGatewayErrorResponseBody {
 	body := &ListInvitesGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetInviteByTokenUnauthorizedResponseBody builds the HTTP response body
-// from the result of the "getInviteByToken" endpoint of the "organizations"
-// service.
-func NewGetInviteByTokenUnauthorizedResponseBody(res *goa.ServiceError) *GetInviteByTokenUnauthorizedResponseBody {
-	body := &GetInviteByTokenUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetInviteByTokenForbiddenResponseBody builds the HTTP response body from
-// the result of the "getInviteByToken" endpoint of the "organizations" service.
-func NewGetInviteByTokenForbiddenResponseBody(res *goa.ServiceError) *GetInviteByTokenForbiddenResponseBody {
-	body := &GetInviteByTokenForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetInviteByTokenBadRequestResponseBody builds the HTTP response body from
-// the result of the "getInviteByToken" endpoint of the "organizations" service.
-func NewGetInviteByTokenBadRequestResponseBody(res *goa.ServiceError) *GetInviteByTokenBadRequestResponseBody {
-	body := &GetInviteByTokenBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetInviteByTokenNotFoundResponseBody builds the HTTP response body from
-// the result of the "getInviteByToken" endpoint of the "organizations" service.
-func NewGetInviteByTokenNotFoundResponseBody(res *goa.ServiceError) *GetInviteByTokenNotFoundResponseBody {
-	body := &GetInviteByTokenNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetInviteByTokenConflictResponseBody builds the HTTP response body from
-// the result of the "getInviteByToken" endpoint of the "organizations" service.
-func NewGetInviteByTokenConflictResponseBody(res *goa.ServiceError) *GetInviteByTokenConflictResponseBody {
-	body := &GetInviteByTokenConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetInviteByTokenUnsupportedMediaResponseBody builds the HTTP response
-// body from the result of the "getInviteByToken" endpoint of the
-// "organizations" service.
-func NewGetInviteByTokenUnsupportedMediaResponseBody(res *goa.ServiceError) *GetInviteByTokenUnsupportedMediaResponseBody {
-	body := &GetInviteByTokenUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetInviteByTokenInvalidResponseBody builds the HTTP response body from
-// the result of the "getInviteByToken" endpoint of the "organizations" service.
-func NewGetInviteByTokenInvalidResponseBody(res *goa.ServiceError) *GetInviteByTokenInvalidResponseBody {
-	body := &GetInviteByTokenInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetInviteByTokenInvariantViolationResponseBody builds the HTTP response
-// body from the result of the "getInviteByToken" endpoint of the
-// "organizations" service.
-func NewGetInviteByTokenInvariantViolationResponseBody(res *goa.ServiceError) *GetInviteByTokenInvariantViolationResponseBody {
-	body := &GetInviteByTokenInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetInviteByTokenUnexpectedResponseBody builds the HTTP response body from
-// the result of the "getInviteByToken" endpoint of the "organizations" service.
-func NewGetInviteByTokenUnexpectedResponseBody(res *goa.ServiceError) *GetInviteByTokenUnexpectedResponseBody {
-	body := &GetInviteByTokenUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetInviteByTokenGatewayErrorResponseBody builds the HTTP response body
-// from the result of the "getInviteByToken" endpoint of the "organizations"
-// service.
-func NewGetInviteByTokenGatewayErrorResponseBody(res *goa.ServiceError) *GetInviteByTokenGatewayErrorResponseBody {
-	body := &GetInviteByTokenGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3528,8 +3170,8 @@ func NewGetPayload(sessionToken *string) *organizations.GetPayload {
 // payload.
 func NewSendInvitePayload(body *SendInviteRequestBody, sessionToken *string) *organizations.SendInvitePayload {
 	v := &organizations.SendInvitePayload{
-		Email:    *body.Email,
-		RoleSlug: body.RoleSlug,
+		Email:  *body.Email,
+		RoleID: body.RoleID,
 	}
 	v.SessionToken = sessionToken
 
@@ -3551,15 +3193,6 @@ func NewRevokeInvitePayload(invitationID string, sessionToken *string) *organiza
 func NewListInvitesPayload(sessionToken *string) *organizations.ListInvitesPayload {
 	v := &organizations.ListInvitesPayload{}
 	v.SessionToken = sessionToken
-
-	return v
-}
-
-// NewGetInviteByTokenPayload builds a organizations service getInviteByToken
-// endpoint payload.
-func NewGetInviteByTokenPayload(token string) *organizations.GetInviteByTokenPayload {
-	v := &organizations.GetInviteByTokenPayload{}
-	v.Token = token
 
 	return v
 }
