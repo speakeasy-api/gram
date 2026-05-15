@@ -15,8 +15,6 @@ const createMCPServer = `-- name: CreateMCPServer :one
 INSERT INTO mcp_servers (
     project_id,
     environment_id,
-    external_oauth_server_id,
-    oauth_proxy_server_id,
     remote_mcp_server_id,
     toolset_id,
     visibility
@@ -26,29 +24,23 @@ VALUES (
     $2,
     $3,
     $4,
-    $5,
-    $6,
-    $7
+    $5
 )
 RETURNING id, project_id, name, slug, environment_id, external_oauth_server_id, oauth_proxy_server_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateMCPServerParams struct {
-	ProjectID             uuid.UUID
-	EnvironmentID         uuid.NullUUID
-	ExternalOauthServerID uuid.NullUUID
-	OauthProxyServerID    uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
-	ToolsetID             uuid.NullUUID
-	Visibility            string
+	ProjectID         uuid.UUID
+	EnvironmentID     uuid.NullUUID
+	RemoteMcpServerID uuid.NullUUID
+	ToolsetID         uuid.NullUUID
+	Visibility        string
 }
 
 func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams) (McpServer, error) {
 	row := q.db.QueryRow(ctx, createMCPServer,
 		arg.ProjectID,
 		arg.EnvironmentID,
-		arg.ExternalOauthServerID,
-		arg.OauthProxyServerID,
 		arg.RemoteMcpServerID,
 		arg.ToolsetID,
 		arg.Visibility,
@@ -195,32 +187,26 @@ const updateMCPServer = `-- name: UpdateMCPServer :one
 UPDATE mcp_servers
 SET
     environment_id = $1,
-    external_oauth_server_id = $2,
-    oauth_proxy_server_id = $3,
-    remote_mcp_server_id = $4,
-    toolset_id = $5,
-    visibility = $6,
+    remote_mcp_server_id = $2,
+    toolset_id = $3,
+    visibility = $4,
     updated_at = clock_timestamp()
-WHERE id = $7 AND project_id = $8 AND deleted IS FALSE
+WHERE id = $5 AND project_id = $6 AND deleted IS FALSE
 RETURNING id, project_id, name, slug, environment_id, external_oauth_server_id, oauth_proxy_server_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateMCPServerParams struct {
-	EnvironmentID         uuid.NullUUID
-	ExternalOauthServerID uuid.NullUUID
-	OauthProxyServerID    uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
-	ToolsetID             uuid.NullUUID
-	Visibility            string
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
+	EnvironmentID     uuid.NullUUID
+	RemoteMcpServerID uuid.NullUUID
+	ToolsetID         uuid.NullUUID
+	Visibility        string
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
 }
 
 func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams) (McpServer, error) {
 	row := q.db.QueryRow(ctx, updateMCPServer,
 		arg.EnvironmentID,
-		arg.ExternalOauthServerID,
-		arg.OauthProxyServerID,
 		arg.RemoteMcpServerID,
 		arg.ToolsetID,
 		arg.Visibility,
