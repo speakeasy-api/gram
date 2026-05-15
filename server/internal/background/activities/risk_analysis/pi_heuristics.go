@@ -42,7 +42,7 @@ func init() {
 	heuristicRules = []heuristicRule{
 		{
 			id:          "pi.role-hijack.you-are-now",
-			canonicalID: "pi.role-hijack",
+			canonicalID: "prompt-injection.role-hijack",
 			description: "Role hijack: 'you are now' assertion",
 			family:      familyRoleHijack,
 			confidence:  0.75,
@@ -50,7 +50,7 @@ func init() {
 		},
 		{
 			id:          "pi.role-hijack.act-as-privileged",
-			canonicalID: "pi.role-hijack",
+			canonicalID: "prompt-injection.role-hijack",
 			description: "Role hijack: 'act as <privileged role>'",
 			family:      familyRoleHijack,
 			confidence:  0.85,
@@ -58,7 +58,7 @@ func init() {
 		},
 		{
 			id:          "pi.system-prompt-leak",
-			canonicalID: "pi.system-prompt-leak",
+			canonicalID: "prompt-injection.system-prompt-leak",
 			description: "Attempt to elicit system prompt or initial instructions",
 			family:      familySystemPromptLeak,
 			confidence:  0.85,
@@ -66,7 +66,7 @@ func init() {
 		},
 		{
 			id:          "pi.encoded-payload",
-			canonicalID: "pi.encoded-payload",
+			canonicalID: "prompt-injection.encoded-payload",
 			description: "Long encoded blob with explicit decode/eval intent",
 			family:      familyEncodedPayload,
 			confidence:  0.7,
@@ -222,7 +222,7 @@ func detectInstructionOverrides(text string) []Finding {
 		if idx < 0 {
 			continue
 		}
-		ruleID, description := Normalize(SourcePromptInjection, "pi.instruction-override", "", RuleContext{ToolName: "", MatchedPattern: ""})
+		ruleID, description := Normalize(SourcePromptInjection, "prompt-injection.instruction-override", "", RuleContext{ToolName: "", MatchedPattern: ""})
 		out = append(out, Finding{
 			RuleID:           ruleID,
 			Description:      description,
@@ -247,7 +247,7 @@ func detectDelimiterInjection(text string) []Finding {
 	if loc == nil {
 		return nil
 	}
-	ruleID, description := Normalize(SourcePromptInjection, "pi.delimiter-injection", "", RuleContext{ToolName: "", MatchedPattern: ""})
+	ruleID, description := Normalize(SourcePromptInjection, "prompt-injection.delimiter-injection", "", RuleContext{ToolName: "", MatchedPattern: ""})
 	return []Finding{{
 		RuleID:           ruleID,
 		Description:      description,

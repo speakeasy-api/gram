@@ -35,10 +35,10 @@ type RuleContext struct {
 // dashboard categories.
 
 const (
-	prefixSecret      = "secret."
-	prefixPII         = "pii."
-	prefixDestructive = "destructive."
-	prefixPI          = "pi."
+	prefixSecret          = "secret."
+	prefixPII             = "pii."
+	prefixDestructive     = "destructive."
+	prefixPromptInjection = "prompt-injection."
 
 	// RuleShadowMCP is the canonical rule id emitted for every shadow_mcp
 	// finding. The detection mechanism (missing toolset id, unknown
@@ -53,7 +53,7 @@ const (
 	// RulePromptInjectionClassifier is the canonical rule id emitted when
 	// the L1 ML classifier flags a message. The specific classifier
 	// (deberta-v3 today) is implementation detail.
-	RulePromptInjectionClassifier = "pi"
+	RulePromptInjectionClassifier = "prompt-injection"
 )
 
 // CanonicalGitleaksRuleID prepends the `secret.` prefix to a gitleaks rule
@@ -275,15 +275,16 @@ var ruleCatalog = func() map[string]ruleSpec {
 		cliDestructiveRule("destructive.cloud.kubectl-delete-namespace", "kubectl delete namespace"),
 		cliDestructiveRule("destructive.cloud.kubectl-delete-workload", "kubectl delete workload"),
 
-		// prompt_injection. The L1 classifier rule_id is just `pi` — the
-		// model (deberta-v3) is implementation detail. L0 heuristic
-		// matches carry a `pi.<heuristic>` sub-rule.
+		// prompt_injection. The L1 classifier rule_id is just
+		// `prompt-injection` — the model (deberta-v3) is implementation
+		// detail. L0 heuristic matches carry a `prompt-injection.<heuristic>`
+		// sub-rule.
 		promptInjectionRule(RulePromptInjectionClassifier, "An ML classifier flagged this message as a prompt injection attempt."),
-		promptInjectionRule(prefixPI+"instruction-override", "Detected an instruction override phrase that attempts to bypass prior instructions."),
-		promptInjectionRule(prefixPI+"role-hijack", "Detected a role hijack attempt."),
-		promptInjectionRule(prefixPI+"system-prompt-leak", "Detected an attempt to elicit the system prompt or initial instructions."),
-		promptInjectionRule(prefixPI+"delimiter-injection", "Detected a forged role or instruction delimiter."),
-		promptInjectionRule(prefixPI+"encoded-payload", "Detected an encoded blob with an explicit decode or execute instruction."),
+		promptInjectionRule(prefixPromptInjection+"instruction-override", "Detected an instruction override phrase that attempts to bypass prior instructions."),
+		promptInjectionRule(prefixPromptInjection+"role-hijack", "Detected a role hijack attempt."),
+		promptInjectionRule(prefixPromptInjection+"system-prompt-leak", "Detected an attempt to elicit the system prompt or initial instructions."),
+		promptInjectionRule(prefixPromptInjection+"delimiter-injection", "Detected a forged role or instruction delimiter."),
+		promptInjectionRule(prefixPromptInjection+"encoded-payload", "Detected an encoded blob with an explicit decode or execute instruction."),
 	}
 
 	out := make(map[string]ruleSpec, len(specs))

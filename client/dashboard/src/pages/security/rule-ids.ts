@@ -8,8 +8,8 @@
 //   shadow-mcp                   — unverified MCP tool call
 //   destructive.tool             — MCP tool annotated as destructive
 //   destructive.cli-<command>    — destructive shell / git / db / cloud command
-//   pi                           — ML classifier prompt injection verdict
-//   pi.<heuristic>               — L0 heuristic prompt injection match
+//   prompt-injection             — ML classifier prompt injection verdict
+//   prompt-injection.<heuristic> — L0 heuristic prompt injection match
 export function canonicalizeRuleId(
   ruleId: string,
   source?: string | null,
@@ -37,11 +37,12 @@ export function canonicalizeRuleId(
     return id.toLowerCase();
   }
   if (src === "prompt_injection") {
-    // The deberta classifier rule id in the policy form maps to `pi` on
-    // findings — the model is implementation detail. Other entries are
-    // heuristic rule names that get a `pi.` prefix.
-    if (id === "deberta-v3-classifier") return "pi";
-    return "pi." + id.toLowerCase();
+    // The deberta classifier rule id in the policy form maps to
+    // `prompt-injection` on findings — the model is implementation
+    // detail. Other entries are heuristic rule names that get a
+    // `prompt-injection.` prefix.
+    if (id === "deberta-v3-classifier") return "prompt-injection";
+    return "prompt-injection." + id.toLowerCase();
   }
 
   // Unknown source: pass through lowercased.
