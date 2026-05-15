@@ -137,7 +137,7 @@ func TestAnalyzeBatch_DestructiveToolAnnotationFinding(t *testing.T) {
 	require.Equal(t, msgID, rows[0].ChatMessageID)
 	require.True(t, rows[0].Found)
 	require.Equal(t, shadowmcp.SourceDestructiveTool, rows[0].Source)
-	require.Equal(t, "destructive_tool.annotation", rows[0].RuleID.String)
+	require.Equal(t, "annotated-destructive", rows[0].RuleID.String)
 	require.Equal(t, "delete_records", rows[0].Match.String)
 }
 
@@ -181,7 +181,7 @@ func TestAnalyzeBatch_CLIDestructive_BashRmRf(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.True(t, rows[0].Found)
 	assert.Equal(t, risk_analysis.SourceCLIDestructive, rows[0].Source)
-	assert.Equal(t, "cli_destructive.shell/rm-rf", rows[0].RuleID.String)
+	assert.Equal(t, "shell-rm-rf", rows[0].RuleID.String)
 	assert.Equal(t, "Bash", rows[0].Match.String)
 }
 
@@ -204,7 +204,7 @@ func TestAnalyzeBatch_CLIDestructive_GitForcePush(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, "cli_destructive.git/push-force", rows[0].RuleID.String)
+	assert.Equal(t, "git-push-force", rows[0].RuleID.String)
 }
 
 // TestAnalyzeBatch_CLIDestructive_MCPArgsDropTable proves the cli_destructive
@@ -230,7 +230,7 @@ func TestAnalyzeBatch_CLIDestructive_MCPArgsDropTable(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, "cli_destructive.database/drop", rows[0].RuleID.String)
+	assert.Equal(t, "database-drop", rows[0].RuleID.String)
 }
 
 // TestAnalyzeBatch_CLIDestructive_StableRuleIDAcrossKeys exercises the
@@ -264,7 +264,7 @@ func TestAnalyzeBatch_CLIDestructive_StableRuleIDAcrossKeys(t *testing.T) {
 	// Sorted-key iteration walks "alt" → "command" → "context", so the
 	// first match is git/push-force from the "alt" key. Locking this in
 	// a test catches accidental reintroduction of random map ordering.
-	assert.Equal(t, "cli_destructive.git/push-force", rows[0].RuleID.String)
+	assert.Equal(t, "git-push-force", rows[0].RuleID.String)
 }
 
 // TestAnalyzeBatch_BothSources_OnSameMCPCall asserts that destructive_tool
@@ -298,8 +298,8 @@ func TestAnalyzeBatch_BothSources_OnSameMCPCall(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 	ruleIDs := []string{rows[0].RuleID.String, rows[1].RuleID.String}
-	assert.Contains(t, ruleIDs, "destructive_tool.annotation")
-	assert.Contains(t, ruleIDs, "cli_destructive.database/drop")
+	assert.Contains(t, ruleIDs, "annotated-destructive")
+	assert.Contains(t, ruleIDs, "database-drop")
 }
 
 func TestAnalyzeBatch_CLIDestructive_BenignBash(t *testing.T) {

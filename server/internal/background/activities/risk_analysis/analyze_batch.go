@@ -363,14 +363,15 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 		if a.shadowMCPClient == nil {
 			continue
 		}
-		detail, denied := a.shadowMCPClient.ValidateToolsetCall(ctx, toolInput, bareName, orgID)
+		reason, _, denied := a.shadowMCPClient.ValidateToolsetCallReason(ctx, toolInput, bareName, orgID)
 		if !denied {
 			continue
 		}
+		ruleID, description := Normalize(shadowmcp.SourceShadowMCP, string(reason), "", RuleContext{ToolName: toolName, MatchedPattern: ""})
 		findings = append(findings, Finding{
 			Source:           shadowmcp.SourceShadowMCP,
-			RuleID:           "shadow_mcp.unverified_call",
-			Description:      detail,
+			RuleID:           ruleID,
+			Description:      description,
 			Match:            toolName,
 			StartPos:         0,
 			EndPos:           0,
@@ -422,10 +423,11 @@ func (a *AnalyzeBatch) scanMessageDestructiveToolCalls(ctx context.Context, orgI
 			continue
 		}
 
+		ruleID, description := Normalize(shadowmcp.SourceDestructiveTool, "annotated-destructive", "", RuleContext{ToolName: resolved.ToolName, MatchedPattern: ""})
 		findings = append(findings, Finding{
 			Source:           shadowmcp.SourceDestructiveTool,
-			RuleID:           "destructive_tool.annotation",
-			Description:      "Tool is annotated as destructive",
+			RuleID:           ruleID,
+			Description:      description,
 			Match:            resolved.ToolName,
 			StartPos:         0,
 			EndPos:           0,
@@ -478,10 +480,14 @@ func (a *AnalyzeBatch) scanMessageDestructiveCLICalls(ctx context.Context, raw [
 			continue
 		}
 
+		ruleID, description := Normalize(SourceCLIDestructive, matched.FullName(), "", RuleContext{
+			ToolName:       toolName,
+			MatchedPattern: matched.FullName(),
+		})
 		findings = append(findings, Finding{
 			Source:           SourceCLIDestructive,
-			RuleID:           "cli_destructive." + matched.FullName(),
-			Description:      "Tool input matched a destructive CLI pattern",
+			RuleID:           ruleID,
+			Description:      description,
 			Match:            toolName,
 			StartPos:         0,
 			EndPos:           0,

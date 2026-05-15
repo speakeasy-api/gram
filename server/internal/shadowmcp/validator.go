@@ -30,6 +30,29 @@ const SourceDestructiveTool = "destructive_tool"
 // toolset.
 const XGramToolsetIDField = "x-gram-toolset-id"
 
+// DenyReason is the stable, kebab-case code identifying why a shadow-MCP
+// validation denied a tool call. Emitted by ValidateToolsetCallReason and
+// written verbatim as the rule_id on risk_results rows produced for
+// shadow_mcp findings.
+type DenyReason string
+
+const (
+	// DenyMissingToolsetID is returned when the recorded tool input does
+	// not carry a usable x-gram-toolset-id property (absent, wrong type,
+	// empty, or not a UUID).
+	DenyMissingToolsetID DenyReason = "missing-toolset-id"
+	// DenyUnknownToolset is returned when the referenced toolset cannot
+	// be located in the calling organization (not found or load failure).
+	DenyUnknownToolset DenyReason = "unknown-toolset"
+	// DenyMissingToolName is returned when the recorded tool call has no
+	// tool name to validate. Edge case; current callers filter empty tool
+	// names before invoking the validator.
+	DenyMissingToolName DenyReason = "missing-tool-name"
+	// DenyToolNotInToolset is returned when the referenced toolset exists
+	// but the named tool is not part of it.
+	DenyToolNotInToolset DenyReason = "tool-not-in-toolset"
+)
+
 // ResolvedToolCall is a recorded MCP tool call resolved back to the Gram
 // toolset and tool definition that produced it.
 type ResolvedToolCall struct {
@@ -41,9 +64,9 @@ type ResolvedToolCall struct {
 // ValidateToolsetCall enforces that a Gram-hosted tool call carries the
 // required x-gram-toolset-id property, that the referenced toolset exists in
 // the calling organization, and that the toolset contains a tool whose
-// post-variation name matches toolName. Returns (reason, true) when the call
-// fails validation; the reason is suitable for surfacing alongside a policy
-// name in deny / flag messages.
+// post-variation name matches toolName. Returns (detail, true) when the call
+// fails validation; the detail is suitable for surfacing alongside a policy
+// name in deny / flag messages on the hook path.
 //
 // Toolset lookups go through the Client's bundled toolset cache so callers
 // on hot paths (tools/list hooks, batch scanner) share a single Redis-backed
@@ -54,8 +77,22 @@ func (c *Client) ValidateToolsetCall(
 	toolName string,
 	orgID string,
 ) (string, bool) {
-	_, detail, failed := c.resolveToolsetCall(ctx, toolInput, toolName, orgID)
+	_, _, detail, failed := c.resolveToolsetCall(ctx, toolInput, toolName, orgID)
 	return detail, failed
+}
+
+// ValidateToolsetCallReason mirrors ValidateToolsetCall but additionally
+// returns a stable DenyReason that identifies which validation rule
+// rejected the call. The batch risk scanner uses the reason as the
+// risk_results rule_id; the human-readable detail remains for logs.
+func (c *Client) ValidateToolsetCallReason(
+	ctx context.Context,
+	toolInput any,
+	toolName string,
+	orgID string,
+) (DenyReason, string, bool) {
+	_, reason, detail, failed := c.resolveToolsetCall(ctx, toolInput, toolName, orgID)
+	return reason, detail, failed
 }
 
 // ResolveToolsetCall resolves a recorded Gram MCP tool call to its underlying
@@ -67,7 +104,7 @@ func (c *Client) ResolveToolsetCall(
 	toolName string,
 	orgID string,
 ) (*ResolvedToolCall, bool) {
-	resolved, _, failed := c.resolveToolsetCall(ctx, toolInput, toolName, orgID)
+	resolved, _, _, failed := c.resolveToolsetCall(ctx, toolInput, toolName, orgID)
 	return resolved, !failed
 }
 
@@ -76,25 +113,18 @@ func (c *Client) resolveToolsetCall(
 	toolInput any,
 	toolName string,
 	orgID string,
-) (*ResolvedToolCall, string, bool) {
-	fail := func(detail string) (string, bool) {
-		return detail, true
-	}
-
+) (*ResolvedToolCall, DenyReason, string, bool) {
 	inputMap, ok := toolInput.(map[string]any)
 	if !ok {
-		detail, failed := fail(fmt.Sprintf("missing required %q property in tool input", XGramToolsetIDField))
-		return nil, detail, failed
+		return nil, DenyMissingToolsetID, fmt.Sprintf("missing required %q property in tool input", XGramToolsetIDField), true
 	}
 	rawID, ok := inputMap[XGramToolsetIDField].(string)
 	if !ok || rawID == "" {
-		detail, failed := fail(fmt.Sprintf("missing required %q property in tool input", XGramToolsetIDField))
-		return nil, detail, failed
+		return nil, DenyMissingToolsetID, fmt.Sprintf("missing required %q property in tool input", XGramToolsetIDField), true
 	}
 	toolsetID, err := uuid.Parse(rawID)
 	if err != nil {
-		detail, failed := fail(fmt.Sprintf("invalid %q value: not a UUID", XGramToolsetIDField))
-		return nil, detail, failed
+		return nil, DenyMissingToolsetID, fmt.Sprintf("invalid %q value: not a UUID", XGramToolsetIDField), true
 	}
 
 	toolsetRow, err := tsr.New(c.db).GetToolsetByIDAndOrganization(ctx, tsr.GetToolsetByIDAndOrganizationParams{
@@ -102,13 +132,11 @@ func (c *Client) resolveToolsetCall(
 		OrganizationID: orgID,
 	})
 	if err != nil {
-		detail, failed := fail(fmt.Sprintf("toolset %s not found in this organization", toolsetID))
-		return nil, detail, failed
+		return nil, DenyUnknownToolset, fmt.Sprintf("toolset %s not found in this organization", toolsetID), true
 	}
 
 	if toolName == "" {
-		detail, failed := fail("tool call missing tool name")
-		return nil, detail, failed
+		return nil, DenyMissingToolName, "tool call missing tool name", true
 	}
 
 	described, err := mv.DescribeToolset(
@@ -120,8 +148,7 @@ func (c *Client) resolveToolsetCall(
 		&c.toolsetCache,
 	)
 	if err != nil {
-		detail, failed := fail(fmt.Sprintf("failed to load toolset %s", toolsetID))
-		return nil, detail, failed
+		return nil, DenyUnknownToolset, fmt.Sprintf("failed to load toolset %s", toolsetID), true
 	}
 
 	for _, tool := range described.Tools {
@@ -134,10 +161,9 @@ func (c *Client) resolveToolsetCall(
 				ToolsetID: toolsetID.String(),
 				ToolName:  toolName,
 				Tool:      base,
-			}, "", false
+			}, "", "", false
 		}
 	}
 
-	detail, failed := fail(fmt.Sprintf("tool %q is not part of toolset %s", toolName, toolsetID))
-	return nil, detail, failed
+	return nil, DenyToolNotInToolset, fmt.Sprintf("tool %q is not part of toolset %s", toolName, toolsetID), true
 }

@@ -32,8 +32,9 @@ const SourcePresidio = "presidio"
 
 // DeadLetterRuleID is set on the synthetic Finding emitted when a message
 // permanently fails analysis after exhausting the retry budget. buildRows
-// uses it as the rule_id for the dead-letter row.
-const DeadLetterRuleID = "presidio.dead_letter"
+// uses it as the rule_id for the dead-letter row. Canonicalized form keeps
+// the same kebab-case shape as every other Presidio rule id.
+const DeadLetterRuleID = "dead-letter"
 
 // PIIScanner detects personally identifiable information in text.
 type PIIScanner interface {
@@ -388,10 +389,11 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 		p.deadLetters.Add(ctx, 1)
 	}
 
+	ruleID, description := Normalize(SourcePresidio, DeadLetterRuleID, "", RuleContext{ToolName: "", MatchedPattern: ""})
 	return []Finding{{
 		Source:           SourcePresidio,
-		RuleID:           DeadLetterRuleID,
-		Description:      "presidio could not analyze message after exhausting retry budget",
+		RuleID:           ruleID,
+		Description:      description,
 		Match:            "",
 		StartPos:         0,
 		EndPos:           0,
@@ -526,13 +528,14 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 		startByte := len(string(runes[:start]))
 		endByte := len(string(runes[:end]))
 
+		ruleID, description := Normalize(SourcePresidio, r.EntityType, "", RuleContext{ToolName: "", MatchedPattern: ""})
 		findings = append(findings, Finding{
-			RuleID:           r.EntityType,
-			Description:      "PII detected: " + r.EntityType,
+			RuleID:           ruleID,
+			Description:      description,
 			Match:            match,
 			StartPos:         startByte,
 			EndPos:           endByte,
-			Tags:             []string{"pii", strings.ToLower(r.EntityType)},
+			Tags:             []string{"pii"},
 			Source:           SourcePresidio,
 			Confidence:       r.Score,
 			DeadLetterReason: "",

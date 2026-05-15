@@ -166,3 +166,64 @@ func TestResolveToolsetCall_MissingToolsetIDReturnsNoResult(t *testing.T) {
 	require.False(t, ok)
 	require.Nil(t, resolved)
 }
+
+func TestValidateToolsetCallReason_MissingToolsetID(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	reason, detail, denied := f.client.ValidateToolsetCallReason(t.Context(), map[string]any{"foo": "bar"}, "tool", f.orgID)
+	assert.True(t, denied)
+	assert.Equal(t, shadowmcp.DenyMissingToolsetID, reason)
+	assert.Contains(t, detail, shadowmcp.XGramToolsetIDField)
+}
+
+func TestValidateToolsetCallReason_InvalidUUIDIsMissingToolsetID(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	reason, _, denied := f.client.ValidateToolsetCallReason(t.Context(), map[string]any{shadowmcp.XGramToolsetIDField: "not-a-uuid"}, "tool", f.orgID)
+	assert.True(t, denied)
+	assert.Equal(t, shadowmcp.DenyMissingToolsetID, reason)
+}
+
+func TestValidateToolsetCallReason_UnknownToolset(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	missingID := uuid.New().String()
+	reason, _, denied := f.client.ValidateToolsetCallReason(t.Context(), map[string]any{shadowmcp.XGramToolsetIDField: missingID}, "tool", f.orgID)
+	assert.True(t, denied)
+	assert.Equal(t, shadowmcp.DenyUnknownToolset, reason)
+}
+
+func TestValidateToolsetCallReason_MissingToolName(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	toolsetID := f.createToolset(t, "ts-"+uuid.NewString()[:8])
+
+	reason, _, denied := f.client.ValidateToolsetCallReason(
+		t.Context(),
+		map[string]any{shadowmcp.XGramToolsetIDField: toolsetID.String()},
+		"",
+		f.orgID,
+	)
+	assert.True(t, denied)
+	assert.Equal(t, shadowmcp.DenyMissingToolName, reason)
+}
+
+func TestValidateToolsetCallReason_ToolNotInToolset(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	toolsetID := f.createToolset(t, "ts-"+uuid.NewString()[:8])
+
+	reason, _, denied := f.client.ValidateToolsetCallReason(
+		t.Context(),
+		map[string]any{shadowmcp.XGramToolsetIDField: toolsetID.String()},
+		"unknown-tool",
+		f.orgID,
+	)
+	assert.True(t, denied)
+	assert.Equal(t, shadowmcp.DenyToolNotInToolset, reason)
+}

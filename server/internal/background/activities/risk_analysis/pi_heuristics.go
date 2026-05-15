@@ -181,9 +181,10 @@ func runFamily(text string, fam ruleFamily) []Finding {
 		if loc == nil {
 			continue
 		}
+		ruleID, description := Normalize(SourcePromptInjection, rule.id, rule.description, RuleContext{ToolName: "", MatchedPattern: ""})
 		out = append(out, Finding{
-			RuleID:           rule.id,
-			Description:      rule.description,
+			RuleID:           ruleID,
+			Description:      description,
 			Match:            text[loc[0]:loc[1]],
 			StartPos:         loc[0],
 			EndPos:           loc[1],
@@ -216,9 +217,10 @@ func detectInstructionOverrides(text string) []Finding {
 		if idx < 0 {
 			continue
 		}
+		ruleID, description := Normalize(SourcePromptInjection, "pi.instruction-override", "", RuleContext{ToolName: "", MatchedPattern: ""})
 		out = append(out, Finding{
-			RuleID:           "pi.instruction-override",
-			Description:      "Instruction override phrase detected: " + kw,
+			RuleID:           ruleID,
+			Description:      description,
 			Match:            scan[idx : idx+len(kw)],
 			StartPos:         idx,
 			EndPos:           idx + len(kw),
@@ -240,9 +242,10 @@ func detectDelimiterInjection(text string) []Finding {
 	if loc == nil {
 		return nil
 	}
+	ruleID, description := Normalize(SourcePromptInjection, "pi.delimiter-injection", "", RuleContext{ToolName: "", MatchedPattern: ""})
 	return []Finding{{
-		RuleID:           "pi.delimiter-injection",
-		Description:      "Forged role or instruction delimiter detected",
+		RuleID:           ruleID,
+		Description:      description,
 		Match:            text[loc[0]:loc[1]],
 		StartPos:         loc[0],
 		EndPos:           loc[1],

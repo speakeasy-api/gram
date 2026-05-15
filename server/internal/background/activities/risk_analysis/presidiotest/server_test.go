@@ -47,9 +47,9 @@ func TestMockServer_DetectsEmail(t *testing.T) {
 	require.Len(t, results, 1)
 
 	ids := ruleIDs(results[0])
-	require.Contains(t, ids, "EMAIL_ADDRESS")
+	require.Contains(t, ids, "email-address")
 	for _, f := range results[0] {
-		if f.RuleID == "EMAIL_ADDRESS" {
+		if f.RuleID == "email-address" {
 			require.Equal(t, "john.smith@acmecorp.com", f.Match)
 			require.Equal(t, "presidio", f.Source)
 		}
@@ -68,9 +68,9 @@ func TestMockServer_DetectsCreditCardWithLuhnCheck(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 3)
 
-	require.Contains(t, ruleIDs(results[0]), "CREDIT_CARD")
-	require.Contains(t, ruleIDs(results[1]), "CREDIT_CARD")
-	require.NotContains(t, ruleIDs(results[2]), "CREDIT_CARD")
+	require.Contains(t, ruleIDs(results[0]), "credit-card")
+	require.Contains(t, ruleIDs(results[1]), "credit-card")
+	require.NotContains(t, ruleIDs(results[2]), "credit-card")
 }
 
 func TestMockServer_DetectsPhoneNumber(t *testing.T) {
@@ -82,7 +82,7 @@ func TestMockServer_DetectsPhoneNumber(t *testing.T) {
 	}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	require.Contains(t, ruleIDs(results[0]), "PHONE_NUMBER")
+	require.Contains(t, ruleIDs(results[0]), "phone-number")
 }
 
 func TestMockServer_DetectsPersonName(t *testing.T) {
@@ -94,7 +94,7 @@ func TestMockServer_DetectsPersonName(t *testing.T) {
 	}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	require.Contains(t, ruleIDs(results[0]), "PERSON")
+	require.Contains(t, ruleIDs(results[0]), "person")
 }
 
 func TestMockServer_NoFalsePositiveOnVersionString(t *testing.T) {
@@ -108,7 +108,7 @@ func TestMockServer_NoFalsePositiveOnVersionString(t *testing.T) {
 	require.Len(t, results, 1)
 
 	for _, f := range results[0] {
-		require.NotEqual(t, "PHONE_NUMBER", f.RuleID, "version string should not match phone regex")
+		require.NotEqual(t, "phone-number", f.RuleID, "version string should not match phone regex")
 	}
 }
 
@@ -123,10 +123,13 @@ func TestMockServer_NoFalsePositiveOnUUID(t *testing.T) {
 	require.Len(t, results, 1)
 
 	for _, f := range results[0] {
-		require.NotEqual(t, "CREDIT_CARD", f.RuleID)
+		require.NotEqual(t, "credit-card", f.RuleID)
 	}
 }
 
+// Note: the entity filter list on AnalyzeBatch is sent verbatim to Presidio,
+// which still speaks UPPER_SNAKE entity types. Only the rule_id written to
+// risk_results is normalized to kebab-case by ConvertFindings.
 func TestMockServer_EntityFilterRespected(t *testing.T) {
 	t.Parallel()
 	_, client := newClient(t)
@@ -138,8 +141,8 @@ func TestMockServer_EntityFilterRespected(t *testing.T) {
 	require.Len(t, results, 1)
 
 	ids := ruleIDs(results[0])
-	require.Contains(t, ids, "EMAIL_ADDRESS")
-	require.NotContains(t, ids, "PHONE_NUMBER")
+	require.Contains(t, ids, "email-address")
+	require.NotContains(t, ids, "phone-number")
 }
 
 func TestMockServer_BatchResultsMapBackToInputIndexes(t *testing.T) {
@@ -161,7 +164,7 @@ func TestMockServer_BatchResultsMapBackToInputIndexes(t *testing.T) {
 	for i, findings := range results {
 		var got string
 		for _, f := range findings {
-			if f.RuleID == "EMAIL_ADDRESS" {
+			if f.RuleID == "email-address" {
 				got = f.Match
 				break
 			}
@@ -187,7 +190,7 @@ func TestMockServer_CustomDetectorOverride(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Len(t, results[0], 1)
-	require.Equal(t, "CUSTOM_ENTITY", results[0][0].RuleID)
+	require.Equal(t, "custom-entity", results[0][0].RuleID)
 	require.Equal(t, "anything", results[0][0].Match)
 }
 
