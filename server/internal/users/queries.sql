@@ -47,6 +47,11 @@ SELECT id FROM users
 WHERE workos_id = $1
 LIMIT 1;
 
+-- name: GetUserByWorkosID :one
+SELECT * FROM users
+WHERE workos_id = @workos_id
+LIMIT 1;
+
 -- name: GetUsersByWorkosIDs :many
 SELECT * FROM users
 WHERE workos_id = ANY(@workos_ids::text[]);

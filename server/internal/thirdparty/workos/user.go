@@ -23,10 +23,13 @@ type Member struct {
 // User represents a WorkOS user with the fields used by Gram.
 type User struct {
 	ID                string
+	ExternalID        string
 	FirstName         string
 	LastName          string
 	Email             string
 	ProfilePictureURL string
+	CreatedAt         string
+	UpdatedAt         string
 }
 
 // ListMembers lists all active organization memberships for the given org.

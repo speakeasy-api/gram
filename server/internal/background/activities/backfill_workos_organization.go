@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/workos/workos-go/v6/pkg/events"
 
@@ -20,7 +19,6 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 type WorkOSClient interface {
@@ -28,6 +26,7 @@ type WorkOSClient interface {
 	ListOrganizations(ctx context.Context) ([]workos.Organization, error)
 	ListRoles(ctx context.Context, orgID string) ([]workos.Role, error)
 	ListOrgMemberships(ctx context.Context, orgID string) ([]workos.Member, error)
+	ListOrgUsers(ctx context.Context, orgID string) (map[string]workos.User, error)
 	ListGlobalRoles(ctx context.Context) ([]workos.Role, error)
 	ListEvents(ctx context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error)
 	UpdateUserExternalID(ctx context.Context, workosUserID, externalID string) error
@@ -73,10 +72,15 @@ func (b *BackfillWorkOSOrganization) Do(ctx context.Context, params BackfillWork
 		return oops.E(oops.CodeUnexpected, err, "list WorkOS organization roles").Log(ctx, logger)
 	}
 
+	users, err := b.workos.ListOrgUsers(ctx, params.WorkOSOrganizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list WorkOS organization users").Log(ctx, logger)
+	}
 	members, err := b.workos.ListOrgMemberships(ctx, params.WorkOSOrganizationID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list WorkOS organization memberships").Log(ctx, logger)
 	}
+
 	parsedMembers := make([]backfillWorkOSMember, 0, len(members))
 	for _, member := range members {
 		updatedAt, err := parseWorkOSTime(member.UpdatedAt)
@@ -117,7 +121,20 @@ func (b *BackfillWorkOSOrganization) Do(ctx context.Context, params BackfillWork
 		return err
 	}
 	for _, member := range parsedMembers {
-		if err := backfillOrganizationMember(ctx, tx, org.ID, member); err != nil {
+		user, ok := users[member.member.UserID]
+		if !ok {
+			return fmt.Errorf("missing WorkOS user %q for membership %q", member.member.UserID, member.member.ID)
+		}
+
+		gramUserID, userResolved, err := backfillWorkOSUser(ctx, logger, tx, user)
+		if err != nil {
+			return fmt.Errorf("backfill WorkOS user %q: %w", user.ID, err)
+		}
+		if !userResolved {
+			continue
+		}
+
+		if err := backfillOrganizationMember(ctx, tx, org.ID, member, gramUserID); err != nil {
 			return err
 		}
 	}
@@ -250,26 +267,13 @@ func backfillOrganizationRoles(ctx context.Context, logger *slog.Logger, dbtx pg
 	return nil
 }
 
-func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID string, parsed backfillWorkOSMember) error {
+func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID string, parsed backfillWorkOSMember, gramUserID string) error {
 	member := parsed.member
 	orgQueries := orgrepo.New(dbtx)
 
-	gramUserID, err := usersrepo.New(dbtx).GetUserIDByWorkosID(ctx, conv.ToPGText(member.UserID))
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("get user by workos id %q: %w", member.UserID, err)
-	}
-
-	cursor, err := latestMembershipCursor(ctx, orgQueries, organizationID, gramUserID, member.UserID)
-	if err != nil {
-		return err
-	}
-	if !ShouldProcessEvent(cursor.lastEventID, cursor.updatedAt, "", parsed.updatedAt) {
-		return nil
-	}
-
 	if err := orgQueries.UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
 		OrganizationID:     organizationID,
-		UserID:             conv.ToPGTextEmpty(gramUserID),
+		UserID:             conv.ToPGText(gramUserID),
 		WorkosUserID:       conv.ToPGText(member.UserID),
 		WorkosMembershipID: conv.ToPGText(member.ID),
 		WorkosUpdatedAt:    conv.ToPGTimestamptz(parsed.updatedAt),
@@ -285,7 +289,7 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 	if err := orgQueries.SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
 		OrganizationID:     organizationID,
 		WorkosUserID:       member.UserID,
-		UserID:             conv.ToPGTextEmpty(gramUserID),
+		UserID:             conv.ToPGText(gramUserID),
 		WorkosMembershipID: conv.ToPGText(member.ID),
 		WorkosUpdatedAt:    conv.ToPGTimestamptz(parsed.updatedAt),
 		WorkosLastEventID:  conv.ToPGText(""),
@@ -297,75 +301,10 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 	return nil
 }
 
-type membershipCursor struct {
-	lastEventID *string
-	updatedAt   *time.Time
-}
-
-// latestMembershipCursor returns the newest local WorkOS state for a membership
-// before applying a snapshot. Membership backfill writes two local shapes:
-// organization_user_relationships when the WorkOS user is linked to a Gram
-// user, and organization_role_assignments even when the user is still unknown
-// locally. Both can be updated by event processing, so the snapshot must compare
-// against the freshest cursor/timestamp from both tables before it overwrites
-// either table.
-func latestMembershipCursor(ctx context.Context, repo *orgrepo.Queries, organizationID, gramUserID, workosUserID string) (membershipCursor, error) {
-	var cursor membershipCursor
-
-	assignments, err := repo.ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
-		OrganizationID: organizationID,
-		WorkosUserID:   workosUserID,
-	})
-	if err != nil {
-		return membershipCursor{}, fmt.Errorf("list organization role assignments for WorkOS user %q: %w", workosUserID, err)
-	}
-	for _, assignment := range assignments {
-		moveMembershipCursor(&cursor, assignment.WorkosLastEventID, assignment.WorkosUpdatedAt)
-	}
-
-	// No relationship row exists when the WorkOS user is not linked to a Gram user.
-	if gramUserID == "" {
-		return cursor, nil
-	}
-
-	existing, err := repo.GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
-		OrganizationID: organizationID,
-		UserID:         conv.ToPGText(gramUserID),
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return cursor, nil
-	case err != nil:
-		return membershipCursor{}, fmt.Errorf("get organization membership for user %q: %w", gramUserID, err)
-	}
-
-	moveMembershipCursor(&cursor, existing.WorkosLastEventID, existing.WorkosUpdatedAt)
-
-	return cursor, nil
-}
-
 func parseWorkOSTime(raw string) (time.Time, error) {
 	t, err := time.Parse(time.RFC3339Nano, raw)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("parse WorkOS timestamp %q: %w", raw, err)
 	}
 	return t, nil
-}
-
-// moveMembershipCursor tracks per-field upper bounds rather than a coherent
-// row state. Backfill only uses the cursor as a conservative skip signal, so any
-// newer event ID or updated timestamp from either local membership shape should
-// block an older snapshot from overwriting local state.
-func moveMembershipCursor(cursor *membershipCursor, eventID pgtype.Text, updatedAt pgtype.Timestamptz) {
-	if eventID.Valid {
-		if cursor.lastEventID == nil || eventID.String > *cursor.lastEventID {
-			cursor.lastEventID = &eventID.String
-		}
-	}
-
-	if updatedAt.Valid {
-		if cursor.updatedAt == nil || updatedAt.Time.After(*cursor.updatedAt) {
-			cursor.updatedAt = &updatedAt.Time
-		}
-	}
 }
