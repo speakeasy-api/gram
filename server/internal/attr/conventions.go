@@ -197,6 +197,7 @@ const (
 	OpenAPIPathKey                  = attribute.Key("gram.openapi.path")
 	OpenAPIVersionKey               = attribute.Key("gram.openapi.version")
 	OpenRouterKeyLimitKey           = attribute.Key("gram.openrouter.key.limit")
+	OpenRouterKeyPreviousLimitKey   = attribute.Key("gram.openrouter.key.previous_limit")
 	OrganizationAccountTypeKey      = attribute.Key("gram.org.account_type")
 	OrganizationInviteIDKey         = attribute.Key("gram.org.invite.id")
 	OutboxIDKey                     = attribute.Key("gram.outbox.id")
@@ -888,6 +889,13 @@ func SlogOpenAPIVersion(v string) slog.Attr      { return slog.String(string(Ope
 
 func OpenRouterKeyLimit(v int) attribute.KeyValue { return OpenRouterKeyLimitKey.Int(v) }
 func SlogOpenRouterKeyLimit(v int) slog.Attr      { return slog.Int(string(OpenRouterKeyLimitKey), v) }
+
+func OpenRouterKeyPreviousLimit(v int) attribute.KeyValue {
+	return OpenRouterKeyPreviousLimitKey.Int(v)
+}
+func SlogOpenRouterKeyPreviousLimit(v int) slog.Attr {
+	return slog.Int(string(OpenRouterKeyPreviousLimitKey), v)
+}
 
 func AccessMemberID(v string) attribute.KeyValue { return AccessMemberIDKey.String(v) }
 func SlogAccessMemberID(v string) slog.Attr      { return slog.String(string(AccessMemberIDKey), v) }

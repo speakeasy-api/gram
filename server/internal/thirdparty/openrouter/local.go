@@ -8,6 +8,8 @@ type Development struct {
 	apiKey string
 }
 
+var _ Provisioner = (*Development)(nil)
+
 func NewDevelopment(apiKey string) *Development {
 	return &Development{apiKey: apiKey}
 }
@@ -24,8 +26,12 @@ func (o *Development) GetCreditsUsed(ctx context.Context, orgID string) (float64
 	return 12.5, 10, nil // arbitrary local numbers
 }
 
-func (o *Development) GetKeyUsage(ctx context.Context, apiKey string) (float64, error) {
-	return 12.5, nil // arbitrary local number
+func (o *Development) GetKeyUsage(ctx context.Context, apiKey string) (float64, *int64, error) {
+	return 12.5, nil, nil // arbitrary local number; unlimited dev key
+}
+
+func (o *Development) ReconcileMonthlyCredits(ctx context.Context, orgID string, currentLimit int64, upstreamLimit *int64) (int64, error) {
+	return currentLimit, nil
 }
 
 func (o *Development) GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error) {
