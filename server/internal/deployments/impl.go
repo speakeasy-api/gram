@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/packages/semver"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -492,6 +493,39 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		return nil, oops.E(oops.CodeInvalid, nil, "at least one openapi document, functions file, package, or external mcp is required").Log(ctx, logger)
 	}
 
+	// Wire --auto-attach: for each named toolset, set-union the function
+	// sources in this deployment into its auto_sync_sources. Runs inside the
+	// deployment-create transaction so the workflow's AutoSyncToolsets
+	// activity sees the updated subscriptions when it runs.
+	if len(form.AutoAttachToolsetSlugs) > 0 {
+		if len(newFunctions) == 0 {
+			return nil, oops.E(oops.CodeBadRequest, nil, "auto_attach_toolset_slugs requires at least one functions source in this deployment").Log(ctx, logger)
+		}
+		sources := make([]string, 0, len(newFunctions))
+		for _, fn := range newFunctions {
+			sources = append(sources, "function:"+fn.slug)
+		}
+		txTsRepo := toolsetsRepo.New(dbtx)
+		for _, slug := range form.AutoAttachToolsetSlugs {
+			updated, err := txTsRepo.AddAutoSyncSourcesBySlug(ctx, toolsetsRepo.AddAutoSyncSourcesBySlugParams{
+				Slug:      slug,
+				ProjectID: projectID,
+				Sources:   sources,
+			})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, nil, "toolset %q not found for auto-attach", slug).Log(ctx, logger)
+			}
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to set auto_sync_sources for toolset %q", slug).Log(ctx, logger)
+			}
+			logger.InfoContext(ctx, "subscribed toolset to function sources via --auto-attach",
+				attr.SlogToolsetID(updated.ID.String()),
+				attr.SlogToolsetSlug(updated.Slug),
+				slog.Int("source_count", len(sources)),
+			)
+		}
+	}
+
 	newID, err := createDeployment(
 		ctx, s.tracer, logger, tx,
 		IdempotencyKey(&form.IdempotencyKey),
@@ -703,6 +737,37 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 
 	if !packagesChanged && !openapiChanged && !functionsChanged && !externalMCPsChanged {
 		return nil, oops.E(oops.CodeInvalid, nil, "at least one asset, package, or external mcp to upsert or exclude is required").Log(ctx, logger)
+	}
+
+	// Wire --auto-attach (Evolve variant): for each named toolset, set-union
+	// the function sources upserted in this deployment into auto_sync_sources.
+	if len(form.AutoAttachToolsetSlugs) > 0 {
+		if len(functionsToUpsert) == 0 {
+			return nil, oops.E(oops.CodeBadRequest, nil, "auto_attach_toolset_slugs requires upsert_functions in this evolution").Log(ctx, logger)
+		}
+		sources := make([]string, 0, len(functionsToUpsert))
+		for _, fn := range functionsToUpsert {
+			sources = append(sources, "function:"+fn.slug)
+		}
+		txTsRepo := toolsetsRepo.New(dbtx)
+		for _, slug := range form.AutoAttachToolsetSlugs {
+			updated, err := txTsRepo.AddAutoSyncSourcesBySlug(ctx, toolsetsRepo.AddAutoSyncSourcesBySlugParams{
+				Slug:      slug,
+				ProjectID: projectID,
+				Sources:   sources,
+			})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, nil, "toolset %q not found for auto-attach", slug).Log(ctx, logger)
+			}
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to set auto_sync_sources for toolset %q", slug).Log(ctx, logger)
+			}
+			logger.InfoContext(ctx, "subscribed toolset to function sources via --auto-attach",
+				attr.SlogToolsetID(updated.ID.String()),
+				attr.SlogToolsetSlug(updated.Slug),
+				slog.Int("source_count", len(sources)),
+			)
+		}
 	}
 
 	var cloneID uuid.UUID

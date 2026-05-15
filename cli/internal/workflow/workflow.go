@@ -163,6 +163,7 @@ func (s *Workflow) UploadAssets(
 
 func (s *Workflow) EvolveDeployment(
 	ctx context.Context,
+	autoAttachToolsetSlugs []string,
 ) *Workflow {
 	if s.Failed() {
 		return s
@@ -170,12 +171,13 @@ func (s *Workflow) EvolveDeployment(
 
 	s.Logger.InfoContext(ctx, "creating deployment with merge strategy")
 	evolved, err := s.DeploymentsClient.Evolve(ctx, api.EvolveRequest{
-		OpenAPIv3Assets: s.NewOpenAPIAssets,
-		NonBlocking:     false,
-		Functions:       s.NewFunctionAssets,
-		APIKey:          s.Params.APIKey,
-		DeploymentID:    nil,
-		ProjectSlug:     s.Params.ProjectSlug,
+		OpenAPIv3Assets:        s.NewOpenAPIAssets,
+		NonBlocking:            false,
+		Functions:              s.NewFunctionAssets,
+		APIKey:                 s.Params.APIKey,
+		DeploymentID:           nil,
+		ProjectSlug:            s.Params.ProjectSlug,
+		AutoAttachToolsetSlugs: autoAttachToolsetSlugs,
 	})
 	if err != nil {
 		return s.Fail(fmt.Errorf("failed to evolve deployment: %w", err))
@@ -195,6 +197,7 @@ func (s *Workflow) EvolveDeployment(
 func (s *Workflow) CreateDeployment(
 	ctx context.Context,
 	idem string,
+	autoAttachToolsetSlugs []string,
 ) *Workflow {
 	if s.Failed() {
 		return s
@@ -202,12 +205,13 @@ func (s *Workflow) CreateDeployment(
 
 	s.Logger.InfoContext(ctx, "creating deployment with replace strategy")
 	createReq := api.CreateDeploymentRequest{
-		APIKey:          s.Params.APIKey,
-		NonBlocking:     false,
-		IdempotencyKey:  idem,
-		OpenAPIv3Assets: s.NewOpenAPIAssets,
-		Functions:       s.NewFunctionAssets,
-		ProjectSlug:     s.Params.ProjectSlug,
+		APIKey:                 s.Params.APIKey,
+		NonBlocking:            false,
+		IdempotencyKey:         idem,
+		OpenAPIv3Assets:        s.NewOpenAPIAssets,
+		Functions:              s.NewFunctionAssets,
+		ProjectSlug:            s.Params.ProjectSlug,
+		AutoAttachToolsetSlugs: autoAttachToolsetSlugs,
 	}
 	result, err := s.DeploymentsClient.CreateDeployment(ctx, createReq)
 	if err != nil {

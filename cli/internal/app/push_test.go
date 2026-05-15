@@ -51,3 +51,29 @@ func TestProcessingMessage(t *testing.T) {
 		})
 	}
 }
+
+func TestMergeAutoAttach(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		fromConfig []string
+		fromFlag   []string
+		want       []string
+	}{
+		{name: "both empty returns nil"},
+		{name: "config only", fromConfig: []string{"a", "b"}, want: []string{"a", "b"}},
+		{name: "flag only", fromFlag: []string{"c"}, want: []string{"c"}},
+		{name: "union preserves config-first order", fromConfig: []string{"a", "b"}, fromFlag: []string{"c"}, want: []string{"a", "b", "c"}},
+		{name: "duplicates collapse", fromConfig: []string{"a"}, fromFlag: []string{"a", "b"}, want: []string{"a", "b"}},
+		{name: "empty strings ignored", fromConfig: []string{"", "a"}, fromFlag: []string{""}, want: []string{"a"}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := mergeAutoAttach(tc.fromConfig, tc.fromFlag)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}

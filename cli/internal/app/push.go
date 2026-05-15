@@ -30,6 +30,11 @@ type PushOptions struct {
 	NonBlocking    bool
 	APIKey         string
 	APIURL         string
+	// AutoAttach is the union of the --auto-attach flag and the
+	// `auto_attach` field in gram.deploy.json. Each entry is a toolset
+	// slug. On the server, every function source in this push is set-
+	// unioned into the named toolsets' auto_sync_sources column.
+	AutoAttach []string
 }
 
 type PushResult struct {
@@ -109,6 +114,9 @@ func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
 		return nil, fmt.Errorf("failed to parse deployment config: %w", err)
 	}
 
+	// Set-union the flag's slugs with the config file's, deduped.
+	autoAttach := mergeAutoAttach(config.AutoAttach, opts.AutoAttach)
+
 	workflowParams := workflow.Params{
 		APIKey:      apiKey,
 		APIURL:      apiURL,
@@ -150,9 +158,9 @@ func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
 	}()
 
 	if opts.Method == "replace" {
-		result = result.CreateDeployment(ctx, opts.IdempotencyKey)
+		result = result.CreateDeployment(ctx, opts.IdempotencyKey, autoAttach)
 	} else {
-		result = result.EvolveDeployment(ctx)
+		result = result.EvolveDeployment(ctx, autoAttach)
 	}
 
 	deployTicker.Stop()
@@ -237,6 +245,10 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				Usage: "Skip polling for deployment completion and return immediately",
 				Value: false,
 			},
+			&cli.StringSliceFlag{
+				Name:  "auto-attach",
+				Usage: "Toolset slug(s) to subscribe to this push's function sources. Repeatable; values union with gram.deploy.json's auto_attach. New tool URNs from subsequent pushes will flow to these toolsets automatically.",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			ctx, cancel := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
@@ -254,6 +266,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				NonBlocking:    c.Bool("skip-poll"),
 				APIKey:         c.String("api-key"),
 				APIURL:         c.String("api-url"),
+				AutoAttach:     c.StringSlice("auto-attach"),
 			})
 
 			if err != nil {
@@ -295,6 +308,29 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			return nil
 		},
 	}
+}
+
+// mergeAutoAttach returns the deduplicated union of the deployment config's
+// `auto_attach` field and any `--auto-attach` flag invocations. Order
+// follows config-first, flag-second so deterministic output is easy to
+// reason about in logs and tests.
+func mergeAutoAttach(fromConfig, fromFlag []string) []string {
+	if len(fromConfig) == 0 && len(fromFlag) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(fromConfig)+len(fromFlag))
+	merged := make([]string, 0, len(fromConfig)+len(fromFlag))
+	for _, slug := range append(append([]string{}, fromConfig...), fromFlag...) {
+		if slug == "" {
+			continue
+		}
+		if _, ok := seen[slug]; ok {
+			continue
+		}
+		seen[slug] = struct{}{}
+		merged = append(merged, slug)
+	}
+	return merged
 }
 
 func processingMessage(elapsed time.Duration) string {

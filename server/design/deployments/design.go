@@ -294,6 +294,11 @@ var CreateDeploymentForm = Type("CreateDeploymentForm", func() {
 	Attribute("functions", ArrayOf(AddFunctionsForm))
 	Attribute("packages", ArrayOf(AddDeploymentPackageForm))
 	Attribute("external_mcps", ArrayOf(AddExternalMCPForm))
+
+	Attribute("auto_attach_toolset_slugs", ArrayOf(String), func() {
+		Description("Toolset slugs that should subscribe to every function source in this deployment. The server adds \"function:<slug>\" entries to each toolset's auto_sync_sources column before the deployment workflow runs; new tool URNs then flow to those toolsets automatically. Idempotent; safe to repeat.")
+		Example([]string{"my-mcp", "internal-tools"})
+	})
 })
 
 var AddOpenAPIv3DeploymentAssetForm = Type("AddOpenAPIv3DeploymentAssetForm", func() {
@@ -456,6 +461,10 @@ var EvolveForm = Type("EvolveForm", func() {
 	Attribute("exclude_packages", ArrayOf(String), "The packages to exclude from the new deployment when cloning a previous deployment.")
 	Attribute("exclude_functions", ArrayOf(String), "The functions, identified by slug, to exclude from the new deployment when cloning a previous deployment.")
 	Attribute("exclude_external_mcps", ArrayOf(String), "The external MCP servers, identified by slug, to exclude from the new deployment when cloning a previous deployment.")
+	Attribute("auto_attach_toolset_slugs", ArrayOf(String), func() {
+		Description("Toolset slugs that should subscribe to every function source upserted by this evolution. Mirrors the CreateDeployment field; idempotent on repeat.")
+		Example([]string{"my-mcp"})
+	})
 })
 
 var EvolveResult = Type("EvolveResult", func() {

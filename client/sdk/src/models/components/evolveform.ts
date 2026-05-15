@@ -27,6 +27,10 @@ import {
 
 export type EvolveForm = {
   /**
+   * Toolset slugs that should subscribe to every function source upserted by this evolution. Mirrors the CreateDeployment field; idempotent on repeat.
+   */
+  autoAttachToolsetSlugs?: Array<string> | undefined;
+  /**
    * The ID of the deployment to evolve. If omitted, the latest deployment will be used.
    */
   deploymentId?: string | undefined;
@@ -70,6 +74,7 @@ export type EvolveForm = {
 
 /** @internal */
 export type EvolveForm$Outbound = {
+  auto_attach_toolset_slugs?: Array<string> | undefined;
   deployment_id?: string | undefined;
   exclude_external_mcps?: Array<string> | undefined;
   exclude_functions?: Array<string> | undefined;
@@ -90,6 +95,7 @@ export const EvolveForm$outboundSchema: z.ZodMiniType<
   EvolveForm
 > = z.pipe(
   z.object({
+    autoAttachToolsetSlugs: z.optional(z.array(z.string())),
     deploymentId: z.optional(z.string()),
     excludeExternalMcps: z.optional(z.array(z.string())),
     excludeFunctions: z.optional(z.array(z.string())),
@@ -105,6 +111,7 @@ export const EvolveForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      autoAttachToolsetSlugs: "auto_attach_toolset_slugs",
       deploymentId: "deployment_id",
       excludeExternalMcps: "exclude_external_mcps",
       excludeFunctions: "exclude_functions",

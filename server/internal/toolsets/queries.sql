@@ -104,6 +104,22 @@ WHERE project_id = @project_id
   AND auto_sync_sources && @sources::TEXT[]
 ORDER BY id;
 
+-- name: AddAutoSyncSourcesBySlug :one
+-- Used by the deployment-create RPC to subscribe a toolset to function
+-- sources at push time. Set-union semantics: existing entries are
+-- preserved, new entries deduplicated. Returns the toolset's id + the
+-- new auto_sync_sources so callers can confirm the slug existed (no row
+-- = caller-supplied slug not found in this project).
+UPDATE toolsets
+SET auto_sync_sources = ARRAY(
+  SELECT DISTINCT unnest(auto_sync_sources || @sources::TEXT[])
+),
+    updated_at = clock_timestamp()
+WHERE slug = @slug
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING id, slug, auto_sync_sources;
+
 -- name: LockToolsetForAutoSync :one
 -- Row-level lock used by the deployment-completed activity to serialize
 -- concurrent auto-sync writers on the same toolset. Pair with a follow-up

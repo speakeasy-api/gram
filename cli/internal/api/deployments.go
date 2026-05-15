@@ -45,12 +45,13 @@ func NewDeploymentsClient(options *DeploymentsClientOptions) *DeploymentsClient 
 }
 
 type CreateDeploymentRequest struct {
-	APIKey          secret.Secret
-	NonBlocking     bool
-	ProjectSlug     string
-	IdempotencyKey  string
-	OpenAPIv3Assets []*deployments.AddOpenAPIv3DeploymentAssetForm
-	Functions       []*deployments.AddFunctionsForm
+	APIKey                 secret.Secret
+	NonBlocking            bool
+	ProjectSlug            string
+	IdempotencyKey         string
+	OpenAPIv3Assets        []*deployments.AddOpenAPIv3DeploymentAssetForm
+	Functions              []*deployments.AddFunctionsForm
+	AutoAttachToolsetSlugs []string
 }
 
 // CreateDeployment creates a remote deployment.
@@ -63,20 +64,21 @@ func (c *DeploymentsClient) CreateDeployment(
 		req.IdempotencyKey = uuid.New().String()
 	}
 	payload := &deployments.CreateDeploymentPayload{
-		ApikeyToken:      &key,
-		NonBlocking:      &req.NonBlocking,
-		ProjectSlugInput: &req.ProjectSlug,
-		IdempotencyKey:   req.IdempotencyKey,
-		Openapiv3Assets:  req.OpenAPIv3Assets,
-		Functions:        req.Functions,
-		SessionToken:     nil,
-		GithubRepo:       nil,
-		GithubPr:         nil,
-		GithubSha:        nil,
-		ExternalID:       nil,
-		ExternalURL:      nil,
-		Packages:         nil,
-		ExternalMcps:     nil,
+		ApikeyToken:            &key,
+		NonBlocking:            &req.NonBlocking,
+		ProjectSlugInput:       &req.ProjectSlug,
+		IdempotencyKey:         req.IdempotencyKey,
+		Openapiv3Assets:        req.OpenAPIv3Assets,
+		Functions:              req.Functions,
+		SessionToken:           nil,
+		GithubRepo:             nil,
+		GithubPr:               nil,
+		GithubSha:              nil,
+		ExternalID:             nil,
+		ExternalURL:            nil,
+		Packages:               nil,
+		ExternalMcps:           nil,
+		AutoAttachToolsetSlugs: req.AutoAttachToolsetSlugs,
 	}
 	result, err := c.client.CreateDeployment(ctx, payload)
 	if err != nil {
@@ -174,12 +176,13 @@ func (c *DeploymentsClient) GetActiveDeployment(
 
 // EvolveRequest lists the assets to add to a deployment.
 type EvolveRequest struct {
-	OpenAPIv3Assets []*deployments.AddOpenAPIv3DeploymentAssetForm
-	NonBlocking     bool
-	Functions       []*deployments.AddFunctionsForm
-	APIKey          secret.Secret
-	DeploymentID    *string
-	ProjectSlug     string
+	OpenAPIv3Assets        []*deployments.AddOpenAPIv3DeploymentAssetForm
+	NonBlocking            bool
+	Functions              []*deployments.AddFunctionsForm
+	APIKey                 secret.Secret
+	DeploymentID           *string
+	ProjectSlug            string
+	AutoAttachToolsetSlugs []string
 }
 
 // Evolve adds assets to an existing deployment.
@@ -202,6 +205,7 @@ func (c *DeploymentsClient) Evolve(
 		SessionToken:           nil,
 		UpsertExternalMcps:     nil,
 		ExcludeExternalMcps:    []string{},
+		AutoAttachToolsetSlugs: req.AutoAttachToolsetSlugs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("api error: %w", err)

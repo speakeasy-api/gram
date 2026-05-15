@@ -92,6 +92,13 @@ type Config struct {
 	// Sources defines the list of prospective assets to include in the
 	// deployment.
 	Sources []Source `json:"sources" yaml:"sources" toml:"sources"`
+
+	// AutoAttach lists toolset slugs that should subscribe to every function
+	// source in this deployment. On push, the server set-unions
+	// "function:<source-slug>" entries into each toolset's auto_sync_sources
+	// column so new tool URNs flow automatically on subsequent pushes.
+	// The `--auto-attach` CLI flag layers on top of this field (set union).
+	AutoAttach []string `json:"auto_attach,omitempty" yaml:"auto_attach,omitempty" toml:"auto_attach,omitempty"`
 }
 
 // NewConfig reads a deployment config.

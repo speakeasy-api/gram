@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 437e4617b9d9c621cdf9a066d96defb7
+  docChecksum: 397bbefddc96af2016c442e4df82802b
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -171,7 +171,7 @@ trackedFiles:
   docs/models/components/createassistantform.md:
     last_write_checksum: sha1:ac74c8c039a20332c8cb667c2e15e84eb66e85b1
   docs/models/components/createdeploymentrequestbody.md:
-    last_write_checksum: sha1:ac00844231e3633fba1b07dc2dc5b8bc54fac957
+    last_write_checksum: sha1:c3711ab49c32d3f446f18760f16e3e04ddcb6f17
   docs/models/components/createdeploymentresult.md:
     last_write_checksum: sha1:41e18a5dedda65b901d6b193aa810ab3a74661cc
   docs/models/components/createdomainrequestbody.md:
@@ -271,7 +271,7 @@ trackedFiles:
   docs/models/components/environmententryinput.md:
     last_write_checksum: sha1:82e419b9a54dbf5869c1c3e7d15f57ef12673593
   docs/models/components/evolveform.md:
-    last_write_checksum: sha1:77109d97c0e09a16399eff19bbd6eeda93a48b2e
+    last_write_checksum: sha1:a93b687d960728ea8dc5f53acb624dd06d514c7f
   docs/models/components/evolveresult.md:
     last_write_checksum: sha1:db06ce126556570bbfa4033c393953026f88280a
   docs/models/components/exportmcpmetadatarequestbody.md:
@@ -1079,7 +1079,7 @@ trackedFiles:
   docs/models/operations/createcustomersessionsecurity.md:
     last_write_checksum: sha1:9a1a4e0b11e6fdee447545ceffddbdf9da949646
   docs/models/operations/createdeploymentrequest.md:
-    last_write_checksum: sha1:7a31f38d036aa3dfd97fb3c876186ce4b4ff7164
+    last_write_checksum: sha1:1de48025971fc421c2dfae9d7544df536bee18e1
   docs/models/operations/createdeploymentsecurity.md:
     last_write_checksum: sha1:8ca4325ac2cbf51b30420d939ac3fe462f106d50
   docs/models/operations/createdeploymentsecurityoption1.md:
@@ -1363,7 +1363,7 @@ trackedFiles:
   docs/models/operations/enablewebhookssecurity.md:
     last_write_checksum: sha1:eb9dac59664586db9d7537cc7db9133803d11461
   docs/models/operations/evolvedeploymentrequest.md:
-    last_write_checksum: sha1:0bbd61b2374e44e59476df5d7c7016434f2fccca
+    last_write_checksum: sha1:d7ce51120165d10a0a0204be70735aefef958263
   docs/models/operations/evolvedeploymentsecurity.md:
     last_write_checksum: sha1:2e3e2ba9b7b6a23d068953b9ad0b2aa24af30802
   docs/models/operations/evolvedeploymentsecurityoption1.md:
@@ -2465,7 +2465,7 @@ trackedFiles:
   docs/sdks/collections/README.md:
     last_write_checksum: sha1:ddea3a234e5ac30d31983aba98d7f85bcd98c81c
   docs/sdks/deployments/README.md:
-    last_write_checksum: sha1:79dfcf6725b753739d1b9fd7ce1cd0aad3503c9a
+    last_write_checksum: sha1:36237c472a04319858a3cd7e7ac12a7c5249ddf6
   docs/sdks/domains/README.md:
     last_write_checksum: sha1:6d05136dac464dac02da4ba3a2e70fad6556ed32
   docs/sdks/environments/README.md:
@@ -3422,7 +3422,7 @@ trackedFiles:
     last_write_checksum: sha1:747efa541d951d5670ea42c817f08223aafccc76
   src/models/components/createdeploymentrequestbody.ts:
     id: 2f1528140dcf
-    last_write_checksum: sha1:7c25ffd8257dab7f29c445ce810fab16adcd9938
+    last_write_checksum: sha1:ab4d395dbb3875ac06759109f8c01f743527702e
     pristine_git_object: a8a9fcdd35e78b22254821a7a23343ae1ce2551d
   src/models/components/createdeploymentresult.ts:
     id: 8e30fd969f71
@@ -3564,7 +3564,7 @@ trackedFiles:
     pristine_git_object: ece53077211303d2aeca1e62e41417697b6b4d87
   src/models/components/evolveform.ts:
     id: a86875fbb84e
-    last_write_checksum: sha1:68770111d897e4e6ed0a489454180da16212b6cb
+    last_write_checksum: sha1:a44d0b3a51176540dc2c8c7f5f9e912764c1ef65
     pristine_git_object: 70b279c6628b4e8638391a9a30fdde8f93e530bc
   src/models/components/evolveresult.ts:
     id: "438570247969"
@@ -6406,7 +6406,7 @@ examples:
         header:
           Idempotency-Key: "01jqq0ajmb4qh9eppz48dejr2m"
       requestBody:
-        application/json: {"external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "external_mcps": [{"name": "ai.exa/exa", "registry_id": "0a3c30db-c529-4810-ad7a-28eff64064bb", "registry_server_specifier": "slack", "slug": "<value>"}], "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "non_blocking": false}
+        application/json: {"auto_attach_toolset_slugs": ["my-mcp", "internal-tools"], "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "external_mcps": [{"name": "ai.exa/exa", "registry_id": "0a3c30db-c529-4810-ad7a-28eff64064bb", "registry_server_specifier": "slack", "slug": "<value>"}], "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "non_blocking": false}
       responses:
         "200":
           application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2023-01-07T04:35:31.471Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "external_mcp_tool_count": 5649, "functions_tool_count": 5649, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "openapiv3_tool_count": 5649, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
@@ -6417,7 +6417,7 @@ examples:
   evolveDeployment:
     speakeasy-default-evolve-deployment:
       requestBody:
-        application/json: {"non_blocking": false, "upsert_external_mcps": [{"name": "ai.exa/exa", "registry_id": "fb7378d0-8d03-460e-bcd1-36af78f7025c", "registry_server_specifier": "slack", "slug": "<value>"}]}
+        application/json: {"auto_attach_toolset_slugs": ["my-mcp"], "non_blocking": false, "upsert_external_mcps": [{"name": "ai.exa/exa", "registry_id": "fb7378d0-8d03-460e-bcd1-36af78f7025c", "registry_server_specifier": "slack", "slug": "<value>"}]}
       responses:
         "200":
           application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2025-12-06T08:41:21.182Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "external_mcp_tool_count": 976608, "functions_tool_count": 976608, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "openapiv3_tool_count": 976608, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}

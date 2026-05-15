@@ -25724,6 +25724,14 @@ components:
     CreateDeploymentForm:
       type: object
       properties:
+        auto_attach_toolset_slugs:
+          type: array
+          items:
+            type: string
+          description: Toolset slugs that should subscribe to every function source in this deployment. The server adds "function:<slug>" entries to each toolset's auto_sync_sources column before the deployment workflow runs; new tool URNs then flow to those toolsets automatically. Idempotent; safe to repeat.
+          example:
+            - my-mcp
+            - internal-tools
         external_id:
           type: string
           description: The external ID to refer to the deployment. This can be a git commit hash for example.
@@ -25772,6 +25780,14 @@ components:
     CreateDeploymentRequestBody:
       type: object
       properties:
+        auto_attach_toolset_slugs:
+          type: array
+          items:
+            type: string
+          description: Toolset slugs that should subscribe to every function source in this deployment. The server adds "function:<slug>" entries to each toolset's auto_sync_sources column before the deployment workflow runs; new tool URNs then flow to those toolsets automatically. Idempotent; safe to repeat.
+          example:
+            - my-mcp
+            - internal-tools
         external_id:
           type: string
           description: The external ID to refer to the deployment. This can be a git commit hash for example.
@@ -27004,6 +27020,13 @@ components:
     EvolveForm:
       type: object
       properties:
+        auto_attach_toolset_slugs:
+          type: array
+          items:
+            type: string
+          description: Toolset slugs that should subscribe to every function source upserted by this evolution. Mirrors the CreateDeployment field; idempotent on repeat.
+          example:
+            - my-mcp
         deployment_id:
           type: string
           description: The ID of the deployment to evolve. If omitted, the latest deployment will be used.
