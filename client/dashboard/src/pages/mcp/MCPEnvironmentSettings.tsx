@@ -7,7 +7,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useIsAdmin, useSession } from "@/contexts/Auth";
+import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
@@ -900,7 +900,6 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
     setIsWireUserSessionIssuerModalOpen,
   ] = useState(false);
 
-  const isAdmin = useIsAdmin();
   const telemetry = useTelemetry();
 
   const { data: environmentsData } = useListEnvironments();
@@ -939,22 +938,24 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
     ? "Enable the MCP server to configure OAuth"
     : "This MCP server does not require the OAuth authorization code flow";
 
+  // userSessionIssuerSlug is populated by the toolsets read path when the
+  // OAuth-Proxy → user-sessions migration has produced a user_session_issuer
+  // for this toolset.
+  const userSessionIssuerWired = !!toolset.userSessionIssuerSlug;
   // The migration entry point appears for both OAuth Proxy paradigms (custom
   // and gram-managed): both produce a user_session_issuer, even though
   // gram-managed skips the remote_session_* pair. External-OAuth toolsets
-  // have nothing to port. Gated to admins so a typical project member
-  // doesn't see plumbing they aren't expected to operate.
+  // have nothing to port. Gated to feature-flag holders, and hidden once a
+  // user_session_issuer is already wired (nothing left to migrate).
   const showWireUserSessionIssuer =
-    isAdmin && (oauthParadigm === "proxy" || oauthParadigm === "gram");
-  // userSessionIssuerSlug is populated by the toolsets read path when the
-  // OAuth-Proxy → user-sessions migration has produced a user_session_issuer
-  // for this toolset. Admin-only on the dashboard side: regular project
-  // members aren't expected to think about the user-session plumbing.
-  const userSessionIssuerWired = !!toolset.userSessionIssuerSlug;
-  const hideConfigureButton =
     (telemetry.isFeatureEnabled(ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG) ??
       false) &&
-    !isOAuthConnected;
+    !userSessionIssuerWired &&
+    (oauthParadigm === "proxy" || oauthParadigm === "gram");
+  // Once the user_session_issuer is wired, the OAuth-proxy CLIENT_ID/SECRET
+  // it was cloned from is no longer the live credential — hide Configure to
+  // avoid steering operators back into the legacy paradigm.
+  const hideConfigureButton = userSessionIssuerWired;
 
   return (
     <PageSection
