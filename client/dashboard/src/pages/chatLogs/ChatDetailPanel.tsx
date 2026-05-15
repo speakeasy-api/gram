@@ -1,7 +1,6 @@
 import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Accordion,
   AccordionContent,
@@ -16,7 +15,7 @@ import type {
 } from "@gram/client/models/components";
 import { useLoadChat, useSearchLogsMutation } from "@gram/client/react-query";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
-import { Badge, Icon, Stack, type IconName } from "@speakeasy-api/moonshine";
+import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
@@ -32,6 +31,19 @@ import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { MessageContent } from "@gram-ai/elements";
 import { useIsAdmin } from "@/contexts/Auth";
 import { toast } from "sonner";
+import { EntryTypeFilterBar } from "./TraceEntryFilterBar";
+import {
+  DEFAULT_ENABLED_ENTRY_TYPES,
+  ENTRY_TYPE_META,
+  type FilterableTraceEntryType,
+  type ToolCall,
+  type TraceEntryType,
+  getEntryTypeCounts,
+  getTraceEntryType,
+  getVisibleMessageCount,
+  isMessageVisible,
+  parseToolCalls,
+} from "./traceEntries";
 
 interface ChatDetailPanelProps {
   chatId: string;
@@ -151,245 +163,6 @@ function getSeverityBadgeVariant(
     default:
       return "neutral";
   }
-}
-
-interface ToolCall {
-  id?: string;
-  type?: string;
-  name?: string;
-  function?: {
-    name?: string;
-    arguments?: string | object;
-  };
-}
-
-const FILTERABLE_ENTRY_TYPES = [
-  "user",
-  "assistant",
-  "tool_call",
-  "tool_result",
-] as const;
-
-type FilterableTraceEntryType = (typeof FILTERABLE_ENTRY_TYPES)[number];
-type TraceEntryType = FilterableTraceEntryType | "system";
-
-const DEFAULT_ENABLED_ENTRY_TYPES = [...FILTERABLE_ENTRY_TYPES];
-
-const ENTRY_TYPE_META: Record<
-  TraceEntryType,
-  {
-    label: string;
-    icon: IconName;
-    avatarClassName: string;
-    iconClassName: string;
-  }
-> = {
-  user: {
-    label: "User",
-    icon: "user",
-    avatarClassName: "bg-muted",
-    iconClassName: "text-muted-foreground",
-  },
-  assistant: {
-    label: "Assistant",
-    icon: "bot",
-    avatarClassName: "bg-information-softest",
-    iconClassName: "text-default-information",
-  },
-  tool_call: {
-    label: "Tool Call",
-    icon: "zap",
-    avatarClassName: "bg-warning-softest",
-    iconClassName: "text-warning-default",
-  },
-  tool_result: {
-    label: "Tool Result",
-    icon: "terminal",
-    avatarClassName: "bg-success-softest",
-    iconClassName: "text-success-default",
-  },
-  system: {
-    label: "System Prompt",
-    icon: "settings",
-    avatarClassName: "bg-accent",
-    iconClassName: "text-muted-foreground",
-  },
-};
-
-const ENTRY_TYPE_FILTER_STYLES: Record<FilterableTraceEntryType, string> = {
-  user: [
-    "border-border bg-accent/50 text-foreground",
-    "data-[state=on]:bg-accent data-[state=on]:text-foreground",
-  ].join(" "),
-  assistant: [
-    "border-information-default bg-information-softest text-foreground",
-    "data-[state=on]:bg-information-softest data-[state=on]:text-foreground",
-  ].join(" "),
-  tool_call: [
-    "border-warning-default bg-warning-softest text-foreground",
-    "data-[state=on]:bg-warning-softest data-[state=on]:text-foreground",
-  ].join(" "),
-  tool_result: [
-    "border-success-default bg-success-softest text-foreground",
-    "data-[state=on]:bg-success-softest data-[state=on]:text-foreground",
-  ].join(" "),
-};
-
-function parseToolCalls(toolCalls: string | undefined): ToolCall[] | null {
-  if (!toolCalls) return null;
-
-  try {
-    let parsed: unknown = JSON.parse(toolCalls);
-    // Handle double-encoded JSON strings.
-    if (typeof parsed === "string") {
-      parsed = JSON.parse(parsed);
-    }
-    return Array.isArray(parsed) ? (parsed as ToolCall[]) : null;
-  } catch {
-    return null;
-  }
-}
-
-function getTraceEntryType(
-  message: ChatMessage,
-  parsedToolCalls: ToolCall[] | null,
-): TraceEntryType {
-  if (parsedToolCalls && parsedToolCalls.length > 0) return "tool_call";
-  if (message.role === "tool") return "tool_result";
-  if (message.role === "user") return "user";
-  if (message.role === "assistant") return "assistant";
-  return "system";
-}
-
-function getEntryTypeCounts(
-  messages: ChatMessage[],
-): Record<FilterableTraceEntryType, number> {
-  const counts: Record<FilterableTraceEntryType, number> = {
-    user: 0,
-    assistant: 0,
-    tool_call: 0,
-    tool_result: 0,
-  };
-
-  for (const message of messages) {
-    const entryType = getTraceEntryType(
-      message,
-      parseToolCalls(message.toolCalls),
-    );
-    if (entryType !== "system") {
-      counts[entryType] += 1;
-    }
-  }
-
-  return counts;
-}
-
-function isMessageVisible(
-  message: ChatMessage,
-  enabledEntryTypes: FilterableTraceEntryType[],
-) {
-  const parsedToolCalls = parseToolCalls(message.toolCalls);
-  const entryType = getTraceEntryType(message, parsedToolCalls);
-  return entryType === "system" || enabledEntryTypes.includes(entryType);
-}
-
-function getVisibleMessageCount(
-  messages: ChatMessage[],
-  enabledEntryTypes: FilterableTraceEntryType[],
-) {
-  return messages.filter((message) =>
-    isMessageVisible(message, enabledEntryTypes),
-  ).length;
-}
-
-function getFilterableEntryTypes(values: string[]) {
-  return FILTERABLE_ENTRY_TYPES.filter((entryType) =>
-    values.includes(entryType),
-  );
-}
-
-function EntryTypeFilterBar({
-  value,
-  counts,
-  totalCount,
-  visibleCount,
-  onChange,
-}: {
-  value: FilterableTraceEntryType[];
-  counts: Record<FilterableTraceEntryType, number>;
-  totalCount: number;
-  visibleCount: number;
-  onChange: (value: FilterableTraceEntryType[]) => void;
-}) {
-  return (
-    <div className="bg-background px-6 py-3">
-      <div className="flex min-w-0 flex-col gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-sm font-medium">Entries</div>
-          <div className="text-muted-foreground shrink-0 text-xs">
-            Showing {visibleCount.toLocaleString()} of{" "}
-            {totalCount.toLocaleString()} entries
-          </div>
-        </div>
-        <ToggleGroup
-          type="multiple"
-          value={value}
-          onValueChange={(next) => {
-            const nextValue = getFilterableEntryTypes(next);
-            if (nextValue.length > 0) {
-              onChange(nextValue);
-            }
-          }}
-          className="border-border grid w-full grid-cols-2 rounded-none border lg:grid-cols-4"
-        >
-          {FILTERABLE_ENTRY_TYPES.map((entryType) => {
-            const meta = ENTRY_TYPE_META[entryType];
-            const count = counts[entryType];
-            const isSelected = value.includes(entryType);
-            const isDisabled = count === 0;
-
-            return (
-              <ToggleGroupItem
-                key={entryType}
-                value={entryType}
-                aria-label={`Toggle ${meta.label} entries`}
-                disabled={isDisabled}
-                className={cn(
-                  "h-10 min-w-0 justify-start rounded-none px-3 text-left shadow-none first:rounded-none last:rounded-none disabled:cursor-not-allowed disabled:opacity-45",
-                  isSelected && !isDisabled
-                    ? ENTRY_TYPE_FILTER_STYLES[entryType]
-                    : "border-border bg-background text-muted-foreground hover:border-muted-foreground/40 hover:bg-muted/30 hover:text-foreground",
-                )}
-              >
-                <Icon
-                  name={meta.icon}
-                  className={cn(
-                    "size-4 shrink-0",
-                    isSelected && !isDisabled
-                      ? meta.iconClassName
-                      : "text-muted-foreground",
-                  )}
-                />
-                <span className="min-w-0 flex-1 truncate font-medium">
-                  {meta.label}
-                </span>
-                <span
-                  className={cn(
-                    "rounded px-1.5 py-0.5 font-mono text-[10px] leading-none",
-                    isSelected && !isDisabled
-                      ? "bg-background/80 text-foreground"
-                      : "bg-muted text-muted-foreground",
-                  )}
-                >
-                  {count.toLocaleString()}
-                </span>
-              </ToggleGroupItem>
-            );
-          })}
-        </ToggleGroup>
-      </div>
-    </div>
-  );
 }
 
 function ChatMessagesList({
