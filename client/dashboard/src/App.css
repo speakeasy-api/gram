@@ -101,3 +101,28 @@
   animation: scroll-dots 3s linear infinite;
   color: oklch(0.553 0.013 58.071 / 0.4);
 }
+
+@layer components {
+  .risk-category-label {
+    container-type: inline-size;
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .risk-category-label__short {
+    display: none;
+  }
+
+  @container (max-width: 220px) {
+    .risk-category-label[data-short-label="true"] .risk-category-label__long {
+      display: none;
+    }
+
+    .risk-category-label[data-short-label="true"] .risk-category-label__short {
+      display: inline;
+    }
+  }
+}

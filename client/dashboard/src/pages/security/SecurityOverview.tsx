@@ -32,7 +32,7 @@ import { toast } from "sonner";
 import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { MetricCard } from "@/components/chart/MetricCard";
-import { CategoryLabel, MaskedMatch, RuleLabel } from "./risk-finding-ui";
+import { CategoryLabel, MaskedMatch, RuleLabel } from "./risk-ui";
 
 export default function SecurityOverview() {
   return (
