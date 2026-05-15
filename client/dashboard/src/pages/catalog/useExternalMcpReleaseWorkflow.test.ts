@@ -1079,7 +1079,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
       expect(mockRemoteSessionIssuersDiscover).toHaveBeenCalledWith(
         {
           discoverRemoteSessionIssuerRequestBody: {
-            issuer: "https://idp.example",
+            issuer: "https://idp.example/oauth",
           },
         },
         undefined,

@@ -82,9 +82,16 @@ export function externalMcpUserSessionOAuthConfigFromMetadata({
   }
 
   const issuerUrl =
-    extractOrigin(authorizationEndpoint) ??
-    extractOrigin(tokenEndpoint) ??
-    extractOrigin(registrationEndpoint);
+    explicitIssuerURL(metadata.issuer, [
+      authorizationEndpoint,
+      tokenEndpoint,
+      registrationEndpoint,
+    ]) ??
+    inferIssuerBaseURL(
+      authorizationEndpoint,
+      tokenEndpoint,
+      registrationEndpoint,
+    );
   if (!issuerUrl) return null;
 
   return {
@@ -211,10 +218,11 @@ function configFromExternalMcpDefinition(
     return null;
   }
 
-  const issuerUrl =
-    extractOrigin(def.oauthAuthorizationEndpoint) ??
-    extractOrigin(def.oauthTokenEndpoint) ??
-    extractOrigin(def.oauthRegistrationEndpoint);
+  const issuerUrl = inferIssuerBaseURL(
+    def.oauthAuthorizationEndpoint,
+    def.oauthTokenEndpoint,
+    def.oauthRegistrationEndpoint,
+  );
   if (!issuerUrl) return null;
 
   return {
@@ -257,13 +265,57 @@ function readStringArray(value: unknown): string[] {
     : [];
 }
 
-function extractOrigin(url: string): string | null {
+function explicitIssuerURL(
+  issuer: unknown,
+  endpointURLs: string[],
+): string | null {
+  const explicit = readString(issuer);
+  if (!explicit) return null;
+
+  const parsedIssuer = parseURL(explicit);
+  if (!parsedIssuer) return null;
+
+  // OAuthWizard may synthesize a Gram-facing issuer while carrying upstream
+  // OAuth endpoints. Only trust explicit metadata issuers that describe the
+  // same upstream authorization server as one of the endpoints.
+  const sameAuthorizationServer = endpointURLs.some((endpointURL) => {
+    const parsedEndpoint = parseURL(endpointURL);
+    return parsedEndpoint
+      ? parsedEndpoint.origin === parsedIssuer.origin
+      : false;
+  });
+  if (!sameAuthorizationServer) return null;
+
+  return formatIssuerURL(parsedIssuer);
+}
+
+function inferIssuerBaseURL(...endpointURLs: string[]): string | null {
+  for (const endpointURL of endpointURLs) {
+    const parsed = parseURL(endpointURL);
+    if (!parsed) continue;
+
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    if (segments.length > 0) segments.pop();
+    if (segments[segments.length - 1]?.match(/^v\d+$/i)) segments.pop();
+
+    parsed.pathname = segments.length > 0 ? `/${segments.join("/")}` : "";
+    return formatIssuerURL(parsed);
+  }
+
+  return null;
+}
+
+function parseURL(url: string): URL | null {
   try {
-    const parsed = new URL(url);
-    return `${parsed.protocol}//${parsed.host}`;
+    return new URL(url);
   } catch {
     return null;
   }
+}
+
+function formatIssuerURL(url: URL): string {
+  const path = url.pathname.replace(/\/+$/g, "");
+  return `${url.protocol}//${url.host}${path}`;
 }
 
 function slugify(value: string): string {
