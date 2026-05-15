@@ -5,9 +5,8 @@
 //
 //   - authenticated: AuthnChallengeState pre-stamped with a user:<id> URN
 //     (what HandleIDPCallback does on the private-toolset path).
-//   - anonymous: public toolset, no subject on the parent challenge at
-//     /authorize time — handleConsentGet late-binds an anonymous URN and
-//     persists it back to Redis before rendering the per-remote cards.
+//   - anonymous: AuthnChallengeState pre-stamped with an anonymous:<id> URN
+//     (what HandleAuthorize does on the public-toolset path).
 package mcp_test
 
 import (
@@ -75,6 +74,7 @@ func TestRemoteLoginCallback_AuthenticatedSubject(t *testing.T) {
 		RedirectURI:         "http://example.com/cb",
 		CodeChallenge:       "",
 		CodeChallengeMethod: "",
+		CSRFToken:           "csrf-token",
 		Subject:             &userSubject,
 		CreatedAt:           time.Now(),
 	}))
@@ -83,10 +83,9 @@ func TestRemoteLoginCallback_AuthenticatedSubject(t *testing.T) {
 }
 
 // TestRemoteLoginCallback_AnonymousSubject covers the public-toolset
-// path. The parent AuthnChallengeState is created with no subject; the
-// /mcp/{slug}/connect GET handler late-binds an anonymous URN and
-// persists it. The remote-login callback then attributes the
-// remote_sessions row to that anonymous URN.
+// path. The parent AuthnChallengeState is created with an anonymous subject;
+// the remote-login callback then attributes the remote_sessions row to that
+// anonymous URN.
 func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 	t.Parallel()
 
@@ -107,6 +106,7 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 	mgr, authnCache := buildChallengeManagerForTest(t, ti)
 
 	parentID := uuid.NewString()
+	anonymousSubject := urn.NewAnonymousSubject(uuid.NewString())
 	require.NoError(t, authnCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  parentID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
@@ -118,15 +118,15 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 		RedirectURI:         "http://example.com/cb",
 		CodeChallenge:       "",
 		CodeChallengeMethod: "",
-		Subject:             nil,
+		CSRFToken:           "csrf-token",
+		Subject:             &anonymousSubject,
 		CreatedAt:           time.Now(),
 	}))
 
 	insertUserSessionClient(t, ctx, ti.conn, result.UserSessionIssuer.ID, "test-mcp-client")
 
-	// HandleConsent (GET) must stamp an anonymous URN onto the parent
-	// AuthnChallengeState. Hitting it via the service exercises the real
-	// path (loadToolset → requireUserSessionIssuer → late-bind branch).
+	// Hitting HandleConsent GET through the service exercises the real
+	// card-render path (loadToolset → requireUserSessionIssuer → card build).
 	req := httptest.NewRequest(http.MethodGet, "/mcp/"+result.Toolset.McpSlug.String+"/connect?state="+parentID, nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("mcpSlug", result.Toolset.McpSlug.String)
@@ -138,8 +138,8 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 
 	stamped, err := authnCache.Get(ctx, "authnChallenge:"+parentID)
 	require.NoError(t, err)
-	require.NotNil(t, stamped.Subject, "consent GET must stamp anonymous subject on public toolset")
-	require.Equal(t, urn.SessionSubjectKindAnonymous, stamped.Subject.Kind)
+	require.NotNil(t, stamped.Subject)
+	require.Equal(t, anonymousSubject, *stamped.Subject)
 
 	runRemoteLoginRoundTrip(t, ctx, ti, mgr, result, parentID, stamped.Subject)
 }

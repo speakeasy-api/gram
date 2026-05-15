@@ -211,6 +211,7 @@
       <div class="actions">
         <form method="POST" action="/mcp/{{.MCPSlug}}/connect">
           <input type="hidden" name="state" value="{{.State}}" />
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
           <button
             type="submit"
             name="action"
@@ -222,6 +223,7 @@
         </form>
         <form method="POST" action="/mcp/{{.MCPSlug}}/connect">
           <input type="hidden" name="state" value="{{.State}}" />
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
           <button
             type="submit"
             name="action"

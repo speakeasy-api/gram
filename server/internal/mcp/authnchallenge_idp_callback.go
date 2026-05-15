@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -144,7 +143,10 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 			return oops.E(oops.CodeUnexpected, derr, "failed to load custom domain").Log(ctx, logger)
 		}
 	}
-	consentURL := fmt.Sprintf("%s/mcp/%s/connect?state=%s", baseURL, mcpSlug, url.QueryEscape(challengeState.ID))
+	consentURL, err := buildConsentURL(baseURL, mcpSlug, challengeState.ID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build consent URL").Log(ctx, logger)
+	}
 	http.Redirect(w, r, consentURL, http.StatusFound)
 	return nil
 }

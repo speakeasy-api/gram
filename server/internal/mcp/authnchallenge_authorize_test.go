@@ -105,6 +105,7 @@ func TestIDPCallback_StaticRouteResolvesToolsetFromChallengeState(t *testing.T) 
 		State:               "client-state",
 		CodeChallenge:       "",
 		CodeChallengeMethod: "",
+		CSRFToken:           "csrf-token",
 		Subject:             nil,
 		CreatedAt:           time.Now(),
 	}))

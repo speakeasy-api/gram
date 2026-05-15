@@ -7,6 +7,7 @@ package mcp
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	_ "embed"
 	"encoding/base64"
 	"errors"
@@ -25,7 +26,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -49,6 +49,7 @@ type consentTemplateData struct {
 	ClientName         string
 	MCPSlug            string
 	State              string
+	CSRFToken          string
 	SubjectDisplay     string
 	RedirectURI        string
 	RemoteSessionCards []remoteSessionCard
@@ -70,8 +71,8 @@ type remoteSessionCard struct {
 //
 // On POST + Give Access:
 //
-//   - If the AuthnChallengeState's Subject is still empty (public-toolset
-//     path that bypassed the IDP), mint a fresh anonymous URN here.
+//   - Verify the consent CSRF token stored on AuthnChallengeState.
+//   - Use the subject that was already resolved into AuthnChallengeState.
 //   - Persist a user_session_consents row binding (principal, client,
 //     remote_set_hash). Even the empty-remote-set case is bound to a
 //     specific hash so consent can't be CSRF'd past on a future issuer
@@ -141,26 +142,11 @@ func (s *Service) handleConsentGet(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").Log(ctx, logger)
 	}
 
-	// Public-toolset late-bind: the IDP path stamps Subject on a private
-	// toolset, but on the public path the user reaches /connect with no
-	// stamped subject. Interactive-mode remote-login cards minted below
-	// need a stable subject so the /remote_login_callback handler can
-	// attribute the resulting remote_sessions row. Stamp an anonymous URN
-	// now and persist it back to Redis; handleConsentPost's existing
-	// public-path branch will skip its own mint when it finds Subject
-	// already set.
-	if (challengeState.Subject == nil || challengeState.Subject.IsZero()) && toolset.McpIsPublic {
-		sub := urn.NewAnonymousSubject(uuid.NewString())
-		challengeState.Subject = &sub
-		if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "stamp anonymous subject").Log(ctx, logger)
-		}
+	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
+		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").Log(ctx, logger)
 	}
 
-	subjectDisplay := "An anonymous session for this MCP server"
-	if challengeState.Subject != nil && !challengeState.Subject.IsZero() {
-		subjectDisplay = challengeState.Subject.String()
-	}
+	subjectDisplay := challengeState.Subject.String()
 
 	cards, err := s.buildRemoteSessionCards(ctx, toolset, challengeState, mcpSlug)
 	if err != nil {
@@ -171,6 +157,7 @@ func (s *Service) handleConsentGet(w http.ResponseWriter, r *http.Request) error
 		ClientName:         client.ClientName,
 		MCPSlug:            mcpSlug,
 		State:              stateID,
+		CSRFToken:          challengeState.CSRFToken,
 		SubjectDisplay:     subjectDisplay,
 		RedirectURI:        challengeState.RedirectURI,
 		RemoteSessionCards: cards,
@@ -234,6 +221,10 @@ func (s *Service) handleConsentPost(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").Log(ctx, logger)
 	}
 
+	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challengeState.CSRFToken)) != 1 {
+		return oops.E(oops.CodeUnauthorized, nil, "invalid consent csrf token").Log(ctx, logger)
+	}
+
 	// Explicit action required: fail closed on missing / unknown values so
 	// a malformed form post can't trigger the approval path.
 	action := r.PostForm.Get("action")
@@ -251,22 +242,10 @@ func (s *Service) handleConsentPost(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeBadRequest, nil, `action must be "approve" or "deny"`).Log(ctx, logger)
 	}
 
-	// Subject binding by toolset privacy:
-	//   - Public toolset: late-bind a fresh anonymous URN. The user came
-	//     straight to /connect bypassing the IDP, so there's no upstream
-	//     identity to attach.
-	//   - Private toolset: Subject MUST have been stamped by
-	//     HandleIDPCallback. If it isn't, the user reached /connect
-	//     without authenticating — refuse rather than mint an anonymous
-	//     session that bypasses the IDP login requirement.
-	var subject urn.SessionSubject
-	if challengeState.Subject != nil && !challengeState.Subject.IsZero() {
-		subject = *challengeState.Subject
-	} else if toolset.McpIsPublic {
-		subject = urn.NewAnonymousSubject(uuid.NewString())
-	} else {
-		return oops.E(oops.CodeUnauthorized, nil, "private toolset requires IDP authentication before consent").Log(ctx, logger)
+	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
+		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").Log(ctx, logger)
 	}
+	subject := *challengeState.Subject
 
 	// Resolve the user_session_clients row id for the consent FK.
 	clientRow, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
@@ -317,6 +296,21 @@ func (s *Service) handleConsentPost(w http.ResponseWriter, r *http.Request) erro
 	// the user agent to GET the redirect target with NO body re-submission.
 	http.Redirect(w, r, clientRedirect, http.StatusSeeOther)
 	return nil
+}
+
+func buildConsentURL(baseURL, mcpSlug, stateID string) (string, error) {
+	consentURL, err := url.JoinPath(baseURL, "mcp", mcpSlug, "connect")
+	if err != nil {
+		return "", fmt.Errorf("join consent path: %w", err)
+	}
+	u, err := url.Parse(consentURL)
+	if err != nil {
+		return "", fmt.Errorf("parse consent URL: %w", err)
+	}
+	q := u.Query()
+	q.Set("state", stateID)
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }
 
 // buildClientRedirect produces the URL to redirect the MCP client to,

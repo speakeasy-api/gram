@@ -56,7 +56,7 @@ type LegacyMcpEndpointRef struct {
 
 // AuthnChallengeState is the in-flight context of a single Gram-as-AS authn
 // challenge — the OAuth client's request, the issuer it's against, and the
-// resolved subject (stamped later in the flow). Stored in Redis under
+// subject once it has been resolved. Stored in Redis under
 // `authnChallenge:{ID}` for ~10 minutes — long enough for the user to
 // round-trip through the IDP and land on /connect, short enough that
 // abandoned flows don't pile up.
@@ -69,11 +69,12 @@ type AuthnChallengeState struct {
 	State               string               `json:"state,omitempty"`
 	CodeChallenge       string               `json:"code_challenge"`
 	CodeChallengeMethod string               `json:"code_challenge_method"`
-	// Subject is nil on creation; HandleIDPCallback (private path)
-	// stamps `user:<id>`, HandleConsent's POST mints a fresh
-	// `anonymous:<uuid>` on the public path. Pointer so the Redis JSON
-	// can round-trip an unstamped state (the URN's MarshalJSON refuses
-	// to serialise a zero-value SessionSubject).
+	CSRFToken           string               `json:"csrf_token"`
+	// Subject is stamped exactly once before consent is rendered:
+	// HandleAuthorize stamps `anonymous:<uuid>` for public toolsets, and
+	// HandleIDPCallback stamps `user:<id>` for private toolsets. Pointer so
+	// the Redis JSON can round-trip the private pre-IDP state (the URN's
+	// MarshalJSON refuses to serialise a zero-value SessionSubject).
 	Subject   *urn.SessionSubject `json:"subject,omitempty"`
 	CreatedAt time.Time           `json:"created_at"`
 }
@@ -210,13 +211,11 @@ func WriteAuthenticateChallenge(w http.ResponseWriter, baseURL, mcpSlug, message
 
 var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not match toolset")
 
-// resolveMcp loads the Toolset addressed by a LegacyMcpEndpointRef. The
-// single source of truth for endpoint → toolset across both
-// path-driven handlers (via loadToolsetFromMcpSlug) and stored-state
-// callbacks (HandleIDPCallback). Strict semantics: an unset
-// CustomDomainID matches ONLY toolsets with custom_domain_id IS NULL —
-// no prefer-platform-with-fallback. Returns errToolsetNotFound on
-// pgx.ErrNoRows.
+// resolveMcp loads the Toolset addressed by a LegacyMcpEndpointRef. Note
+// that this resolution differs from other places where we resolve MCPs in
+// the legacy MCP pathway. It pins the MCP to only be resolved through a
+// single context rather than allowing it to be resolved willy-nilly by
+// platform slug. Returns errToolsetNotFound on pgx.ErrNoRows.
 func (s *Service) resolveMcp(ctx context.Context, endpoint LegacyMcpEndpointRef) (*toolsets_repo.Toolset, error) {
 	var toolset toolsets_repo.Toolset
 	var err error
