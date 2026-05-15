@@ -156,6 +156,11 @@ func TestBackfillWorkOSOrganization_UnknownUserSyncsSingleRoleAssignment(t *test
 	require.False(t, assignments[0].UserID.Valid)
 	require.Equal(t, membershipID, assignments[0].WorkosMembershipID.String)
 	require.Empty(t, assignments[0].WorkosLastEventID.String)
+
+	relationship, err := orgrepo.New(conn).GetRelationshipByMembershipID(ctx, conv.ToPGText(membershipID))
+	require.NoError(t, err)
+	require.False(t, relationship.UserID.Valid)
+	require.Equal(t, workosUserID, relationship.WorkosUserID.String)
 }
 
 func TestBackfillWorkOSOrganization_MembershipWithNewerEventSkipsRoleSnapshot(t *testing.T) {

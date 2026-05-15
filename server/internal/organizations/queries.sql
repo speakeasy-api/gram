@@ -172,48 +172,91 @@ FROM organization_user_relationships
 WHERE organization_id = @organization_id
   AND user_id = @user_id;
 
--- name: UpsertOrganizationUserRelationshipFromWorkOS :exec
+-- name: GetRelationshipByMembershipID :one
+SELECT *
+FROM organization_user_relationships
+WHERE workos_membership_id = @workos_membership_id
+ORDER BY updated_at DESC
+LIMIT 1;
+
+-- name: UpsertWorkOSMembership :exec
 -- Upsert a membership row from a WorkOS organization_membership event. Caller
 -- must have already passed the row through ShouldProcessEvent.
+WITH updated_existing_user_relationship AS (
+    UPDATE organization_user_relationships
+    SET workos_user_id = @workos_user_id,
+        workos_membership_id = @workos_membership_id,
+        workos_updated_at = @workos_updated_at,
+        workos_last_event_id = @workos_last_event_id,
+        deleted_at = NULL,
+        updated_at = clock_timestamp()
+    WHERE organization_id = @organization_id
+      AND user_id = @user_id
+      AND @user_id::text IS NOT NULL
+    RETURNING id
+)
 INSERT INTO organization_user_relationships (
     organization_id,
     user_id,
+    workos_user_id,
     workos_membership_id,
     workos_updated_at,
     workos_last_event_id
-) VALUES (
+)
+SELECT
     @organization_id,
     @user_id,
+    @workos_user_id,
     @workos_membership_id,
     @workos_updated_at,
     @workos_last_event_id
-)
-ON CONFLICT (organization_id, user_id) DO UPDATE SET
+WHERE NOT EXISTS (SELECT 1 FROM updated_existing_user_relationship)
+ON CONFLICT (workos_membership_id) WHERE deleted IS FALSE DO UPDATE SET
+    user_id = COALESCE(EXCLUDED.user_id, organization_user_relationships.user_id),
+    workos_user_id = COALESCE(EXCLUDED.workos_user_id, organization_user_relationships.workos_user_id),
     workos_membership_id = EXCLUDED.workos_membership_id,
     workos_updated_at = EXCLUDED.workos_updated_at,
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     deleted_at = NULL,
     updated_at = clock_timestamp();
 
--- name: MarkOrganizationUserRelationshipAsDeleted :exec
+-- name: MarkWorkOSMembershipDeleted :exec
 -- Record a WorkOS membership delete, inserting a tombstone when the local
 -- relationship did not exist so stale replayed creates cannot resurrect it.
+WITH updated_existing_user_relationship AS (
+    UPDATE organization_user_relationships
+    SET workos_user_id = @workos_user_id,
+        workos_membership_id = @workos_membership_id,
+        workos_updated_at = @workos_updated_at,
+        workos_last_event_id = @workos_last_event_id,
+        deleted_at = COALESCE(deleted_at, clock_timestamp()),
+        updated_at = clock_timestamp()
+    WHERE organization_id = @organization_id
+      AND user_id = @user_id
+      AND @user_id::text IS NOT NULL
+    RETURNING id
+)
 INSERT INTO organization_user_relationships (
     organization_id,
     user_id,
+    workos_user_id,
     workos_membership_id,
     workos_updated_at,
     workos_last_event_id,
     deleted_at
-) VALUES (
+)
+SELECT
     @organization_id,
     @user_id,
+    @workos_user_id,
     @workos_membership_id,
     @workos_updated_at,
     @workos_last_event_id,
     clock_timestamp()
-)
-ON CONFLICT (organization_id, user_id) DO UPDATE SET
+WHERE NOT EXISTS (SELECT 1 FROM updated_existing_user_relationship)
+ON CONFLICT (workos_membership_id) WHERE deleted IS FALSE DO UPDATE SET
+    user_id = COALESCE(EXCLUDED.user_id, organization_user_relationships.user_id),
+    workos_user_id = COALESCE(EXCLUDED.workos_user_id, organization_user_relationships.workos_user_id),
     workos_membership_id = COALESCE(EXCLUDED.workos_membership_id, organization_user_relationships.workos_membership_id),
     workos_updated_at = EXCLUDED.workos_updated_at,
     workos_last_event_id = EXCLUDED.workos_last_event_id,
@@ -263,25 +306,97 @@ upserted AS (
         workos_membership_id = EXCLUDED.workos_membership_id,
         workos_updated_at = EXCLUDED.workos_updated_at,
         workos_last_event_id = EXCLUDED.workos_last_event_id,
+        deleted_at = NULL,
         updated_at = clock_timestamp()
     RETURNING role_urn
 )
-DELETE FROM organization_role_assignments
+UPDATE organization_role_assignments
+SET workos_updated_at = @workos_updated_at,
+    workos_last_event_id = @workos_last_event_id,
+    deleted_at = COALESCE(deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
 WHERE organization_role_assignments.organization_id = @organization_id
   AND organization_role_assignments.workos_user_id = @workos_user_id
+  AND organization_role_assignments.deleted_at IS NULL
   AND organization_role_assignments.role_urn NOT IN (SELECT input_role_urns.role_urn FROM input_role_urns);
 
--- name: DeleteOrganizationRoleAssignmentsByWorkosUser :exec
-DELETE FROM organization_role_assignments
+-- name: MarkRoleAssignmentsDeleted :exec
+UPDATE organization_role_assignments
+SET workos_updated_at = @workos_updated_at,
+    workos_last_event_id = @workos_last_event_id,
+    deleted_at = COALESCE(deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
-  AND workos_user_id = @workos_user_id;
+  AND workos_user_id = @workos_user_id
+  AND deleted_at IS NULL;
 
 -- name: LinkRoleAssignmentsToUser :exec
 UPDATE organization_role_assignments
 SET user_id = @user_id,
     updated_at = clock_timestamp()
 WHERE workos_user_id = @workos_user_id
-  AND user_id IS NULL;
+  AND user_id IS NULL
+  AND deleted_at IS NULL;
+
+-- name: LinkRelationshipsToUser :exec
+WITH pending_relationships AS (
+    SELECT
+        id,
+        organization_id,
+        workos_user_id,
+        workos_membership_id,
+        workos_updated_at,
+        workos_last_event_id
+    FROM organization_user_relationships
+    WHERE workos_user_id = @workos_user_id
+      AND user_id IS NULL
+      AND deleted_at IS NULL
+),
+deleted_pending_for_tombstones AS (
+    UPDATE organization_user_relationships pending
+    SET deleted_at = clock_timestamp(),
+        updated_at = clock_timestamp()
+    FROM pending_relationships
+    WHERE pending.id = pending_relationships.id
+      AND EXISTS (
+          SELECT 1
+          FROM organization_user_relationships existing
+          WHERE existing.organization_id = pending_relationships.organization_id
+            AND existing.user_id = @user_id
+            AND existing.deleted_at IS NOT NULL
+      )
+    RETURNING
+        pending_relationships.organization_id,
+        pending_relationships.workos_user_id,
+        pending_relationships.workos_membership_id,
+        pending_relationships.workos_updated_at,
+        pending_relationships.workos_last_event_id
+),
+relinked_tombstones AS (
+    UPDATE organization_user_relationships existing
+    SET workos_user_id = deleted_pending_for_tombstones.workos_user_id,
+        workos_membership_id = deleted_pending_for_tombstones.workos_membership_id,
+        workos_updated_at = deleted_pending_for_tombstones.workos_updated_at,
+        workos_last_event_id = deleted_pending_for_tombstones.workos_last_event_id,
+        deleted_at = NULL,
+        updated_at = clock_timestamp()
+    FROM deleted_pending_for_tombstones
+    WHERE existing.organization_id = deleted_pending_for_tombstones.organization_id
+      AND existing.user_id = @user_id
+      AND existing.deleted_at IS NOT NULL
+)
+UPDATE organization_user_relationships pending
+SET user_id = @user_id,
+    updated_at = clock_timestamp()
+WHERE pending.workos_user_id = @workos_user_id
+  AND pending.user_id IS NULL
+  AND pending.deleted_at IS NULL
+  AND NOT EXISTS (
+      SELECT 1
+      FROM organization_user_relationships existing
+      WHERE existing.organization_id = pending.organization_id
+        AND existing.user_id = @user_id
+  );
 
 -- name: GetRoleAssignmentLinkedToDifferentWorkOSUser :one
 SELECT id, workos_user_id
