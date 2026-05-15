@@ -46,6 +46,10 @@ func TestService_SendInvite_WithRoleID(t *testing.T) {
 
 	roleID := "test-role"
 
+	ti.orgs.On("ListRoles", mock.Anything, mock.Anything).Return([]thirdpartyworkos.Role{
+		{ID: "test-role", Slug: "member", Name: "Member"},
+	}, nil).Once()
+
 	ti.orgs.On("CreatePasswordlessSession", mock.Anything, mock.Anything).Return(&thirdpartyworkos.PasswordlessSession{
 		ID:   "pwl_456",
 		Link: "https://stub.workos.com/passwordless/456",
