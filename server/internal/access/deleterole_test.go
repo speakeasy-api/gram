@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -35,6 +36,15 @@ func TestService_DeleteRole(t *testing.T) {
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
 	require.Empty(t, grants)
+
+	role, err := accessrepo.New(ti.conn).GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		WorkosSlug:     "custom-builder",
+	})
+	require.NoError(t, err)
+	require.True(t, role.Deleted)
+	require.False(t, role.WorkosDeleted)
+	require.False(t, role.WorkosDeletedAt.Valid)
 }
 
 func TestService_DeleteRole_ReassignsMembersToDefault(t *testing.T) {

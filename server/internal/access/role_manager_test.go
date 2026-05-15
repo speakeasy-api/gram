@@ -72,14 +72,34 @@ func TestRoleManager_MembersAndCounts(t *testing.T) {
 	manager := ti.service.roleMgr
 	members, err := manager.ListMembers(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
-	require.Len(t, members.Members, 3)
+	require.Len(t, members.Members, 2)
 
 	slugs, err := manager.MemberRoleSlugs(ctx, authCtx.ActiveOrganizationID, "user_2")
 	require.NoError(t, err)
 	require.Equal(t, []string{"custom-builder"}, slugs)
 
-	counts, err := manager.memberCounts(ctx, authCtx.ActiveOrganizationID)
+	roles, err := manager.ListRoles(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
-	require.Equal(t, 1, counts["admin"])
-	require.Equal(t, 1, counts["custom-builder"])
+	counts := make(map[string]int, len(roles.Roles))
+	for _, role := range roles.Roles {
+		counts[role.Name] = role.MemberCount
+	}
+	require.Equal(t, 1, counts["Admin"])
+	require.Equal(t, 1, counts["Custom Builder"])
+}
+
+func TestRoleManager_AssignMembersToRoleRequiresLocalAssignment(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Can build"))
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "u1@example.com", "User 1", "user_1", "membership_1")
+
+	assigned, err := ti.service.roleMgr.assignMembersToRole(ctx, authCtx.ActiveOrganizationID, "custom-builder", []string{"local_user_1"})
+	require.Error(t, err)
+	require.Equal(t, 0, assigned)
+	require.Contains(t, err.Error(), "member role assignment not found")
 }

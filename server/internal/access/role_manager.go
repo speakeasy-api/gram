@@ -64,15 +64,9 @@ func (r *RoleManager) ListRoles(ctx context.Context, gramOrgID string) (*gen.Lis
 		return nil, oops.E(oops.CodeUnexpected, err, "list roles").Log(ctx, r.logger)
 	}
 
-	memberCounts, err := r.memberCounts(ctx, gramOrgID)
-	if err != nil {
-		return nil, err
-	}
-
-	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSource("db"))
 	roles := make([]*gen.Role, 0, len(rows))
 	for _, row := range rows {
-		role, err := r.roleViewFromLocalRole(ctx, gramOrgID, localRoleFromActiveRow(row), memberCounts[row.WorkosSlug])
+		role, err := r.roleViewFromLocalRole(ctx, gramOrgID, localRoleFromActiveRow(row))
 		if err != nil {
 			return nil, err
 		}
@@ -89,12 +83,7 @@ func (r *RoleManager) GetRoleByID(ctx context.Context, gramOrgID, id string) (*g
 		return nil, err
 	}
 
-	memberCounts, err := r.memberCounts(ctx, gramOrgID)
-	if err != nil {
-		return nil, err
-	}
-
-	return r.roleViewFromLocalRole(ctx, gramOrgID, role, memberCounts[role.Slug])
+	return r.roleViewFromLocalRole(ctx, gramOrgID, role)
 }
 
 type localRoleAssignment struct {
@@ -111,7 +100,7 @@ func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.L
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list roles").Log(ctx, r.logger)
 	}
-	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSource("db"))
+
 	roles := make(map[string]string, len(roleRows))
 	for _, row := range roleRows {
 		roles[row.WorkosSlug] = row.ID.String()
@@ -121,7 +110,7 @@ func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.L
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list members").Log(ctx, r.logger)
 	}
-	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSource("db"))
+
 	assignments := make([]localRoleAssignment, 0, len(assignmentRows))
 	for _, row := range assignmentRows {
 		assignments = append(assignments, localRoleAssignment{
@@ -152,14 +141,6 @@ func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.L
 	for _, assignment := range assignments {
 		user, ok := localUsers[assignment.UserID]
 		if !ok {
-			result = append(result, &gen.AccessMember{
-				ID:       assignment.WorkosUserID,
-				Name:     assignment.WorkosUserID,
-				Email:    "",
-				PhotoURL: nil,
-				RoleID:   roles[assignment.RoleSlug],
-				JoinedAt: assignment.CreatedAt,
-			})
 			continue
 		}
 
@@ -232,13 +213,12 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 		if _, err := r.assignMembersToRole(ctx, gramOrgID, roleSlug, payload.MemberIds); err != nil {
 			return roleCreateResult{}, err
 		}
+		createdRole, err = r.getLocalRoleBySlug(ctx, gramOrgID, roleSlug)
+		if err != nil {
+			return roleCreateResult{}, err
+		}
 	}
-
-	memberCounts, err := r.memberCounts(ctx, gramOrgID)
-	if err != nil {
-		return roleCreateResult{}, err
-	}
-	role, err := r.roleViewFromLocalRole(ctx, gramOrgID, createdRole, memberCounts[createdRole.Slug])
+	role, err := r.roleViewFromLocalRole(ctx, gramOrgID, createdRole)
 	if err != nil {
 		return roleCreateResult{}, err
 	}
@@ -253,6 +233,7 @@ type localRole struct {
 	Description string
 	CreatedAt   string
 	UpdatedAt   string
+	MemberCount int
 }
 
 type roleUpdateResult struct {
@@ -268,11 +249,7 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 	if err != nil {
 		return roleUpdateResult{}, err
 	}
-	memberCountsBefore, err := r.memberCounts(ctx, gramOrgID)
-	if err != nil {
-		return roleUpdateResult{}, err
-	}
-	existingRole, err := r.roleViewFromLocalRole(ctx, gramOrgID, currentRole, memberCountsBefore[currentRole.Slug])
+	existingRole, err := r.roleViewFromLocalRole(ctx, gramOrgID, currentRole)
 	if err != nil {
 		return roleUpdateResult{}, err
 	}
@@ -338,13 +315,13 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 		if _, err := r.assignMembersToRole(ctx, gramOrgID, currentRole.Slug, payload.MemberIds); err != nil {
 			return roleUpdateResult{}, err
 		}
+		updatedRole, err = r.getLocalRoleByID(ctx, gramOrgID, payload.ID)
+		if err != nil {
+			return roleUpdateResult{}, err
+		}
 	}
 
-	memberCounts, err := r.memberCounts(ctx, gramOrgID)
-	if err != nil {
-		return roleUpdateResult{}, err
-	}
-	updatedRoleView, err := r.roleViewFromLocalRole(ctx, gramOrgID, updatedRole, memberCounts[updatedRole.Slug])
+	updatedRoleView, err := r.roleViewFromLocalRole(ctx, gramOrgID, updatedRole)
 	if err != nil {
 		return roleUpdateResult{}, err
 	}
@@ -397,10 +374,9 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 		})
 	}
 
-	if _, err := repo.New(r.db).MarkOrganizationRoleDeleted(ctx, repo.MarkOrganizationRoleDeletedParams{
+	if _, err := repo.New(r.db).MarkOrganizationRoleDeletedLocally(ctx, repo.MarkOrganizationRoleDeletedLocallyParams{
 		OrganizationID:    gramOrgID,
 		WorkosSlug:        currentRole.Slug,
-		WorkosDeletedAt:   conv.ToPGTimestamptz(time.Now().UTC()),
 		WorkosLastEventID: conv.ToPGTextEmpty(""),
 	}); err != nil {
 		trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
@@ -575,7 +551,7 @@ func (r *RoleManager) getLocalRoleByID(ctx context.Context, gramOrgID, id string
 // getLocalRoleBySlug loads one local organization role record by WorkOS slug.
 // Side effects: reads Postgres local role records; does not call WorkOS.
 func (r *RoleManager) getLocalRoleBySlug(ctx context.Context, gramOrgID, slug string) (localRole, error) {
-	row, err := repo.New(r.db).GetOrganizationRoleBySlug(ctx, repo.GetOrganizationRoleBySlugParams{
+	row, err := repo.New(r.db).GetActiveOrganizationRoleBySlug(ctx, repo.GetActiveOrganizationRoleBySlugParams{
 		OrganizationID: gramOrgID,
 		WorkosSlug:     slug,
 	})
@@ -584,12 +560,10 @@ func (r *RoleManager) getLocalRoleBySlug(ctx context.Context, gramOrgID, slug st
 		return localRole{}, oops.E(oops.CodeNotFound, ErrRoleNotFound, "role not found").Log(ctx, r.logger)
 	case err != nil:
 		return localRole{}, oops.E(oops.CodeUnexpected, err, "get role").Log(ctx, r.logger)
-	case row.Deleted || row.WorkosDeleted:
-		return localRole{}, oops.E(oops.CodeNotFound, ErrRoleNotFound, "role not found").Log(ctx, r.logger)
 	}
 
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSource("db"))
-	return localRoleFromOrganizationRole(row), nil
+	return localRoleFromSlugRow(row), nil
 }
 
 type memberAssignmentTarget struct {
@@ -613,9 +587,13 @@ func (r *RoleManager) memberAssignmentTargets(ctx context.Context, gramOrgID str
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve users by ids").Log(ctx, r.logger)
 	}
 	workosByGramID := make(map[string]string, len(users))
+	requestedByWorkosID := make(map[string]string, len(users))
 	for _, user := range users {
 		if user.WorkosID.Valid && user.WorkosID.String != "" {
 			workosByGramID[user.ID] = user.WorkosID.String
+			if _, ok := requested[user.ID]; ok {
+				requestedByWorkosID[user.WorkosID.String] = user.ID
+			}
 		}
 	}
 
@@ -624,37 +602,43 @@ func (r *RoleManager) memberAssignmentTargets(ctx context.Context, gramOrgID str
 		return nil, oops.E(oops.CodeUnexpected, err, "list members").Log(ctx, r.logger)
 	}
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSource("db"))
-	membershipByWorkosID := make(map[string]string, len(assignmentRows))
-	for _, row := range assignmentRows {
-		membershipByWorkosID[row.WorkosUserID] = conv.FromPGTextOrEmpty[string](row.WorkosMembershipID)
-	}
-
 	targets := make([]memberAssignmentTarget, 0, len(memberIDs))
+	resolved := make(map[string]struct{}, len(requested))
+	seenWorkosID := make(map[string]struct{}, len(memberIDs))
 	for _, row := range assignmentRows {
 		userID := conv.FromPGTextOrEmpty[string](row.UserID)
 		membershipID := conv.FromPGTextOrEmpty[string](row.WorkosMembershipID)
-		if _, ok := requested[row.WorkosUserID]; ok {
-			targets = append(targets, memberAssignmentTarget{
-				UserID:       userID,
-				WorkosUserID: row.WorkosUserID,
-				MembershipID: membershipID,
-			})
-			continue
-		}
-
-		workosID, ok := workosByGramID[userID]
-		if !ok {
-			continue
-		}
+		requestedID := ""
 		if _, ok := requested[userID]; ok {
-			if _, ok := membershipByWorkosID[workosID]; ok {
-				targets = append(targets, memberAssignmentTarget{
-					UserID:       userID,
-					WorkosUserID: workosID,
-					MembershipID: membershipID,
-				})
-			}
+			requestedID = userID
+		} else if gramID, ok := requestedByWorkosID[row.WorkosUserID]; ok {
+			requestedID = gramID
+		} else if _, ok := requested[row.WorkosUserID]; ok {
+			requestedID = row.WorkosUserID
+		} else {
+			continue
 		}
+		workosID := row.WorkosUserID
+		if userWorkosID, ok := workosByGramID[userID]; ok {
+			workosID = userWorkosID
+		}
+		if workosID == "" || membershipID == "" {
+			continue
+		}
+		if _, ok := seenWorkosID[workosID]; ok {
+			resolved[requestedID] = struct{}{}
+			continue
+		}
+		seenWorkosID[workosID] = struct{}{}
+		resolved[requestedID] = struct{}{}
+		targets = append(targets, memberAssignmentTarget{
+			UserID:       userID,
+			WorkosUserID: workosID,
+			MembershipID: membershipID,
+		})
+	}
+	if len(resolved) != len(requested) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "member role assignment not found; wait for WorkOS sync to complete").Log(ctx, r.logger)
 	}
 
 	return targets, nil
@@ -732,25 +716,9 @@ func retryWorkOSError(err error) bool {
 	return apiErr.StatusCode == 429 || apiErr.StatusCode >= 500
 }
 
-// memberCounts returns the number of locally connected members per role slug.
-// Side effects: reads Postgres local assignment records; does not call WorkOS.
-func (r *RoleManager) memberCounts(ctx context.Context, gramOrgID string) (map[string]int, error) {
-	rows, err := repo.New(r.db).CountMembersByRoleForOrg(ctx, gramOrgID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count local members by role").Log(ctx, r.logger)
-	}
-
-	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSource("db"))
-	counts := make(map[string]int, len(rows))
-	for _, row := range rows {
-		counts[row.RoleSlug] = int(row.MemberCount)
-	}
-	return counts, nil
-}
-
 // roleViewFromLocalRole converts a local role record into the public API role view and attaches local grants.
 // Side effects: reads Postgres grants; does not call WorkOS.
-func (r *RoleManager) roleViewFromLocalRole(ctx context.Context, organizationID string, role localRole, memberCount int) (*gen.Role, error) {
+func (r *RoleManager) roleViewFromLocalRole(ctx context.Context, organizationID string, role localRole) (*gen.Role, error) {
 	grants, err := authz.GrantsForRole(ctx, r.logger, r.db, organizationID, role.Slug)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load role grants").Log(ctx, r.logger)
@@ -766,7 +734,7 @@ func (r *RoleManager) roleViewFromLocalRole(ctx context.Context, organizationID 
 		Description: role.Description,
 		IsSystem:    isSystemRole(role.Slug),
 		Grants:      genGrants,
-		MemberCount: memberCount,
+		MemberCount: role.MemberCount,
 		CreatedAt:   conv.Default(role.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 		UpdatedAt:   conv.Default(role.UpdatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 	}, nil
@@ -782,6 +750,7 @@ func localRoleFromActiveRow(row repo.ListActiveOrganizationRolesRow) localRole {
 		Description: conv.FromPGTextOrEmpty[string](row.WorkosDescription),
 		CreatedAt:   conv.FromPGTimestamptz(row.WorkosCreatedAt),
 		UpdatedAt:   conv.FromPGTimestamptz(row.WorkosUpdatedAt),
+		MemberCount: int(row.MemberCount),
 	}
 }
 
@@ -795,12 +764,13 @@ func localRoleFromRoleRow(row repo.GetOrganizationRoleByIDRow) localRole {
 		Description: conv.FromPGTextOrEmpty[string](row.WorkosDescription),
 		CreatedAt:   conv.FromPGTimestamptz(row.WorkosCreatedAt),
 		UpdatedAt:   conv.FromPGTimestamptz(row.WorkosUpdatedAt),
+		MemberCount: int(row.MemberCount),
 	}
 }
 
-// localRoleFromOrganizationRole converts an organization role row into the manager's internal local role record shape.
+// localRoleFromSlugRow converts a sqlc role slug lookup row into the manager's internal local role record shape.
 // Side effects: none.
-func localRoleFromOrganizationRole(row repo.OrganizationRole) localRole {
+func localRoleFromSlugRow(row repo.GetActiveOrganizationRoleBySlugRow) localRole {
 	return localRole{
 		ID:          row.ID.String(),
 		Name:        row.WorkosName,
@@ -808,6 +778,7 @@ func localRoleFromOrganizationRole(row repo.OrganizationRole) localRole {
 		Description: conv.FromPGTextOrEmpty[string](row.WorkosDescription),
 		CreatedAt:   conv.FromPGTimestamptz(row.WorkosCreatedAt),
 		UpdatedAt:   conv.FromPGTimestamptz(row.WorkosUpdatedAt),
+		MemberCount: int(row.MemberCount),
 	}
 }
 
