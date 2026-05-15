@@ -648,35 +648,29 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 	return nil
 }
 
-// guardRuleIDs is the last barrier before risk_results writes: every row
-// with a non-null rule_id must pass ValidateRuleID. In dev/test mode a
-// malformed id panics so writer drift fails CI immediately; in production
-// the offending row is dropped (and logged) so a single misbehaving
-// scanner cannot break the whole batch.
+// guardRuleIDs is the dev/test-only barrier before risk_results writes:
+// every row with a non-null rule_id must pass ValidateRuleID, otherwise
+// the batch panics so writer drift fails CI immediately. Production
+// passes rows through unchanged — dropping a row here would orphan the
+// message in the "no risk_results row = unanalyzed" semantics that
+// FetchUnanalyzedMessageIDs relies on (the message would be re-scanned
+// on every subsequent batch).
 //
-// Empty/null rule_ids are allowed — they represent the "analyzed, no
+// Empty/null rule_ids are allowed; they represent the "analyzed, no
 // findings" sentinel row buildRows emits per message.
-func (a *AnalyzeBatch) guardRuleIDs(ctx context.Context, rows []repo.InsertRiskResultsParams) []repo.InsertRiskResultsParams {
-	out := rows[:0]
+func (a *AnalyzeBatch) guardRuleIDs(_ context.Context, rows []repo.InsertRiskResultsParams) []repo.InsertRiskResultsParams {
+	if !enforceRuleIDFormat {
+		return rows
+	}
 	for _, row := range rows {
 		if !row.RuleID.Valid || row.RuleID.String == "" {
-			out = append(out, row)
 			continue
 		}
 		if err := ValidateRuleID(row.RuleID.String); err != nil {
-			if enforceRuleIDFormat {
-				panic(fmt.Sprintf("risk_analysis.writeResults: malformed rule_id %q from source %q: %v", row.RuleID.String, row.Source, err))
-			}
-			a.logger.ErrorContext(ctx, "dropping risk_result row with malformed rule_id",
-				attr.SlogError(err),
-				attr.SlogRiskSource(row.Source),
-				attr.SlogRiskRuleID(row.RuleID.String),
-			)
-			continue
+			panic(fmt.Sprintf("risk_analysis.writeResults: malformed rule_id %q from source %q: %v", row.RuleID.String, row.Source, err))
 		}
-		out = append(out, row)
 	}
-	return out
+	return rows
 }
 
 func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID) repo.InsertRiskResultsParams {

@@ -22,19 +22,13 @@ type RiskResult struct {
 	ChatTitle *string
 	// The user who owns the chat session.
 	UserID *string
-	// Detection source (e.g. gitleaks). Stable, lowercase identifier of the
-	// scanner that produced this finding.
+	// Detection source (e.g. gitleaks).
 	Source string
-	// The matched rule identifier, in lowercase kebab-case. The pair (source,
-	// rule_id) is the stable composite key consumers should use to recognize a
-	// finding type; the same id never carries a source prefix.
+	// The matched rule identifier.
 	RuleID *string
-	// Human-readable, source-agnostic description of the finding. Never echoes the
-	// matched value and never leaks internal validator detail. Safe to display
-	// verbatim.
+	// Human-readable description of the finding.
 	Description *string
-	// The matched secret or sensitive data. Treat as sensitive; do not surface
-	// unredacted in public contracts.
+	// The matched secret or sensitive data.
 	Match *string
 	// Start byte position within the message content.
 	StartPos *int

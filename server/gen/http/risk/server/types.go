@@ -2123,19 +2123,13 @@ type RiskResultResponseBody struct {
 	ChatTitle *string `form:"chat_title,omitempty" json:"chat_title,omitempty" xml:"chat_title,omitempty"`
 	// The user who owns the chat session.
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	// Detection source (e.g. gitleaks). Stable, lowercase identifier of the
-	// scanner that produced this finding.
+	// Detection source (e.g. gitleaks).
 	Source string `form:"source" json:"source" xml:"source"`
-	// The matched rule identifier, in lowercase kebab-case. The pair (source,
-	// rule_id) is the stable composite key consumers should use to recognize a
-	// finding type; the same id never carries a source prefix.
+	// The matched rule identifier.
 	RuleID *string `form:"rule_id,omitempty" json:"rule_id,omitempty" xml:"rule_id,omitempty"`
-	// Human-readable, source-agnostic description of the finding. Never echoes the
-	// matched value and never leaks internal validator detail. Safe to display
-	// verbatim.
+	// Human-readable description of the finding.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The matched secret or sensitive data. Treat as sensitive; do not surface
-	// unredacted in public contracts.
+	// The matched secret or sensitive data.
 	Match *string `form:"match,omitempty" json:"match,omitempty" xml:"match,omitempty"`
 	// Start byte position within the message content.
 	StartPos *int `form:"start_pos,omitempty" json:"start_pos,omitempty" xml:"start_pos,omitempty"`
