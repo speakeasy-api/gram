@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/users"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	svix "github.com/svix/svix-webhooks/go"
 	"github.com/svix/svix-webhooks/go/models"
@@ -758,25 +759,40 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Try to create the org-user relationship if the user already exists in Gram.
-	// If the user doesn't exist yet, they'll land on the dashboard with a
-	// session but no org — the normal auth flow handles org provisioning.
+	// Find or create the user in Gram. The invitee is already authenticated
+	// via the magic link — we have their verified email and name from the
+	// SSO profile, so we can provision them directly.
+	userQueries := userrepo.New(s.db)
 	var gramUserID string
-	if user, err := userrepo.New(s.db).GetUserByEmail(ctx, inviteeEmail); err == nil {
-		gramUserID = user.ID
-		if _, err := repo.UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
-			OrganizationID: invite.OrganizationID,
-			UserID:         conv.ToPGText(user.ID),
-		}); err != nil {
-			s.logger.WarnContext(ctx, "invite callback: failed to create org membership", attr.SlogError(err))
+	if existingUser, lookupErr := userQueries.GetUserByEmail(ctx, inviteeEmail); lookupErr == nil {
+		gramUserID = existingUser.ID
+	} else {
+		// User doesn't exist yet — create them from the SSO profile.
+		displayName := strings.TrimSpace(profile.FirstName + " " + profile.LastName)
+		if displayName == "" {
+			displayName = inviteeEmail
 		}
+		newUserID := users.UserIDFromWorkOSID(profile.ID)
+		upserted, upsertErr := userQueries.UpsertUser(ctx, userrepo.UpsertUserParams{
+			ID:          newUserID,
+			Email:       inviteeEmail,
+			DisplayName: displayName,
+			PhotoUrl:    pgtype.Text{String: "", Valid: false},
+			Admin:       false,
+		})
+		if upsertErr != nil {
+			s.logger.ErrorContext(ctx, "invite callback: failed to create user", attr.SlogError(upsertErr))
+			redirectError("failed to create user account")
+			return
+		}
+		gramUserID = upserted.ID
 	}
 
-	if gramUserID == "" {
-		// User doesn't exist in Gram yet — redirect to normal login so the
-		// IDP flow creates the user and establishes a session.
-		http.Redirect(w, r, s.siteURL, http.StatusTemporaryRedirect)
-		return
+	if _, err := repo.UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: invite.OrganizationID,
+		UserID:         conv.ToPGText(gramUserID),
+	}); err != nil {
+		s.logger.WarnContext(ctx, "invite callback: failed to create org membership", attr.SlogError(err))
 	}
 
 	// Create a Gram session directly — no need to bounce through an external

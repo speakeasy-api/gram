@@ -10,6 +10,7 @@ import (
 // InviteLinkProfile contains the authenticated user's identity from a
 // passwordless magic-link code exchange.
 type InviteLinkProfile struct {
+	ID        string // WorkOS user ID (e.g. the SSO profile ID)
 	Email     string
 	FirstName string
 	LastName  string
@@ -40,6 +41,7 @@ func (wc *Client) AuthenticateWithInviteLink(ctx context.Context, code string) (
 	}
 
 	return &InviteLinkProfile{
+		ID:        resp.Profile.ID,
 		Email:     resp.Profile.Email,
 		FirstName: resp.Profile.FirstName,
 		LastName:  resp.Profile.LastName,

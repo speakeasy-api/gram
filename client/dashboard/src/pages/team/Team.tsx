@@ -14,6 +14,7 @@ import { Type } from "@/components/ui/type";
 import { useOrganization, useUser } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
 import { formatDistanceToNow } from "date-fns";
+import { z } from "zod";
 import {
   invalidateAllListInvites,
   invalidateAllListOrganizationUsers,
@@ -77,9 +78,11 @@ export function TeamInner() {
 
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteEmailTouched, setInviteEmailTouched] = useState(false);
   const [inviteRoleId, setInviteRoleId] = useState<string | undefined>(
     undefined,
   );
+
   const [memberToRemove, setMemberToRemove] = useState<OrganizationUser | null>(
     null,
   );
@@ -93,6 +96,10 @@ export function TeamInner() {
   const members = membersData?.users ?? [];
   const invites = invitesData?.invitations ?? [];
   const roles = rolesData?.roles ?? [];
+  const defaultRoleId = roles.find(
+    (r) => r.name.toLowerCase() === "member",
+  )?.id;
+  const effectiveInviteRoleId = inviteRoleId ?? defaultRoleId;
 
   const invalidateTeamData = async () => {
     await Promise.all([
@@ -100,6 +107,14 @@ export function TeamInner() {
       invalidateAllListInvites(queryClient),
     ]);
   };
+
+  const emailSchema = z.string().email();
+  const inviteEmailError =
+    inviteEmailTouched &&
+    inviteEmail.trim() !== "" &&
+    !emailSchema.safeParse(inviteEmail.trim()).success
+      ? "Please enter a valid email address"
+      : undefined;
 
   const inviteMutation = useSendInviteMutation({
     onError: () => {
@@ -122,14 +137,15 @@ export function TeamInner() {
   const handleInvite = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const submittedEmail = inviteEmail.trim();
-    if (!submittedEmail) return;
+    if (!submittedEmail || !emailSchema.safeParse(submittedEmail).success)
+      return;
 
     inviteMutation.mutate(
       {
         request: {
           sendInviteRequestBody: {
             email: submittedEmail,
-            roleId: inviteRoleId || undefined,
+            roleId: effectiveInviteRoleId,
           },
         },
       },
@@ -138,6 +154,7 @@ export function TeamInner() {
           await invalidateTeamData();
           toast.success(`Invite sent to ${submittedEmail}`);
           setInviteEmail("");
+          setInviteEmailTouched(false);
           setInviteRoleId(undefined);
           setIsInviteDialogOpen(false);
         },
@@ -515,7 +532,12 @@ export function TeamInner() {
               name="email"
               type="email"
               value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
+              onChange={(e) => {
+                setInviteEmail(e.target.value);
+                if (!inviteEmailTouched) setInviteEmailTouched(true);
+              }}
+              onBlur={() => setInviteEmailTouched(true)}
+              error={inviteEmailError}
               placeholder="colleague@company.com"
               required
               autoFocus
@@ -526,9 +548,12 @@ export function TeamInner() {
             {roles.length > 0 && (
               <AnyField
                 label="Role"
-                optionality="visible"
+                optionality="hidden"
                 render={() => (
-                  <Select value={inviteRoleId} onValueChange={setInviteRoleId}>
+                  <Select
+                    value={effectiveInviteRoleId}
+                    onValueChange={setInviteRoleId}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select a role" />
                     </SelectTrigger>
@@ -553,7 +578,11 @@ export function TeamInner() {
               </Button>
               <Button
                 type="submit"
-                disabled={inviteMutation.isPending || !inviteEmail.trim()}
+                disabled={
+                  inviteMutation.isPending ||
+                  !inviteEmail.trim() ||
+                  !!inviteEmailError
+                }
               >
                 {inviteMutation.isPending ? "Sending..." : "Send Invite"}
               </Button>

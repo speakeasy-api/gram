@@ -298,6 +298,7 @@ func (s *StubClient) CreatePasswordlessSession(_ context.Context, opts CreatePas
 
 func (s *StubClient) AuthenticateWithInviteLink(_ context.Context, _ string) (*InviteLinkProfile, error) {
 	return &InviteLinkProfile{
+		ID:        "stub_user_invite",
 		Email:     "stub@example.com",
 		FirstName: "Stub",
 		LastName:  "User",
