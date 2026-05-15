@@ -46,6 +46,8 @@ function getTraceId(chatId: string): string {
   return `trace-${chatId.slice(0, 3)}`;
 }
 
+const PANEL_TELEMETRY_LOG_LIMIT = 100;
+
 function downloadJsonFile(filename: string, data: unknown) {
   const json = JSON.stringify(data, null, 2);
   const blob = new Blob([json], { type: "application/json" });
@@ -70,6 +72,7 @@ function getTraceExportSlug(chat: { id: string; title?: string | null }) {
 function exportTraceDataAsJson({
   chatId,
   chat,
+  telemetryLogLimit,
   telemetryLogs,
   riskResults,
 }: {
@@ -79,18 +82,27 @@ function exportTraceDataAsJson({
     title?: string | null;
     messages: ChatMessage[];
   };
+  telemetryLogLimit: number;
   telemetryLogs: TelemetryLogRecord[];
   riskResults: RiskResult[];
 }) {
   try {
     const exported = {
       schemaVersion: 1,
+      exportScope: "chat_detail_panel",
       exportedAt: new Date().toISOString(),
       chatId,
-      chat,
-      messages: chat.messages,
-      telemetryLogs,
-      riskResults,
+      telemetryLogsQuery: {
+        filter: { gramChatId: chatId },
+        limit: telemetryLogLimit,
+        loadedCount: telemetryLogs.length,
+      },
+      panelData: {
+        chat,
+        messages: chat.messages,
+        telemetryLogs,
+        riskResults,
+      },
     };
 
     downloadJsonFile(`trace-${getTraceExportSlug(chat)}.json`, exported);
@@ -633,7 +645,7 @@ function EntryContentFrame({
       className={cn(
         "border-muted min-w-0 overflow-hidden rounded-md border text-sm",
         {
-          "bg-neutral-default border-neutral-default": entryType === "user",
+          "bg-muted/30 border-neutral-default": entryType === "user",
           "bg-information-softest border-information-softest":
             entryType === "assistant",
         },
@@ -1186,7 +1198,7 @@ export function ChatDetailPanel({
           filter: {
             gramChatId: chatId,
           },
-          limit: 100,
+          limit: PANEL_TELEMETRY_LOG_LIMIT,
         },
       },
     });
@@ -1278,6 +1290,7 @@ export function ChatDetailPanel({
                     exportTraceDataAsJson({
                       chatId,
                       chat,
+                      telemetryLogLimit: PANEL_TELEMETRY_LOG_LIMIT,
                       telemetryLogs: logs,
                       riskResults,
                     })
