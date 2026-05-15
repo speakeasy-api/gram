@@ -24,6 +24,10 @@ import (
 // Rejects: "1bad", ".leading.dot", "path with spaces", "semi;colon", "@@double", "trailing.", "double..dot"
 var validJSONPath = regexp.MustCompile(`^@?[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$`)
 
+func userIdentifierExpr(col string) string {
+	return "if(telemetry_logs." + col + " != '', telemetry_logs." + col + ", telemetry_logs.user_email)"
+}
+
 // AttributeFilter represents a filter on an arbitrary JSON attribute path.
 // Paths prefixed with @ target user-defined attributes (translated to app.<path> in ClickHouse).
 // Bare paths target system/OTel attributes directly.
@@ -181,6 +185,47 @@ func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLog
 	}
 
 	return q.conn.Exec(ctx, query, args...)
+}
+
+// ListExistingCursorEventHashes returns already-ingested Cursor event hashes
+// for a narrow poll window so the usage polling workflow can avoid duplicate
+// telemetry rows after a retry.
+func (q *Queries) ListExistingCursorEventHashes(ctx context.Context, projectID string, startNano int64, endNano int64, hashes []string) ([]string, error) {
+	if len(hashes) == 0 {
+		return nil, nil
+	}
+
+	hashCol := "toString(attributes.cursor.event_hash)"
+	query, args, err := sq.Select(hashCol).
+		From("telemetry_logs").
+		Where(squirrel.Eq{"gram_project_id": projectID}).
+		Where(squirrel.GtOrEq{"time_unix_nano": startNano}).
+		Where(squirrel.LtOrEq{"time_unix_nano": endNano}).
+		Where(squirrel.Eq{"toString(attributes.gram.hook.source)": "cursor"}).
+		Where(squirrel.Eq{hashCol: hashes}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building existing cursor hashes query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query existing cursor hashes: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]string, 0, len(hashes))
+	for rows.Next() {
+		var hash string
+		if err := rows.Scan(&hash); err != nil {
+			return nil, fmt.Errorf("scan existing cursor hash: %w", err)
+		}
+		out = append(out, hash)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate existing cursor hashes: %w", err)
+	}
+	return out, nil
 }
 
 // ListTelemetryLogsParams contains the parameters for listing telemetry logs.
@@ -631,10 +676,10 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 		GroupBy("bucket_time_unix_nano")
 
 	if arg.ExternalUserID != "" {
-		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
 	}
 	if arg.UserID != "" {
-		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
+		sb = sb.Where(squirrel.Eq{userIdentifierExpr("user_id"): arg.UserID})
 	}
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
@@ -718,10 +763,10 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 
 	// Optional filters
 	if arg.ExternalUserID != "" {
-		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
 	}
 	if arg.UserID != "" {
-		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
+		sb = sb.Where(squirrel.Eq{userIdentifierExpr("user_id"): arg.UserID})
 	}
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
@@ -892,10 +937,10 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 		Where("time_unix_nano <= ?", arg.TimeEnd)
 
 	if arg.ExternalUserID != "" {
-		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
 	}
 	if arg.UserID != "" {
-		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
+		sb = sb.Where(squirrel.Eq{userIdentifierExpr("user_id"): arg.UserID})
 	}
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
@@ -1135,11 +1180,12 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	if arg.GroupBy == "external_user_id" {
 		groupCol = "external_user_id"
 	}
+	groupExpr := userIdentifierExpr(groupCol)
 
 	tc := toolCallExprsFor(arg.EventSource)
 
 	sb := sq.Select(
-		groupCol+" AS user_id",
+		groupExpr+" AS user_id",
 
 		// Activity timestamps
 		"min(time_unix_nano) AS first_seen_unix_nano",
@@ -1175,8 +1221,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where(groupCol + " IS NOT NULL").
-		Where(groupCol + " != ''")
+		Where(groupExpr + " != ''")
 
 	// Optional deployment filter
 	if arg.GramDeploymentID != "" {
@@ -1189,16 +1234,16 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		sb = sb.Where("hook_source = ?", arg.HookSource)
 	}
 	if len(arg.UserIDs) > 0 {
-		sb = sb.Where(squirrel.Eq{groupCol: arg.UserIDs})
+		sb = sb.Where(squirrel.Eq{groupExpr: arg.UserIDs})
 	}
 
-	sb = sb.GroupBy(groupCol)
+	sb = sb.GroupBy(groupExpr)
 
 	// Cursor pagination using last_seen + group column for stable ordering
-	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, groupCol, "max(time_unix_nano)")
+	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, groupExpr, "max(time_unix_nano)")
 
 	// Order by last_seen with group column as tie-breaker
-	sb = withOrdering(sb, arg.SortOrder, "last_seen_unix_nano", groupCol)
+	sb = withOrdering(sb, arg.SortOrder, "last_seen_unix_nano", "user_id")
 
 	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
 
@@ -1299,9 +1344,9 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 
 	// Filter by user ID (one of these must be set)
 	if arg.UserID != "" {
-		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
+		sb = sb.Where(squirrel.Eq{userIdentifierExpr("user_id"): arg.UserID})
 	} else if arg.ExternalUserID != "" {
-		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
+		sb = sb.Where(squirrel.Eq{userIdentifierExpr("external_user_id"): arg.ExternalUserID})
 	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})

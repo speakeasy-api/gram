@@ -78,7 +78,7 @@ type GetConfigByOrgAndProviderRow struct {
 	OrganizationID  string
 	Provider        string
 	ProjectID       uuid.UUID
-	ApiKeyEncrypted pgtype.Text
+	ApiKeyEncrypted string
 	Enabled         bool
 	ID              uuid.UUID
 	Deleted         bool
@@ -149,7 +149,7 @@ type ListEnabledConfigsByProviderRow struct {
 	OrganizationID  string
 	Provider        string
 	ProjectID       uuid.UUID
-	ApiKeyEncrypted pgtype.Text
+	ApiKeyEncrypted string
 	Enabled         bool
 	ID              uuid.UUID
 	Deleted         bool
@@ -256,7 +256,7 @@ type UpsertConfigParams struct {
 	OrganizationID  string
 	Provider        string
 	ProjectID       uuid.UUID
-	ApiKeyEncrypted pgtype.Text
+	ApiKeyEncrypted string
 	Enabled         bool
 }
 

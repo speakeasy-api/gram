@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -42,6 +43,7 @@ import (
 
 type Activities struct {
 	collectPlatformUsageMetrics     *activities.CollectPlatformUsageMetrics
+	cursorUsageMetrics              *activities.CursorUsageMetrics
 	customDomainIngress             *activities.CustomDomainIngress
 	fallbackModelUsageTracking      *activities.FallbackModelUsageTracking
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
@@ -112,6 +114,7 @@ func NewActivities(
 	mcpRegistryClient *externalmcp.RegistryClient,
 	temporalEnv *tenv.Environment,
 	telemetryLogger *telemetry.Logger,
+	telemetryRepo *telemetryrepo.Queries,
 	triggerApp *bgtriggers.App,
 	cacheAdapter cache.Cache,
 	assistantsCore *assistants.ServiceCore,
@@ -127,6 +130,7 @@ func NewActivities(
 
 	return &Activities{
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
+		cursorUsageMetrics:              activities.NewCursorUsageMetrics(logger, db, encryption, telemetryLogger, telemetryRepo),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
 		fallbackModelUsageTracking:      activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
@@ -241,6 +245,22 @@ func (a *Activities) FirePlatformUsageMetrics(ctx context.Context, metrics []act
 
 func (a *Activities) FreeTierReportingUsageMetrics(ctx context.Context, orgIDs []string) error {
 	return a.freeTierReportingUsageMetrics.Do(ctx, orgIDs)
+}
+
+func (a *Activities) ListCursorAIIntegrationConfigs(ctx context.Context) ([]activities.CursorAIIntegrationConfig, error) {
+	return a.cursorUsageMetrics.ListCursorAIIntegrationConfigs(ctx)
+}
+
+func (a *Activities) PollCursorUsageEventsPage(ctx context.Context, input activities.PollCursorUsageEventsPageInput) (*activities.PollCursorUsageEventsPageOutput, error) {
+	return a.cursorUsageMetrics.PollCursorUsageEventsPage(ctx, input)
+}
+
+func (a *Activities) DeduplicateAndWriteCursorEvents(ctx context.Context, input activities.DeduplicateAndWriteCursorEventsInput) error {
+	return a.cursorUsageMetrics.DeduplicateAndWriteCursorEvents(ctx, input)
+}
+
+func (a *Activities) UpdateCursorPollWatermark(ctx context.Context, input activities.UpdateCursorPollWatermarkInput) error {
+	return a.cursorUsageMetrics.UpdateCursorPollWatermark(ctx, input)
 }
 
 func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) error {
