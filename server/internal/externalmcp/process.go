@@ -219,10 +219,9 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 	if len(serverDetails.Tools) > 0 {
 		// Create individual tool definitions for each tool from the registry
 		for _, tool := range serverDetails.Tools {
-			toolURN := urn.Tool{
-				Kind:   urn.ToolKindExternalMCP,
-				Source: task.MCP.Slug,
-				Name:   tool.Name,
+			toolURN := urn.NewTool(urn.ToolKindExternalMCP, task.MCP.Slug, tool.Name)
+			if err := toolURN.Validate(); err != nil {
+				return oops.E(oops.CodeInvalid, err, "[%s] invalid external mcp tool name %s", task.MCP.Name, tool.Name).Log(ctx, logger)
 			}
 
 			_, err = te.repo.CreateExternalMCPToolDefinition(ctx, repo.CreateExternalMCPToolDefinitionParams{
@@ -258,10 +257,9 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 		)
 	} else {
 		// Fallback to proxy tool when no tools are defined in the registry
-		toolURN := urn.Tool{
-			Kind:   urn.ToolKindExternalMCP,
-			Source: task.MCP.Slug,
-			Name:   "proxy",
+		toolURN := urn.NewTool(urn.ToolKindExternalMCP, task.MCP.Slug, "proxy")
+		if err := toolURN.Validate(); err != nil {
+			return oops.E(oops.CodeInvalid, err, "[%s] invalid external mcp proxy tool name", task.MCP.Name).Log(ctx, logger)
 		}
 
 		_, err = te.repo.CreateExternalMCPToolDefinition(ctx, repo.CreateExternalMCPToolDefinitionParams{

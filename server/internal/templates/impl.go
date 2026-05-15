@@ -135,6 +135,9 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 	}
 
 	toolURN := urn.NewTool(urn.ToolKindPrompt, payload.Kind, string(payload.Name))
+	if err := toolURN.Validate(); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid tool URN").Log(ctx, logger)
+	}
 
 	id, err := tr.CreateTemplate(ctx, repo.CreateTemplateParams{
 		ProjectID:    projectID,
@@ -246,6 +249,9 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 	}
 
 	toolURN := urn.NewTool(urn.ToolKindPrompt, current.Kind.String, current.Name)
+	if err := toolURN.Validate(); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid tool URN").Log(ctx, logger)
+	}
 
 	// We allow the editing of the name via variation
 	if payload.Name != nil && *payload.Name != current.Name {
