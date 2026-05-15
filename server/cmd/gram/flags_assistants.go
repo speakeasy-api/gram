@@ -105,7 +105,7 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 
 // newAssistantRuntime resolves CLI flags into an assistant RuntimeBackend.
 func newAssistantRuntime(
-	_ context.Context,
+	ctx context.Context,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	c *cli.Context,
@@ -119,6 +119,9 @@ func newAssistantRuntime(
 	}
 	if err := cfg.Fly.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid fly assistant runtime config: %w", err)
+	}
+	if err := guardianPolicy.ValidateHost(ctx, cfg.Fly.ServerURL.Hostname()); err != nil {
+		return nil, fmt.Errorf("assistant fly runtime requires a public --assistant-runtime-server-url or --server-url; got %q: %w", cfg.Fly.ServerURL.String(), err)
 	}
 	return assistants.NewRuntimeBackend(logger, tracerProvider, guardianPolicy, cfg), nil
 }

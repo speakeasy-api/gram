@@ -53,7 +53,7 @@ func (c FlyRuntimeConfig) Validate() error {
 	if c.ServerURL == nil {
 		return fmt.Errorf("assistant fly runtime server URL is not configured")
 	}
-	if host := c.ServerURL.Hostname(); host == "" || isLoopbackHost(host) {
+	if c.ServerURL.Hostname() == "" {
 		return fmt.Errorf("assistant fly runtime requires a public --assistant-runtime-server-url or --server-url; got %q", c.ServerURL.String())
 	}
 	return nil

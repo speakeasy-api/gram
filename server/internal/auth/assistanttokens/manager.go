@@ -203,7 +203,7 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "unable to load assistant owner")
 	}
 
-	if err := m.checkRevocation(ctx, threadID, assistantID); err != nil {
+	if err := m.checkRevocation(ctx, projectID, assistantID, threadID); err != nil {
 		return ctx, nil, err
 	}
 
@@ -244,7 +244,7 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 // per-turn burst of authorized calls (1× /chat/completions + N× MCP)
 // collapses to a single DB hit. v2 tokens omit ThreadID — the lookup
 // collapses to an assistant-only check.
-func (m *Manager) checkRevocation(ctx context.Context, threadID, assistantID uuid.UUID) error {
+func (m *Manager) checkRevocation(ctx context.Context, projectID, assistantID, threadID uuid.UUID) error {
 	cacheKey := threadID
 	if cacheKey == uuid.Nil {
 		cacheKey = assistantID
@@ -265,6 +265,7 @@ func (m *Manager) checkRevocation(ctx context.Context, threadID, assistantID uui
 		row, err := m.tokens.GetAssistantTokenRevocation(ctx, tokenrepo.GetAssistantTokenRevocationParams{
 			ThreadID:    threadID,
 			AssistantID: assistantID,
+			ProjectID:   projectID,
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -277,7 +278,10 @@ func (m *Manager) checkRevocation(ctx context.Context, threadID, assistantID uui
 		assistantDeleted = row.AssistantDeleted
 		assistantStatus = row.AssistantStatus
 	} else {
-		row, err := m.tokens.GetAssistantRevocation(ctx, assistantID)
+		row, err := m.tokens.GetAssistantRevocation(ctx, tokenrepo.GetAssistantRevocationParams{
+			AssistantID: assistantID,
+			ProjectID:   projectID,
+		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				m.revocation.put(cacheKey, false)

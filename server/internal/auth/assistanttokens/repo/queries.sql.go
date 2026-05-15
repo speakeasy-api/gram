@@ -15,15 +15,21 @@ const getAssistantRevocation = `-- name: GetAssistantRevocation :one
 SELECT a.deleted AS assistant_deleted, a.status AS assistant_status
 FROM assistants a
 WHERE a.id = $1
+  AND a.project_id = $2
 `
+
+type GetAssistantRevocationParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
 
 type GetAssistantRevocationRow struct {
 	AssistantDeleted bool
 	AssistantStatus  string
 }
 
-func (q *Queries) GetAssistantRevocation(ctx context.Context, assistantID uuid.UUID) (GetAssistantRevocationRow, error) {
-	row := q.db.QueryRow(ctx, getAssistantRevocation, assistantID)
+func (q *Queries) GetAssistantRevocation(ctx context.Context, arg GetAssistantRevocationParams) (GetAssistantRevocationRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantRevocation, arg.AssistantID, arg.ProjectID)
 	var i GetAssistantRevocationRow
 	err := row.Scan(&i.AssistantDeleted, &i.AssistantStatus)
 	return i, err
@@ -35,11 +41,14 @@ FROM assistant_threads t
 JOIN assistants a ON a.id = t.assistant_id
 WHERE t.id = $1
   AND t.assistant_id = $2
+  AND t.project_id = $3
+  AND a.project_id = $3
 `
 
 type GetAssistantTokenRevocationParams struct {
 	ThreadID    uuid.UUID
 	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
 }
 
 type GetAssistantTokenRevocationRow struct {
@@ -49,7 +58,7 @@ type GetAssistantTokenRevocationRow struct {
 }
 
 func (q *Queries) GetAssistantTokenRevocation(ctx context.Context, arg GetAssistantTokenRevocationParams) (GetAssistantTokenRevocationRow, error) {
-	row := q.db.QueryRow(ctx, getAssistantTokenRevocation, arg.ThreadID, arg.AssistantID)
+	row := q.db.QueryRow(ctx, getAssistantTokenRevocation, arg.ThreadID, arg.AssistantID, arg.ProjectID)
 	var i GetAssistantTokenRevocationRow
 	err := row.Scan(&i.ThreadDeleted, &i.AssistantDeleted, &i.AssistantStatus)
 	return i, err

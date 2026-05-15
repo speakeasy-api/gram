@@ -823,22 +823,6 @@ func TestFlyRuntimeBackendRunTurnHitsThreadScopedRoute(t *testing.T) {
 	require.Equal(t, fmt.Sprintf("/threads/%s/turn", turnThreadID), observedPath)
 }
 
-func TestFlyRuntimeConfigValidateRejectsLoopbackServerURL(t *testing.T) {
-	t.Parallel()
-
-	cfg := FlyRuntimeConfig{
-		FlyTokens:        tokens.Parse("test"),
-		DefaultFlyOrg:    "speakeasy-lab",
-		DefaultFlyRegion: "iad",
-		OCIImage:         "registry.fly.io/assistant-runtime",
-		ImageVersion:     "dev",
-		ServerURL:        &url.URL{Scheme: "https", Host: "127.0.0.1:8080"},
-	}
-	err := cfg.Validate()
-	require.Error(t, err)
-	require.ErrorContains(t, err, "public")
-}
-
 func TestFlyRuntimeConfigValidateRequiresServerURL(t *testing.T) {
 	t.Parallel()
 

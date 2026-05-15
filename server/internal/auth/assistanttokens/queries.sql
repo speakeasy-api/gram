@@ -3,9 +3,12 @@ SELECT t.deleted AS thread_deleted, a.deleted AS assistant_deleted, a.status AS 
 FROM assistant_threads t
 JOIN assistants a ON a.id = t.assistant_id
 WHERE t.id = @thread_id
-  AND t.assistant_id = @assistant_id;
+  AND t.assistant_id = @assistant_id
+  AND t.project_id = @project_id
+  AND a.project_id = @project_id;
 
 -- name: GetAssistantRevocation :one
 SELECT a.deleted AS assistant_deleted, a.status AS assistant_status
 FROM assistants a
-WHERE a.id = @assistant_id;
+WHERE a.id = @assistant_id
+  AND a.project_id = @project_id;

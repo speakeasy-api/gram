@@ -24,14 +24,6 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func isLoopbackHost(host string) bool {
-	switch strings.ToLower(host) {
-	case "localhost", "127.0.0.1", "::1", "0.0.0.0":
-		return true
-	}
-	return false
-}
-
 // runtimeRequestContext returns a child context bounded by the caller's
 // MaxTimeSeconds when set, otherwise by fallback. Caller is responsible for
 // invoking the returned cancel.
