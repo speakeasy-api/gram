@@ -35440,7 +35440,7 @@ components:
           format: date-time
         user_session_issuer_id:
           type: string
-          description: The id of the user_session_issuer wired to this toolset, present when the OAuth-Proxy → user-sessions migration has completed at least the user session issuer step. Looked up by the project-scoped slug convention {toolset.slug}-usi.
+          description: The id of the user_session_issuer wired to this toolset. Set via toolsets.setUserSessionIssuer; null when no USI is linked.
         user_session_issuer_slug:
           type: string
           description: A short url-friendly label that uniquely identifies a resource.

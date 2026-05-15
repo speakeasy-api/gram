@@ -149,7 +149,7 @@ export type Toolset = {
    */
   updatedAt: Date;
   /**
-   * The id of the user_session_issuer wired to this toolset, present when the OAuth-Proxy → user-sessions migration has completed at least the user session issuer step. Looked up by the project-scoped slug convention {toolset.slug}-usi.
+   * The id of the user_session_issuer wired to this toolset. Set via toolsets.setUserSessionIssuer; null when no USI is linked.
    */
   userSessionIssuerId?: string | undefined;
   /**
