@@ -44,15 +44,19 @@ const ACRONYMS = new Set([
 ]);
 
 // Humanize a kebab/dotted rule id we don't have catalog metadata for.
-// "destructive.cli-rm-rf" -> "Destructive CLI Rm Rf"
-// "pii.credit-card"       -> "PII Credit Card"
-// "pii.us-ssn"            -> "PII US SSN"
-// Used as a last-resort label so unknown findings render legibly instead
-// of as raw kebab.
+// Splits on every separator the dashboard might encounter — dots, hyphens,
+// underscores, and forward slashes — so canonical, UPPER_SNAKE Presidio,
+// and legacy slash-bearing cli_destructive ids all render legibly.
+// "destructive.cli-rm-rf"            -> "Destructive CLI Rm Rf"
+// "pii.credit-card"                  -> "PII Credit Card"
+// "pii.us-ssn"                       -> "PII US SSN"
+// "MEDICAL_LICENSE" (legacy)         -> "Medical License"
+// "cli_destructive.shell/rm-rf"      -> "CLI Destructive Shell Rm Rf"
+// "shadow_mcp.unverified_call"       -> "Shadow MCP Unverified Call"
 export function humanizeRuleId(ruleId: string): string {
   if (!ruleId) return "";
   return ruleId
-    .split(/[.-]/)
+    .split(/[._/-]/)
     .filter(Boolean)
     .map((part) => {
       const lower = part.toLowerCase();
