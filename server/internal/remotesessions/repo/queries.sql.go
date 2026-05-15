@@ -266,6 +266,43 @@ func (q *Queries) DeleteRemoteSessionIssuer(ctx context.Context, arg DeleteRemot
 	return i, err
 }
 
+const getActiveRemoteSession = `-- name: GetActiveRemoteSession :one
+SELECT id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, refresh_expires_at, scopes, created_at, updated_at, deleted_at, deleted
+FROM remote_sessions
+WHERE subject_urn = $1
+  AND remote_session_client_id = $2
+  AND deleted IS FALSE
+`
+
+type GetActiveRemoteSessionParams struct {
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+}
+
+// Look up the active remote_session for a (subject, client) binding.
+// Single-row exact lookup; uniqueness enforced by the partial unique
+// index on (subject_urn, remote_session_client_id) WHERE deleted IS FALSE.
+func (q *Queries) GetActiveRemoteSession(ctx context.Context, arg GetActiveRemoteSessionParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, getActiveRemoteSession, arg.SubjectUrn, arg.RemoteSessionClientID)
+	var i RemoteSession
+	err := row.Scan(
+		&i.ID,
+		&i.SubjectUrn,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.RefreshExpiresAt,
+		&i.Scopes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getRemoteSessionByID = `-- name: GetRemoteSessionByID :one
 SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM remote_sessions AS s
@@ -457,6 +494,46 @@ func (q *Queries) InsertRemoteSession(ctx context.Context, arg InsertRemoteSessi
 	return i, err
 }
 
+const listConnectedClientIDsForSubject = `-- name: ListConnectedClientIDsForSubject :many
+SELECT remote_session_client_id
+FROM remote_sessions
+WHERE subject_urn = $1
+  AND user_session_issuer_id = $2
+  AND deleted IS FALSE
+`
+
+type ListConnectedClientIDsForSubjectParams struct {
+	SubjectUrn          urn.SessionSubject
+	UserSessionIssuerID uuid.UUID
+}
+
+// Bulk lookup for the consent renderer: returns the set of
+// remote_session_client_ids that have an active remote_sessions row for
+// the given subject under a single user_session_issuer. Folds the N
+// per-card IsConnected lookups into one round-trip. The partial unique
+// index on (subject_urn, remote_session_client_id) WHERE deleted IS
+// FALSE means at most one row per (subject, client), so the result set
+// doubles as a membership set without DISTINCT.
+func (q *Queries) ListConnectedClientIDsForSubject(ctx context.Context, arg ListConnectedClientIDsForSubjectParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listConnectedClientIDsForSubject, arg.SubjectUrn, arg.UserSessionIssuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var remote_session_client_id uuid.UUID
+		if err := rows.Scan(&remote_session_client_id); err != nil {
+			return nil, err
+		}
+		items = append(items, remote_session_client_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRemoteSessionClientsByProjectID = `-- name: ListRemoteSessionClientsByProjectID :many
 SELECT id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, created_at, updated_at, deleted_at, deleted
 FROM remote_session_clients
@@ -505,6 +582,85 @@ func (q *Queries) ListRemoteSessionClientsByProjectID(ctx context.Context, arg L
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteSessionClientsForUserSessionIssuer = `-- name: ListRemoteSessionClientsForUserSessionIssuer :many
+SELECT
+    c.id                                   AS client_id,
+    c.client_id                            AS external_client_id,
+    c.client_secret_encrypted              AS client_secret_encrypted,
+    c.remote_session_issuer_id             AS remote_session_issuer_id,
+    c.user_session_issuer_id               AS user_session_issuer_id,
+    i.slug                                 AS issuer_slug,
+    i.issuer                               AS issuer_url,
+    i.authorization_endpoint               AS authorization_endpoint,
+    i.token_endpoint                       AS token_endpoint,
+    i.scopes_supported                     AS scopes_supported,
+    i.passthrough                          AS passthrough,
+    i.oidc                                 AS oidc
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.user_session_issuer_id = $1
+  AND c.project_id              = $2
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+ORDER BY c.id ASC
+`
+
+type ListRemoteSessionClientsForUserSessionIssuerParams struct {
+	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+type ListRemoteSessionClientsForUserSessionIssuerRow struct {
+	ClientID              uuid.UUID
+	ExternalClientID      string
+	ClientSecretEncrypted pgtype.Text
+	RemoteSessionIssuerID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	IssuerSlug            string
+	IssuerUrl             string
+	AuthorizationEndpoint pgtype.Text
+	TokenEndpoint         pgtype.Text
+	ScopesSupported       []string
+	Passthrough           bool
+	Oidc                  bool
+}
+
+// Joined client + issuer view used by the consent renderer and the
+// ChallengeManager. Returns one row per remote_session_client linked to
+// the given user_session_issuer.
+func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Context, arg ListRemoteSessionClientsForUserSessionIssuerParams) ([]ListRemoteSessionClientsForUserSessionIssuerRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionClientsForUserSessionIssuer, arg.UserSessionIssuerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteSessionClientsForUserSessionIssuerRow
+	for rows.Next() {
+		var i ListRemoteSessionClientsForUserSessionIssuerRow
+		if err := rows.Scan(
+			&i.ClientID,
+			&i.ExternalClientID,
+			&i.ClientSecretEncrypted,
+			&i.RemoteSessionIssuerID,
+			&i.UserSessionIssuerID,
+			&i.IssuerSlug,
+			&i.IssuerUrl,
+			&i.AuthorizationEndpoint,
+			&i.TokenEndpoint,
+			&i.ScopesSupported,
+			&i.Passthrough,
+			&i.Oidc,
 		); err != nil {
 			return nil, err
 		}
@@ -800,6 +956,85 @@ func (q *Queries) UpdateRemoteSessionIssuer(ctx context.Context, arg UpdateRemot
 		&i.TokenEndpointAuthMethodsSupported,
 		&i.Oidc,
 		&i.Passthrough,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertRemoteSession = `-- name: UpsertRemoteSession :one
+INSERT INTO remote_sessions (
+    subject_urn,
+    user_session_issuer_id,
+    remote_session_client_id,
+    access_token_encrypted,
+    access_expires_at,
+    refresh_token_encrypted,
+    refresh_expires_at,
+    scopes
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8
+)
+ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    access_token_encrypted = EXCLUDED.access_token_encrypted,
+    access_expires_at = EXCLUDED.access_expires_at,
+    refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
+    refresh_expires_at = EXCLUDED.refresh_expires_at,
+    scopes = EXCLUDED.scopes,
+    updated_at = clock_timestamp()
+RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, refresh_expires_at, scopes, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertRemoteSessionParams struct {
+	SubjectUrn            urn.SessionSubject
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	AccessTokenEncrypted  string
+	AccessExpiresAt       pgtype.Timestamptz
+	RefreshTokenEncrypted pgtype.Text
+	RefreshExpiresAt      pgtype.Timestamptz
+	Scopes                []string
+}
+
+// Used by /mcp/remote_login_callback to materialise (or refresh) the
+// remote_session for a (subject, client) pair. Conflict target matches the
+// partial unique index on (subject_urn, remote_session_client_id) WHERE
+// deleted IS FALSE; on conflict we overwrite every token field. A
+// soft-deleted row falls outside the partial index, so a re-auth after
+// revocation inserts a fresh active row alongside the tombstone.
+func (q *Queries) UpsertRemoteSession(ctx context.Context, arg UpsertRemoteSessionParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, upsertRemoteSession,
+		arg.SubjectUrn,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.AccessTokenEncrypted,
+		arg.AccessExpiresAt,
+		arg.RefreshTokenEncrypted,
+		arg.RefreshExpiresAt,
+		arg.Scopes,
+	)
+	var i RemoteSession
+	err := row.Scan(
+		&i.ID,
+		&i.SubjectUrn,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.RefreshExpiresAt,
+		&i.Scopes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

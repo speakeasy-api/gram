@@ -365,6 +365,22 @@ RETURNING *;
 DELETE FROM current_users WHERE mode = @mode;
 
 -- =============================================================================
+-- oauth_clients (dynamic client registration for oauth2-1)
+-- =============================================================================
+
+-- name: CreateOAuthClient :one
+INSERT INTO oauth_clients (
+  client_id, mode, client_secret, redirect_uris
+)
+VALUES (
+  @client_id, @mode, @client_secret, @redirect_uris
+)
+RETURNING *;
+
+-- name: GetOAuthClient :one
+SELECT * FROM oauth_clients WHERE client_id = @client_id AND mode = @mode;
+
+-- =============================================================================
 -- auth_codes / tokens (shared by every OAuth-shaped mode)
 -- =============================================================================
 
