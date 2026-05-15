@@ -25,6 +25,27 @@ type AgentExecution struct {
 	Deleted      bool
 }
 
+type AiIntegrationConfig struct {
+	CreatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	OrganizationID  string
+	Provider        string
+	ProjectID       uuid.UUID
+	ApiKeyEncrypted pgtype.Text
+	Enabled         bool
+	ID              uuid.UUID
+	Deleted         bool
+}
+
+type AiIntegrationSync struct {
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	AiIntegrationConfigID uuid.UUID
+	LastPolledAt          pgtype.Timestamptz
+	ID                    uuid.UUID
+}
+
 type ApiKey struct {
 	ID              uuid.UUID
 	OrganizationID  string
