@@ -19,6 +19,7 @@ import { ToolList } from "@/components/tool-list";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
@@ -58,6 +59,7 @@ import { Confirm } from "@gram/client/models/components";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
   invalidateAllGetPeriodUsage,
+  invalidateAllListToolsets,
   invalidateAllToolset,
   invalidateTemplate,
   buildCollectionsListServersQuery,
@@ -345,8 +347,11 @@ function MCPDetailPageContent({
         >
           <div className="flex items-end justify-between">
             <Stack gap={2}>
-              <div className="ml-1 flex items-end gap-3">
-                <Heading variant="h1">{toolset.name}</Heading>
+              <div className="ml-1 flex items-end gap-1">
+                <div className="flex items-baseline">
+                  <Heading variant="h1">{toolset.name}</Heading>
+                  <RenameMCPServerButton toolset={toolset} />
+                </div>
                 <div className="mb-1 flex items-center gap-2">
                   {statusBadge}
                 </div>
@@ -471,6 +476,144 @@ function MCPDetailPageContent({
         </Tabs>
       </Page.Body>
     </Page>
+  );
+}
+
+const MCP_SERVER_NAME_MAX_LENGTH = 40;
+
+function RenameMCPServerButton({ toolset }: { toolset: Toolset }) {
+  const queryClient = useQueryClient();
+  const telemetry = useTelemetry();
+  const updateToolsetMutation = useUpdateToolsetMutation();
+  const [isOpen, setIsOpen] = useState(false);
+  const [name, setName] = useState(toolset.name);
+
+  useEffect(() => {
+    if (isOpen) {
+      setName(toolset.name);
+    }
+  }, [isOpen, toolset.name]);
+
+  const trimmedName = name.trim();
+  const nameError =
+    trimmedName.length === 0
+      ? "Name is required"
+      : name.length > MCP_SERVER_NAME_MAX_LENGTH
+        ? `Must be ${MCP_SERVER_NAME_MAX_LENGTH} characters or less`
+        : null;
+  const hasChanges = trimmedName !== toolset.name;
+  const canSave = !nameError && hasChanges && !updateToolsetMutation.isPending;
+
+  const handleOpenChange = (open: boolean) => {
+    if (!updateToolsetMutation.isPending) {
+      setIsOpen(open);
+    }
+  };
+
+  const handleSave = () => {
+    if (!canSave) return;
+
+    updateToolsetMutation.mutate(
+      {
+        request: {
+          slug: toolset.slug,
+          updateToolsetRequestBody: {
+            name: trimmedName,
+          },
+        },
+      },
+      {
+        onSuccess: () => {
+          invalidateAllToolset(queryClient);
+          invalidateAllListToolsets(queryClient);
+          telemetry.capture("mcp_event", {
+            action: "mcp_server_renamed",
+            slug: toolset.slug,
+          });
+          toast.success("MCP server renamed");
+          setIsOpen(false);
+        },
+        onError: (error) => {
+          toast.error(
+            error instanceof Error ? error.message : "Failed to rename server",
+          );
+        },
+      },
+    );
+  };
+
+  return (
+    <>
+      <RequireScope
+        scope="mcp:write"
+        level="component"
+        reason="You don't have permission to rename this MCP server."
+        className="shrink-0"
+      >
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="tertiary"
+              size="sm"
+              className="text-muted-foreground hover:text-foreground h-5 w-5 shrink-0 p-0"
+              onClick={() => setIsOpen(true)}
+              aria-label="Rename MCP server"
+            >
+              <Button.LeftIcon>
+                <Pencil className="h-3 w-3" />
+              </Button.LeftIcon>
+              <Button.Text className="sr-only">Rename MCP server</Button.Text>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Rename MCP server</TooltipContent>
+        </Tooltip>
+      </RequireScope>
+
+      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+        <Dialog.Content className="max-w-md">
+          <Dialog.Header>
+            <Dialog.Title>Rename MCP Server</Dialog.Title>
+            <Dialog.Description>
+              Update the display name for this MCP server. The URL slug will
+              stay the same.
+            </Dialog.Description>
+          </Dialog.Header>
+
+          <div className="space-y-2 py-1">
+            <Label htmlFor="mcp-server-name">Name</Label>
+            <Input
+              id="mcp-server-name"
+              placeholder="My MCP Server"
+              value={name}
+              onChange={setName}
+              onEnter={handleSave}
+              maxLength={MCP_SERVER_NAME_MAX_LENGTH}
+              disabled={updateToolsetMutation.isPending}
+              autoFocus
+            />
+            <div className="text-muted-foreground flex min-h-5 justify-between gap-4 text-sm">
+              <p className="text-destructive">{nameError}</p>
+              <p>
+                {name.length}/{MCP_SERVER_NAME_MAX_LENGTH}
+              </p>
+            </div>
+          </div>
+
+          <Dialog.Footer>
+            <Button
+              variant="secondary"
+              onClick={() => setIsOpen(false)}
+              disabled={updateToolsetMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={!canSave}>
+              {updateToolsetMutation.isPending ? "Saving..." : "Save"}
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+    </>
   );
 }
 
