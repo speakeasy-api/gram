@@ -15,7 +15,7 @@ export function CategoryLabel({
   const label = category ? RULE_CATEGORY_META[category].label : null;
   const shortLabel = category === "pii" ? "PII" : null;
   return (
-    <span className="@container block min-w-0 overflow-hidden whitespace-nowrap">
+    <span className="@container block min-w-0 truncate">
       <Badge variant="neutral" title={label ?? undefined}>
         <Badge.Text>
           {shortLabel ? (
