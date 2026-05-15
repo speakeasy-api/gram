@@ -259,6 +259,30 @@ WHERE ora.organization_id = @organization_id
   AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
 ORDER BY ora.workos_user_id, role_slug;
 
+-- name: ListAccessMembers :many
+SELECT
+  users.id,
+  users.display_name,
+  users.email,
+  users.photo_url,
+  COALESCE(organization_roles.id, global_roles.id)::uuid AS role_id,
+  ora.created_at AS joined_at
+FROM organization_role_assignments AS ora
+JOIN users
+  ON users.id = ora.user_id
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND COALESCE(organization_roles.id, global_roles.id) IS NOT NULL
+ORDER BY users.email, users.id;
+
 -- name: ListMemberRoleSlugsByWorkosUser :many
 SELECT DISTINCT COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug
 FROM organization_role_assignments AS ora

@@ -336,6 +336,67 @@ func (q *Queries) InsertChallengeResolutions(ctx context.Context, arg InsertChal
 	return items, nil
 }
 
+const listAccessMembers = `-- name: ListAccessMembers :many
+SELECT
+  users.id,
+  users.display_name,
+  users.email,
+  users.photo_url,
+  COALESCE(organization_roles.id, global_roles.id)::uuid AS role_id,
+  ora.created_at AS joined_at
+FROM organization_role_assignments AS ora
+JOIN users
+  ON users.id = ora.user_id
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = $1
+  AND COALESCE(organization_roles.id, global_roles.id) IS NOT NULL
+ORDER BY users.email, users.id
+`
+
+type ListAccessMembersRow struct {
+	ID          string
+	DisplayName string
+	Email       string
+	PhotoUrl    pgtype.Text
+	RoleID      uuid.UUID
+	JoinedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) ListAccessMembers(ctx context.Context, organizationID string) ([]ListAccessMembersRow, error) {
+	rows, err := q.db.Query(ctx, listAccessMembers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAccessMembersRow
+	for rows.Next() {
+		var i ListAccessMembersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.Email,
+			&i.PhotoUrl,
+			&i.RoleID,
+			&i.JoinedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveOrganizationRoles = `-- name: ListActiveOrganizationRoles :many
 WITH active_roles AS (
   SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'global'::text AS role_kind

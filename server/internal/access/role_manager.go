@@ -96,61 +96,20 @@ type localRoleAssignment struct {
 
 // ListMembers returns locally known organization members with role IDs resolved from local role assignments.
 func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.ListMembersResult, error) {
-	roleRows, err := repo.New(r.db).ListActiveOrganizationRoles(ctx, gramOrgID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list roles").Log(ctx, r.logger)
-	}
-
-	roles := make(map[string]string, len(roleRows))
-	for _, row := range roleRows {
-		roles[row.WorkosSlug] = row.ID.String()
-	}
-
-	assignmentRows, err := repo.New(r.db).ListOrganizationRoleAssignmentsForOrg(ctx, gramOrgID)
+	rows, err := repo.New(r.db).ListAccessMembers(ctx, gramOrgID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list members").Log(ctx, r.logger)
 	}
 
-	assignments := make([]localRoleAssignment, 0, len(assignmentRows))
-	for _, row := range assignmentRows {
-		assignments = append(assignments, localRoleAssignment{
-			UserID:       conv.FromPGTextOrEmpty[string](row.UserID),
-			WorkosUserID: row.WorkosUserID,
-			MembershipID: conv.FromPGTextOrEmpty[string](row.WorkosMembershipID),
-			RoleSlug:     row.RoleSlug,
-			CreatedAt:    conv.FromPGTimestamptz(row.CreatedAt),
-		})
-	}
-
-	userIDs := make([]string, 0, len(assignments))
-	for _, assignment := range assignments {
-		if assignment.UserID != "" {
-			userIDs = append(userIDs, assignment.UserID)
-		}
-	}
-	localRows, err := usersrepo.New(r.db).GetUsersByIDs(ctx, userIDs)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "resolve users by ids").Log(ctx, r.logger)
-	}
-	localUsers := make(map[string]usersrepo.User, len(localRows))
-	for _, u := range localRows {
-		localUsers[u.ID] = u
-	}
-
-	result := make([]*gen.AccessMember, 0, len(assignments))
-	for _, assignment := range assignments {
-		user, ok := localUsers[assignment.UserID]
-		if !ok {
-			continue
-		}
-
+	result := make([]*gen.AccessMember, 0, len(rows))
+	for _, row := range rows {
 		result = append(result, &gen.AccessMember{
-			ID:       user.ID,
-			Name:     conv.Default(user.DisplayName, user.Email),
-			Email:    user.Email,
-			PhotoURL: conv.FromPGText[string](user.PhotoUrl),
-			RoleID:   roles[assignment.RoleSlug],
-			JoinedAt: assignment.CreatedAt,
+			ID:       row.ID,
+			Name:     conv.Default(row.DisplayName, row.Email),
+			Email:    row.Email,
+			PhotoURL: conv.FromPGText[string](row.PhotoUrl),
+			RoleID:   row.RoleID.String(),
+			JoinedAt: conv.FromPGTimestamptz(row.JoinedAt),
 		})
 	}
 
@@ -169,7 +128,6 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 	if err != nil {
 		return roleCreateResult{}, err
 	}
-	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSlug(roleSlug))
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	if err := repo.New(r.db).UpsertOrganizationRole(ctx, organizationRoleParams(gramOrgID, workos.Role{
