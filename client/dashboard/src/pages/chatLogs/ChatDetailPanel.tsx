@@ -1,6 +1,7 @@
 import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MultiSelect } from "@/components/ui/multi-select";
 import {
   Accordion,
   AccordionContent,
@@ -15,7 +16,7 @@ import type {
 } from "@gram/client/models/components";
 import { useLoadChat, useSearchLogsMutation } from "@gram/client/react-query";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
-import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Icon, Stack, type IconName } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
@@ -45,68 +46,56 @@ function getTraceId(chatId: string): string {
   return `trace-${chatId.slice(0, 3)}`;
 }
 
-function exportChatAsJson(chat: {
-  id: string;
-  title: string;
-  source?: string;
-  createdAt: Date;
-  updatedAt: Date;
-  messages: Array<{
+function downloadJsonFile(filename: string, data: unknown) {
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function getTraceExportSlug(chat: { id: string; title?: string | null }) {
+  const titleSlug = chat.title
+    ?.toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40);
+
+  return titleSlug || chat.id.slice(0, 8);
+}
+
+function exportTraceDataAsJson({
+  chatId,
+  chat,
+  telemetryLogs,
+  riskResults,
+}: {
+  chatId: string;
+  chat: {
     id: string;
-    role: string;
-    content?: string;
-    model: string;
-    toolCallId?: string;
-    toolCalls?: string;
-    finishReason?: string;
-    createdAt: Date;
-    generation: number;
-  }>;
-  totalInputTokens?: number;
-  totalOutputTokens?: number;
-  totalTokens?: number;
-  totalCost?: number;
+    title?: string | null;
+    messages: ChatMessage[];
+  };
+  telemetryLogs: TelemetryLogRecord[];
+  riskResults: RiskResult[];
 }) {
   try {
     const exported = {
-      id: chat.id,
-      title: chat.title,
-      source: chat.source,
-      created_at: chat.createdAt.toISOString(),
-      updated_at: chat.updatedAt.toISOString(),
-      total_input_tokens: chat.totalInputTokens,
-      total_output_tokens: chat.totalOutputTokens,
-      total_tokens: chat.totalTokens,
-      total_cost: chat.totalCost,
-      messages: chat.messages.map((m) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        model: m.model,
-        tool_call_id: m.toolCallId,
-        tool_calls: m.toolCalls ? JSON.parse(m.toolCalls) : undefined,
-        finish_reason: m.finishReason,
-        created_at: m.createdAt.toISOString(),
-        generation: m.generation,
-      })),
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      chatId,
+      chat,
+      messages: chat.messages,
+      telemetryLogs,
+      riskResults,
     };
 
-    const json = JSON.stringify(exported, null, 2);
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const slug = chat.title
-      ? chat.title
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .slice(0, 40)
-      : chat.id.slice(0, 8);
-    a.download = `chat-${slug}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  } catch (_err) {
-    toast.error("Failed to export chat session");
+    downloadJsonFile(`trace-${getTraceExportSlug(chat)}.json`, exported);
+  } catch {
+    toast.error("Failed to export trace data");
   }
 }
 
@@ -162,20 +151,203 @@ interface ToolCall {
   };
 }
 
+const FILTERABLE_ENTRY_TYPES = [
+  "user",
+  "assistant",
+  "tool_call",
+  "tool_result",
+] as const;
+
+type FilterableTraceEntryType = (typeof FILTERABLE_ENTRY_TYPES)[number];
+type TraceEntryType = FilterableTraceEntryType | "system";
+
+const DEFAULT_ENABLED_ENTRY_TYPES = [...FILTERABLE_ENTRY_TYPES];
+
+const ENTRY_TYPE_META: Record<
+  TraceEntryType,
+  {
+    label: string;
+    icon: IconName;
+    iconClassName: string;
+  }
+> = {
+  user: {
+    label: "User",
+    icon: "user",
+    iconClassName: "text-muted-foreground",
+  },
+  assistant: {
+    label: "Assistant",
+    icon: "bot",
+    iconClassName: "text-default-information",
+  },
+  tool_call: {
+    label: "Tool Call",
+    icon: "zap",
+    iconClassName: "text-warning-default",
+  },
+  tool_result: {
+    label: "Tool Result",
+    icon: "terminal",
+    iconClassName: "text-success-default",
+  },
+  system: {
+    label: "System Prompt",
+    icon: "settings",
+    iconClassName: "text-muted-foreground",
+  },
+};
+
+function parseToolCalls(toolCalls: string | undefined): ToolCall[] | null {
+  if (!toolCalls) return null;
+
+  try {
+    let parsed: unknown = JSON.parse(toolCalls);
+    // Handle double-encoded JSON strings.
+    if (typeof parsed === "string") {
+      parsed = JSON.parse(parsed);
+    }
+    return Array.isArray(parsed) ? (parsed as ToolCall[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function getTraceEntryType(
+  message: ChatMessage,
+  parsedToolCalls: ToolCall[] | null,
+): TraceEntryType {
+  if (parsedToolCalls && parsedToolCalls.length > 0) return "tool_call";
+  if (message.role === "tool") return "tool_result";
+  if (message.role === "user") return "user";
+  if (message.role === "assistant") return "assistant";
+  return "system";
+}
+
+function getEntryTypeCounts(
+  messages: ChatMessage[],
+): Record<FilterableTraceEntryType, number> {
+  const counts: Record<FilterableTraceEntryType, number> = {
+    user: 0,
+    assistant: 0,
+    tool_call: 0,
+    tool_result: 0,
+  };
+
+  for (const message of messages) {
+    const entryType = getTraceEntryType(
+      message,
+      parseToolCalls(message.toolCalls),
+    );
+    if (entryType !== "system") {
+      counts[entryType] += 1;
+    }
+  }
+
+  return counts;
+}
+
+function isMessageVisible(
+  message: ChatMessage,
+  enabledEntryTypes: FilterableTraceEntryType[],
+) {
+  const parsedToolCalls = parseToolCalls(message.toolCalls);
+  const entryType = getTraceEntryType(message, parsedToolCalls);
+  return entryType === "system" || enabledEntryTypes.includes(entryType);
+}
+
+function getVisibleMessageCount(
+  messages: ChatMessage[],
+  enabledEntryTypes: FilterableTraceEntryType[],
+) {
+  return messages.filter((message) =>
+    isMessageVisible(message, enabledEntryTypes),
+  ).length;
+}
+
+function isFilterableEntryType(
+  value: string,
+): value is FilterableTraceEntryType {
+  return FILTERABLE_ENTRY_TYPES.includes(value as FilterableTraceEntryType);
+}
+
+function EntryTypeFilterBar({
+  value,
+  counts,
+  totalCount,
+  visibleCount,
+  onChange,
+}: {
+  value: FilterableTraceEntryType[];
+  counts: Record<FilterableTraceEntryType, number>;
+  totalCount: number;
+  visibleCount: number;
+  onChange: (value: FilterableTraceEntryType[]) => void;
+}) {
+  const options = FILTERABLE_ENTRY_TYPES.map((entryType) => {
+    const meta = ENTRY_TYPE_META[entryType];
+
+    return {
+      label: `${meta.label} (${counts[entryType].toLocaleString()})`,
+      value: entryType,
+      icon: ({ className }: { className?: string }) => (
+        <Icon name={meta.icon} className={cn(className, meta.iconClassName)} />
+      ),
+    };
+  });
+
+  return (
+    <div className="bg-background border-b px-6 py-3">
+      <div className="flex min-w-0 flex-col gap-2">
+        <div className="text-sm font-medium">Entry type filter</div>
+        <div>
+          <MultiSelect
+            options={options}
+            defaultValue={value}
+            onValueChange={(next) =>
+              onChange(next.filter(isFilterableEntryType))
+            }
+            placeholder="Filter by entry type"
+            maxCount={10}
+            popoverClassName="min-w-[240px]"
+          />
+        </div>
+        <div>
+          <div className="text-muted-foreground text-xs">
+            Showing {visibleCount.toLocaleString()} of{" "}
+            {totalCount.toLocaleString()}{" "}
+            {visibleCount === 1 ? "entry" : "entries"}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ChatMessagesList({
   messages,
   messageResolutionMap,
   riskResultsByMessage,
   collapseNonRisk,
+  enabledEntryTypes,
 }: {
   messages: ChatMessage[];
   messageResolutionMap: Map<string, ChatResolution>;
   riskResultsByMessage: Map<string, RiskResult[]>;
   collapseNonRisk?: boolean;
+  enabledEntryTypes: FilterableTraceEntryType[];
 }) {
+  const visibleMessages = useMemo(
+    () =>
+      messages.filter((message) =>
+        isMessageVisible(message, enabledEntryTypes),
+      ),
+    [enabledEntryTypes, messages],
+  );
+
   const groups = useMemo(() => {
     const byGeneration = new Map<number, ChatMessage[]>();
-    for (const m of messages) {
+    for (const m of visibleMessages) {
       const list = byGeneration.get(m.generation) ?? [];
       list.push(m);
       byGeneration.set(m.generation, list);
@@ -183,16 +355,24 @@ function ChatMessagesList({
     return Array.from(byGeneration.entries())
       .sort(([a], [b]) => a - b)
       .map(([generation, items]) => ({ generation, messages: items }));
-  }, [messages]);
+  }, [visibleMessages]);
 
   const maxGeneration =
     groups.length > 0 ? groups[groups.length - 1]!.generation : 0;
+
+  if (visibleMessages.length === 0) {
+    return (
+      <div className="text-muted-foreground rounded-lg border border-dashed p-6 text-center text-sm">
+        No entries match the selected filters.
+      </div>
+    );
+  }
 
   // A single segment (no compaction has ever occurred) stays flat — no accordion.
   if (maxGeneration === 0) {
     return (
       <Stack direction="vertical" gap={4}>
-        {messages.map((message) => (
+        {visibleMessages.map((message) => (
           <MessageItem
             key={message.id}
             message={message}
@@ -786,6 +966,9 @@ export function ChatDetailPanel({
 }: ChatDetailPanelProps) {
   const isAdmin = useIsAdmin();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [enabledEntryTypes, setEnabledEntryTypes] = useState<
+    FilterableTraceEntryType[]
+  >([...DEFAULT_ENABLED_ENTRY_TYPES]);
   const { data: chat, isLoading: chatLoading } = useLoadChat(
     { id: chatId },
     undefined,
@@ -819,9 +1002,13 @@ export function ChatDetailPanel({
 
   // Fetch risk findings for this chat
   const { data: riskData } = useRiskListResults({ chatId });
+  const riskResults = useMemo(
+    () => riskData?.results ?? [],
+    [riskData?.results],
+  );
   const riskResultsByMessage = useMemo(() => {
     const map = new Map<string, RiskResult[]>();
-    for (const r of riskData?.results ?? []) {
+    for (const r of riskResults) {
       const existing = map.get(r.chatMessageId);
       if (existing) {
         existing.push(r);
@@ -830,7 +1017,7 @@ export function ChatDetailPanel({
       }
     }
     return map;
-  }, [riskData]);
+  }, [riskResults]);
 
   if (chatLoading) {
     return <div className="p-8">Loading chat details...</div>;
@@ -847,6 +1034,11 @@ export function ChatDetailPanel({
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const duration = Math.round(
     (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
+  );
+  const entryTypeCounts = getEntryTypeCounts(chat.messages);
+  const visibleEntryCount = getVisibleMessageCount(
+    chat.messages,
+    enabledEntryTypes,
   );
 
   // Create a map of message IDs to resolution info for showing breakpoints
@@ -887,11 +1079,19 @@ export function ChatDetailPanel({
             {isAdmin && (
               <>
                 <button
-                  onClick={() => exportChatAsJson(chat)}
-                  className="hover:bg-muted text-muted-foreground rounded-md p-1 transition-colors"
-                  aria-label="Export chat as JSON"
+                  onClick={() =>
+                    exportTraceDataAsJson({
+                      chatId,
+                      chat,
+                      telemetryLogs: logs,
+                      riskResults,
+                    })
+                  }
+                  className="hover:bg-muted text-muted-foreground inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
+                  aria-label="Export data as JSON"
                 >
-                  <Icon name="download" className="size-5" />
+                  <Icon name="download" className="size-4" />
+                  <span>Export data</span>
                 </button>
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
@@ -1103,6 +1303,14 @@ export function ChatDetailPanel({
             </div>
           )}
 
+          <EntryTypeFilterBar
+            value={enabledEntryTypes}
+            counts={entryTypeCounts}
+            totalCount={chat.messages.length}
+            visibleCount={visibleEntryCount}
+            onChange={setEnabledEntryTypes}
+          />
+
           {/* Chat Messages */}
           <div className="p-6">
             <ChatMessagesList
@@ -1110,6 +1318,7 @@ export function ChatDetailPanel({
               messageResolutionMap={messageResolutionMap}
               riskResultsByMessage={riskResultsByMessage}
               collapseNonRisk={collapseNonRisk}
+              enabledEntryTypes={enabledEntryTypes}
             />
           </div>
         </TabsContent>
