@@ -183,6 +183,80 @@ func TestProcessWorkOSUserEvents_LinksOptimisticRoleAssignments(t *testing.T) {
 	require.Equal(t, gramID, assignments[0].UserID.String)
 }
 
+func TestProcessWorkOSUserEvents_LinksPendingRelationshipOverTombstone(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newUserEventsTestConn(t, "workos_user_events_link_relationship_tombstone")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "org_relationship_tombstone"
+	const workosOrgID = "org_workos_relationship_tombstone"
+	const workosUserID = "user_relationship_tombstone"
+	const gramUserID = "gram_user_relationship_tombstone"
+	const firstMembershipID = "mem_relationship_tombstone_1"
+	const secondMembershipID = "mem_relationship_tombstone_2"
+	seedTime := time.Date(2026, 5, 10, 10, 0, 0, 0, time.UTC)
+
+	_, err := orgrepo.New(conn).UpsertOrganizationMetadataFromWorkOS(ctx, orgrepo.UpsertOrganizationMetadataFromWorkOSParams{
+		ID:                organizationID,
+		Name:              "Relationship Tombstone Org",
+		Slug:              "relationship-tombstone-org",
+		WorkosID:          conv.ToPGText(workosOrgID),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(seedTime),
+		WorkosLastEventID: conv.ToPGText("event_org_relationship_tombstone"),
+	})
+	require.NoError(t, err)
+	_, err = usersrepo.New(conn).UpsertSyncedUser(ctx, syncedUserParams(gramUserID, workosUserID, "old@example.com", "Existing User"))
+	require.NoError(t, err)
+	err = orgrepo.New(conn).UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
+		OrganizationID:     organizationID,
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosUserID:       conv.ToPGText(workosUserID),
+		WorkosMembershipID: conv.ToPGText(firstMembershipID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(seedTime),
+		WorkosLastEventID:  conv.ToPGText("event_relationship_tombstone_1"),
+	})
+	require.NoError(t, err)
+	err = orgrepo.New(conn).MarkWorkOSMembershipDeleted(ctx, orgrepo.MarkWorkOSMembershipDeletedParams{
+		OrganizationID:     organizationID,
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosUserID:       conv.ToPGText(workosUserID),
+		WorkosMembershipID: conv.ToPGText(firstMembershipID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(seedTime.Add(time.Hour)),
+		WorkosLastEventID:  conv.ToPGText("event_relationship_tombstone_2"),
+	})
+	require.NoError(t, err)
+	err = orgrepo.New(conn).UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
+		OrganizationID:     organizationID,
+		UserID:             conv.ToPGTextEmpty(""),
+		WorkosUserID:       conv.ToPGText(workosUserID),
+		WorkosMembershipID: conv.ToPGText(secondMembershipID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(seedTime.Add(2 * time.Hour)),
+		WorkosLastEventID:  conv.ToPGText("event_relationship_tombstone_3"),
+	})
+	require.NoError(t, err)
+
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		{ID: "event_user_relationship_tombstone", Event: "user.updated", CreatedAt: time.Now(), Data: userEventDataWithExternalID(workosUserID, gramUserID, "new@example.com", "Existing", "User", "")},
+	}})
+
+	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
+	require.NoError(t, err)
+	require.Equal(t, "event_user_relationship_tombstone", res.LastEventID)
+
+	relationship, err := orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.NoError(t, err)
+	require.False(t, relationship.Deleted)
+	require.Equal(t, secondMembershipID, relationship.WorkosMembershipID.String)
+	require.Equal(t, "event_relationship_tombstone_3", relationship.WorkosLastEventID.String)
+}
+
 func TestProcessWorkOSUserEvents_UsesExistingUserIDWhenExternalIDMissing(t *testing.T) {
 	t.Parallel()
 
