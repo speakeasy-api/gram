@@ -5,7 +5,6 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -38,7 +37,6 @@ func TestResolveAssistantMCPServers_UserToolsetsListedBeforePlatformServer(t *te
 
 	rows := []assistantToolsetRow{
 		{
-			ToolsetID:       uuid.New(),
 			ToolsetSlug:     "billing",
 			McpEnabled:      true,
 			McpSlug:         pgtype.Text{String: "billing-mcp", Valid: true},
@@ -72,19 +70,16 @@ func TestResolveAssistantMCPServers_MisconfiguredToolsetIsOmitted(t *testing.T) 
 
 	rows := []assistantToolsetRow{
 		{
-			ToolsetID:   uuid.New(),
 			ToolsetSlug: "no-mcp-slug",
 			McpEnabled:  true,
 			McpSlug:     pgtype.Text{Valid: false},
 		},
 		{
-			ToolsetID:   uuid.New(),
 			ToolsetSlug: "mcp-disabled",
 			McpEnabled:  false,
 			McpSlug:     pgtype.Text{String: "mcp-disabled-mcp", Valid: true},
 		},
 		{
-			ToolsetID:   uuid.New(),
 			ToolsetSlug: "billing",
 			McpEnabled:  true,
 			McpSlug:     pgtype.Text{String: "billing-mcp", Valid: true},
