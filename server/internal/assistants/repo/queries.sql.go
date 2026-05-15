@@ -1120,21 +1120,18 @@ const listInactiveAssistantRuntimesForReap = `-- name: ListInactiveAssistantRunt
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.backend_metadata_json <> '{}'::jsonb
-  AND r.state NOT IN ($1, $2)
   AND NOT EXISTS (
     SELECT 1
     FROM assistant_runtimes r2
     WHERE r2.assistant_id = r.assistant_id
-      AND r2.updated_at >= $3
+      AND r2.updated_at >= $1
       AND r2.backend_metadata_json <> '{}'::jsonb
   )
 ORDER BY r.updated_at ASC
-LIMIT $4
+LIMIT $2
 `
 
 type ListInactiveAssistantRuntimesForReapParams struct {
-	StartingState  string
-	ActiveState    string
 	InactiveBefore pgtype.Timestamptz
 	LimitCount     int32
 }
@@ -1150,17 +1147,12 @@ type ListInactiveAssistantRuntimesForReapRow struct {
 	WarmUntil           pgtype.Timestamptz
 }
 
-// Returns runtime rows that still carry backend metadata and whose owning
-// assistant has had no runtime activity since @inactive_before. Active and
-// starting rows are excluded so a long-running session that updated_at
-// recently is never collected mid-flight.
+// Returns runtime rows that still carry backend metadata whose owning
+// assistant has had no runtime activity since @inactive_before. Liveness is
+// judged solely by the EXISTS-on-updated_at join across the assistant's
+// runtime rows; row state is intentionally ignored.
 func (q *Queries) ListInactiveAssistantRuntimesForReap(ctx context.Context, arg ListInactiveAssistantRuntimesForReapParams) ([]ListInactiveAssistantRuntimesForReapRow, error) {
-	rows, err := q.db.Query(ctx, listInactiveAssistantRuntimesForReap,
-		arg.StartingState,
-		arg.ActiveState,
-		arg.InactiveBefore,
-		arg.LimitCount,
-	)
+	rows, err := q.db.Query(ctx, listInactiveAssistantRuntimesForReap, arg.InactiveBefore, arg.LimitCount)
 	if err != nil {
 		return nil, err
 	}

@@ -661,14 +661,13 @@ WHERE assistant_id = @assistant_id
   AND backend_metadata_json <> '{}'::jsonb;
 
 -- name: ListInactiveAssistantRuntimesForReap :many
--- Returns runtime rows that still carry backend metadata and whose owning
--- assistant has had no runtime activity since @inactive_before. Active and
--- starting rows are excluded so a long-running session that updated_at
--- recently is never collected mid-flight.
+-- Returns runtime rows that still carry backend metadata whose owning
+-- assistant has had no runtime activity since @inactive_before. Liveness is
+-- judged solely by the EXISTS-on-updated_at join across the assistant's
+-- runtime rows; row state is intentionally ignored.
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.backend_metadata_json <> '{}'::jsonb
-  AND r.state NOT IN (@starting_state, @active_state)
   AND NOT EXISTS (
     SELECT 1
     FROM assistant_runtimes r2

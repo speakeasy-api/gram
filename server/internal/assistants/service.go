@@ -1009,8 +1009,6 @@ type ReapInactiveAssistantRuntimesParams struct {
 // ReapInactiveAssistantRuntimes drives the long-inactivity janitor. It picks
 // runtime rows whose owning assistant has had no recorded activity within
 // InactivityThreshold and tears down the corresponding backend resources.
-// Active and starting rows are filtered out at the SQL layer so an in-flight
-// admit is never collected mid-flight.
 func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params ReapInactiveAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
 	if params.InactivityThreshold <= 0 {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("inactivity threshold must be positive")
@@ -1020,8 +1018,6 @@ func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params 
 	}
 
 	rows, err := assistantrepo.New(s.db).ListInactiveAssistantRuntimesForReap(ctx, assistantrepo.ListInactiveAssistantRuntimesForReapParams{
-		StartingState:  runtimeStateStarting,
-		ActiveState:    runtimeStateActive,
 		InactiveBefore: conv.ToPGTimestamptz(time.Now().UTC().Add(-params.InactivityThreshold)),
 		LimitCount:     params.BatchSize,
 	})

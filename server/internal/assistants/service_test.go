@@ -1085,17 +1085,18 @@ func TestServiceCoreReapInactiveAssistantRuntimesReapsSiblingsAcrossSweeps(t *te
 	require.EqualValues(t, 2, reapCalls.Load())
 }
 
-func TestServiceCoreReapInactiveAssistantRuntimesIgnoresActiveAndStarting(t *testing.T) {
+func TestServiceCoreReapInactiveAssistantRuntimesReapsStaleRowsRegardlessOfState(t *testing.T) {
 	t.Parallel()
 
-	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_inactive_state_filter")
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_inactive_state_agnostic")
 	require.NoError(t, err)
 
+	stale := time.Now().UTC().Add(-30 * 24 * time.Hour)
 	projectID, assistantID, threadID := insertReapableProject(t, conn, "active-state")
-	insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateActive, "gram-asst-active", time.Now().UTC().Add(-30*24*time.Hour))
+	insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateActive, "gram-asst-active", stale)
 
 	startingProject, startingAssistantID, startingThreadID := insertReapableProject(t, conn, "starting-state")
-	insertReapableRuntimeRow(t, conn, startingProject, startingAssistantID, startingThreadID, runtimeStateStarting, "gram-asst-starting", time.Now().UTC().Add(-30*24*time.Hour))
+	insertReapableRuntimeRow(t, conn, startingProject, startingAssistantID, startingThreadID, runtimeStateStarting, "gram-asst-starting", stale)
 
 	reapCalls := &atomic.Int64{}
 	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
@@ -1106,8 +1107,8 @@ func TestServiceCoreReapInactiveAssistantRuntimesIgnoresActiveAndStarting(t *tes
 		BatchSize:           10,
 	})
 	require.NoError(t, err)
-	require.Equal(t, 0, result.Reaped)
-	require.EqualValues(t, 0, reapCalls.Load())
+	require.Equal(t, 2, result.Reaped)
+	require.EqualValues(t, 2, reapCalls.Load())
 }
 
 type testRuntimeBackend struct {
