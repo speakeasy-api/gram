@@ -28,7 +28,7 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * upsertConfig aiIntegrations
+ * upsertAIIntegrationConfig aiIntegrations
  *
  * @remarks
  * Create or update the org-wide AI integration config for a provider.
@@ -95,9 +95,11 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.UpsertConfigRequestBody, {
-    explode: true,
-  });
+  const body = encodeJSON(
+    "body",
+    payload.UpsertAIIntegrationConfigRequestBody,
+    { explode: true },
+  );
 
   const path = pathToFunc("/rpc/aiIntegrations.upsertConfig")();
 

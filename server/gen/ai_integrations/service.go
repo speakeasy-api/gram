@@ -18,11 +18,11 @@ import (
 type Service interface {
 	// Get the org-wide AI integration config for a provider. Returns an empty
 	// config (enabled=false, has_api_key=false) when none is set.
-	GetConfig(context.Context, *GetConfigPayload) (res *AIIntegrationConfig, err error)
+	GetAIIntegrationConfig(context.Context, *GetAIIntegrationConfigPayload) (res *AIIntegrationConfig, err error)
 	// Create or update the org-wide AI integration config for a provider.
-	UpsertConfig(context.Context, *UpsertConfigPayload) (res *AIIntegrationConfig, err error)
+	UpsertAIIntegrationConfig(context.Context, *UpsertAIIntegrationConfigPayload) (res *AIIntegrationConfig, err error)
 	// Delete the org-wide AI integration config for a provider.
-	DeleteConfig(context.Context, *DeleteConfigPayload) (err error)
+	DeleteAIIntegrationConfig(context.Context, *DeleteAIIntegrationConfigPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -45,10 +45,10 @@ const ServiceName = "aiIntegrations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"getConfig", "upsertConfig", "deleteConfig"}
+var MethodNames = [3]string{"getAIIntegrationConfig", "upsertAIIntegrationConfig", "deleteAIIntegrationConfig"}
 
 // AIIntegrationConfig is the result type of the aiIntegrations service
-// getConfig method.
+// getAIIntegrationConfig method.
 type AIIntegrationConfig struct {
 	// Config ID. Omitted when no config is set for the provider.
 	ID *string
@@ -72,27 +72,27 @@ type AIIntegrationConfig struct {
 	UpdatedAt *string
 }
 
-// DeleteConfigPayload is the payload type of the aiIntegrations service
-// deleteConfig method.
-type DeleteConfigPayload struct {
+// DeleteAIIntegrationConfigPayload is the payload type of the aiIntegrations
+// service deleteAIIntegrationConfig method.
+type DeleteAIIntegrationConfigPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Initially only cursor is supported.
 	Provider string
 }
 
-// GetConfigPayload is the payload type of the aiIntegrations service getConfig
-// method.
-type GetConfigPayload struct {
+// GetAIIntegrationConfigPayload is the payload type of the aiIntegrations
+// service getAIIntegrationConfig method.
+type GetAIIntegrationConfigPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Initially only cursor is supported.
 	Provider string
 }
 
-// UpsertConfigPayload is the payload type of the aiIntegrations service
-// upsertConfig method.
-type UpsertConfigPayload struct {
+// UpsertAIIntegrationConfigPayload is the payload type of the aiIntegrations
+// service upsertAIIntegrationConfig method.
+type UpsertAIIntegrationConfigPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Initially only cursor is supported.

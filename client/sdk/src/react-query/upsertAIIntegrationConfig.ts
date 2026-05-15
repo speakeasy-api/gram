@@ -49,7 +49,7 @@ export type UpsertAIIntegrationConfigMutationError =
   | SDKValidationError;
 
 /**
- * upsertConfig aiIntegrations
+ * upsertAIIntegrationConfig aiIntegrations
  *
  * @remarks
  * Create or update the org-wide AI integration config for a provider.

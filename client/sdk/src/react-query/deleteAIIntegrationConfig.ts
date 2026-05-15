@@ -47,7 +47,7 @@ export type DeleteAIIntegrationConfigMutationError =
   | SDKValidationError;
 
 /**
- * deleteConfig aiIntegrations
+ * deleteAIIntegrationConfig aiIntegrations
  *
  * @remarks
  * Delete the org-wide AI integration config for a provider.

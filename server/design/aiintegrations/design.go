@@ -32,7 +32,7 @@ var _ = Service("aiIntegrations", func() {
 
 	shared.DeclareErrorResponses()
 
-	Method("getConfig", func() {
+	Method("getAIIntegrationConfig", func() {
 		Description("Get the org-wide AI integration config for a provider. Returns an empty config (enabled=false, has_api_key=false) when none is set.")
 
 		Security(security.ByKey, func() {
@@ -62,7 +62,7 @@ var _ = Service("aiIntegrations", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AIIntegrationConfig"}`)
 	})
 
-	Method("upsertConfig", func() {
+	Method("upsertAIIntegrationConfig", func() {
 		Description("Create or update the org-wide AI integration config for a provider.")
 
 		Security(security.ByKey, func() {
@@ -93,7 +93,7 @@ var _ = Service("aiIntegrations", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertAIIntegrationConfig"}`)
 	})
 
-	Method("deleteConfig", func() {
+	Method("deleteAIIntegrationConfig", func() {
 		Description("Delete the org-wide AI integration config for a provider.")
 
 		Security(security.ByKey, func() {

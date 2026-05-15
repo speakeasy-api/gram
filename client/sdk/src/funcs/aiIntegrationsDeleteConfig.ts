@@ -27,7 +27,7 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * deleteConfig aiIntegrations
+ * deleteAIIntegrationConfig aiIntegrations
  *
  * @remarks
  * Delete the org-wide AI integration config for a provider.
@@ -94,9 +94,11 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.DeleteConfigRequestBody, {
-    explode: true,
-  });
+  const body = encodeJSON(
+    "body",
+    payload.DeleteAIIntegrationConfigRequestBody,
+    { explode: true },
+  );
 
   const path = pathToFunc("/rpc/aiIntegrations.deleteConfig")();
 

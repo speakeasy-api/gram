@@ -16,9 +16,9 @@ import (
 
 // Endpoints wraps the "aiIntegrations" service endpoints.
 type Endpoints struct {
-	GetConfig    goa.Endpoint
-	UpsertConfig goa.Endpoint
-	DeleteConfig goa.Endpoint
+	GetAIIntegrationConfig    goa.Endpoint
+	UpsertAIIntegrationConfig goa.Endpoint
+	DeleteAIIntegrationConfig goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "aiIntegrations" service with
@@ -27,25 +27,25 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetConfig:    NewGetConfigEndpoint(s, a.APIKeyAuth),
-		UpsertConfig: NewUpsertConfigEndpoint(s, a.APIKeyAuth),
-		DeleteConfig: NewDeleteConfigEndpoint(s, a.APIKeyAuth),
+		GetAIIntegrationConfig:    NewGetAIIntegrationConfigEndpoint(s, a.APIKeyAuth),
+		UpsertAIIntegrationConfig: NewUpsertAIIntegrationConfigEndpoint(s, a.APIKeyAuth),
+		DeleteAIIntegrationConfig: NewDeleteAIIntegrationConfigEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "aiIntegrations" service
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
-	e.GetConfig = m(e.GetConfig)
-	e.UpsertConfig = m(e.UpsertConfig)
-	e.DeleteConfig = m(e.DeleteConfig)
+	e.GetAIIntegrationConfig = m(e.GetAIIntegrationConfig)
+	e.UpsertAIIntegrationConfig = m(e.UpsertAIIntegrationConfig)
+	e.DeleteAIIntegrationConfig = m(e.DeleteAIIntegrationConfig)
 }
 
-// NewGetConfigEndpoint returns an endpoint function that calls the method
-// "getConfig" of service "aiIntegrations".
-func NewGetConfigEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewGetAIIntegrationConfigEndpoint returns an endpoint function that calls
+// the method "getAIIntegrationConfig" of service "aiIntegrations".
+func NewGetAIIntegrationConfigEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*GetConfigPayload)
+		p := req.(*GetAIIntegrationConfigPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
@@ -72,15 +72,15 @@ func NewGetConfigEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 		if err != nil {
 			return nil, err
 		}
-		return s.GetConfig(ctx, p)
+		return s.GetAIIntegrationConfig(ctx, p)
 	}
 }
 
-// NewUpsertConfigEndpoint returns an endpoint function that calls the method
-// "upsertConfig" of service "aiIntegrations".
-func NewUpsertConfigEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewUpsertAIIntegrationConfigEndpoint returns an endpoint function that calls
+// the method "upsertAIIntegrationConfig" of service "aiIntegrations".
+func NewUpsertAIIntegrationConfigEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*UpsertConfigPayload)
+		p := req.(*UpsertAIIntegrationConfigPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
@@ -107,15 +107,15 @@ func NewUpsertConfigEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			return nil, err
 		}
-		return s.UpsertConfig(ctx, p)
+		return s.UpsertAIIntegrationConfig(ctx, p)
 	}
 }
 
-// NewDeleteConfigEndpoint returns an endpoint function that calls the method
-// "deleteConfig" of service "aiIntegrations".
-func NewDeleteConfigEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewDeleteAIIntegrationConfigEndpoint returns an endpoint function that calls
+// the method "deleteAIIntegrationConfig" of service "aiIntegrations".
+func NewDeleteAIIntegrationConfigEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*DeleteConfigPayload)
+		p := req.(*DeleteAIIntegrationConfigPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
@@ -142,6 +142,6 @@ func NewDeleteConfigEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			return nil, err
 		}
-		return nil, s.DeleteConfig(ctx, p)
+		return nil, s.DeleteAIIntegrationConfig(ctx, p)
 	}
 }

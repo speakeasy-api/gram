@@ -17,17 +17,17 @@ import (
 
 // Client lists the aiIntegrations service endpoint HTTP clients.
 type Client struct {
-	// GetConfig Doer is the HTTP client used to make requests to the getConfig
-	// endpoint.
-	GetConfigDoer goahttp.Doer
+	// GetAIIntegrationConfig Doer is the HTTP client used to make requests to the
+	// getAIIntegrationConfig endpoint.
+	GetAIIntegrationConfigDoer goahttp.Doer
 
-	// UpsertConfig Doer is the HTTP client used to make requests to the
-	// upsertConfig endpoint.
-	UpsertConfigDoer goahttp.Doer
+	// UpsertAIIntegrationConfig Doer is the HTTP client used to make requests to
+	// the upsertAIIntegrationConfig endpoint.
+	UpsertAIIntegrationConfigDoer goahttp.Doer
 
-	// DeleteConfig Doer is the HTTP client used to make requests to the
-	// deleteConfig endpoint.
-	DeleteConfigDoer goahttp.Doer
+	// DeleteAIIntegrationConfig Doer is the HTTP client used to make requests to
+	// the deleteAIIntegrationConfig endpoint.
+	DeleteAIIntegrationConfigDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -50,26 +50,26 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetConfigDoer:       doer,
-		UpsertConfigDoer:    doer,
-		DeleteConfigDoer:    doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		GetAIIntegrationConfigDoer:    doer,
+		UpsertAIIntegrationConfigDoer: doer,
+		DeleteAIIntegrationConfigDoer: doer,
+		RestoreResponseBody:           restoreBody,
+		scheme:                        scheme,
+		host:                          host,
+		decoder:                       dec,
+		encoder:                       enc,
 	}
 }
 
-// GetConfig returns an endpoint that makes HTTP requests to the aiIntegrations
-// service getConfig server.
-func (c *Client) GetConfig() goa.Endpoint {
+// GetAIIntegrationConfig returns an endpoint that makes HTTP requests to the
+// aiIntegrations service getAIIntegrationConfig server.
+func (c *Client) GetAIIntegrationConfig() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeGetConfigRequest(c.encoder)
-		decodeResponse = DecodeGetConfigResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeGetAIIntegrationConfigRequest(c.encoder)
+		decodeResponse = DecodeGetAIIntegrationConfigResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetConfigRequest(ctx, v)
+		req, err := c.BuildGetAIIntegrationConfigRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -77,23 +77,23 @@ func (c *Client) GetConfig() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.GetConfigDoer.Do(req)
+		resp, err := c.GetAIIntegrationConfigDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("aiIntegrations", "getConfig", err)
+			return nil, goahttp.ErrRequestError("aiIntegrations", "getAIIntegrationConfig", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// UpsertConfig returns an endpoint that makes HTTP requests to the
-// aiIntegrations service upsertConfig server.
-func (c *Client) UpsertConfig() goa.Endpoint {
+// UpsertAIIntegrationConfig returns an endpoint that makes HTTP requests to
+// the aiIntegrations service upsertAIIntegrationConfig server.
+func (c *Client) UpsertAIIntegrationConfig() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeUpsertConfigRequest(c.encoder)
-		decodeResponse = DecodeUpsertConfigResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeUpsertAIIntegrationConfigRequest(c.encoder)
+		decodeResponse = DecodeUpsertAIIntegrationConfigResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildUpsertConfigRequest(ctx, v)
+		req, err := c.BuildUpsertAIIntegrationConfigRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -101,23 +101,23 @@ func (c *Client) UpsertConfig() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.UpsertConfigDoer.Do(req)
+		resp, err := c.UpsertAIIntegrationConfigDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("aiIntegrations", "upsertConfig", err)
+			return nil, goahttp.ErrRequestError("aiIntegrations", "upsertAIIntegrationConfig", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// DeleteConfig returns an endpoint that makes HTTP requests to the
-// aiIntegrations service deleteConfig server.
-func (c *Client) DeleteConfig() goa.Endpoint {
+// DeleteAIIntegrationConfig returns an endpoint that makes HTTP requests to
+// the aiIntegrations service deleteAIIntegrationConfig server.
+func (c *Client) DeleteAIIntegrationConfig() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeDeleteConfigRequest(c.encoder)
-		decodeResponse = DecodeDeleteConfigResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeDeleteAIIntegrationConfigRequest(c.encoder)
+		decodeResponse = DecodeDeleteAIIntegrationConfigResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildDeleteConfigRequest(ctx, v)
+		req, err := c.BuildDeleteAIIntegrationConfigRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -125,9 +125,9 @@ func (c *Client) DeleteConfig() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.DeleteConfigDoer.Do(req)
+		resp, err := c.DeleteAIIntegrationConfigDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("aiIntegrations", "deleteConfig", err)
+			return nil, goahttp.ErrRequestError("aiIntegrations", "deleteAIIntegrationConfig", err)
 		}
 		return decodeResponse(resp)
 	}

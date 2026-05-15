@@ -12,7 +12,7 @@ import { unwrapAsync } from "../types/fp.js";
 
 export class AiIntegrations extends ClientSDK {
   /**
-   * deleteConfig aiIntegrations
+   * deleteAIIntegrationConfig aiIntegrations
    *
    * @remarks
    * Delete the org-wide AI integration config for a provider.
@@ -31,7 +31,7 @@ export class AiIntegrations extends ClientSDK {
   }
 
   /**
-   * getConfig aiIntegrations
+   * getAIIntegrationConfig aiIntegrations
    *
    * @remarks
    * Get the org-wide AI integration config for a provider. Returns an empty config (enabled=false, has_api_key=false) when none is set.
@@ -50,7 +50,7 @@ export class AiIntegrations extends ClientSDK {
   }
 
   /**
-   * upsertConfig aiIntegrations
+   * upsertAIIntegrationConfig aiIntegrations
    *
    * @remarks
    * Create or update the org-wide AI integration config for a provider.

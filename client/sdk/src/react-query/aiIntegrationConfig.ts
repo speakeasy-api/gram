@@ -53,7 +53,7 @@ export type AiIntegrationConfigQueryError =
   | SDKValidationError;
 
 /**
- * getConfig aiIntegrations
+ * getAIIntegrationConfig aiIntegrations
  *
  * @remarks
  * Get the org-wide AI integration config for a provider. Returns an empty config (enabled=false, has_api_key=false) when none is set.
@@ -79,7 +79,7 @@ export function useAiIntegrationConfig(
 }
 
 /**
- * getConfig aiIntegrations
+ * getAIIntegrationConfig aiIntegrations
  *
  * @remarks
  * Get the org-wide AI integration config for a provider. Returns an empty config (enabled=false, has_api_key=false) when none is set.

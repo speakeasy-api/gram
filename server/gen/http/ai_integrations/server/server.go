@@ -18,10 +18,10 @@ import (
 
 // Server lists the aiIntegrations service endpoint HTTP handlers.
 type Server struct {
-	Mounts       []*MountPoint
-	GetConfig    http.Handler
-	UpsertConfig http.Handler
-	DeleteConfig http.Handler
+	Mounts                    []*MountPoint
+	GetAIIntegrationConfig    http.Handler
+	UpsertAIIntegrationConfig http.Handler
+	DeleteAIIntegrationConfig http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -51,13 +51,13 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
-			{"GetConfig", "GET", "/rpc/aiIntegrations.getConfig"},
-			{"UpsertConfig", "POST", "/rpc/aiIntegrations.upsertConfig"},
-			{"DeleteConfig", "POST", "/rpc/aiIntegrations.deleteConfig"},
+			{"GetAIIntegrationConfig", "GET", "/rpc/aiIntegrations.getConfig"},
+			{"UpsertAIIntegrationConfig", "POST", "/rpc/aiIntegrations.upsertConfig"},
+			{"DeleteAIIntegrationConfig", "POST", "/rpc/aiIntegrations.deleteConfig"},
 		},
-		GetConfig:    NewGetConfigHandler(e.GetConfig, mux, decoder, encoder, errhandler, formatter),
-		UpsertConfig: NewUpsertConfigHandler(e.UpsertConfig, mux, decoder, encoder, errhandler, formatter),
-		DeleteConfig: NewDeleteConfigHandler(e.DeleteConfig, mux, decoder, encoder, errhandler, formatter),
+		GetAIIntegrationConfig:    NewGetAIIntegrationConfigHandler(e.GetAIIntegrationConfig, mux, decoder, encoder, errhandler, formatter),
+		UpsertAIIntegrationConfig: NewUpsertAIIntegrationConfigHandler(e.UpsertAIIntegrationConfig, mux, decoder, encoder, errhandler, formatter),
+		DeleteAIIntegrationConfig: NewDeleteAIIntegrationConfigHandler(e.DeleteAIIntegrationConfig, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -66,9 +66,9 @@ func (s *Server) Service() string { return "aiIntegrations" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
-	s.GetConfig = m(s.GetConfig)
-	s.UpsertConfig = m(s.UpsertConfig)
-	s.DeleteConfig = m(s.DeleteConfig)
+	s.GetAIIntegrationConfig = m(s.GetAIIntegrationConfig)
+	s.UpsertAIIntegrationConfig = m(s.UpsertAIIntegrationConfig)
+	s.DeleteAIIntegrationConfig = m(s.DeleteAIIntegrationConfig)
 }
 
 // MethodNames returns the methods served.
@@ -76,9 +76,9 @@ func (s *Server) MethodNames() []string { return aiintegrations.MethodNames[:] }
 
 // Mount configures the mux to serve the aiIntegrations endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
-	MountGetConfigHandler(mux, h.GetConfig)
-	MountUpsertConfigHandler(mux, h.UpsertConfig)
-	MountDeleteConfigHandler(mux, h.DeleteConfig)
+	MountGetAIIntegrationConfigHandler(mux, h.GetAIIntegrationConfig)
+	MountUpsertAIIntegrationConfigHandler(mux, h.UpsertAIIntegrationConfig)
+	MountDeleteAIIntegrationConfigHandler(mux, h.DeleteAIIntegrationConfig)
 }
 
 // Mount configures the mux to serve the aiIntegrations endpoints.
@@ -86,9 +86,9 @@ func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
 }
 
-// MountGetConfigHandler configures the mux to serve the "aiIntegrations"
-// service "getConfig" endpoint.
-func MountGetConfigHandler(mux goahttp.Muxer, h http.Handler) {
+// MountGetAIIntegrationConfigHandler configures the mux to serve the
+// "aiIntegrations" service "getAIIntegrationConfig" endpoint.
+func MountGetAIIntegrationConfigHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
@@ -98,9 +98,10 @@ func MountGetConfigHandler(mux goahttp.Muxer, h http.Handler) {
 	mux.Handle("GET", "/rpc/aiIntegrations.getConfig", f)
 }
 
-// NewGetConfigHandler creates a HTTP handler which loads the HTTP request and
-// calls the "aiIntegrations" service "getConfig" endpoint.
-func NewGetConfigHandler(
+// NewGetAIIntegrationConfigHandler creates a HTTP handler which loads the HTTP
+// request and calls the "aiIntegrations" service "getAIIntegrationConfig"
+// endpoint.
+func NewGetAIIntegrationConfigHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -109,13 +110,13 @@ func NewGetConfigHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeGetConfigRequest(mux, decoder)
-		encodeResponse = EncodeGetConfigResponse(encoder)
-		encodeError    = EncodeGetConfigError(encoder, formatter)
+		decodeRequest  = DecodeGetAIIntegrationConfigRequest(mux, decoder)
+		encodeResponse = EncodeGetAIIntegrationConfigResponse(encoder)
+		encodeError    = EncodeGetAIIntegrationConfigError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "getConfig")
+		ctx = context.WithValue(ctx, goa.MethodKey, "getAIIntegrationConfig")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "aiIntegrations")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -139,9 +140,9 @@ func NewGetConfigHandler(
 	})
 }
 
-// MountUpsertConfigHandler configures the mux to serve the "aiIntegrations"
-// service "upsertConfig" endpoint.
-func MountUpsertConfigHandler(mux goahttp.Muxer, h http.Handler) {
+// MountUpsertAIIntegrationConfigHandler configures the mux to serve the
+// "aiIntegrations" service "upsertAIIntegrationConfig" endpoint.
+func MountUpsertAIIntegrationConfigHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
@@ -151,9 +152,10 @@ func MountUpsertConfigHandler(mux goahttp.Muxer, h http.Handler) {
 	mux.Handle("POST", "/rpc/aiIntegrations.upsertConfig", f)
 }
 
-// NewUpsertConfigHandler creates a HTTP handler which loads the HTTP request
-// and calls the "aiIntegrations" service "upsertConfig" endpoint.
-func NewUpsertConfigHandler(
+// NewUpsertAIIntegrationConfigHandler creates a HTTP handler which loads the
+// HTTP request and calls the "aiIntegrations" service
+// "upsertAIIntegrationConfig" endpoint.
+func NewUpsertAIIntegrationConfigHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -162,13 +164,13 @@ func NewUpsertConfigHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeUpsertConfigRequest(mux, decoder)
-		encodeResponse = EncodeUpsertConfigResponse(encoder)
-		encodeError    = EncodeUpsertConfigError(encoder, formatter)
+		decodeRequest  = DecodeUpsertAIIntegrationConfigRequest(mux, decoder)
+		encodeResponse = EncodeUpsertAIIntegrationConfigResponse(encoder)
+		encodeError    = EncodeUpsertAIIntegrationConfigError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "upsertConfig")
+		ctx = context.WithValue(ctx, goa.MethodKey, "upsertAIIntegrationConfig")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "aiIntegrations")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -192,9 +194,9 @@ func NewUpsertConfigHandler(
 	})
 }
 
-// MountDeleteConfigHandler configures the mux to serve the "aiIntegrations"
-// service "deleteConfig" endpoint.
-func MountDeleteConfigHandler(mux goahttp.Muxer, h http.Handler) {
+// MountDeleteAIIntegrationConfigHandler configures the mux to serve the
+// "aiIntegrations" service "deleteAIIntegrationConfig" endpoint.
+func MountDeleteAIIntegrationConfigHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
@@ -204,9 +206,10 @@ func MountDeleteConfigHandler(mux goahttp.Muxer, h http.Handler) {
 	mux.Handle("POST", "/rpc/aiIntegrations.deleteConfig", f)
 }
 
-// NewDeleteConfigHandler creates a HTTP handler which loads the HTTP request
-// and calls the "aiIntegrations" service "deleteConfig" endpoint.
-func NewDeleteConfigHandler(
+// NewDeleteAIIntegrationConfigHandler creates a HTTP handler which loads the
+// HTTP request and calls the "aiIntegrations" service
+// "deleteAIIntegrationConfig" endpoint.
+func NewDeleteAIIntegrationConfigHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -215,13 +218,13 @@ func NewDeleteConfigHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeDeleteConfigRequest(mux, decoder)
-		encodeResponse = EncodeDeleteConfigResponse(encoder)
-		encodeError    = EncodeDeleteConfigError(encoder, formatter)
+		decodeRequest  = DecodeDeleteAIIntegrationConfigRequest(mux, decoder)
+		encodeResponse = EncodeDeleteAIIntegrationConfigResponse(encoder)
+		encodeError    = EncodeDeleteAIIntegrationConfigError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "deleteConfig")
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteAIIntegrationConfig")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "aiIntegrations")
 		payload, err := decodeRequest(r)
 		if err != nil {

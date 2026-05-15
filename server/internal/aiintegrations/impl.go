@@ -75,7 +75,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) GetConfig(ctx context.Context, payload *gen.GetConfigPayload) (*gen.AIIntegrationConfig, error) {
+func (s *Service) GetAIIntegrationConfig(ctx context.Context, payload *gen.GetAIIntegrationConfigPayload) (*gen.AIIntegrationConfig, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -99,7 +99,7 @@ func (s *Service) GetConfig(ctx context.Context, payload *gen.GetConfigPayload) 
 	return buildView(cfg, row.ID), nil
 }
 
-func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPayload) (*gen.AIIntegrationConfig, error) {
+func (s *Service) UpsertAIIntegrationConfig(ctx context.Context, payload *gen.UpsertAIIntegrationConfigPayload) (*gen.AIIntegrationConfig, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -165,7 +165,7 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	return buildView(cfg, row.ID), nil
 }
 
-func (s *Service) DeleteConfig(ctx context.Context, payload *gen.DeleteConfigPayload) error {
+func (s *Service) DeleteAIIntegrationConfig(ctx context.Context, payload *gen.DeleteAIIntegrationConfigPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return oops.C(oops.CodeUnauthorized)

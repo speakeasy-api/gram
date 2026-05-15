@@ -19,23 +19,23 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// EncodeGetConfigResponse returns an encoder for responses returned by the
-// aiIntegrations getConfig endpoint.
-func EncodeGetConfigResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeGetAIIntegrationConfigResponse returns an encoder for responses
+// returned by the aiIntegrations getAIIntegrationConfig endpoint.
+func EncodeGetAIIntegrationConfigResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*aiintegrations.AIIntegrationConfig)
 		enc := encoder(ctx, w)
-		body := NewGetConfigResponseBody(res)
+		body := NewGetAIIntegrationConfigResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeGetConfigRequest returns a decoder for requests sent to the
-// aiIntegrations getConfig endpoint.
-func DecodeGetConfigRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*aiintegrations.GetConfigPayload, error) {
-	return func(r *http.Request) (*aiintegrations.GetConfigPayload, error) {
-		var payload *aiintegrations.GetConfigPayload
+// DecodeGetAIIntegrationConfigRequest returns a decoder for requests sent to
+// the aiIntegrations getAIIntegrationConfig endpoint.
+func DecodeGetAIIntegrationConfigRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*aiintegrations.GetAIIntegrationConfigPayload, error) {
+	return func(r *http.Request) (*aiintegrations.GetAIIntegrationConfigPayload, error) {
+		var payload *aiintegrations.GetAIIntegrationConfigPayload
 		var (
 			provider     string
 			apikeyToken  *string
@@ -57,7 +57,7 @@ func DecodeGetConfigRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetConfigPayload(provider, apikeyToken, sessionToken)
+		payload = NewGetAIIntegrationConfigPayload(provider, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -77,9 +77,9 @@ func DecodeGetConfigRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 	}
 }
 
-// EncodeGetConfigError returns an encoder for errors returned by the getConfig
-// aiIntegrations endpoint.
-func EncodeGetConfigError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeGetAIIntegrationConfigError returns an encoder for errors returned by
+// the getAIIntegrationConfig aiIntegrations endpoint.
+func EncodeGetAIIntegrationConfigError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -96,7 +96,7 @@ func EncodeGetConfigError(encoder func(context.Context, http.ResponseWriter) goa
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetConfigUnauthorizedResponseBody(res)
+				body = NewGetAIIntegrationConfigUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -110,7 +110,7 @@ func EncodeGetConfigError(encoder func(context.Context, http.ResponseWriter) goa
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetConfigForbiddenResponseBody(res)
+				body = NewGetAIIntegrationConfigForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -124,7 +124,7 @@ func EncodeGetConfigError(encoder func(context.Context, http.ResponseWriter) goa
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetConfigBadRequestResponseBody(res)
+				body = NewGetAIIntegrationConfigBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -138,7 +138,7 @@ func EncodeGetConfigError(encoder func(context.Context, http.ResponseWriter) goa
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetConfigNotFoundResponseBody(res)
+				body = NewGetAIIntegrationConfigNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -152,7 +152,7 @@ func EncodeGetConfigError(encoder func(context.Context, http.ResponseWriter) goa
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetConfigConflictResponseBody(res)
+				body = NewGetAIIntegrationConfigConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -166,7 +166,7 @@ func EncodeGetConfigError(encoder func(context.Context, http.ResponseWriter) goa
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetConfigUnsupportedMediaResponseBody(res)
+				body = NewGetAIIntegrationConfigUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -180,7 +180,7 @@ func EncodeGetConfigError(encoder func(context.Context, http.ResponseWriter) goa
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetConfigInvalidResponseBody(res)
+				body = NewGetAIIntegrationConfigInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -194,7 +194,7 @@ func EncodeGetConfigError(encoder func(context.Context, http.ResponseWriter) goa
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetConfigInvariantViolationResponseBody(res)
+				body = NewGetAIIntegrationConfigInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -208,7 +208,7 @@ func EncodeGetConfigError(encoder func(context.Context, http.ResponseWriter) goa
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetConfigUnexpectedResponseBody(res)
+				body = NewGetAIIntegrationConfigUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -222,7 +222,7 @@ func EncodeGetConfigError(encoder func(context.Context, http.ResponseWriter) goa
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetConfigGatewayErrorResponseBody(res)
+				body = NewGetAIIntegrationConfigGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -233,25 +233,25 @@ func EncodeGetConfigError(encoder func(context.Context, http.ResponseWriter) goa
 	}
 }
 
-// EncodeUpsertConfigResponse returns an encoder for responses returned by the
-// aiIntegrations upsertConfig endpoint.
-func EncodeUpsertConfigResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeUpsertAIIntegrationConfigResponse returns an encoder for responses
+// returned by the aiIntegrations upsertAIIntegrationConfig endpoint.
+func EncodeUpsertAIIntegrationConfigResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*aiintegrations.AIIntegrationConfig)
 		enc := encoder(ctx, w)
-		body := NewUpsertConfigResponseBody(res)
+		body := NewUpsertAIIntegrationConfigResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeUpsertConfigRequest returns a decoder for requests sent to the
-// aiIntegrations upsertConfig endpoint.
-func DecodeUpsertConfigRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*aiintegrations.UpsertConfigPayload, error) {
-	return func(r *http.Request) (*aiintegrations.UpsertConfigPayload, error) {
-		var payload *aiintegrations.UpsertConfigPayload
+// DecodeUpsertAIIntegrationConfigRequest returns a decoder for requests sent
+// to the aiIntegrations upsertAIIntegrationConfig endpoint.
+func DecodeUpsertAIIntegrationConfigRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*aiintegrations.UpsertAIIntegrationConfigPayload, error) {
+	return func(r *http.Request) (*aiintegrations.UpsertAIIntegrationConfigPayload, error) {
+		var payload *aiintegrations.UpsertAIIntegrationConfigPayload
 		var (
-			body UpsertConfigRequestBody
+			body UpsertAIIntegrationConfigRequestBody
 			err  error
 		)
 		err = decoder(r).Decode(&body)
@@ -265,7 +265,7 @@ func DecodeUpsertConfigRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateUpsertConfigRequestBody(&body)
+		err = ValidateUpsertAIIntegrationConfigRequestBody(&body)
 		if err != nil {
 			return payload, err
 		}
@@ -282,7 +282,7 @@ func DecodeUpsertConfigRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewUpsertConfigPayload(&body, apikeyToken, sessionToken)
+		payload = NewUpsertAIIntegrationConfigPayload(&body, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -302,9 +302,9 @@ func DecodeUpsertConfigRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 	}
 }
 
-// EncodeUpsertConfigError returns an encoder for errors returned by the
-// upsertConfig aiIntegrations endpoint.
-func EncodeUpsertConfigError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeUpsertAIIntegrationConfigError returns an encoder for errors returned
+// by the upsertAIIntegrationConfig aiIntegrations endpoint.
+func EncodeUpsertAIIntegrationConfigError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -321,7 +321,7 @@ func EncodeUpsertConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertConfigUnauthorizedResponseBody(res)
+				body = NewUpsertAIIntegrationConfigUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -335,7 +335,7 @@ func EncodeUpsertConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertConfigForbiddenResponseBody(res)
+				body = NewUpsertAIIntegrationConfigForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -349,7 +349,7 @@ func EncodeUpsertConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertConfigBadRequestResponseBody(res)
+				body = NewUpsertAIIntegrationConfigBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -363,7 +363,7 @@ func EncodeUpsertConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertConfigNotFoundResponseBody(res)
+				body = NewUpsertAIIntegrationConfigNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -377,7 +377,7 @@ func EncodeUpsertConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertConfigConflictResponseBody(res)
+				body = NewUpsertAIIntegrationConfigConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -391,7 +391,7 @@ func EncodeUpsertConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertConfigUnsupportedMediaResponseBody(res)
+				body = NewUpsertAIIntegrationConfigUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -405,7 +405,7 @@ func EncodeUpsertConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertConfigInvalidResponseBody(res)
+				body = NewUpsertAIIntegrationConfigInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -419,7 +419,7 @@ func EncodeUpsertConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertConfigInvariantViolationResponseBody(res)
+				body = NewUpsertAIIntegrationConfigInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -433,7 +433,7 @@ func EncodeUpsertConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertConfigUnexpectedResponseBody(res)
+				body = NewUpsertAIIntegrationConfigUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -447,7 +447,7 @@ func EncodeUpsertConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpsertConfigGatewayErrorResponseBody(res)
+				body = NewUpsertAIIntegrationConfigGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -458,22 +458,22 @@ func EncodeUpsertConfigError(encoder func(context.Context, http.ResponseWriter) 
 	}
 }
 
-// EncodeDeleteConfigResponse returns an encoder for responses returned by the
-// aiIntegrations deleteConfig endpoint.
-func EncodeDeleteConfigResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeDeleteAIIntegrationConfigResponse returns an encoder for responses
+// returned by the aiIntegrations deleteAIIntegrationConfig endpoint.
+func EncodeDeleteAIIntegrationConfigResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		w.WriteHeader(http.StatusNoContent)
 		return nil
 	}
 }
 
-// DecodeDeleteConfigRequest returns a decoder for requests sent to the
-// aiIntegrations deleteConfig endpoint.
-func DecodeDeleteConfigRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*aiintegrations.DeleteConfigPayload, error) {
-	return func(r *http.Request) (*aiintegrations.DeleteConfigPayload, error) {
-		var payload *aiintegrations.DeleteConfigPayload
+// DecodeDeleteAIIntegrationConfigRequest returns a decoder for requests sent
+// to the aiIntegrations deleteAIIntegrationConfig endpoint.
+func DecodeDeleteAIIntegrationConfigRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*aiintegrations.DeleteAIIntegrationConfigPayload, error) {
+	return func(r *http.Request) (*aiintegrations.DeleteAIIntegrationConfigPayload, error) {
+		var payload *aiintegrations.DeleteAIIntegrationConfigPayload
 		var (
-			body DeleteConfigRequestBody
+			body DeleteAIIntegrationConfigRequestBody
 			err  error
 		)
 		err = decoder(r).Decode(&body)
@@ -487,7 +487,7 @@ func DecodeDeleteConfigRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateDeleteConfigRequestBody(&body)
+		err = ValidateDeleteAIIntegrationConfigRequestBody(&body)
 		if err != nil {
 			return payload, err
 		}
@@ -504,7 +504,7 @@ func DecodeDeleteConfigRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewDeleteConfigPayload(&body, apikeyToken, sessionToken)
+		payload = NewDeleteAIIntegrationConfigPayload(&body, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -524,9 +524,9 @@ func DecodeDeleteConfigRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 	}
 }
 
-// EncodeDeleteConfigError returns an encoder for errors returned by the
-// deleteConfig aiIntegrations endpoint.
-func EncodeDeleteConfigError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeDeleteAIIntegrationConfigError returns an encoder for errors returned
+// by the deleteAIIntegrationConfig aiIntegrations endpoint.
+func EncodeDeleteAIIntegrationConfigError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -543,7 +543,7 @@ func EncodeDeleteConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteConfigUnauthorizedResponseBody(res)
+				body = NewDeleteAIIntegrationConfigUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -557,7 +557,7 @@ func EncodeDeleteConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteConfigForbiddenResponseBody(res)
+				body = NewDeleteAIIntegrationConfigForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -571,7 +571,7 @@ func EncodeDeleteConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteConfigBadRequestResponseBody(res)
+				body = NewDeleteAIIntegrationConfigBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -585,7 +585,7 @@ func EncodeDeleteConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteConfigNotFoundResponseBody(res)
+				body = NewDeleteAIIntegrationConfigNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -599,7 +599,7 @@ func EncodeDeleteConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteConfigConflictResponseBody(res)
+				body = NewDeleteAIIntegrationConfigConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -613,7 +613,7 @@ func EncodeDeleteConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteConfigUnsupportedMediaResponseBody(res)
+				body = NewDeleteAIIntegrationConfigUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -627,7 +627,7 @@ func EncodeDeleteConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteConfigInvalidResponseBody(res)
+				body = NewDeleteAIIntegrationConfigInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -641,7 +641,7 @@ func EncodeDeleteConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteConfigInvariantViolationResponseBody(res)
+				body = NewDeleteAIIntegrationConfigInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -655,7 +655,7 @@ func EncodeDeleteConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteConfigUnexpectedResponseBody(res)
+				body = NewDeleteAIIntegrationConfigUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -669,7 +669,7 @@ func EncodeDeleteConfigError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteConfigGatewayErrorResponseBody(res)
+				body = NewDeleteAIIntegrationConfigGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)

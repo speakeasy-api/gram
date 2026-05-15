@@ -14,26 +14,26 @@ import (
 	aiintegrations "github.com/speakeasy-api/gram/server/gen/ai_integrations"
 )
 
-// BuildGetConfigPayload builds the payload for the aiIntegrations getConfig
-// endpoint from CLI flags.
-func BuildGetConfigPayload(aiIntegrationsGetConfigProvider string, aiIntegrationsGetConfigApikeyToken string, aiIntegrationsGetConfigSessionToken string) (*aiintegrations.GetConfigPayload, error) {
+// BuildGetAIIntegrationConfigPayload builds the payload for the aiIntegrations
+// getAIIntegrationConfig endpoint from CLI flags.
+func BuildGetAIIntegrationConfigPayload(aiIntegrationsGetAIIntegrationConfigProvider string, aiIntegrationsGetAIIntegrationConfigApikeyToken string, aiIntegrationsGetAIIntegrationConfigSessionToken string) (*aiintegrations.GetAIIntegrationConfigPayload, error) {
 	var provider string
 	{
-		provider = aiIntegrationsGetConfigProvider
+		provider = aiIntegrationsGetAIIntegrationConfigProvider
 	}
 	var apikeyToken *string
 	{
-		if aiIntegrationsGetConfigApikeyToken != "" {
-			apikeyToken = &aiIntegrationsGetConfigApikeyToken
+		if aiIntegrationsGetAIIntegrationConfigApikeyToken != "" {
+			apikeyToken = &aiIntegrationsGetAIIntegrationConfigApikeyToken
 		}
 	}
 	var sessionToken *string
 	{
-		if aiIntegrationsGetConfigSessionToken != "" {
-			sessionToken = &aiIntegrationsGetConfigSessionToken
+		if aiIntegrationsGetAIIntegrationConfigSessionToken != "" {
+			sessionToken = &aiIntegrationsGetAIIntegrationConfigSessionToken
 		}
 	}
-	v := &aiintegrations.GetConfigPayload{}
+	v := &aiintegrations.GetAIIntegrationConfigPayload{}
 	v.Provider = provider
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -41,30 +41,30 @@ func BuildGetConfigPayload(aiIntegrationsGetConfigProvider string, aiIntegration
 	return v, nil
 }
 
-// BuildUpsertConfigPayload builds the payload for the aiIntegrations
-// upsertConfig endpoint from CLI flags.
-func BuildUpsertConfigPayload(aiIntegrationsUpsertConfigBody string, aiIntegrationsUpsertConfigApikeyToken string, aiIntegrationsUpsertConfigSessionToken string) (*aiintegrations.UpsertConfigPayload, error) {
+// BuildUpsertAIIntegrationConfigPayload builds the payload for the
+// aiIntegrations upsertAIIntegrationConfig endpoint from CLI flags.
+func BuildUpsertAIIntegrationConfigPayload(aiIntegrationsUpsertAIIntegrationConfigBody string, aiIntegrationsUpsertAIIntegrationConfigApikeyToken string, aiIntegrationsUpsertAIIntegrationConfigSessionToken string) (*aiintegrations.UpsertAIIntegrationConfigPayload, error) {
 	var err error
-	var body UpsertConfigRequestBody
+	var body UpsertAIIntegrationConfigRequestBody
 	{
-		err = json.Unmarshal([]byte(aiIntegrationsUpsertConfigBody), &body)
+		err = json.Unmarshal([]byte(aiIntegrationsUpsertAIIntegrationConfigBody), &body)
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"api_key\": \"abc123\",\n      \"enabled\": false,\n      \"provider\": \"abc123\"\n   }'")
 		}
 	}
 	var apikeyToken *string
 	{
-		if aiIntegrationsUpsertConfigApikeyToken != "" {
-			apikeyToken = &aiIntegrationsUpsertConfigApikeyToken
+		if aiIntegrationsUpsertAIIntegrationConfigApikeyToken != "" {
+			apikeyToken = &aiIntegrationsUpsertAIIntegrationConfigApikeyToken
 		}
 	}
 	var sessionToken *string
 	{
-		if aiIntegrationsUpsertConfigSessionToken != "" {
-			sessionToken = &aiIntegrationsUpsertConfigSessionToken
+		if aiIntegrationsUpsertAIIntegrationConfigSessionToken != "" {
+			sessionToken = &aiIntegrationsUpsertAIIntegrationConfigSessionToken
 		}
 	}
-	v := &aiintegrations.UpsertConfigPayload{
+	v := &aiintegrations.UpsertAIIntegrationConfigPayload{
 		Provider: body.Provider,
 		APIKey:   body.APIKey,
 		Enabled:  body.Enabled,
@@ -75,30 +75,30 @@ func BuildUpsertConfigPayload(aiIntegrationsUpsertConfigBody string, aiIntegrati
 	return v, nil
 }
 
-// BuildDeleteConfigPayload builds the payload for the aiIntegrations
-// deleteConfig endpoint from CLI flags.
-func BuildDeleteConfigPayload(aiIntegrationsDeleteConfigBody string, aiIntegrationsDeleteConfigApikeyToken string, aiIntegrationsDeleteConfigSessionToken string) (*aiintegrations.DeleteConfigPayload, error) {
+// BuildDeleteAIIntegrationConfigPayload builds the payload for the
+// aiIntegrations deleteAIIntegrationConfig endpoint from CLI flags.
+func BuildDeleteAIIntegrationConfigPayload(aiIntegrationsDeleteAIIntegrationConfigBody string, aiIntegrationsDeleteAIIntegrationConfigApikeyToken string, aiIntegrationsDeleteAIIntegrationConfigSessionToken string) (*aiintegrations.DeleteAIIntegrationConfigPayload, error) {
 	var err error
-	var body DeleteConfigRequestBody
+	var body DeleteAIIntegrationConfigRequestBody
 	{
-		err = json.Unmarshal([]byte(aiIntegrationsDeleteConfigBody), &body)
+		err = json.Unmarshal([]byte(aiIntegrationsDeleteAIIntegrationConfigBody), &body)
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"provider\": \"abc123\"\n   }'")
 		}
 	}
 	var apikeyToken *string
 	{
-		if aiIntegrationsDeleteConfigApikeyToken != "" {
-			apikeyToken = &aiIntegrationsDeleteConfigApikeyToken
+		if aiIntegrationsDeleteAIIntegrationConfigApikeyToken != "" {
+			apikeyToken = &aiIntegrationsDeleteAIIntegrationConfigApikeyToken
 		}
 	}
 	var sessionToken *string
 	{
-		if aiIntegrationsDeleteConfigSessionToken != "" {
-			sessionToken = &aiIntegrationsDeleteConfigSessionToken
+		if aiIntegrationsDeleteAIIntegrationConfigSessionToken != "" {
+			sessionToken = &aiIntegrationsDeleteAIIntegrationConfigSessionToken
 		}
 	}
-	v := &aiintegrations.DeleteConfigPayload{
+	v := &aiintegrations.DeleteAIIntegrationConfigPayload{
 		Provider: body.Provider,
 	}
 	v.ApikeyToken = apikeyToken

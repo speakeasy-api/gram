@@ -28,7 +28,7 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getConfig aiIntegrations
+ * getAIIntegrationConfig aiIntegrations
  *
  * @remarks
  * Get the org-wide AI integration config for a provider. Returns an empty config (enabled=false, has_api_key=false) when none is set.

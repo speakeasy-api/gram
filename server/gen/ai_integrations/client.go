@@ -15,22 +15,23 @@ import (
 
 // Client is the "aiIntegrations" service client.
 type Client struct {
-	GetConfigEndpoint    goa.Endpoint
-	UpsertConfigEndpoint goa.Endpoint
-	DeleteConfigEndpoint goa.Endpoint
+	GetAIIntegrationConfigEndpoint    goa.Endpoint
+	UpsertAIIntegrationConfigEndpoint goa.Endpoint
+	DeleteAIIntegrationConfigEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "aiIntegrations" service client given the endpoints.
-func NewClient(getConfig, upsertConfig, deleteConfig goa.Endpoint) *Client {
+func NewClient(getAIIntegrationConfig, upsertAIIntegrationConfig, deleteAIIntegrationConfig goa.Endpoint) *Client {
 	return &Client{
-		GetConfigEndpoint:    getConfig,
-		UpsertConfigEndpoint: upsertConfig,
-		DeleteConfigEndpoint: deleteConfig,
+		GetAIIntegrationConfigEndpoint:    getAIIntegrationConfig,
+		UpsertAIIntegrationConfigEndpoint: upsertAIIntegrationConfig,
+		DeleteAIIntegrationConfigEndpoint: deleteAIIntegrationConfig,
 	}
 }
 
-// GetConfig calls the "getConfig" endpoint of the "aiIntegrations" service.
-// GetConfig may return the following errors:
+// GetAIIntegrationConfig calls the "getAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+// GetAIIntegrationConfig may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -42,18 +43,18 @@ func NewClient(getConfig, upsertConfig, deleteConfig goa.Endpoint) *Client {
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) GetConfig(ctx context.Context, p *GetConfigPayload) (res *AIIntegrationConfig, err error) {
+func (c *Client) GetAIIntegrationConfig(ctx context.Context, p *GetAIIntegrationConfigPayload) (res *AIIntegrationConfig, err error) {
 	var ires any
-	ires, err = c.GetConfigEndpoint(ctx, p)
+	ires, err = c.GetAIIntegrationConfigEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
 	return ires.(*AIIntegrationConfig), nil
 }
 
-// UpsertConfig calls the "upsertConfig" endpoint of the "aiIntegrations"
-// service.
-// UpsertConfig may return the following errors:
+// UpsertAIIntegrationConfig calls the "upsertAIIntegrationConfig" endpoint of
+// the "aiIntegrations" service.
+// UpsertAIIntegrationConfig may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -65,18 +66,18 @@ func (c *Client) GetConfig(ctx context.Context, p *GetConfigPayload) (res *AIInt
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) UpsertConfig(ctx context.Context, p *UpsertConfigPayload) (res *AIIntegrationConfig, err error) {
+func (c *Client) UpsertAIIntegrationConfig(ctx context.Context, p *UpsertAIIntegrationConfigPayload) (res *AIIntegrationConfig, err error) {
 	var ires any
-	ires, err = c.UpsertConfigEndpoint(ctx, p)
+	ires, err = c.UpsertAIIntegrationConfigEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
 	return ires.(*AIIntegrationConfig), nil
 }
 
-// DeleteConfig calls the "deleteConfig" endpoint of the "aiIntegrations"
-// service.
-// DeleteConfig may return the following errors:
+// DeleteAIIntegrationConfig calls the "deleteAIIntegrationConfig" endpoint of
+// the "aiIntegrations" service.
+// DeleteAIIntegrationConfig may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -88,7 +89,7 @@ func (c *Client) UpsertConfig(ctx context.Context, p *UpsertConfigPayload) (res 
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) DeleteConfig(ctx context.Context, p *DeleteConfigPayload) (err error) {
-	_, err = c.DeleteConfigEndpoint(ctx, p)
+func (c *Client) DeleteAIIntegrationConfig(ctx context.Context, p *DeleteAIIntegrationConfigPayload) (err error) {
+	_, err = c.DeleteAIIntegrationConfigEndpoint(ctx, p)
 	return
 }

@@ -152,9 +152,9 @@ run();
 
 ### [AiIntegrations](docs/sdks/aiintegrations/README.md)
 
-* [deleteConfig](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteConfig aiIntegrations
-* [getConfig](docs/sdks/aiintegrations/README.md#getconfig) - getConfig aiIntegrations
-* [upsertConfig](docs/sdks/aiintegrations/README.md#upsertconfig) - upsertConfig aiIntegrations
+* [deleteConfig](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteAIIntegrationConfig aiIntegrations
+* [getConfig](docs/sdks/aiintegrations/README.md#getconfig) - getAIIntegrationConfig aiIntegrations
+* [upsertConfig](docs/sdks/aiintegrations/README.md#upsertconfig) - upsertAIIntegrationConfig aiIntegrations
 
 ### [Assets](docs/sdks/assets/README.md)
 
@@ -570,9 +570,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`accessResolveChallenge`](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
 - [`accessUpdateMemberRole`](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
 - [`accessUpdateRole`](docs/sdks/access/README.md#updaterole) - updateRole access
-- [`aiIntegrationsDeleteConfig`](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteConfig aiIntegrations
-- [`aiIntegrationsGetConfig`](docs/sdks/aiintegrations/README.md#getconfig) - getConfig aiIntegrations
-- [`aiIntegrationsUpsertConfig`](docs/sdks/aiintegrations/README.md#upsertconfig) - upsertConfig aiIntegrations
+- [`aiIntegrationsDeleteConfig`](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteAIIntegrationConfig aiIntegrations
+- [`aiIntegrationsGetConfig`](docs/sdks/aiintegrations/README.md#getconfig) - getAIIntegrationConfig aiIntegrations
+- [`aiIntegrationsUpsertConfig`](docs/sdks/aiintegrations/README.md#upsertconfig) - upsertAIIntegrationConfig aiIntegrations
 - [`assetsCreateSignedChatAttachmentURL`](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
 - [`assetsFetchOpenAPIv3FromURL`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
 - [`assetsListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
@@ -843,7 +843,7 @@ To learn about this feature and how to get started, check
 - [`useAddExternalOAuthServerMutation`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 - [`useAddOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
 - [`useAddPluginServerMutation`](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
-- [`useAiIntegrationConfig`](docs/sdks/aiintegrations/README.md#getconfig) - getConfig aiIntegrations
+- [`useAiIntegrationConfig`](docs/sdks/aiintegrations/README.md#getconfig) - getAIIntegrationConfig aiIntegrations
 - [`useAssistantMemoriesDeleteMutation`](docs/sdks/assistantmemories/README.md#delete) - deleteAssistantMemory assistantMemories
 - [`useAssistantsCreateMutation`](docs/sdks/assistants/README.md#create) - createAssistant assistants
 - [`useAssistantsDeleteMutation`](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
@@ -892,7 +892,7 @@ To learn about this feature and how to get started, check
 - [`useCreateTopUpCheckoutMutation`](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
 - [`useCreateTriggerMutation`](docs/sdks/triggers/README.md#create) - createTriggerInstance triggers
 - [`useCreateUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#create) - createUserSessionIssuer userSessionIssuers
-- [`useDeleteAIIntegrationConfigMutation`](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteConfig aiIntegrations
+- [`useDeleteAIIntegrationConfigMutation`](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteAIIntegrationConfig aiIntegrations
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
@@ -1082,7 +1082,7 @@ To learn about this feature and how to get started, check
 - [`useUploadFunctionsMutation`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 - [`useUploadImageMutation`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
-- [`useUpsertAIIntegrationConfigMutation`](docs/sdks/aiintegrations/README.md#upsertconfig) - upsertConfig aiIntegrations
+- [`useUpsertAIIntegrationConfigMutation`](docs/sdks/aiintegrations/README.md#upsertconfig) - upsertAIIntegrationConfig aiIntegrations
 - [`useUpsertAllowedOriginMutation`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 - [`useUpsertGlobalVariationMutation`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
 - [`useUpsertOtelForwardingConfigMutation`](docs/sdks/otelforwarding/README.md#upsertconfig) - upsertConfig otelForwarding

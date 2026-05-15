@@ -76,7 +76,7 @@ func UsageCommands() []string {
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-role|get-rbac-status|enable-rbac|disable-rbac|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"admin poke",
-		"ai-integrations (get-config|upsert-config|delete-config)",
+		"ai-integrations (get-ai-integration-config|upsert-ai-integration-config|delete-ai-integration-config)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant)",
@@ -131,7 +131,7 @@ func UsageExamples() string {
 		os.Args[0] + " " + "about openapi" + "\n" +
 		os.Args[0] + " " + "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "admin poke" + "\n" +
-		os.Args[0] + " " + "ai-integrations get-config --provider \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
+		os.Args[0] + " " + "ai-integrations get-ai-integration-config --provider \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
 		""
 }
 
@@ -241,20 +241,20 @@ func ParseEndpoint(
 
 		aiIntegrationsFlags = flag.NewFlagSet("ai-integrations", flag.ContinueOnError)
 
-		aiIntegrationsGetConfigFlags            = flag.NewFlagSet("get-config", flag.ExitOnError)
-		aiIntegrationsGetConfigProviderFlag     = aiIntegrationsGetConfigFlags.String("provider", "REQUIRED", "")
-		aiIntegrationsGetConfigApikeyTokenFlag  = aiIntegrationsGetConfigFlags.String("apikey-token", "", "")
-		aiIntegrationsGetConfigSessionTokenFlag = aiIntegrationsGetConfigFlags.String("session-token", "", "")
+		aiIntegrationsGetAIIntegrationConfigFlags            = flag.NewFlagSet("get-ai-integration-config", flag.ExitOnError)
+		aiIntegrationsGetAIIntegrationConfigProviderFlag     = aiIntegrationsGetAIIntegrationConfigFlags.String("provider", "REQUIRED", "")
+		aiIntegrationsGetAIIntegrationConfigApikeyTokenFlag  = aiIntegrationsGetAIIntegrationConfigFlags.String("apikey-token", "", "")
+		aiIntegrationsGetAIIntegrationConfigSessionTokenFlag = aiIntegrationsGetAIIntegrationConfigFlags.String("session-token", "", "")
 
-		aiIntegrationsUpsertConfigFlags            = flag.NewFlagSet("upsert-config", flag.ExitOnError)
-		aiIntegrationsUpsertConfigBodyFlag         = aiIntegrationsUpsertConfigFlags.String("body", "REQUIRED", "")
-		aiIntegrationsUpsertConfigApikeyTokenFlag  = aiIntegrationsUpsertConfigFlags.String("apikey-token", "", "")
-		aiIntegrationsUpsertConfigSessionTokenFlag = aiIntegrationsUpsertConfigFlags.String("session-token", "", "")
+		aiIntegrationsUpsertAIIntegrationConfigFlags            = flag.NewFlagSet("upsert-ai-integration-config", flag.ExitOnError)
+		aiIntegrationsUpsertAIIntegrationConfigBodyFlag         = aiIntegrationsUpsertAIIntegrationConfigFlags.String("body", "REQUIRED", "")
+		aiIntegrationsUpsertAIIntegrationConfigApikeyTokenFlag  = aiIntegrationsUpsertAIIntegrationConfigFlags.String("apikey-token", "", "")
+		aiIntegrationsUpsertAIIntegrationConfigSessionTokenFlag = aiIntegrationsUpsertAIIntegrationConfigFlags.String("session-token", "", "")
 
-		aiIntegrationsDeleteConfigFlags            = flag.NewFlagSet("delete-config", flag.ExitOnError)
-		aiIntegrationsDeleteConfigBodyFlag         = aiIntegrationsDeleteConfigFlags.String("body", "REQUIRED", "")
-		aiIntegrationsDeleteConfigApikeyTokenFlag  = aiIntegrationsDeleteConfigFlags.String("apikey-token", "", "")
-		aiIntegrationsDeleteConfigSessionTokenFlag = aiIntegrationsDeleteConfigFlags.String("session-token", "", "")
+		aiIntegrationsDeleteAIIntegrationConfigFlags            = flag.NewFlagSet("delete-ai-integration-config", flag.ExitOnError)
+		aiIntegrationsDeleteAIIntegrationConfigBodyFlag         = aiIntegrationsDeleteAIIntegrationConfigFlags.String("body", "REQUIRED", "")
+		aiIntegrationsDeleteAIIntegrationConfigApikeyTokenFlag  = aiIntegrationsDeleteAIIntegrationConfigFlags.String("apikey-token", "", "")
+		aiIntegrationsDeleteAIIntegrationConfigSessionTokenFlag = aiIntegrationsDeleteAIIntegrationConfigFlags.String("session-token", "", "")
 
 		assetsFlags = flag.NewFlagSet("assets", flag.ContinueOnError)
 
@@ -1704,9 +1704,9 @@ func ParseEndpoint(
 	adminPokeFlags.Usage = adminPokeUsage
 
 	aiIntegrationsFlags.Usage = aiIntegrationsUsage
-	aiIntegrationsGetConfigFlags.Usage = aiIntegrationsGetConfigUsage
-	aiIntegrationsUpsertConfigFlags.Usage = aiIntegrationsUpsertConfigUsage
-	aiIntegrationsDeleteConfigFlags.Usage = aiIntegrationsDeleteConfigUsage
+	aiIntegrationsGetAIIntegrationConfigFlags.Usage = aiIntegrationsGetAIIntegrationConfigUsage
+	aiIntegrationsUpsertAIIntegrationConfigFlags.Usage = aiIntegrationsUpsertAIIntegrationConfigUsage
+	aiIntegrationsDeleteAIIntegrationConfigFlags.Usage = aiIntegrationsDeleteAIIntegrationConfigUsage
 
 	assetsFlags.Usage = assetsUsage
 	assetsServeImageFlags.Usage = assetsServeImageUsage
@@ -2240,14 +2240,14 @@ func ParseEndpoint(
 
 		case "ai-integrations":
 			switch epn {
-			case "get-config":
-				epf = aiIntegrationsGetConfigFlags
+			case "get-ai-integration-config":
+				epf = aiIntegrationsGetAIIntegrationConfigFlags
 
-			case "upsert-config":
-				epf = aiIntegrationsUpsertConfigFlags
+			case "upsert-ai-integration-config":
+				epf = aiIntegrationsUpsertAIIntegrationConfigFlags
 
-			case "delete-config":
-				epf = aiIntegrationsDeleteConfigFlags
+			case "delete-ai-integration-config":
+				epf = aiIntegrationsDeleteAIIntegrationConfigFlags
 
 			}
 
@@ -3245,15 +3245,15 @@ func ParseEndpoint(
 		case "ai-integrations":
 			c := aiintegrationsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
-			case "get-config":
-				endpoint = c.GetConfig()
-				data, err = aiintegrationsc.BuildGetConfigPayload(*aiIntegrationsGetConfigProviderFlag, *aiIntegrationsGetConfigApikeyTokenFlag, *aiIntegrationsGetConfigSessionTokenFlag)
-			case "upsert-config":
-				endpoint = c.UpsertConfig()
-				data, err = aiintegrationsc.BuildUpsertConfigPayload(*aiIntegrationsUpsertConfigBodyFlag, *aiIntegrationsUpsertConfigApikeyTokenFlag, *aiIntegrationsUpsertConfigSessionTokenFlag)
-			case "delete-config":
-				endpoint = c.DeleteConfig()
-				data, err = aiintegrationsc.BuildDeleteConfigPayload(*aiIntegrationsDeleteConfigBodyFlag, *aiIntegrationsDeleteConfigApikeyTokenFlag, *aiIntegrationsDeleteConfigSessionTokenFlag)
+			case "get-ai-integration-config":
+				endpoint = c.GetAIIntegrationConfig()
+				data, err = aiintegrationsc.BuildGetAIIntegrationConfigPayload(*aiIntegrationsGetAIIntegrationConfigProviderFlag, *aiIntegrationsGetAIIntegrationConfigApikeyTokenFlag, *aiIntegrationsGetAIIntegrationConfigSessionTokenFlag)
+			case "upsert-ai-integration-config":
+				endpoint = c.UpsertAIIntegrationConfig()
+				data, err = aiintegrationsc.BuildUpsertAIIntegrationConfigPayload(*aiIntegrationsUpsertAIIntegrationConfigBodyFlag, *aiIntegrationsUpsertAIIntegrationConfigApikeyTokenFlag, *aiIntegrationsUpsertAIIntegrationConfigSessionTokenFlag)
+			case "delete-ai-integration-config":
+				endpoint = c.DeleteAIIntegrationConfig()
+				data, err = aiintegrationsc.BuildDeleteAIIntegrationConfigPayload(*aiIntegrationsDeleteAIIntegrationConfigBodyFlag, *aiIntegrationsDeleteAIIntegrationConfigApikeyTokenFlag, *aiIntegrationsDeleteAIIntegrationConfigSessionTokenFlag)
 			}
 		case "assets":
 			c := assetsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -4623,16 +4623,16 @@ func aiIntegrationsUsage() {
 	fmt.Fprintln(os.Stderr, `Manage organization-level AI provider integrations.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] ai-integrations COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    get-config: Get the org-wide AI integration config for a provider. Returns an empty config (enabled=false, has_api_key=false) when none is set.`)
-	fmt.Fprintln(os.Stderr, `    upsert-config: Create or update the org-wide AI integration config for a provider.`)
-	fmt.Fprintln(os.Stderr, `    delete-config: Delete the org-wide AI integration config for a provider.`)
+	fmt.Fprintln(os.Stderr, `    get-ai-integration-config: Get the org-wide AI integration config for a provider. Returns an empty config (enabled=false, has_api_key=false) when none is set.`)
+	fmt.Fprintln(os.Stderr, `    upsert-ai-integration-config: Create or update the org-wide AI integration config for a provider.`)
+	fmt.Fprintln(os.Stderr, `    delete-ai-integration-config: Delete the org-wide AI integration config for a provider.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s ai-integrations COMMAND --help\n", os.Args[0])
 }
-func aiIntegrationsGetConfigUsage() {
+func aiIntegrationsGetAIIntegrationConfigUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] ai-integrations get-config", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] ai-integrations get-ai-integration-config", os.Args[0])
 	fmt.Fprint(os.Stderr, " -provider STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
@@ -4649,12 +4649,12 @@ func aiIntegrationsGetConfigUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations get-config --provider \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations get-ai-integration-config --provider \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
-func aiIntegrationsUpsertConfigUsage() {
+func aiIntegrationsUpsertAIIntegrationConfigUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] ai-integrations upsert-config", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] ai-integrations upsert-ai-integration-config", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
@@ -4671,12 +4671,12 @@ func aiIntegrationsUpsertConfigUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations upsert-config --body '{\n      \"api_key\": \"abc123\",\n      \"enabled\": false,\n      \"provider\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations upsert-ai-integration-config --body '{\n      \"api_key\": \"abc123\",\n      \"enabled\": false,\n      \"provider\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
-func aiIntegrationsDeleteConfigUsage() {
+func aiIntegrationsDeleteAIIntegrationConfigUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] ai-integrations delete-config", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] ai-integrations delete-ai-integration-config", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
@@ -4693,7 +4693,7 @@ func aiIntegrationsDeleteConfigUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations delete-config --body '{\n      \"provider\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations delete-ai-integration-config --body '{\n      \"provider\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 // assetsUsage displays the usage of the assets command and its subcommands.

@@ -18,13 +18,14 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
-// BuildGetConfigRequest instantiates a HTTP request object with method and
-// path set to call the "aiIntegrations" service "getConfig" endpoint
-func (c *Client) BuildGetConfigRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetConfigAiIntegrationsPath()}
+// BuildGetAIIntegrationConfigRequest instantiates a HTTP request object with
+// method and path set to call the "aiIntegrations" service
+// "getAIIntegrationConfig" endpoint
+func (c *Client) BuildGetAIIntegrationConfigRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetAIIntegrationConfigAiIntegrationsPath()}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("aiIntegrations", "getConfig", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("aiIntegrations", "getAIIntegrationConfig", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -33,13 +34,13 @@ func (c *Client) BuildGetConfigRequest(ctx context.Context, v any) (*http.Reques
 	return req, nil
 }
 
-// EncodeGetConfigRequest returns an encoder for requests sent to the
-// aiIntegrations getConfig server.
-func EncodeGetConfigRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeGetAIIntegrationConfigRequest returns an encoder for requests sent to
+// the aiIntegrations getAIIntegrationConfig server.
+func EncodeGetAIIntegrationConfigRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*aiintegrations.GetConfigPayload)
+		p, ok := v.(*aiintegrations.GetAIIntegrationConfigPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("aiIntegrations", "getConfig", "*aiintegrations.GetConfigPayload", v)
+			return goahttp.ErrInvalidType("aiIntegrations", "getAIIntegrationConfig", "*aiintegrations.GetAIIntegrationConfigPayload", v)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -56,10 +57,10 @@ func EncodeGetConfigRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 	}
 }
 
-// DecodeGetConfigResponse returns a decoder for responses returned by the
-// aiIntegrations getConfig endpoint. restoreBody controls whether the response
-// body should be restored after having been read.
-// DecodeGetConfigResponse may return the following errors:
+// DecodeGetAIIntegrationConfigResponse returns a decoder for responses
+// returned by the aiIntegrations getAIIntegrationConfig endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetAIIntegrationConfigResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -71,7 +72,7 @@ func EncodeGetConfigRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeGetConfigResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeGetAIIntegrationConfigResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -88,180 +89,181 @@ func DecodeGetConfigResponse(decoder func(*http.Response) goahttp.Decoder, resto
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body GetConfigResponseBody
+				body GetAIIntegrationConfigResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "getConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "getAIIntegrationConfig", err)
 			}
-			err = ValidateGetConfigResponseBody(&body)
+			err = ValidateGetAIIntegrationConfigResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "getConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "getAIIntegrationConfig", err)
 			}
-			res := NewGetConfigAIIntegrationConfigOK(&body)
+			res := NewGetAIIntegrationConfigAIIntegrationConfigOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body GetConfigUnauthorizedResponseBody
+				body GetAIIntegrationConfigUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "getConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "getAIIntegrationConfig", err)
 			}
-			err = ValidateGetConfigUnauthorizedResponseBody(&body)
+			err = ValidateGetAIIntegrationConfigUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "getConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "getAIIntegrationConfig", err)
 			}
-			return nil, NewGetConfigUnauthorized(&body)
+			return nil, NewGetAIIntegrationConfigUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body GetConfigForbiddenResponseBody
+				body GetAIIntegrationConfigForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "getConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "getAIIntegrationConfig", err)
 			}
-			err = ValidateGetConfigForbiddenResponseBody(&body)
+			err = ValidateGetAIIntegrationConfigForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "getConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "getAIIntegrationConfig", err)
 			}
-			return nil, NewGetConfigForbidden(&body)
+			return nil, NewGetAIIntegrationConfigForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body GetConfigBadRequestResponseBody
+				body GetAIIntegrationConfigBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "getConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "getAIIntegrationConfig", err)
 			}
-			err = ValidateGetConfigBadRequestResponseBody(&body)
+			err = ValidateGetAIIntegrationConfigBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "getConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "getAIIntegrationConfig", err)
 			}
-			return nil, NewGetConfigBadRequest(&body)
+			return nil, NewGetAIIntegrationConfigBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body GetConfigNotFoundResponseBody
+				body GetAIIntegrationConfigNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "getConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "getAIIntegrationConfig", err)
 			}
-			err = ValidateGetConfigNotFoundResponseBody(&body)
+			err = ValidateGetAIIntegrationConfigNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "getConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "getAIIntegrationConfig", err)
 			}
-			return nil, NewGetConfigNotFound(&body)
+			return nil, NewGetAIIntegrationConfigNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body GetConfigConflictResponseBody
+				body GetAIIntegrationConfigConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "getConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "getAIIntegrationConfig", err)
 			}
-			err = ValidateGetConfigConflictResponseBody(&body)
+			err = ValidateGetAIIntegrationConfigConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "getConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "getAIIntegrationConfig", err)
 			}
-			return nil, NewGetConfigConflict(&body)
+			return nil, NewGetAIIntegrationConfigConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body GetConfigUnsupportedMediaResponseBody
+				body GetAIIntegrationConfigUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "getConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "getAIIntegrationConfig", err)
 			}
-			err = ValidateGetConfigUnsupportedMediaResponseBody(&body)
+			err = ValidateGetAIIntegrationConfigUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "getConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "getAIIntegrationConfig", err)
 			}
-			return nil, NewGetConfigUnsupportedMedia(&body)
+			return nil, NewGetAIIntegrationConfigUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body GetConfigInvalidResponseBody
+				body GetAIIntegrationConfigInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "getConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "getAIIntegrationConfig", err)
 			}
-			err = ValidateGetConfigInvalidResponseBody(&body)
+			err = ValidateGetAIIntegrationConfigInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "getConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "getAIIntegrationConfig", err)
 			}
-			return nil, NewGetConfigInvalid(&body)
+			return nil, NewGetAIIntegrationConfigInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body GetConfigInvariantViolationResponseBody
+					body GetAIIntegrationConfigInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("aiIntegrations", "getConfig", err)
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "getAIIntegrationConfig", err)
 				}
-				err = ValidateGetConfigInvariantViolationResponseBody(&body)
+				err = ValidateGetAIIntegrationConfigInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("aiIntegrations", "getConfig", err)
+					return nil, goahttp.ErrValidationError("aiIntegrations", "getAIIntegrationConfig", err)
 				}
-				return nil, NewGetConfigInvariantViolation(&body)
+				return nil, NewGetAIIntegrationConfigInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body GetConfigUnexpectedResponseBody
+					body GetAIIntegrationConfigUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("aiIntegrations", "getConfig", err)
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "getAIIntegrationConfig", err)
 				}
-				err = ValidateGetConfigUnexpectedResponseBody(&body)
+				err = ValidateGetAIIntegrationConfigUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("aiIntegrations", "getConfig", err)
+					return nil, goahttp.ErrValidationError("aiIntegrations", "getAIIntegrationConfig", err)
 				}
-				return nil, NewGetConfigUnexpected(&body)
+				return nil, NewGetAIIntegrationConfigUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("aiIntegrations", "getConfig", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("aiIntegrations", "getAIIntegrationConfig", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body GetConfigGatewayErrorResponseBody
+				body GetAIIntegrationConfigGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "getConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "getAIIntegrationConfig", err)
 			}
-			err = ValidateGetConfigGatewayErrorResponseBody(&body)
+			err = ValidateGetAIIntegrationConfigGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "getConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "getAIIntegrationConfig", err)
 			}
-			return nil, NewGetConfigGatewayError(&body)
+			return nil, NewGetAIIntegrationConfigGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("aiIntegrations", "getConfig", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("aiIntegrations", "getAIIntegrationConfig", resp.StatusCode, string(body))
 		}
 	}
 }
 
-// BuildUpsertConfigRequest instantiates a HTTP request object with method and
-// path set to call the "aiIntegrations" service "upsertConfig" endpoint
-func (c *Client) BuildUpsertConfigRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpsertConfigAiIntegrationsPath()}
+// BuildUpsertAIIntegrationConfigRequest instantiates a HTTP request object
+// with method and path set to call the "aiIntegrations" service
+// "upsertAIIntegrationConfig" endpoint
+func (c *Client) BuildUpsertAIIntegrationConfigRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpsertAIIntegrationConfigAiIntegrationsPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("aiIntegrations", "upsertConfig", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("aiIntegrations", "upsertAIIntegrationConfig", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -270,13 +272,13 @@ func (c *Client) BuildUpsertConfigRequest(ctx context.Context, v any) (*http.Req
 	return req, nil
 }
 
-// EncodeUpsertConfigRequest returns an encoder for requests sent to the
-// aiIntegrations upsertConfig server.
-func EncodeUpsertConfigRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeUpsertAIIntegrationConfigRequest returns an encoder for requests sent
+// to the aiIntegrations upsertAIIntegrationConfig server.
+func EncodeUpsertAIIntegrationConfigRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*aiintegrations.UpsertConfigPayload)
+		p, ok := v.(*aiintegrations.UpsertAIIntegrationConfigPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("aiIntegrations", "upsertConfig", "*aiintegrations.UpsertConfigPayload", v)
+			return goahttp.ErrInvalidType("aiIntegrations", "upsertAIIntegrationConfig", "*aiintegrations.UpsertAIIntegrationConfigPayload", v)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -286,18 +288,19 @@ func EncodeUpsertConfigRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		body := NewUpsertConfigRequestBody(p)
+		body := NewUpsertAIIntegrationConfigRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("aiIntegrations", "upsertConfig", err)
+			return goahttp.ErrEncodingError("aiIntegrations", "upsertAIIntegrationConfig", err)
 		}
 		return nil
 	}
 }
 
-// DecodeUpsertConfigResponse returns a decoder for responses returned by the
-// aiIntegrations upsertConfig endpoint. restoreBody controls whether the
-// response body should be restored after having been read.
-// DecodeUpsertConfigResponse may return the following errors:
+// DecodeUpsertAIIntegrationConfigResponse returns a decoder for responses
+// returned by the aiIntegrations upsertAIIntegrationConfig endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeUpsertAIIntegrationConfigResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -309,7 +312,7 @@ func EncodeUpsertConfigRequest(encoder func(*http.Request) goahttp.Encoder) func
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeUpsertConfigResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeUpsertAIIntegrationConfigResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -326,180 +329,181 @@ func DecodeUpsertConfigResponse(decoder func(*http.Response) goahttp.Decoder, re
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body UpsertConfigResponseBody
+				body UpsertAIIntegrationConfigResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAIIntegrationConfig", err)
 			}
-			err = ValidateUpsertConfigResponseBody(&body)
+			err = ValidateUpsertAIIntegrationConfigResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAIIntegrationConfig", err)
 			}
-			res := NewUpsertConfigAIIntegrationConfigOK(&body)
+			res := NewUpsertAIIntegrationConfigAIIntegrationConfigOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body UpsertConfigUnauthorizedResponseBody
+				body UpsertAIIntegrationConfigUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAIIntegrationConfig", err)
 			}
-			err = ValidateUpsertConfigUnauthorizedResponseBody(&body)
+			err = ValidateUpsertAIIntegrationConfigUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAIIntegrationConfig", err)
 			}
-			return nil, NewUpsertConfigUnauthorized(&body)
+			return nil, NewUpsertAIIntegrationConfigUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body UpsertConfigForbiddenResponseBody
+				body UpsertAIIntegrationConfigForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAIIntegrationConfig", err)
 			}
-			err = ValidateUpsertConfigForbiddenResponseBody(&body)
+			err = ValidateUpsertAIIntegrationConfigForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAIIntegrationConfig", err)
 			}
-			return nil, NewUpsertConfigForbidden(&body)
+			return nil, NewUpsertAIIntegrationConfigForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body UpsertConfigBadRequestResponseBody
+				body UpsertAIIntegrationConfigBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAIIntegrationConfig", err)
 			}
-			err = ValidateUpsertConfigBadRequestResponseBody(&body)
+			err = ValidateUpsertAIIntegrationConfigBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAIIntegrationConfig", err)
 			}
-			return nil, NewUpsertConfigBadRequest(&body)
+			return nil, NewUpsertAIIntegrationConfigBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body UpsertConfigNotFoundResponseBody
+				body UpsertAIIntegrationConfigNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAIIntegrationConfig", err)
 			}
-			err = ValidateUpsertConfigNotFoundResponseBody(&body)
+			err = ValidateUpsertAIIntegrationConfigNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAIIntegrationConfig", err)
 			}
-			return nil, NewUpsertConfigNotFound(&body)
+			return nil, NewUpsertAIIntegrationConfigNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body UpsertConfigConflictResponseBody
+				body UpsertAIIntegrationConfigConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAIIntegrationConfig", err)
 			}
-			err = ValidateUpsertConfigConflictResponseBody(&body)
+			err = ValidateUpsertAIIntegrationConfigConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAIIntegrationConfig", err)
 			}
-			return nil, NewUpsertConfigConflict(&body)
+			return nil, NewUpsertAIIntegrationConfigConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body UpsertConfigUnsupportedMediaResponseBody
+				body UpsertAIIntegrationConfigUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAIIntegrationConfig", err)
 			}
-			err = ValidateUpsertConfigUnsupportedMediaResponseBody(&body)
+			err = ValidateUpsertAIIntegrationConfigUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAIIntegrationConfig", err)
 			}
-			return nil, NewUpsertConfigUnsupportedMedia(&body)
+			return nil, NewUpsertAIIntegrationConfigUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body UpsertConfigInvalidResponseBody
+				body UpsertAIIntegrationConfigInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAIIntegrationConfig", err)
 			}
-			err = ValidateUpsertConfigInvalidResponseBody(&body)
+			err = ValidateUpsertAIIntegrationConfigInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAIIntegrationConfig", err)
 			}
-			return nil, NewUpsertConfigInvalid(&body)
+			return nil, NewUpsertAIIntegrationConfigInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body UpsertConfigInvariantViolationResponseBody
+					body UpsertAIIntegrationConfigInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertConfig", err)
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAIIntegrationConfig", err)
 				}
-				err = ValidateUpsertConfigInvariantViolationResponseBody(&body)
+				err = ValidateUpsertAIIntegrationConfigInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("aiIntegrations", "upsertConfig", err)
+					return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAIIntegrationConfig", err)
 				}
-				return nil, NewUpsertConfigInvariantViolation(&body)
+				return nil, NewUpsertAIIntegrationConfigInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body UpsertConfigUnexpectedResponseBody
+					body UpsertAIIntegrationConfigUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertConfig", err)
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAIIntegrationConfig", err)
 				}
-				err = ValidateUpsertConfigUnexpectedResponseBody(&body)
+				err = ValidateUpsertAIIntegrationConfigUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("aiIntegrations", "upsertConfig", err)
+					return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAIIntegrationConfig", err)
 				}
-				return nil, NewUpsertConfigUnexpected(&body)
+				return nil, NewUpsertAIIntegrationConfigUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("aiIntegrations", "upsertConfig", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("aiIntegrations", "upsertAIIntegrationConfig", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body UpsertConfigGatewayErrorResponseBody
+				body UpsertAIIntegrationConfigGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAIIntegrationConfig", err)
 			}
-			err = ValidateUpsertConfigGatewayErrorResponseBody(&body)
+			err = ValidateUpsertAIIntegrationConfigGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAIIntegrationConfig", err)
 			}
-			return nil, NewUpsertConfigGatewayError(&body)
+			return nil, NewUpsertAIIntegrationConfigGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("aiIntegrations", "upsertConfig", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("aiIntegrations", "upsertAIIntegrationConfig", resp.StatusCode, string(body))
 		}
 	}
 }
 
-// BuildDeleteConfigRequest instantiates a HTTP request object with method and
-// path set to call the "aiIntegrations" service "deleteConfig" endpoint
-func (c *Client) BuildDeleteConfigRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteConfigAiIntegrationsPath()}
+// BuildDeleteAIIntegrationConfigRequest instantiates a HTTP request object
+// with method and path set to call the "aiIntegrations" service
+// "deleteAIIntegrationConfig" endpoint
+func (c *Client) BuildDeleteAIIntegrationConfigRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteAIIntegrationConfigAiIntegrationsPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("aiIntegrations", "deleteConfig", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("aiIntegrations", "deleteAIIntegrationConfig", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -508,13 +512,13 @@ func (c *Client) BuildDeleteConfigRequest(ctx context.Context, v any) (*http.Req
 	return req, nil
 }
 
-// EncodeDeleteConfigRequest returns an encoder for requests sent to the
-// aiIntegrations deleteConfig server.
-func EncodeDeleteConfigRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeDeleteAIIntegrationConfigRequest returns an encoder for requests sent
+// to the aiIntegrations deleteAIIntegrationConfig server.
+func EncodeDeleteAIIntegrationConfigRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*aiintegrations.DeleteConfigPayload)
+		p, ok := v.(*aiintegrations.DeleteAIIntegrationConfigPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("aiIntegrations", "deleteConfig", "*aiintegrations.DeleteConfigPayload", v)
+			return goahttp.ErrInvalidType("aiIntegrations", "deleteAIIntegrationConfig", "*aiintegrations.DeleteAIIntegrationConfigPayload", v)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -524,18 +528,19 @@ func EncodeDeleteConfigRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		body := NewDeleteConfigRequestBody(p)
+		body := NewDeleteAIIntegrationConfigRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("aiIntegrations", "deleteConfig", err)
+			return goahttp.ErrEncodingError("aiIntegrations", "deleteAIIntegrationConfig", err)
 		}
 		return nil
 	}
 }
 
-// DecodeDeleteConfigResponse returns a decoder for responses returned by the
-// aiIntegrations deleteConfig endpoint. restoreBody controls whether the
-// response body should be restored after having been read.
-// DecodeDeleteConfigResponse may return the following errors:
+// DecodeDeleteAIIntegrationConfigResponse returns a decoder for responses
+// returned by the aiIntegrations deleteAIIntegrationConfig endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeDeleteAIIntegrationConfigResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -547,7 +552,7 @@ func EncodeDeleteConfigRequest(encoder func(*http.Request) goahttp.Encoder) func
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeDeleteConfigResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeDeleteAIIntegrationConfigResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -566,154 +571,154 @@ func DecodeDeleteConfigResponse(decoder func(*http.Response) goahttp.Decoder, re
 			return nil, nil
 		case http.StatusUnauthorized:
 			var (
-				body DeleteConfigUnauthorizedResponseBody
+				body DeleteAIIntegrationConfigUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAIIntegrationConfig", err)
 			}
-			err = ValidateDeleteConfigUnauthorizedResponseBody(&body)
+			err = ValidateDeleteAIIntegrationConfigUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAIIntegrationConfig", err)
 			}
-			return nil, NewDeleteConfigUnauthorized(&body)
+			return nil, NewDeleteAIIntegrationConfigUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body DeleteConfigForbiddenResponseBody
+				body DeleteAIIntegrationConfigForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAIIntegrationConfig", err)
 			}
-			err = ValidateDeleteConfigForbiddenResponseBody(&body)
+			err = ValidateDeleteAIIntegrationConfigForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAIIntegrationConfig", err)
 			}
-			return nil, NewDeleteConfigForbidden(&body)
+			return nil, NewDeleteAIIntegrationConfigForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body DeleteConfigBadRequestResponseBody
+				body DeleteAIIntegrationConfigBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAIIntegrationConfig", err)
 			}
-			err = ValidateDeleteConfigBadRequestResponseBody(&body)
+			err = ValidateDeleteAIIntegrationConfigBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAIIntegrationConfig", err)
 			}
-			return nil, NewDeleteConfigBadRequest(&body)
+			return nil, NewDeleteAIIntegrationConfigBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body DeleteConfigNotFoundResponseBody
+				body DeleteAIIntegrationConfigNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAIIntegrationConfig", err)
 			}
-			err = ValidateDeleteConfigNotFoundResponseBody(&body)
+			err = ValidateDeleteAIIntegrationConfigNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAIIntegrationConfig", err)
 			}
-			return nil, NewDeleteConfigNotFound(&body)
+			return nil, NewDeleteAIIntegrationConfigNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body DeleteConfigConflictResponseBody
+				body DeleteAIIntegrationConfigConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAIIntegrationConfig", err)
 			}
-			err = ValidateDeleteConfigConflictResponseBody(&body)
+			err = ValidateDeleteAIIntegrationConfigConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAIIntegrationConfig", err)
 			}
-			return nil, NewDeleteConfigConflict(&body)
+			return nil, NewDeleteAIIntegrationConfigConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body DeleteConfigUnsupportedMediaResponseBody
+				body DeleteAIIntegrationConfigUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAIIntegrationConfig", err)
 			}
-			err = ValidateDeleteConfigUnsupportedMediaResponseBody(&body)
+			err = ValidateDeleteAIIntegrationConfigUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAIIntegrationConfig", err)
 			}
-			return nil, NewDeleteConfigUnsupportedMedia(&body)
+			return nil, NewDeleteAIIntegrationConfigUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body DeleteConfigInvalidResponseBody
+				body DeleteAIIntegrationConfigInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAIIntegrationConfig", err)
 			}
-			err = ValidateDeleteConfigInvalidResponseBody(&body)
+			err = ValidateDeleteAIIntegrationConfigInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAIIntegrationConfig", err)
 			}
-			return nil, NewDeleteConfigInvalid(&body)
+			return nil, NewDeleteAIIntegrationConfigInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body DeleteConfigInvariantViolationResponseBody
+					body DeleteAIIntegrationConfigInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteConfig", err)
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAIIntegrationConfig", err)
 				}
-				err = ValidateDeleteConfigInvariantViolationResponseBody(&body)
+				err = ValidateDeleteAIIntegrationConfigInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("aiIntegrations", "deleteConfig", err)
+					return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAIIntegrationConfig", err)
 				}
-				return nil, NewDeleteConfigInvariantViolation(&body)
+				return nil, NewDeleteAIIntegrationConfigInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body DeleteConfigUnexpectedResponseBody
+					body DeleteAIIntegrationConfigUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteConfig", err)
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAIIntegrationConfig", err)
 				}
-				err = ValidateDeleteConfigUnexpectedResponseBody(&body)
+				err = ValidateDeleteAIIntegrationConfigUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("aiIntegrations", "deleteConfig", err)
+					return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAIIntegrationConfig", err)
 				}
-				return nil, NewDeleteConfigUnexpected(&body)
+				return nil, NewDeleteAIIntegrationConfigUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("aiIntegrations", "deleteConfig", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("aiIntegrations", "deleteAIIntegrationConfig", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body DeleteConfigGatewayErrorResponseBody
+				body DeleteAIIntegrationConfigGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteConfig", err)
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAIIntegrationConfig", err)
 			}
-			err = ValidateDeleteConfigGatewayErrorResponseBody(&body)
+			err = ValidateDeleteAIIntegrationConfigGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteConfig", err)
+				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAIIntegrationConfig", err)
 			}
-			return nil, NewDeleteConfigGatewayError(&body)
+			return nil, NewDeleteAIIntegrationConfigGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("aiIntegrations", "deleteConfig", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("aiIntegrations", "deleteAIIntegrationConfig", resp.StatusCode, string(body))
 		}
 	}
 }

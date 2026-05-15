@@ -7,17 +7,17 @@
 
 package client
 
-// GetConfigAiIntegrationsPath returns the URL path to the aiIntegrations service getConfig HTTP endpoint.
-func GetConfigAiIntegrationsPath() string {
+// GetAIIntegrationConfigAiIntegrationsPath returns the URL path to the aiIntegrations service getAIIntegrationConfig HTTP endpoint.
+func GetAIIntegrationConfigAiIntegrationsPath() string {
 	return "/rpc/aiIntegrations.getConfig"
 }
 
-// UpsertConfigAiIntegrationsPath returns the URL path to the aiIntegrations service upsertConfig HTTP endpoint.
-func UpsertConfigAiIntegrationsPath() string {
+// UpsertAIIntegrationConfigAiIntegrationsPath returns the URL path to the aiIntegrations service upsertAIIntegrationConfig HTTP endpoint.
+func UpsertAIIntegrationConfigAiIntegrationsPath() string {
 	return "/rpc/aiIntegrations.upsertConfig"
 }
 
-// DeleteConfigAiIntegrationsPath returns the URL path to the aiIntegrations service deleteConfig HTTP endpoint.
-func DeleteConfigAiIntegrationsPath() string {
+// DeleteAIIntegrationConfigAiIntegrationsPath returns the URL path to the aiIntegrations service deleteAIIntegrationConfig HTTP endpoint.
+func DeleteAIIntegrationConfigAiIntegrationsPath() string {
 	return "/rpc/aiIntegrations.deleteConfig"
 }

@@ -20,7 +20,8 @@ export type DeleteAIIntegrationConfigRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  deleteConfigRequestBody: components.DeleteConfigRequestBody;
+  deleteAIIntegrationConfigRequestBody:
+    components.DeleteAIIntegrationConfigRequestBody;
 };
 
 /** @internal */
@@ -60,7 +61,8 @@ export function deleteAIIntegrationConfigSecurityToJSON(
 export type DeleteAIIntegrationConfigRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
-  DeleteConfigRequestBody: components.DeleteConfigRequestBody$Outbound;
+  DeleteAIIntegrationConfigRequestBody:
+    components.DeleteAIIntegrationConfigRequestBody$Outbound;
 };
 
 /** @internal */
@@ -71,13 +73,15 @@ export const DeleteAIIntegrationConfigRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-    deleteConfigRequestBody: components.DeleteConfigRequestBody$outboundSchema,
+    deleteAIIntegrationConfigRequestBody:
+      components.DeleteAIIntegrationConfigRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
-      deleteConfigRequestBody: "DeleteConfigRequestBody",
+      deleteAIIntegrationConfigRequestBody:
+        "DeleteAIIntegrationConfigRequestBody",
     });
   }),
 );

@@ -12,9 +12,9 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// UpsertConfigRequestBody is the type of the "aiIntegrations" service
-// "upsertConfig" endpoint HTTP request body.
-type UpsertConfigRequestBody struct {
+// UpsertAIIntegrationConfigRequestBody is the type of the "aiIntegrations"
+// service "upsertAIIntegrationConfig" endpoint HTTP request body.
+type UpsertAIIntegrationConfigRequestBody struct {
 	// AI provider identifier. Initially only cursor is supported.
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Provider API key. Stored encrypted at rest; never returned on reads.
@@ -23,16 +23,16 @@ type UpsertConfigRequestBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
-// DeleteConfigRequestBody is the type of the "aiIntegrations" service
-// "deleteConfig" endpoint HTTP request body.
-type DeleteConfigRequestBody struct {
+// DeleteAIIntegrationConfigRequestBody is the type of the "aiIntegrations"
+// service "deleteAIIntegrationConfig" endpoint HTTP request body.
+type DeleteAIIntegrationConfigRequestBody struct {
 	// AI provider identifier. Initially only cursor is supported.
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 }
 
-// GetConfigResponseBody is the type of the "aiIntegrations" service
-// "getConfig" endpoint HTTP response body.
-type GetConfigResponseBody struct {
+// GetAIIntegrationConfigResponseBody is the type of the "aiIntegrations"
+// service "getAIIntegrationConfig" endpoint HTTP response body.
+type GetAIIntegrationConfigResponseBody struct {
 	// Config ID. Omitted when no config is set for the provider.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Organization the config belongs to.
@@ -55,9 +55,9 @@ type GetConfigResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// UpsertConfigResponseBody is the type of the "aiIntegrations" service
-// "upsertConfig" endpoint HTTP response body.
-type UpsertConfigResponseBody struct {
+// UpsertAIIntegrationConfigResponseBody is the type of the "aiIntegrations"
+// service "upsertAIIntegrationConfig" endpoint HTTP response body.
+type UpsertAIIntegrationConfigResponseBody struct {
 	// Config ID. Omitted when no config is set for the provider.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Organization the config belongs to.
@@ -80,9 +80,10 @@ type UpsertConfigResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// GetConfigUnauthorizedResponseBody is the type of the "aiIntegrations"
-// service "getConfig" endpoint HTTP response body for the "unauthorized" error.
-type GetConfigUnauthorizedResponseBody struct {
+// GetAIIntegrationConfigUnauthorizedResponseBody is the type of the
+// "aiIntegrations" service "getAIIntegrationConfig" endpoint HTTP response
+// body for the "unauthorized" error.
+type GetAIIntegrationConfigUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -98,9 +99,10 @@ type GetConfigUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetConfigForbiddenResponseBody is the type of the "aiIntegrations" service
-// "getConfig" endpoint HTTP response body for the "forbidden" error.
-type GetConfigForbiddenResponseBody struct {
+// GetAIIntegrationConfigForbiddenResponseBody is the type of the
+// "aiIntegrations" service "getAIIntegrationConfig" endpoint HTTP response
+// body for the "forbidden" error.
+type GetAIIntegrationConfigForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -116,9 +118,10 @@ type GetConfigForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetConfigBadRequestResponseBody is the type of the "aiIntegrations" service
-// "getConfig" endpoint HTTP response body for the "bad_request" error.
-type GetConfigBadRequestResponseBody struct {
+// GetAIIntegrationConfigBadRequestResponseBody is the type of the
+// "aiIntegrations" service "getAIIntegrationConfig" endpoint HTTP response
+// body for the "bad_request" error.
+type GetAIIntegrationConfigBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -134,9 +137,10 @@ type GetConfigBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetConfigNotFoundResponseBody is the type of the "aiIntegrations" service
-// "getConfig" endpoint HTTP response body for the "not_found" error.
-type GetConfigNotFoundResponseBody struct {
+// GetAIIntegrationConfigNotFoundResponseBody is the type of the
+// "aiIntegrations" service "getAIIntegrationConfig" endpoint HTTP response
+// body for the "not_found" error.
+type GetAIIntegrationConfigNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -152,9 +156,10 @@ type GetConfigNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetConfigConflictResponseBody is the type of the "aiIntegrations" service
-// "getConfig" endpoint HTTP response body for the "conflict" error.
-type GetConfigConflictResponseBody struct {
+// GetAIIntegrationConfigConflictResponseBody is the type of the
+// "aiIntegrations" service "getAIIntegrationConfig" endpoint HTTP response
+// body for the "conflict" error.
+type GetAIIntegrationConfigConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -170,10 +175,10 @@ type GetConfigConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetConfigUnsupportedMediaResponseBody is the type of the "aiIntegrations"
-// service "getConfig" endpoint HTTP response body for the "unsupported_media"
-// error.
-type GetConfigUnsupportedMediaResponseBody struct {
+// GetAIIntegrationConfigUnsupportedMediaResponseBody is the type of the
+// "aiIntegrations" service "getAIIntegrationConfig" endpoint HTTP response
+// body for the "unsupported_media" error.
+type GetAIIntegrationConfigUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -189,9 +194,10 @@ type GetConfigUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetConfigInvalidResponseBody is the type of the "aiIntegrations" service
-// "getConfig" endpoint HTTP response body for the "invalid" error.
-type GetConfigInvalidResponseBody struct {
+// GetAIIntegrationConfigInvalidResponseBody is the type of the
+// "aiIntegrations" service "getAIIntegrationConfig" endpoint HTTP response
+// body for the "invalid" error.
+type GetAIIntegrationConfigInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -207,10 +213,10 @@ type GetConfigInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetConfigInvariantViolationResponseBody is the type of the "aiIntegrations"
-// service "getConfig" endpoint HTTP response body for the
-// "invariant_violation" error.
-type GetConfigInvariantViolationResponseBody struct {
+// GetAIIntegrationConfigInvariantViolationResponseBody is the type of the
+// "aiIntegrations" service "getAIIntegrationConfig" endpoint HTTP response
+// body for the "invariant_violation" error.
+type GetAIIntegrationConfigInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -226,9 +232,10 @@ type GetConfigInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetConfigUnexpectedResponseBody is the type of the "aiIntegrations" service
-// "getConfig" endpoint HTTP response body for the "unexpected" error.
-type GetConfigUnexpectedResponseBody struct {
+// GetAIIntegrationConfigUnexpectedResponseBody is the type of the
+// "aiIntegrations" service "getAIIntegrationConfig" endpoint HTTP response
+// body for the "unexpected" error.
+type GetAIIntegrationConfigUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -244,10 +251,10 @@ type GetConfigUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetConfigGatewayErrorResponseBody is the type of the "aiIntegrations"
-// service "getConfig" endpoint HTTP response body for the "gateway_error"
-// error.
-type GetConfigGatewayErrorResponseBody struct {
+// GetAIIntegrationConfigGatewayErrorResponseBody is the type of the
+// "aiIntegrations" service "getAIIntegrationConfig" endpoint HTTP response
+// body for the "gateway_error" error.
+type GetAIIntegrationConfigGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -263,10 +270,10 @@ type GetConfigGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertConfigUnauthorizedResponseBody is the type of the "aiIntegrations"
-// service "upsertConfig" endpoint HTTP response body for the "unauthorized"
-// error.
-type UpsertConfigUnauthorizedResponseBody struct {
+// UpsertAIIntegrationConfigUnauthorizedResponseBody is the type of the
+// "aiIntegrations" service "upsertAIIntegrationConfig" endpoint HTTP response
+// body for the "unauthorized" error.
+type UpsertAIIntegrationConfigUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -282,9 +289,10 @@ type UpsertConfigUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertConfigForbiddenResponseBody is the type of the "aiIntegrations"
-// service "upsertConfig" endpoint HTTP response body for the "forbidden" error.
-type UpsertConfigForbiddenResponseBody struct {
+// UpsertAIIntegrationConfigForbiddenResponseBody is the type of the
+// "aiIntegrations" service "upsertAIIntegrationConfig" endpoint HTTP response
+// body for the "forbidden" error.
+type UpsertAIIntegrationConfigForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -300,10 +308,10 @@ type UpsertConfigForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertConfigBadRequestResponseBody is the type of the "aiIntegrations"
-// service "upsertConfig" endpoint HTTP response body for the "bad_request"
-// error.
-type UpsertConfigBadRequestResponseBody struct {
+// UpsertAIIntegrationConfigBadRequestResponseBody is the type of the
+// "aiIntegrations" service "upsertAIIntegrationConfig" endpoint HTTP response
+// body for the "bad_request" error.
+type UpsertAIIntegrationConfigBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -319,9 +327,10 @@ type UpsertConfigBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertConfigNotFoundResponseBody is the type of the "aiIntegrations" service
-// "upsertConfig" endpoint HTTP response body for the "not_found" error.
-type UpsertConfigNotFoundResponseBody struct {
+// UpsertAIIntegrationConfigNotFoundResponseBody is the type of the
+// "aiIntegrations" service "upsertAIIntegrationConfig" endpoint HTTP response
+// body for the "not_found" error.
+type UpsertAIIntegrationConfigNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -337,9 +346,10 @@ type UpsertConfigNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertConfigConflictResponseBody is the type of the "aiIntegrations" service
-// "upsertConfig" endpoint HTTP response body for the "conflict" error.
-type UpsertConfigConflictResponseBody struct {
+// UpsertAIIntegrationConfigConflictResponseBody is the type of the
+// "aiIntegrations" service "upsertAIIntegrationConfig" endpoint HTTP response
+// body for the "conflict" error.
+type UpsertAIIntegrationConfigConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -355,10 +365,10 @@ type UpsertConfigConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertConfigUnsupportedMediaResponseBody is the type of the "aiIntegrations"
-// service "upsertConfig" endpoint HTTP response body for the
-// "unsupported_media" error.
-type UpsertConfigUnsupportedMediaResponseBody struct {
+// UpsertAIIntegrationConfigUnsupportedMediaResponseBody is the type of the
+// "aiIntegrations" service "upsertAIIntegrationConfig" endpoint HTTP response
+// body for the "unsupported_media" error.
+type UpsertAIIntegrationConfigUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -374,9 +384,10 @@ type UpsertConfigUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertConfigInvalidResponseBody is the type of the "aiIntegrations" service
-// "upsertConfig" endpoint HTTP response body for the "invalid" error.
-type UpsertConfigInvalidResponseBody struct {
+// UpsertAIIntegrationConfigInvalidResponseBody is the type of the
+// "aiIntegrations" service "upsertAIIntegrationConfig" endpoint HTTP response
+// body for the "invalid" error.
+type UpsertAIIntegrationConfigInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -392,10 +403,10 @@ type UpsertConfigInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertConfigInvariantViolationResponseBody is the type of the
-// "aiIntegrations" service "upsertConfig" endpoint HTTP response body for the
-// "invariant_violation" error.
-type UpsertConfigInvariantViolationResponseBody struct {
+// UpsertAIIntegrationConfigInvariantViolationResponseBody is the type of the
+// "aiIntegrations" service "upsertAIIntegrationConfig" endpoint HTTP response
+// body for the "invariant_violation" error.
+type UpsertAIIntegrationConfigInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -411,10 +422,10 @@ type UpsertConfigInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertConfigUnexpectedResponseBody is the type of the "aiIntegrations"
-// service "upsertConfig" endpoint HTTP response body for the "unexpected"
-// error.
-type UpsertConfigUnexpectedResponseBody struct {
+// UpsertAIIntegrationConfigUnexpectedResponseBody is the type of the
+// "aiIntegrations" service "upsertAIIntegrationConfig" endpoint HTTP response
+// body for the "unexpected" error.
+type UpsertAIIntegrationConfigUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -430,10 +441,10 @@ type UpsertConfigUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpsertConfigGatewayErrorResponseBody is the type of the "aiIntegrations"
-// service "upsertConfig" endpoint HTTP response body for the "gateway_error"
-// error.
-type UpsertConfigGatewayErrorResponseBody struct {
+// UpsertAIIntegrationConfigGatewayErrorResponseBody is the type of the
+// "aiIntegrations" service "upsertAIIntegrationConfig" endpoint HTTP response
+// body for the "gateway_error" error.
+type UpsertAIIntegrationConfigGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -449,10 +460,10 @@ type UpsertConfigGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteConfigUnauthorizedResponseBody is the type of the "aiIntegrations"
-// service "deleteConfig" endpoint HTTP response body for the "unauthorized"
-// error.
-type DeleteConfigUnauthorizedResponseBody struct {
+// DeleteAIIntegrationConfigUnauthorizedResponseBody is the type of the
+// "aiIntegrations" service "deleteAIIntegrationConfig" endpoint HTTP response
+// body for the "unauthorized" error.
+type DeleteAIIntegrationConfigUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -468,9 +479,10 @@ type DeleteConfigUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteConfigForbiddenResponseBody is the type of the "aiIntegrations"
-// service "deleteConfig" endpoint HTTP response body for the "forbidden" error.
-type DeleteConfigForbiddenResponseBody struct {
+// DeleteAIIntegrationConfigForbiddenResponseBody is the type of the
+// "aiIntegrations" service "deleteAIIntegrationConfig" endpoint HTTP response
+// body for the "forbidden" error.
+type DeleteAIIntegrationConfigForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -486,10 +498,10 @@ type DeleteConfigForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteConfigBadRequestResponseBody is the type of the "aiIntegrations"
-// service "deleteConfig" endpoint HTTP response body for the "bad_request"
-// error.
-type DeleteConfigBadRequestResponseBody struct {
+// DeleteAIIntegrationConfigBadRequestResponseBody is the type of the
+// "aiIntegrations" service "deleteAIIntegrationConfig" endpoint HTTP response
+// body for the "bad_request" error.
+type DeleteAIIntegrationConfigBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -505,9 +517,10 @@ type DeleteConfigBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteConfigNotFoundResponseBody is the type of the "aiIntegrations" service
-// "deleteConfig" endpoint HTTP response body for the "not_found" error.
-type DeleteConfigNotFoundResponseBody struct {
+// DeleteAIIntegrationConfigNotFoundResponseBody is the type of the
+// "aiIntegrations" service "deleteAIIntegrationConfig" endpoint HTTP response
+// body for the "not_found" error.
+type DeleteAIIntegrationConfigNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -523,9 +536,10 @@ type DeleteConfigNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteConfigConflictResponseBody is the type of the "aiIntegrations" service
-// "deleteConfig" endpoint HTTP response body for the "conflict" error.
-type DeleteConfigConflictResponseBody struct {
+// DeleteAIIntegrationConfigConflictResponseBody is the type of the
+// "aiIntegrations" service "deleteAIIntegrationConfig" endpoint HTTP response
+// body for the "conflict" error.
+type DeleteAIIntegrationConfigConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -541,10 +555,10 @@ type DeleteConfigConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteConfigUnsupportedMediaResponseBody is the type of the "aiIntegrations"
-// service "deleteConfig" endpoint HTTP response body for the
-// "unsupported_media" error.
-type DeleteConfigUnsupportedMediaResponseBody struct {
+// DeleteAIIntegrationConfigUnsupportedMediaResponseBody is the type of the
+// "aiIntegrations" service "deleteAIIntegrationConfig" endpoint HTTP response
+// body for the "unsupported_media" error.
+type DeleteAIIntegrationConfigUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -560,9 +574,10 @@ type DeleteConfigUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteConfigInvalidResponseBody is the type of the "aiIntegrations" service
-// "deleteConfig" endpoint HTTP response body for the "invalid" error.
-type DeleteConfigInvalidResponseBody struct {
+// DeleteAIIntegrationConfigInvalidResponseBody is the type of the
+// "aiIntegrations" service "deleteAIIntegrationConfig" endpoint HTTP response
+// body for the "invalid" error.
+type DeleteAIIntegrationConfigInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -578,10 +593,10 @@ type DeleteConfigInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteConfigInvariantViolationResponseBody is the type of the
-// "aiIntegrations" service "deleteConfig" endpoint HTTP response body for the
-// "invariant_violation" error.
-type DeleteConfigInvariantViolationResponseBody struct {
+// DeleteAIIntegrationConfigInvariantViolationResponseBody is the type of the
+// "aiIntegrations" service "deleteAIIntegrationConfig" endpoint HTTP response
+// body for the "invariant_violation" error.
+type DeleteAIIntegrationConfigInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -597,10 +612,10 @@ type DeleteConfigInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteConfigUnexpectedResponseBody is the type of the "aiIntegrations"
-// service "deleteConfig" endpoint HTTP response body for the "unexpected"
-// error.
-type DeleteConfigUnexpectedResponseBody struct {
+// DeleteAIIntegrationConfigUnexpectedResponseBody is the type of the
+// "aiIntegrations" service "deleteAIIntegrationConfig" endpoint HTTP response
+// body for the "unexpected" error.
+type DeleteAIIntegrationConfigUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -616,10 +631,10 @@ type DeleteConfigUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DeleteConfigGatewayErrorResponseBody is the type of the "aiIntegrations"
-// service "deleteConfig" endpoint HTTP response body for the "gateway_error"
-// error.
-type DeleteConfigGatewayErrorResponseBody struct {
+// DeleteAIIntegrationConfigGatewayErrorResponseBody is the type of the
+// "aiIntegrations" service "deleteAIIntegrationConfig" endpoint HTTP response
+// body for the "gateway_error" error.
+type DeleteAIIntegrationConfigGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -635,10 +650,11 @@ type DeleteConfigGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// NewGetConfigResponseBody builds the HTTP response body from the result of
-// the "getConfig" endpoint of the "aiIntegrations" service.
-func NewGetConfigResponseBody(res *aiintegrations.AIIntegrationConfig) *GetConfigResponseBody {
-	body := &GetConfigResponseBody{
+// NewGetAIIntegrationConfigResponseBody builds the HTTP response body from the
+// result of the "getAIIntegrationConfig" endpoint of the "aiIntegrations"
+// service.
+func NewGetAIIntegrationConfigResponseBody(res *aiintegrations.AIIntegrationConfig) *GetAIIntegrationConfigResponseBody {
+	body := &GetAIIntegrationConfigResponseBody{
 		ID:             res.ID,
 		OrganizationID: res.OrganizationID,
 		Provider:       res.Provider,
@@ -652,10 +668,11 @@ func NewGetConfigResponseBody(res *aiintegrations.AIIntegrationConfig) *GetConfi
 	return body
 }
 
-// NewUpsertConfigResponseBody builds the HTTP response body from the result of
-// the "upsertConfig" endpoint of the "aiIntegrations" service.
-func NewUpsertConfigResponseBody(res *aiintegrations.AIIntegrationConfig) *UpsertConfigResponseBody {
-	body := &UpsertConfigResponseBody{
+// NewUpsertAIIntegrationConfigResponseBody builds the HTTP response body from
+// the result of the "upsertAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewUpsertAIIntegrationConfigResponseBody(res *aiintegrations.AIIntegrationConfig) *UpsertAIIntegrationConfigResponseBody {
+	body := &UpsertAIIntegrationConfigResponseBody{
 		ID:             res.ID,
 		OrganizationID: res.OrganizationID,
 		Provider:       res.Provider,
@@ -669,10 +686,11 @@ func NewUpsertConfigResponseBody(res *aiintegrations.AIIntegrationConfig) *Upser
 	return body
 }
 
-// NewGetConfigUnauthorizedResponseBody builds the HTTP response body from the
-// result of the "getConfig" endpoint of the "aiIntegrations" service.
-func NewGetConfigUnauthorizedResponseBody(res *goa.ServiceError) *GetConfigUnauthorizedResponseBody {
-	body := &GetConfigUnauthorizedResponseBody{
+// NewGetAIIntegrationConfigUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewGetAIIntegrationConfigUnauthorizedResponseBody(res *goa.ServiceError) *GetAIIntegrationConfigUnauthorizedResponseBody {
+	body := &GetAIIntegrationConfigUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -683,10 +701,11 @@ func NewGetConfigUnauthorizedResponseBody(res *goa.ServiceError) *GetConfigUnaut
 	return body
 }
 
-// NewGetConfigForbiddenResponseBody builds the HTTP response body from the
-// result of the "getConfig" endpoint of the "aiIntegrations" service.
-func NewGetConfigForbiddenResponseBody(res *goa.ServiceError) *GetConfigForbiddenResponseBody {
-	body := &GetConfigForbiddenResponseBody{
+// NewGetAIIntegrationConfigForbiddenResponseBody builds the HTTP response body
+// from the result of the "getAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewGetAIIntegrationConfigForbiddenResponseBody(res *goa.ServiceError) *GetAIIntegrationConfigForbiddenResponseBody {
+	body := &GetAIIntegrationConfigForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -697,10 +716,11 @@ func NewGetConfigForbiddenResponseBody(res *goa.ServiceError) *GetConfigForbidde
 	return body
 }
 
-// NewGetConfigBadRequestResponseBody builds the HTTP response body from the
-// result of the "getConfig" endpoint of the "aiIntegrations" service.
-func NewGetConfigBadRequestResponseBody(res *goa.ServiceError) *GetConfigBadRequestResponseBody {
-	body := &GetConfigBadRequestResponseBody{
+// NewGetAIIntegrationConfigBadRequestResponseBody builds the HTTP response
+// body from the result of the "getAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewGetAIIntegrationConfigBadRequestResponseBody(res *goa.ServiceError) *GetAIIntegrationConfigBadRequestResponseBody {
+	body := &GetAIIntegrationConfigBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -711,10 +731,11 @@ func NewGetConfigBadRequestResponseBody(res *goa.ServiceError) *GetConfigBadRequ
 	return body
 }
 
-// NewGetConfigNotFoundResponseBody builds the HTTP response body from the
-// result of the "getConfig" endpoint of the "aiIntegrations" service.
-func NewGetConfigNotFoundResponseBody(res *goa.ServiceError) *GetConfigNotFoundResponseBody {
-	body := &GetConfigNotFoundResponseBody{
+// NewGetAIIntegrationConfigNotFoundResponseBody builds the HTTP response body
+// from the result of the "getAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewGetAIIntegrationConfigNotFoundResponseBody(res *goa.ServiceError) *GetAIIntegrationConfigNotFoundResponseBody {
+	body := &GetAIIntegrationConfigNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -725,10 +746,11 @@ func NewGetConfigNotFoundResponseBody(res *goa.ServiceError) *GetConfigNotFoundR
 	return body
 }
 
-// NewGetConfigConflictResponseBody builds the HTTP response body from the
-// result of the "getConfig" endpoint of the "aiIntegrations" service.
-func NewGetConfigConflictResponseBody(res *goa.ServiceError) *GetConfigConflictResponseBody {
-	body := &GetConfigConflictResponseBody{
+// NewGetAIIntegrationConfigConflictResponseBody builds the HTTP response body
+// from the result of the "getAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewGetAIIntegrationConfigConflictResponseBody(res *goa.ServiceError) *GetAIIntegrationConfigConflictResponseBody {
+	body := &GetAIIntegrationConfigConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -739,10 +761,11 @@ func NewGetConfigConflictResponseBody(res *goa.ServiceError) *GetConfigConflictR
 	return body
 }
 
-// NewGetConfigUnsupportedMediaResponseBody builds the HTTP response body from
-// the result of the "getConfig" endpoint of the "aiIntegrations" service.
-func NewGetConfigUnsupportedMediaResponseBody(res *goa.ServiceError) *GetConfigUnsupportedMediaResponseBody {
-	body := &GetConfigUnsupportedMediaResponseBody{
+// NewGetAIIntegrationConfigUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getAIIntegrationConfig" endpoint of
+// the "aiIntegrations" service.
+func NewGetAIIntegrationConfigUnsupportedMediaResponseBody(res *goa.ServiceError) *GetAIIntegrationConfigUnsupportedMediaResponseBody {
+	body := &GetAIIntegrationConfigUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -753,10 +776,11 @@ func NewGetConfigUnsupportedMediaResponseBody(res *goa.ServiceError) *GetConfigU
 	return body
 }
 
-// NewGetConfigInvalidResponseBody builds the HTTP response body from the
-// result of the "getConfig" endpoint of the "aiIntegrations" service.
-func NewGetConfigInvalidResponseBody(res *goa.ServiceError) *GetConfigInvalidResponseBody {
-	body := &GetConfigInvalidResponseBody{
+// NewGetAIIntegrationConfigInvalidResponseBody builds the HTTP response body
+// from the result of the "getAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewGetAIIntegrationConfigInvalidResponseBody(res *goa.ServiceError) *GetAIIntegrationConfigInvalidResponseBody {
+	body := &GetAIIntegrationConfigInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -767,10 +791,11 @@ func NewGetConfigInvalidResponseBody(res *goa.ServiceError) *GetConfigInvalidRes
 	return body
 }
 
-// NewGetConfigInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "getConfig" endpoint of the "aiIntegrations" service.
-func NewGetConfigInvariantViolationResponseBody(res *goa.ServiceError) *GetConfigInvariantViolationResponseBody {
-	body := &GetConfigInvariantViolationResponseBody{
+// NewGetAIIntegrationConfigInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getAIIntegrationConfig" endpoint of
+// the "aiIntegrations" service.
+func NewGetAIIntegrationConfigInvariantViolationResponseBody(res *goa.ServiceError) *GetAIIntegrationConfigInvariantViolationResponseBody {
+	body := &GetAIIntegrationConfigInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -781,10 +806,11 @@ func NewGetConfigInvariantViolationResponseBody(res *goa.ServiceError) *GetConfi
 	return body
 }
 
-// NewGetConfigUnexpectedResponseBody builds the HTTP response body from the
-// result of the "getConfig" endpoint of the "aiIntegrations" service.
-func NewGetConfigUnexpectedResponseBody(res *goa.ServiceError) *GetConfigUnexpectedResponseBody {
-	body := &GetConfigUnexpectedResponseBody{
+// NewGetAIIntegrationConfigUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewGetAIIntegrationConfigUnexpectedResponseBody(res *goa.ServiceError) *GetAIIntegrationConfigUnexpectedResponseBody {
+	body := &GetAIIntegrationConfigUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -795,10 +821,11 @@ func NewGetConfigUnexpectedResponseBody(res *goa.ServiceError) *GetConfigUnexpec
 	return body
 }
 
-// NewGetConfigGatewayErrorResponseBody builds the HTTP response body from the
-// result of the "getConfig" endpoint of the "aiIntegrations" service.
-func NewGetConfigGatewayErrorResponseBody(res *goa.ServiceError) *GetConfigGatewayErrorResponseBody {
-	body := &GetConfigGatewayErrorResponseBody{
+// NewGetAIIntegrationConfigGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewGetAIIntegrationConfigGatewayErrorResponseBody(res *goa.ServiceError) *GetAIIntegrationConfigGatewayErrorResponseBody {
+	body := &GetAIIntegrationConfigGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -809,10 +836,11 @@ func NewGetConfigGatewayErrorResponseBody(res *goa.ServiceError) *GetConfigGatew
 	return body
 }
 
-// NewUpsertConfigUnauthorizedResponseBody builds the HTTP response body from
-// the result of the "upsertConfig" endpoint of the "aiIntegrations" service.
-func NewUpsertConfigUnauthorizedResponseBody(res *goa.ServiceError) *UpsertConfigUnauthorizedResponseBody {
-	body := &UpsertConfigUnauthorizedResponseBody{
+// NewUpsertAIIntegrationConfigUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "upsertAIIntegrationConfig" endpoint of
+// the "aiIntegrations" service.
+func NewUpsertAIIntegrationConfigUnauthorizedResponseBody(res *goa.ServiceError) *UpsertAIIntegrationConfigUnauthorizedResponseBody {
+	body := &UpsertAIIntegrationConfigUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -823,10 +851,11 @@ func NewUpsertConfigUnauthorizedResponseBody(res *goa.ServiceError) *UpsertConfi
 	return body
 }
 
-// NewUpsertConfigForbiddenResponseBody builds the HTTP response body from the
-// result of the "upsertConfig" endpoint of the "aiIntegrations" service.
-func NewUpsertConfigForbiddenResponseBody(res *goa.ServiceError) *UpsertConfigForbiddenResponseBody {
-	body := &UpsertConfigForbiddenResponseBody{
+// NewUpsertAIIntegrationConfigForbiddenResponseBody builds the HTTP response
+// body from the result of the "upsertAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewUpsertAIIntegrationConfigForbiddenResponseBody(res *goa.ServiceError) *UpsertAIIntegrationConfigForbiddenResponseBody {
+	body := &UpsertAIIntegrationConfigForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -837,10 +866,11 @@ func NewUpsertConfigForbiddenResponseBody(res *goa.ServiceError) *UpsertConfigFo
 	return body
 }
 
-// NewUpsertConfigBadRequestResponseBody builds the HTTP response body from the
-// result of the "upsertConfig" endpoint of the "aiIntegrations" service.
-func NewUpsertConfigBadRequestResponseBody(res *goa.ServiceError) *UpsertConfigBadRequestResponseBody {
-	body := &UpsertConfigBadRequestResponseBody{
+// NewUpsertAIIntegrationConfigBadRequestResponseBody builds the HTTP response
+// body from the result of the "upsertAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewUpsertAIIntegrationConfigBadRequestResponseBody(res *goa.ServiceError) *UpsertAIIntegrationConfigBadRequestResponseBody {
+	body := &UpsertAIIntegrationConfigBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -851,10 +881,11 @@ func NewUpsertConfigBadRequestResponseBody(res *goa.ServiceError) *UpsertConfigB
 	return body
 }
 
-// NewUpsertConfigNotFoundResponseBody builds the HTTP response body from the
-// result of the "upsertConfig" endpoint of the "aiIntegrations" service.
-func NewUpsertConfigNotFoundResponseBody(res *goa.ServiceError) *UpsertConfigNotFoundResponseBody {
-	body := &UpsertConfigNotFoundResponseBody{
+// NewUpsertAIIntegrationConfigNotFoundResponseBody builds the HTTP response
+// body from the result of the "upsertAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewUpsertAIIntegrationConfigNotFoundResponseBody(res *goa.ServiceError) *UpsertAIIntegrationConfigNotFoundResponseBody {
+	body := &UpsertAIIntegrationConfigNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -865,10 +896,11 @@ func NewUpsertConfigNotFoundResponseBody(res *goa.ServiceError) *UpsertConfigNot
 	return body
 }
 
-// NewUpsertConfigConflictResponseBody builds the HTTP response body from the
-// result of the "upsertConfig" endpoint of the "aiIntegrations" service.
-func NewUpsertConfigConflictResponseBody(res *goa.ServiceError) *UpsertConfigConflictResponseBody {
-	body := &UpsertConfigConflictResponseBody{
+// NewUpsertAIIntegrationConfigConflictResponseBody builds the HTTP response
+// body from the result of the "upsertAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewUpsertAIIntegrationConfigConflictResponseBody(res *goa.ServiceError) *UpsertAIIntegrationConfigConflictResponseBody {
+	body := &UpsertAIIntegrationConfigConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -879,11 +911,11 @@ func NewUpsertConfigConflictResponseBody(res *goa.ServiceError) *UpsertConfigCon
 	return body
 }
 
-// NewUpsertConfigUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "upsertConfig" endpoint of the "aiIntegrations"
-// service.
-func NewUpsertConfigUnsupportedMediaResponseBody(res *goa.ServiceError) *UpsertConfigUnsupportedMediaResponseBody {
-	body := &UpsertConfigUnsupportedMediaResponseBody{
+// NewUpsertAIIntegrationConfigUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "upsertAIIntegrationConfig" endpoint of
+// the "aiIntegrations" service.
+func NewUpsertAIIntegrationConfigUnsupportedMediaResponseBody(res *goa.ServiceError) *UpsertAIIntegrationConfigUnsupportedMediaResponseBody {
+	body := &UpsertAIIntegrationConfigUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -894,10 +926,11 @@ func NewUpsertConfigUnsupportedMediaResponseBody(res *goa.ServiceError) *UpsertC
 	return body
 }
 
-// NewUpsertConfigInvalidResponseBody builds the HTTP response body from the
-// result of the "upsertConfig" endpoint of the "aiIntegrations" service.
-func NewUpsertConfigInvalidResponseBody(res *goa.ServiceError) *UpsertConfigInvalidResponseBody {
-	body := &UpsertConfigInvalidResponseBody{
+// NewUpsertAIIntegrationConfigInvalidResponseBody builds the HTTP response
+// body from the result of the "upsertAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewUpsertAIIntegrationConfigInvalidResponseBody(res *goa.ServiceError) *UpsertAIIntegrationConfigInvalidResponseBody {
+	body := &UpsertAIIntegrationConfigInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -908,11 +941,11 @@ func NewUpsertConfigInvalidResponseBody(res *goa.ServiceError) *UpsertConfigInva
 	return body
 }
 
-// NewUpsertConfigInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "upsertConfig" endpoint of the "aiIntegrations"
-// service.
-func NewUpsertConfigInvariantViolationResponseBody(res *goa.ServiceError) *UpsertConfigInvariantViolationResponseBody {
-	body := &UpsertConfigInvariantViolationResponseBody{
+// NewUpsertAIIntegrationConfigInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "upsertAIIntegrationConfig" endpoint of
+// the "aiIntegrations" service.
+func NewUpsertAIIntegrationConfigInvariantViolationResponseBody(res *goa.ServiceError) *UpsertAIIntegrationConfigInvariantViolationResponseBody {
+	body := &UpsertAIIntegrationConfigInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -923,10 +956,11 @@ func NewUpsertConfigInvariantViolationResponseBody(res *goa.ServiceError) *Upser
 	return body
 }
 
-// NewUpsertConfigUnexpectedResponseBody builds the HTTP response body from the
-// result of the "upsertConfig" endpoint of the "aiIntegrations" service.
-func NewUpsertConfigUnexpectedResponseBody(res *goa.ServiceError) *UpsertConfigUnexpectedResponseBody {
-	body := &UpsertConfigUnexpectedResponseBody{
+// NewUpsertAIIntegrationConfigUnexpectedResponseBody builds the HTTP response
+// body from the result of the "upsertAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewUpsertAIIntegrationConfigUnexpectedResponseBody(res *goa.ServiceError) *UpsertAIIntegrationConfigUnexpectedResponseBody {
+	body := &UpsertAIIntegrationConfigUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -937,10 +971,11 @@ func NewUpsertConfigUnexpectedResponseBody(res *goa.ServiceError) *UpsertConfigU
 	return body
 }
 
-// NewUpsertConfigGatewayErrorResponseBody builds the HTTP response body from
-// the result of the "upsertConfig" endpoint of the "aiIntegrations" service.
-func NewUpsertConfigGatewayErrorResponseBody(res *goa.ServiceError) *UpsertConfigGatewayErrorResponseBody {
-	body := &UpsertConfigGatewayErrorResponseBody{
+// NewUpsertAIIntegrationConfigGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "upsertAIIntegrationConfig" endpoint of
+// the "aiIntegrations" service.
+func NewUpsertAIIntegrationConfigGatewayErrorResponseBody(res *goa.ServiceError) *UpsertAIIntegrationConfigGatewayErrorResponseBody {
+	body := &UpsertAIIntegrationConfigGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -951,10 +986,11 @@ func NewUpsertConfigGatewayErrorResponseBody(res *goa.ServiceError) *UpsertConfi
 	return body
 }
 
-// NewDeleteConfigUnauthorizedResponseBody builds the HTTP response body from
-// the result of the "deleteConfig" endpoint of the "aiIntegrations" service.
-func NewDeleteConfigUnauthorizedResponseBody(res *goa.ServiceError) *DeleteConfigUnauthorizedResponseBody {
-	body := &DeleteConfigUnauthorizedResponseBody{
+// NewDeleteAIIntegrationConfigUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "deleteAIIntegrationConfig" endpoint of
+// the "aiIntegrations" service.
+func NewDeleteAIIntegrationConfigUnauthorizedResponseBody(res *goa.ServiceError) *DeleteAIIntegrationConfigUnauthorizedResponseBody {
+	body := &DeleteAIIntegrationConfigUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -965,10 +1001,11 @@ func NewDeleteConfigUnauthorizedResponseBody(res *goa.ServiceError) *DeleteConfi
 	return body
 }
 
-// NewDeleteConfigForbiddenResponseBody builds the HTTP response body from the
-// result of the "deleteConfig" endpoint of the "aiIntegrations" service.
-func NewDeleteConfigForbiddenResponseBody(res *goa.ServiceError) *DeleteConfigForbiddenResponseBody {
-	body := &DeleteConfigForbiddenResponseBody{
+// NewDeleteAIIntegrationConfigForbiddenResponseBody builds the HTTP response
+// body from the result of the "deleteAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewDeleteAIIntegrationConfigForbiddenResponseBody(res *goa.ServiceError) *DeleteAIIntegrationConfigForbiddenResponseBody {
+	body := &DeleteAIIntegrationConfigForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -979,10 +1016,11 @@ func NewDeleteConfigForbiddenResponseBody(res *goa.ServiceError) *DeleteConfigFo
 	return body
 }
 
-// NewDeleteConfigBadRequestResponseBody builds the HTTP response body from the
-// result of the "deleteConfig" endpoint of the "aiIntegrations" service.
-func NewDeleteConfigBadRequestResponseBody(res *goa.ServiceError) *DeleteConfigBadRequestResponseBody {
-	body := &DeleteConfigBadRequestResponseBody{
+// NewDeleteAIIntegrationConfigBadRequestResponseBody builds the HTTP response
+// body from the result of the "deleteAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewDeleteAIIntegrationConfigBadRequestResponseBody(res *goa.ServiceError) *DeleteAIIntegrationConfigBadRequestResponseBody {
+	body := &DeleteAIIntegrationConfigBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -993,10 +1031,11 @@ func NewDeleteConfigBadRequestResponseBody(res *goa.ServiceError) *DeleteConfigB
 	return body
 }
 
-// NewDeleteConfigNotFoundResponseBody builds the HTTP response body from the
-// result of the "deleteConfig" endpoint of the "aiIntegrations" service.
-func NewDeleteConfigNotFoundResponseBody(res *goa.ServiceError) *DeleteConfigNotFoundResponseBody {
-	body := &DeleteConfigNotFoundResponseBody{
+// NewDeleteAIIntegrationConfigNotFoundResponseBody builds the HTTP response
+// body from the result of the "deleteAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewDeleteAIIntegrationConfigNotFoundResponseBody(res *goa.ServiceError) *DeleteAIIntegrationConfigNotFoundResponseBody {
+	body := &DeleteAIIntegrationConfigNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1007,10 +1046,11 @@ func NewDeleteConfigNotFoundResponseBody(res *goa.ServiceError) *DeleteConfigNot
 	return body
 }
 
-// NewDeleteConfigConflictResponseBody builds the HTTP response body from the
-// result of the "deleteConfig" endpoint of the "aiIntegrations" service.
-func NewDeleteConfigConflictResponseBody(res *goa.ServiceError) *DeleteConfigConflictResponseBody {
-	body := &DeleteConfigConflictResponseBody{
+// NewDeleteAIIntegrationConfigConflictResponseBody builds the HTTP response
+// body from the result of the "deleteAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewDeleteAIIntegrationConfigConflictResponseBody(res *goa.ServiceError) *DeleteAIIntegrationConfigConflictResponseBody {
+	body := &DeleteAIIntegrationConfigConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1021,11 +1061,11 @@ func NewDeleteConfigConflictResponseBody(res *goa.ServiceError) *DeleteConfigCon
 	return body
 }
 
-// NewDeleteConfigUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "deleteConfig" endpoint of the "aiIntegrations"
-// service.
-func NewDeleteConfigUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteConfigUnsupportedMediaResponseBody {
-	body := &DeleteConfigUnsupportedMediaResponseBody{
+// NewDeleteAIIntegrationConfigUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "deleteAIIntegrationConfig" endpoint of
+// the "aiIntegrations" service.
+func NewDeleteAIIntegrationConfigUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteAIIntegrationConfigUnsupportedMediaResponseBody {
+	body := &DeleteAIIntegrationConfigUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1036,10 +1076,11 @@ func NewDeleteConfigUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteC
 	return body
 }
 
-// NewDeleteConfigInvalidResponseBody builds the HTTP response body from the
-// result of the "deleteConfig" endpoint of the "aiIntegrations" service.
-func NewDeleteConfigInvalidResponseBody(res *goa.ServiceError) *DeleteConfigInvalidResponseBody {
-	body := &DeleteConfigInvalidResponseBody{
+// NewDeleteAIIntegrationConfigInvalidResponseBody builds the HTTP response
+// body from the result of the "deleteAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewDeleteAIIntegrationConfigInvalidResponseBody(res *goa.ServiceError) *DeleteAIIntegrationConfigInvalidResponseBody {
+	body := &DeleteAIIntegrationConfigInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1050,11 +1091,11 @@ func NewDeleteConfigInvalidResponseBody(res *goa.ServiceError) *DeleteConfigInva
 	return body
 }
 
-// NewDeleteConfigInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "deleteConfig" endpoint of the "aiIntegrations"
-// service.
-func NewDeleteConfigInvariantViolationResponseBody(res *goa.ServiceError) *DeleteConfigInvariantViolationResponseBody {
-	body := &DeleteConfigInvariantViolationResponseBody{
+// NewDeleteAIIntegrationConfigInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "deleteAIIntegrationConfig" endpoint of
+// the "aiIntegrations" service.
+func NewDeleteAIIntegrationConfigInvariantViolationResponseBody(res *goa.ServiceError) *DeleteAIIntegrationConfigInvariantViolationResponseBody {
+	body := &DeleteAIIntegrationConfigInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1065,10 +1106,11 @@ func NewDeleteConfigInvariantViolationResponseBody(res *goa.ServiceError) *Delet
 	return body
 }
 
-// NewDeleteConfigUnexpectedResponseBody builds the HTTP response body from the
-// result of the "deleteConfig" endpoint of the "aiIntegrations" service.
-func NewDeleteConfigUnexpectedResponseBody(res *goa.ServiceError) *DeleteConfigUnexpectedResponseBody {
-	body := &DeleteConfigUnexpectedResponseBody{
+// NewDeleteAIIntegrationConfigUnexpectedResponseBody builds the HTTP response
+// body from the result of the "deleteAIIntegrationConfig" endpoint of the
+// "aiIntegrations" service.
+func NewDeleteAIIntegrationConfigUnexpectedResponseBody(res *goa.ServiceError) *DeleteAIIntegrationConfigUnexpectedResponseBody {
+	body := &DeleteAIIntegrationConfigUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1079,10 +1121,11 @@ func NewDeleteConfigUnexpectedResponseBody(res *goa.ServiceError) *DeleteConfigU
 	return body
 }
 
-// NewDeleteConfigGatewayErrorResponseBody builds the HTTP response body from
-// the result of the "deleteConfig" endpoint of the "aiIntegrations" service.
-func NewDeleteConfigGatewayErrorResponseBody(res *goa.ServiceError) *DeleteConfigGatewayErrorResponseBody {
-	body := &DeleteConfigGatewayErrorResponseBody{
+// NewDeleteAIIntegrationConfigGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "deleteAIIntegrationConfig" endpoint of
+// the "aiIntegrations" service.
+func NewDeleteAIIntegrationConfigGatewayErrorResponseBody(res *goa.ServiceError) *DeleteAIIntegrationConfigGatewayErrorResponseBody {
+	body := &DeleteAIIntegrationConfigGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1093,10 +1136,10 @@ func NewDeleteConfigGatewayErrorResponseBody(res *goa.ServiceError) *DeleteConfi
 	return body
 }
 
-// NewGetConfigPayload builds a aiIntegrations service getConfig endpoint
-// payload.
-func NewGetConfigPayload(provider string, apikeyToken *string, sessionToken *string) *aiintegrations.GetConfigPayload {
-	v := &aiintegrations.GetConfigPayload{}
+// NewGetAIIntegrationConfigPayload builds a aiIntegrations service
+// getAIIntegrationConfig endpoint payload.
+func NewGetAIIntegrationConfigPayload(provider string, apikeyToken *string, sessionToken *string) *aiintegrations.GetAIIntegrationConfigPayload {
+	v := &aiintegrations.GetAIIntegrationConfigPayload{}
 	v.Provider = provider
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -1104,10 +1147,10 @@ func NewGetConfigPayload(provider string, apikeyToken *string, sessionToken *str
 	return v
 }
 
-// NewUpsertConfigPayload builds a aiIntegrations service upsertConfig endpoint
-// payload.
-func NewUpsertConfigPayload(body *UpsertConfigRequestBody, apikeyToken *string, sessionToken *string) *aiintegrations.UpsertConfigPayload {
-	v := &aiintegrations.UpsertConfigPayload{
+// NewUpsertAIIntegrationConfigPayload builds a aiIntegrations service
+// upsertAIIntegrationConfig endpoint payload.
+func NewUpsertAIIntegrationConfigPayload(body *UpsertAIIntegrationConfigRequestBody, apikeyToken *string, sessionToken *string) *aiintegrations.UpsertAIIntegrationConfigPayload {
+	v := &aiintegrations.UpsertAIIntegrationConfigPayload{
 		Provider: *body.Provider,
 		APIKey:   *body.APIKey,
 		Enabled:  *body.Enabled,
@@ -1118,10 +1161,10 @@ func NewUpsertConfigPayload(body *UpsertConfigRequestBody, apikeyToken *string, 
 	return v
 }
 
-// NewDeleteConfigPayload builds a aiIntegrations service deleteConfig endpoint
-// payload.
-func NewDeleteConfigPayload(body *DeleteConfigRequestBody, apikeyToken *string, sessionToken *string) *aiintegrations.DeleteConfigPayload {
-	v := &aiintegrations.DeleteConfigPayload{
+// NewDeleteAIIntegrationConfigPayload builds a aiIntegrations service
+// deleteAIIntegrationConfig endpoint payload.
+func NewDeleteAIIntegrationConfigPayload(body *DeleteAIIntegrationConfigRequestBody, apikeyToken *string, sessionToken *string) *aiintegrations.DeleteAIIntegrationConfigPayload {
+	v := &aiintegrations.DeleteAIIntegrationConfigPayload{
 		Provider: *body.Provider,
 	}
 	v.ApikeyToken = apikeyToken
@@ -1130,9 +1173,9 @@ func NewDeleteConfigPayload(body *DeleteConfigRequestBody, apikeyToken *string, 
 	return v
 }
 
-// ValidateUpsertConfigRequestBody runs the validations defined on
-// UpsertConfigRequestBody
-func ValidateUpsertConfigRequestBody(body *UpsertConfigRequestBody) (err error) {
+// ValidateUpsertAIIntegrationConfigRequestBody runs the validations defined on
+// UpsertAIIntegrationConfigRequestBody
+func ValidateUpsertAIIntegrationConfigRequestBody(body *UpsertAIIntegrationConfigRequestBody) (err error) {
 	if body.Provider == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
 	}
@@ -1145,9 +1188,9 @@ func ValidateUpsertConfigRequestBody(body *UpsertConfigRequestBody) (err error) 
 	return
 }
 
-// ValidateDeleteConfigRequestBody runs the validations defined on
-// DeleteConfigRequestBody
-func ValidateDeleteConfigRequestBody(body *DeleteConfigRequestBody) (err error) {
+// ValidateDeleteAIIntegrationConfigRequestBody runs the validations defined on
+// DeleteAIIntegrationConfigRequestBody
+func ValidateDeleteAIIntegrationConfigRequestBody(body *DeleteAIIntegrationConfigRequestBody) (err error) {
 	if body.Provider == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
 	}

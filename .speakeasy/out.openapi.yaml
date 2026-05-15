@@ -1510,7 +1510,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DeleteConfigRequestBody'
+              $ref: '#/components/schemas/DeleteAIIntegrationConfigRequestBody'
         required: true
       responses:
         "204":
@@ -1573,7 +1573,7 @@ paths:
         - apikey_header_Gram-Key: []
         - session_header_Gram-Session: []
         - {}
-      summary: deleteConfig aiIntegrations
+      summary: deleteAIIntegrationConfig aiIntegrations
       tags:
         - aiIntegrations
       x-speakeasy-name-override: deleteConfig
@@ -1671,7 +1671,7 @@ paths:
         - apikey_header_Gram-Key: []
         - session_header_Gram-Session: []
         - {}
-      summary: getConfig aiIntegrations
+      summary: getAIIntegrationConfig aiIntegrations
       tags:
         - aiIntegrations
       x-speakeasy-name-override: getConfig
@@ -1700,7 +1700,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpsertConfigRequestBody'
+              $ref: '#/components/schemas/UpsertAIIntegrationConfigRequestBody'
         required: true
       responses:
         "200":
@@ -1767,7 +1767,7 @@ paths:
         - apikey_header_Gram-Key: []
         - session_header_Gram-Session: []
         - {}
-      summary: upsertConfig aiIntegrations
+      summary: upsertAIIntegrationConfig aiIntegrations
       tags:
         - aiIntegrations
       x-speakeasy-name-override: upsertConfig
@@ -12701,7 +12701,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpsertConfigRequestBody2'
+              $ref: '#/components/schemas/UpsertConfigRequestBody'
         required: true
       responses:
         "200":
@@ -28738,7 +28738,7 @@ components:
         - created_at
         - updated_at
         - is_updating
-    DeleteConfigRequestBody:
+    DeleteAIIntegrationConfigRequestBody:
       type: object
       properties:
         provider:
@@ -36890,6 +36890,22 @@ components:
           $ref: '#/components/schemas/Asset'
       required:
         - asset
+    UpsertAIIntegrationConfigRequestBody:
+      type: object
+      properties:
+        api_key:
+          type: string
+          description: Provider API key. Stored encrypted at rest; never returned on reads.
+        enabled:
+          type: boolean
+          description: Whether the integration should be active.
+        provider:
+          type: string
+          description: AI provider identifier. Initially only cursor is supported.
+      required:
+        - provider
+        - api_key
+        - enabled
     UpsertAllowedOriginForm:
       type: object
       properties:
@@ -36915,22 +36931,6 @@ components:
       required:
         - allowed_origin
     UpsertConfigRequestBody:
-      type: object
-      properties:
-        api_key:
-          type: string
-          description: Provider API key. Stored encrypted at rest; never returned on reads.
-        enabled:
-          type: boolean
-          description: Whether the integration should be active.
-        provider:
-          type: string
-          description: AI provider identifier. Initially only cursor is supported.
-      required:
-        - provider
-        - api_key
-        - enabled
-    UpsertConfigRequestBody2:
       type: object
       properties:
         enabled:
