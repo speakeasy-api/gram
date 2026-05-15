@@ -146,10 +146,8 @@ type CreateToolsetResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset, present when the
-	// OAuth-Proxy → user-sessions migration has completed at least the user
-	// session issuer step. Looked up by the project-scoped slug convention
-	// {toolset.slug}-usi.
+	// The id of the user_session_issuer wired to this toolset. Set via
+	// toolsets.setUserSessionIssuer; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -232,10 +230,8 @@ type UpdateToolsetResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset, present when the
-	// OAuth-Proxy → user-sessions migration has completed at least the user
-	// session issuer step. Looked up by the project-scoped slug convention
-	// {toolset.slug}-usi.
+	// The id of the user_session_issuer wired to this toolset. Set via
+	// toolsets.setUserSessionIssuer; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -304,10 +300,8 @@ type GetToolsetResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset, present when the
-	// OAuth-Proxy → user-sessions migration has completed at least the user
-	// session issuer step. Looked up by the project-scoped slug convention
-	// {toolset.slug}-usi.
+	// The id of the user_session_issuer wired to this toolset. Set via
+	// toolsets.setUserSessionIssuer; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -376,10 +370,8 @@ type CloneToolsetResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset, present when the
-	// OAuth-Proxy → user-sessions migration has completed at least the user
-	// session issuer step. Looked up by the project-scoped slug convention
-	// {toolset.slug}-usi.
+	// The id of the user_session_issuer wired to this toolset. Set via
+	// toolsets.setUserSessionIssuer; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -448,10 +440,8 @@ type AddExternalOAuthServerResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset, present when the
-	// OAuth-Proxy → user-sessions migration has completed at least the user
-	// session issuer step. Looked up by the project-scoped slug convention
-	// {toolset.slug}-usi.
+	// The id of the user_session_issuer wired to this toolset. Set via
+	// toolsets.setUserSessionIssuer; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -520,10 +510,8 @@ type RemoveOAuthServerResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset, present when the
-	// OAuth-Proxy → user-sessions migration has completed at least the user
-	// session issuer step. Looked up by the project-scoped slug convention
-	// {toolset.slug}-usi.
+	// The id of the user_session_issuer wired to this toolset. Set via
+	// toolsets.setUserSessionIssuer; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -592,10 +580,8 @@ type AddOAuthProxyServerResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset, present when the
-	// OAuth-Proxy → user-sessions migration has completed at least the user
-	// session issuer step. Looked up by the project-scoped slug convention
-	// {toolset.slug}-usi.
+	// The id of the user_session_issuer wired to this toolset. Set via
+	// toolsets.setUserSessionIssuer; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -664,10 +650,8 @@ type UpdateOAuthProxyServerResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset, present when the
-	// OAuth-Proxy → user-sessions migration has completed at least the user
-	// session issuer step. Looked up by the project-scoped slug convention
-	// {toolset.slug}-usi.
+	// The id of the user_session_issuer wired to this toolset. Set via
+	// toolsets.setUserSessionIssuer; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
@@ -736,10 +720,8 @@ type SetUserSessionIssuerResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
-	// The id of the user_session_issuer wired to this toolset, present when the
-	// OAuth-Proxy → user-sessions migration has completed at least the user
-	// session issuer step. Looked up by the project-scoped slug convention
-	// {toolset.slug}-usi.
+	// The id of the user_session_issuer wired to this toolset. Set via
+	// toolsets.setUserSessionIssuer; null when no USI is linked.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The slug of the user_session_issuer wired to this toolset; present when
 	// user_session_issuer_id is.
