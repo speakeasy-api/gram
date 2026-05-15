@@ -1053,6 +1053,18 @@ describe("useExternalMcpReleaseWorkflow", () => {
         expect(state.toolsetStatuses[0].status).toBe("completed");
       });
 
+      expect(mockToolsetsUpdateBySlug).toHaveBeenNthCalledWith(
+        1,
+        {
+          slug: "my-server",
+          updateToolsetRequestBody: {
+            mcpEnabled: true,
+            mcpIsPublic: false,
+          },
+        },
+        undefined,
+        undefined,
+      );
       expect(mockUserSessionIssuersCreate).toHaveBeenCalledWith(
         {
           createUserSessionIssuerForm: {
@@ -1091,6 +1103,17 @@ describe("useExternalMcpReleaseWorkflow", () => {
               expect.stringContaining("/mcp/remote_login_callback"),
             ],
           }),
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockToolsetsUpdateBySlug).toHaveBeenNthCalledWith(
+        2,
+        {
+          slug: "my-server",
+          updateToolsetRequestBody: {
+            mcpIsPublic: false,
+          },
         },
         undefined,
         undefined,
@@ -1149,6 +1172,29 @@ describe("useExternalMcpReleaseWorkflow", () => {
         expect(state.toolsetStatuses[0].status).toBe("completed");
       });
 
+      expect(mockToolsetsUpdateBySlug).toHaveBeenNthCalledWith(
+        1,
+        {
+          slug: "my-server",
+          updateToolsetRequestBody: {
+            mcpEnabled: true,
+            mcpIsPublic: false,
+          },
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockToolsetsUpdateBySlug).toHaveBeenNthCalledWith(
+        2,
+        {
+          slug: "my-server",
+          updateToolsetRequestBody: {
+            mcpIsPublic: true,
+          },
+        },
+        undefined,
+        undefined,
+      );
       expect(mockUserSessionIssuersCreate).not.toHaveBeenCalled();
       expect(mockRemoteSessionIssuersCreate).not.toHaveBeenCalled();
       expect(mockRemoteSessionIssuersRegister).not.toHaveBeenCalled();

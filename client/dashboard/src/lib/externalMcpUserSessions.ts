@@ -172,6 +172,17 @@ export async function onboardExternalMcpToUserSessions({
     options,
   );
 
+  await client.toolsets.updateBySlug(
+    {
+      slug: toolsetSlug,
+      updateToolsetRequestBody: {
+        mcpIsPublic: false,
+      },
+    },
+    undefined,
+    options,
+  );
+
   await client.toolsets.setUserSessionIssuer(
     {
       slug: toolsetSlug,

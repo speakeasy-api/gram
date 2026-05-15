@@ -377,7 +377,7 @@ export function useExternalMcpReleaseWorkflow({
               slug: toolset.slug,
               updateToolsetRequestBody: {
                 mcpEnabled: true,
-                mcpIsPublic: true,
+                mcpIsPublic: !onboardExternalMcpToUserSessions,
               },
             },
             undefined,
@@ -401,6 +401,17 @@ export function useExternalMcpReleaseWorkflow({
                 oauth,
                 options: reqOpts,
               });
+            } else {
+              await client.toolsets.updateBySlug(
+                {
+                  slug: toolset.slug,
+                  updateToolsetRequestBody: {
+                    mcpIsPublic: true,
+                  },
+                },
+                undefined,
+                reqOpts,
+              );
             }
           }
 

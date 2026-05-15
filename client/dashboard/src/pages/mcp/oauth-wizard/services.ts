@@ -4,8 +4,8 @@ import {
   buildCreateEnvironmentMutation,
   buildDeleteEnvironmentMutation,
   buildListEnvironmentsQuery,
-  useGramContext,
 } from "@gram/client/react-query";
+import type { Gram } from "@gram/client";
 import type { QueryClient } from "@tanstack/react-query";
 import { fromPromise } from "xstate";
 
@@ -90,7 +90,7 @@ export type WizardServices = {
   >;
 };
 
-export type GramClient = ReturnType<typeof useGramContext>;
+export type GramClient = Gram;
 
 export function createWizardServices(
   client: GramClient,

@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => {
     invalidateAllRemoteSessionIssuers: vi.fn(),
     invalidateAllRemoteSessionClients: vi.fn(),
     invalidateAllUserSessionIssuers: vi.fn(),
+    isFeatureEnabled: vi.fn(() => false),
   };
 });
 
@@ -77,10 +78,14 @@ vi.mock("@/contexts/Fetcher", () => ({
   }),
 }));
 
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({}),
+}));
+
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({
     capture: mocks.capture,
-    isFeatureEnabled: () => false,
+    isFeatureEnabled: mocks.isFeatureEnabled,
   }),
 }));
 
@@ -140,6 +145,25 @@ const toolset = {
   oauthEnablementMetadata: { oauth2SecurityCount: 0 },
 } as unknown as Parameters<typeof ConnectOAuthModal>[0]["toolset"];
 
+const oauthToolset = {
+  ...toolset,
+  rawTools: [
+    {
+      externalMcpToolDefinition: {
+        requiresOauth: true,
+        slug: "my-oauth-server",
+        name: "proxy",
+        registryServerName: "My OAuth Server",
+        oauthVersion: "2.1",
+        oauthAuthorizationEndpoint: "https://idp.example/oauth/authorize",
+        oauthTokenEndpoint: "https://idp.example/oauth/token",
+        oauthRegistrationEndpoint: "https://idp.example/oauth/register",
+        oauthScopesSupported: ["read"],
+      },
+    },
+  ],
+} as unknown as Parameters<typeof ConnectOAuthModal>[0]["toolset"];
+
 function renderWizard(
   props: Partial<Parameters<typeof ConnectOAuthModal>[0]> = {},
 ) {
@@ -165,6 +189,7 @@ beforeEach(() => {
   for (const fn of Object.values(mocks)) {
     if (typeof fn === "function" && "mockClear" in fn) fn.mockClear();
   }
+  mocks.isFeatureEnabled.mockReturnValue(false);
 });
 
 afterEach(() => {
@@ -182,6 +207,12 @@ describe("OAuthWizard — rendering", () => {
     expect(screen.getByText("Connect OAuth")).toBeTruthy();
     expect(screen.getByRole("button", { name: /OAuth Proxy/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /External OAuth/ })).toBeTruthy();
+  });
+
+  it("shows interactive auth status when user-session onboarding is enabled", () => {
+    mocks.isFeatureEnabled.mockReturnValue(true);
+    renderWizard({ toolset: oauthToolset });
+    expect(screen.getByText("Interactive auth enabled")).toBeTruthy();
   });
 });
 

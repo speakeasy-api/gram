@@ -2,6 +2,7 @@ import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Dialog } from "@/components/ui/dialog";
 import { useSession } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
+import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
@@ -14,7 +15,6 @@ import {
   invalidateAllRemoteSessionIssuers,
   invalidateAllToolset,
   invalidateAllUserSessionIssuers,
-  useGramContext,
 } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
@@ -90,7 +90,7 @@ function WizardBody({
   toolsetSlug: string;
   toolset: Toolset;
 }) {
-  const client = useGramContext();
+  const client = useSdkClient();
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const session = useSession();
