@@ -30,7 +30,7 @@ export type RiskResult = {
    */
   createdAt: Date;
   /**
-   * Human-readable description of the finding.
+   * Human-readable, source-agnostic description of the finding. Never echoes the matched value and never leaks internal validator detail. Safe to display verbatim.
    */
   description?: string | undefined;
   /**
@@ -42,7 +42,7 @@ export type RiskResult = {
    */
   id: string;
   /**
-   * The matched secret or sensitive data.
+   * The matched secret or sensitive data. Treat as sensitive; do not surface unredacted in public contracts.
    */
   match?: string | undefined;
   /**
@@ -54,11 +54,11 @@ export type RiskResult = {
    */
   policyVersion: number;
   /**
-   * The matched rule identifier.
+   * The matched rule identifier, in lowercase kebab-case. The pair (source, rule_id) is the stable composite key consumers should use to recognize a finding type; the same id never carries a source prefix.
    */
   ruleId?: string | undefined;
   /**
-   * Detection source (e.g. gitleaks).
+   * Detection source (e.g. gitleaks). Stable, lowercase identifier of the scanner that produced this finding.
    */
   source: string;
   /**
