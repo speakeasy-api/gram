@@ -1,5 +1,13 @@
 # dashboard
 
+## 0.53.1
+
+### Patch Changes
+
+- 3eaeb9b: Rename the plugins publish CTA from "Publish to GitHub" to "Publish Private Marketplace".
+- 2b15965: Allow users to rename MCP servers from the server detail page without changing the server URL slug.
+- f837455: Updated risk overview and policy page headers to match the shared page layout and Moonshine CTA patterns.
+
 ## 0.53.0
 
 ### Minor Changes
