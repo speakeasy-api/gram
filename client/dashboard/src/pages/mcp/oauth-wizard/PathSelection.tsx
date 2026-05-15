@@ -15,6 +15,9 @@ import type { DiscoveredOAuth } from "./machine-types";
 export function PathSelection() {
   const send = WizardContext.useActorRef().send;
   const discovered = WizardContext.useSelector((s) => s.context.discovered);
+  const onboardToUserSessions = WizardContext.useSelector(
+    (s) => s.context.onboardToUserSessions,
+  );
   const canAutoConfigure = canAutoConfigureFromDiscovered(discovered);
 
   return (
@@ -34,8 +37,9 @@ export function PathSelection() {
             badges={<Badge variant="information">Recommended</Badge>}
           >
             <Type muted small>
-              Automatically set up OAuth Proxy based on pre-discovered details
-              about this MCP server.
+              {onboardToUserSessions
+                ? "Automatically set up user sessions based on pre-discovered OAuth details about this MCP server."
+                : "Automatically set up OAuth Proxy based on pre-discovered details about this MCP server."}
             </Type>
           </PathOptionCard>
         )}

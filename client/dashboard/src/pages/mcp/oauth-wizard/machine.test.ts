@@ -20,6 +20,7 @@ import {
   nextEnvironmentName,
   type AddExternalOAuthInput,
   type AddOAuthProxyInput,
+  type ConfigureUserSessionsInput,
   type CreateEnvironmentInput,
   type CreateEnvironmentOutput,
   type DeleteEnvironmentInput,
@@ -75,6 +76,9 @@ function happyServices() {
         clientSecret: "auto-secret",
         tokenAuthMethod: "client_secret_basic",
       }),
+    ),
+    configureUserSessions: fromPromise<void, ConfigureUserSessionsInput>(
+      async () => {},
     ),
   };
 }
@@ -229,6 +233,7 @@ function withExternal(over: Partial<Context["external"]> = {}): Context {
     toolsetSlug: "",
     toolsetName: "",
     activeOrganizationId: "",
+    onboardToUserSessions: false,
   };
 }
 
@@ -690,6 +695,39 @@ describe("oauthWizardMachine — auto-configure from path selection", () => {
     expect(snap.context.proxy.clientSecret).toBe("auto-secret");
     expect(snap.context.envSlug).toBe("env-new");
     expect(snap.context.result?.success).toBe(true);
+  });
+
+  it("uses the user-session onboarding path when the feature flag is enabled", async () => {
+    const configureUserSessions = fromPromise<void, ConfigureUserSessionsInput>(
+      async ({ input }) => {
+        expect(input.toolsetSlug).toBe("ts");
+        expect(input.toolsetName).toBe("Toolset");
+        expect(input.oauth.registrationEndpoint).toBe(
+          VALID_PROXY_METADATA.registration_endpoint,
+        );
+      },
+    );
+    const actor = makeActor(
+      { ...inputWithDiscovered, onboardToUserSessions: true },
+      {
+        ...happyServices(),
+        configureUserSessions,
+      },
+    );
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+
+    expect(actor.getSnapshot().matches({ userSessions: "submitting" })).toBe(
+      true,
+    );
+
+    await waitFor(actor, (s) => s.matches({ result: "success" }), {
+      timeout: 1000,
+    });
+
+    const snap = actor.getSnapshot();
+    expect(snap.context.result?.message).toContain("User sessions");
+    expect(snap.context.envSlug).toBeNull();
   });
 
   it("registerClient failure routes to autoRegisterFailed", async () => {

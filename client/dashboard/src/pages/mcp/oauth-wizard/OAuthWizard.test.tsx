@@ -27,6 +27,9 @@ const mocks = vi.hoisted(() => {
     invalidateAllToolset: vi.fn(),
     invalidateAllGetMcpMetadata: vi.fn(),
     invalidateAllListEnvironments: vi.fn(),
+    invalidateAllRemoteSessionIssuers: vi.fn(),
+    invalidateAllRemoteSessionClients: vi.fn(),
+    invalidateAllUserSessionIssuers: vi.fn(),
   };
 });
 
@@ -35,6 +38,9 @@ vi.mock("@gram/client/react-query", () => ({
   invalidateAllToolset: mocks.invalidateAllToolset,
   invalidateAllGetMcpMetadata: mocks.invalidateAllGetMcpMetadata,
   invalidateAllListEnvironments: mocks.invalidateAllListEnvironments,
+  invalidateAllRemoteSessionIssuers: mocks.invalidateAllRemoteSessionIssuers,
+  invalidateAllRemoteSessionClients: mocks.invalidateAllRemoteSessionClients,
+  invalidateAllUserSessionIssuers: mocks.invalidateAllUserSessionIssuers,
   buildAddExternalOAuthServerMutation: () => ({
     mutationKey: [],
     mutationFn: mocks.addExternalOAuth,
@@ -72,7 +78,10 @@ vi.mock("@/contexts/Fetcher", () => ({
 }));
 
 vi.mock("@/contexts/Telemetry", () => ({
-  useTelemetry: () => ({ capture: mocks.capture }),
+  useTelemetry: () => ({
+    capture: mocks.capture,
+    isFeatureEnabled: () => false,
+  }),
 }));
 
 vi.mock("@/hooks/useProductTier", () => ({

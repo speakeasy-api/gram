@@ -1,4 +1,5 @@
 import type { Toolset } from "@/lib/toolTypes";
+import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
 import type { OAuthProxyProvider } from "@gram/client/models/components";
 
 // Pure helpers that derive migration defaults from a toolset's first
@@ -40,7 +41,7 @@ export function deriveMigrationDefaults(
   // and the remote session issuer live in different tables with independent
   // uniqueness, so the same value works for both and reads as a pair. 4
   // bytes of entropy is plenty for project-scoped uniqueness.
-  const slug = `${toolset.slug}-${randomSlugSuffix()}`;
+  const slug = buildUserSessionResourceSlug(toolset.slug);
   return {
     proxyProvider: proxy,
     userSessionIssuerSlug: slug,
@@ -58,10 +59,4 @@ function extractOrigin(url: string | null | undefined): string | null {
   } catch {
     return null;
   }
-}
-
-function randomSlugSuffix(): string {
-  const bytes = new Uint8Array(4);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
