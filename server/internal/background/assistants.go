@@ -161,6 +161,16 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 		if !result.RuntimeActive {
 			return nil
 		}
+		if result.BootstrappedRuntime {
+			// v2 cold admit fanned out only this thread to avoid a concurrent
+			// Ensure race; the runtime row is now active so signal the
+			// coordinator to admit any siblings that were held back.
+			if err := workflow.ExecuteActivity(ctx, a.SignalAssistantCoordinator, activities.SignalAssistantCoordinatorInput{
+				AssistantID: result.AssistantID,
+			}).Get(ctx, nil); err != nil {
+				return err
+			}
+		}
 
 		var waitFor time.Duration
 		if result.WarmUntil != "" {

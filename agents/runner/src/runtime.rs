@@ -107,14 +107,29 @@ pub struct ConfiguredThread {
 
 pub enum McpCmd {
     /// Force a server to disconnect and reconnect from scratch.
+    ///
+    /// `tokens` is the calling thread's bearer slot — the actor scopes it
+    /// onto `THREAD_TOKEN` for the duration of `connect_server`, otherwise
+    /// the initial handshake (run in the actor's own tokio task) reads the
+    /// empty host fallback and protected Gram MCP endpoints reject it.
     ForceReconnect {
         server_id: McpServerId,
+        tokens: TokenRegistry,
         reply: oneshot::Sender<Result<(), String>>,
     },
     /// Register a server that the actor has not yet seen. Idempotent — the
-    /// actor skips it if already registered.
+    /// actor skips it if already registered. See `ForceReconnect` for the
+    /// `tokens` rationale.
     Register {
         config: McpServerConfig,
+        tokens: TokenRegistry,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+    /// Disconnect a server that's no longer in the assistant's toolset
+    /// without registering a replacement. The actor drops the transport
+    /// so subsequent agent turns can't call into the removed server.
+    Disconnect {
+        server_id: McpServerId,
         reply: oneshot::Sender<Result<(), String>>,
     },
 }
@@ -468,10 +483,50 @@ async fn reconcile_mcp_servers(
     host: &Arc<RuntimeHost>,
     incoming: &[McpServer],
 ) -> Result<(), RunnerError> {
+    let mut state = host.mcp.lock().await;
+
+    // Caller is in the per-thread tokio task (or the /threads/turn handler
+    // before spawn); THREAD_TOKEN is the calling thread's bearer slot. The
+    // MCP actor runs in its own task and does not inherit task-locals, so we
+    // pass the registry through McpCmd::* and have the actor re-scope it
+    // around `connect_server` — without that, the initial handshake to
+    // protected Gram MCP endpoints carries the empty host fallback bearer.
+    let thread_tokens = THREAD_TOKEN
+        .try_with(|r| r.clone())
+        .unwrap_or_else(|_| host.tokens.clone());
+
+    // Servers absent from the new bootstrap are no longer in the assistant's
+    // toolset; drop them so later turns on this warm VM can't keep calling
+    // tools the assistant no longer exposes. Matched by id — config drift
+    // for still-present ids is handled by the re-register pass below.
+    let removed: Vec<McpServer> = state
+        .registered
+        .iter()
+        .filter(|prev| !incoming.iter().any(|s| s.id == prev.id))
+        .cloned()
+        .collect();
+    for server in &removed {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        if host
+            .mcp_cmd_tx
+            .send(McpCmd::Disconnect {
+                server_id: McpServerId::new(server.id.clone()),
+                reply: reply_tx,
+            })
+            .await
+            .is_err()
+        {
+            return Err(RunnerError::Loop("mcp actor channel closed".into()));
+        }
+        match reply_rx.await {
+            Ok(_) => state.registered.retain(|s| s.id != server.id),
+            Err(_) => return Err(RunnerError::Loop("mcp actor reply dropped".into())),
+        }
+    }
+
     if incoming.is_empty() {
         return Ok(());
     }
-    let mut state = host.mcp.lock().await;
     // A warm VM serves multiple threads under one assistant; a later thread's
     // bootstrap may carry the same MCP server id with a different URL or
     // header set (e.g. environment switch). Re-register on drift so the actor
@@ -496,6 +551,7 @@ async fn reconcile_mcp_servers(
             .mcp_cmd_tx
             .send(McpCmd::Register {
                 config,
+                tokens: thread_tokens.clone(),
                 reply: reply_tx,
             })
             .await
@@ -554,7 +610,11 @@ fn build_mcp_server_config(
 async fn run_mcp_actor(mut manager: McpServerManager, mut cmd_rx: mpsc::Receiver<McpCmd>) {
     while let Some(cmd) = cmd_rx.recv().await {
         match cmd {
-            McpCmd::Register { config, reply } => {
+            McpCmd::Register {
+                config,
+                tokens,
+                reply,
+            } => {
                 let server_id = config.id.clone();
                 // Drop the existing connection before re-registering so the
                 // new config (URL or headers) actually takes effect; the
@@ -566,37 +626,62 @@ async fn run_mcp_actor(mut manager: McpServerManager, mut cmd_rx: mpsc::Receiver
                     tracing::debug!(server_id = %server_id, error = %e, "disconnect before re-register");
                 }
                 manager.register_server(config);
-                let result = match manager.connect_server(&server_id).await {
-                    Ok(handle) => {
-                        tracing::info!(
-                            server_id = %server_id,
-                            tools = handle.snapshot().tools.len(),
-                            "mcp register ok"
-                        );
-                        Ok(())
-                    }
-                    Err(e) => {
-                        tracing::warn!(server_id = %server_id, error = %e, "mcp register/connect failed");
-                        Err(e.to_string())
-                    }
-                };
+                let result = THREAD_TOKEN
+                    .scope(tokens, async {
+                        match manager.connect_server(&server_id).await {
+                            Ok(handle) => {
+                                tracing::info!(
+                                    server_id = %server_id,
+                                    tools = handle.snapshot().tools.len(),
+                                    "mcp register ok"
+                                );
+                                Ok(())
+                            }
+                            Err(e) => {
+                                tracing::warn!(server_id = %server_id, error = %e, "mcp register/connect failed");
+                                Err(e.to_string())
+                            }
+                        }
+                    })
+                    .await;
                 let _ = reply.send(result);
             }
-            McpCmd::ForceReconnect { server_id, reply } => {
+            McpCmd::ForceReconnect {
+                server_id,
+                tokens,
+                reply,
+            } => {
                 if let Err(e) = manager.disconnect_server(&server_id).await {
                     tracing::debug!(server_id = %server_id, error = %e, "disconnect during force reconnect");
                 }
-                let result = match manager.connect_server(&server_id).await {
-                    Ok(handle) => {
-                        tracing::info!(
-                            server_id = %server_id,
-                            tools = handle.snapshot().tools.len(),
-                            "mcp force reconnect ok"
-                        );
+                let result = THREAD_TOKEN
+                    .scope(tokens, async {
+                        match manager.connect_server(&server_id).await {
+                            Ok(handle) => {
+                                tracing::info!(
+                                    server_id = %server_id,
+                                    tools = handle.snapshot().tools.len(),
+                                    "mcp force reconnect ok"
+                                );
+                                Ok(())
+                            }
+                            Err(e) => {
+                                tracing::warn!(server_id = %server_id, error = %e, "mcp force reconnect failed");
+                                Err(e.to_string())
+                            }
+                        }
+                    })
+                    .await;
+                let _ = reply.send(result);
+            }
+            McpCmd::Disconnect { server_id, reply } => {
+                let result = match manager.disconnect_server(&server_id).await {
+                    Ok(()) => {
+                        tracing::info!(server_id = %server_id, "mcp disconnect ok");
                         Ok(())
                     }
                     Err(e) => {
-                        tracing::warn!(server_id = %server_id, error = %e, "mcp force reconnect failed");
+                        tracing::warn!(server_id = %server_id, error = %e, "mcp disconnect failed");
                         Err(e.to_string())
                     }
                 };

@@ -8,6 +8,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, oneshot};
 
+use crate::http_layer::{THREAD_TOKEN, TokenRegistry};
 use crate::runtime::McpCmd;
 
 const TOOL_NAME: &str = "mcp_force_reconnect";
@@ -88,9 +89,16 @@ impl Tool for McpForceReconnectTool {
 
         let (reply_tx, reply_rx) = oneshot::channel();
         let server_id = McpServerId::new(input.server_id.clone());
+        // Tool runs inside the calling thread's task; lift its bearer slot
+        // into the McpCmd so the actor task can re-scope THREAD_TOKEN around
+        // the reconnect handshake.
+        let tokens = THREAD_TOKEN
+            .try_with(|r| r.clone())
+            .unwrap_or_else(|_| TokenRegistry::new(""));
         self.cmd_tx
             .send(McpCmd::ForceReconnect {
                 server_id,
+                tokens,
                 reply: reply_tx,
             })
             .await

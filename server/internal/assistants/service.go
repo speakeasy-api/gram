@@ -260,6 +260,13 @@ type ProcessThreadEventsResult struct {
 	RuntimeActive     bool
 	RetryAdmission    bool
 	ProcessedAnyEvent bool
+	// BootstrappedRuntime signals that this call transitioned the v2 runtime
+	// row from `starting` to `active`. v2 admit only fans out the first
+	// pending thread when reserving a fresh row (Ensure has no per-row CAS,
+	// so concurrent ensures would race the Fly machine launch). The
+	// workflow signals the coordinator on this flag so the remaining
+	// pending threads get admitted against the now-active row.
+	BootstrappedRuntime bool
 }
 
 // ExpireThreadRuntimeResult reports the outcome of an expire attempt.
@@ -1296,6 +1303,15 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 		ProjectID:   assistant.ProjectID,
 		AssistantID: assistant.ID,
 	})
+	// When the runtime row is freshly reserved here, only admit the first
+	// thread. The Fly Ensure path has no CAS or lock around machine launch:
+	// fanning out all pending threads against a `starting` row lets two
+	// thread workflows race their Ensure activities and launch separate
+	// machines, with only one app/machine recorded in
+	// backend_metadata_json. The first admitted thread brings the runtime
+	// to `active`; subsequent admits fall through the lookup with row in
+	// active state and admit the rest.
+	firstThreadOnly := false
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		if err := queries.ReserveAssistantRuntimeV2(ctx, assistantrepo.ReserveAssistantRuntimeV2Params{
@@ -1307,8 +1323,14 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 		}); err != nil {
 			return AdmitPendingThreadsResult{}, fmt.Errorf("reserve v2 assistant runtime: %w", err)
 		}
+		firstThreadOnly = true
 	case err != nil:
 		return AdmitPendingThreadsResult{}, fmt.Errorf("lookup v2 runtime: %w", err)
+	case row.State == runtimeStateStarting:
+		// Another worker reserved the row but its admitted thread hasn't
+		// finished Ensure yet. Same race condition — don't fan out until
+		// the runtime is active.
+		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
 	case row.State == runtimeStateExpiring:
 		// The warm-timer workflow has CASed the row to expiring and is
 		// driving Stop. Signalling threads now would race with that path:
@@ -1324,6 +1346,9 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 		return AdmitPendingThreadsResult{}, fmt.Errorf("commit assistant admit tx (v2): %w", err)
 	}
 
+	if firstThreadOnly {
+		threads = threads[:1]
+	}
 	admitted := make([]uuid.UUID, 0, len(threads))
 	for _, t := range threads {
 		admitted = append(admitted, t.ID)
@@ -1332,6 +1357,7 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 }
 
 func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, threadID uuid.UUID) (ProcessThreadEventsResult, error) {
+	bootstrappedRuntime := false
 	thread, assistant, runtimeRecord, err := s.loadThreadContext(ctx, projectID, threadID)
 	if err != nil {
 		return ProcessThreadEventsResult{}, err
@@ -1362,12 +1388,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		s.logger.ErrorContext(ctx, "ensure assistant runtime failed", attr.SlogAssistantThreadID(thread.ID.String()), attr.SlogError(err))
 		_ = s.stopRuntimeRecord(ctx, thread.ProjectID, runtimeRecord.ID, runtimeStateFailed)
 		return ProcessThreadEventsResult{
-			AssistantID:       assistant.ID,
-			WarmUntil:         time.Time{},
-			WarmTTLSeconds:    assistant.WarmTTLSeconds,
-			RuntimeActive:     false,
-			RetryAdmission:    true,
-			ProcessedAnyEvent: false,
+			AssistantID:         assistant.ID,
+			WarmUntil:           time.Time{},
+			WarmTTLSeconds:      assistant.WarmTTLSeconds,
+			RuntimeActive:       false,
+			RetryAdmission:      true,
+			ProcessedAnyEvent:   false,
+			BootstrappedRuntime: bootstrappedRuntime,
 		}, nil
 	}
 	if err := s.updateRuntimeEnsureResult(ctx, &runtimeRecord, ensureResult); err != nil {
@@ -1378,6 +1405,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		if err := s.setRuntimeActive(ctx, thread.ProjectID, runtimeRecord.ID, time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds)*time.Second)); err != nil {
 			return ProcessThreadEventsResult{}, err
 		}
+		bootstrappedRuntime = true
 	}
 
 	processedAny := false
@@ -1415,12 +1443,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				_ = s.runtime.Stop(ctx, runtimeRecord)
 				_ = s.stopRuntimeRecord(ctx, thread.ProjectID, runtimeRecord.ID, runtimeStateFailed)
 				return ProcessThreadEventsResult{
-					AssistantID:       assistant.ID,
-					WarmUntil:         time.Time{},
-					WarmTTLSeconds:    assistant.WarmTTLSeconds,
-					RuntimeActive:     false,
-					RetryAdmission:    true,
-					ProcessedAnyEvent: processedAny,
+					AssistantID:         assistant.ID,
+					WarmUntil:           time.Time{},
+					WarmTTLSeconds:      assistant.WarmTTLSeconds,
+					RuntimeActive:       false,
+					RetryAdmission:      true,
+					ProcessedAnyEvent:   processedAny,
+					BootstrappedRuntime: bootstrappedRuntime,
 				}, nil
 			}
 
@@ -1444,12 +1473,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 						return ProcessThreadEventsResult{}, err
 					}
 					return ProcessThreadEventsResult{
-						AssistantID:       assistant.ID,
-						WarmUntil:         warmUntil,
-						WarmTTLSeconds:    assistant.WarmTTLSeconds,
-						RuntimeActive:     true,
-						RetryAdmission:    false,
-						ProcessedAnyEvent: processedAny,
+						AssistantID:         assistant.ID,
+						WarmUntil:           warmUntil,
+						WarmTTLSeconds:      assistant.WarmTTLSeconds,
+						RuntimeActive:       true,
+						RetryAdmission:      false,
+						ProcessedAnyEvent:   processedAny,
+						BootstrappedRuntime: bootstrappedRuntime,
 					}, nil
 				}
 				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_self_heal", "assistant history self-heal applied", "WARN", runErr)
@@ -1459,12 +1489,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 					return ProcessThreadEventsResult{}, err
 				}
 				return ProcessThreadEventsResult{
-					AssistantID:       assistant.ID,
-					WarmUntil:         time.Time{},
-					WarmTTLSeconds:    assistant.WarmTTLSeconds,
-					RuntimeActive:     false,
-					RetryAdmission:    true,
-					ProcessedAnyEvent: processedAny,
+					AssistantID:         assistant.ID,
+					WarmUntil:           time.Time{},
+					WarmTTLSeconds:      assistant.WarmTTLSeconds,
+					RuntimeActive:       false,
+					RetryAdmission:      true,
+					ProcessedAnyEvent:   processedAny,
+					BootstrappedRuntime: bootstrappedRuntime,
 				}, nil
 			}
 
@@ -1483,12 +1514,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 					return ProcessThreadEventsResult{}, err
 				}
 				return ProcessThreadEventsResult{
-					AssistantID:       assistant.ID,
-					WarmUntil:         warmUntil,
-					WarmTTLSeconds:    assistant.WarmTTLSeconds,
-					RuntimeActive:     true,
-					RetryAdmission:    false,
-					ProcessedAnyEvent: processedAny,
+					AssistantID:         assistant.ID,
+					WarmUntil:           warmUntil,
+					WarmTTLSeconds:      assistant.WarmTTLSeconds,
+					RuntimeActive:       true,
+					RetryAdmission:      false,
+					ProcessedAnyEvent:   processedAny,
+					BootstrappedRuntime: bootstrappedRuntime,
 				}, nil
 			}
 
@@ -1504,12 +1536,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 					return ProcessThreadEventsResult{}, err
 				}
 				return ProcessThreadEventsResult{
-					AssistantID:       assistant.ID,
-					WarmUntil:         warmUntil,
-					WarmTTLSeconds:    assistant.WarmTTLSeconds,
-					RuntimeActive:     true,
-					RetryAdmission:    false,
-					ProcessedAnyEvent: processedAny,
+					AssistantID:         assistant.ID,
+					WarmUntil:           warmUntil,
+					WarmTTLSeconds:      assistant.WarmTTLSeconds,
+					RuntimeActive:       true,
+					RetryAdmission:      false,
+					ProcessedAnyEvent:   processedAny,
+					BootstrappedRuntime: bootstrappedRuntime,
 				}, nil
 			}
 			// Transient turn-level failure (LLM 5xx, MCP blip) — reset event,
@@ -1524,12 +1557,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				return ProcessThreadEventsResult{}, err
 			}
 			return ProcessThreadEventsResult{
-				AssistantID:       assistant.ID,
-				WarmUntil:         warmUntil,
-				WarmTTLSeconds:    assistant.WarmTTLSeconds,
-				RuntimeActive:     true,
-				RetryAdmission:    true,
-				ProcessedAnyEvent: processedAny,
+				AssistantID:         assistant.ID,
+				WarmUntil:           warmUntil,
+				WarmTTLSeconds:      assistant.WarmTTLSeconds,
+				RuntimeActive:       true,
+				RetryAdmission:      true,
+				ProcessedAnyEvent:   processedAny,
+				BootstrappedRuntime: bootstrappedRuntime,
 			}, nil
 		}
 
@@ -1545,12 +1579,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		return ProcessThreadEventsResult{}, err
 	}
 	return ProcessThreadEventsResult{
-		AssistantID:       assistant.ID,
-		WarmUntil:         warmUntil,
-		WarmTTLSeconds:    assistant.WarmTTLSeconds,
-		RuntimeActive:     true,
-		RetryAdmission:    false,
-		ProcessedAnyEvent: processedAny,
+		AssistantID:         assistant.ID,
+		WarmUntil:           warmUntil,
+		WarmTTLSeconds:      assistant.WarmTTLSeconds,
+		RuntimeActive:       true,
+		RetryAdmission:      false,
+		ProcessedAnyEvent:   processedAny,
+		BootstrappedRuntime: bootstrappedRuntime,
 	}, nil
 }
 
