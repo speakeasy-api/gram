@@ -264,14 +264,14 @@ function RiskActivityContent() {
 function RiskActivityHeader() {
   return (
     <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-8 py-2.5 text-xs font-medium tracking-wide uppercase">
-      <div className="w-[150px] shrink-0">Timestamp</div>
-      <div className="w-[140px] shrink-0">Category</div>
-      <div className="w-[160px] shrink-0">Rule</div>
-      <div className="min-w-[160px] flex-1">Chat</div>
-      <div className="w-[180px] shrink-0">User</div>
-      <div className="w-[220px] shrink-0">Match</div>
-      <div className="w-[220px] shrink-0">Policy Note</div>
-      <div className="w-[110px] shrink-0 text-right">Actions</div>
+      <div className="w-[172px] shrink-0">Timestamp</div>
+      <div className="w-[256px] shrink-0">Category</div>
+      <div className="w-[288px] shrink-0">Rule</div>
+      <div className="w-[288px] shrink-0">Session Name</div>
+      <div className="w-[288px] shrink-0">User</div>
+      <div className="min-w-[320px] flex-1">Match</div>
+      <div className="w-[288px] shrink-0">Policy Note</div>
+      <div className="flex w-[110px] shrink-0 justify-center">Actions</div>
     </div>
   );
 }
@@ -378,22 +378,20 @@ function RiskActivityRow({
         }
       }}
     >
-      <div className="text-muted-foreground w-[150px] shrink-0 font-mono text-xs">
+      <div className="text-muted-foreground w-[172px] shrink-0 font-mono text-xs">
         {result.createdAt ? new Date(result.createdAt).toLocaleString() : "-"}
       </div>
-      <div className="w-[140px] shrink-0">
+      <div className="w-[256px] shrink-0">
         <CategoryLabel source={result.source} ruleId={result.ruleId} />
       </div>
-      <div className="w-[160px] shrink-0">
+      <div className="w-[288px] shrink-0">
         <span className="font-mono text-xs">{result.ruleId ?? "-"}</span>
       </div>
-      <div className="text-muted-foreground min-w-[160px] flex-1 truncate">
+      <div className="w-[288px] shrink-0 truncate">
         {result.chatTitle ?? "Untitled"}
       </div>
-      <div className="text-muted-foreground w-[180px] shrink-0 truncate">
-        {result.userId ?? "-"}
-      </div>
-      <div className="w-[220px] shrink-0 truncate">
+      <div className="w-[288px] shrink-0 truncate">{result.userId ?? "-"}</div>
+      <div className="min-w-[320px] flex-1 truncate">
         {isShadowMCP && result.match ? (
           <span className="font-mono text-xs" title={result.match}>
             {result.match}
@@ -402,16 +400,13 @@ function RiskActivityRow({
           <MaskedMatch value={result.match} />
         )}
       </div>
-      <div
-        className="text-muted-foreground w-[220px] shrink-0 truncate italic"
-        title={policyNote}
-      >
+      <div className="w-[288px] shrink-0 truncate" title={policyNote}>
         {policyNote ?? "-"}
       </div>
-      <div className="flex w-[110px] shrink-0 justify-end">
+      <div className="flex w-[110px] shrink-0 justify-center">
         {isShadowMCP && result.match ? (
           <Button
-            variant="ghost"
+            variant="secondary"
             size="sm"
             disabled={isExcluding}
             onClick={(e) => {
@@ -420,7 +415,7 @@ function RiskActivityRow({
             }}
             title="Exclude this MCP server from the policy"
           >
-            <ShieldOff className="mr-1 h-3 w-3" />
+            <ShieldOff className="h-3 w-3" />
             <span className="text-xs">Exclude</span>
           </Button>
         ) : null}
