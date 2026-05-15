@@ -182,6 +182,17 @@ func (q *Queries) DisableOrganizationByWorkosID(ctx context.Context, arg Disable
 	return result.RowsAffected(), nil
 }
 
+const expireInvitationForTest = `-- name: ExpireInvitationForTest :exec
+UPDATE organization_invitations
+SET expires_at = clock_timestamp() - interval '1 hour'
+WHERE id = $1
+`
+
+func (q *Queries) ExpireInvitationForTest(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, expireInvitationForTest, id)
+	return err
+}
+
 const getInvitationByID = `-- name: GetInvitationByID :one
 SELECT id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
 FROM organization_invitations

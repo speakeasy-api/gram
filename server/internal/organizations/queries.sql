@@ -205,6 +205,11 @@ WHERE id = @id
   AND state = 'pending'
   AND expires_at > clock_timestamp();
 
+-- name: ExpireInvitationForTest :exec
+UPDATE organization_invitations
+SET expires_at = clock_timestamp() - interval '1 hour'
+WHERE id = @id;
+
 -- name: GetInvitationByTokenHash :one
 SELECT *
 FROM organization_invitations

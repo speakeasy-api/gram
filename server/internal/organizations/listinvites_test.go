@@ -88,10 +88,7 @@ func TestService_ListInvites_ExcludesExpired(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = ti.conn.Exec(ctx,
-		"UPDATE organization_invitations SET expires_at = clock_timestamp() - interval '1 hour' WHERE id = $1",
-		row.ID,
-	)
+	err = orgrepo.New(ti.conn).ExpireInvitationForTest(ctx, row.ID)
 	require.NoError(t, err)
 
 	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
@@ -143,10 +140,7 @@ func TestAcceptInvitation_ExpiredReturnsZeroRows(t *testing.T) {
 	require.NoError(t, err)
 
 	// Expire it manually.
-	_, err = ti.conn.Exec(ctx,
-		"UPDATE organization_invitations SET expires_at = clock_timestamp() - interval '1 hour' WHERE id = $1",
-		row.ID,
-	)
+	err = orgrepo.New(ti.conn).ExpireInvitationForTest(ctx, row.ID)
 	require.NoError(t, err)
 
 	// Accept should affect 0 rows because expired.
