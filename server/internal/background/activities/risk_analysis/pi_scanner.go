@@ -15,10 +15,11 @@ import (
 // action='block' policies).
 const SourcePromptInjection = "prompt_injection"
 
-// RulePromptInjectionClassifierDeberta is the rule id stored in
-// risk_policies.prompt_injection_rules to opt a policy in to L1
-// classifier-backed detection on top of the always-on L0 heuristics.
-const RulePromptInjectionClassifierDeberta = "deberta-v3-classifier"
+// The L1 classifier opt-in is keyed by the canonical
+// `RulePromptInjectionClassifier` ("prompt-injection") in
+// risk_policies.prompt_injection_rules. The same value is what we emit on
+// the resulting Finding's rule_id — opting in by the rule you're trying to
+// detect.
 
 // promptInjectionClassifierFindingDescription is the human-readable description carried
 // on the Finding emitted when the L1 model flags a text. Kept short — the
@@ -46,7 +47,7 @@ func NewPromptInjectionScanner(logger *slog.Logger, classifier PromptInjectionCl
 }
 
 // Scan runs the heuristic rules unconditionally; runs the L1 classifier when
-// rules contains RulePromptInjectionClassifierDeberta. Used by the realtime risk scanner.
+// rules contains RulePromptInjectionClassifier. Used by the realtime risk scanner.
 func (s *PromptInjectionScanner) Scan(ctx context.Context, text string, rules []string) ([]Finding, error) {
 	if text == "" {
 		return nil, nil
@@ -54,7 +55,7 @@ func (s *PromptInjectionScanner) Scan(ctx context.Context, text string, rules []
 
 	findings := runHeuristics(text)
 
-	if !slices.Contains(rules, RulePromptInjectionClassifierDeberta) {
+	if !slices.Contains(rules, RulePromptInjectionClassifier) {
 		return findings, nil
 	}
 
@@ -89,7 +90,7 @@ func (s *PromptInjectionScanner) ScanBatch(ctx context.Context, texts []string, 
 		out[i] = runHeuristics(t)
 	}
 
-	if !slices.Contains(rules, RulePromptInjectionClassifierDeberta) {
+	if !slices.Contains(rules, RulePromptInjectionClassifier) {
 		return out, nil
 	}
 

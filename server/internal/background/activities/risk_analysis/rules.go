@@ -51,9 +51,12 @@ const (
 	RuleDestructiveTool = prefixDestructive + "tool"
 
 	// RulePromptInjectionClassifier is the canonical rule id emitted when
-	// the L1 ML classifier flags a message. The specific classifier
+	// the L1 ML classifier flags a message. The classifier gives a
+	// binary verdict without identifying a specific attack family, so it
+	// lives under `prompt-injection.unknown` — peer to the L0 sub-rules
+	// like `prompt-injection.role-hijack`. The specific classifier model
 	// (deberta-v3 today) is implementation detail.
-	RulePromptInjectionClassifier = "prompt-injection"
+	RulePromptInjectionClassifier = "prompt-injection.unknown"
 )
 
 // CanonicalGitleaksRuleID prepends the `secret.` prefix to a gitleaks rule
@@ -275,8 +278,9 @@ var ruleCatalog = func() map[string]ruleSpec {
 		cliDestructiveRule("destructive.cloud.kubectl-delete-namespace", "kubectl delete namespace"),
 		cliDestructiveRule("destructive.cloud.kubectl-delete-workload", "kubectl delete workload"),
 
-		// prompt_injection. The L1 classifier rule_id is just
-		// `prompt-injection` — the model (deberta-v3) is implementation
+		// prompt_injection. The L1 classifier lands at
+		// `prompt-injection.unknown` (no specific attack family identified
+		// by the binary model); the model (deberta-v3) is implementation
 		// detail. L0 heuristic matches carry a `prompt-injection.<heuristic>`
 		// sub-rule.
 		promptInjectionRule(RulePromptInjectionClassifier, "An ML classifier flagged this message as a prompt injection attempt."),

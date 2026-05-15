@@ -8,8 +8,8 @@
 //   shadow-mcp                   — unverified MCP tool call
 //   destructive.tool             — MCP tool annotated as destructive
 //   destructive.cli-<command>    — destructive shell / git / db / cloud command
-//   prompt-injection             — ML classifier prompt injection verdict
 //   prompt-injection.<heuristic> — L0 heuristic prompt injection match
+//   prompt-injection.unknown     — L1 ML classifier binary verdict
 export function canonicalizeRuleId(
   ruleId: string,
   source?: string | null,
@@ -38,15 +38,25 @@ export function canonicalizeRuleId(
   }
   if (src === "prompt_injection") {
     // The deberta classifier rule id in the policy form maps to
-    // `prompt-injection` on findings — the model is implementation
-    // detail. Other entries are heuristic rule names that get a
-    // `prompt-injection.` prefix.
-    if (id === "deberta-v3-classifier") return "prompt-injection";
+    // `prompt-injection.unknown` on findings — the binary model can't
+    // pin a specific attack family. Other entries are heuristic rule
+    // names that get a `prompt-injection.` prefix.
+    if (id === "deberta-v3-classifier") return "prompt-injection.unknown";
     return "prompt-injection." + id.toLowerCase();
   }
 
   // Unknown source: pass through lowercased.
   return id.toLowerCase();
+}
+
+// ruleIdToPresidioEntity converts a canonical `pii.<kebab>` rule id back
+// to the UPPER_SNAKE entity type Presidio's HTTP API speaks. Used at the
+// policy-payload boundary so the dashboard can store canonical ids
+// everywhere internally while still sending Presidio a compatible
+// entities list.
+export function ruleIdToPresidioEntity(ruleId: string): string {
+  const stripped = ruleId.startsWith("pii.") ? ruleId.slice(4) : ruleId;
+  return stripped.toUpperCase().replace(/-/g, "_");
 }
 
 // Humanize a kebab/dotted rule id we don't have catalog metadata for.

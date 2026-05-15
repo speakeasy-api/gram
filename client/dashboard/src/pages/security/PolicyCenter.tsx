@@ -64,6 +64,7 @@ import {
   type PolicyAction,
 } from "./policy-data";
 import { cn } from "@/lib/utils";
+import { ruleIdToPresidioEntity } from "./rule-ids";
 
 /** Presidio-backed categories */
 const PRESIDIO_CATEGORIES: RuleCategory[] = [
@@ -93,7 +94,11 @@ const ALL_CATEGORIES: RuleCategory[] = [
   "off_policy",
 ];
 
-/** Derive selected categories from a policy's sources + presidioEntities. */
+/** Derive selected categories from a policy's sources + presidioEntities.
+ *
+ * DETECTION_RULES.id is the canonical `pii.<kebab>` form; the wire format
+ * stored on the policy is the UPPER_SNAKE entity name Presidio speaks. We
+ * translate at this boundary so callers never see the wire format. */
 function policyToCategories(
   sources: string[],
   presidioEntities?: string[],
@@ -104,8 +109,10 @@ function policyToCategories(
   if (sources.includes("destructive_tool")) cats.add("destructive_tool");
   if (sources.includes("prompt_injection")) cats.add("prompt_injection");
   for (const cat of PRESIDIO_CATEGORIES) {
-    const catEntityIds = DETECTION_RULES[cat].map((r) => r.id);
-    if (catEntityIds.some((id) => presidioEntities?.includes(id))) {
+    const wireEntities = DETECTION_RULES[cat].map((r) =>
+      ruleIdToPresidioEntity(r.id),
+    );
+    if (wireEntities.some((id) => presidioEntities?.includes(id))) {
       cats.add(cat);
     }
   }
@@ -116,7 +123,12 @@ function policyToCategories(
  * categories and per-category rule selections. promptInjectionRules is the
  * subset of rule ids the user has ticked under the prompt_injection category;
  * the source itself is enabled by the category-level checkbox (heuristics are
- * the always-on baseline). */
+ * the always-on baseline).
+ *
+ * `presidioEntities` is translated to UPPER_SNAKE for Presidio's HTTP API;
+ * `promptInjectionRules` is the canonical rule id itself (the backend
+ * accepts the same string as both the policy opt-in key and the resulting
+ * finding rule_id). */
 function categoriesToPayload(
   cats: Set<RuleCategory>,
   promptInjectionRuleSelection: Set<string>,
@@ -138,7 +150,7 @@ function categoriesToPayload(
   for (const cat of PRESIDIO_CATEGORIES) {
     if (cats.has(cat)) {
       for (const rule of DETECTION_RULES[cat]) {
-        presidioEntities.push(rule.id);
+        presidioEntities.push(ruleIdToPresidioEntity(rule.id));
       }
     }
   }

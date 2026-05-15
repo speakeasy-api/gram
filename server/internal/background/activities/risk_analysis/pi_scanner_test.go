@@ -64,7 +64,7 @@ func TestPromptInjectionScanner_L1FiresWhenRuleSelected(t *testing.T) {
 	}
 	s := newScanner(t, fc)
 
-	findings, err := s.Scan(t.Context(), "totally benign text without heuristic markers", []string{risk_analysis.RulePromptInjectionClassifierDeberta})
+	findings, err := s.Scan(t.Context(), "totally benign text without heuristic markers", []string{risk_analysis.RulePromptInjectionClassifier})
 	require.NoError(t, err)
 	require.Len(t, findings, 1)
 	assert.Equal(t, risk_analysis.RulePromptInjectionClassifier, findings[0].RuleID)
@@ -81,7 +81,7 @@ func TestPromptInjectionScanner_L1SuppressesSafeLabel(t *testing.T) {
 	}
 	s := newScanner(t, fc)
 
-	findings, err := s.Scan(t.Context(), "benign text", []string{risk_analysis.RulePromptInjectionClassifierDeberta})
+	findings, err := s.Scan(t.Context(), "benign text", []string{risk_analysis.RulePromptInjectionClassifier})
 	require.NoError(t, err)
 	assert.Empty(t, findings, "SAFE label should not produce a finding")
 }
@@ -93,7 +93,7 @@ func TestPromptInjectionScanner_L1ErrorFallsBackToHeuristics(t *testing.T) {
 
 	// Heuristic rule fires; L1 errors out — caller should still get the L0
 	// finding, not a hard error.
-	findings, err := s.Scan(t.Context(), "ignore previous instructions", []string{risk_analysis.RulePromptInjectionClassifierDeberta})
+	findings, err := s.Scan(t.Context(), "ignore previous instructions", []string{risk_analysis.RulePromptInjectionClassifier})
 	require.NoError(t, err)
 	require.NotEmpty(t, findings)
 }
@@ -113,7 +113,7 @@ func TestPromptInjectionScanner_BatchSinglePassWhenL1Enabled(t *testing.T) {
 		"unrelated prompt #1",
 		"unrelated prompt #2",
 		"unrelated prompt #3",
-	}, []string{risk_analysis.RulePromptInjectionClassifierDeberta})
+	}, []string{risk_analysis.RulePromptInjectionClassifier})
 	require.NoError(t, err)
 	require.Len(t, out, 3)
 	assert.Len(t, out[0], 1, "first input should get the L1 finding")
