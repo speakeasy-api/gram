@@ -12,6 +12,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acceptInvitation = `-- name: AcceptInvitation :execrows
+UPDATE organization_invitations
+SET state = 'accepted',
+    accepted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND state = 'pending'
+  AND expires_at > clock_timestamp()
+`
+
+func (q *Queries) AcceptInvitation(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, acceptInvitation, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const attachWorkOSUserToOrg = `-- name: AttachWorkOSUserToOrg :exec
 INSERT INTO organization_user_relationships (
     organization_id,
@@ -52,6 +70,61 @@ func (q *Queries) ClearOrganizationWorkosID(ctx context.Context, organizationID 
 	return err
 }
 
+const createInvitation = `-- name: CreateInvitation :one
+INSERT INTO organization_invitations (
+    organization_id,
+    email,
+    token_hash,
+    inviter_user_id,
+    role_slug,
+    expires_at
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    clock_timestamp() + make_interval(days => $6::int)
+)
+RETURNING id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
+`
+
+type CreateInvitationParams struct {
+	OrganizationID string
+	Email          string
+	TokenHash      string
+	InviterUserID  pgtype.Text
+	RoleSlug       pgtype.Text
+	ExpiresInDays  int32
+}
+
+func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationParams) (OrganizationInvitation, error) {
+	row := q.db.QueryRow(ctx, createInvitation,
+		arg.OrganizationID,
+		arg.Email,
+		arg.TokenHash,
+		arg.InviterUserID,
+		arg.RoleSlug,
+		arg.ExpiresInDays,
+	)
+	var i OrganizationInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.TokenHash,
+		&i.InviterUserID,
+		&i.RoleSlug,
+		&i.State,
+		&i.ExpiresAt,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createOrganizationMetadata = `-- name: CreateOrganizationMetadata :exec
 INSERT INTO organization_metadata (id, name, slug)
 VALUES ($1, $2, $3)
@@ -65,22 +138,6 @@ type CreateOrganizationMetadataParams struct {
 
 func (q *Queries) CreateOrganizationMetadata(ctx context.Context, arg CreateOrganizationMetadataParams) error {
 	_, err := q.db.Exec(ctx, createOrganizationMetadata, arg.ID, arg.Name, arg.Slug)
-	return err
-}
-
-const deleteOrganizationRoleAssignmentsByWorkosUser = `-- name: DeleteOrganizationRoleAssignmentsByWorkosUser :exec
-DELETE FROM organization_role_assignments
-WHERE organization_id = $1
-  AND workos_user_id = $2
-`
-
-type DeleteOrganizationRoleAssignmentsByWorkosUserParams struct {
-	OrganizationID string
-	WorkosUserID   string
-}
-
-func (q *Queries) DeleteOrganizationRoleAssignmentsByWorkosUser(ctx context.Context, arg DeleteOrganizationRoleAssignmentsByWorkosUserParams) error {
-	_, err := q.db.Exec(ctx, deleteOrganizationRoleAssignmentsByWorkosUser, arg.OrganizationID, arg.WorkosUserID)
 	return err
 }
 
@@ -123,6 +180,92 @@ func (q *Queries) DisableOrganizationByWorkosID(ctx context.Context, arg Disable
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const expireInvitationForTest = `-- name: ExpireInvitationForTest :exec
+UPDATE organization_invitations
+SET expires_at = clock_timestamp() - interval '1 hour'
+WHERE id = $1
+`
+
+func (q *Queries) ExpireInvitationForTest(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, expireInvitationForTest, id)
+	return err
+}
+
+const expireStaleInvitations = `-- name: ExpireStaleInvitations :exec
+UPDATE organization_invitations
+SET state = 'expired',
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND email = $2
+  AND state = 'pending'
+  AND expires_at <= clock_timestamp()
+`
+
+type ExpireStaleInvitationsParams struct {
+	OrganizationID string
+	Email          string
+}
+
+// Transition pending invitations that have passed their expires_at to 'expired'
+// state. Called before creating a new invitation so the partial unique index
+// (org_id, email) WHERE state = 'pending' does not block re-inviting.
+func (q *Queries) ExpireStaleInvitations(ctx context.Context, arg ExpireStaleInvitationsParams) error {
+	_, err := q.db.Exec(ctx, expireStaleInvitations, arg.OrganizationID, arg.Email)
+	return err
+}
+
+const getInvitationByID = `-- name: GetInvitationByID :one
+SELECT id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
+FROM organization_invitations
+WHERE id = $1
+`
+
+func (q *Queries) GetInvitationByID(ctx context.Context, id uuid.UUID) (OrganizationInvitation, error) {
+	row := q.db.QueryRow(ctx, getInvitationByID, id)
+	var i OrganizationInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.TokenHash,
+		&i.InviterUserID,
+		&i.RoleSlug,
+		&i.State,
+		&i.ExpiresAt,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getInvitationByTokenHash = `-- name: GetInvitationByTokenHash :one
+SELECT id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
+FROM organization_invitations
+WHERE token_hash = $1
+`
+
+func (q *Queries) GetInvitationByTokenHash(ctx context.Context, tokenHash string) (OrganizationInvitation, error) {
+	row := q.db.QueryRow(ctx, getInvitationByTokenHash, tokenHash)
+	var i OrganizationInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.TokenHash,
+		&i.InviterUserID,
+		&i.RoleSlug,
+		&i.State,
+		&i.ExpiresAt,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getOrganizationByWorkosID = `-- name: GetOrganizationByWorkosID :one
@@ -292,6 +435,33 @@ func (q *Queries) GetOrganizationUserRelationship(ctx context.Context, arg GetOr
 	return i, err
 }
 
+const getRelationshipByMembershipID = `-- name: GetRelationshipByMembershipID :one
+SELECT id, organization_id, user_id, workos_user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
+FROM organization_user_relationships
+WHERE workos_membership_id = $1
+ORDER BY updated_at DESC
+LIMIT 1
+`
+
+func (q *Queries) GetRelationshipByMembershipID(ctx context.Context, workosMembershipID pgtype.Text) (OrganizationUserRelationship, error) {
+	row := q.db.QueryRow(ctx, getRelationshipByMembershipID, workosMembershipID)
+	var i OrganizationUserRelationship
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UserID,
+		&i.WorkosUserID,
+		&i.WorkosMembershipID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getRoleAssignmentLinkedToDifferentWorkOSUser = `-- name: GetRoleAssignmentLinkedToDifferentWorkOSUser :one
 SELECT id, workos_user_id
 FROM organization_role_assignments
@@ -353,12 +523,84 @@ func (q *Queries) HasOrganizationUserRelationship(ctx context.Context, arg HasOr
 	return exists, err
 }
 
+const linkRelationshipsToUser = `-- name: LinkRelationshipsToUser :exec
+WITH pending_relationships AS (
+    SELECT
+        id,
+        organization_id,
+        workos_user_id,
+        workos_membership_id,
+        workos_updated_at,
+        workos_last_event_id
+    FROM organization_user_relationships
+    WHERE workos_user_id = $2
+      AND user_id IS NULL
+      AND deleted_at IS NULL
+),
+deleted_pending_for_tombstones AS (
+    UPDATE organization_user_relationships pending
+    SET deleted_at = clock_timestamp(),
+        updated_at = clock_timestamp()
+    FROM pending_relationships
+    WHERE pending.id = pending_relationships.id
+      AND EXISTS (
+          SELECT 1
+          FROM organization_user_relationships existing
+          WHERE existing.organization_id = pending_relationships.organization_id
+            AND existing.user_id = $1
+            AND existing.deleted_at IS NOT NULL
+      )
+    RETURNING
+        pending_relationships.organization_id,
+        pending_relationships.workos_user_id,
+        pending_relationships.workos_membership_id,
+        pending_relationships.workos_updated_at,
+        pending_relationships.workos_last_event_id
+),
+relinked_tombstones AS (
+    UPDATE organization_user_relationships existing
+    SET workos_user_id = deleted_pending_for_tombstones.workos_user_id,
+        workos_membership_id = deleted_pending_for_tombstones.workos_membership_id,
+        workos_updated_at = deleted_pending_for_tombstones.workos_updated_at,
+        workos_last_event_id = deleted_pending_for_tombstones.workos_last_event_id,
+        deleted_at = NULL,
+        updated_at = clock_timestamp()
+    FROM deleted_pending_for_tombstones
+    WHERE existing.organization_id = deleted_pending_for_tombstones.organization_id
+      AND existing.user_id = $1
+      AND existing.deleted_at IS NOT NULL
+)
+UPDATE organization_user_relationships pending
+SET user_id = $1,
+    updated_at = clock_timestamp()
+WHERE pending.workos_user_id = $2
+  AND pending.user_id IS NULL
+  AND pending.deleted_at IS NULL
+  AND NOT EXISTS (
+      SELECT 1
+      FROM organization_user_relationships existing
+      WHERE existing.organization_id = pending.organization_id
+        AND existing.user_id = $1
+  )
+`
+
+type LinkRelationshipsToUserParams struct {
+	UserID       pgtype.Text
+	WorkosUserID pgtype.Text
+}
+
+func (q *Queries) LinkRelationshipsToUser(ctx context.Context, arg LinkRelationshipsToUserParams) error {
+	_, err := q.db.Exec(ctx, linkRelationshipsToUser, arg.UserID, arg.WorkosUserID)
+	return err
+}
+
 const linkRoleAssignmentsToUser = `-- name: LinkRoleAssignmentsToUser :exec
 UPDATE organization_role_assignments
 SET user_id = $1,
     updated_at = clock_timestamp()
 WHERE workos_user_id = $2
   AND user_id IS NULL
+  AND deleted_at IS NULL
 `
 
 type LinkRoleAssignmentsToUserParams struct {
@@ -372,7 +614,7 @@ func (q *Queries) LinkRoleAssignmentsToUser(ctx context.Context, arg LinkRoleAss
 }
 
 const listOrganizationRoleAssignmentsByWorkOSUser = `-- name: ListOrganizationRoleAssignmentsByWorkOSUser :many
-SELECT id, organization_id, workos_user_id, user_id, role_urn, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at
+SELECT id, organization_id, workos_user_id, user_id, role_urn, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at
 FROM organization_role_assignments
 WHERE organization_id = $1
   AND workos_user_id = $2
@@ -404,6 +646,7 @@ func (q *Queries) ListOrganizationRoleAssignmentsByWorkOSUser(ctx context.Contex
 			&i.WorkosLastEventID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -420,7 +663,8 @@ SELECT
   our.id, our.organization_id, our.user_id, our.workos_user_id, our.workos_membership_id, our.workos_updated_at, our.workos_last_event_id, our.created_at, our.updated_at, our.deleted_at, our.deleted,
   u.email AS user_email,
   u.display_name AS user_display_name,
-  u.photo_url AS user_photo_url
+  u.photo_url AS user_photo_url,
+  u.last_login AS user_last_login
 FROM organization_user_relationships our
 JOIN users u ON u.id = our.user_id
 WHERE our.organization_id = $1
@@ -442,6 +686,7 @@ type ListOrganizationUsersRow struct {
 	UserEmail          string
 	UserDisplayName    string
 	UserPhotoUrl       pgtype.Text
+	UserLastLogin      pgtype.Timestamptz
 }
 
 func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID string) ([]ListOrganizationUsersRow, error) {
@@ -468,6 +713,7 @@ func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID stri
 			&i.UserEmail,
 			&i.UserDisplayName,
 			&i.UserPhotoUrl,
+			&i.UserLastLogin,
 		); err != nil {
 			return nil, err
 		}
@@ -520,23 +766,111 @@ func (q *Queries) ListOrganizationsForUser(ctx context.Context, userID pgtype.Te
 	return items, nil
 }
 
-const markOrganizationUserRelationshipAsDeleted = `-- name: MarkOrganizationUserRelationshipAsDeleted :exec
+const listPendingInvitations = `-- name: ListPendingInvitations :many
+SELECT id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
+FROM organization_invitations
+WHERE organization_id = $1
+  AND state = 'pending'
+  AND expires_at > clock_timestamp()
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListPendingInvitations(ctx context.Context, organizationID string) ([]OrganizationInvitation, error) {
+	rows, err := q.db.Query(ctx, listPendingInvitations, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrganizationInvitation
+	for rows.Next() {
+		var i OrganizationInvitation
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Email,
+			&i.TokenHash,
+			&i.InviterUserID,
+			&i.RoleSlug,
+			&i.State,
+			&i.ExpiresAt,
+			&i.AcceptedAt,
+			&i.RevokedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markRoleAssignmentsDeleted = `-- name: MarkRoleAssignmentsDeleted :exec
+UPDATE organization_role_assignments
+SET workos_updated_at = $1,
+    workos_last_event_id = $2,
+    deleted_at = COALESCE(deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+WHERE organization_id = $3
+  AND workos_user_id = $4
+  AND deleted_at IS NULL
+`
+
+type MarkRoleAssignmentsDeletedParams struct {
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+	OrganizationID    string
+	WorkosUserID      string
+}
+
+func (q *Queries) MarkRoleAssignmentsDeleted(ctx context.Context, arg MarkRoleAssignmentsDeletedParams) error {
+	_, err := q.db.Exec(ctx, markRoleAssignmentsDeleted,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+		arg.OrganizationID,
+		arg.WorkosUserID,
+	)
+	return err
+}
+
+const markWorkOSMembershipDeleted = `-- name: MarkWorkOSMembershipDeleted :exec
+WITH updated_existing_user_relationship AS (
+    UPDATE organization_user_relationships
+    SET workos_user_id = $3,
+        workos_membership_id = $4,
+        workos_updated_at = $5,
+        workos_last_event_id = $6,
+        deleted_at = COALESCE(deleted_at, clock_timestamp()),
+        updated_at = clock_timestamp()
+    WHERE organization_id = $1
+      AND user_id = $2
+      AND $2::text IS NOT NULL
+    RETURNING id
+)
 INSERT INTO organization_user_relationships (
     organization_id,
     user_id,
+    workos_user_id,
     workos_membership_id,
     workos_updated_at,
     workos_last_event_id,
     deleted_at
-) VALUES (
+)
+SELECT
     $1,
     $2,
     $3,
     $4,
     $5,
+    $6,
     clock_timestamp()
-)
-ON CONFLICT (organization_id, user_id) DO UPDATE SET
+WHERE NOT EXISTS (SELECT 1 FROM updated_existing_user_relationship)
+ON CONFLICT (workos_membership_id) WHERE deleted IS FALSE DO UPDATE SET
+    user_id = COALESCE(EXCLUDED.user_id, organization_user_relationships.user_id),
+    workos_user_id = COALESCE(EXCLUDED.workos_user_id, organization_user_relationships.workos_user_id),
     workos_membership_id = COALESCE(EXCLUDED.workos_membership_id, organization_user_relationships.workos_membership_id),
     workos_updated_at = EXCLUDED.workos_updated_at,
     workos_last_event_id = EXCLUDED.workos_last_event_id,
@@ -544,9 +878,10 @@ ON CONFLICT (organization_id, user_id) DO UPDATE SET
     updated_at = clock_timestamp()
 `
 
-type MarkOrganizationUserRelationshipAsDeletedParams struct {
+type MarkWorkOSMembershipDeletedParams struct {
 	OrganizationID     string
 	UserID             pgtype.Text
+	WorkosUserID       pgtype.Text
 	WorkosMembershipID pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz
 	WorkosLastEventID  pgtype.Text
@@ -554,14 +889,29 @@ type MarkOrganizationUserRelationshipAsDeletedParams struct {
 
 // Record a WorkOS membership delete, inserting a tombstone when the local
 // relationship did not exist so stale replayed creates cannot resurrect it.
-func (q *Queries) MarkOrganizationUserRelationshipAsDeleted(ctx context.Context, arg MarkOrganizationUserRelationshipAsDeletedParams) error {
-	_, err := q.db.Exec(ctx, markOrganizationUserRelationshipAsDeleted,
+func (q *Queries) MarkWorkOSMembershipDeleted(ctx context.Context, arg MarkWorkOSMembershipDeletedParams) error {
+	_, err := q.db.Exec(ctx, markWorkOSMembershipDeleted,
 		arg.OrganizationID,
 		arg.UserID,
+		arg.WorkosUserID,
 		arg.WorkosMembershipID,
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
 	)
+	return err
+}
+
+const revokeInvitation = `-- name: RevokeInvitation :exec
+UPDATE organization_invitations
+SET state = 'revoked',
+    revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND state = 'pending'
+`
+
+func (q *Queries) RevokeInvitation(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, revokeInvitation, id)
 	return err
 }
 
@@ -700,14 +1050,14 @@ const syncUserOrganizationRoleAssignments = `-- name: SyncUserOrganizationRoleAs
 WITH input_role_urns AS (
     SELECT 'role:organization:' || id::text AS role_urn
     FROM organization_roles
-    WHERE organization_id = $1
-      AND workos_slug = ANY($3::text[])
+    WHERE organization_id = $3
+      AND workos_slug = ANY($5::text[])
       AND deleted IS FALSE
       AND workos_deleted IS FALSE
     UNION ALL
     SELECT 'role:global:' || id::text AS role_urn
     FROM global_roles
-    WHERE workos_slug = ANY($3::text[])
+    WHERE workos_slug = ANY($5::text[])
       AND deleted IS FALSE
       AND workos_deleted IS FALSE
 ),
@@ -722,37 +1072,43 @@ upserted AS (
         workos_last_event_id
     )
     SELECT
-        $1,
-        $2,
+        $3,
         $4,
-        input_role_urns.role_urn,
-        $5,
         $6,
-        $7
+        input_role_urns.role_urn,
+        $7,
+        $1,
+        $2
     FROM input_role_urns
-    ON CONFLICT (organization_id, workos_user_id, role_urn) DO UPDATE SET
+    ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL DO UPDATE SET
         -- COALESCE preserves a backfilled user_id if the sync fires before the Gram user exists.
         user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
         workos_membership_id = EXCLUDED.workos_membership_id,
         workos_updated_at = EXCLUDED.workos_updated_at,
         workos_last_event_id = EXCLUDED.workos_last_event_id,
+        deleted_at = NULL,
         updated_at = clock_timestamp()
     RETURNING role_urn
 )
-DELETE FROM organization_role_assignments
-WHERE organization_role_assignments.organization_id = $1
-  AND organization_role_assignments.workos_user_id = $2
+UPDATE organization_role_assignments
+SET workos_updated_at = $1,
+    workos_last_event_id = $2,
+    deleted_at = COALESCE(deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+WHERE organization_role_assignments.organization_id = $3
+  AND organization_role_assignments.workos_user_id = $4
+  AND organization_role_assignments.deleted_at IS NULL
   AND organization_role_assignments.role_urn NOT IN (SELECT input_role_urns.role_urn FROM input_role_urns)
 `
 
 type SyncUserOrganizationRoleAssignmentsParams struct {
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
 	OrganizationID     string
 	WorkosUserID       string
 	WorkosRoleSlugs    []string
 	UserID             pgtype.Text
 	WorkosMembershipID pgtype.Text
-	WorkosUpdatedAt    pgtype.Timestamptz
-	WorkosLastEventID  pgtype.Text
 }
 
 // Declaratively set all WorkOS role assignments for a known Gram user in an
@@ -760,13 +1116,13 @@ type SyncUserOrganizationRoleAssignmentsParams struct {
 // this WorkOS user are removed.
 func (q *Queries) SyncUserOrganizationRoleAssignments(ctx context.Context, arg SyncUserOrganizationRoleAssignmentsParams) error {
 	_, err := q.db.Exec(ctx, syncUserOrganizationRoleAssignments,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
 		arg.OrganizationID,
 		arg.WorkosUserID,
 		arg.WorkosRoleSlugs,
 		arg.UserID,
 		arg.WorkosMembershipID,
-		arg.WorkosUpdatedAt,
-		arg.WorkosLastEventID,
 	)
 	return err
 }
@@ -916,7 +1272,9 @@ INSERT INTO organization_user_relationships (
     $2
 )
 ON CONFLICT (organization_id, user_id) DO UPDATE SET
-    updated_at = clock_timestamp()
+    updated_at = clock_timestamp(),
+    deleted_at = NULL,
+    created_at = CASE WHEN organization_user_relationships.deleted_at IS NOT NULL THEN clock_timestamp() ELSE organization_user_relationships.created_at END
 RETURNING id, organization_id, user_id, workos_user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
 `
 
@@ -942,49 +1300,6 @@ func (q *Queries) UpsertOrganizationUserRelationship(ctx context.Context, arg Up
 		&i.Deleted,
 	)
 	return i, err
-}
-
-const upsertOrganizationUserRelationshipFromWorkOS = `-- name: UpsertOrganizationUserRelationshipFromWorkOS :exec
-INSERT INTO organization_user_relationships (
-    organization_id,
-    user_id,
-    workos_membership_id,
-    workos_updated_at,
-    workos_last_event_id
-) VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5
-)
-ON CONFLICT (organization_id, user_id) DO UPDATE SET
-    workos_membership_id = EXCLUDED.workos_membership_id,
-    workos_updated_at = EXCLUDED.workos_updated_at,
-    workos_last_event_id = EXCLUDED.workos_last_event_id,
-    deleted_at = NULL,
-    updated_at = clock_timestamp()
-`
-
-type UpsertOrganizationUserRelationshipFromWorkOSParams struct {
-	OrganizationID     string
-	UserID             pgtype.Text
-	WorkosMembershipID pgtype.Text
-	WorkosUpdatedAt    pgtype.Timestamptz
-	WorkosLastEventID  pgtype.Text
-}
-
-// Upsert a membership row from a WorkOS organization_membership event. Caller
-// must have already passed the row through ShouldProcessEvent.
-func (q *Queries) UpsertOrganizationUserRelationshipFromWorkOS(ctx context.Context, arg UpsertOrganizationUserRelationshipFromWorkOSParams) error {
-	_, err := q.db.Exec(ctx, upsertOrganizationUserRelationshipFromWorkOS,
-		arg.OrganizationID,
-		arg.UserID,
-		arg.WorkosMembershipID,
-		arg.WorkosUpdatedAt,
-		arg.WorkosLastEventID,
-	)
-	return err
 }
 
 const upsertSvixAppID = `-- name: UpsertSvixAppID :one
@@ -1031,4 +1346,67 @@ func (q *Queries) UpsertSvixAppID(ctx context.Context, arg UpsertSvixAppIDParams
 		&i.WebhooksEnabled,
 	)
 	return i, err
+}
+
+const upsertWorkOSMembership = `-- name: UpsertWorkOSMembership :exec
+WITH updated_existing_user_relationship AS (
+    UPDATE organization_user_relationships
+    SET workos_user_id = $3,
+        workos_membership_id = $4,
+        workos_updated_at = $5,
+        workos_last_event_id = $6,
+        deleted_at = NULL,
+        updated_at = clock_timestamp()
+    WHERE organization_id = $1
+      AND user_id = $2
+      AND $2::text IS NOT NULL
+    RETURNING id
+)
+INSERT INTO organization_user_relationships (
+    organization_id,
+    user_id,
+    workos_user_id,
+    workos_membership_id,
+    workos_updated_at,
+    workos_last_event_id
+)
+SELECT
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+WHERE NOT EXISTS (SELECT 1 FROM updated_existing_user_relationship)
+ON CONFLICT (workos_membership_id) WHERE deleted IS FALSE DO UPDATE SET
+    user_id = COALESCE(EXCLUDED.user_id, organization_user_relationships.user_id),
+    workos_user_id = COALESCE(EXCLUDED.workos_user_id, organization_user_relationships.workos_user_id),
+    workos_membership_id = EXCLUDED.workos_membership_id,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = EXCLUDED.workos_last_event_id,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+`
+
+type UpsertWorkOSMembershipParams struct {
+	OrganizationID     string
+	UserID             pgtype.Text
+	WorkosUserID       pgtype.Text
+	WorkosMembershipID pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+}
+
+// Upsert a membership row from a WorkOS organization_membership event. Caller
+// must have already passed the row through ShouldProcessEvent.
+func (q *Queries) UpsertWorkOSMembership(ctx context.Context, arg UpsertWorkOSMembershipParams) error {
+	_, err := q.db.Exec(ctx, upsertWorkOSMembership,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.WorkosUserID,
+		arg.WorkosMembershipID,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+	)
+	return err
 }

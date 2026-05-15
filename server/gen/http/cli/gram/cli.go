@@ -96,14 +96,14 @@ func UsageCommands() []string {
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|update-mcp-server|delete-mcp-server)",
-		"organizations (get|send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session)",
+		"organizations (get|send-invite|revoke-invite|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|verify-url|delete-server)",
-		"remote-session-clients (create-remote-session-client|update-remote-session-client|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
+		"remote-session-clients (create-remote-session-client|clone-client-fromoauth-proxy-provider|update-remote-session-client|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
 		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|register-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
@@ -112,7 +112,7 @@ func UsageCommands() []string {
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
-		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server|updateoauth-proxy-server)",
+		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server|updateoauth-proxy-server|set-user-session-issuer)",
 		"triggers (list-trigger-definitions|list-trigger-instances|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"usage (get-period-usage|get-usage-tiers|create-customer-session|create-checkout|create-top-up-checkout)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|revoke-user-session-client)",
@@ -841,9 +841,6 @@ func ParseEndpoint(
 		organizationsListInvitesFlags            = flag.NewFlagSet("list-invites", flag.ExitOnError)
 		organizationsListInvitesSessionTokenFlag = organizationsListInvitesFlags.String("session-token", "", "")
 
-		organizationsGetInviteByTokenFlags     = flag.NewFlagSet("get-invite-by-token", flag.ExitOnError)
-		organizationsGetInviteByTokenTokenFlag = organizationsGetInviteByTokenFlags.String("token", "REQUIRED", "")
-
 		organizationsListUsersFlags            = flag.NewFlagSet("list-users", flag.ExitOnError)
 		organizationsListUsersSessionTokenFlag = organizationsListUsersFlags.String("session-token", "", "")
 
@@ -1074,6 +1071,12 @@ func ParseEndpoint(
 		remoteSessionClientsCreateRemoteSessionClientSessionTokenFlag     = remoteSessionClientsCreateRemoteSessionClientFlags.String("session-token", "", "")
 		remoteSessionClientsCreateRemoteSessionClientApikeyTokenFlag      = remoteSessionClientsCreateRemoteSessionClientFlags.String("apikey-token", "", "")
 		remoteSessionClientsCreateRemoteSessionClientProjectSlugInputFlag = remoteSessionClientsCreateRemoteSessionClientFlags.String("project-slug-input", "", "")
+
+		remoteSessionClientsCloneClientFromOAuthProxyProviderFlags                = flag.NewFlagSet("clone-client-fromoauth-proxy-provider", flag.ExitOnError)
+		remoteSessionClientsCloneClientFromOAuthProxyProviderBodyFlag             = remoteSessionClientsCloneClientFromOAuthProxyProviderFlags.String("body", "REQUIRED", "")
+		remoteSessionClientsCloneClientFromOAuthProxyProviderSessionTokenFlag     = remoteSessionClientsCloneClientFromOAuthProxyProviderFlags.String("session-token", "", "")
+		remoteSessionClientsCloneClientFromOAuthProxyProviderApikeyTokenFlag      = remoteSessionClientsCloneClientFromOAuthProxyProviderFlags.String("apikey-token", "", "")
+		remoteSessionClientsCloneClientFromOAuthProxyProviderProjectSlugInputFlag = remoteSessionClientsCloneClientFromOAuthProxyProviderFlags.String("project-slug-input", "", "")
 
 		remoteSessionClientsUpdateRemoteSessionClientFlags                = flag.NewFlagSet("update-remote-session-client", flag.ExitOnError)
 		remoteSessionClientsUpdateRemoteSessionClientBodyFlag             = remoteSessionClientsUpdateRemoteSessionClientFlags.String("body", "REQUIRED", "")
@@ -1501,6 +1504,13 @@ func ParseEndpoint(
 		toolsetsUpdateOAuthProxyServerApikeyTokenFlag      = toolsetsUpdateOAuthProxyServerFlags.String("apikey-token", "", "")
 		toolsetsUpdateOAuthProxyServerProjectSlugInputFlag = toolsetsUpdateOAuthProxyServerFlags.String("project-slug-input", "", "")
 
+		toolsetsSetUserSessionIssuerFlags                = flag.NewFlagSet("set-user-session-issuer", flag.ExitOnError)
+		toolsetsSetUserSessionIssuerBodyFlag             = toolsetsSetUserSessionIssuerFlags.String("body", "REQUIRED", "")
+		toolsetsSetUserSessionIssuerSlugFlag             = toolsetsSetUserSessionIssuerFlags.String("slug", "REQUIRED", "")
+		toolsetsSetUserSessionIssuerSessionTokenFlag     = toolsetsSetUserSessionIssuerFlags.String("session-token", "", "")
+		toolsetsSetUserSessionIssuerApikeyTokenFlag      = toolsetsSetUserSessionIssuerFlags.String("apikey-token", "", "")
+		toolsetsSetUserSessionIssuerProjectSlugInputFlag = toolsetsSetUserSessionIssuerFlags.String("project-slug-input", "", "")
+
 		triggersFlags = flag.NewFlagSet("triggers", flag.ContinueOnError)
 
 		triggersListTriggerDefinitionsFlags                = flag.NewFlagSet("list-trigger-definitions", flag.ExitOnError)
@@ -1839,7 +1849,6 @@ func ParseEndpoint(
 	organizationsSendInviteFlags.Usage = organizationsSendInviteUsage
 	organizationsRevokeInviteFlags.Usage = organizationsRevokeInviteUsage
 	organizationsListInvitesFlags.Usage = organizationsListInvitesUsage
-	organizationsGetInviteByTokenFlags.Usage = organizationsGetInviteByTokenUsage
 	organizationsListUsersFlags.Usage = organizationsListUsersUsage
 	organizationsRemoveUserFlags.Usage = organizationsRemoveUserUsage
 	organizationsEnableWebhooksFlags.Usage = organizationsEnableWebhooksUsage
@@ -1898,6 +1907,7 @@ func ParseEndpoint(
 
 	remoteSessionClientsFlags.Usage = remoteSessionClientsUsage
 	remoteSessionClientsCreateRemoteSessionClientFlags.Usage = remoteSessionClientsCreateRemoteSessionClientUsage
+	remoteSessionClientsCloneClientFromOAuthProxyProviderFlags.Usage = remoteSessionClientsCloneClientFromOAuthProxyProviderUsage
 	remoteSessionClientsUpdateRemoteSessionClientFlags.Usage = remoteSessionClientsUpdateRemoteSessionClientUsage
 	remoteSessionClientsListRemoteSessionClientsFlags.Usage = remoteSessionClientsListRemoteSessionClientsUsage
 	remoteSessionClientsGetRemoteSessionClientFlags.Usage = remoteSessionClientsGetRemoteSessionClientUsage
@@ -1982,6 +1992,7 @@ func ParseEndpoint(
 	toolsetsRemoveOAuthServerFlags.Usage = toolsetsRemoveOAuthServerUsage
 	toolsetsAddOAuthProxyServerFlags.Usage = toolsetsAddOAuthProxyServerUsage
 	toolsetsUpdateOAuthProxyServerFlags.Usage = toolsetsUpdateOAuthProxyServerUsage
+	toolsetsSetUserSessionIssuerFlags.Usage = toolsetsSetUserSessionIssuerUsage
 
 	triggersFlags.Usage = triggersUsage
 	triggersListTriggerDefinitionsFlags.Usage = triggersListTriggerDefinitionsUsage
@@ -2618,9 +2629,6 @@ func ParseEndpoint(
 			case "list-invites":
 				epf = organizationsListInvitesFlags
 
-			case "get-invite-by-token":
-				epf = organizationsGetInviteByTokenFlags
-
 			case "list-users":
 				epf = organizationsListUsersFlags
 
@@ -2780,6 +2788,9 @@ func ParseEndpoint(
 			switch epn {
 			case "create-remote-session-client":
 				epf = remoteSessionClientsCreateRemoteSessionClientFlags
+
+			case "clone-client-fromoauth-proxy-provider":
+				epf = remoteSessionClientsCloneClientFromOAuthProxyProviderFlags
 
 			case "update-remote-session-client":
 				epf = remoteSessionClientsUpdateRemoteSessionClientFlags
@@ -3014,6 +3025,9 @@ func ParseEndpoint(
 
 			case "updateoauth-proxy-server":
 				epf = toolsetsUpdateOAuthProxyServerFlags
+
+			case "set-user-session-issuer":
+				epf = toolsetsSetUserSessionIssuerFlags
 
 			}
 
@@ -3628,9 +3642,6 @@ func ParseEndpoint(
 			case "list-invites":
 				endpoint = c.ListInvites()
 				data, err = organizationsc.BuildListInvitesPayload(*organizationsListInvitesSessionTokenFlag)
-			case "get-invite-by-token":
-				endpoint = c.GetInviteByToken()
-				data, err = organizationsc.BuildGetInviteByTokenPayload(*organizationsGetInviteByTokenTokenFlag)
 			case "list-users":
 				endpoint = c.ListUsers()
 				data, err = organizationsc.BuildListUsersPayload(*organizationsListUsersSessionTokenFlag)
@@ -3791,6 +3802,9 @@ func ParseEndpoint(
 			case "create-remote-session-client":
 				endpoint = c.CreateRemoteSessionClient()
 				data, err = remotesessionclientsc.BuildCreateRemoteSessionClientPayload(*remoteSessionClientsCreateRemoteSessionClientBodyFlag, *remoteSessionClientsCreateRemoteSessionClientSessionTokenFlag, *remoteSessionClientsCreateRemoteSessionClientApikeyTokenFlag, *remoteSessionClientsCreateRemoteSessionClientProjectSlugInputFlag)
+			case "clone-client-fromoauth-proxy-provider":
+				endpoint = c.CloneClientFromOAuthProxyProvider()
+				data, err = remotesessionclientsc.BuildCloneClientFromOAuthProxyProviderPayload(*remoteSessionClientsCloneClientFromOAuthProxyProviderBodyFlag, *remoteSessionClientsCloneClientFromOAuthProxyProviderSessionTokenFlag, *remoteSessionClientsCloneClientFromOAuthProxyProviderApikeyTokenFlag, *remoteSessionClientsCloneClientFromOAuthProxyProviderProjectSlugInputFlag)
 			case "update-remote-session-client":
 				endpoint = c.UpdateRemoteSessionClient()
 				data, err = remotesessionclientsc.BuildUpdateRemoteSessionClientPayload(*remoteSessionClientsUpdateRemoteSessionClientBodyFlag, *remoteSessionClientsUpdateRemoteSessionClientSessionTokenFlag, *remoteSessionClientsUpdateRemoteSessionClientApikeyTokenFlag, *remoteSessionClientsUpdateRemoteSessionClientProjectSlugInputFlag)
@@ -4025,6 +4039,9 @@ func ParseEndpoint(
 			case "updateoauth-proxy-server":
 				endpoint = c.UpdateOAuthProxyServer()
 				data, err = toolsetsc.BuildUpdateOAuthProxyServerPayload(*toolsetsUpdateOAuthProxyServerBodyFlag, *toolsetsUpdateOAuthProxyServerSlugFlag, *toolsetsUpdateOAuthProxyServerSessionTokenFlag, *toolsetsUpdateOAuthProxyServerApikeyTokenFlag, *toolsetsUpdateOAuthProxyServerProjectSlugInputFlag)
+			case "set-user-session-issuer":
+				endpoint = c.SetUserSessionIssuer()
+				data, err = toolsetsc.BuildSetUserSessionIssuerPayload(*toolsetsSetUserSessionIssuerBodyFlag, *toolsetsSetUserSessionIssuerSlugFlag, *toolsetsSetUserSessionIssuerSessionTokenFlag, *toolsetsSetUserSessionIssuerApikeyTokenFlag, *toolsetsSetUserSessionIssuerProjectSlugInputFlag)
 			}
 		case "triggers":
 			c := triggersc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -7181,7 +7198,6 @@ func organizationsUsage() {
 	fmt.Fprintln(os.Stderr, `    send-invite: Send a WorkOS invitation for the active organization.`)
 	fmt.Fprintln(os.Stderr, `    revoke-invite: Revoke a pending WorkOS invitation.`)
 	fmt.Fprintln(os.Stderr, `    list-invites: List pending WorkOS invitations for the active organization.`)
-	fmt.Fprintln(os.Stderr, `    get-invite-by-token: Resolve a WorkOS invitation from its token (e.g. accept-flow).`)
 	fmt.Fprintln(os.Stderr, `    list-users: List users in the active organization from Gram organization_user_relationships.`)
 	fmt.Fprintln(os.Stderr, `    remove-user: Remove a user from the active organization in Gram and delete their WorkOS organization membership.`)
 	fmt.Fprintln(os.Stderr, `    enable-webhooks: Enable  webhooks for the active organization.`)
@@ -7226,7 +7242,7 @@ func organizationsSendInviteUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations send-invite --body '{\n      \"email\": \"abc123\",\n      \"role_slug\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations send-invite --body '{\n      \"email\": \"abc123\",\n      \"role_id\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func organizationsRevokeInviteUsage() {
@@ -7265,24 +7281,6 @@ func organizationsListInvitesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations list-invites --session-token \"abc123\"")
-}
-
-func organizationsGetInviteByTokenUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] organizations get-invite-by-token", os.Args[0])
-	fmt.Fprint(os.Stderr, " -token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Resolve a WorkOS invitation from its token (e.g. accept-flow).`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations get-invite-by-token --token \"abc123\"")
 }
 
 func organizationsListUsersUsage() {
@@ -8324,6 +8322,7 @@ func remoteSessionClientsUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] remote-session-clients COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-remote-session-client: Register a remote_session_client. Two paths: manual (caller supplies client_id and optionally client_secret) or auto-DCR (auto_register=true triggers an outbound RFC 7591 registration against the issuer's registration_endpoint).`)
+	fmt.Fprintln(os.Stderr, `    clone-client-fromoauth-proxy-provider: Platform-admin-only. Clone the client_id / client_secret from an existing oauth_proxy_provider into a new remote_session_client paired with the supplied issuers. The upstream secret stays server-side: it is read from the proxy provider's stored secrets, re-encrypted, and persisted on the remote_session_client row without ever crossing the wire.`)
 	fmt.Fprintln(os.Stderr, `    update-remote-session-client: Rotate the client_secret or change the user_session_issuer_id linkage on an existing remote_session_client.`)
 	fmt.Fprintln(os.Stderr, `    list-remote-session-clients: List remote_session_clients in the caller's project.`)
 	fmt.Fprintln(os.Stderr, `    get-remote-session-client: Get a remote_session_client by id.`)
@@ -8354,6 +8353,30 @@ func remoteSessionClientsCreateRemoteSessionClientUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients create-remote-session-client --body '{\n      \"auto_register\": false,\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionClientsCloneClientFromOAuthProxyProviderUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-clients clone-client-fromoauth-proxy-provider", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Platform-admin-only. Clone the client_id / client_secret from an existing oauth_proxy_provider into a new remote_session_client paired with the supplied issuers. The upstream secret stays server-side: it is read from the proxy provider's stored secrets, re-encrypted, and persisted on the remote_session_client row without ever crossing the wire.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients clone-client-fromoauth-proxy-provider --body '{\n      \"oauth_proxy_provider_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionClientsUpdateRemoteSessionClientUsage() {
@@ -9818,6 +9841,7 @@ func toolsetsUsage() {
 	fmt.Fprintln(os.Stderr, `    removeoauth-server: Remove OAuth server association from a toolset`)
 	fmt.Fprintln(os.Stderr, `    addoauth-proxy-server: Associate an OAuth proxy server with a toolset (admin only)`)
 	fmt.Fprintln(os.Stderr, `    updateoauth-proxy-server: Update an existing OAuth proxy server associated with a toolset`)
+	fmt.Fprintln(os.Stderr, `    set-user-session-issuer: Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s toolsets COMMAND --help\n", os.Args[0])
@@ -10110,6 +10134,32 @@ func toolsetsUpdateOAuthProxyServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets updateoauth-proxy-server --body '{\n      \"oauth_proxy_server\": {\n         \"audience\": \"abc123\",\n         \"authorization_endpoint\": \"abc123\",\n         \"environment_slug\": \"aaa\",\n         \"scopes_supported\": [\n            \"abc123\"\n         ],\n         \"token_endpoint\": \"abc123\",\n         \"token_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ]\n      }\n   }' --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func toolsetsSetUserSessionIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] toolsets set-user-session-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -slug STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets set-user-session-issuer --body '{\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // triggersUsage displays the usage of the triggers command and its subcommands.

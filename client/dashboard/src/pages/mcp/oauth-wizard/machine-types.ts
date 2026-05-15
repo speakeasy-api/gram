@@ -49,6 +49,7 @@ export type Context = {
   toolsetSlug: string;
   toolsetName: string;
   activeOrganizationId: string;
+  onboardToUserSessions: boolean;
 };
 
 export type Input = {
@@ -56,6 +57,7 @@ export type Input = {
   toolsetSlug: string;
   toolsetName: string;
   activeOrganizationId: string;
+  onboardToUserSessions?: boolean;
 };
 
 export type WizardEvent =

@@ -383,17 +383,12 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 
 	state := encodeStateParam(payload, nonce)
 
-	// When we already know the target org, pass its WorkOS ID so AuthKit
-	// skips the org-selector screen.
-	workosOrgID := s.resolveWorkOSOrgIDForLogin(ctx, payload)
-
 	authURL, err := s.identity.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
 		CallbackURL:     callbackURL,
 		State:           state,
 		Scope:           "",
 		ClientID:        "",
 		ScopesSupported: nil,
-		OrganizationID:  workosOrgID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error building authorization URL").Log(ctx, s.logger)
@@ -402,43 +397,6 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	return &gen.LoginResult{
 		Location: authURL.String(),
 	}, nil
-}
-
-// resolveWorkOSOrgIDForLogin attempts to determine the target WorkOS org ID
-// at login time so AuthKit can skip the org-selector screen. Checks the admin
-// override header first, then falls back to extracting the org slug from the
-// redirect destination URL. Returns "" when neither is present (e.g. a bare
-// /login with no context), which leaves the organization_id param unset and
-// lets AuthKit show the org selector as normal.
-func (s *Service) resolveWorkOSOrgIDForLogin(ctx context.Context, payload *gen.LoginPayload) string {
-	// Admin override header takes priority.
-	if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
-		return s.workosOrgIDFromSlug(ctx, adminOverride)
-	}
-
-	// Fall back to the org slug embedded in the redirect URL.
-	if payload != nil && payload.Redirect != nil {
-		if slug := organizationSlugFromDestinationURL(*payload.Redirect); slug != "" {
-			return s.workosOrgIDFromSlug(ctx, slug)
-		}
-	}
-
-	// Default: no admin override and no org slug in the redirect URL.
-	// Return "" so AuthKit shows the org selector as normal.
-	return ""
-}
-
-// workosOrgIDFromSlug looks up an org by slug and returns its WorkOS ID.
-// Returns "" if the org doesn't exist or has no WorkOS ID.
-func (s *Service) workosOrgIDFromSlug(ctx context.Context, slug string) string {
-	orgMeta, err := s.orgRepo.GetOrganizationMetadataBySlug(ctx, slug)
-	if err != nil {
-		return ""
-	}
-	if !orgMeta.WorkosID.Valid {
-		return ""
-	}
-	return orgMeta.WorkosID.String
 }
 
 // organizationSlugFromState extracts the org slug from the state param's

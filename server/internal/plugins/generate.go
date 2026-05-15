@@ -69,12 +69,15 @@ func pluginManifestVersion(cfg GenerateConfig) string {
 }
 
 // claudeHookAsyncFlag returns the async flag for a Claude hook event.
-// Blocking events (PreToolUse, UserPromptSubmit) return false so Claude
-// waits for the deny/allow decision. All others return true for
-// fire-and-forget telemetry so Claude is not held up.
+// PreToolUse and UserPromptSubmit are blocking so Claude waits for the
+// deny/allow decision. Stop must also be blocking: when async=true,
+// Cowork (Claude Code) appears to skip dispatching the Stop hook entirely
+// — an apparent bug on the client side. Marking it synchronous is the
+// only reliable way to get Stop events to fire. All other events return
+// true for fire-and-forget telemetry so Claude is not held up.
 func claudeHookAsyncFlag(event string) *bool {
 	switch event {
-	case "UserPromptSubmit", "PreToolUse":
+	case "UserPromptSubmit", "PreToolUse", "Stop":
 		f := false
 		return &f
 	default:

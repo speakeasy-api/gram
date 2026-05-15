@@ -259,6 +259,45 @@ func (q *Queries) CreateMembership(ctx context.Context, arg CreateMembershipPara
 	return i, err
 }
 
+const createOAuthClient = `-- name: CreateOAuthClient :one
+
+INSERT INTO oauth_clients (
+  client_id, mode, client_secret, redirect_uris
+)
+VALUES (
+  ?1, ?2, ?3, ?4
+)
+RETURNING client_id, mode, client_secret, redirect_uris, created_at
+`
+
+type CreateOAuthClientParams struct {
+	ClientID     string
+	Mode         string
+	ClientSecret string
+	RedirectUris string
+}
+
+// =============================================================================
+// oauth_clients (dynamic client registration for oauth2-1)
+// =============================================================================
+func (q *Queries) CreateOAuthClient(ctx context.Context, arg CreateOAuthClientParams) (OauthClient, error) {
+	row := q.db.QueryRowContext(ctx, createOAuthClient,
+		arg.ClientID,
+		arg.Mode,
+		arg.ClientSecret,
+		arg.RedirectUris,
+	)
+	var i OauthClient
+	err := row.Scan(
+		&i.ClientID,
+		&i.Mode,
+		&i.ClientSecret,
+		&i.RedirectUris,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createOrganization = `-- name: CreateOrganization :one
 
 INSERT INTO organizations (id, name, slug, account_type, workos_id)
@@ -635,6 +674,7 @@ SELECT
   m.user_id,
   m.organization_id,
   o.name AS organization_name,
+  o.workos_id AS org_workos_id,
   m.role,
   m.created_at,
   m.updated_at
@@ -648,6 +688,7 @@ type GetMembershipWithOrgNameRow struct {
 	UserID           uuid.UUID
 	OrganizationID   uuid.UUID
 	OrganizationName string
+	OrgWorkosID      sql.NullString
 	Role             string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
@@ -663,9 +704,32 @@ func (q *Queries) GetMembershipWithOrgName(ctx context.Context, id uuid.UUID) (G
 		&i.UserID,
 		&i.OrganizationID,
 		&i.OrganizationName,
+		&i.OrgWorkosID,
 		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getOAuthClient = `-- name: GetOAuthClient :one
+SELECT client_id, mode, client_secret, redirect_uris, created_at FROM oauth_clients WHERE client_id = ?1 AND mode = ?2
+`
+
+type GetOAuthClientParams struct {
+	ClientID string
+	Mode     string
+}
+
+func (q *Queries) GetOAuthClient(ctx context.Context, arg GetOAuthClientParams) (OauthClient, error) {
+	row := q.db.QueryRowContext(ctx, getOAuthClient, arg.ClientID, arg.Mode)
+	var i OauthClient
+	err := row.Scan(
+		&i.ClientID,
+		&i.Mode,
+		&i.ClientSecret,
+		&i.RedirectUris,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -868,6 +932,7 @@ SELECT
   m.user_id,
   m.organization_id,
   o.name AS organization_name,
+  o.workos_id AS org_workos_id,
   m.role,
   m.created_at,
   m.updated_at
@@ -892,6 +957,7 @@ type ListMembershipsWithOrgNameRow struct {
 	UserID           uuid.UUID
 	OrganizationID   uuid.UUID
 	OrganizationName string
+	OrgWorkosID      sql.NullString
 	Role             string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
@@ -901,8 +967,9 @@ type ListMembershipsWithOrgNameRow struct {
 // WorkOS emulation: memberships (ListOrganizationMemberships, GetMembership)
 // =============================================================================
 // ListMembershipsWithOrgName joins memberships with organizations so the
-// WorkOS-shaped response can include `organization_name` (the SDK's
-// OrganizationMembership type carries it).
+// WorkOS-shaped response can include `organization_name` and the external
+// `workos_id` (the WorkOS-style org ID that Gram stores in
+// organization_metadata.workos_id).
 func (q *Queries) ListMembershipsWithOrgName(ctx context.Context, arg ListMembershipsWithOrgNameParams) ([]ListMembershipsWithOrgNameRow, error) {
 	rows, err := q.db.QueryContext(ctx, listMembershipsWithOrgName,
 		arg.After,
@@ -922,6 +989,7 @@ func (q *Queries) ListMembershipsWithOrgName(ctx context.Context, arg ListMember
 			&i.UserID,
 			&i.OrganizationID,
 			&i.OrganizationName,
+			&i.OrgWorkosID,
 			&i.Role,
 			&i.CreatedAt,
 			&i.UpdatedAt,

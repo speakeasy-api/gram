@@ -105,6 +105,7 @@ type AssistantRuntime struct {
 	LastHeartbeatAt     pgtype.Timestamptz
 	BackendMetadataJson []byte
 	EndedAt             pgtype.Timestamptz
+	RuntimeVersion      int16
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
@@ -853,6 +854,7 @@ type OrganizationRoleAssignment struct {
 	WorkosLastEventID  pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
 }
 
 type OrganizationUserRelationship struct {

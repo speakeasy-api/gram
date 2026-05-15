@@ -32,6 +32,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -39,26 +40,41 @@ import (
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
+// LegacyMcpEndpointRef identifies an MCP endpoint by (mcp_slug,
+// custom_domain_id) — the tuple of toolset columns that addresses a
+// served MCP server outside of any project context. Structurally
+// similar to the new MCP Endpoint concept
+// (mcpendpointsrepo.McpEndpoint) but distinct: this reference points
+// into the legacy toolsets-driven MCP surface, where each toolset row
+// exposes one (slug, optional domain) pair, not a separate
+// mcp_endpoints row. Resolved to a *toolsets_repo.Toolset by
+// (*Service).resolveMcp.
+type LegacyMcpEndpointRef struct {
+	McpSlug        string        `json:"mcp_slug"`
+	CustomDomainID uuid.NullUUID `json:"custom_domain_id"`
+}
+
 // AuthnChallengeState is the in-flight context of a single Gram-as-AS authn
 // challenge — the OAuth client's request, the issuer it's against, and the
-// resolved subject (stamped later in the flow). Stored in Redis under
+// subject once it has been resolved. Stored in Redis under
 // `authnChallenge:{ID}` for ~10 minutes — long enough for the user to
 // round-trip through the IDP and land on /connect, short enough that
 // abandoned flows don't pile up.
 type AuthnChallengeState struct {
-	ID                  string    `json:"id"`
-	UserSessionIssuerID uuid.UUID `json:"user_session_issuer_id"`
-	ToolsetID           uuid.UUID `json:"toolset_id"`
-	ClientID            string    `json:"client_id"`
-	RedirectURI         string    `json:"redirect_uri"`
-	State               string    `json:"state,omitempty"`
-	CodeChallenge       string    `json:"code_challenge"`
-	CodeChallengeMethod string    `json:"code_challenge_method"`
-	// Subject is nil on creation; HandleIDPCallback (private path)
-	// stamps `user:<id>`, HandleConsent's POST mints a fresh
-	// `anonymous:<uuid>` on the public path. Pointer so the Redis JSON
-	// can round-trip an unstamped state (the URN's MarshalJSON refuses
-	// to serialise a zero-value SessionSubject).
+	ID                  string               `json:"id"`
+	UserSessionIssuerID uuid.UUID            `json:"user_session_issuer_id"`
+	Endpoint            LegacyMcpEndpointRef `json:"endpoint"`
+	ClientID            string               `json:"client_id"`
+	RedirectURI         string               `json:"redirect_uri"`
+	State               string               `json:"state,omitempty"`
+	CodeChallenge       string               `json:"code_challenge"`
+	CodeChallengeMethod string               `json:"code_challenge_method"`
+	CSRFToken           string               `json:"csrf_token"`
+	// Subject is stamped exactly once before consent is rendered:
+	// HandleAuthorize stamps `anonymous:<uuid>` for public toolsets, and
+	// HandleIDPCallback stamps `user:<id>` for private toolsets. Pointer so
+	// the Redis JSON can round-trip the private pre-IDP state (the URN's
+	// MarshalJSON refuses to serialise a zero-value SessionSubject).
 	Subject   *urn.SessionSubject `json:"subject,omitempty"`
 	CreatedAt time.Time           `json:"created_at"`
 }
@@ -127,22 +143,22 @@ func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 // silently bypasses on enterprise toolsets (ShouldEnforce returns false
 // when AccountType != "enterprise"; PrepareContext skips when SessionID
 // is nil).
-func (s *Service) validateUserSessionToken(ctx context.Context, token string, toolset *toolsets_repo.Toolset) (context.Context, bool) {
+func (s *Service) validateUserSessionToken(ctx context.Context, token string, toolset *toolsets_repo.Toolset) (context.Context, *urn.SessionSubject, bool) {
 	if token == "" {
-		return ctx, false
+		return ctx, nil, false
 	}
 	subject, jti, err := s.userSessionSigner.ValidateBearer(ctx, token, urn.NewToolset(toolset.ID).String(), s.chatSessionsManager)
 	if err != nil {
-		return ctx, false
+		return ctx, nil, false
 	}
 
 	if subject.Kind == urn.SessionSubjectKindAnonymous {
-		return ctx, true
+		return ctx, &subject, true
 	}
 
 	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgsRepo, s.billingRepository, toolset.OrganizationID)
 	if err != nil {
-		return ctx, false
+		return ctx, nil, false
 	}
 	authCtx := &contextvalues.AuthContext{
 		ActiveOrganizationID:  toolset.OrganizationID,
@@ -169,7 +185,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, to
 		// Unreachable: anonymous subjects return ctx untouched above. Listed
 		// for exhaustiveness so the linter doesn't flag the switch.
 	}
-	return contextvalues.SetAuthContext(ctx, authCtx), true
+	return contextvalues.SetAuthContext(ctx, authCtx), &subject, true
 }
 
 // WriteAuthenticateChallenge sets the WWW-Authenticate header and returns an
@@ -191,6 +207,50 @@ func WriteAuthenticateChallenge(w http.ResponseWriter, baseURL, mcpSlug, message
 		return oops.C(oops.CodeUnauthorized)
 	}
 	return oops.E(oops.CodeUnauthorized, nil, "%s", message)
+}
+
+var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not match toolset")
+
+// resolveMcp loads the Toolset addressed by a LegacyMcpEndpointRef. Note
+// that this resolution differs from other places where we resolve MCPs in
+// the legacy MCP pathway. It pins the MCP to only be resolved through a
+// single context rather than allowing it to be resolved willy-nilly by
+// platform slug. Returns errToolsetNotFound on pgx.ErrNoRows.
+func (s *Service) resolveMcp(ctx context.Context, endpoint LegacyMcpEndpointRef) (*toolsets_repo.Toolset, error) {
+	var toolset toolsets_repo.Toolset
+	var err error
+	if endpoint.CustomDomainID.Valid {
+		toolset, err = s.toolsetsRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
+			McpSlug:        conv.ToPGText(endpoint.McpSlug),
+			CustomDomainID: endpoint.CustomDomainID,
+		})
+	} else {
+		toolset, err = s.toolsetsRepo.GetToolsetByPlatformMcpSlug(ctx, conv.ToPGText(endpoint.McpSlug))
+	}
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, errToolsetNotFound
+	case err != nil:
+		return nil, fmt.Errorf("lookup toolset: %w", err)
+	}
+	return &toolset, nil
+}
+
+// compareToolsetEndpoint asserts the stored endpoint reference matches
+// the toolset's (mcp_slug, custom_domain_id) tuple. Replaces the
+// historical ToolsetID-equality state-confusion guard. Today there is
+// one endpoint per toolset and the comparison is direct; the helper
+// centralises it so a future model with multiple mcp_endpoints rows
+// per toolset can expand the check to "endpoint is in the toolset's
+// endpoint set" without churning callers.
+func compareToolsetEndpoint(toolset *toolsets_repo.Toolset, endpoint LegacyMcpEndpointRef) error {
+	if conv.PtrValOr(conv.FromPGText[string](toolset.McpSlug), "") != endpoint.McpSlug {
+		return errToolsetEndpointMismatch
+	}
+	if toolset.CustomDomainID != endpoint.CustomDomainID {
+		return errToolsetEndpointMismatch
+	}
+	return nil
 }
 
 // requireUserSessionIssuer verifies the toolset's user_session_issuer_id FK

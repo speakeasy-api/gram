@@ -12,7 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Invitation lifecycle state.
  */
-export const OrganizationInvitationState = {
+export const State = {
   Pending: "pending",
   Accepted: "accepted",
   Expired: "expired",
@@ -21,9 +21,7 @@ export const OrganizationInvitationState = {
 /**
  * Invitation lifecycle state.
  */
-export type OrganizationInvitationState = ClosedEnum<
-  typeof OrganizationInvitationState
->;
+export type State = ClosedEnum<typeof State>;
 
 export type OrganizationInvitation = {
   /**
@@ -54,14 +52,12 @@ export type OrganizationInvitation = {
   /**
    * Invitation lifecycle state.
    */
-  state: OrganizationInvitationState;
+  state: State;
   updatedAt: Date;
 };
 
 /** @internal */
-export const OrganizationInvitationState$inboundSchema: z.ZodMiniEnum<
-  typeof OrganizationInvitationState
-> = z.enum(OrganizationInvitationState);
+export const State$inboundSchema: z.ZodMiniEnum<typeof State> = z.enum(State);
 
 /** @internal */
 export const OrganizationInvitation$inboundSchema: z.ZodMiniType<
@@ -85,7 +81,7 @@ export const OrganizationInvitation$inboundSchema: z.ZodMiniType<
     revoked_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
-    state: OrganizationInvitationState$inboundSchema,
+    state: State$inboundSchema,
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

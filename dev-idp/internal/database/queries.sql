@@ -102,14 +102,16 @@ LIMIT @max_rows;
 -- =============================================================================
 
 -- ListMembershipsWithOrgName joins memberships with organizations so the
--- WorkOS-shaped response can include `organization_name` (the SDK's
--- OrganizationMembership type carries it).
+-- WorkOS-shaped response can include `organization_name` and the external
+-- `workos_id` (the WorkOS-style org ID that Gram stores in
+-- organization_metadata.workos_id).
 -- name: ListMembershipsWithOrgName :many
 SELECT
   m.id,
   m.user_id,
   m.organization_id,
   o.name AS organization_name,
+  o.workos_id AS org_workos_id,
   m.role,
   m.created_at,
   m.updated_at
@@ -129,6 +131,7 @@ SELECT
   m.user_id,
   m.organization_id,
   o.name AS organization_name,
+  o.workos_id AS org_workos_id,
   m.role,
   m.created_at,
   m.updated_at
@@ -363,6 +366,22 @@ RETURNING *;
 -- default-user bootstrap.
 -- name: DeleteCurrentUser :exec
 DELETE FROM current_users WHERE mode = @mode;
+
+-- =============================================================================
+-- oauth_clients (dynamic client registration for oauth2-1)
+-- =============================================================================
+
+-- name: CreateOAuthClient :one
+INSERT INTO oauth_clients (
+  client_id, mode, client_secret, redirect_uris
+)
+VALUES (
+  @client_id, @mode, @client_secret, @redirect_uris
+)
+RETURNING *;
+
+-- name: GetOAuthClient :one
+SELECT * FROM oauth_clients WHERE client_id = @client_id AND mode = @mode;
 
 -- =============================================================================
 -- auth_codes / tokens (shared by every OAuth-shaped mode)

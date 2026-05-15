@@ -10,19 +10,22 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // HandleIDPCallback is the GET endpoint the IDP redirects back to after the
 // user authenticates on the private-toolset path. Mounted at
-// `GET /mcp/{mcpSlug}/idp_callback`.
+// `GET /mcp/idp_callback`; the legacy `GET /mcp/{mcpSlug}/idp_callback`
+// route is still accepted, but the toolset is resolved from the stored
+// AuthnChallengeState.
 //
 // It drives the IDP wire calls through s.identityResolver (WorkOS-backed)
 // and runs the standard user bootstrap (UpsertUser, posthog signup, WorkOS
@@ -33,29 +36,8 @@ import (
 // persists.
 func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	mcpSlug := chi.URLParam(r, "mcpSlug")
-	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
-	}
-
-	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
-	switch {
-	case errors.Is(err, errToolsetNotFound):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
-	}
-	if !toolset.UserSessionIssuerID.Valid {
-		return oops.E(oops.CodeNotFound, nil, "not found")
-	}
-	if err := s.requireUserSessionIssuer(ctx, toolset); err != nil {
-		return err
-	}
-
-	logger := s.logger.With(
-		attr.SlogToolsetID(toolset.ID.String()),
-		attr.SlogProjectID(toolset.ProjectID.String()),
-	)
+	routeMcpSlug := chi.URLParam(r, "mcpSlug")
+	logger := s.logger
 
 	q := r.URL.Query()
 	stateID := q.Get("state")
@@ -73,10 +55,32 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").Log(ctx, logger)
 	}
 
-	// State-confusion guard: the state must belong to this toolset.
-	if challengeState.ToolsetID != toolset.ID {
+	mcpSlug := challengeState.Endpoint.McpSlug
+	if mcpSlug == "" {
+		return oops.E(oops.CodeBadRequest, nil, "mcp slug is missing from authn challenge state").Log(ctx, logger)
+	}
+	if routeMcpSlug != "" && routeMcpSlug != mcpSlug {
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this MCP server").Log(ctx, logger)
 	}
+
+	toolset, err := s.resolveMcp(ctx, challengeState.Endpoint)
+	switch {
+	case errors.Is(err, errToolsetNotFound):
+		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, logger)
+	}
+	if !toolset.UserSessionIssuerID.Valid {
+		return oops.E(oops.CodeNotFound, nil, "not found")
+	}
+	if err := s.requireUserSessionIssuer(ctx, toolset); err != nil {
+		return err
+	}
+
+	logger = s.logger.With(
+		attr.SlogToolsetID(toolset.ID.String()),
+		attr.SlogProjectID(toolset.ProjectID.String()),
+	)
 
 	// If the IDP returned an error (user cancelled at the IDP, IDP refused
 	// to authenticate, etc.) per OAuth 2.0, forward it back to the MCP
@@ -127,10 +131,22 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	}
 
 	baseURL := s.serverURL.String()
-	if customDomainCtx != nil {
-		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
+	if challengeState.Endpoint.CustomDomainID.Valid {
+		domain, derr := customdomains_repo.New(s.db).GetCustomDomainByIDAndOrganization(ctx, customdomains_repo.GetCustomDomainByIDAndOrganizationParams{
+			ID:             challengeState.Endpoint.CustomDomainID.UUID,
+			OrganizationID: toolset.OrganizationID,
+		})
+		switch {
+		case derr == nil:
+			baseURL = fmt.Sprintf("https://%s", domain.Domain)
+		case !errors.Is(derr, pgx.ErrNoRows):
+			return oops.E(oops.CodeUnexpected, derr, "failed to load custom domain").Log(ctx, logger)
+		}
 	}
-	consentURL := fmt.Sprintf("%s/mcp/%s/connect?state=%s", baseURL, mcpSlug, url.QueryEscape(challengeState.ID))
+	consentURL, err := buildConsentURL(baseURL, mcpSlug, challengeState.ID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build consent URL").Log(ctx, logger)
+	}
 	http.Redirect(w, r, consentURL, http.StatusFound)
 	return nil
 }

@@ -64,6 +64,54 @@ func BuildCreateRemoteSessionClientPayload(remoteSessionClientsCreateRemoteSessi
 	return v, nil
 }
 
+// BuildCloneClientFromOAuthProxyProviderPayload builds the payload for the
+// remoteSessionClients cloneClientFromOAuthProxyProvider endpoint from CLI
+// flags.
+func BuildCloneClientFromOAuthProxyProviderPayload(remoteSessionClientsCloneClientFromOAuthProxyProviderBody string, remoteSessionClientsCloneClientFromOAuthProxyProviderSessionToken string, remoteSessionClientsCloneClientFromOAuthProxyProviderApikeyToken string, remoteSessionClientsCloneClientFromOAuthProxyProviderProjectSlugInput string) (*remotesessionclients.CloneClientFromOAuthProxyProviderPayload, error) {
+	var err error
+	var body CloneClientFromOAuthProxyProviderRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionClientsCloneClientFromOAuthProxyProviderBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"oauth_proxy_provider_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.oauth_proxy_provider_id", body.OauthProxyProviderID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionClientsCloneClientFromOAuthProxyProviderSessionToken != "" {
+			sessionToken = &remoteSessionClientsCloneClientFromOAuthProxyProviderSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionClientsCloneClientFromOAuthProxyProviderApikeyToken != "" {
+			apikeyToken = &remoteSessionClientsCloneClientFromOAuthProxyProviderApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionClientsCloneClientFromOAuthProxyProviderProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionClientsCloneClientFromOAuthProxyProviderProjectSlugInput
+		}
+	}
+	v := &remotesessionclients.CloneClientFromOAuthProxyProviderPayload{
+		OauthProxyProviderID:  body.OauthProxyProviderID,
+		RemoteSessionIssuerID: body.RemoteSessionIssuerID,
+		UserSessionIssuerID:   body.UserSessionIssuerID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildUpdateRemoteSessionClientPayload builds the payload for the
 // remoteSessionClients updateRemoteSessionClient endpoint from CLI flags.
 func BuildUpdateRemoteSessionClientPayload(remoteSessionClientsUpdateRemoteSessionClientBody string, remoteSessionClientsUpdateRemoteSessionClientSessionToken string, remoteSessionClientsUpdateRemoteSessionClientApikeyToken string, remoteSessionClientsUpdateRemoteSessionClientProjectSlugInput string) (*remotesessionclients.UpdateRemoteSessionClientPayload, error) {

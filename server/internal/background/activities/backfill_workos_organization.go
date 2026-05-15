@@ -267,16 +267,15 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 		return nil
 	}
 
-	if gramUserID != "" {
-		if err := orgQueries.UpsertOrganizationUserRelationshipFromWorkOS(ctx, orgrepo.UpsertOrganizationUserRelationshipFromWorkOSParams{
-			OrganizationID:     organizationID,
-			UserID:             conv.ToPGText(gramUserID),
-			WorkosMembershipID: conv.ToPGText(member.ID),
-			WorkosUpdatedAt:    conv.ToPGTimestamptz(parsed.updatedAt),
-			WorkosLastEventID:  conv.ToPGText(""),
-		}); err != nil {
-			return fmt.Errorf("upsert organization membership %q: %w", member.ID, err)
-		}
+	if err := orgQueries.UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
+		OrganizationID:     organizationID,
+		UserID:             conv.ToPGTextEmpty(gramUserID),
+		WorkosUserID:       conv.ToPGText(member.UserID),
+		WorkosMembershipID: conv.ToPGText(member.ID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(parsed.updatedAt),
+		WorkosLastEventID:  conv.ToPGText(""),
+	}); err != nil {
+		return fmt.Errorf("upsert organization membership %q: %w", member.ID, err)
 	}
 
 	roleSlugs := []string{}

@@ -52,18 +52,19 @@ func (wc *Client) CreateOrganization(ctx context.Context, name, gramOrgID string
 	return o.ID, nil
 }
 
-// CreateOrganizationMembership adds a WorkOS user to a WorkOS organization.
-func (wc *Client) CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID string) error {
-	_, err := wc.um.CreateOrganizationMembership(ctx, usermanagement.CreateOrganizationMembershipOpts{
+// CreateOrganizationMembership adds a WorkOS user to a WorkOS organization
+// with the given role and returns the membership ID.
+func (wc *Client) CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error) {
+	membership, err := wc.um.CreateOrganizationMembership(ctx, usermanagement.CreateOrganizationMembershipOpts{
 		UserID:         workosUserID,
 		OrganizationID: workosOrgID,
-		RoleSlug:       "admin",
+		RoleSlug:       roleSlug,
 		RoleSlugs:      nil,
 	})
 	if err != nil {
-		return fmt.Errorf("create organization membership: %w", err)
+		return "", fmt.Errorf("create organization membership: %w", err)
 	}
-	return nil
+	return membership.ID, nil
 }
 
 // EnsureOrgExternalID sets the WorkOS organization's external_id to gramOrgID

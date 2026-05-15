@@ -59,5 +59,5 @@ func NewAssistantsToolset(tools ...ExternalTool) Toolset {
 // platform toolset. Keep the path segments in lockstep with the chi route
 // registered by the mcp package.
 func PlatformToolsetURL(base *url.URL, slug string) string {
-	return base.JoinPath("x", "platform-mcp", slug).String()
+	return base.JoinPath("platform", "mcp", slug).String()
 }

@@ -4,11 +4,12 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery } from "../lib/encodings.js";
+import { encodeFormQuery, encodeJSON, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
+import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
@@ -27,18 +28,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getInviteByToken organizations
+ * setUserSessionIssuer toolsets
  *
  * @remarks
- * Resolve a WorkOS invitation from its token (e.g. accept-flow).
+ * Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
  */
-export function organizationsGetInviteByToken(
+export function toolsetsSetUserSessionIssuer(
   client: GramCore,
-  request: operations.GetInviteByTokenRequest,
+  request: operations.SetToolsetUserSessionIssuerRequest,
+  security?: operations.SetToolsetUserSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.OrganizationInvitationAccept,
+    components.Toolset,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -53,18 +55,20 @@ export function organizationsGetInviteByToken(
   return new APIPromise($do(
     client,
     request,
+    security,
     options,
   ));
 }
 
 async function $do(
   client: GramCore,
-  request: operations.GetInviteByTokenRequest,
+  request: operations.SetToolsetUserSessionIssuerRequest,
+  security?: operations.SetToolsetUserSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.OrganizationInvitationAccept,
+      components.Toolset,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -81,34 +85,79 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(operations.GetInviteByTokenRequest$outboundSchema, value),
+      z.parse(
+        operations.SetToolsetUserSessionIssuerRequest$outboundSchema,
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON("body", payload.SetUserSessionIssuerRequestBody, {
+    explode: true,
+  });
 
-  const path = pathToFunc("/rpc/organizations.getInviteByToken")();
+  const path = pathToFunc("/rpc/toolsets.setUserSessionIssuer")();
 
   const query = encodeFormQuery({
-    "token": payload.token,
+    "slug": payload.slug,
   });
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
+    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+      explode: false,
+      charEncoding: "none",
+    }),
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+      explode: false,
+      charEncoding: "none",
+    }),
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+      explode: false,
+      charEncoding: "none",
+    }),
   }));
+
+  const requestSecurity = resolveSecurity(
+    [
+      {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.option1?.projectSlugHeaderGramProject,
+      },
+      {
+        fieldName: "Gram-Session",
+        type: "apiKey:header",
+        value: security?.option1?.sessionHeaderGramSession,
+      },
+    ],
+    [
+      {
+        fieldName: "Gram-Key",
+        type: "apiKey:header",
+        value: security?.option2?.apikeyHeaderGramKey,
+      },
+      {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.option2?.projectSlugHeaderGramProject,
+      },
+    ],
+  );
 
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getInviteByToken",
+    operationID: "setToolsetUserSessionIssuer",
     oAuth2Scopes: null,
 
-    resolvedSecurity: null,
+    resolvedSecurity: requestSecurity,
 
-    securitySource: null,
+    securitySource: security,
     retryConfig: options?.retries
       || client._options.retryConfig
       || { strategy: "none" },
@@ -116,7 +165,8 @@ async function $do(
   };
 
   const requestRes = client._createRequest(context, {
-    method: "GET",
+    security: requestSecurity,
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -158,7 +208,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.OrganizationInvitationAccept,
+    components.Toolset,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -169,7 +219,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.OrganizationInvitationAccept$inboundSchema),
+    M.json(200, components.Toolset$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

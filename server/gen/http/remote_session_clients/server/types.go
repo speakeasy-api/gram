@@ -30,6 +30,19 @@ type CreateRemoteSessionClientRequestBody struct {
 	AutoRegister *bool `form:"auto_register,omitempty" json:"auto_register,omitempty" xml:"auto_register,omitempty"`
 }
 
+// CloneClientFromOAuthProxyProviderRequestBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP request body.
+type CloneClientFromOAuthProxyProviderRequestBody struct {
+	// The oauth_proxy_provider to read client_id / client_secret from. Must live
+	// in the caller's project.
+	OauthProxyProviderID *string `form:"oauth_proxy_provider_id,omitempty" json:"oauth_proxy_provider_id,omitempty" xml:"oauth_proxy_provider_id,omitempty"`
+	// The remote_session_issuer the new client is registered with.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The user_session_issuer the new client is paired with.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+}
+
 // UpdateRemoteSessionClientRequestBody is the type of the
 // "remoteSessionClients" service "updateRemoteSessionClient" endpoint HTTP
 // request body.
@@ -46,6 +59,28 @@ type UpdateRemoteSessionClientRequestBody struct {
 // "remoteSessionClients" service "createRemoteSessionClient" endpoint HTTP
 // response body.
 type CreateRemoteSessionClientResponseBody struct {
+	// The remote_session_client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The owning project id.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
+	// The user_session_issuer this client is paired with.
+	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID         string `form:"client_id" json:"client_id" xml:"client_id"`
+	ClientIDIssuedAt string `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	CreatedAt             string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt             string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// CloneClientFromOAuthProxyProviderResponseBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP response body.
+type CloneClientFromOAuthProxyProviderResponseBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id.
@@ -291,6 +326,196 @@ type CreateRemoteSessionClientUnexpectedResponseBody struct {
 // "remoteSessionClients" service "createRemoteSessionClient" endpoint HTTP
 // response body for the "gateway_error" error.
 type CreateRemoteSessionClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneClientFromOAuthProxyProviderUnauthorizedResponseBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP response body for the "unauthorized" error.
+type CloneClientFromOAuthProxyProviderUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneClientFromOAuthProxyProviderForbiddenResponseBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP response body for the "forbidden" error.
+type CloneClientFromOAuthProxyProviderForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneClientFromOAuthProxyProviderBadRequestResponseBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP response body for the "bad_request" error.
+type CloneClientFromOAuthProxyProviderBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneClientFromOAuthProxyProviderNotFoundResponseBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP response body for the "not_found" error.
+type CloneClientFromOAuthProxyProviderNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneClientFromOAuthProxyProviderConflictResponseBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP response body for the "conflict" error.
+type CloneClientFromOAuthProxyProviderConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneClientFromOAuthProxyProviderUnsupportedMediaResponseBody is the type of
+// the "remoteSessionClients" service "cloneClientFromOAuthProxyProvider"
+// endpoint HTTP response body for the "unsupported_media" error.
+type CloneClientFromOAuthProxyProviderUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneClientFromOAuthProxyProviderInvalidResponseBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP response body for the "invalid" error.
+type CloneClientFromOAuthProxyProviderInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneClientFromOAuthProxyProviderInvariantViolationResponseBody is the type
+// of the "remoteSessionClients" service "cloneClientFromOAuthProxyProvider"
+// endpoint HTTP response body for the "invariant_violation" error.
+type CloneClientFromOAuthProxyProviderInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneClientFromOAuthProxyProviderUnexpectedResponseBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP response body for the "unexpected" error.
+type CloneClientFromOAuthProxyProviderUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneClientFromOAuthProxyProviderGatewayErrorResponseBody is the type of the
+// "remoteSessionClients" service "cloneClientFromOAuthProxyProvider" endpoint
+// HTTP response body for the "gateway_error" error.
+type CloneClientFromOAuthProxyProviderGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1105,6 +1330,24 @@ func NewCreateRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *C
 	return body
 }
 
+// NewCloneClientFromOAuthProxyProviderResponseBody builds the HTTP response
+// body from the result of the "cloneClientFromOAuthProxyProvider" endpoint of
+// the "remoteSessionClients" service.
+func NewCloneClientFromOAuthProxyProviderResponseBody(res *types.RemoteSessionClient) *CloneClientFromOAuthProxyProviderResponseBody {
+	body := &CloneClientFromOAuthProxyProviderResponseBody{
+		ID:                    res.ID,
+		ProjectID:             res.ProjectID,
+		RemoteSessionIssuerID: res.RemoteSessionIssuerID,
+		UserSessionIssuerID:   res.UserSessionIssuerID,
+		ClientID:              res.ClientID,
+		ClientIDIssuedAt:      res.ClientIDIssuedAt,
+		ClientSecretExpiresAt: res.ClientSecretExpiresAt,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+	}
+	return body
+}
+
 // NewUpdateRemoteSessionClientResponseBody builds the HTTP response body from
 // the result of the "updateRemoteSessionClient" endpoint of the
 // "remoteSessionClients" service.
@@ -1303,6 +1546,158 @@ func NewCreateRemoteSessionClientUnexpectedResponseBody(res *goa.ServiceError) *
 // the "remoteSessionClients" service.
 func NewCreateRemoteSessionClientGatewayErrorResponseBody(res *goa.ServiceError) *CreateRemoteSessionClientGatewayErrorResponseBody {
 	body := &CreateRemoteSessionClientGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneClientFromOAuthProxyProviderUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "cloneClientFromOAuthProxyProvider"
+// endpoint of the "remoteSessionClients" service.
+func NewCloneClientFromOAuthProxyProviderUnauthorizedResponseBody(res *goa.ServiceError) *CloneClientFromOAuthProxyProviderUnauthorizedResponseBody {
+	body := &CloneClientFromOAuthProxyProviderUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneClientFromOAuthProxyProviderForbiddenResponseBody builds the HTTP
+// response body from the result of the "cloneClientFromOAuthProxyProvider"
+// endpoint of the "remoteSessionClients" service.
+func NewCloneClientFromOAuthProxyProviderForbiddenResponseBody(res *goa.ServiceError) *CloneClientFromOAuthProxyProviderForbiddenResponseBody {
+	body := &CloneClientFromOAuthProxyProviderForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneClientFromOAuthProxyProviderBadRequestResponseBody builds the HTTP
+// response body from the result of the "cloneClientFromOAuthProxyProvider"
+// endpoint of the "remoteSessionClients" service.
+func NewCloneClientFromOAuthProxyProviderBadRequestResponseBody(res *goa.ServiceError) *CloneClientFromOAuthProxyProviderBadRequestResponseBody {
+	body := &CloneClientFromOAuthProxyProviderBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneClientFromOAuthProxyProviderNotFoundResponseBody builds the HTTP
+// response body from the result of the "cloneClientFromOAuthProxyProvider"
+// endpoint of the "remoteSessionClients" service.
+func NewCloneClientFromOAuthProxyProviderNotFoundResponseBody(res *goa.ServiceError) *CloneClientFromOAuthProxyProviderNotFoundResponseBody {
+	body := &CloneClientFromOAuthProxyProviderNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneClientFromOAuthProxyProviderConflictResponseBody builds the HTTP
+// response body from the result of the "cloneClientFromOAuthProxyProvider"
+// endpoint of the "remoteSessionClients" service.
+func NewCloneClientFromOAuthProxyProviderConflictResponseBody(res *goa.ServiceError) *CloneClientFromOAuthProxyProviderConflictResponseBody {
+	body := &CloneClientFromOAuthProxyProviderConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneClientFromOAuthProxyProviderUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the
+// "cloneClientFromOAuthProxyProvider" endpoint of the "remoteSessionClients"
+// service.
+func NewCloneClientFromOAuthProxyProviderUnsupportedMediaResponseBody(res *goa.ServiceError) *CloneClientFromOAuthProxyProviderUnsupportedMediaResponseBody {
+	body := &CloneClientFromOAuthProxyProviderUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneClientFromOAuthProxyProviderInvalidResponseBody builds the HTTP
+// response body from the result of the "cloneClientFromOAuthProxyProvider"
+// endpoint of the "remoteSessionClients" service.
+func NewCloneClientFromOAuthProxyProviderInvalidResponseBody(res *goa.ServiceError) *CloneClientFromOAuthProxyProviderInvalidResponseBody {
+	body := &CloneClientFromOAuthProxyProviderInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneClientFromOAuthProxyProviderInvariantViolationResponseBody builds
+// the HTTP response body from the result of the
+// "cloneClientFromOAuthProxyProvider" endpoint of the "remoteSessionClients"
+// service.
+func NewCloneClientFromOAuthProxyProviderInvariantViolationResponseBody(res *goa.ServiceError) *CloneClientFromOAuthProxyProviderInvariantViolationResponseBody {
+	body := &CloneClientFromOAuthProxyProviderInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneClientFromOAuthProxyProviderUnexpectedResponseBody builds the HTTP
+// response body from the result of the "cloneClientFromOAuthProxyProvider"
+// endpoint of the "remoteSessionClients" service.
+func NewCloneClientFromOAuthProxyProviderUnexpectedResponseBody(res *goa.ServiceError) *CloneClientFromOAuthProxyProviderUnexpectedResponseBody {
+	body := &CloneClientFromOAuthProxyProviderUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneClientFromOAuthProxyProviderGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "cloneClientFromOAuthProxyProvider"
+// endpoint of the "remoteSessionClients" service.
+func NewCloneClientFromOAuthProxyProviderGatewayErrorResponseBody(res *goa.ServiceError) *CloneClientFromOAuthProxyProviderGatewayErrorResponseBody {
+	body := &CloneClientFromOAuthProxyProviderGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1930,6 +2325,21 @@ func NewCreateRemoteSessionClientPayload(body *CreateRemoteSessionClientRequestB
 	return v
 }
 
+// NewCloneClientFromOAuthProxyProviderPayload builds a remoteSessionClients
+// service cloneClientFromOAuthProxyProvider endpoint payload.
+func NewCloneClientFromOAuthProxyProviderPayload(body *CloneClientFromOAuthProxyProviderRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionclients.CloneClientFromOAuthProxyProviderPayload {
+	v := &remotesessionclients.CloneClientFromOAuthProxyProviderPayload{
+		OauthProxyProviderID:  *body.OauthProxyProviderID,
+		RemoteSessionIssuerID: *body.RemoteSessionIssuerID,
+		UserSessionIssuerID:   *body.UserSessionIssuerID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewUpdateRemoteSessionClientPayload builds a remoteSessionClients service
 // updateRemoteSessionClient endpoint payload.
 func NewUpdateRemoteSessionClientPayload(body *UpdateRemoteSessionClientRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionclients.UpdateRemoteSessionClientPayload {
@@ -1992,6 +2402,30 @@ func ValidateCreateRemoteSessionClientRequestBody(body *CreateRemoteSessionClien
 	}
 	if body.UserSessionIssuerID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateCloneClientFromOAuthProxyProviderRequestBody runs the validations
+// defined on CloneClientFromOAuthProxyProviderRequestBody
+func ValidateCloneClientFromOAuthProxyProviderRequestBody(body *CloneClientFromOAuthProxyProviderRequestBody) (err error) {
+	if body.OauthProxyProviderID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oauth_proxy_provider_id", "body"))
+	}
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.OauthProxyProviderID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.oauth_proxy_provider_id", *body.OauthProxyProviderID, goa.FormatUUID))
 	}
 	if body.RemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))

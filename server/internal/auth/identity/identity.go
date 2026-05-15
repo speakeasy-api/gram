@@ -61,7 +61,7 @@ type WorkOSClient interface {
 	EnsureUserExternalID(ctx context.Context, workosUserID, gramUserID string) error
 	EnsureOrgExternalID(ctx context.Context, workosOrgID, gramOrgID string) error
 	CreateOrganization(ctx context.Context, name, gramOrgID string) (string, error)
-	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID string) error
+	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
 }
 
 // IDPUserInfo represents the user identity returned by the IDP after code exchange.
@@ -490,9 +490,6 @@ func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params sessions.Au
 	q.Set("state", params.State)
 	q.Set("scope", "openid email profile")
 	q.Set("provider", "authkit")
-	if params.OrganizationID != "" {
-		q.Set("organization_id", params.OrganizationID)
-	}
 
 	authorizeBase := workosAuthorizeEndpoint
 	if !strings.HasPrefix(r.idpClientID, "client_") {
@@ -534,7 +531,7 @@ func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, gramOrgID, orgName,
 		return "", fmt.Errorf("create WorkOS organization: %w", err)
 	}
 
-	if err := r.workosClient.CreateOrganizationMembership(ctx, user.WorkosID.String, workosOrgID); err != nil {
+	if _, err := r.workosClient.CreateOrganizationMembership(ctx, user.WorkosID.String, workosOrgID, "admin"); err != nil {
 		return "", fmt.Errorf("create WorkOS organization membership: %w", err)
 	}
 

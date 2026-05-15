@@ -52,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -89,6 +90,7 @@ import (
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
@@ -401,6 +403,12 @@ func newStartCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
+			Name:     "loops-api-key",
+			Usage:    "Loops API key for transactional emails (invite emails). Empty or 'unset' disables email sending.",
+			EnvVars:  []string{"LOOPS_API_KEY"},
+			Required: false,
+		},
+		&cli.StringFlag{
 			Name:    "presidio-analyzer-url",
 			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
 			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},
@@ -603,6 +611,8 @@ func newStartCommand() *cli.Command {
 			auditLogger := newAuditLogger()
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+			loopsClient := loops.New(ctx, logger, guardianPolicy, c.String("loops-api-key"))
+			emailService := email.NewService(logger, loopsClient)
 
 			var openRouter openrouter.Provisioner
 			if c.String("environment") == "local" {
@@ -766,6 +776,15 @@ func newStartCommand() *cli.Command {
 				platformtoolsruntime.WithExternalTools(memoryTools),
 			)
 
+			remoteChallengeManager := remotesessions.NewChallengeManager(
+				logger,
+				db,
+				encryptionClient,
+				guardianPolicy,
+				cache.NewRedisCacheAdapter(redisClient),
+				serverURL,
+			)
+
 			mcpService := mcp.NewService(
 				logger,
 				tracerProvider,
@@ -797,6 +816,7 @@ func newStartCommand() *cli.Command {
 				platformToolsets,
 				identityResolver,
 				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
+				remoteChallengeManager,
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -958,7 +978,7 @@ func newStartCommand() *cli.Command {
 				posthogClient,
 				cache.NewRedisCacheAdapter(redisClient),
 			))
-			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, productFeatures, authzEngine, auditLogger, svixClient))
+			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, authzEngine, emailService, siteURL.String(), auditLogger, svixClient))
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 
