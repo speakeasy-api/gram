@@ -24,6 +24,10 @@ func (o *Development) GetCreditsUsed(ctx context.Context, orgID string) (float64
 	return 12.5, 10, nil // arbitrary local numbers
 }
 
+func (o *Development) GetKeyUsage(ctx context.Context, apiKey string) (float64, error) {
+	return 12.5, nil // arbitrary local number
+}
+
 func (o *Development) GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error) {
 	// Development mode doesn't track model usage
 	totalCost := 12.5
