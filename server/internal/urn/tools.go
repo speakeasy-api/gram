@@ -72,6 +72,10 @@ func (u Tool) String() string {
 	return "tools" + delimiter + string(u.Kind) + delimiter + u.Source + delimiter + u.Name
 }
 
+func (u Tool) Validate() error {
+	return u.validate()
+}
+
 func (u Tool) MarshalJSON() ([]byte, error) {
 	if err := u.validate(); err != nil {
 		return nil, err
@@ -178,7 +182,12 @@ func (u *Tool) validate() error {
 			return u.err
 		}
 
-		if !constants.SlugPatternRE.MatchString(v) {
+		if segment == "name" && !constants.MCPToolNamePatternRE.MatchString(v) {
+			u.err = fmt.Errorf("%w: disallowed characters in %s: %q", ErrInvalid, segment, v)
+			return u.err
+		}
+
+		if segment != "name" && !constants.SlugPatternRE.MatchString(v) {
 			u.err = fmt.Errorf("%w: disallowed characters in %s: %q", ErrInvalid, segment, v)
 			return u.err
 		}
