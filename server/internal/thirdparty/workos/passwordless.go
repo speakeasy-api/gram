@@ -31,10 +31,12 @@ func (wc *Client) CreatePasswordlessSession(ctx context.Context, opts CreatePass
 		APIKey:     wc.apiKey,
 		HTTPClient: wc.httpClient,
 		Endpoint:   wc.endpoint,
+		JSONEncode: nil,
 	}
 	sess, err := pwl.CreateSession(ctx, passwordless.CreateSessionOpts{
 		Email:       opts.Email,
 		Type:        passwordless.MagicLink,
+		Connection:  "",
 		RedirectURI: opts.RedirectURI,
 		ExpiresIn:   opts.ExpiresIn,
 		State:       opts.State,

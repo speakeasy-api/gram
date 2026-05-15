@@ -35,8 +35,8 @@ type stubOrgState struct {
 	roleOrder    []string
 	memberships  map[string]Member
 	users        map[string]User
-	invites      map[string]Invitation //nolint:unused // reserved for invite stub tests
-	inviteOrder  []string              //nolint:unused // reserved for invite stub tests
+	invites      map[string]Invitation
+	inviteOrder  []string
 }
 
 func NewStubClient() *StubClient {
@@ -412,6 +412,8 @@ func (s *StubClient) orgState(orgID string) *stubOrgState {
 		roleOrder:   []string{"admin", "member"},
 		memberships: make(map[string]Member),
 		users:       make(map[string]User),
+		invites:     make(map[string]Invitation),
+		inviteOrder: nil,
 	}
 	s.orgs[orgID] = state
 	s.orgOrder = append(s.orgOrder, orgID)

@@ -172,7 +172,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		return nil, oops.E(oops.CodeUnexpected, err, "generate invite token").Log(ctx, logger)
 	}
 
-	roleSlug := pgtype.Text{}
+	roleSlug := pgtype.Text{String: "", Valid: false}
 	if payload.RoleID != nil && *payload.RoleID != "" {
 		roleSlug = conv.ToPGText(*payload.RoleID)
 	}
@@ -745,10 +745,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	// Verify the authenticated email matches the invite.
 	inviteeEmail := strings.ToLower(profile.Email)
 	if invite.Email != inviteeEmail {
-		s.logger.WarnContext(ctx, "invite callback: email mismatch",
-			slog.String("invite_email", invite.Email),
-			slog.String("authenticated_email", inviteeEmail),
-		)
+		s.logger.WarnContext(ctx, fmt.Sprintf("invite callback: email mismatch (invite=%s, authenticated=%s)", invite.Email, inviteeEmail))
 		redirectError("email does not match invitation")
 		return
 	}

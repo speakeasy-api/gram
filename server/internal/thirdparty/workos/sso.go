@@ -29,6 +29,7 @@ func (wc *Client) AuthenticateWithInviteLink(ctx context.Context, code string) (
 		ClientID:   wc.clientID,
 		HTTPClient: wc.httpClient,
 		Endpoint:   wc.endpoint,
+		JSONEncode: nil,
 	}
 
 	resp, err := ssoClient.GetProfileAndToken(ctx, sso.GetProfileAndTokenOpts{
