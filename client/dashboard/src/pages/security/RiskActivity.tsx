@@ -27,6 +27,9 @@ import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { CategoryLabel, MaskedMatch } from "./risk-ui";
 
+const RISK_ACTIVITY_GRID =
+  "grid grid-cols-[172px_minmax(140px,0.9fr)_minmax(160px,1fr)_minmax(180px,1.15fr)_minmax(160px,1fr)_minmax(200px,1.25fr)_minmax(180px,1.1fr)_110px] gap-3";
+
 export default function RiskActivity() {
   return (
     <RequireScope scope="org:admin" level="page">
@@ -263,15 +266,20 @@ function RiskActivityContent() {
 
 function RiskActivityHeader() {
   return (
-    <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-8 py-2.5 text-xs font-medium tracking-wide uppercase">
-      <div className="w-[172px] shrink-0">Timestamp</div>
-      <div className="w-[256px] shrink-0">Category</div>
-      <div className="w-[288px] shrink-0">Rule</div>
-      <div className="w-[288px] shrink-0">Session Name</div>
-      <div className="w-[288px] shrink-0">User</div>
-      <div className="min-w-[320px] flex-1">Match</div>
-      <div className="w-[288px] shrink-0">Policy Note</div>
-      <div className="flex w-[110px] shrink-0 justify-center">Actions</div>
+    <div
+      className={cn(
+        RISK_ACTIVITY_GRID,
+        "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-8 py-2.5 text-xs font-medium tracking-wide",
+      )}
+    >
+      <div className="min-w-0">Timestamp</div>
+      <div className="min-w-0">Category</div>
+      <div className="min-w-0">Rule</div>
+      <div className="min-w-0">Session Name</div>
+      <div className="min-w-0">User</div>
+      <div className="min-w-0">Match</div>
+      <div className="min-w-0">Policy Note</div>
+      <div className="flex min-w-0 justify-center">Actions</div>
     </div>
   );
 }
@@ -369,7 +377,8 @@ function RiskActivityRow({
     <button
       type="button"
       className={cn(
-        "hover:bg-muted/30 flex w-full items-center gap-3 border-b px-8 py-3 text-left text-sm transition-colors",
+        RISK_ACTIVITY_GRID,
+        "hover:bg-muted/30 w-full items-center border-b px-8 py-3 text-left text-sm transition-colors",
         !result.chatId && "cursor-default",
       )}
       onClick={() => {
@@ -378,20 +387,18 @@ function RiskActivityRow({
         }
       }}
     >
-      <div className="text-muted-foreground w-[172px] shrink-0 font-mono text-xs">
+      <div className="text-muted-foreground min-w-0 font-mono text-xs">
         {result.createdAt ? new Date(result.createdAt).toLocaleString() : "-"}
       </div>
-      <div className="w-[256px] shrink-0">
+      <div className="min-w-0">
         <CategoryLabel source={result.source} ruleId={result.ruleId} />
       </div>
-      <div className="w-[288px] shrink-0">
+      <div className="min-w-0 truncate">
         <span className="font-mono text-xs">{result.ruleId ?? "-"}</span>
       </div>
-      <div className="w-[288px] shrink-0 truncate">
-        {result.chatTitle ?? "Untitled"}
-      </div>
-      <div className="w-[288px] shrink-0 truncate">{result.userId ?? "-"}</div>
-      <div className="min-w-[320px] flex-1 truncate">
+      <div className="min-w-0 truncate">{result.chatTitle ?? "Untitled"}</div>
+      <div className="min-w-0 truncate">{result.userId ?? "-"}</div>
+      <div className="min-w-0 truncate">
         {isShadowMCP && result.match ? (
           <span className="font-mono text-xs" title={result.match}>
             {result.match}
@@ -400,10 +407,10 @@ function RiskActivityRow({
           <MaskedMatch value={result.match} />
         )}
       </div>
-      <div className="w-[288px] shrink-0 truncate" title={policyNote}>
+      <div className="min-w-0 truncate" title={policyNote}>
         {policyNote ?? "-"}
       </div>
-      <div className="flex w-[110px] shrink-0 justify-center">
+      <div className="flex min-w-0 justify-center">
         {isShadowMCP && result.match ? (
           <Button
             variant="secondary"
