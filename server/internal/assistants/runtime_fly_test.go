@@ -513,6 +513,74 @@ func TestFlyRuntimeBackendReapToleratesMissingMachine(t *testing.T) {
 	require.Equal(t, 1, apiClient.deleteCalls, "missing machine should not block app cleanup when no siblings remain")
 }
 
+func TestFlyRuntimeBackendReapStoppedMachineDestroysOnlyMachine(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t, true)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:   "gram-asst-shared",
+		AppID:     "app-1",
+		AppURL:    "https://gram-asst-shared.fly.dev",
+		AppIP:     "1.2.3.4",
+		MachineID: "machine-1",
+	})
+	require.NoError(t, err)
+
+	err = backend.ReapStoppedMachine(context.Background(), assistantRuntimeRecord{
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, flapsClient.destroyCalls)
+	require.Equal(t, "machine-1", flapsClient.destroyInputs[0].ID)
+	require.True(t, flapsClient.destroyInputs[0].Kill)
+	require.Equal(t, 0, apiClient.deleteCalls, "per-thread reap must leave the app intact")
+}
+
+func TestFlyRuntimeBackendReapStoppedMachineToleratesMissingMachine(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t, true)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	flapsClient.destroyErr = errors.New("not found")
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:   "gram-asst-shared",
+		MachineID: "machine-already-gone",
+	})
+	require.NoError(t, err)
+
+	err = backend.ReapStoppedMachine(context.Background(), assistantRuntimeRecord{
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, apiClient.deleteCalls)
+}
+
+func TestFlyRuntimeBackendReapStoppedMachineNoopWithoutMachineID(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t, true)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName: "gram-asst-shared",
+	})
+	require.NoError(t, err)
+
+	err = backend.ReapStoppedMachine(context.Background(), assistantRuntimeRecord{
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, flapsClient.destroyCalls)
+	require.Equal(t, 0, apiClient.deleteCalls)
+}
+
 func TestFlyRuntimeBackendReapTreatsAppNotFoundAsSuccess(t *testing.T) {
 	t.Parallel()
 

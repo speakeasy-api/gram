@@ -37,6 +37,14 @@ const (
 	// rhythm keeps it out of the candidate set; short enough that
 	// abandoned tenants don't sit on Fly apps for weeks.
 	AssistantRuntimeJanitorInactivityThreshold = 7 * 24 * time.Hour
+
+	// AssistantRuntimeJanitorStoppedTTL is the age (against the row's own
+	// updated_at) at which a stopped or failed runtime becomes eligible for
+	// per-thread collection, regardless of sibling activity on the assistant.
+	// Daily/weekly triggers re-Stop the row well inside this window, so only
+	// truly dormant threads age out; the assistant app survives so the next
+	// admit cold-launches with the same IP and secrets.
+	AssistantRuntimeJanitorStoppedTTL = 14 * 24 * time.Hour
 )
 
 // AssistantRuntimeJanitorWorkflowParams lets operators override the bake-in
@@ -44,6 +52,7 @@ const (
 // remediation. Empty fields fall back to the package constants.
 type AssistantRuntimeJanitorWorkflowParams struct {
 	InactivityThreshold time.Duration
+	StoppedTTL          time.Duration
 	BatchSize           int32
 }
 
@@ -64,6 +73,10 @@ func AssistantRuntimeJanitorWorkflow(ctx workflow.Context, params AssistantRunti
 	if threshold <= 0 {
 		threshold = AssistantRuntimeJanitorInactivityThreshold
 	}
+	stoppedTTL := params.StoppedTTL
+	if stoppedTTL <= 0 {
+		stoppedTTL = AssistantRuntimeJanitorStoppedTTL
+	}
 	batchSize := params.BatchSize
 	if batchSize <= 0 {
 		batchSize = AssistantRuntimeJanitorBatchSize
@@ -81,22 +94,34 @@ func AssistantRuntimeJanitorWorkflow(ctx workflow.Context, params AssistantRunti
 		},
 	})
 
-	var result activities.ReapInactiveAssistantRuntimesResult
+	var inactiveResult activities.ReapInactiveAssistantRuntimesResult
 	if err := workflow.ExecuteActivity(ctx, a.ReapInactiveAssistantRuntimes, activities.ReapInactiveAssistantRuntimesRequest{
 		InactivityThreshold: threshold,
 		BatchSize:           batchSize,
-	}).Get(ctx, &result); err != nil {
+	}).Get(ctx, &inactiveResult); err != nil {
 		return nil, fmt.Errorf("reap inactive assistant runtimes: %w", err)
 	}
 
+	var stoppedResult activities.ReapStoppedAssistantRuntimesResult
+	if err := workflow.ExecuteActivity(ctx, a.ReapStoppedAssistantRuntimes, activities.ReapStoppedAssistantRuntimesRequest{
+		StoppedTTL: stoppedTTL,
+		BatchSize:  batchSize,
+	}).Get(ctx, &stoppedResult); err != nil {
+		return nil, fmt.Errorf("reap stopped assistant runtimes: %w", err)
+	}
+
+	reaped := inactiveResult.Reaped + stoppedResult.Reaped
+	errs := inactiveResult.Errors + stoppedResult.Errors
 	logger.Info("assistant runtime janitor completed",
-		"reaped", result.Reaped,
-		"errors", result.Errors,
+		"reaped", reaped,
+		"errors", errs,
+		"inactive_reaped", inactiveResult.Reaped,
+		"stopped_reaped", stoppedResult.Reaped,
 	)
 
 	return &AssistantRuntimeJanitorWorkflowResult{
-		Reaped: result.Reaped,
-		Errors: result.Errors,
+		Reaped: reaped,
+		Errors: errs,
 	}, nil
 }
 
@@ -113,6 +138,7 @@ func AddAssistantRuntimeJanitorSchedule(ctx context.Context, temporalEnv *tenv.E
 			WorkflowRunTimeout: 15 * time.Minute,
 			Args: []any{AssistantRuntimeJanitorWorkflowParams{
 				InactivityThreshold: 0,
+				StoppedTTL:          0,
 				BatchSize:           0,
 			}},
 		},

@@ -58,3 +58,52 @@ func (r *ReapInactiveAssistantRuntimes) Do(ctx context.Context, req ReapInactive
 		Errors: result.Errors,
 	}, nil
 }
+
+// ReapStoppedAssistantRuntimesRequest carries one per-thread reap sweep's
+// configuration over the Temporal activity boundary.
+type ReapStoppedAssistantRuntimesRequest struct {
+	StoppedTTL time.Duration
+	BatchSize  int32
+}
+
+type ReapStoppedAssistantRuntimesResult struct {
+	Reaped int
+	Errors int
+}
+
+type ReapStoppedAssistantRuntimes struct {
+	logger *slog.Logger
+	core   *assistants.ServiceCore
+}
+
+func NewReapStoppedAssistantRuntimes(logger *slog.Logger, core *assistants.ServiceCore) *ReapStoppedAssistantRuntimes {
+	return &ReapStoppedAssistantRuntimes{
+		logger: logger.With(attr.SlogComponent("assistant_runtime_janitor")),
+		core:   core,
+	}
+}
+
+func (r *ReapStoppedAssistantRuntimes) Do(ctx context.Context, req ReapStoppedAssistantRuntimesRequest) (*ReapStoppedAssistantRuntimesResult, error) {
+	if r.core == nil {
+		return nil, fmt.Errorf("assistants core not configured")
+	}
+
+	result, err := r.core.ReapStoppedAssistantRuntimes(ctx, assistants.ReapStoppedAssistantRuntimesParams{
+		StoppedTTL: req.StoppedTTL,
+		BatchSize:  req.BatchSize,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("reap stopped assistant runtimes: %w", err)
+	}
+
+	if result.Reaped > 0 || result.Errors > 0 {
+		r.logger.InfoContext(ctx, fmt.Sprintf("assistant runtime janitor (stopped) swept reaped=%d errors=%d", result.Reaped, result.Errors),
+			attr.SlogVisibilityInternal(),
+		)
+	}
+
+	return &ReapStoppedAssistantRuntimesResult{
+		Reaped: result.Reaped,
+		Errors: result.Errors,
+	}, nil
+}
