@@ -1,6 +1,8 @@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import { useSdkClient } from "@/contexts/Sdk";
 import { cn, getServerURL } from "@/lib/utils";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
@@ -297,6 +299,7 @@ export function AddServerDialog({
   onServersAdded,
   projectSlug,
 }: AddServerDialogProps) {
+  const telemetry = useTelemetry();
   // Fetch server details (including remotes) when dialog opens
   const {
     enrichedServers,
@@ -308,6 +311,9 @@ export function AddServerDialog({
   const releaseState = useExternalMcpReleaseWorkflow({
     servers: enrichedServers,
     projectSlug,
+    onboardExternalMcpToUserSessions:
+      telemetry.isFeatureEnabled(ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG) ??
+      false,
   });
 
   // Reset when dialog closes

@@ -5,6 +5,11 @@ const mockEvolveDeployment = vi.fn();
 const mockToolsetsCreate = vi.fn();
 const mockToolsetsUpdateBySlug = vi.fn();
 const mockToolsetsGetBySlug = vi.fn();
+const mockToolsetsSetUserSessionIssuer = vi.fn();
+const mockUserSessionIssuersCreate = vi.fn();
+const mockRemoteSessionIssuersDiscover = vi.fn();
+const mockRemoteSessionIssuersCreate = vi.fn();
+const mockRemoteSessionIssuersRegister = vi.fn();
 
 // Return a stable client reference to avoid re-render loops from useCallback deps
 const mockClient = {
@@ -13,6 +18,15 @@ const mockClient = {
     create: mockToolsetsCreate,
     updateBySlug: mockToolsetsUpdateBySlug,
     getBySlug: mockToolsetsGetBySlug,
+    setUserSessionIssuer: mockToolsetsSetUserSessionIssuer,
+  },
+  userSessionIssuers: {
+    create: mockUserSessionIssuersCreate,
+  },
+  remoteSessionIssuers: {
+    discover: mockRemoteSessionIssuersDiscover,
+    create: mockRemoteSessionIssuersCreate,
+    register: mockRemoteSessionIssuersRegister,
   },
 };
 
@@ -119,6 +133,23 @@ describe("useExternalMcpReleaseWorkflow", () => {
       data: undefined,
       isLoading: false,
     } as ReturnType<typeof useListToolsets>);
+    mockUserSessionIssuersCreate.mockResolvedValue({ id: "usi-1" });
+    mockRemoteSessionIssuersDiscover.mockResolvedValue({
+      issuer: "https://idp.example",
+      authorizationEndpoint: "https://idp.example/oauth/authorize",
+      tokenEndpoint: "https://idp.example/oauth/token",
+      registrationEndpoint: "https://idp.example/oauth/register",
+      scopesSupported: ["read"],
+      grantTypesSupported: ["authorization_code", "refresh_token"],
+      responseTypesSupported: ["code"],
+      tokenEndpointAuthMethodsSupported: ["client_secret_basic"],
+      oidc: false,
+      passthrough: false,
+      discoveryWarnings: [],
+    });
+    mockRemoteSessionIssuersCreate.mockResolvedValue({ id: "rsi-1" });
+    mockRemoteSessionIssuersRegister.mockResolvedValue({ id: "rsc-1" });
+    mockToolsetsSetUserSessionIssuer.mockResolvedValue({});
   });
 
   // -------------------------------------------------------------------------
@@ -977,6 +1008,197 @@ describe("useExternalMcpReleaseWorkflow", () => {
         undefined,
         undefined,
       );
+    });
+
+    it("onboards OAuth 2.1 toolsets to user sessions when enabled", async () => {
+      mockEvolveDeployment.mockResolvedValue({});
+      mockToolsetsCreate.mockResolvedValue({ slug: "my-server" });
+      mockToolsetsUpdateBySlug.mockResolvedValue({});
+      mockToolsetsGetBySlug.mockResolvedValue({
+        slug: "my-server",
+        name: "My Server",
+        mcpSlug: "mcp-slug",
+        tools: [
+          {
+            externalMcpToolDefinition: {
+              requiresOauth: true,
+              slug: "my-server",
+              name: "proxy",
+              registryServerName: "My Server",
+              oauthAuthorizationEndpoint: "https://idp.example/oauth/authorize",
+              oauthTokenEndpoint: "https://idp.example/oauth/token",
+              oauthRegistrationEndpoint: "https://idp.example/oauth/register",
+              oauthScopesSupported: ["read"],
+            },
+          },
+        ],
+      });
+
+      const servers = [makeServer({ title: "My Server" })];
+      const { result } = renderHook(() =>
+        useExternalMcpReleaseWorkflow({
+          servers,
+          onboardExternalMcpToUserSessions: true,
+        }),
+      );
+      await act(async () => {
+        const state = result.current;
+        if (state.phase !== "configure") throw new Error("unexpected phase");
+        await state.startDeployment();
+      });
+
+      await vi.waitFor(() => {
+        const state = result.current;
+        if (state.phase !== "complete") throw new Error("unexpected phase");
+        expect(state.toolsetStatuses[0].status).toBe("completed");
+      });
+
+      expect(mockToolsetsUpdateBySlug).toHaveBeenNthCalledWith(
+        1,
+        {
+          slug: "my-server",
+          updateToolsetRequestBody: {
+            mcpEnabled: true,
+            mcpIsPublic: false,
+          },
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockUserSessionIssuersCreate).toHaveBeenCalledWith(
+        {
+          createUserSessionIssuerForm: {
+            slug: expect.stringMatching(/^my-server-[0-9a-f]{8}$/),
+            authnChallengeMode: "interactive",
+            sessionDurationHours: 24 * 14,
+          },
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockRemoteSessionIssuersDiscover).toHaveBeenCalledWith(
+        {
+          discoverRemoteSessionIssuerRequestBody: {
+            issuer: "https://idp.example/oauth",
+          },
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockRemoteSessionIssuersCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          createRemoteSessionIssuerForm: expect.objectContaining({
+            registrationEndpoint: "https://idp.example/oauth/register",
+          }),
+        }),
+        undefined,
+        undefined,
+      );
+      expect(mockRemoteSessionIssuersRegister).toHaveBeenCalledWith(
+        {
+          registerRemoteSessionIssuerForm: expect.objectContaining({
+            remoteSessionIssuerId: "rsi-1",
+            userSessionIssuerId: "usi-1",
+            redirectUris: [
+              expect.stringContaining("/mcp/remote_login_callback"),
+            ],
+          }),
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockToolsetsUpdateBySlug).toHaveBeenNthCalledWith(
+        2,
+        {
+          slug: "my-server",
+          updateToolsetRequestBody: {
+            mcpIsPublic: false,
+          },
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockToolsetsSetUserSessionIssuer).toHaveBeenCalledWith(
+        {
+          slug: "my-server",
+          setUserSessionIssuerRequestBody: {
+            userSessionIssuerId: "usi-1",
+          },
+        },
+        undefined,
+        undefined,
+      );
+    });
+
+    it("keeps current behavior when onboarding is enabled but no registration endpoint exists", async () => {
+      mockEvolveDeployment.mockResolvedValue({});
+      mockToolsetsCreate.mockResolvedValue({ slug: "my-server" });
+      mockToolsetsUpdateBySlug.mockResolvedValue({});
+      mockToolsetsGetBySlug.mockResolvedValue({
+        slug: "my-server",
+        name: "My Server",
+        mcpSlug: "mcp-slug",
+        tools: [
+          {
+            externalMcpToolDefinition: {
+              requiresOauth: true,
+              slug: "my-server",
+              name: "proxy",
+              registryServerName: "My Server",
+              oauthAuthorizationEndpoint: "https://idp.example/oauth/authorize",
+              oauthTokenEndpoint: "https://idp.example/oauth/token",
+              oauthScopesSupported: ["read"],
+            },
+          },
+        ],
+      });
+
+      const servers = [makeServer({ title: "My Server" })];
+      const { result } = renderHook(() =>
+        useExternalMcpReleaseWorkflow({
+          servers,
+          onboardExternalMcpToUserSessions: true,
+        }),
+      );
+      await act(async () => {
+        const state = result.current;
+        if (state.phase !== "configure") throw new Error("unexpected phase");
+        await state.startDeployment();
+      });
+
+      await vi.waitFor(() => {
+        const state = result.current;
+        if (state.phase !== "complete") throw new Error("unexpected phase");
+        expect(state.toolsetStatuses[0].status).toBe("completed");
+      });
+
+      expect(mockToolsetsUpdateBySlug).toHaveBeenNthCalledWith(
+        1,
+        {
+          slug: "my-server",
+          updateToolsetRequestBody: {
+            mcpEnabled: true,
+            mcpIsPublic: false,
+          },
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockToolsetsUpdateBySlug).toHaveBeenNthCalledWith(
+        2,
+        {
+          slug: "my-server",
+          updateToolsetRequestBody: {
+            mcpIsPublic: true,
+          },
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockUserSessionIssuersCreate).not.toHaveBeenCalled();
+      expect(mockRemoteSessionIssuersCreate).not.toHaveBeenCalled();
+      expect(mockRemoteSessionIssuersRegister).not.toHaveBeenCalled();
+      expect(mockToolsetsSetUserSessionIssuer).not.toHaveBeenCalled();
     });
 
     it("marks toolset as failed when creation throws", async () => {
