@@ -308,7 +308,7 @@ func scanL1OptIn(ctx context.Context, corpus []labeledCase, l0Findings [][]risk_
 			continue
 		}
 		out[i] = append(out[i], risk_analysis.Finding{
-			RuleID:           risk_analysis.RulePromptInjectionClassifier,
+			RuleID:           risk_analysis.RulePromptInjection,
 			Description:      "ML classifier flagged prompt injection",
 			Match:            corpus[i].Text,
 			StartPos:         0,

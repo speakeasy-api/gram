@@ -38,10 +38,9 @@ type RuleContext struct {
 // dashboard categories.
 
 const (
-	prefixSecret          = "secret."
-	prefixPII             = "pii."
-	prefixDestructive     = "destructive."
-	prefixPromptInjection = "prompt-injection."
+	prefixSecret      = "secret."
+	prefixPII         = "pii."
+	prefixDestructive = "destructive."
 
 	// RuleShadowMCP is the canonical rule id emitted for every shadow_mcp
 	// finding. The detection mechanism (missing toolset id, unknown
@@ -53,13 +52,12 @@ const (
 	// destructive_tool finding.
 	RuleDestructiveTool = prefixDestructive + "tool"
 
-	// RulePromptInjectionClassifier is the canonical rule id emitted when
-	// the L1 ML classifier flags a message. The classifier gives a
-	// binary verdict without identifying a specific attack family, so it
-	// lives under `prompt-injection.unknown` — peer to the L0 sub-rules
-	// like `prompt-injection.role-hijack`. The specific classifier model
-	// (deberta-v3 today) is implementation detail.
-	RulePromptInjectionClassifier = "prompt-injection.unknown"
+	// RulePromptInjection is the canonical rule id emitted for every
+	// prompt-injection finding. There is exactly one rule: whether the
+	// match came from the L1 deberta classifier, an L0 heuristic regex,
+	// or a keyword pattern is an implementation detail that is not part
+	// of the public contract.
+	RulePromptInjection = "prompt-injection"
 )
 
 // CanonicalGitleaksRuleID prepends the `secret.` prefix to a gitleaks rule
@@ -325,17 +323,11 @@ var ruleCatalog = func() map[string]ruleSpec {
 		cliDestructiveRule("destructive.cloud.kubectl-delete-namespace", "kubectl delete namespace"),
 		cliDestructiveRule("destructive.cloud.kubectl-delete-workload", "kubectl delete workload"),
 
-		// prompt_injection. The L1 classifier lands at
-		// `prompt-injection.unknown` (no specific attack family identified
-		// by the binary model); the model (deberta-v3) is implementation
-		// detail. L0 heuristic matches carry a `prompt-injection.<heuristic>`
-		// sub-rule.
-		promptInjectionRule(RulePromptInjectionClassifier, "An ML classifier flagged this message as a prompt injection attempt."),
-		promptInjectionRule(prefixPromptInjection+"instruction-override", "Detected an instruction override phrase that attempts to bypass prior instructions."),
-		promptInjectionRule(prefixPromptInjection+"role-hijack", "Detected a role hijack attempt."),
-		promptInjectionRule(prefixPromptInjection+"system-prompt-leak", "Detected an attempt to elicit the system prompt or initial instructions."),
-		promptInjectionRule(prefixPromptInjection+"delimiter-injection", "Detected a forged role or instruction delimiter."),
-		promptInjectionRule(prefixPromptInjection+"encoded-payload", "Detected an encoded blob with an explicit decode or execute instruction."),
+		// prompt_injection. Single rule_id. Whether the match came from
+		// the L1 deberta classifier or an L0 heuristic regex is an
+		// implementation detail that is decided per-org at scan time and
+		// kept out of the public contract.
+		promptInjectionRule(RulePromptInjection, "Detected a prompt injection attempt."),
 	}
 
 	out := make(map[string]ruleSpec, len(specs))

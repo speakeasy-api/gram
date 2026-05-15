@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 )
 
 // SourcePromptInjection is the policy source value that enables prompt
@@ -15,89 +15,114 @@ import (
 // action='block' policies).
 const SourcePromptInjection = "prompt_injection"
 
-// The L1 classifier opt-in is keyed by the canonical
-// `RulePromptInjectionClassifier` ("prompt-injection") in
-// risk_policies.prompt_injection_rules. The same value is what we emit on
-// the resulting Finding's rule_id — opting in by the rule you're trying to
-// detect.
+// promptInjectionClassifierFindingDescription is the human-readable
+// description carried on the Finding emitted when the L1 model flags a
+// text. Kept short — the dashboard renders this verbatim.
+const promptInjectionClassifierFindingDescription = "Detected a prompt injection attempt."
 
-// promptInjectionClassifierFindingDescription is the human-readable description carried
-// on the Finding emitted when the L1 model flags a text. Kept short — the
-// dashboard renders this verbatim under the policy result row.
-const promptInjectionClassifierFindingDescription = "ML classifier flagged prompt injection"
-
-// PromptInjectionScanner runs the always-on L0 heuristic rules and, when a
-// policy opts in via prompt_injection_rules, the L1 ML classifier.
+// PromptInjectionScanner emits prompt-injection findings using one of two
+// engines:
+//   - L1 ML classifier (deberta-v3) — the default
+//   - L0 heuristic regex/keyword rules — opt-in per org via the
+//     feature.FlagPromptInjectionUseRegex flag
 //
-// Construction always wires a non-nil classifier (StubClassifier when
-// --pi-classifier-url is empty), so callers don't branch on availability.
+// Both engines emit the same canonical rule_id (`prompt-injection`); the
+// engine choice is an implementation detail not surfaced on the public
+// contract. If the classifier is wired as a stub (no `--pi-classifier-url`),
+// the scanner falls back to L0 regardless of the flag so local-dev still
+// produces findings.
 type PromptInjectionScanner struct {
 	classifier PromptInjectionClassifier
+	flags      feature.Provider
 	logger     *slog.Logger
 }
 
-// NewPromptInjectionScanner returns a scanner that calls the given classifier
-// for L1 detection. The classifier's binary label decides whether to emit an
-// L1 finding; the score is carried as confidence metadata.
-//
-// logger must be non-nil; pass an explicit *slog.Logger so log lines carry the
-// caller's component attrs (forbidigo blocks slog.Default in this codebase).
-func NewPromptInjectionScanner(logger *slog.Logger, classifier PromptInjectionClassifier) *PromptInjectionScanner {
-	return &PromptInjectionScanner{classifier: classifier, logger: logger}
+// NewPromptInjectionScanner constructs a scanner that defaults to the L1
+// classifier. `flags` may be nil; when nil (and the classifier is real),
+// every org gets the default L1 engine.
+func NewPromptInjectionScanner(logger *slog.Logger, classifier PromptInjectionClassifier, flags feature.Provider) *PromptInjectionScanner {
+	return &PromptInjectionScanner{classifier: classifier, flags: flags, logger: logger}
 }
 
-// Scan runs the heuristic rules unconditionally; runs the L1 classifier when
-// rules contains RulePromptInjectionClassifier. Used by the realtime risk scanner.
-func (s *PromptInjectionScanner) Scan(ctx context.Context, text string, rules []string) ([]Finding, error) {
+// useRegex returns true when this scan should use the L0 regex engine
+// instead of the default L1 classifier. The decision is per-org: a feature
+// flag flips the engine. When the classifier is a stub (no sidecar), L0 is
+// the only thing that can produce findings.
+func (s *PromptInjectionScanner) useRegex(ctx context.Context, orgID string) bool {
+	if _, isStub := s.classifier.(StubClassifier); isStub {
+		return true
+	}
+	if s.flags == nil {
+		return false
+	}
+	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagPromptInjectionUseRegex, orgID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "prompt-injection engine flag check failed; defaulting to classifier",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+		)
+		return false
+	}
+	return on
+}
+
+// Scan runs prompt-injection detection on a single text. Used by the
+// realtime risk scanner on the hook path.
+func (s *PromptInjectionScanner) Scan(ctx context.Context, text, orgID string) ([]Finding, error) {
 	if text == "" {
 		return nil, nil
 	}
 
-	findings := runHeuristics(text)
-
-	if !slices.Contains(rules, RulePromptInjectionClassifier) {
-		return findings, nil
+	if s.useRegex(ctx, orgID) {
+		return runHeuristics(text), nil
 	}
 
 	results, err := s.classifier.Classify(ctx, []string{text})
 	if err != nil {
-		// Don't fail the scan on classifier errors — surface L0 findings and
-		// let the per-batch error counter pick up the failure.
-		s.logger.WarnContext(ctx, "pi_classifier scan failed, continuing with heuristics only", attr.SlogError(err))
-		return findings, nil
+		s.logger.WarnContext(ctx, "pi_classifier scan failed, falling back to heuristics",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+		)
+		return runHeuristics(text), nil
 	}
 	if len(results) != 1 {
-		return findings, nil
+		return runHeuristics(text), nil
 	}
 
 	if f := s.findingFromResult(text, results[0]); f != nil {
-		findings = append(findings, *f)
+		return []Finding{*f}, nil
 	}
-	return findings, nil
+	return nil, nil
 }
 
-// ScanBatch is the batched counterpart used by AnalyzeBatch. When the L1
-// classifier is enabled, all texts go through a single Classify call so the
-// HTTP cost is paid once per activity, not once per message.
-func (s *PromptInjectionScanner) ScanBatch(ctx context.Context, texts []string, rules []string) ([][]Finding, error) {
+// ScanBatch is the batched counterpart used by AnalyzeBatch. The whole
+// batch runs through one engine — there is no L0 + L1 mixing.
+func (s *PromptInjectionScanner) ScanBatch(ctx context.Context, texts []string, orgID string) ([][]Finding, error) {
 	out := make([][]Finding, len(texts))
 
-	// L0 — always.
-	for i, t := range texts {
-		if t == "" {
-			continue
+	if s.useRegex(ctx, orgID) {
+		for i, t := range texts {
+			if t == "" {
+				continue
+			}
+			out[i] = runHeuristics(t)
 		}
-		out[i] = runHeuristics(t)
-	}
-
-	if !slices.Contains(rules, RulePromptInjectionClassifier) {
 		return out, nil
 	}
 
 	// L1 — single batched HTTP call.
 	results, err := s.classifier.Classify(ctx, texts)
 	if err != nil {
-		s.logger.WarnContext(ctx, "pi_classifier batch scan failed, continuing with heuristics only", attr.SlogError(err))
+		s.logger.WarnContext(ctx, "pi_classifier batch scan failed, falling back to heuristics",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+		)
+		for i, t := range texts {
+			if t == "" {
+				continue
+			}
+			out[i] = runHeuristics(t)
+		}
 		return out, nil
 	}
 	if len(results) != len(texts) {
@@ -122,7 +147,7 @@ func (s *PromptInjectionScanner) findingFromResult(text string, r ClassifierResu
 	if r.Label != LabelInjection {
 		return nil
 	}
-	ruleID, description := Normalize(SourcePromptInjection, RulePromptInjectionClassifier, promptInjectionClassifierFindingDescription, RuleContext{ToolName: "", MatchedPattern: ""})
+	ruleID, description := Normalize(SourcePromptInjection, RulePromptInjection, promptInjectionClassifierFindingDescription, RuleContext{ToolName: "", MatchedPattern: ""})
 	return &Finding{
 		RuleID:           ruleID,
 		Description:      description,
@@ -136,10 +161,9 @@ func (s *PromptInjectionScanner) findingFromResult(text string, r ClassifierResu
 	}
 }
 
-// DetectPromptInjection runs the L0 heuristic rules only. Kept for tests and
-// for code paths that don't have a scanner instance (none in production —
-// production callers must use PromptInjectionScanner so policy.prompt_injection_rules
-// is honored). Returns one Finding per heuristic match.
+// DetectPromptInjection runs the L0 heuristic rules only. Kept for tests
+// and for code paths that don't have a scanner instance. Returns one
+// Finding per heuristic match.
 func DetectPromptInjection(_ context.Context, text string) ([]Finding, error) {
 	if text == "" {
 		return nil, nil

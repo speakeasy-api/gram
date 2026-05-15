@@ -3,13 +3,12 @@
 // lookups match the rule_id the backend writes to risk_results.
 //
 // Convention: rule ids are category-prefixed:
-//   secret.<gitleaks-rule>       — credentials / secrets
-//   pii.<presidio-entity>        — personal / financial / medical data
-//   shadow-mcp                   — unverified MCP tool call
-//   destructive.tool             — MCP tool annotated as destructive
-//   destructive.cli-<command>    — destructive shell / git / db / cloud command
-//   prompt-injection.<heuristic> — L0 heuristic prompt injection match
-//   prompt-injection.unknown     — L1 ML classifier binary verdict
+//   secret.<gitleaks-rule>     — credentials / secrets
+//   pii.<presidio-entity>      — personal / financial / medical data
+//   shadow-mcp                 — unverified MCP tool call
+//   destructive.tool           — MCP tool annotated as destructive
+//   destructive.<cat>.<name>   — destructive shell / git / db / cloud command
+//   prompt-injection           — prompt injection (engine selected by backend)
 export function canonicalizeRuleId(
   ruleId: string,
   source?: string | null,
@@ -37,12 +36,7 @@ export function canonicalizeRuleId(
     return id.toLowerCase();
   }
   if (src === "prompt_injection") {
-    // The deberta classifier rule id in the policy form maps to
-    // `prompt-injection.unknown` on findings — the binary model can't
-    // pin a specific attack family. Other entries are heuristic rule
-    // names that get a `prompt-injection.` prefix.
-    if (id === "deberta-v3-classifier") return "prompt-injection.unknown";
-    return "prompt-injection." + id.toLowerCase();
+    return "prompt-injection";
   }
 
   // Unknown source: pass through lowercased.

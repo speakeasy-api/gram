@@ -120,33 +120,20 @@ function policyToCategories(
 }
 
 /** Derive sources, presidioEntities, and promptInjectionRules from selected
- * categories and per-category rule selections. promptInjectionRules is the
- * subset of rule ids the user has ticked under the prompt_injection category;
- * the source itself is enabled by the category-level checkbox (heuristics are
- * the always-on baseline).
+ * categories. Prompt-injection is a single category-level toggle; the
+ * detection engine (deberta classifier vs L0 regex) is chosen per-org via
+ * a feature flag, not by the policy author. promptInjectionRules is left
+ * empty here for backward compatibility with the policy schema.
  *
- * `presidioEntities` is translated to UPPER_SNAKE for Presidio's HTTP API;
- * `promptInjectionRules` is the canonical rule id itself (the backend
- * accepts the same string as both the policy opt-in key and the resulting
- * finding rule_id). */
-function categoriesToPayload(
-  cats: Set<RuleCategory>,
-  promptInjectionRuleSelection: Set<string>,
-) {
+ * `presidioEntities` is translated to UPPER_SNAKE for Presidio's HTTP API. */
+function categoriesToPayload(cats: Set<RuleCategory>) {
   const sources: string[] = [];
   const presidioEntities: string[] = [];
   const promptInjectionRules: string[] = [];
   if (cats.has("secrets")) sources.push("gitleaks");
   if (cats.has("shadow_mcp")) sources.push("shadow_mcp");
   if (cats.has("destructive_tool")) sources.push("destructive_tool");
-  if (cats.has("prompt_injection")) {
-    sources.push("prompt_injection");
-    for (const rule of DETECTION_RULES.prompt_injection) {
-      if (promptInjectionRuleSelection.has(rule.id)) {
-        promptInjectionRules.push(rule.id);
-      }
-    }
-  }
+  if (cats.has("prompt_injection")) sources.push("prompt_injection");
   for (const cat of PRESIDIO_CATEGORIES) {
     if (cats.has(cat)) {
       for (const rule of DETECTION_RULES[cat]) {
@@ -255,7 +242,7 @@ function PolicyCenterContent() {
 
   const handleSave = () => {
     const { sources, presidioEntities, promptInjectionRules } =
-      categoriesToPayload(selectedCategories, formPromptInjectionRules);
+      categoriesToPayload(selectedCategories);
     const action =
       sources.includes("destructive_tool") && formAction === "block"
         ? "flag"
@@ -354,7 +341,6 @@ function PolicyCenterContent() {
                 const { sources, presidioEntities, promptInjectionRules } =
                   categoriesToPayload(
                     new Set<RuleCategory>(["secrets", "pii"]),
-                    new Set<string>(),
                   );
                 createMutation.mutate({
                   request: {

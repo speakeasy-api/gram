@@ -47,7 +47,7 @@ func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, m
 		piiScanner = &StubPIIScanner{}
 	}
 	if piScanner == nil {
-		piScanner = NewPromptInjectionScanner(logger, StubClassifier{})
+		piScanner = NewPromptInjectionScanner(logger, StubClassifier{}, nil)
 	}
 	return &AnalyzeBatch{
 		logger:          logger,
@@ -238,7 +238,7 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	if slices.Contains(args.Sources, SourcePromptInjection) {
 		wg.Go(func() {
-			results, err := a.piScanner.ScanBatch(ctx, contents, args.PromptInjectionRules)
+			results, err := a.piScanner.ScanBatch(ctx, contents, args.OrganizationID)
 			if err != nil {
 				a.logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
 				return

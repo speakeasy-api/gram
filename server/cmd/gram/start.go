@@ -932,7 +932,7 @@ func newStartCommand() *cli.Command {
 			if piURL := c.String("pi-classifier-url"); piURL != "" {
 				hookPromptInjectionClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
 			}
-			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, hookPromptInjectionClassifier)
+			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, hookPromptInjectionClassifier, featureFlags)
 
 			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, meterProvider)
 			if err != nil {
@@ -1068,7 +1068,7 @@ func newStartCommand() *cli.Command {
 					if piURL := c.String("pi-classifier-url"); piURL != "" {
 						promptInjectionClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
 					}
-					piScanner := risk_analysis.NewPromptInjectionScanner(logger, promptInjectionClassifier)
+					piScanner := risk_analysis.NewPromptInjectionScanner(logger, promptInjectionClassifier, featureFlags)
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:      guardianPolicy,

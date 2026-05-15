@@ -1412,13 +1412,11 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
       source: "presidio",
     },
   ],
-  prompt_injection: [
-    {
-      id: "prompt-injection.unknown",
-      title: "ML classifier (deberta-v3)",
-      source: "prompt_injection",
-    },
-  ],
+  // prompt_injection is enabled at the category level; the detection
+  // engine (deberta classifier vs L0 regex/keyword heuristics) is selected
+  // per-org via the prompt-injection-use-regex feature flag, not by the
+  // policy author.
+  prompt_injection: [],
   off_policy: [
     {
       id: "pii.harmful-content-request",
