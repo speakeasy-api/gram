@@ -340,12 +340,18 @@ func (t *ListTriggers) Call(ctx context.Context, _ toolconfig.ToolCallEnv, paylo
 	}
 
 	var selfTargetRef string
+	var selfCorrelationID string
 	if t.assistantSelfScoped {
 		principal, ok := contextvalues.GetAssistantPrincipal(ctx)
 		if !ok {
 			return fmt.Errorf("assistant list-triggers requires an assistant principal")
 		}
 		selfTargetRef = principal.AssistantID.String()
+		callerThread, err := assistantrepo.New(t.db).ResolveThreadCorrelation(ctx, principal.ThreadID)
+		if err != nil {
+			return fmt.Errorf("resolve thread correlation: %w", err)
+		}
+		selfCorrelationID = callerThread.CorrelationID
 	}
 
 	input := listTriggersInput{DefinitionSlug: nil}
@@ -365,8 +371,19 @@ func (t *ListTriggers) Call(ctx context.Context, _ toolconfig.ToolCallEnv, paylo
 		if input.DefinitionSlug != nil && *input.DefinitionSlug != "" && item.DefinitionSlug != *input.DefinitionSlug {
 			continue
 		}
-		if t.assistantSelfScoped && (item.TargetKind != targetKindAssistant || item.TargetRef != selfTargetRef) {
-			continue
+		if t.assistantSelfScoped {
+			if item.TargetKind != targetKindAssistant || item.TargetRef != selfTargetRef {
+				continue
+			}
+			// Wake binds to a specific thread via correlation_id; admit only
+			// reminders the caller owns so a sibling can't enumerate (and
+			// then cancel) peer wakes.
+			if item.DefinitionSlug == bgtriggers.DefinitionSlugWake {
+				correlationID, _ := bgtriggers.WakeConfigFields(item.ConfigJson)
+				if correlationID != selfCorrelationID {
+					continue
+				}
+			}
 		}
 
 		view, err := buildTriggerToolView(ctx, envQueries, *authCtx.ProjectID, item, t.app)
@@ -703,6 +720,16 @@ func (t *ConfigureTrigger) cancelWake(
 	}
 
 	correlationID, fireAt := bgtriggers.WakeConfigFields(existing.ConfigJson)
+
+	// One wake per (assistant, correlation); without this, a sibling
+	// thread under the same assistant could cancel a peer's reminder.
+	callerThread, err := assistantrepo.New(t.db).ResolveThreadCorrelation(ctx, principal.ThreadID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve thread correlation: %w", err)
+	}
+	if correlationID != callerThread.CorrelationID {
+		return nil, fmt.Errorf("wake does not belong to the calling thread")
+	}
 
 	item, err := t.app.CancelWakeInstance(ctx, *authCtx.ProjectID, triggerID, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
 		return t.audit.LogWakeCancelled(ctx, dbtx, audit.LogWakeEvent{

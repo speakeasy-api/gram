@@ -115,6 +115,13 @@ func (s *Service) handleGetThreadBootstrap(w http.ResponseWriter, r *http.Reques
 		return oops.E(oops.CodeBadRequest, err, "invalid thread_id")
 	}
 
+	// Per-thread token (ThreadID claim populated) may only bootstrap its
+	// own thread; rejects replay/misuse against a sibling under the same
+	// assistant. Assistant-only tokens (ThreadID zero) still flow through.
+	if principal.ThreadID != uuid.Nil && principal.ThreadID != threadID {
+		return oops.E(oops.CodeForbidden, nil, "token thread does not match requested thread")
+	}
+
 	if !s.bootstrapLimiter.allow(principal.AssistantID, time.Now()) {
 		return oops.E(oops.CodeRateLimitExceeded, nil, "thread bootstrap rate limit exceeded")
 	}
