@@ -102,14 +102,16 @@ LIMIT @max_rows;
 -- =============================================================================
 
 -- ListMembershipsWithOrgName joins memberships with organizations so the
--- WorkOS-shaped response can include `organization_name` (the SDK's
--- OrganizationMembership type carries it).
+-- WorkOS-shaped response can include `organization_name` and the external
+-- `workos_id` (the WorkOS-style org ID that Gram stores in
+-- organization_metadata.workos_id).
 -- name: ListMembershipsWithOrgName :many
 SELECT
   m.id,
   m.user_id,
   m.organization_id,
   o.name AS organization_name,
+  o.workos_id AS org_workos_id,
   m.role,
   m.created_at,
   m.updated_at
@@ -129,6 +131,7 @@ SELECT
   m.user_id,
   m.organization_id,
   o.name AS organization_name,
+  o.workos_id AS org_workos_id,
   m.role,
   m.created_at,
   m.updated_at

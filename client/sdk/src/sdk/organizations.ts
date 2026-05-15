@@ -6,7 +6,6 @@ import { organizationsCreatePortalSession } from "../funcs/organizationsCreatePo
 import { organizationsDisableWebhooks } from "../funcs/organizationsDisableWebhooks.js";
 import { organizationsEnableWebhooks } from "../funcs/organizationsEnableWebhooks.js";
 import { organizationsGet } from "../funcs/organizationsGet.js";
-import { organizationsGetInviteByToken } from "../funcs/organizationsGetInviteByToken.js";
 import { organizationsListInvites } from "../funcs/organizationsListInvites.js";
 import { organizationsListUsers } from "../funcs/organizationsListUsers.js";
 import { organizationsRemoveUser } from "../funcs/organizationsRemoveUser.js";
@@ -90,23 +89,6 @@ export class Organizations extends ClientSDK {
       this,
       request,
       security,
-      options,
-    ));
-  }
-
-  /**
-   * getInviteByToken organizations
-   *
-   * @remarks
-   * Resolve a WorkOS invitation from its token (e.g. accept-flow).
-   */
-  async getInviteByToken(
-    request: operations.GetInviteByTokenRequest,
-    options?: RequestOptions,
-  ): Promise<components.OrganizationInvitationAccept> {
-    return unwrapAsync(organizationsGetInviteByToken(
-      this,
-      request,
       options,
     ));
   }

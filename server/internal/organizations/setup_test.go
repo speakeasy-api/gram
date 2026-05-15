@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	svix "github.com/svix/svix-webhooks/go"
 
-	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -17,13 +16,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/svix/svixtest"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,6 +68,7 @@ type testInstance struct {
 	service *organizations.Service
 	conn    *pgxpool.Pool
 	orgs    *MockOrganizationProvider
+	loops   *MockLoopsClient
 	svixSrv *svixtest.MockServer
 }
 
@@ -116,7 +116,7 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 	svixClient, err := svix.New("test-token", &svix.SvixOptions{ServerUrl: svixSrv.URL()})
 	require.NoError(t, err)
 
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeatures{}, authzEngine, auditLogger, svixClient)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeatures{}, authzEngine, nil, "http://localhost:5173", auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service: svc,
@@ -172,7 +172,7 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 	svixClient, err := svix.New("test-token", &svix.SvixOptions{ServerUrl: svixSrv.URL()})
 	require.NoError(t, err)
 
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeaturesEnabled{}, authzEngine, auditLogger, svixClient)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeaturesEnabled{}, authzEngine, nil, "http://localhost:5173", auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service: svc,
@@ -182,14 +182,58 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 	}
 }
 
-// expectWorkOSOrgAdminRole stubs a successful WorkOS admin membership check for the session user.
-func expectWorkOSOrgAdminRole(t *testing.T, orgs *MockOrganizationProvider) {
+// newTestOrganizationsServiceWithEmail creates a service with a mock email
+// sender so tests can assert on email delivery success/failure paths.
+func newTestOrganizationsServiceWithEmail(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
-	orgs.On("GetOrgMembership", mock.Anything, testAuthUserWorkOSID, mockidp.MockOrgID).Return(&thirdpartyworkos.Member{RoleSlug: "admin"}, nil).Once()
-}
 
-// expectWorkOSOrgNonAdminRole stubs WorkOS membership with a non-admin role.
-func expectWorkOSOrgNonAdminRole(t *testing.T, orgs *MockOrganizationProvider) {
-	t.Helper()
-	orgs.On("GetOrgMembership", mock.Anything, testAuthUserWorkOSID, mockidp.MockOrgID).Return(&thirdpartyworkos.Member{RoleSlug: "member"}, nil).Once()
+	ctx := t.Context()
+
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	billingClient := billing.NewStubClient(logger, tracerProvider)
+
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+
+	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	err = userrepo.New(conn).OverwriteUserWorkosID(ctx, userrepo.OverwriteUserWorkosIDParams{
+		ID:       authCtx.UserID,
+		WorkosID: conv.ToPGText(testAuthUserWorkOSID),
+	})
+	require.NoError(t, err)
+
+	orgs := newMockOrganizationProvider(t)
+	loopsMock := newMockLoopsClient(t)
+
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient(), cache.NoopCache)
+
+	auditLogger := audit.NewLogger()
+
+	svixSrv := svixtest.NewMockServer(logger)
+	t.Cleanup(svixSrv.Close)
+	svixClient, err := svix.New("test-token", &svix.SvixOptions{ServerUrl: svixSrv.URL()})
+	require.NoError(t, err)
+
+	emailService := email.NewService(logger, loopsMock)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeatures{}, authzEngine, emailService, "http://localhost:5173", auditLogger, svixClient)
+
+	return ctx, &testInstance{
+		service: svc,
+		conn:    conn,
+		orgs:    orgs,
+		loops:   loopsMock,
+		svixSrv: svixSrv,
+	}
 }

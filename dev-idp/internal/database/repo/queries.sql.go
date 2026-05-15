@@ -674,6 +674,7 @@ SELECT
   m.user_id,
   m.organization_id,
   o.name AS organization_name,
+  o.workos_id AS org_workos_id,
   m.role,
   m.created_at,
   m.updated_at
@@ -687,6 +688,7 @@ type GetMembershipWithOrgNameRow struct {
 	UserID           uuid.UUID
 	OrganizationID   uuid.UUID
 	OrganizationName string
+	OrgWorkosID      sql.NullString
 	Role             string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
@@ -702,6 +704,7 @@ func (q *Queries) GetMembershipWithOrgName(ctx context.Context, id uuid.UUID) (G
 		&i.UserID,
 		&i.OrganizationID,
 		&i.OrganizationName,
+		&i.OrgWorkosID,
 		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -929,6 +932,7 @@ SELECT
   m.user_id,
   m.organization_id,
   o.name AS organization_name,
+  o.workos_id AS org_workos_id,
   m.role,
   m.created_at,
   m.updated_at
@@ -953,6 +957,7 @@ type ListMembershipsWithOrgNameRow struct {
 	UserID           uuid.UUID
 	OrganizationID   uuid.UUID
 	OrganizationName string
+	OrgWorkosID      sql.NullString
 	Role             string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
@@ -962,8 +967,9 @@ type ListMembershipsWithOrgNameRow struct {
 // WorkOS emulation: memberships (ListOrganizationMemberships, GetMembership)
 // =============================================================================
 // ListMembershipsWithOrgName joins memberships with organizations so the
-// WorkOS-shaped response can include `organization_name` (the SDK's
-// OrganizationMembership type carries it).
+// WorkOS-shaped response can include `organization_name` and the external
+// `workos_id` (the WorkOS-style org ID that Gram stores in
+// organization_metadata.workos_id).
 func (q *Queries) ListMembershipsWithOrgName(ctx context.Context, arg ListMembershipsWithOrgNameParams) ([]ListMembershipsWithOrgNameRow, error) {
 	rows, err := q.db.QueryContext(ctx, listMembershipsWithOrgName,
 		arg.After,
@@ -983,6 +989,7 @@ func (q *Queries) ListMembershipsWithOrgName(ctx context.Context, arg ListMember
 			&i.UserID,
 			&i.OrganizationID,
 			&i.OrganizationName,
+			&i.OrgWorkosID,
 			&i.Role,
 			&i.CreatedAt,
 			&i.UpdatedAt,

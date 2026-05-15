@@ -55,7 +55,9 @@ INSERT INTO organization_user_relationships (
     @user_id
 )
 ON CONFLICT (organization_id, user_id) DO UPDATE SET
-    updated_at = clock_timestamp()
+    updated_at = clock_timestamp(),
+    deleted_at = NULL,
+    created_at = CASE WHEN organization_user_relationships.deleted_at IS NOT NULL THEN clock_timestamp() ELSE organization_user_relationships.created_at END
 RETURNING *;
 
 -- name: HasOrganizationUserRelationship :one
@@ -79,7 +81,8 @@ SELECT
   our.*,
   u.email AS user_email,
   u.display_name AS user_display_name,
-  u.photo_url AS user_photo_url
+  u.photo_url AS user_photo_url,
+  u.last_login AS user_last_login
 FROM organization_user_relationships our
 JOIN users u ON u.id = our.user_id
 WHERE our.organization_id = @organization_id
@@ -153,6 +156,76 @@ SET workos_id = @workos_id,
 WHERE id = @organization_id AND
     workos_id IS NULL
 RETURNING *;
+
+-- name: ExpireStaleInvitations :exec
+-- Transition pending invitations that have passed their expires_at to 'expired'
+-- state. Called before creating a new invitation so the partial unique index
+-- (org_id, email) WHERE state = 'pending' does not block re-inviting.
+UPDATE organization_invitations
+SET state = 'expired',
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND email = @email
+  AND state = 'pending'
+  AND expires_at <= clock_timestamp();
+
+-- name: CreateInvitation :one
+INSERT INTO organization_invitations (
+    organization_id,
+    email,
+    token_hash,
+    inviter_user_id,
+    role_slug,
+    expires_at
+) VALUES (
+    @organization_id,
+    @email,
+    @token_hash,
+    @inviter_user_id,
+    @role_slug,
+    clock_timestamp() + make_interval(days => @expires_in_days::int)
+)
+RETURNING *;
+
+-- name: GetInvitationByID :one
+SELECT *
+FROM organization_invitations
+WHERE id = @id;
+
+-- name: ListPendingInvitations :many
+SELECT *
+FROM organization_invitations
+WHERE organization_id = @organization_id
+  AND state = 'pending'
+  AND expires_at > clock_timestamp()
+ORDER BY created_at DESC;
+
+-- name: RevokeInvitation :exec
+UPDATE organization_invitations
+SET state = 'revoked',
+    revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND state = 'pending';
+
+-- name: AcceptInvitation :execrows
+UPDATE organization_invitations
+SET state = 'accepted',
+    accepted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND state = 'pending'
+  AND expires_at > clock_timestamp();
+
+-- name: ExpireInvitationForTest :exec
+UPDATE organization_invitations
+SET expires_at = clock_timestamp() - interval '1 hour'
+WHERE id = @id;
+
+-- name: GetInvitationByTokenHash :one
+SELECT *
+FROM organization_invitations
+WHERE token_hash = @token_hash;
 
 -- name: ClearOrganizationWorkosID :exec
 UPDATE organization_metadata SET workos_id = NULL WHERE id = @organization_id;

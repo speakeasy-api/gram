@@ -218,7 +218,6 @@ export * from "./openapiv3deploymentasset.js";
 export * from "./organization.js";
 export * from "./organizationentry.js";
 export * from "./organizationinvitation.js";
-export * from "./organizationinvitationaccept.js";
 export * from "./organizationuser.js";
 export * from "./otelattribute.js";
 export * from "./otelattributevalue.js";
