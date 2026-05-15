@@ -84,7 +84,8 @@ type Service struct {
 	userProvision UserProvisioner
 	features      orgFeatureChecker
 	email         *email.Service
-	siteURL       string // site URL; used for invite callback RedirectURI and post-callback redirect
+	serverURL     string // API server URL; used as WorkOS invite callback RedirectURI
+	siteURL       string // frontend URL; used for post-callback browser redirects
 	audit         *audit.Logger
 	svix          *svix.Svix
 }
@@ -93,7 +94,7 @@ var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, userProvision UserProvisioner, features orgFeatureChecker, authzEngine *authz.Engine, emailService *email.Service, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, userProvision UserProvisioner, features orgFeatureChecker, authzEngine *authz.Engine, emailService *email.Service, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 
 	return &Service{
@@ -107,6 +108,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		userProvision: userProvision,
 		features:      features,
 		email:         emailService,
+		serverURL:     serverURL,
 		siteURL:       siteURL,
 		audit:         auditLogger,
 		svix:          svix,
@@ -245,21 +247,21 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		return nil, oops.E(oops.CodeUnexpected, err, "create invitation").Log(ctx, logger)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit invitation").Log(ctx, logger)
-	}
-
-	// Create a WorkOS passwordless magic-link session for the invitee.
-	// RedirectURI points to our invite callback which exchanges the code,
-	// accepts the invite, and redirects to the dashboard.
+	// Create the WorkOS passwordless magic-link session BEFORE committing
+	// the invite. If this fails the transaction rolls back, avoiding an
+	// orphaned invite row with no magic link.
 	pwlSess, pwlErr := s.orgs.CreatePasswordlessSession(ctx, workos.CreatePasswordlessSessionOpts{
 		Email:       row.Email,
-		RedirectURI: s.siteURL + inviteCallbackPath,
+		RedirectURI: s.serverURL + inviteCallbackPath,
 		ExpiresIn:   defaultInviteExpiryDays * 24 * 60 * 60,
 		State:       fmt.Sprintf("invite_token=%s", rawToken),
 	})
 	if pwlErr != nil {
 		return nil, oops.E(oops.CodeUnexpected, pwlErr, "failed to create invite link").Log(ctx, logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit invitation").Log(ctx, logger)
 	}
 
 	if s.email != nil {
