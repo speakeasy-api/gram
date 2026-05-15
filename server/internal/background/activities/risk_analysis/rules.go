@@ -235,27 +235,14 @@ var ruleCatalog = func() map[string]ruleSpec {
 			},
 		},
 
-		// shadow_mcp deny reasons. Each carries the tool name so the description
-		// names which call was rejected without leaking validator internals.
+		// shadow_mcp: a single risk — an unverified MCP tool call. Which
+		// validator path rejected it (missing toolset id, unknown toolset,
+		// tool not in toolset, ...) is implementation detail kept in logs;
+		// the public rule_id describes the risk itself.
 		shadowMCPRule(
-			"missing-toolset-id",
-			"Detected an MCP tool call to %s with no Gram toolset provenance.",
-			"Detected an MCP tool call with no Gram toolset provenance.",
-		),
-		shadowMCPRule(
-			"unknown-toolset",
-			"Detected an MCP tool call to %s referencing a toolset not registered in this organization.",
-			"Detected an MCP tool call referencing a toolset not registered in this organization.",
-		),
-		shadowMCPRule(
-			"tool-not-in-toolset",
-			"Detected an MCP tool call to %s that is not part of its declared toolset.",
-			"Detected an MCP tool call that is not part of its declared toolset.",
-		),
-		shadowMCPRule(
-			"missing-tool-name",
-			"Detected an MCP tool call with no tool name.",
-			"Detected an MCP tool call with no tool name.",
+			"shadow-mcp",
+			"Detected an unverified MCP tool call to %s.",
+			"Detected an unverified MCP tool call.",
 		),
 
 		// destructive_tool.

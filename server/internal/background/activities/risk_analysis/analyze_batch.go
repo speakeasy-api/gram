@@ -363,11 +363,11 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 		if a.shadowMCPClient == nil {
 			continue
 		}
-		reason, _, denied := a.shadowMCPClient.ValidateToolsetCallReason(ctx, toolInput, bareName, orgID)
+		_, denied := a.shadowMCPClient.ValidateToolsetCall(ctx, toolInput, bareName, orgID)
 		if !denied {
 			continue
 		}
-		ruleID, description := Normalize(shadowmcp.SourceShadowMCP, string(reason), "", RuleContext{ToolName: toolName, MatchedPattern: ""})
+		ruleID, description := Normalize(shadowmcp.SourceShadowMCP, "shadow-mcp", "", RuleContext{ToolName: toolName, MatchedPattern: ""})
 		findings = append(findings, Finding{
 			Source:           shadowmcp.SourceShadowMCP,
 			RuleID:           ruleID,

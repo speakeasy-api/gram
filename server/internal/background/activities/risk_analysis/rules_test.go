@@ -11,7 +11,7 @@ import (
 func TestCanonicalRuleID_StripsSourcePrefix(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "unverified-call", CanonicalRuleID("shadow_mcp", "shadow_mcp.unverified_call"))
+	assert.Equal(t, "shadow-mcp", CanonicalRuleID("shadow_mcp", "shadow_mcp.shadow_mcp"))
 	assert.Equal(t, "annotation", CanonicalRuleID("destructive_tool", "destructive_tool.annotation"))
 	assert.Equal(t, "shell-rm-rf", CanonicalRuleID("cli_destructive", "cli_destructive.shell/rm-rf"))
 	assert.Equal(t, "deberta-v3-classifier", CanonicalRuleID(SourcePromptInjection, "pi.deberta-v3-classifier"))
@@ -68,15 +68,12 @@ func TestNormalize_FallsBackToPerSourceDefault(t *testing.T) {
 	assert.Contains(t, desc, "mcp__github__create_pr")
 }
 
-func TestNormalize_ShadowMCPDescriptionsIncludeToolName(t *testing.T) {
+func TestNormalize_ShadowMCPDescriptionIncludesToolName(t *testing.T) {
 	t.Parallel()
 
-	cases := []string{"missing-toolset-id", "unknown-toolset", "tool-not-in-toolset"}
-	for _, ruleID := range cases {
-		_, desc := Normalize("shadow_mcp", ruleID, "", RuleContext{ToolName: "mcp__db__delete"})
-		assert.Contains(t, desc, "mcp__db__delete", "shadow_mcp description for %q must name the tool", ruleID)
-		assert.NotContains(t, desc, "x-gram-toolset-id", "shadow_mcp description for %q must not leak validator internals", ruleID)
-	}
+	_, desc := Normalize("shadow_mcp", "shadow-mcp", "", RuleContext{ToolName: "mcp__db__delete"})
+	assert.Contains(t, desc, "mcp__db__delete", "shadow_mcp description must name the tool")
+	assert.NotContains(t, desc, "x-gram-toolset-id", "shadow_mcp description must not leak validator internals")
 }
 
 func TestNormalize_DestructiveToolDescriptionIncludesToolName(t *testing.T) {
@@ -136,9 +133,7 @@ func TestRuleCatalog_ContainsExpectedAnchors(t *testing.T) {
 		{SourcePresidio, "email-address"},
 		{SourcePresidio, "medical-license"},
 		{SourcePresidio, "dead-letter"},
-		{"shadow_mcp", "missing-toolset-id"},
-		{"shadow_mcp", "unknown-toolset"},
-		{"shadow_mcp", "tool-not-in-toolset"},
+		{"shadow_mcp", "shadow-mcp"},
 		{"destructive_tool", "annotated-destructive"},
 		{SourceCLIDestructive, "shell-rm-rf"},
 		{SourceCLIDestructive, "git-push-force"},
