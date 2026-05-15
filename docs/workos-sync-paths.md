@@ -286,7 +286,74 @@ It then applies local state in this order:
    1. Find the matching WorkOS user snapshot.
    2. Backfill that WorkOS user into `users`.
    3. If a Gram user ID was resolved, upsert the membership relationship.
-   4. Sync role assignments for that membership.
+4. Sync role assignments for that membership.
+
+Organization backfill also backfills users for the organization. For each WorkOS membership, it finds the matching WorkOS user snapshot and tries to apply that user locally before applying the membership and role assignments. If the user cannot be resolved to a Gram user ID, the membership and role assignment rows for that membership are skipped.
+
+## Running Backfill From Temporal UI
+
+Use Temporal UI's **Start Workflow** page.
+
+Common fields:
+
+- **Task Queue:** `main` locally, or the deployment's `TEMPORAL_TASK_QUEUE` value.
+- **Workflow Type:** `BackfillWorkOSWorkflow`
+- **Encoding:** `json/plain`
+
+Use a unique workflow ID. The application-generated format is:
+
+- All organizations: `v1:backfill-workos:<unix timestamp>`
+- One organization: `v1:backfill-workos:<workos organization id>:<unix timestamp>`
+
+Any unique ID is fine from the UI, but matching this shape makes workflow history easier to scan.
+
+### Backfill Global Roles And One Organization
+
+Input:
+
+```json
+{
+  "workos_organization_id": "org_..."
+}
+```
+
+Result:
+
+- Backfills global WorkOS roles first.
+- Backfills the specified WorkOS organization.
+- Backfills that organization's users as part of the organization membership pass.
+- Backfills the organization's WorkOS-managed roles, memberships, and role assignments.
+
+This is the preferred option when reconciling one known WorkOS organization.
+
+### Backfill Global Roles And All Organizations
+
+Input:
+
+```json
+{}
+```
+
+Result:
+
+- Backfills global WorkOS roles first.
+- Lists every WorkOS organization.
+- Backfills each organization one at a time.
+- Backfills users for each organization as part of each organization's membership pass.
+
+If an individual organization backfill fails during an all-org run, the workflow logs that org failure and continues with the remaining organizations.
+
+### Global Role Backfill Behavior
+
+There is no separate global-role-only workflow. Global role backfill is always run at the start of `BackfillWorkOSWorkflow`, before any organization work.
+
+Global role backfill:
+
+- Lists current WorkOS global roles.
+- Upserts current WorkOS-managed global roles locally.
+- Soft-deletes local WorkOS-managed global roles that are missing from the current WorkOS snapshot.
+
+Operational failure handling is covered in [WorkOS Sync Runbook](workos-sync-runbook.md).
 
 ### Organization Metadata
 
