@@ -1,3 +1,4 @@
+import { AutoSyncSourcesCard } from "@/pages/mcp/AutoSyncSourcesCard";
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
 import { DetailHero } from "@/components/detail-hero";
@@ -1535,6 +1536,8 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
       </PageSection>
 
       <MCPPublishingSection toolset={toolset} />
+
+      <AutoSyncSourcesCard toolset={toolset} />
 
       <PageSection
         heading="Actions"
