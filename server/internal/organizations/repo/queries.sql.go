@@ -12,18 +12,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const acceptInvitation = `-- name: AcceptInvitation :exec
+const acceptInvitation = `-- name: AcceptInvitation :execrows
 UPDATE organization_invitations
 SET state = 'accepted',
     accepted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE id = $1
   AND state = 'pending'
+  AND expires_at > clock_timestamp()
 `
 
-func (q *Queries) AcceptInvitation(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, acceptInvitation, id)
-	return err
+func (q *Queries) AcceptInvitation(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, acceptInvitation, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const attachWorkOSUserToOrg = `-- name: AttachWorkOSUserToOrg :exec
@@ -733,6 +737,7 @@ SELECT id, organization_id, email, token_hash, inviter_user_id, role_slug, state
 FROM organization_invitations
 WHERE organization_id = $1
   AND state = 'pending'
+  AND expires_at > clock_timestamp()
 ORDER BY created_at DESC
 `
 

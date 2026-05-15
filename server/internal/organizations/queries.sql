@@ -185,6 +185,7 @@ SELECT *
 FROM organization_invitations
 WHERE organization_id = @organization_id
   AND state = 'pending'
+  AND expires_at > clock_timestamp()
 ORDER BY created_at DESC;
 
 -- name: RevokeInvitation :exec
@@ -195,13 +196,14 @@ SET state = 'revoked',
 WHERE id = @id
   AND state = 'pending';
 
--- name: AcceptInvitation :exec
+-- name: AcceptInvitation :execrows
 UPDATE organization_invitations
 SET state = 'accepted',
     accepted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE id = @id
-  AND state = 'pending';
+  AND state = 'pending'
+  AND expires_at > clock_timestamp();
 
 -- name: GetInvitationByTokenHash :one
 SELECT *

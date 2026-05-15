@@ -61,12 +61,98 @@ func TestService_ListInvites_ExcludesAccepted(t *testing.T) {
 		ExpiresInDays:  7,
 	})
 	require.NoError(t, err)
-	require.NoError(t, orgrepo.New(ti.conn).AcceptInvitation(ctx, row.ID))
+	affected, err := orgrepo.New(ti.conn).AcceptInvitation(ctx, row.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), affected)
 
 	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	require.Empty(t, res.Invitations, "accepted invitations should not appear")
+}
+
+func TestService_ListInvites_ExcludesExpired(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// Create an invitation, then expire it by setting expires_at to the past.
+	row, err := orgrepo.New(ti.conn).CreateInvitation(ctx, orgrepo.CreateInvitationParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Email:          "expired@example.com",
+		TokenHash:      "expiredhash",
+		InviterUserID:  conv.ToPGText(authCtx.UserID),
+		ExpiresInDays:  7,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.conn.Exec(ctx,
+		"UPDATE organization_invitations SET expires_at = clock_timestamp() - interval '1 hour' WHERE id = $1",
+		row.ID,
+	)
+	require.NoError(t, err)
+
+	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Empty(t, res.Invitations, "expired invitations should not appear")
+}
+
+func TestAcceptInvitation_RevokedReturnsZeroRows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	row, err := orgrepo.New(ti.conn).CreateInvitation(ctx, orgrepo.CreateInvitationParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Email:          "race-revoked@example.com",
+		TokenHash:      "racerevokedhash",
+		InviterUserID:  conv.ToPGText(authCtx.UserID),
+		ExpiresInDays:  7,
+	})
+	require.NoError(t, err)
+
+	// Revoke first.
+	err = orgrepo.New(ti.conn).RevokeInvitation(ctx, row.ID)
+	require.NoError(t, err)
+
+	// Accept should affect 0 rows.
+	affected, err := orgrepo.New(ti.conn).AcceptInvitation(ctx, row.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), affected, "accepting a revoked invite should affect 0 rows")
+}
+
+func TestAcceptInvitation_ExpiredReturnsZeroRows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	row, err := orgrepo.New(ti.conn).CreateInvitation(ctx, orgrepo.CreateInvitationParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Email:          "race-expired@example.com",
+		TokenHash:      "raceexpiredhash",
+		InviterUserID:  conv.ToPGText(authCtx.UserID),
+		ExpiresInDays:  7,
+	})
+	require.NoError(t, err)
+
+	// Expire it manually.
+	_, err = ti.conn.Exec(ctx,
+		"UPDATE organization_invitations SET expires_at = clock_timestamp() - interval '1 hour' WHERE id = $1",
+		row.ID,
+	)
+	require.NoError(t, err)
+
+	// Accept should affect 0 rows because expired.
+	affected, err := orgrepo.New(ti.conn).AcceptInvitation(ctx, row.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), affected, "accepting an expired invite should affect 0 rows")
 }
 
 func TestService_ListInvites_AllowsOrgReadGrant(t *testing.T) {

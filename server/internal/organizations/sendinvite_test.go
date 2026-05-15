@@ -1,6 +1,7 @@
 package organizations_test
 
 import (
+	"fmt"
 	"testing"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
@@ -93,6 +94,56 @@ func TestService_SendInvite_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestService_SendInvite_DuplicatePendingEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+
+	ti.orgs.On("CreatePasswordlessSession", mock.Anything, mock.Anything).Return(&thirdpartyworkos.PasswordlessSession{
+		ID: "pwl_dup", Link: "https://stub.workos.com/passwordless/dup",
+	}, nil).Once()
+
+	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "dup@example.com"})
+	require.NoError(t, err)
+
+	// Second invite to same email in same org should fail (partial unique index).
+	_, err = ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "dup@example.com"})
+	require.Error(t, err, "duplicate pending invite for same email should fail")
+}
+
+func TestService_SendInvite_UnknownRoleID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+
+	roleID := "nonexistent-role"
+
+	ti.orgs.On("ListRoles", mock.Anything, mock.Anything).Return([]thirdpartyworkos.Role{
+		{ID: "some-other-role", Slug: "member", Name: "Member"},
+	}, nil).Once()
+
+	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{
+		Email:  "test@example.com",
+		RoleID: &roleID,
+	})
+	require.Error(t, err, "should fail when role ID not found in ListRoles result")
+}
+
+func TestService_SendInvite_FailsWhenPasswordlessSessionFails(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+
+	ti.orgs.On("CreatePasswordlessSession", mock.Anything, mock.Anything).Return(
+		(*thirdpartyworkos.PasswordlessSession)(nil), fmt.Errorf("workos unavailable"),
+	).Once()
+
+	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{
+		Email: "nobody@example.com",
+	})
+	require.Error(t, err, "should fail when passwordless session creation fails")
 }
 
 func TestService_SendInvite_ForbiddenWithGrantForDifferentOrganization(t *testing.T) {

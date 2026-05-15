@@ -84,7 +84,7 @@ type Service struct {
 	userProvision UserProvisioner
 	features      orgFeatureChecker
 	email         *email.Service
-	siteURL       string // dashboard URL; used for invite callback RedirectURI and post-callback redirect
+	siteURL       string // site URL; used for invite callback RedirectURI and post-callback redirect
 	audit         *audit.Logger
 	svix          *svix.Svix
 }
@@ -193,20 +193,21 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, logger)
 		}
-		if org.WorkosID.Valid && org.WorkosID.String != "" {
-			roles, err := s.orgs.ListRoles(ctx, org.WorkosID.String)
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "list roles for invite").Log(ctx, logger)
+		if !org.WorkosID.Valid || org.WorkosID.String == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, logger)
+		}
+		roles, err := s.orgs.ListRoles(ctx, org.WorkosID.String)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list roles for invite").Log(ctx, logger)
+		}
+		for _, r := range roles {
+			if r.ID == *payload.RoleID {
+				roleSlug = conv.ToPGText(r.Slug)
+				break
 			}
-			for _, r := range roles {
-				if r.ID == *payload.RoleID {
-					roleSlug = conv.ToPGText(r.Slug)
-					break
-				}
-			}
-			if !roleSlug.Valid {
-				return nil, oops.E(oops.CodeBadRequest, nil, "role not found").Log(ctx, logger)
-			}
+		}
+		if !roleSlug.Valid {
+			return nil, oops.E(oops.CodeBadRequest, nil, "role not found").Log(ctx, logger)
 		}
 	}
 
@@ -232,10 +233,10 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		State:       fmt.Sprintf("invite_token=%s", rawToken),
 	})
 	if pwlErr != nil {
-		logger.WarnContext(ctx, "failed to create passwordless session; invite saved but email not sent",
-			attr.SlogError(pwlErr),
-		)
-	} else if s.email != nil {
+		return nil, oops.E(oops.CodeUnexpected, pwlErr, "failed to create invite link").Log(ctx, logger)
+	}
+
+	if s.email != nil {
 		// Look up inviter display name + email and org name for the email template.
 		inviterName, inviterEmail := ac.UserID, ""
 		if u, err := userrepo.New(s.db).GetUser(ctx, ac.UserID); err == nil {
@@ -253,7 +254,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 			InviterName:      inviterName,
 			InviterEmail:     inviterEmail,
 		}); err != nil {
-			logger.WarnContext(ctx, "failed to send invite email",
+			logger.WarnContext(ctx, "failed to send invite email; invite link still valid",
 				attr.SlogError(err),
 			)
 		}
@@ -790,11 +791,19 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Accept the invite and add the user to the org.
+	// Accept the invite atomically — the WHERE clause ensures only pending,
+	// non-expired invites transition. If a concurrent revoke wins the race,
+	// rowsAffected will be 0 and we abort.
 	repo := orgrepo.New(s.db)
-	if err := repo.AcceptInvitation(ctx, invite.ID); err != nil {
+	rowsAffected, err := repo.AcceptInvitation(ctx, invite.ID)
+	if err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: failed to accept invitation", attr.SlogError(err))
 		redirectError("failed to accept invite")
+		return
+	}
+	if rowsAffected == 0 {
+		s.logger.WarnContext(ctx, "invite callback: invite was revoked or expired before acceptance")
+		redirectError("invite already used, revoked, or expired")
 		return
 	}
 
@@ -806,9 +815,13 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		displayName = inviteeEmail
 	}
 	gramUserID, err := s.userProvision.UpsertUserFromIDP(ctx, &identity.IDPUserInfo{
-		Sub:   profile.ID,
-		Email: inviteeEmail,
-		Name:  displayName,
+		Sub:             profile.ID,
+		Email:           inviteeEmail,
+		Name:            displayName,
+		Picture:         nil,
+		ExternalID:      "",
+		WorkOSSessionID: "",
+		OrganizationID:  "",
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: failed to provision user", attr.SlogError(err))
@@ -855,8 +868,8 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 			WorkosRoleSlugs:    []string{invite.RoleSlug.String},
 			UserID:             conv.ToPGText(gramUserID),
 			WorkosMembershipID: conv.ToPGText(workosMembershipID),
-			WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Now(), Valid: true},
-			WorkosLastEventID:  pgtype.Text{},
+			WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
+			WorkosLastEventID:  pgtype.Text{String: "", Valid: false},
 		}); err != nil {
 			s.logger.WarnContext(ctx, "invite callback: failed to sync role assignments", attr.SlogError(err))
 		}
