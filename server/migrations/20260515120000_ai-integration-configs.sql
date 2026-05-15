@@ -6,7 +6,7 @@ CREATE TABLE "ai_integration_configs" (
   "organization_id" text NOT NULL,
   "provider" text NOT NULL,
   "project_id" uuid NOT NULL,
-  "api_key_encrypted" text NULL,
+  "api_key_encrypted" text NOT NULL,
   "enabled" boolean NOT NULL DEFAULT true,
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,

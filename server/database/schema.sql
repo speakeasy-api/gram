@@ -2219,7 +2219,7 @@ CREATE TABLE IF NOT EXISTS ai_integration_configs (
   organization_id TEXT NOT NULL,
   provider TEXT NOT NULL,
   project_id uuid NOT NULL,
-  api_key_encrypted TEXT,
+  api_key_encrypted TEXT NOT NULL,
   enabled boolean NOT NULL DEFAULT true,
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
