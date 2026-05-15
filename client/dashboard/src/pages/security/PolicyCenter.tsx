@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/table";
 import { Type } from "@/components/ui/type";
 import {
+  Button as MoonshineButton,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -384,110 +385,115 @@ function PolicyCenterContent() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">Risk Policies</h2>
-            <p className="text-muted-foreground text-sm">
-              Configure risk analysis rules to detect secrets and sensitive
-              information in chat messages.
-            </p>
-          </div>
-          <Button onClick={handleCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Policy
-          </Button>
-        </div>
-
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Action</TableHead>
-              <TableHead>Categories</TableHead>
-              <TableHead>Progress</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="w-[60px]" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {policies.map((policy) => {
-              const categories = sourcesToCategories(
-                policy.sources,
-                policy.presidioEntities,
-              );
-              return (
-                <TableRow
-                  key={policy.id}
-                  className="cursor-pointer"
-                  onClick={() => handleEdit(policy)}
-                >
-                  <TableCell className="font-medium">{policy.name}</TableCell>
-                  <TableCell>
-                    <ActionBadge
-                      action={(policy.action as PolicyAction) ?? "flag"}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      {categories.map((cat) => (
-                        <Badge key={cat} variant="secondary">
-                          {RULE_CATEGORY_META[cat].label}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {policy.pendingMessages > 0 ? (
-                      <span className="text-muted-foreground text-xs">
-                        {policy.totalMessages - policy.pendingMessages}/
-                        {policy.totalMessages} analyzed
-                      </span>
-                    ) : (
-                      <Badge variant="secondary">Complete</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Switch
-                      checked={policy.enabled}
-                      onCheckedChange={(checked) =>
-                        handleToggle(policy, checked)
-                      }
-                    />
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Ellipsis className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          className="cursor-pointer"
-                          onSelect={() =>
-                            setTimeout(() => setRunPanelPolicy(policy), 0)
-                          }
-                        >
-                          View Progress
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive cursor-pointer"
-                          onSelect={() => handleDelete(policy.id)}
-                        >
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+        <Page.Section>
+          <Page.Section.Title>Risk Policies</Page.Section.Title>
+          <Page.Section.Description className="max-w-2xl">
+            Configure risk analysis rules to detect secrets and sensitive
+            information in chat messages.
+          </Page.Section.Description>
+          <Page.Section.CTA>
+            <MoonshineButton onClick={handleCreate}>
+              <MoonshineButton.LeftIcon>
+                <Plus className="h-4 w-4" />
+              </MoonshineButton.LeftIcon>
+              <MoonshineButton.Text>New Policy</MoonshineButton.Text>
+            </MoonshineButton>
+          </Page.Section.CTA>
+          <Page.Section.Body>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Action</TableHead>
+                  <TableHead>Categories</TableHead>
+                  <TableHead>Progress</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-[60px]" />
                 </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+              </TableHeader>
+              <TableBody>
+                {policies.map((policy) => {
+                  const categories = sourcesToCategories(
+                    policy.sources,
+                    policy.presidioEntities,
+                  );
+                  return (
+                    <TableRow
+                      key={policy.id}
+                      className="cursor-pointer"
+                      onClick={() => handleEdit(policy)}
+                    >
+                      <TableCell className="font-medium">
+                        {policy.name}
+                      </TableCell>
+                      <TableCell>
+                        <ActionBadge
+                          action={(policy.action as PolicyAction) ?? "flag"}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          {categories.map((cat) => (
+                            <Badge key={cat} variant="secondary">
+                              {RULE_CATEGORY_META[cat].label}
+                            </Badge>
+                          ))}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {policy.pendingMessages > 0 ? (
+                          <span className="text-muted-foreground text-xs">
+                            {policy.totalMessages - policy.pendingMessages}/
+                            {policy.totalMessages} analyzed
+                          </span>
+                        ) : (
+                          <Badge variant="secondary">Complete</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Switch
+                          checked={policy.enabled}
+                          onCheckedChange={(checked) =>
+                            handleToggle(policy, checked)
+                          }
+                        />
+                      </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Ellipsis className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onSelect={() =>
+                                setTimeout(() => setRunPanelPolicy(policy), 0)
+                              }
+                            >
+                              View Progress
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive cursor-pointer"
+                              onSelect={() => handleDelete(policy.id)}
+                            >
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </Page.Section.Body>
+        </Page.Section>
 
         {/* Edit/Create Sheet */}
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
