@@ -1,5 +1,17 @@
 # server
 
+## 0.53.0
+
+### Minor Changes
+
+- bdb246a: monitor OpenRouter credits usage for enterprise organizations
+- 73f273e: auto-reconcile OpenRouter per-key credit limits via metrics workflow
+- 21dd9c7: Lay the groundwork for the v2 assistant runtime path: optional `ThreadID` claim on assistant runtime tokens (assistant-scoped tokens omit it), a `runtime_version` column plus partial unique index on `assistant_runtimes`, a new `/rpc/assistants.getThreadBootstrap` endpoint that lets a runner pull a thread's bootstrap state on demand, and an assistant-scope check on `/chat/completions` that rejects writes whose `Gram-Chat-ID` resolves to a chat outside the caller's assistant. Existing v1 admit, configure, and run-turn flows are unchanged.
+
+### Patch Changes
+
+- 733bf43: Allow tool URNs to use MCP-valid tool names, including camelCase, PascalCase, dotted, and kebab-case names.
+
 ## 0.52.1
 
 ### Patch Changes
