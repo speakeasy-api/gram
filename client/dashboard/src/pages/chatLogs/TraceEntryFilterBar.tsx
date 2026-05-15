@@ -7,25 +7,6 @@ import {
   type FilterableTraceEntryType,
 } from "./traceEntries";
 
-const ENTRY_TYPE_FILTER_STYLES: Record<FilterableTraceEntryType, string> = {
-  user: [
-    "border-border bg-accent/50 text-foreground",
-    "data-[state=on]:bg-accent data-[state=on]:text-foreground",
-  ].join(" "),
-  assistant: [
-    "border-information-default bg-information-softest text-foreground",
-    "data-[state=on]:bg-information-softest data-[state=on]:text-foreground",
-  ].join(" "),
-  tool_call: [
-    "border-warning-default bg-warning-softest text-foreground",
-    "data-[state=on]:bg-warning-softest data-[state=on]:text-foreground",
-  ].join(" "),
-  tool_result: [
-    "border-success-default bg-success-softest text-foreground",
-    "data-[state=on]:bg-success-softest data-[state=on]:text-foreground",
-  ].join(" "),
-};
-
 function getFilterableEntryTypes(values: string[]) {
   return FILTERABLE_ENTRY_TYPES.filter((entryType) =>
     values.includes(entryType),
@@ -38,80 +19,84 @@ export function EntryTypeFilterBar({
   totalCount,
   visibleCount,
   onChange,
+  title = "Entries Filter",
 }: {
   value: FilterableTraceEntryType[];
   counts: Record<FilterableTraceEntryType, number>;
   totalCount: number;
   visibleCount: number;
   onChange: (value: FilterableTraceEntryType[]) => void;
+  title?: string;
 }) {
   return (
-    <div className="bg-background px-6 py-3">
-      <div className="flex min-w-0 flex-col gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-sm font-medium">Entries</div>
-          <div className="text-muted-foreground shrink-0 text-xs">
-            Showing {visibleCount.toLocaleString()} of{" "}
-            {totalCount.toLocaleString()} entries
-          </div>
+    <div>
+      <div className="flex items-center justify-between gap-3 px-6 py-3">
+        <div className="text-sm font-medium">{title}</div>
+        <div className="text-muted-foreground shrink-0 text-xs">
+          Showing {visibleCount.toLocaleString()} of{" "}
+          {totalCount.toLocaleString()} entries
         </div>
-        <ToggleGroup
-          type="multiple"
-          value={value}
-          onValueChange={(next) => {
-            const nextValue = getFilterableEntryTypes(next);
-            if (nextValue.length > 0) {
-              onChange(nextValue);
-            }
-          }}
-          className="border-border grid w-full grid-cols-2 rounded-none border lg:grid-cols-4"
-        >
-          {FILTERABLE_ENTRY_TYPES.map((entryType) => {
-            const meta = ENTRY_TYPE_META[entryType];
-            const count = counts[entryType];
-            const isSelected = value.includes(entryType);
-            const isDisabled = count === 0;
+      </div>
+      <ToggleGroup
+        type="multiple"
+        value={value}
+        onValueChange={(next) => {
+          const nextValue = getFilterableEntryTypes(next);
+          if (nextValue.length > 0) {
+            onChange(nextValue);
+          }
+        }}
+        className="grid w-full grid-cols-2 gap-2 rounded-none p-2 pt-0 lg:grid-cols-4"
+      >
+        {FILTERABLE_ENTRY_TYPES.map((entryType) => {
+          const meta = ENTRY_TYPE_META[entryType];
+          const count = counts[entryType];
+          const isSelected = value.includes(entryType);
+          const isDisabled = count === 0;
+          // Defaults select every type, so zero-count items can be both selected and disabled.
+          const canShowSelectedState = isSelected && !isDisabled;
 
-            return (
-              <ToggleGroupItem
-                key={entryType}
-                value={entryType}
-                aria-label={`Toggle ${meta.label} entries`}
-                disabled={isDisabled}
+          return (
+            <ToggleGroupItem
+              key={entryType}
+              value={entryType}
+              aria-label={`Toggle ${meta.label} entries`}
+              disabled={isDisabled}
+              className={cn(
+                "h-10 min-w-0 cursor-pointer px-3 disabled:cursor-not-allowed disabled:opacity-45",
+                "text-foreground hover:text-foreground justify-start text-left",
+                "bg-muted hover:bg-muted/50 rounded-lg shadow-none inset-shadow-xs transition-all",
+                "hover:border-muted-foreground/50 border-muted border",
+                canShowSelectedState &&
+                  "bg-muted border-muted-foreground hover:border-muted-foreground shadow-muted hover:shadow-sm",
+              )}
+            >
+              <Icon
+                name={meta.icon}
                 className={cn(
-                  "h-10 min-w-0 justify-start rounded-none px-3 text-left shadow-none first:rounded-none last:rounded-none disabled:cursor-not-allowed disabled:opacity-45",
-                  isSelected && !isDisabled
-                    ? ENTRY_TYPE_FILTER_STYLES[entryType]
-                    : "border-border bg-background text-muted-foreground hover:border-muted-foreground/40 hover:bg-muted/30 hover:text-foreground",
+                  "size-4 shrink-0",
+                  canShowSelectedState
+                    ? meta.iconClassName
+                    : "text-muted-foreground",
+                )}
+              />
+              <span className="min-w-0 flex-1 truncate font-medium">
+                {meta.label}
+              </span>
+              <span
+                className={cn(
+                  "rounded px-1.5 py-0.5 font-mono text-[10px] leading-none",
+                  canShowSelectedState
+                    ? "bg-background/80 text-foreground"
+                    : "bg-muted text-muted-foreground",
                 )}
               >
-                <Icon
-                  name={meta.icon}
-                  className={cn(
-                    "size-4 shrink-0",
-                    isSelected && !isDisabled
-                      ? meta.iconClassName
-                      : "text-muted-foreground",
-                  )}
-                />
-                <span className="min-w-0 flex-1 truncate font-medium">
-                  {meta.label}
-                </span>
-                <span
-                  className={cn(
-                    "rounded px-1.5 py-0.5 font-mono text-[10px] leading-none",
-                    isSelected && !isDisabled
-                      ? "bg-background/80 text-foreground"
-                      : "bg-muted text-muted-foreground",
-                  )}
-                >
-                  {count.toLocaleString()}
-                </span>
-              </ToggleGroupItem>
-            );
-          })}
-        </ToggleGroup>
-      </div>
+                {count.toLocaleString()}
+              </span>
+            </ToggleGroupItem>
+          );
+        })}
+      </ToggleGroup>
     </div>
   );
 }
