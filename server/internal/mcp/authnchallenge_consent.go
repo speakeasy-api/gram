@@ -315,7 +315,7 @@ func (s *Service) handleConsentPost(w http.ResponseWriter, r *http.Request) erro
 
 // resolveSubjectDisplay picks the friendliest label for the consent page's
 // "Signing in as" row. User-kind subjects look up the gram user and prefer
-// display_name then email; any miss (anonymous subject, deleted user, lookup
+// email then display_name; any miss (anonymous subject, deleted user, lookup
 // error) falls back to the URN string so the UI still renders.
 func resolveSubjectDisplay(ctx context.Context, db users_repo.DBTX, subject urn.SessionSubject) string {
 	fallback := subject.String()
@@ -326,11 +326,11 @@ func resolveSubjectDisplay(ctx context.Context, db users_repo.DBTX, subject urn.
 	if err != nil {
 		return fallback
 	}
-	if user.DisplayName != "" {
-		return user.DisplayName
-	}
 	if user.Email != "" {
 		return user.Email
+	}
+	if user.DisplayName != "" {
+		return user.DisplayName
 	}
 	return fallback
 }
