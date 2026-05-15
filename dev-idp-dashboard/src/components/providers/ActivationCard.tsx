@@ -55,16 +55,12 @@ function InactiveState({ mode }: { mode: ActivatableMode }) {
     <div className="space-y-3">
       <Header />
       {match(mode)
-        .with("local-speakeasy", () => (
-          <CopyableCommand command="mise set --file mise.local.toml SPEAKEASY_SERVER_ADDRESS={{env.GRAM_DEVIDP_EXTERNAL_URL}}/local-speakeasy" />
+        .with("mock-workos", () => (
+          <CopyableCommand command="mise set --file mise.local.toml WORKOS_API_URL={{env.GRAM_DEVIDP_EXTERNAL_URL}}/mock-workos" />
         ))
         .with("workos", () => (
           <>
-            <CopyableCommand
-              command={`mise set --file mise.local.toml \\
-  SPEAKEASY_SERVER_ADDRESS={{env.GRAM_DEVIDP_EXTERNAL_URL}}/workos \\
-  WORKOS_API_URL=https://api.workos.com`}
-            />
+            <CopyableCommand command="mise set --file mise.local.toml WORKOS_API_URL=https://api.workos.com" />
             {!workosKeySet && (
               <div className="space-y-2 pt-3 border-t border-border">
                 <CopyableCommand command="mise set --file mise.local.toml WORKOS_API_KEY=<paste-key>" />

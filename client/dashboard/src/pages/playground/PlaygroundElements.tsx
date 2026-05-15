@@ -10,7 +10,7 @@ import { useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
 import type { Toolset } from "@/lib/toolTypes";
-import { getServerURL } from "@/lib/utils";
+import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
   Chat,
@@ -202,7 +202,7 @@ export function PlaygroundElements({
       config={{
         projectSlug: project.slug,
         api: {
-          url: getServerURL(),
+          url: getPlaygroundMcpBaseURL(),
           session: getSession,
           headers: {
             "X-Gram-Source": "playground",

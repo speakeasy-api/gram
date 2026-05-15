@@ -71,8 +71,14 @@ SELECT * FROM users
 WHERE id = ANY(@ids::text[]);
 
 -- name: SetUserWorkosID :exec
-UPDATE users 
-SET workos_id = @workos_id, 
+UPDATE users
+SET workos_id = @workos_id,
   updated_at = clock_timestamp()
-WHERE id = @id AND 
+WHERE id = @id AND
   workos_id IS NULL;
+
+-- name: OverwriteUserWorkosID :exec
+UPDATE users
+SET workos_id = @workos_id,
+  updated_at = clock_timestamp()
+WHERE id = @id;

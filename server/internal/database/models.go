@@ -105,6 +105,7 @@ type AssistantRuntime struct {
 	LastHeartbeatAt     pgtype.Timestamptz
 	BackendMetadataJson []byte
 	EndedAt             pgtype.Timestamptz
+	RuntimeVersion      int16
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
@@ -1084,7 +1085,7 @@ type RemoteMcpServerHeader struct {
 
 type RemoteSession struct {
 	ID                    uuid.UUID
-	SubjectUrn            string
+	SubjectUrn            urn.SessionSubject
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionClientID uuid.UUID
 	AccessTokenEncrypted  string

@@ -323,6 +323,31 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateOAuthProxyServer"}`)
 	})
 
+	Method("setUserSessionIssuer", func() {
+		Description("Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.")
+
+		Payload(func() {
+			Extend(SetUserSessionIssuerForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			Param("slug")
+			POST("/rpc/toolsets.setUserSessionIssuer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setToolsetUserSessionIssuer")
+		Meta("openapi:extension:x-speakeasy-name-override", "setUserSessionIssuer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetToolsetUserSessionIssuer"}`)
+	})
+
 })
 
 var CreateToolsetForm = Type("CreateToolsetForm", func() {
@@ -382,6 +407,15 @@ var UpdateOAuthProxyServerForm = Type("UpdateOAuthProxyServerForm", func() {
 	Attribute("oauth_proxy_server", shared.OAuthProxyServerUpdateForm, "The OAuth proxy server fields to update")
 	security.ProjectPayload()
 	Required("slug", "oauth_proxy_server")
+})
+
+var SetUserSessionIssuerForm = Type("SetUserSessionIssuerForm", func() {
+	Attribute("slug", shared.Slug, "The slug of the toolset to link")
+	Attribute("user_session_issuer_id", String, "The user_session_issuer id to link, or null to unlink.", func() {
+		Format(FormatUUID)
+	})
+	security.ProjectPayload()
+	Required("slug")
 })
 
 var UpdateSecurityVariableDisplayNameForm = Type("UpdateSecurityVariableDisplayNameForm", func() {

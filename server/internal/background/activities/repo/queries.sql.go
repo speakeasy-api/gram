@@ -7,7 +7,139 @@ package repo
 
 import (
 	"context"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const fetchOutboxRowsByIDs = `-- name: FetchOutboxRowsByIDs :many
+SELECT
+    o.id,
+    o.public_id,
+    o.organization_id,
+    o.event_type,
+    o.payload,
+    COALESCE(r.attempts, 0)::int AS attempts
+FROM outbox o
+LEFT JOIN outbox_relays r ON r.outbox_id = o.id
+WHERE o.id = ANY($1::bigint[])
+ORDER BY o.id ASC
+`
+
+type FetchOutboxRowsByIDsRow struct {
+	ID             int64
+	PublicID       uuid.UUID
+	OrganizationID string
+	EventType      string
+	Payload        []byte
+	Attempts       int32
+}
+
+// Hydrate a set of outbox IDs back into full rows along with their current
+// relay attempt count. Intended to be called inside the relay activity after
+// the workflow has handed it a batch of IDs.
+func (q *Queries) FetchOutboxRowsByIDs(ctx context.Context, ids []int64) ([]FetchOutboxRowsByIDsRow, error) {
+	rows, err := q.db.Query(ctx, fetchOutboxRowsByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FetchOutboxRowsByIDsRow
+	for rows.Next() {
+		var i FetchOutboxRowsByIDsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.OrganizationID,
+			&i.EventType,
+			&i.Payload,
+			&i.Attempts,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const fetchPendingOutboxIDs = `-- name: FetchPendingOutboxIDs :many
+SELECT o.id, o.organization_id, om.svix_app_id, om.webhooks_enabled
+FROM outbox o
+LEFT JOIN organization_metadata om ON o.organization_id = om.id
+LEFT JOIN outbox_relays r ON r.outbox_id = o.id
+WHERE r.outbox_id IS NULL OR (r.processed_at IS NULL AND r.dead_lettered IS FALSE AND (r.retry_after IS NULL OR r.retry_after <= clock_timestamp()))
+ORDER BY o.id ASC
+LIMIT $1
+`
+
+type FetchPendingOutboxIDsRow struct {
+	ID              int64
+	OrganizationID  string
+	SvixAppID       pgtype.Text
+	WebhooksEnabled pgtype.Bool
+}
+
+// Fetch the next batch of outbox row IDs (across all organizations) that the
+// Svix relay has not finished processing. A row is "pending" when no relay
+// tracking row exists OR a tracking row exists with processed_at IS NULL and
+// not dead-lettered. Returns only IDs to keep the activity payload small —
+// workflows pass IDs to RelayBatch which re-queries the full rows.
+func (q *Queries) FetchPendingOutboxIDs(ctx context.Context, batchSize int32) ([]FetchPendingOutboxIDsRow, error) {
+	rows, err := q.db.Query(ctx, fetchPendingOutboxIDs, batchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FetchPendingOutboxIDsRow
+	for rows.Next() {
+		var i FetchPendingOutboxIDsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.SvixAppID,
+			&i.WebhooksEnabled,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const gCProcessedOutboxRows = `-- name: GCProcessedOutboxRows :execrows
+DELETE FROM outbox
+WHERE id IN (
+  SELECT o.id
+  FROM outbox o
+  JOIN outbox_relays r ON r.outbox_id = o.id
+  WHERE o.created_at < $1
+    AND (r.processed_at IS NOT NULL OR r.noop = TRUE OR r.dead_lettered = TRUE)
+  ORDER BY o.id ASC
+  LIMIT $2
+)
+`
+
+type GCProcessedOutboxRowsParams struct {
+	Cutoff    pgtype.Timestamptz
+	BatchSize int32
+}
+
+// Hard-deletes terminal outbox rows older than @cutoff. Terminal means the
+// relay row is processed, noop, or dead-lettered. The cascade FK removes the
+// outbox_relays row automatically. Batched via LIMIT to bound lock time.
+func (q *Queries) GCProcessedOutboxRows(ctx context.Context, arg GCProcessedOutboxRowsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, gCProcessedOutboxRows, arg.Cutoff, arg.BatchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
 
 const getAllOrganizationsWithToolsets = `-- name: GetAllOrganizationsWithToolsets :many
 SELECT
@@ -139,7 +271,7 @@ JOIN users u ON d.user_id = u.id
 WHERE d.organization_id = ANY($1::text[])
   AND d.id IN (
     SELECT DISTINCT ON (organization_id) id
-    FROM deployments 
+    FROM deployments
     WHERE organization_id = ANY($1::text[])
     ORDER BY organization_id, created_at DESC
   )
@@ -169,4 +301,70 @@ func (q *Queries) GetUserEmailsByOrgIDs(ctx context.Context, dollar_1 []string) 
 		return nil, err
 	}
 	return items, nil
+}
+
+const markOutboxRelayDeadLettered = `-- name: MarkOutboxRelayDeadLettered :exec
+INSERT INTO outbox_relays (outbox_id, attempts, last_error, dead_lettered)
+VALUES ($1, 1, $2, TRUE)
+ON CONFLICT (outbox_id) DO UPDATE SET
+    attempts = outbox_relays.attempts + 1,
+    last_error = EXCLUDED.last_error,
+    dead_lettered = TRUE,
+    updated_at = clock_timestamp()
+`
+
+type MarkOutboxRelayDeadLetteredParams struct {
+	OutboxID  int64
+	LastError pgtype.Text
+}
+
+// Permanently parks a row after exceeding the retry budget. The pending
+// partial index excludes dead_lettered rows so they will not be re-fetched.
+func (q *Queries) MarkOutboxRelayDeadLettered(ctx context.Context, arg MarkOutboxRelayDeadLetteredParams) error {
+	_, err := q.db.Exec(ctx, markOutboxRelayDeadLettered, arg.OutboxID, arg.LastError)
+	return err
+}
+
+const markOutboxRelayFailed = `-- name: MarkOutboxRelayFailed :exec
+INSERT INTO outbox_relays (outbox_id, attempts, last_error, retry_after)
+VALUES ($1, 1, $2, $3)
+ON CONFLICT (outbox_id) DO UPDATE SET
+    attempts = outbox_relays.attempts + 1,
+    last_error = EXCLUDED.last_error,
+    retry_after = EXCLUDED.retry_after,
+    updated_at = clock_timestamp()
+`
+
+type MarkOutboxRelayFailedParams struct {
+	OutboxID   int64
+	LastError  pgtype.Text
+	RetryAfter pgtype.Timestamptz
+}
+
+// Records a failed delivery attempt; the row remains pending for retry.
+func (q *Queries) MarkOutboxRelayFailed(ctx context.Context, arg MarkOutboxRelayFailedParams) error {
+	_, err := q.db.Exec(ctx, markOutboxRelayFailed, arg.OutboxID, arg.LastError, arg.RetryAfter)
+	return err
+}
+
+const markOutboxRelayProcessed = `-- name: MarkOutboxRelayProcessed :exec
+INSERT INTO outbox_relays (outbox_id, processed_at, svix_message_id, attempts, last_error)
+VALUES ($1, clock_timestamp(), $2, 1, NULL)
+ON CONFLICT (outbox_id) DO UPDATE SET
+    processed_at = clock_timestamp(),
+    svix_message_id = EXCLUDED.svix_message_id,
+    attempts = outbox_relays.attempts + 1,
+    last_error = NULL,
+    updated_at = clock_timestamp()
+`
+
+type MarkOutboxRelayProcessedParams struct {
+	OutboxID      int64
+	SvixMessageID pgtype.Text
+}
+
+// Marks a relay as successfully delivered to Svix.
+func (q *Queries) MarkOutboxRelayProcessed(ctx context.Context, arg MarkOutboxRelayProcessedParams) error {
+	_, err := q.db.Exec(ctx, markOutboxRelayProcessed, arg.OutboxID, arg.SvixMessageID)
+	return err
 }

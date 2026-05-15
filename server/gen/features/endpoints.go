@@ -55,12 +55,7 @@ func NewGetProductFeaturesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 		if err != nil {
 			return nil, err
 		}
-		res, err := s.GetProductFeatures(ctx, p)
-		if err != nil {
-			return nil, err
-		}
-		vres := NewViewedGramProductFeatures(res, "default")
-		return vres, nil
+		return s.GetProductFeatures(ctx, p)
 	}
 }
 

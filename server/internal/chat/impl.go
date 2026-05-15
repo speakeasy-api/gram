@@ -208,7 +208,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	var userInfo *sessions.CachedUserInfo
 	var err error
 	if authCtx.SessionID != nil {
-		userInfo, _, err = s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+		userInfo, _, err = s.sessions.GetUserInfo(ctx, authCtx.UserID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
 		}
@@ -662,6 +662,33 @@ func (s *Service) checkCreditBalance(ctx context.Context, orgID, accountType str
 	return nil
 }
 
+// historyCorruptedMarker rides on /chat/completions 4xx response bodies and
+// survives the runner's "provider error: <body>" wrap so the assistant
+// runtime can detect upstream history rejection without sniffing each
+// provider's evolving wording. Detection is exposed via IsHistoryCorrupted.
+const historyCorruptedMarker = "history corrupted: upstream provider rejected the replayed transcript"
+
+// IsHistoryCorrupted reports whether err carries the upstream-history-rejected
+// marker stamped by HandleCompletion on a 400/422 from OpenRouter. Callers
+// (assistant runtime) self-heal by trimming history and retrying.
+func IsHistoryCorrupted(err error) bool {
+	return err != nil && strings.Contains(err.Error(), historyCorruptedMarker)
+}
+
+// classifyCompletionError maps an upstream OpenRouter error returned by the
+// completion client into the oops code that should flow back to the caller
+// (and through the runner to the assistant runtime).
+func (s *Service) classifyCompletionError(ctx context.Context, label string, err error) error {
+	switch {
+	case openrouter.IsInsufficientCredits(err):
+		return oops.C(oops.CodeInsufficientCredits).Log(ctx, s.logger)
+	case openrouter.IsHistoryCorruptionCandidate(err):
+		return oops.E(oops.CodeInvalid, err, historyCorruptedMarker).Log(ctx, s.logger)
+	default:
+		return oops.E(oops.CodeGatewayError, err, "%s", label).Log(ctx, s.logger)
+	}
+}
+
 // HandleCompletion is a proxy to the OpenAI API that logs request and response data.
 func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error {
 	ctx, authCtx, err := s.directAuthorize(r.Context(), r)
@@ -828,10 +855,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	if isStreaming {
 		streamBody, err := s.completionClient.GetCompletionStream(ctx, completionReq)
 		if err != nil {
-			if openrouter.IsInsufficientCredits(err) {
-				return oops.C(oops.CodeInsufficientCredits).Log(ctx, s.logger)
-			}
-			return oops.E(oops.CodeGatewayError, err, "get completion stream").Log(ctx, s.logger)
+			return s.classifyCompletionError(ctx, "get completion stream", err)
 		}
 		defer o11y.NoLogDefer(func() error { return streamBody.Close() })
 
@@ -852,10 +876,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	 */
 	response, err := s.completionClient.GetCompletion(ctx, completionReq)
 	if err != nil {
-		if openrouter.IsInsufficientCredits(err) {
-			return oops.C(oops.CodeInsufficientCredits).Log(ctx, s.logger)
-		}
-		return oops.E(oops.CodeGatewayError, err, "completion failed").Log(ctx, s.logger)
+		return s.classifyCompletionError(ctx, "completion failed", err)
 	}
 
 	var gramMetadata *openrouter.GramMetadata
@@ -1256,6 +1277,11 @@ const (
 	// maxAssetReadSize is the maximum size of message content that will be
 	// read from asset storage to prevent memory issues.
 	maxAssetReadSize = 20 * 1024 * 1024 // 20 MiB
+
+	// maxConcurrentChatAssetWork bounds parallelism for the per-batch marshal
+	// and asset-upload phases in storeMessages, capping goroutines, memory,
+	// and outbound connections for arbitrarily large batches.
+	maxConcurrentChatAssetWork = 32
 )
 
 func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, assetStorage assets.BlobStore, rows []chatMessageRow) error {
@@ -1270,57 +1296,110 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 		err      error // non-nil if upload failed
 	}
 
-	results := make([]uploadResult, len(rows))
-
-	// Upload all messages to asset storage in parallel.
-	// We don't use errgroup's error propagation here because we want to
-	// continue even if some uploads fail - we'll record the errors and
-	// still insert the messages with their plain text content.
-	var wg errgroup.Group
+	// Phase 1: marshal + hash + path in parallel. Asset paths are
+	// content-addressable (sha256 of jsonData), so the path also serves as
+	// the dedup key in Phase 2.
+	type rowPrep struct {
+		jsonData []byte
+		path     string
+		err      error
+	}
+	preps := make([]rowPrep, len(rows))
+	var marshalWg errgroup.Group
+	marshalWg.SetLimit(maxConcurrentChatAssetWork)
 	for i, row := range rows {
-		wg.Go(func() error {
-			// Marshal the message content to JSON.
+		marshalWg.Go(func() error {
 			jsonData, err := openrouter.GetContentJSON(row.content)
 			if err != nil {
-				results[i] = uploadResult{assetURL: "", jsonData: nil, err: fmt.Errorf("marshal message content: %w", err)}
-				return nil // Don't abort other uploads
+				preps[i] = rowPrep{jsonData: nil, path: "", err: fmt.Errorf("marshal message content: %w", err)}
+				return nil
 			}
-
-			// Compute SHA256 hash for the content-addressable path.
 			hash := sha256.Sum256(jsonData)
 			hashHex := hex.EncodeToString(hash[:])
-
-			// Build asset path: <project_id>/chats/<chat_id>/<sha256_hex>.json
 			assetPath := path.Join(row.projectID.String(), "chats", row.chatID.String(), hashHex+".json")
+			preps[i] = rowPrep{jsonData: jsonData, path: assetPath, err: nil}
+			return nil
+		})
+	}
+	if err := marshalWg.Wait(); err != nil {
+		// Goroutines record per-row failures into preps[i].err and return nil,
+		// so a non-nil error here signals an unexpected future change. Log and
+		// continue with whatever was prepared.
+		logger.ErrorContext(ctx, "chat asset marshal phase reported unexpected error", attr.SlogError(err))
+	}
 
-			// Upload to asset storage.
-			writer, assetURL, err := assetStorage.Write(ctx, assetPath, "application/json", int64(len(jsonData)))
+	// Phase 2: dedup by asset path so duplicate-content rows dispatch a
+	// single upload. Without this, concurrent writers race to the same GCS
+	// object and hit the per-object 1-write/sec rate limit.
+	leaders := make(map[string]int, len(rows)) // assetPath -> first row index that dispatches the upload
+	for i, prep := range preps {
+		if prep.err != nil {
+			continue
+		}
+		if _, ok := leaders[prep.path]; !ok {
+			leaders[prep.path] = i
+		}
+	}
+
+	results := make([]uploadResult, len(rows))
+
+	// Phase 3: upload deduplicated leaders to asset storage in parallel. The
+	// BlobStore.Write contract attaches a "create only if absent" precondition
+	// on GCS so cross-batch races resolve as idempotent no-ops. We don't use
+	// errgroup's error propagation because we want to continue even if some
+	// uploads fail — we'll record the errors and still insert the messages
+	// with their plain text content.
+	var uploadWg errgroup.Group
+	uploadWg.SetLimit(maxConcurrentChatAssetWork)
+	for assetPath, leader := range leaders {
+		uploadWg.Go(func() error {
+			prep := preps[leader]
+
+			writer, assetURL, err := assetStorage.Write(ctx, assetPath, "application/json", int64(len(prep.jsonData)))
 			if err != nil {
-				results[i] = uploadResult{assetURL: "", jsonData: jsonData, err: fmt.Errorf("create asset writer: %w", err)}
+				results[leader] = uploadResult{assetURL: "", jsonData: prep.jsonData, err: fmt.Errorf("create asset writer: %w", err)}
 				return nil
 			}
 
-			if _, err := io.Copy(writer, bytes.NewReader(jsonData)); err != nil {
+			if _, err := io.Copy(writer, bytes.NewReader(prep.jsonData)); err != nil {
 				_ = writer.Close()
-				results[i] = uploadResult{assetURL: "", jsonData: jsonData, err: fmt.Errorf("write asset content: %w", err)}
+				results[leader] = uploadResult{assetURL: "", jsonData: prep.jsonData, err: fmt.Errorf("write asset content: %w", err)}
 				return nil
 			}
 
 			if err := writer.Close(); err != nil {
-				results[i] = uploadResult{assetURL: "", jsonData: jsonData, err: fmt.Errorf("finalize asset upload: %w", err)}
+				results[leader] = uploadResult{assetURL: "", jsonData: prep.jsonData, err: fmt.Errorf("finalize asset upload: %w", err)}
 				return nil
 			}
 
-			results[i] = uploadResult{
+			results[leader] = uploadResult{
 				assetURL: assetURL.String(),
-				jsonData: jsonData,
+				jsonData: prep.jsonData,
 				err:      nil,
 			}
 			return nil
 		})
 	}
 
-	_ = wg.Wait() // Always succeeds since goroutines don't return errors
+	if err := uploadWg.Wait(); err != nil {
+		// Goroutines record per-row failures into results[i].err and return
+		// nil, so a non-nil error here signals an unexpected future change.
+		// Log and continue with whatever was uploaded.
+		logger.ErrorContext(ctx, "chat asset upload phase reported unexpected error", attr.SlogError(err))
+	}
+
+	// Fan leader results back out to follower rows and record marshal errors.
+	for i := range rows {
+		prep := preps[i]
+		if prep.err != nil {
+			results[i] = uploadResult{assetURL: "", jsonData: nil, err: prep.err}
+			continue
+		}
+		if leader, ok := leaders[prep.path]; ok && leader != i {
+			res := results[leader]
+			results[i] = uploadResult{assetURL: res.assetURL, jsonData: prep.jsonData, err: res.err}
+		}
+	}
 
 	// Build database params from upload results.
 	dbrows := make([]repo.CreateChatMessageParams, len(rows))

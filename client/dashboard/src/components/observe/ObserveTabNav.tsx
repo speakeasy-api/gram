@@ -16,6 +16,9 @@ export function ObserveTabNav({ base }: { base: "insights" | "logs" }) {
     ...(base === "insights"
       ? [{ label: "Employees", href: `${baseSlug}/employees` }]
       : []),
+    ...(base === "insights"
+      ? [{ label: "Costs", href: `${baseSlug}/costs` }]
+      : []),
   ];
 
   return (

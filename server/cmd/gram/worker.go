@@ -20,8 +20,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
@@ -41,9 +41,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -52,6 +54,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
@@ -263,16 +266,21 @@ func newWorkerCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:     "speakeasy-server-address",
-			Usage:    "Speakeasy server address",
-			EnvVars:  []string{"SPEAKEASY_SERVER_ADDRESS"},
+			Name:     "idp-base-url",
+			Usage:    "OIDC identity provider base URL (e.g. http://localhost:35291/oauth2)",
+			EnvVars:  []string{"GRAM_IDP_BASE_URL"},
 			Required: true,
 		},
 		&cli.StringFlag{
-			Name:     "speakeasy-secret-key",
-			Usage:    "Speakeasy secret key",
-			EnvVars:  []string{"SPEAKEASY_SECRET_KEY"},
+			Name:     "idp-client-id",
+			Usage:    "OIDC client ID for the identity provider",
+			EnvVars:  []string{"GRAM_IDP_CLIENT_ID"},
 			Required: true,
+		},
+		&cli.StringFlag{
+			Name:    "idp-client-secret",
+			Usage:   "WorkOS API key scoped to the IDP application (falls back to workos-api-key if unset)",
+			EnvVars: []string{"GRAM_IDP_CLIENT_SECRET"},
 		},
 		&cli.StringFlag{
 			Name:     usersessions.JWTSigningKeyFlag,
@@ -294,7 +302,7 @@ func newWorkerCommand() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:     "workos-endpoint",
-			Usage:    "Base URL for WorkOS API calls. Leave unset for production (defaults to https://api.workos.com); set to the dev-idp's local-speakeasy mode for fully-local development.",
+			Usage:    "Base URL for WorkOS API calls. Leave unset for production (defaults to https://api.workos.com); set to the dev-idp's mock-workos mode for fully-local development.",
 			EnvVars:  []string{"WORKOS_API_URL"},
 			Required: false,
 		},
@@ -303,6 +311,11 @@ func newWorkerCommand() *cli.Command {
 			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
 			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},
 		},
+		&cli.StringFlag{
+			Name:    "pi-classifier-url",
+			Usage:   "Base URL of the gram-pi-classifier service (e.g. http://gram-pi-classifier:8000). Empty disables L1 ML prompt-injection detection; L0 heuristics still run when a policy enables the prompt_injection source.",
+			EnvVars: []string{"PI_CLASSIFIER_URL"},
+		},
 	}
 
 	flags = append(flags, redisFlags...)
@@ -310,6 +323,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, functionsFlags...)
 	flags = append(flags, pulseMCPFlags...)
 	flags = append(flags, assistantRuntimeFlags...)
+	flags = append(flags, svixFlags...)
 
 	return &cli.Command{
 		Name:  "worker",
@@ -451,6 +465,14 @@ func newWorkerCommand() *cli.Command {
 				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker)
 			}
 
+			svixClient, shutdown, err := newSvixClient(c, logger, guardianPolicy)
+			if shutdown != nil {
+				shutdownFuncs = append(shutdownFuncs, shutdown)
+			}
+			if err != nil {
+				return fmt.Errorf("failed to create svix webhook sender: %w", err)
+			}
+
 			tigrisStore, shutdown, err := newTigrisStore(ctx, c, logger)
 			if err != nil {
 				return fmt.Errorf("failed to create tigris asset store: %w", err)
@@ -554,12 +576,37 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create pylon client: %w", err)
 			}
 
-			speakeasyIDPClient := speakeasyclient.NewClient(logger, tracerProvider, guardianPolicy, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), db, nil, posthogClient)
-			sessionManager := sessions.NewManager(logger, tracerProvider, guardianPolicy, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, billingRepo, speakeasyIDPClient)
+			idpClientSecret := c.String("idp-client-secret")
+			if idpClientSecret == "" {
+				idpClientSecret = c.String("workos-api-key")
+			}
+
+			umClient := newIDPUserManagementClient(guardianPolicy, idpClientSecret, c)
+			if umClient == nil {
+				return fmt.Errorf("failed to create IDP user management client: idp-client-secret (or workos-api-key) is required")
+			}
+
+			idpClient := identity.NewWorkOSAdapter(umClient)
+
+			identityResolver := identity.NewResolver(
+				logger,
+				tracerProvider,
+				cache.NewRedisCacheAdapter(redisClient),
+				c.String("idp-base-url"),
+				c.String("idp-client-id"),
+				idpClient,
+				nil, // no WorkOS client in worker
+				orgRepo.New(db),
+				userRepo.New(db),
+				pylonClient,
+				posthogClient,
+			)
+
+			sessionManager := sessions.NewManager(logger, tracerProvider, db, redisClient, cache.SuffixNone, idpClient, billingRepo, identityResolver)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String(usersessions.JWTSigningKeyFlag))
 
-			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, guardianPolicy)
+			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, identityResolver, guardianPolicy)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL)
 
 			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
@@ -576,6 +623,15 @@ func newWorkerCommand() *cli.Command {
 			)
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
+
+			remoteChallengeManager := remotesessions.NewChallengeManager(
+				logger,
+				db,
+				encryptionClient,
+				guardianPolicy,
+				cache.NewRedisCacheAdapter(redisClient),
+				serverURL,
+			)
 
 			mcpService := mcp.NewService(
 				logger,
@@ -606,8 +662,9 @@ func newWorkerCommand() *cli.Command {
 				memoryTools,
 				platformFeatureChecker,
 				nil,
-				speakeasyIDPClient,
+				identityResolver,
 				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
+				remoteChallengeManager,
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -626,6 +683,7 @@ func newWorkerCommand() *cli.Command {
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, db, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver)
 			assistantsCore.SetWakeCanceller(triggerApp)
+			assistantsCore.SetChatMessageWriter(chatWriter)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
@@ -638,6 +696,13 @@ func newWorkerCommand() *cli.Command {
 				piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 				logger.InfoContext(ctx, "presidio PII scanner enabled", attr.SlogURL(presidioURL))
 			}
+
+			var promptInjectionClassifier risk_analysis.PromptInjectionClassifier = risk_analysis.StubClassifier{}
+			if piURL := c.String("pi-classifier-url"); piURL != "" {
+				promptInjectionClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
+				logger.InfoContext(ctx, "pi_classifier L1 prompt-injection scanner enabled", attr.SlogURL(piURL))
+			}
+			piScanner := risk_analysis.NewPromptInjectionScanner(logger, promptInjectionClassifier)
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:      guardianPolicy,
@@ -664,9 +729,12 @@ func newWorkerCommand() *cli.Command {
 				AssistantsCore:      assistantsCore,
 				TemporalEnv:         temporalEnv,
 				PIIScanner:          piiScanner,
+				PIScanner:           piScanner,
 				ShadowMCPClient:     shadowMCPClient,
 				AuditLogger:         auditLogger,
 				WorkOSClient:        backgroundWorkOSClient,
+				SvixClient:          svixClient,
+				ProductFeatures:     productFeatures,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

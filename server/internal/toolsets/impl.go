@@ -46,8 +46,6 @@ import (
 	usageRepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
-const maxUnpaidEnabledServers = 1
-
 // validOAuthProxyAuthMethods is the allowlist of token_endpoint_auth_methods_supported
 // values accepted by AddOAuthProxyServer and UpdateOAuthProxyServer.
 var validOAuthProxyAuthMethods = map[string]bool{
@@ -428,23 +426,9 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		updateParams.McpIsPublic = *payload.McpIsPublic
 	}
 
-	// Server-side enforcement of limit on # of enabled MCP servers by account type
 	if payload.McpEnabled != nil {
 		if *payload.McpEnabled && !existingToolset.McpSlug.Valid && (payload.McpSlug == nil || *payload.McpSlug == "") {
-			// sanity check this should not be able to happens
 			return nil, oops.E(oops.CodeBadRequest, nil, "mcp slug is required to set mcp is public")
-		}
-
-		isUnpaidAccount := !authCtx.HasActiveSubscription
-		if *payload.McpEnabled && !existingToolset.McpEnabled && isUnpaidAccount {
-			enabledServers, err := tr.ListEnabledToolsetsByOrganization(ctx, authCtx.ActiveOrganizationID)
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "error listing enabled toolsets").Log(ctx, logger)
-			}
-
-			if len(enabledServers) >= maxUnpaidEnabledServers {
-				return nil, oops.E(oops.CodeForbidden, nil, "%s", fmt.Sprintf("you have reached the maximum number of public MCP servers for your account type: %d", maxUnpaidEnabledServers)).Log(ctx, logger)
-			}
 		}
 
 		updateParams.McpEnabled = *payload.McpEnabled

@@ -24,21 +24,32 @@ import (
 
 // Cursor is the endpoint for Cursor hook events
 func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.CursorHookResult, error) {
+	logger := s.logger.With(
+		attr.SlogHookSource("cursor"),
+		attr.SlogHookEvent(payload.HookEventName),
+		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
+		attr.SlogGenAIConversationID(conv.PtrValOr(payload.ConversationID, "")),
+		attr.SlogAuthUserEmail(conv.PtrValOr(payload.UserEmail, "")),
+	)
+
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		logger.WarnContext(ctx, "rejected unauthorized cursor hook request",
+			attr.SlogEvent("cursor_hook_unauthorized"),
+		)
 		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	}
 
-	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Cursor: %s", payload.HookEventName),
-		attr.SlogEvent("cursor_hook"),
-		attr.SlogValueAny(map[string]any{
-			"hookEventName": payload.HookEventName,
-			"toolName":      payload.ToolName,
-		}),
-	)
-
 	orgID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
+	logger = logger.With(
+		attr.SlogOrganizationID(orgID),
+		attr.SlogProjectID(projectID),
+	)
+
+	logger.InfoContext(ctx, "cursor hook received",
+		attr.SlogEvent("cursor_hook"),
+	)
 
 	result := &gen.CursorHookResult{
 		Permission:        nil,
@@ -72,15 +83,11 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		}
 		toolName := strings.TrimPrefix(conv.PtrValOr(payload.ToolName, ""), "MCP:")
 		if detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, payload.ToolInput, toolName, orgID); denied {
-			s.logger.InfoContext(ctx, "denying cursor tool call: failed gram toolset validation",
+			logger.InfoContext(ctx, "denying cursor tool call: failed gram toolset validation",
 				attr.SlogEvent("cursor_hook_denied"),
-				attr.SlogValueAny(map[string]any{
-					"hookEventName": payload.HookEventName,
-					"toolName":      conv.PtrValOr(payload.ToolName, ""),
-					"reason":        detail,
-					"policyID":      policy.ID,
-					"policyName":    policy.Name,
-				}),
+				attr.SlogHookBlockReason(detail),
+				attr.SlogRiskPolicyID(policy.ID),
+				attr.SlogRiskPolicyName(policy.Name),
 			)
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 			userReason := renderUserBlockReason(policy.UserMessage, auditReason)
@@ -138,6 +145,11 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 		return
 	}
 
+	// Persistence outlives the request: the client may close the connection
+	// the instant the hook returns, which would otherwise cancel in-flight
+	// INSERTs and drop the chat message.
+	ctx = context.WithoutCancel(ctx)
+
 	userEmail := conv.PtrValOr(payload.UserEmail, "")
 	userID := s.resolveUserByEmail(ctx, userEmail, orgID)
 
@@ -151,7 +163,12 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 		ProjectID:   projectID,
 	}
 
-	s.persistCursorHook(ctx, payload, metadata, blockReason)
+	// Persistence does DB + ClickHouse writes that can take longer than the
+	// client is willing to wait for a hook response (`stop` especially —
+	// curl in send_hook.sh has a 10s --max-time and the client closes the
+	// connection the moment the response lands). Run detached so the
+	// response returns promptly and the work completes in the background.
+	go s.persistCursorHook(ctx, payload, metadata, blockReason)
 }
 
 func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata, blockReason string) {

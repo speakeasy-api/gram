@@ -71,9 +71,9 @@ type CreateResponseBody struct {
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
 	// Optional GitHub handle.
 	GithubHandle *string `form:"github_handle,omitempty" json:"github_handle,omitempty" xml:"github_handle,omitempty"`
-	// Admin flag echoed by local-speakeasy validate.
+	// Admin flag.
 	Admin *bool `form:"admin,omitempty" json:"admin,omitempty" xml:"admin,omitempty"`
-	// Whitelist flag echoed by local-speakeasy validate.
+	// Whitelist flag.
 	Whitelisted *bool   `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
@@ -92,9 +92,9 @@ type UpdateResponseBody struct {
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
 	// Optional GitHub handle.
 	GithubHandle *string `form:"github_handle,omitempty" json:"github_handle,omitempty" xml:"github_handle,omitempty"`
-	// Admin flag echoed by local-speakeasy validate.
+	// Admin flag.
 	Admin *bool `form:"admin,omitempty" json:"admin,omitempty" xml:"admin,omitempty"`
-	// Whitelist flag echoed by local-speakeasy validate.
+	// Whitelist flag.
 	Whitelisted *bool   `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
@@ -121,9 +121,9 @@ type UserResponseBody struct {
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
 	// Optional GitHub handle.
 	GithubHandle *string `form:"github_handle,omitempty" json:"github_handle,omitempty" xml:"github_handle,omitempty"`
-	// Admin flag echoed by local-speakeasy validate.
+	// Admin flag.
 	Admin *bool `form:"admin,omitempty" json:"admin,omitempty" xml:"admin,omitempty"`
-	// Whitelist flag echoed by local-speakeasy validate.
+	// Whitelist flag.
 	Whitelisted *bool   `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`

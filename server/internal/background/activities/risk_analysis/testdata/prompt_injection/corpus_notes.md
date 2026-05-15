@@ -1,17 +1,18 @@
 # Prompt-injection accuracy corpus notes
 
-This directory holds the labeled corpus consumed by `TestDetectPromptInjection_AccuracyBaseline`. Notes below capture decisions made when assembling the corpus and findings surfaced on first run.
+This directory holds the labeled corpus consumed by `mise risk:report`. Notes below capture decisions made when assembling the corpus and findings surfaced on first run.
 
 ## Sources
 
-| File                     | Origin                                                                        | License    | Rows | Class balance              |
-| ------------------------ | ----------------------------------------------------------------------------- | ---------- | ---- | -------------------------- |
-| `deepset.jsonl`          | `deepset/prompt-injections` on HuggingFace, train + test splits concatenated  | Apache 2.0 | 662  | 263 malicious / 399 benign |
-| `gram_benigns.jsonl`     | Hand-authored realistic Gram-style prompts                                    | Internal   | 140  | 0 malicious / 140 benign   |
-| `litellm_extended.jsonl` | Hand-authored, inspired by injection patterns in BerriAI/litellm tests        | Internal   | 51   | 51 malicious / 0 benign    |
-| `mutations.jsonl`        | Pre-baked output of `mise gen:risk-mutations`, deterministic from fixed seeds | Internal   | 75   | 75 malicious / 0 benign    |
+| File                        | Origin                                                                             | License    | Rows | Class balance              |
+| --------------------------- | ---------------------------------------------------------------------------------- | ---------- | ---- | -------------------------- |
+| `deepset.jsonl`             | `deepset/prompt-injections` on HuggingFace, train + test splits concatenated       | Apache 2.0 | 662  | 263 malicious / 399 benign |
+| `gram_benigns.jsonl`        | Hand-authored realistic Gram-style prompts                                         | Internal   | 140  | 0 malicious / 140 benign   |
+| `litellm_extended.jsonl`    | Hand-authored, inspired by injection patterns in BerriAI/litellm tests             | Internal   | 51   | 51 malicious / 0 benign    |
+| `mutations.jsonl`           | Pre-baked output of `mise gen:risk-mutations`, deterministic from fixed seeds      | Internal   | 70   | 70 malicious / 0 benign    |
+| `operational_benigns.jsonl` | Hand-authored CI/build/tool-output logs that should not create Risk Overview noise | Internal   | 10   | 0 malicious / 10 benign    |
 
-After dedup the loaded corpus is 928 cases (some duplicates between sources are dropped — see test log).
+After dedup the loaded corpus is 933 cases.
 
 ## Deepset labeling philosophy mismatch
 
@@ -51,4 +52,4 @@ The 0% mutations are useful: they document that the heuristics are brittle to ch
 1. Fix the regression in detector code and bring FP-rate back under the cap.
 2. Update `floors.json` in the same PR with a tightened or loosened cap and a note explaining why. A loosening should be justified in the PR description.
 
-`recall_floor` is left `null` for now and treated as a soft signal; it's logged by the test but never fails CI.
+`recall_floor` is left `null` for now and treated as a soft signal; the evaluator reports it but never fails CI on it.

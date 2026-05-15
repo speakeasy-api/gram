@@ -7,8 +7,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
-import { useAuditLogs, useGramContext } from "@gram/client/react-query";
-import { useFeaturesGet } from "@gram/client/react-query/featuresGet";
+import {
+  useAuditLogs,
+  useGramContext,
+  useProductFeatures,
+} from "@gram/client/react-query";
 import { telemetryGetProjectOverview } from "@gram/client/funcs/telemetryGetProjectOverview";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -55,7 +58,7 @@ export function ProjectDashboard() {
     data: featuresData,
     isPending: isFeaturesPending,
     isError: isFeaturesError,
-  } = useFeaturesGet();
+  } = useProductFeatures();
   const logsEnabled = featuresData?.logsEnabled === true;
 
   // The SDK's useGetProjectOverview omits the request body from its query

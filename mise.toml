@@ -77,6 +77,12 @@ TEMPORAL_ADDRESS = "{{env.TEMPORAL_HOST}}:{{env.TEMPORAL_PORT}}"
 PRESIDIO_PORT = "5050"
 PRESIDIO_ANALYZER_URL = "http://127.0.0.1:{{env.PRESIDIO_PORT}}"
 
+###########################################
+## Prompt-injection ML classifier (L1)   ##
+###########################################
+PI_CLASSIFIER_PORT = "5051"
+PI_CLASSIFIER_URL = "http://127.0.0.1:{{env.PI_CLASSIFIER_PORT}}"
+
 ##########################################
 ## Gram server, admin and worker config ##
 ##########################################
@@ -121,14 +127,30 @@ GRAM_DEVIDP_ADDRESS = ":{{env.GRAM_DEVIDP_PORT}}"
 GRAM_DEVIDP_CONTROL_ADDRESS = ":{{env.GRAM_DEVIDP_CONTROL_PORT}}"
 GRAM_DEVIDP_EXTERNAL_URL = "http://{{env.GRAM_DEVIDP_HOST}}:{{env.GRAM_DEVIDP_PORT}}"
 GRAM_DEVIDP_DB = "file:{{ config_root }}/local/devidp/devidp.db"
-SPEAKEASY_SERVER_ADDRESS = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/local-speakeasy"
-SPEAKEASY_SECRET_KEY = "test-secret"
-## Override base URL for Gram's WorkOS client (defaults to api.workos.com).
-# WORKOS_API_URL = ""
+GRAM_IDP_BASE_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/oauth2"
+GRAM_IDP_CLIENT_ID = "gram-local-dev"
+## Mock API key for the WorkOS SDK — any non-empty value works in mock-workos mode.
+## Override in mise.local.toml with a real sk_test_... key for workos mode.
+GRAM_IDP_CLIENT_SECRET = "mock-workos-api-key"
+## IDP mode: "mock-workos" (default) or "workos".
+##
+## mock-workos — fully local, zero config. dev-idp emulates the WorkOS API.
+##               No overrides needed.
+##
+## workos      — real WorkOS via dev-idp proxy. Add these to mise.local.toml:
+##                 GRAM_IDP_MODE = "workos"
+##                 WORKOS_API_KEY = "sk_test_..."
+##                 WORKOS_API_URL = "https://api.workos.com"
+##                 GRAM_IDP_CLIENT_ID = "<your WorkOS client ID>"
+##
+## See CONTRIBUTING.md "Local auth and identity" for details.
+GRAM_IDP_MODE = "mock-workos"
+## Points the Gram server and dev-idp at the WorkOS-compatible API.
+## In mock-workos mode this is the dev-idp emulator; override in
+## mise.local.toml for workos mode.
+WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/mock-workos"
 ## PEM-encoded RSA private key for stable JWKS across dev-idp restarts.
 # GRAM_DEVIDP_RSA_PRIVATE_KEY = ""
-## Override base URL for the dev-idp's WorkOS client (defaults to api.workos.com).
-# WORKOS_HOST = ""
 ## The following variables are only needed if you want to do one of the following:
 ## - Run the server with SSL enabled and not rely on SSL termination at a load balancer.
 ## - Local development with SSL enabled.
@@ -228,3 +250,8 @@ POLAR_PRODUCT_ID_ASSISTANTS = ""
 POLAR_METER_ID_TOOL_CALLS = "7ec16f6d-6189-4262-9898-c64bed7b8a91"
 POLAR_METER_ID_SERVERS = "af37f394-69c8-4d46-8308-9b92407ee52e"
 POLAR_METER_ID_CREDITS = "b96fda22-2147-4089-bedb-72c3304b17eb"
+
+########################
+## Svix configuration ##
+########################
+GRAM_SVIX_API_KEY = "unset"

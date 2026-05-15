@@ -425,9 +425,8 @@ type EnableMCPForToolsetsParams struct {
 // Flips mcp_enabled to TRUE for the listed toolsets in a project. Every
 // toolset attached to an assistant must be MCP-reachable for the runtime's
 // startup config to build; we enable on attach so users don't have to do it
-// separately. Bypasses the unpaid-plan public-server cap on purpose: an
-// assistant-attached toolset has no working alternative. mcp_slug is
-// required for an MCP-reachable toolset, so we skip rows that lack one.
+// separately. mcp_slug is required for an MCP-reachable toolset, so we skip
+// rows that lack one.
 func (q *Queries) EnableMCPForToolsets(ctx context.Context, arg EnableMCPForToolsetsParams) error {
 	_, err := q.db.Exec(ctx, enableMCPForToolsets, arg.ToolsetIds, arg.ProjectID)
 	return err
@@ -461,7 +460,7 @@ func (q *Queries) FailAssistantThreadEvent(ctx context.Context, arg FailAssistan
 }
 
 const getActiveAssistantRuntimeByThreadID = `-- name: GetActiveAssistantRuntimeByThreadID :one
-SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE assistant_thread_id = $1
   AND project_id = $2
   AND deleted IS FALSE
@@ -489,6 +488,7 @@ func (q *Queries) GetActiveAssistantRuntimeByThreadID(ctx context.Context, arg G
 		&i.LastHeartbeatAt,
 		&i.BackendMetadataJson,
 		&i.EndedAt,
+		&i.RuntimeVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -642,7 +642,7 @@ func (q *Queries) GetAssistantIgnoringDeleted(ctx context.Context, arg GetAssist
 }
 
 const getAssistantRuntime = `-- name: GetAssistantRuntime :one
-SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE id = $1
   AND project_id = $2
 `
@@ -667,6 +667,7 @@ func (q *Queries) GetAssistantRuntime(ctx context.Context, arg GetAssistantRunti
 		&i.LastHeartbeatAt,
 		&i.BackendMetadataJson,
 		&i.EndedAt,
+		&i.RuntimeVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -677,7 +678,7 @@ func (q *Queries) GetAssistantRuntime(ctx context.Context, arg GetAssistantRunti
 }
 
 const getLatestAssistantRuntimeByThreadID = `-- name: GetLatestAssistantRuntimeByThreadID :one
-SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE assistant_thread_id = $1
   AND project_id = $2
 ORDER BY created_at DESC
@@ -706,6 +707,7 @@ func (q *Queries) GetLatestAssistantRuntimeByThreadID(ctx context.Context, arg G
 		&i.LastHeartbeatAt,
 		&i.BackendMetadataJson,
 		&i.EndedAt,
+		&i.RuntimeVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

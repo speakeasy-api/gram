@@ -65,6 +65,10 @@ type Client struct {
 	// updateOAuthProxyServer endpoint.
 	UpdateOAuthProxyServerDoer goahttp.Doer
 
+	// SetUserSessionIssuer Doer is the HTTP client used to make requests to the
+	// setUserSessionIssuer endpoint.
+	SetUserSessionIssuerDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -97,6 +101,7 @@ func NewClient(
 		RemoveOAuthServerDoer:        doer,
 		AddOAuthProxyServerDoer:      doer,
 		UpdateOAuthProxyServerDoer:   doer,
+		SetUserSessionIssuerDoer:     doer,
 		RestoreResponseBody:          restoreBody,
 		scheme:                       scheme,
 		host:                         host,
@@ -388,6 +393,30 @@ func (c *Client) UpdateOAuthProxyServer() goa.Endpoint {
 		resp, err := c.UpdateOAuthProxyServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "updateOAuthProxyServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetUserSessionIssuer returns an endpoint that makes HTTP requests to the
+// toolsets service setUserSessionIssuer server.
+func (c *Client) SetUserSessionIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetUserSessionIssuerRequest(c.encoder)
+		decodeResponse = DecodeSetUserSessionIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetUserSessionIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetUserSessionIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "setUserSessionIssuer", err)
 		}
 		return decodeResponse(resp)
 	}

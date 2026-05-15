@@ -29,7 +29,7 @@ import (
 // toolsets. The path prefix is distinct from /mcp/{slug} so a platform slug
 // can never collide with a user-toolset slug; keep it in lockstep with
 // platformtools.PlatformToolsetURL.
-const PlatformToolsetRoute = "/x/platform-mcp/{toolsetSlug}"
+const PlatformToolsetRoute = "/platform/mcp/{toolsetSlug}"
 
 // ServePlatformToolset is the runtime-only entrypoint for platform toolsets:
 // only the assistant token is accepted, so user OAuth/API keys/chat sessions

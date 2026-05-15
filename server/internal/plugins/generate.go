@@ -53,15 +53,31 @@ type GenerateConfig struct {
 	// ProjectSlug is the publishing project's slug. The Cursor hooks endpoint
 	// requires it via the Gram-Project header (Claude's does not).
 	ProjectSlug string
+	// Version is stamped into every plugin.json. Callers should bump this on
+	// every publish so platform marketplaces (Claude Code, Cursor, Codex) treat
+	// the manifest as new and refresh installed copies. Empty falls back to
+	// the static default, preserving test ergonomics.
+	Version string
+}
+
+// pluginManifestVersion returns the version to stamp into generated
+// plugin.json files. Callers set cfg.Version to a per-publish value; the
+// "0.1.0" fallback exists so package tests don't need to construct a version
+// just to exercise unrelated assertions.
+func pluginManifestVersion(cfg GenerateConfig) string {
+	return conv.Default(cfg.Version, "0.1.0")
 }
 
 // claudeHookAsyncFlag returns the async flag for a Claude hook event.
-// Blocking events (PreToolUse, UserPromptSubmit) return false so Claude
-// waits for the deny/allow decision. All others return true for
-// fire-and-forget telemetry so Claude is not held up.
+// PreToolUse and UserPromptSubmit are blocking so Claude waits for the
+// deny/allow decision. Stop must also be blocking: when async=true,
+// Cowork (Claude Code) appears to skip dispatching the Stop hook entirely
+// — an apparent bug on the client side. Marking it synchronous is the
+// only reliable way to get Stop events to fire. All other events return
+// true for fire-and-forget telemetry so Claude is not held up.
 func claudeHookAsyncFlag(event string) *bool {
 	switch event {
-	case "UserPromptSubmit", "PreToolUse":
+	case "UserPromptSubmit", "PreToolUse", "Stop":
 		f := false
 		return &f
 	default:
@@ -369,7 +385,7 @@ func codexAuthPolicy(p PluginInfo, cfg GenerateConfig) string {
 func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p PluginInfo, cfg GenerateConfig) error {
 	pluginJSON, err := marshalJSON(codexPluginMeta{
 		Name:        name,
-		Version:     "0.1.0",
+		Version:     pluginManifestVersion(cfg),
 		Description: p.Description,
 		MCPServers:  "./.mcp.json",
 		Hooks:       "",
@@ -458,7 +474,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	pluginJSON, err := marshalJSON(claudePluginMeta{
 		Name:        name,
 		Description: "Gram observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Gram dashboard.",
-		Version:     "0.1.0",
+		Version:     pluginManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
 		UserConfig:  nil,
@@ -511,7 +527,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir stri
 		Name:        name,
 		DisplayName: "Observability (Cursor)",
 		Description: "Gram observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Gram dashboard.",
-		Version:     "0.1.0",
+		Version:     pluginManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
 	})
@@ -594,7 +610,7 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	}
 	pluginJSON, err := marshalJSON(codexPluginMeta{
 		Name:        name,
-		Version:     "0.1.0",
+		Version:     pluginManifestVersion(cfg),
 		Description: "Gram observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Gram dashboard.",
 		MCPServers:  "",
 		Hooks:       "./hooks/hooks.json",
@@ -1026,7 +1042,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	pluginJSON, err := marshalJSON(claudePluginMeta{
 		Name:        p.Slug,
 		Description: p.Description,
-		Version:     "0.1.0",
+		Version:     pluginManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
 		UserConfig:  userConfigPtr,
@@ -1078,7 +1094,7 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		Name:        name,
 		DisplayName: displayName,
 		Description: p.Description,
-		Version:     "0.1.0",
+		Version:     pluginManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
 	})

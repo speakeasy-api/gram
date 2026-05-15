@@ -242,6 +242,8 @@ SELECT
   pd.project_id,
   t.id,
   t.tool_urn,
+  t.type,
+  t.name,
   e.slug,
   t.read_only_hint,
   t.destructive_hint,
@@ -258,6 +260,8 @@ type FindExternalMCPToolEntriesForProjectsRow struct {
 	ProjectID       uuid.UUID
 	ID              uuid.UUID
 	ToolUrn         string
+	Type            string
+	Name            pgtype.Text
 	Slug            string
 	ReadOnlyHint    pgtype.Bool
 	DestructiveHint pgtype.Bool
@@ -279,6 +283,8 @@ func (q *Queries) FindExternalMCPToolEntriesForProjects(ctx context.Context, pro
 			&i.ProjectID,
 			&i.ID,
 			&i.ToolUrn,
+			&i.Type,
+			&i.Name,
 			&i.Slug,
 			&i.ReadOnlyHint,
 			&i.DestructiveHint,
