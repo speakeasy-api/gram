@@ -247,6 +247,9 @@ export function TeamInner() {
             },
           );
         },
+        onError: () => {
+          toast.error(`Failed to revoke previous invite for ${invite.email}`);
+        },
       },
     );
   };

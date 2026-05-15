@@ -213,18 +213,27 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 
 	normalizedEmail := strings.ToLower(strings.TrimSpace(payload.Email))
 
+	// Expire stale invites and create the new one in a single transaction so
+	// a concurrent request cannot slip in between and claim the unique index.
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback is no-op after commit
+
+	txRepo := orgrepo.New(tx)
+
 	// Transition any expired-but-still-pending invites to 'expired' state so
 	// the partial unique index (org_id, email) WHERE state = 'pending' does
 	// not block re-inviting after an invite naturally expires.
-	repo := orgrepo.New(s.db)
-	if err := repo.ExpireStaleInvitations(ctx, orgrepo.ExpireStaleInvitationsParams{
+	if err := txRepo.ExpireStaleInvitations(ctx, orgrepo.ExpireStaleInvitationsParams{
 		OrganizationID: ac.ActiveOrganizationID,
 		Email:          normalizedEmail,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "expire stale invitations").Log(ctx, logger)
 	}
 
-	row, err := repo.CreateInvitation(ctx, orgrepo.CreateInvitationParams{
+	row, err := txRepo.CreateInvitation(ctx, orgrepo.CreateInvitationParams{
 		OrganizationID: ac.ActiveOrganizationID,
 		Email:          normalizedEmail,
 		TokenHash:      tokenHash,
@@ -234,6 +243,10 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create invitation").Log(ctx, logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit invitation").Log(ctx, logger)
 	}
 
 	// Create a WorkOS passwordless magic-link session for the invitee.
@@ -269,7 +282,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		}); err != nil {
 			// Revoke the invite so the user can retry — the invitee never
 			// received the magic link so the invite is useless.
-			_ = repo.RevokeInvitation(ctx, row.ID)
+			_ = orgrepo.New(s.db).RevokeInvitation(ctx, row.ID)
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to send invite email").Log(ctx, logger)
 		}
 	}

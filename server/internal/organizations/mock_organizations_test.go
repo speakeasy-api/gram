@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/organizations"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -16,6 +17,8 @@ import (
 type MockOrganizationProvider struct {
 	mock.Mock
 }
+
+var _ organizations.OrganizationProvider = (*MockOrganizationProvider)(nil)
 
 func newMockOrganizationProvider(t *testing.T) *MockOrganizationProvider {
 	t.Helper()

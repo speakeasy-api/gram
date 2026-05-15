@@ -130,7 +130,9 @@ func TestService_SendInvite_UnknownRoleID(t *testing.T) {
 		Email:  "test@example.com",
 		RoleID: &roleID,
 	})
-	require.Error(t, err, "should fail when role ID not found in ListRoles result")
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code, "unknown role should return bad request")
 }
 
 func TestService_SendInvite_FailsWhenPasswordlessSessionFails(t *testing.T) {
@@ -146,6 +148,9 @@ func TestService_SendInvite_FailsWhenPasswordlessSessionFails(t *testing.T) {
 		Email: "nobody@example.com",
 	})
 	require.Error(t, err, "should fail when passwordless session creation fails")
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 }
 
 func TestService_SendInvite_EmailFailureRevokesInvite(t *testing.T) {
