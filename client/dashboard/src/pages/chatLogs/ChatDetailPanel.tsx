@@ -483,7 +483,8 @@ function MessageItem({
         onClick={() => setExpanded(true)}
         className={cn(
           entryMeta.collapsedClassName,
-          "text-muted-foreground flex w-full items-center gap-3 truncate px-2 py-2 text-sm transition-colors",
+          "flex w-full items-center gap-3 px-4 py-3",
+          "text-muted-foreground truncate text-sm transition-colors",
           "border-r-muted border-t-muted last:border-b-muted border border-b-transparent",
         )}
       >
@@ -1338,15 +1339,13 @@ export function ChatDetailPanel({
           />
 
           {/* Chat Messages */}
-          <div className="p-6">
-            <ChatMessagesList
-              messages={chat.messages}
-              messageResolutionMap={messageResolutionMap}
-              riskResultsByMessage={riskResultsByMessage}
-              collapseNonRisk={collapseNonRisk}
-              enabledEntryTypes={enabledEntryTypes}
-            />
-          </div>
+          <ChatMessagesList
+            messages={chat.messages}
+            messageResolutionMap={messageResolutionMap}
+            riskResultsByMessage={riskResultsByMessage}
+            collapseNonRisk={collapseNonRisk}
+            enabledEntryTypes={enabledEntryTypes}
+          />
         </TabsContent>
 
         {/* Telemetry Logs Tab */}
