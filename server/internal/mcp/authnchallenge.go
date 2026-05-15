@@ -143,22 +143,22 @@ func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 // silently bypasses on enterprise toolsets (ShouldEnforce returns false
 // when AccountType != "enterprise"; PrepareContext skips when SessionID
 // is nil).
-func (s *Service) validateUserSessionToken(ctx context.Context, token string, toolset *toolsets_repo.Toolset) (context.Context, bool) {
+func (s *Service) validateUserSessionToken(ctx context.Context, token string, toolset *toolsets_repo.Toolset) (context.Context, *urn.SessionSubject, bool) {
 	if token == "" {
-		return ctx, false
+		return ctx, nil, false
 	}
 	subject, jti, err := s.userSessionSigner.ValidateBearer(ctx, token, urn.NewToolset(toolset.ID).String(), s.chatSessionsManager)
 	if err != nil {
-		return ctx, false
+		return ctx, nil, false
 	}
 
 	if subject.Kind == urn.SessionSubjectKindAnonymous {
-		return ctx, true
+		return ctx, &subject, true
 	}
 
 	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgsRepo, s.billingRepository, toolset.OrganizationID)
 	if err != nil {
-		return ctx, false
+		return ctx, nil, false
 	}
 	authCtx := &contextvalues.AuthContext{
 		ActiveOrganizationID:  toolset.OrganizationID,
@@ -185,7 +185,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, to
 		// Unreachable: anonymous subjects return ctx untouched above. Listed
 		// for exhaustiveness so the linter doesn't flag the switch.
 	}
-	return contextvalues.SetAuthContext(ctx, authCtx), true
+	return contextvalues.SetAuthContext(ctx, authCtx), &subject, true
 }
 
 // WriteAuthenticateChallenge sets the WWW-Authenticate header and returns an

@@ -450,11 +450,34 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// can discover the AS surface.
 	issuerGated := toolset.UserSessionIssuerID.Valid
 	if issuerGated {
-		newCtx, ok := s.validateUserSessionToken(ctx, authToken, toolset)
+		newCtx, subject, ok := s.validateUserSessionToken(ctx, authToken, toolset)
 		if !ok {
 			return WriteAuthenticateChallenge(w, baseURL, mcpSlug, "expired or invalid access token")
 		}
 		ctx = newCtx
+
+		// Resolve the upstream remote_session for this subject before
+		// running the legacy auth chain. The resolver short-circuits to
+		// no-op when the issuer has no remote_session_clients bound;
+		// otherwise it either supplies the upstream access token (fed
+		// into tokenInputs so it satisfies the toolset's oauth2 scheme
+		// downstream) or fails with ErrNoValidToken — which the user
+		// resolves by re-linking via /mcp/{slug}/connect.
+		if subject != nil {
+			upstream, rerr := s.remoteChallengeMgr.ResolveOneAccessToken(ctx, toolset.ProjectID, toolset.UserSessionIssuerID.UUID, *subject)
+			switch {
+			case errors.Is(rerr, remotesessions.ErrNoValidToken):
+				return WriteAuthenticateChallenge(w, baseURL, mcpSlug, "")
+			case rerr != nil:
+				return oops.E(oops.CodeUnexpected, rerr, "resolve remote session").Log(ctx, s.logger)
+			}
+			if upstream != "" {
+				tokenInputs = append(tokenInputs, oauthTokenInputs{
+					securityKeys: []string{},
+					Token:        upstream,
+				})
+			}
+		}
 	}
 
 	var oauthProtectedResourceURL string
