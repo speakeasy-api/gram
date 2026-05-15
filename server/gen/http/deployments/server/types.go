@@ -37,6 +37,11 @@ type CreateDeploymentRequestBody struct {
 	Functions       []*AddFunctionsFormRequestBody                `form:"functions,omitempty" json:"functions,omitempty" xml:"functions,omitempty"`
 	Packages        []*AddDeploymentPackageFormRequestBody        `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
 	ExternalMcps    []*AddExternalMCPFormRequestBody              `form:"external_mcps,omitempty" json:"external_mcps,omitempty" xml:"external_mcps,omitempty"`
+	// Toolset slugs that should subscribe to every function source in this
+	// deployment. The server adds "function:<slug>" entries to each toolset's
+	// auto_sync_sources column before the deployment workflow runs; new tool URNs
+	// then flow to those toolsets automatically. Idempotent; safe to repeat.
+	AutoAttachToolsetSlugs []string `form:"auto_attach_toolset_slugs,omitempty" json:"auto_attach_toolset_slugs,omitempty" xml:"auto_attach_toolset_slugs,omitempty"`
 }
 
 // EvolveRequestBody is the type of the "deployments" service "evolve" endpoint
@@ -69,6 +74,9 @@ type EvolveRequestBody struct {
 	// The external MCP servers, identified by slug, to exclude from the new
 	// deployment when cloning a previous deployment.
 	ExcludeExternalMcps []string `form:"exclude_external_mcps,omitempty" json:"exclude_external_mcps,omitempty" xml:"exclude_external_mcps,omitempty"`
+	// Toolset slugs that should subscribe to every function source upserted by
+	// this evolution. Mirrors the CreateDeployment field; idempotent on repeat.
+	AutoAttachToolsetSlugs []string `form:"auto_attach_toolset_slugs,omitempty" json:"auto_attach_toolset_slugs,omitempty" xml:"auto_attach_toolset_slugs,omitempty"`
 }
 
 // RedeployRequestBody is the type of the "deployments" service "redeploy"
@@ -3291,6 +3299,12 @@ func NewCreateDeploymentPayload(body *CreateDeploymentRequestBody, apikeyToken *
 			v.ExternalMcps[i] = unmarshalAddExternalMCPFormRequestBodyToDeploymentsAddExternalMCPForm(val)
 		}
 	}
+	if body.AutoAttachToolsetSlugs != nil {
+		v.AutoAttachToolsetSlugs = make([]string, len(body.AutoAttachToolsetSlugs))
+		for i, val := range body.AutoAttachToolsetSlugs {
+			v.AutoAttachToolsetSlugs[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3367,6 +3381,12 @@ func NewEvolvePayload(body *EvolveRequestBody, apikeyToken *string, sessionToken
 		v.ExcludeExternalMcps = make([]string, len(body.ExcludeExternalMcps))
 		for i, val := range body.ExcludeExternalMcps {
 			v.ExcludeExternalMcps[i] = val
+		}
+	}
+	if body.AutoAttachToolsetSlugs != nil {
+		v.AutoAttachToolsetSlugs = make([]string, len(body.AutoAttachToolsetSlugs))
+		for i, val := range body.AutoAttachToolsetSlugs {
+			v.AutoAttachToolsetSlugs[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken

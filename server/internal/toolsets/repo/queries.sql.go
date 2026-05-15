@@ -13,6 +13,42 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const addAutoSyncSourcesBySlug = `-- name: AddAutoSyncSourcesBySlug :one
+UPDATE toolsets
+SET auto_sync_sources = ARRAY(
+  SELECT DISTINCT unnest(auto_sync_sources || $1::TEXT[])
+),
+    updated_at = clock_timestamp()
+WHERE slug = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+RETURNING id, slug, auto_sync_sources
+`
+
+type AddAutoSyncSourcesBySlugParams struct {
+	Sources   []string
+	Slug      string
+	ProjectID uuid.UUID
+}
+
+type AddAutoSyncSourcesBySlugRow struct {
+	ID              uuid.UUID
+	Slug            string
+	AutoSyncSources []string
+}
+
+// Used by the deployment-create RPC to subscribe a toolset to function
+// sources at push time. Set-union semantics: existing entries are
+// preserved, new entries deduplicated. Returns the toolset's id + the
+// new auto_sync_sources so callers can confirm the slug existed (no row
+// = caller-supplied slug not found in this project).
+func (q *Queries) AddAutoSyncSourcesBySlug(ctx context.Context, arg AddAutoSyncSourcesBySlugParams) (AddAutoSyncSourcesBySlugRow, error) {
+	row := q.db.QueryRow(ctx, addAutoSyncSourcesBySlug, arg.Sources, arg.Slug, arg.ProjectID)
+	var i AddAutoSyncSourcesBySlugRow
+	err := row.Scan(&i.ID, &i.Slug, &i.AutoSyncSources)
+	return i, err
+}
+
 type AddToolsetPromptTemplatesParams struct {
 	ProjectID        uuid.UUID
 	ToolsetID        uuid.UUID

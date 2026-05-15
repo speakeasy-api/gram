@@ -86,9 +86,9 @@ Example:
 				UploadAssets(ctx, []deploy.Source{parseSource(c)}).
 				LoadLatestDeployment(ctx)
 			if result.Deployment == nil {
-				result.CreateDeployment(ctx, "")
+				result.CreateDeployment(ctx, "", nil)
 			} else {
-				result.EvolveDeployment(ctx)
+				result.EvolveDeployment(ctx, nil)
 			}
 
 			if result.Failed() {

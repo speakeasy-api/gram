@@ -27,6 +27,10 @@ import {
 
 export type CreateDeploymentRequestBody = {
   /**
+   * Toolset slugs that should subscribe to every function source in this deployment. The server adds "function:<slug>" entries to each toolset's auto_sync_sources column before the deployment workflow runs; new tool URNs then flow to those toolsets automatically. Idempotent; safe to repeat.
+   */
+  autoAttachToolsetSlugs?: Array<string> | undefined;
+  /**
    * The external ID to refer to the deployment. This can be a git commit hash for example.
    */
   externalId?: string | undefined;
@@ -58,6 +62,7 @@ export type CreateDeploymentRequestBody = {
 
 /** @internal */
 export type CreateDeploymentRequestBody$Outbound = {
+  auto_attach_toolset_slugs?: Array<string> | undefined;
   external_id?: string | undefined;
   external_mcps?: Array<AddExternalMCPForm$Outbound> | undefined;
   external_url?: string | undefined;
@@ -78,6 +83,7 @@ export const CreateDeploymentRequestBody$outboundSchema: z.ZodMiniType<
   CreateDeploymentRequestBody
 > = z.pipe(
   z.object({
+    autoAttachToolsetSlugs: z.optional(z.array(z.string())),
     externalId: z.optional(z.string()),
     externalMcps: z.optional(z.array(AddExternalMCPForm$outboundSchema)),
     externalUrl: z.optional(z.string()),
@@ -93,6 +99,7 @@ export const CreateDeploymentRequestBody$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      autoAttachToolsetSlugs: "auto_attach_toolset_slugs",
       externalId: "external_id",
       externalMcps: "external_mcps",
       externalUrl: "external_url",

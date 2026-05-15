@@ -144,6 +144,11 @@ type CreateDeploymentPayload struct {
 	Functions       []*AddFunctionsForm
 	Packages        []*AddDeploymentPackageForm
 	ExternalMcps    []*AddExternalMCPForm
+	// Toolset slugs that should subscribe to every function source in this
+	// deployment. The server adds "function:<slug>" entries to each toolset's
+	// auto_sync_sources column before the deployment workflow runs; new tool URNs
+	// then flow to those toolsets automatically. Idempotent; safe to repeat.
+	AutoAttachToolsetSlugs []string
 }
 
 // CreateDeploymentResult is the result type of the deployments service
@@ -223,6 +228,9 @@ type EvolvePayload struct {
 	// The external MCP servers, identified by slug, to exclude from the new
 	// deployment when cloning a previous deployment.
 	ExcludeExternalMcps []string
+	// Toolset slugs that should subscribe to every function source upserted by
+	// this evolution. Mirrors the CreateDeployment field; idempotent on repeat.
+	AutoAttachToolsetSlugs []string
 }
 
 // EvolveResult is the result type of the deployments service evolve method.
