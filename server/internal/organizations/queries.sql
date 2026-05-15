@@ -157,6 +157,18 @@ WHERE id = @organization_id AND
     workos_id IS NULL
 RETURNING *;
 
+-- name: ExpireStaleInvitations :exec
+-- Transition pending invitations that have passed their expires_at to 'expired'
+-- state. Called before creating a new invitation so the partial unique index
+-- (org_id, email) WHERE state = 'pending' does not block re-inviting.
+UPDATE organization_invitations
+SET state = 'expired',
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND email = @email
+  AND state = 'pending'
+  AND expires_at <= clock_timestamp();
+
 -- name: CreateInvitation :one
 INSERT INTO organization_invitations (
     organization_id,

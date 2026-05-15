@@ -8,7 +8,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -144,6 +146,77 @@ func TestService_SendInvite_FailsWhenPasswordlessSessionFails(t *testing.T) {
 		Email: "nobody@example.com",
 	})
 	require.Error(t, err, "should fail when passwordless session creation fails")
+}
+
+func TestService_SendInvite_EmailFailureRevokesInvite(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceWithEmail(t)
+
+	ti.orgs.On("CreatePasswordlessSession", mock.Anything, mock.Anything).Return(&thirdpartyworkos.PasswordlessSession{
+		ID: "pwl_email_fail", Link: "https://stub.workos.com/passwordless/email_fail",
+	}, nil).Once()
+
+	ti.loops.On("SendTransactional", mock.Anything, mock.Anything).Return(
+		fmt.Errorf("loops API unavailable"),
+	).Once()
+
+	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "noemail@example.com"})
+	require.Error(t, err, "should fail when email delivery fails")
+
+	// The invite should have been revoked so the user can retry.
+	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
+	require.NoError(t, err)
+	require.Empty(t, res.Invitations, "failed-to-send invite should be revoked")
+}
+
+func TestService_SendInvite_EmailSuccessReturnsInvite(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceWithEmail(t)
+
+	ti.orgs.On("CreatePasswordlessSession", mock.Anything, mock.Anything).Return(&thirdpartyworkos.PasswordlessSession{
+		ID: "pwl_email_ok", Link: "https://stub.workos.com/passwordless/email_ok",
+	}, nil).Once()
+
+	ti.loops.On("SendTransactional", mock.Anything, mock.Anything).Return(nil).Once()
+
+	invite, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "emailok@example.com"})
+	require.NoError(t, err)
+	require.NotNil(t, invite)
+	require.Equal(t, "emailok@example.com", invite.Email)
+	require.Equal(t, "pending", invite.State)
+}
+
+func TestService_SendInvite_ExpiredInviteAllowsReinvite(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// Create an invitation then expire it.
+	row, err := orgrepo.New(ti.conn).CreateInvitation(ctx, orgrepo.CreateInvitationParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Email:          "reinvite@example.com",
+		TokenHash:      "reinvitehash",
+		InviterUserID:  conv.ToPGText(authCtx.UserID),
+		ExpiresInDays:  7,
+	})
+	require.NoError(t, err)
+	err = orgrepo.New(ti.conn).ExpireInvitationForTest(ctx, row.ID)
+	require.NoError(t, err)
+
+	// SendInvite should auto-expire the stale invite and create a new one.
+	ti.orgs.On("CreatePasswordlessSession", mock.Anything, mock.Anything).Return(&thirdpartyworkos.PasswordlessSession{
+		ID: "pwl_reinvite", Link: "https://stub.workos.com/passwordless/reinvite",
+	}, nil).Once()
+
+	invite, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "reinvite@example.com"})
+	require.NoError(t, err)
+	require.NotNil(t, invite)
+	require.Equal(t, "reinvite@example.com", invite.Email)
+	require.Equal(t, "pending", invite.State)
 }
 
 func TestService_SendInvite_ForbiddenWithGrantForDifferentOrganization(t *testing.T) {

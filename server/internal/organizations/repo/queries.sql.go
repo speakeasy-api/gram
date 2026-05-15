@@ -193,6 +193,29 @@ func (q *Queries) ExpireInvitationForTest(ctx context.Context, id uuid.UUID) err
 	return err
 }
 
+const expireStaleInvitations = `-- name: ExpireStaleInvitations :exec
+UPDATE organization_invitations
+SET state = 'expired',
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND email = $2
+  AND state = 'pending'
+  AND expires_at <= clock_timestamp()
+`
+
+type ExpireStaleInvitationsParams struct {
+	OrganizationID string
+	Email          string
+}
+
+// Transition pending invitations that have passed their expires_at to 'expired'
+// state. Called before creating a new invitation so the partial unique index
+// (org_id, email) WHERE state = 'pending' does not block re-inviting.
+func (q *Queries) ExpireStaleInvitations(ctx context.Context, arg ExpireStaleInvitationsParams) error {
+	_, err := q.db.Exec(ctx, expireStaleInvitations, arg.OrganizationID, arg.Email)
+	return err
+}
+
 const getInvitationByID = `-- name: GetInvitationByID :one
 SELECT id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
 FROM organization_invitations

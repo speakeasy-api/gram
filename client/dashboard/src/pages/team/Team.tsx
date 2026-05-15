@@ -217,16 +217,32 @@ export function TeamInner() {
   };
 
   const handleResendInvite = (invite: OrganizationInvitation) => {
+    // Must revoke first — the unique partial index (org_id, email) WHERE
+    // state = 'pending' blocks a second pending invite for the same email.
+    // Pass the effective role ID so the resent invite preserves the role.
     revokeInviteMutation.mutate(
       { request: { invitationId: invite.id } },
       {
         onSuccess: () => {
           inviteMutation.mutate(
-            { request: { sendInviteRequestBody: { email: invite.email } } },
+            {
+              request: {
+                sendInviteRequestBody: {
+                  email: invite.email,
+                  roleId: effectiveInviteRoleId,
+                },
+              },
+            },
             {
               onSuccess: async () => {
                 await invalidateTeamData();
                 toast.success(`Invite resent to ${invite.email}`);
+              },
+              onError: async () => {
+                await invalidateTeamData();
+                toast.error(
+                  `Failed to resend invite to ${invite.email}. The previous invite was revoked — please send a new invite.`,
+                );
               },
             },
           );

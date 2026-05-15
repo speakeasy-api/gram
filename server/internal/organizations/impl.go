@@ -211,9 +211,22 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		}
 	}
 
-	row, err := orgrepo.New(s.db).CreateInvitation(ctx, orgrepo.CreateInvitationParams{
+	normalizedEmail := strings.ToLower(strings.TrimSpace(payload.Email))
+
+	// Transition any expired-but-still-pending invites to 'expired' state so
+	// the partial unique index (org_id, email) WHERE state = 'pending' does
+	// not block re-inviting after an invite naturally expires.
+	repo := orgrepo.New(s.db)
+	if err := repo.ExpireStaleInvitations(ctx, orgrepo.ExpireStaleInvitationsParams{
 		OrganizationID: ac.ActiveOrganizationID,
-		Email:          strings.ToLower(strings.TrimSpace(payload.Email)),
+		Email:          normalizedEmail,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "expire stale invitations").Log(ctx, logger)
+	}
+
+	row, err := repo.CreateInvitation(ctx, orgrepo.CreateInvitationParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		Email:          normalizedEmail,
 		TokenHash:      tokenHash,
 		InviterUserID:  conv.ToPGText(ac.UserID),
 		RoleSlug:       roleSlug,
@@ -254,9 +267,10 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 			InviterName:      inviterName,
 			InviterEmail:     inviterEmail,
 		}); err != nil {
-			logger.WarnContext(ctx, "failed to send invite email; invite link still valid",
-				attr.SlogError(err),
-			)
+			// Revoke the invite so the user can retry — the invitee never
+			// received the magic link so the invite is useless.
+			_ = repo.RevokeInvitation(ctx, row.ID)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to send invite email").Log(ctx, logger)
 		}
 	}
 
@@ -791,21 +805,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Accept the invite atomically — the WHERE clause ensures only pending,
-	// non-expired invites transition. If a concurrent revoke wins the race,
-	// rowsAffected will be 0 and we abort.
 	repo := orgrepo.New(s.db)
-	rowsAffected, err := repo.AcceptInvitation(ctx, invite.ID)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "invite callback: failed to accept invitation", attr.SlogError(err))
-		redirectError("failed to accept invite")
-		return
-	}
-	if rowsAffected == 0 {
-		s.logger.WarnContext(ctx, "invite callback: invite was revoked or expired before acceptance")
-		redirectError("invite already used, revoked, or expired")
-		return
-	}
 
 	// Provision the user via the shared identity upsert path. This handles
 	// user creation, workos_id stamping, external_id sync, and PostHog events
@@ -838,7 +838,10 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		OrganizationID: invite.OrganizationID,
 		UserID:         conv.ToPGText(gramUserID),
 	}); err != nil {
-		s.logger.WarnContext(ctx, "invite callback: failed to create org membership", attr.SlogError(err))
+		s.logger.ErrorContext(ctx, "invite callback: failed to create org membership", attr.SlogError(err))
+		span.RecordError(err)
+		redirectError("failed to join organization")
+		return
 	}
 
 	// Create the WorkOS organization membership so ListMembers returns the
@@ -873,6 +876,22 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		}); err != nil {
 			s.logger.WarnContext(ctx, "invite callback: failed to sync role assignments", attr.SlogError(err))
 		}
+	}
+
+	// Accept the invite AFTER all provisioning succeeds. This ensures a
+	// transient failure in user creation or org membership doesn't burn the
+	// invite — the invitee can retry. The WHERE clause guards against a
+	// concurrent revoke or expiry winning the race.
+	rowsAffected, err := repo.AcceptInvitation(ctx, invite.ID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "invite callback: failed to accept invitation", attr.SlogError(err))
+		redirectError("failed to accept invite")
+		return
+	}
+	if rowsAffected == 0 {
+		s.logger.WarnContext(ctx, "invite callback: invite was revoked or expired before acceptance")
+		redirectError("invite already used, revoked, or expired")
+		return
 	}
 
 	// Create a Gram session directly — no need to bounce through an external

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -83,6 +84,27 @@ type stubUserProvisioner struct{}
 
 func (stubUserProvisioner) UpsertUserFromIDP(_ context.Context, idpUser *identity.IDPUserInfo) (string, error) {
 	return idpUser.Sub, nil
+}
+
+// MockLoopsClient implements loops.Client for testing email send paths.
+type MockLoopsClient struct {
+	mock.Mock
+}
+
+var _ loops.Client = (*MockLoopsClient)(nil)
+
+func newMockLoopsClient(t *testing.T) *MockLoopsClient {
+	t.Helper()
+	c := &MockLoopsClient{}
+	t.Cleanup(func() {
+		require.True(t, c.AssertExpectations(t))
+	})
+	return c
+}
+
+func (m *MockLoopsClient) SendTransactional(ctx context.Context, input loops.SendTransactionalInput) error {
+	args := m.Called(ctx, input)
+	return args.Error(0)
 }
 
 func mockErr(args mock.Arguments, index int) error {
