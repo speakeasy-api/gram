@@ -1,7 +1,10 @@
 package risk_analysis
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
+	"testing"
 )
 
 // RuleContext carries optional, source-specific values that catalog entries
@@ -85,7 +88,17 @@ type ruleSpec struct {
 // `CanonicalXxxRuleID` helpers and the per-source `Rule*` constants); the
 // description either comes from the catalog or, when absent, from
 // fallbackDescription, or a per-source default.
+//
+// In dev / test environments, an invalid canonical rule id panics so the
+// failing writer is caught at the boundary instead of contaminating
+// risk_results. In production, the bad id is passed through unchanged so
+// scanning stays available even if a new writer drifts.
 func Normalize(source, canonicalRuleID, fallbackDescription string, rctx RuleContext) (string, string) {
+	if enforceRuleIDFormat {
+		if err := ValidateRuleID(canonicalRuleID); err != nil {
+			panic(fmt.Sprintf("risk_analysis.Normalize: invalid rule id for source %q: %v", source, err))
+		}
+	}
 	if spec, ok := ruleCatalog[canonicalRuleID]; ok {
 		return canonicalRuleID, spec.description(rctx)
 	}
@@ -93,6 +106,40 @@ func Normalize(source, canonicalRuleID, fallbackDescription string, rctx RuleCon
 		return canonicalRuleID, fallbackDescription
 	}
 	return canonicalRuleID, defaultDescription(source, rctx)
+}
+
+// ruleIDFormat is the canonical rule id grammar: lowercase ASCII letters
+// and digits, hyphens within a segment, dots between segments. Matches
+// `secret.anthropic-api-key`, `shadow-mcp`, `destructive.shell.rm-rf`,
+// `prompt-injection.unknown`.
+var ruleIDFormat = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*(\.[a-z0-9]+(-[a-z0-9]+)*)*$`)
+
+// ValidateRuleID returns an error when id does not conform to the canonical
+// rule id grammar.
+func ValidateRuleID(id string) error {
+	if id == "" {
+		return fmt.Errorf("rule id is empty")
+	}
+	if !ruleIDFormat.MatchString(id) {
+		return fmt.Errorf("rule id %q is not in canonical form (lowercase kebab segments joined by dots)", id)
+	}
+	return nil
+}
+
+// enforceRuleIDFormat is true when the binary is running under `go test`
+// (covers unit + integration suites) or after cmd/ wiring opts in via
+// EnableRuleIDFormatEnforcement (used in local-dev). In those modes
+// Normalize panics on a malformed canonical rule id so writer drift is
+// caught immediately. Production runs leave the value through.
+var enforceRuleIDFormat = testing.Testing()
+
+// EnableRuleIDFormatEnforcement opts the process in to strict canonical
+// rule_id validation: any Normalize call with a malformed id will panic.
+// Intended for local development; cmd/ wires this on when
+// `--environment=local`. Test binaries get the same behavior automatically
+// via testing.Testing().
+func EnableRuleIDFormatEnforcement() {
+	enforceRuleIDFormat = true
 }
 
 // defaultDescription is used when a finding has no catalog entry and no

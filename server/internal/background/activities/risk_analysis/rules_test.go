@@ -24,6 +24,68 @@ func TestCanonicalPresidioRuleID_KebabsAndPrependsPII(t *testing.T) {
 	assert.Equal(t, "pii.email-address", CanonicalPresidioRuleID("EMAIL_ADDRESS"))
 }
 
+func TestValidateRuleID_AcceptsCanonicalForms(t *testing.T) {
+	t.Parallel()
+
+	valid := []string{
+		"shadow-mcp",
+		"secret.anthropic-api-key",
+		"pii.credit-card",
+		"pii.medical-license",
+		"destructive.tool",
+		"destructive.shell.rm-rf",
+		"destructive.cloud.kubectl-delete-namespace",
+		"prompt-injection.unknown",
+		"prompt-injection.role-hijack",
+	}
+	for _, id := range valid {
+		assert.NoError(t, ValidateRuleID(id), "expected %q to validate", id)
+	}
+}
+
+func TestValidateRuleID_RejectsMalformed(t *testing.T) {
+	t.Parallel()
+
+	invalid := []string{
+		"",                 // empty
+		"UPPER_SNAKE",      // uppercase and underscore
+		"snake_case",       // underscore
+		"shell/rm-rf",      // slash
+		"trailing-dot.",    // empty trailing segment
+		".leading-dot",     // empty leading segment
+		"double..dot",      // empty middle segment
+		"trailing-hyphen-", // empty trailing kebab piece
+		"-leading-hyphen",  // empty leading kebab piece
+		"double--hyphen",   // empty middle kebab piece
+		"spaces in id",     // spaces
+		"Mixed.Case",       // uppercase
+	}
+	for _, id := range invalid {
+		assert.Error(t, ValidateRuleID(id), "expected %q to fail validation", id)
+	}
+}
+
+// TestRuleCatalog_AllIDsAreCanonical confirms every entry in the catalog
+// passes ValidateRuleID, locking the grammar against accidental drift.
+func TestRuleCatalog_AllIDsAreCanonical(t *testing.T) {
+	t.Parallel()
+
+	for id := range ruleCatalog {
+		assert.NoError(t, ValidateRuleID(id), "catalog entry %q is not canonical", id)
+	}
+}
+
+// TestNormalize_PanicsOnInvalidIDInDevTest exercises the dev/test-only
+// boundary check. testing.Testing() is true here, so the panic path is
+// active without needing GRAM_ENVIRONMENT to be set.
+func TestNormalize_PanicsOnInvalidIDInDevTest(t *testing.T) {
+	t.Parallel()
+
+	assert.Panics(t, func() {
+		Normalize(SourcePresidio, "PII.CREDIT_CARD", "", RuleContext{ToolName: "", MatchedPattern: ""})
+	}, "Normalize should panic on a non-canonical rule id while testing")
+}
+
 func TestCLIDestructivePattern_FullNameProducesCanonicalRuleID(t *testing.T) {
 	t.Parallel()
 

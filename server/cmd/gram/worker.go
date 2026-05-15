@@ -344,6 +344,10 @@ func newWorkerCommand() *cli.Command {
 			meterProvider := otel.GetMeterProvider()
 			slog.SetDefault(logger)
 
+			if serviceEnv == "local" {
+				risk_analysis.EnableRuleIDFormatEnforcement()
+			}
+
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
 
