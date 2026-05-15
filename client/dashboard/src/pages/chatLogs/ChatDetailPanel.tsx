@@ -497,7 +497,6 @@ function MessageItem({
 
           <TraceEntryBody
             contentRevealed={contentRevealed}
-            entryMeta={entryMeta}
             entryType={entryType}
             hasSensitiveContent={hasSensitiveContent}
             message={message}
@@ -573,7 +572,6 @@ function MessageItemToggle({
 
 function TraceEntryBody({
   contentRevealed,
-  entryMeta,
   entryType,
   hasSensitiveContent,
   message,
@@ -581,7 +579,6 @@ function TraceEntryBody({
   parsedToolCalls,
 }: {
   contentRevealed: boolean;
-  entryMeta: TraceEntryMeta;
   entryType: TraceEntryType;
   hasSensitiveContent: boolean;
   message: ChatMessage;
@@ -593,7 +590,6 @@ function TraceEntryBody({
       return (
         <ToolCallEntry
           contentRevealed={contentRevealed}
-          entryMeta={entryMeta}
           hasSensitiveContent={hasSensitiveContent}
           onRevealContent={onRevealContent}
           toolCalls={parsedToolCalls ?? []}
@@ -604,7 +600,6 @@ function TraceEntryBody({
         <ToolResultEntry
           content={message.content}
           contentRevealed={contentRevealed}
-          entryMeta={entryMeta}
           hasSensitiveContent={hasSensitiveContent}
           onRevealContent={onRevealContent}
           toolCallId={message.toolCallId}
@@ -676,13 +671,11 @@ function SensitiveContentGate({
 
 function ToolCallEntry({
   contentRevealed,
-  entryMeta,
   hasSensitiveContent,
   onRevealContent,
   toolCalls,
 }: {
   contentRevealed: boolean;
-  entryMeta: TraceEntryMeta;
   hasSensitiveContent: boolean;
   onRevealContent: () => void;
   toolCalls: ToolCall[];
@@ -698,10 +691,6 @@ function ToolCallEntry({
           >
             <div className="p-3">
               <div className="flex items-center gap-2">
-                <Icon
-                  name={entryMeta.icon}
-                  className={cn("size-4", entryMeta.iconClassName)}
-                />
                 <span className="truncate font-semibold">
                   {toolCall.function?.name || toolCall.name || "Tool Call"}
                 </span>
@@ -732,14 +721,12 @@ function ToolCallEntry({
 function ToolResultEntry({
   content,
   contentRevealed,
-  entryMeta,
   hasSensitiveContent,
   onRevealContent,
   toolCallId,
 }: {
   content: unknown;
   contentRevealed: boolean;
-  entryMeta: TraceEntryMeta;
   hasSensitiveContent: boolean;
   onRevealContent: () => void;
   toolCallId: string | undefined;
@@ -753,10 +740,6 @@ function ToolResultEntry({
       >
         <div className="bg-background/50 p-3">
           <div className="flex items-center gap-2">
-            <Icon
-              name={entryMeta.icon}
-              className={cn("size-4", entryMeta.iconClassName)}
-            />
             <span className="font-semibold">Response</span>
             {toolCallId && (
               <Badge variant="neutral" className="ml-auto">
