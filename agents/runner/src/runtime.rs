@@ -31,7 +31,9 @@ use crate::clip::ClippedToolSource;
 use crate::compaction::build_compactor;
 use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
-use crate::http_layer::{McpRotatingClient, TokenRegistry, build_bootstrap_client, build_http};
+use crate::http_layer::{
+    McpRotatingClient, THREAD_TOKEN, TokenRegistry, build_bootstrap_client, build_http,
+};
 use crate::tools;
 use crate::wire::{McpServer, RunnerMessage, ThreadBootstrap};
 use crate::workdir::ASSISTANT_WORKDIR;
@@ -51,12 +53,17 @@ const EVICTION_SWEEP_INTERVAL: Duration = Duration::from_secs(60);
 pub type AppState = Arc<RuntimeHost>;
 
 /// Singleton host shared by every per-thread task on the VM. Owns the
-/// shared bearer registry, the MCP actor handle (one connection per
-/// server, shared across threads), and the bootstrap client.
+/// per-thread bearer registries (one slot per live thread, swapped on each
+/// /threads/turn admission), the MCP actor handle (one connection per
+/// server, shared across threads), and the bootstrap client. The
+/// `tokens` registry is the boot-time fallback used only before any
+/// per-thread slot exists; once a thread is admitted, outbound traffic
+/// rides its slot via `THREAD_TOKEN`.
 pub struct RuntimeHost {
     pub assistant_id: String,
     pub started_at: Instant,
     pub tokens: TokenRegistry,
+    pub thread_tokens: DashMap<String, TokenRegistry>,
     /// Per-idempotency-key admission slot. The bool tracks whether the
     /// keyed turn has actually been enqueued: holding the mutex covers
     /// the check + bootstrap + enqueue + mark-done sequence so concurrent
@@ -167,6 +174,7 @@ pub async fn build_host(
         assistant_id,
         started_at: Instant::now(),
         tokens,
+        thread_tokens: DashMap::new(),
         seen: DashMap::new(),
         threads: DashMap::new(),
         gram_client,
@@ -242,12 +250,25 @@ async fn sweep_idle(host: &Arc<RuntimeHost>) {
         // them so `seen` does not grow without bound over the VM lifetime.
         let prefix = format!("{thread_id}:");
         host.seen.retain(|key, _| !key.starts_with(&prefix));
+        host.thread_tokens.remove(&thread_id);
     }
 }
 
 /// First-turn bootstrap path. Concurrent /turn requests for the same thread
 /// race through the `OnceCell`; only one wins the bootstrap fetch and task
 /// spawn. Subsequent turns (cached cell) skip directly to enqueue.
+/// Returns the bearer slot for `thread_id`, creating it empty if absent. The
+/// server stamps the freshly-minted thread-scoped JWT on every /threads/turn
+/// admission and the handler rotates this slot under it before
+/// `THREAD_TOKEN.scope`s the bootstrap + enqueue path; outbound HTTP from
+/// the per-thread tokio task then reads it via the task-local override.
+pub fn thread_token_registry(host: &Arc<RuntimeHost>, thread_id: &str) -> TokenRegistry {
+    host.thread_tokens
+        .entry(thread_id.to_string())
+        .or_insert_with(|| TokenRegistry::new(""))
+        .clone()
+}
+
 pub async fn ensure_thread(
     host: &Arc<RuntimeHost>,
     thread_id: &str,
@@ -401,10 +422,15 @@ async fn spawn_thread(
     let log_thread_id = thread_id.clone();
     let host_for_eviction = Arc::clone(host);
     let evict_thread_id = thread_id.clone();
+    let thread_registry = thread_token_registry(host, &thread_id);
 
     let task_handle = tokio::spawn(async move {
-        let outcome = AssertUnwindSafe(run_loop(driver, inbox_rx, loop_idle))
-            .catch_unwind()
+        let outcome = THREAD_TOKEN
+            .scope(thread_registry, async move {
+                AssertUnwindSafe(run_loop(driver, inbox_rx, loop_idle))
+                    .catch_unwind()
+                    .await
+            })
             .await;
         match outcome {
             Ok(Ok(reason)) => {
@@ -425,6 +451,7 @@ async fn spawn_thread(
         // Drop the entry on exit so a stale ConfiguredThread doesn't keep
         // holding state for a dead task.
         host_for_eviction.threads.remove(&evict_thread_id);
+        host_for_eviction.thread_tokens.remove(&evict_thread_id);
     });
 
     let configured = Arc::new(ConfiguredThread {

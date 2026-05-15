@@ -40,6 +40,16 @@ pub struct TokenRegistry {
     inner: Arc<RwLock<String>>,
 }
 
+tokio::task_local! {
+    /// Per-thread registry scoped onto the spawning task. Outbound HTTP
+    /// (chat completions, MCP, bootstrap fetch) prefers this over the
+    /// host-shared fallback so a shared VM serving multiple threads still
+    /// authenticates each request under the calling thread's JWT — the
+    /// ThreadID claim then propagates through to platform tools that key
+    /// off `principal.ThreadID` (wake, memory, telemetry).
+    pub static THREAD_TOKEN: TokenRegistry;
+}
+
 impl TokenRegistry {
     pub fn new(initial: impl Into<String>) -> Self {
         Self {
@@ -56,12 +66,19 @@ impl TokenRegistry {
         Ok(())
     }
 
-    pub fn current(&self) -> Result<String, RunnerError> {
+    fn read_local(&self) -> Result<String, RunnerError> {
         Ok(self
             .inner
             .read()
             .map_err(|_| RunnerError::Loop("token registry read lock poisoned".into()))?
             .clone())
+    }
+
+    pub fn current(&self) -> Result<String, RunnerError> {
+        match THREAD_TOKEN.try_with(|r| r.read_local()) {
+            Ok(res) => res,
+            Err(_) => self.read_local(),
+        }
     }
 }
 
@@ -73,11 +90,12 @@ impl Middleware for TokenRegistry {
         extensions: &mut http::Extensions,
         next: Next<'_>,
     ) -> reqwest_middleware::Result<reqwest::Response> {
-        let token = self
-            .inner
-            .read()
-            .map_err(|_| reqwest_middleware::Error::middleware(MiddlewareError::LockPoisoned))?
-            .clone();
+        let token_result = match THREAD_TOKEN.try_with(|r| r.read_local()) {
+            Ok(res) => res,
+            Err(_) => self.read_local(),
+        };
+        let token = token_result
+            .map_err(|_| reqwest_middleware::Error::middleware(MiddlewareError::LockPoisoned))?;
         let value = http::HeaderValue::try_from(format!("Bearer {token}"))
             .map_err(|e| reqwest_middleware::Error::middleware(MiddlewareError::from(e)))?;
         req.headers_mut().insert(http::header::AUTHORIZATION, value);

@@ -1569,7 +1569,7 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return fmt.Errorf("decode assistant turn: %w", err)
 	}
-	turnToken, err := s.MintAssistantScopedRuntimeToken(assistant)
+	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID)
 	if err != nil {
 		return err
 	}
@@ -1624,18 +1624,19 @@ func (s *ServiceCore) touchProcessingLease(ctx context.Context, projectID, runti
 	return nil
 }
 
-// MintAssistantScopedRuntimeToken issues the assistant-scoped JWT the runner
-// reuses across every thread it hosts. ThreadID is omitted on purpose — a
-// single VM serves every thread under one assistant, so per-call thread
-// context flows through the request body (e.g. /turn URL segment) rather
-// than the token claims.
-func (s *ServiceCore) MintAssistantScopedRuntimeToken(assistant assistantRecord) (string, error) {
+// MintThreadScopedRuntimeToken issues the JWT the runner uses for every
+// outbound call originating from a specific thread (chat completions, MCP,
+// platform tools). The ThreadID claim populates principal.ThreadID
+// downstream, so platform tools that key on the calling thread (wake,
+// memory, telemetry) keep working under the v2 single-VM-per-assistant
+// runtime — the VM is shared but the auth identity is per-thread.
+func (s *ServiceCore) MintThreadScopedRuntimeToken(assistant assistantRecord, threadID uuid.UUID) (string, error) {
 	token, err := s.assistantTokens.Generate(assistanttokens.GenerateInput{
 		OrgID:       assistant.OrganizationID,
 		ProjectID:   assistant.ProjectID,
 		UserID:      assistant.CreatedByUserID,
 		AssistantID: assistant.ID,
-		ThreadID:    uuid.Nil,
+		ThreadID:    threadID,
 		TTL:         assistantRuntimeTokenTTL,
 	})
 	if err != nil {

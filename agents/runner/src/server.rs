@@ -8,8 +8,10 @@ use axum::{Json, Router};
 use tokio::net::TcpListener;
 use tokio::sync::{Mutex, Notify};
 
+use crate::http_layer::THREAD_TOKEN;
 use crate::runtime::{
     AppState, DEFAULT_THREAD_IDLE_TTL, build_host, ensure_thread, snapshot_threads,
+    thread_token_registry,
 };
 
 const IDEMPOTENCY_HEADER: &str = "x-idempotency-key";
@@ -80,13 +82,16 @@ async fn thread_turn(
         return Err((StatusCode::BAD_REQUEST, "missing thread_id".to_string()));
     }
 
-    // Rotate the shared bearer ahead of bootstrap so the runner's outbound
-    // call to /rpc/assistants.getThreadBootstrap uses the freshest token
-    // the backend just minted for this admit.
+    // Rotate this thread's bearer slot under the freshly minted JWT the
+    // backend stamped on the turn body. The slot is thread-scoped — every
+    // outbound call from the thread's tokio task (chat completions, MCP,
+    // bootstrap) reads it via THREAD_TOKEN, so the ThreadID claim
+    // propagates to platform tools that depend on `principal.ThreadID`.
+    let thread_registry = thread_token_registry(&host, &thread_id);
     if let Some(token) = request.auth_token.as_deref()
         && !token.is_empty()
     {
-        host.tokens
+        thread_registry
             .rotate(token)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     }
@@ -120,20 +125,29 @@ async fn thread_turn(
         return Ok(Json(ThreadTurnResponse::deduped()));
     }
 
-    let thread = ensure_thread(&host, &thread_id)
+    // Scope the per-thread bearer onto the bootstrap + enqueue path so the
+    // outbound /rpc/assistants.getThreadBootstrap call authenticates under
+    // the calling thread's JWT rather than whichever thread last
+    // rotated the host fallback.
+    THREAD_TOKEN
+        .scope(thread_registry, async {
+            let thread = ensure_thread(&host, &thread_id)
+                .await
+                .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+
+            thread
+                .enqueue(request.input)
+                .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+
+            if let Some(ref mut guard) = admission_guard {
+                **guard = true;
+            }
+
+            // The model's response goes out via /chat/completions on the
+            // per-thread task; the HTTP response here is just an ack so the
+            // backend's RunTurn activity can mark the event processed
+            // without blocking on the turn.
+            Ok(Json(ThreadTurnResponse::accepted()))
+        })
         .await
-        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
-
-    thread
-        .enqueue(request.input)
-        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
-
-    if let Some(ref mut guard) = admission_guard {
-        **guard = true;
-    }
-
-    // The model's response goes out via /chat/completions on the per-thread
-    // task; the HTTP response here is just an ack so the backend's RunTurn
-    // activity can mark the event processed without blocking on the turn.
-    Ok(Json(ThreadTurnResponse::accepted()))
 }
