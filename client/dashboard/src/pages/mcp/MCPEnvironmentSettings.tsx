@@ -7,7 +7,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useSession } from "@/contexts/Auth";
+import { useIsAdmin, useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { Toolset } from "@/lib/toolTypes";
@@ -44,6 +44,7 @@ import {
   getValueForEnvironment,
 } from "./environmentVariableUtils";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
+import { WireUserSessionIssuerModal } from "./wire-user-session-issuer/WireUserSessionIssuerModal";
 
 // Empty array constant to avoid creating new references
 const EMPTY_ENVIRONMENTS: never[] = [];
@@ -893,6 +894,12 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
   const [isEditOAuthModalOpen, setIsEditOAuthModalOpen] = useState(false);
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
+  const [
+    isWireUserSessionIssuerModalOpen,
+    setIsWireUserSessionIssuerModalOpen,
+  ] = useState(false);
+
+  const isAdmin = useIsAdmin();
 
   const { data: environmentsData } = useListEnvironments();
   const environments = environmentsData?.environments ?? [];
@@ -929,32 +936,63 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
     ? "Enable the MCP server to configure OAuth"
     : "This MCP server does not require the OAuth authorization code flow";
 
+  // The migration entry point appears for both OAuth Proxy paradigms (custom
+  // and gram-managed): both produce a user_session_issuer, even though
+  // gram-managed skips the remote_session_* pair. External-OAuth toolsets
+  // have nothing to port. Gated to admins so a typical project member
+  // doesn't see plumbing they aren't expected to operate.
+  const showWireUserSessionIssuer =
+    isAdmin && (oauthParadigm === "proxy" || oauthParadigm === "gram");
+  // userSessionIssuerSlug is populated by the toolsets read path when the
+  // OAuth-Proxy → user-sessions migration has produced a user_session_issuer
+  // for this toolset. Admin-only on the dashboard side: regular project
+  // members aren't expected to think about the user-session plumbing.
+  const userSessionIssuerWired = isAdmin && !!toolset.userSessionIssuerSlug;
+
   return (
     <PageSection
       heading="OAuth"
       description="OAuth let's you control access to MCP servers through an identity provider."
       headingExtra={undefined}
       action={
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {!isOAuthEligible ? (
-              <span className="inline-block">
-                <Button disabled>
-                  <Button.Text>Configure</Button.Text>
-                </Button>
-              </span>
-            ) : (
-              <Button onClick={handleConfigureClick}>
-                <Button.Text>
-                  {isOAuthConnected ? "Manage" : "Configure"}
-                </Button.Text>
-              </Button>
-            )}
-          </TooltipTrigger>
-          {!isOAuthEligible && (
-            <TooltipContent>{disabledTooltipText}</TooltipContent>
+        <div className="flex items-center gap-2">
+          {userSessionIssuerWired && (
+            <span
+              className="rounded-full border border-green-500/40 bg-green-50 px-2 py-0.5 text-[11px] font-medium tracking-wide text-green-900 dark:bg-green-950 dark:text-green-200"
+              title={`User session issuer: ${toolset.userSessionIssuerSlug}`}
+            >
+              User session issuer wired
+            </span>
           )}
-        </Tooltip>
+          {showWireUserSessionIssuer && (
+            <Button
+              variant="tertiary"
+              onClick={() => setIsWireUserSessionIssuerModalOpen(true)}
+            >
+              <Button.Text>Wire User Session Issuer</Button.Text>
+            </Button>
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {!isOAuthEligible ? (
+                <span className="inline-block">
+                  <Button disabled>
+                    <Button.Text>Configure</Button.Text>
+                  </Button>
+                </span>
+              ) : (
+                <Button onClick={handleConfigureClick}>
+                  <Button.Text>
+                    {isOAuthConnected ? "Manage" : "Configure"}
+                  </Button.Text>
+                </Button>
+              )}
+            </TooltipTrigger>
+            {!isOAuthEligible && (
+              <TooltipContent>{disabledTooltipText}</TooltipContent>
+            )}
+          </Tooltip>
+        </div>
       }
     >
       <OAuthStatusDisplay
@@ -995,6 +1033,13 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
           onClose={() => setIsEditOAuthModalOpen(false)}
           toolsetSlug={toolset.slug}
           proxyServer={toolset.oauthProxyServer}
+        />
+      )}
+      {showWireUserSessionIssuer && (
+        <WireUserSessionIssuerModal
+          isOpen={isWireUserSessionIssuerModalOpen}
+          onClose={() => setIsWireUserSessionIssuerModalOpen(false)}
+          toolset={toolset}
         />
       )}
     </PageSection>

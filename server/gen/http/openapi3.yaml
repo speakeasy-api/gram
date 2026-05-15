@@ -15850,6 +15850,110 @@ paths:
             x-speakeasy-name-override: verifyURL
             x-speakeasy-react-hook:
                 name: VerifyRemoteMcpURL
+    /rpc/remoteSessionClients.cloneClientFromOAuthProxyProvider:
+        post:
+            description: 'Platform-admin-only. Clone the client_id / client_secret from an existing oauth_proxy_provider into a new remote_session_client paired with the supplied issuers. The upstream secret stays server-side: it is read from the proxy provider''s stored secrets, re-encrypted, and persisted on the remote_session_client row without ever crossing the wire.'
+            operationId: cloneClientFromOAuthProxyProvider
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CloneClientFromOAuthProxyProviderForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteSessionClient'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: cloneClientFromOAuthProxyProvider remoteSessionClients
+            tags:
+                - remoteSessionClients
+            x-speakeasy-name-override: cloneClientFromOAuthProxyProvider
+            x-speakeasy-react-hook:
+                name: CloneClientFromOAuthProxyProvider
     /rpc/remoteSessionClients.create:
         post:
             description: 'Register a remote_session_client. Two paths: manual (caller supplies client_id and optionally client_secret) or auto-DCR (auto_register=true triggers an outbound RFC 7591 registration against the issuer''s registration_endpoint).'
@@ -22445,6 +22549,120 @@ paths:
             x-speakeasy-name-override: removeOAuthServer
             x-speakeasy-react-hook:
                 name: RemoveOAuthServer
+    /rpc/toolsets.setUserSessionIssuer:
+        post:
+            description: Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
+            operationId: setToolsetUserSessionIssuer
+            parameters:
+                - allowEmptyValue: true
+                  description: The slug of the toolset to link
+                  in: query
+                  name: slug
+                  required: true
+                  schema:
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    maxLength: 40
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetUserSessionIssuerRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Toolset'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: setUserSessionIssuer toolsets
+            tags:
+                - toolsets
+            x-speakeasy-name-override: setUserSessionIssuer
+            x-speakeasy-react-hook:
+                name: SetToolsetUserSessionIssuer
     /rpc/toolsets.update:
         post:
             description: Update a toolset's properties including name, description, and HTTP tools
@@ -26874,6 +27092,26 @@ components:
                     type: string
                     description: Warning message shown to the user in the terminal
             description: Unified result for all Claude Code hook events with proper response structure
+        CloneClientFromOAuthProxyProviderForm:
+            type: object
+            properties:
+                oauth_proxy_provider_id:
+                    type: string
+                    description: The oauth_proxy_provider to read client_id / client_secret from. Must live in the caller's project.
+                    format: uuid
+                remote_session_issuer_id:
+                    type: string
+                    description: The remote_session_issuer the new client is registered with.
+                    format: uuid
+                user_session_issuer_id:
+                    type: string
+                    description: The user_session_issuer the new client is paired with.
+                    format: uuid
+            description: Form for cloning an oauth_proxy_provider's client credentials into a new remote_session_client. The caller supplies the existing oauth_proxy_provider, plus the remote_session_issuer and user_session_issuer to pair the new client with.
+            required:
+                - oauth_proxy_provider_id
+                - remote_session_issuer_id
+                - user_session_issuer_id
         CloneEnvironmentForm:
             type: object
             properties:
@@ -34217,6 +34455,29 @@ components:
             required:
                 - toolset_id
                 - environment_id
+        SetUserSessionIssuerForm:
+            type: object
+            properties:
+                project_slug_input:
+                    type: string
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                user_session_issuer_id:
+                    type: string
+                    description: The user_session_issuer id to link, or null to unlink.
+                    format: uuid
+            required:
+                - slug
+        SetUserSessionIssuerRequestBody:
+            type: object
+            properties:
+                user_session_issuer_id:
+                    type: string
+                    description: The user_session_issuer id to link, or null to unlink.
+                    format: uuid
         SkillBreakdownRow:
             type: object
             properties:
@@ -34894,6 +35155,14 @@ components:
                     type: string
                     description: When the toolset was last updated.
                     format: date-time
+                user_session_issuer_id:
+                    type: string
+                    description: The id of the user_session_issuer wired to this toolset. Set via toolsets.setUserSessionIssuer; null when no USI is linked.
+                user_session_issuer_slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
             required:
                 - id
                 - project_id

@@ -32,7 +32,7 @@ import {
   filterHttpTools,
   filterPromptTools,
 } from "@/lib/toolTypes";
-import { getServerURL } from "@/lib/utils";
+import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useChat } from "@ai-sdk/react";
 import { useInstance } from "@gram/client/react-query/index.js";
 import {
@@ -223,7 +223,7 @@ function ChatInner({
     (tool: { toolUrn: string }, toolsetSlug: string) =>
     async (args: unknown) => {
       const response = await fetch(
-        `${getServerURL()}/rpc/instances.invoke/tool?tool_urn=${tool.toolUrn}&environment_slug=${
+        `${getPlaygroundMcpBaseURL()}/rpc/instances.invoke/tool?tool_urn=${tool.toolUrn}&environment_slug=${
           configRef.current.environmentSlug
         }&chat_id=${chat.id}&toolset_slug=${toolsetSlug}`,
         {

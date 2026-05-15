@@ -11,10 +11,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/stretchr/testify/require"
@@ -91,6 +94,27 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	return newTestMCPServiceWithIdentityResolver(t, nil)
 }
 
+// newTestMCPServiceWithDevIDP launches an in-process dev-idp instance and
+// wires the service with a real *identity.Resolver pointing at it. Use this
+// for tests exercising HandleAuthorize / HandleIDPCallback that need a real
+// BuildAuthorizationURL (redirect_uri shape, oauth21 authorize endpoint)
+// rather than the static-return mockIdentityResolver.
+func newTestMCPServiceWithDevIDP(t *testing.T) (context.Context, *testInstance, *devidptest.Instance) {
+	t.Helper()
+	idp := devidptest.Launch(t, devidptest.LaunchOpts{})
+	resolver := identity.NewResolver(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		cache.NoopCache,
+		idp.OAuth21URL,
+		"devidp-test-client", // non-"client_" prefix routes through idpBaseURL
+		nil,                  // idpClient — BuildAuthorizationURL doesn't touch it
+		nil, nil, nil, nil, nil,
+	)
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, resolver)
+	return ctx, ti, idp
+}
+
 func newTestMCPServiceWithIdentityResolver(t *testing.T, identityResolver mcp.IdentityResolver) (context.Context, *testInstance) {
 	t.Helper()
 
@@ -164,7 +188,8 @@ func newTestMCPServiceWithIdentityResolver(t *testing.T, identityResolver mcp.Id
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter)
 	auditLogger := audit.NewLogger()
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, identityResolver, userSessionSigner)
+	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, conn, enc, guardianPolicy, cacheAdapter, serverURL)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, identityResolver, userSessionSigner, remoteChallengeMgr)
 
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](logger, cacheAdapter, cache.SuffixNone)
 

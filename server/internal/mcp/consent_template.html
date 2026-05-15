@@ -4,118 +4,290 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Authorize {{.ClientName}}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&display=swap"
+      rel="stylesheet"
+    />
     <style>
+      html,
       body {
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        background-color: #f5f5f5;
+        --font-diatype:
+          "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        --font-diatype-mono:
+          "Geist Mono", SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
+
+        --color-base-white: hsl(0 0% 100%);
+        --color-base-black: hsl(0 0% 0%);
+
+        --color-neutral-50: hsl(0, 0%, 99%);
+        --color-neutral-100: hsl(0, 0%, 98%);
+        --color-neutral-200: hsl(0, 0%, 92%);
+        --color-neutral-700: hsl(0, 0%, 33%);
+        --color-neutral-800: hsl(0, 0%, 20%);
+
+        --color-feedback-green-100: hsl(102, 35%, 93%);
+        --color-feedback-green-300: hsl(99, 30%, 73%);
+        --color-feedback-green-700: hsl(105, 24%, 27%);
+        --color-feedback-amber-700: hsl(32, 80%, 36%);
+        --color-brand-blue-600: hsl(215, 71%, 40%);
+
+        --text-default: var(--color-neutral-700);
+        --text-default-inverse: var(--color-neutral-100);
+        --text-default-success: var(--color-feedback-green-700);
+        --text-default-warning: var(--color-feedback-amber-700);
+
+        --fill-neutral-highlight: var(--color-base-black);
+        --fill-neutral-default: var(--color-neutral-800);
+        --fill-neutral-default-inverse: var(--color-neutral-50);
+
+        --bg-surface-primary-default: var(--color-base-white);
+        --bg-surface-secondary-default: var(--color-neutral-100);
+
+        --border-neutral-softest: var(--color-neutral-200);
+
+        --ease-in-out-quad: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+
+        font-family: var(--font-diatype);
+        color: var(--text-default);
+        background: var(--bg-surface-secondary-default);
+
         margin: 0;
-        padding: 20px;
+        padding: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        font-weight: 300;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      .main {
+        flex: 1;
         display: flex;
         justify-content: center;
-        align-items: center;
-        min-height: 100vh;
+        align-items: flex-start;
+        padding: 6rem 1rem;
       }
+
+      @media (min-width: 768px) {
+        .main {
+          padding: 6rem 2rem;
+        }
+      }
+
       .consent-container {
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        padding: 30px;
-        max-width: 440px;
+        background: var(--bg-surface-primary-default);
+        border: solid 1px var(--border-neutral-softest);
+        border-radius: 0.5rem;
+        padding: 2rem;
+        max-width: 30rem;
         width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
       }
+
       .header {
-        text-align: center;
-        margin-bottom: 30px;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
       }
+
       .header h1 {
-        color: #333;
-        margin: 0 0 10px 0;
-        font-size: 24px;
-      }
-      .header p {
-        color: #666;
+        color: var(--fill-neutral-default);
         margin: 0;
-        font-size: 16px;
+        font-size: 1.625rem;
+        font-weight: 300;
+        line-height: 150%;
+        text-wrap-style: balance;
       }
+
+      .header p {
+        margin: 0;
+        font-size: 1rem;
+        line-height: 175%;
+        color: var(--text-default);
+        text-wrap-style: balance;
+      }
+
+      .header strong {
+        font-weight: 500;
+        color: var(--fill-neutral-default);
+      }
+
       .info {
-        background: #f8f9fa;
-        border-radius: 6px;
-        padding: 20px;
-        margin-bottom: 24px;
-        font-size: 14px;
-        color: #444;
+        background: var(--bg-surface-secondary-default);
+        border: solid 1px var(--border-neutral-softest);
+        border-radius: 0.5rem;
+        padding: 1rem 1.25rem;
+        margin: 0;
+        font-size: 0.8125rem;
       }
+
       .info dt {
-        font-weight: 600;
-        color: #333;
-        margin-top: 10px;
+        font-weight: 500;
+        color: var(--fill-neutral-default);
+        margin-top: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        font-size: 0.6875rem;
       }
+
       .info dt:first-child {
         margin-top: 0;
       }
+
       .info dd {
-        margin: 4px 0 0 0;
+        margin: 0.25rem 0 0 0;
         word-break: break-all;
+        font-family: var(--font-diatype-mono);
+        color: var(--text-default);
       }
-      .permissions h3 {
-        margin: 0 0 12px 0;
-        color: #333;
-        font-size: 15px;
+
+      .remotes {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
       }
-      .permissions ul {
-        list-style: none;
-        padding: 0;
-        margin: 0 0 24px 0;
+
+      .remotes h3 {
+        margin: 0;
+        color: var(--fill-neutral-default);
+        font-size: 0.875rem;
+        font-weight: 400;
       }
-      .permissions li {
-        padding: 6px 0;
-        color: #555;
-        font-size: 14px;
+
+      .remote-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.875rem 1rem;
+        border: solid 1px var(--border-neutral-softest);
+        border-radius: 0.5rem;
+        background: var(--fill-neutral-default-inverse);
+        transition: background-color 300ms var(--ease-in-out-quad);
       }
-      .permissions li:before {
-        content: "✓";
-        color: #28a745;
-        font-weight: bold;
-        margin-right: 10px;
+
+      .remote-card:hover {
+        background: var(--bg-surface-primary-default);
       }
+
+      .remote-card .meta {
+        font-size: 0.8125rem;
+        color: var(--text-default);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: flex;
+        flex-direction: column;
+        gap: 0.125rem;
+      }
+
+      .remote-card .meta .issuer {
+        font-weight: 500;
+        color: var(--fill-neutral-default);
+        font-family: var(--font-diatype-mono);
+      }
+
+      .remote-card .meta .state {
+        font-size: 0.6875rem;
+        color: var(--text-default);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+
+      .remote-card .state.connected {
+        color: var(--text-default-success);
+      }
+
+      .remote-card .state.disconnected {
+        color: var(--text-default-warning);
+      }
+
+      .remote-card a.btn-link {
+        padding: 0.5rem 1rem;
+        font-size: calc(1rem - 2px);
+        font-weight: 400;
+        border-radius: 6px;
+        text-decoration: none;
+        text-transform: uppercase;
+        background: var(--fill-neutral-default);
+        color: var(--text-default-inverse);
+        transition: background-color 300ms var(--ease-in-out-quad);
+        white-space: nowrap;
+      }
+
+      .remote-card a.btn-link:hover {
+        background: var(--fill-neutral-highlight);
+      }
+
+      .remote-card a.btn-link.connected {
+        background: var(--color-neutral-200);
+        color: var(--fill-neutral-default);
+      }
+
+      .remote-card a.btn-link.connected:hover {
+        background: var(--color-neutral-200);
+        color: var(--fill-neutral-highlight);
+      }
+
       .actions {
         display: flex;
-        gap: 10px;
-        justify-content: center;
+        gap: 0.75rem;
       }
+
       .actions form {
         flex: 1;
       }
+
       .btn {
         width: 100%;
-        padding: 12px 20px;
-        border: none;
+        padding: 0.75rem 1.25rem;
+        border: solid 1px transparent;
         border-radius: 6px;
-        font-size: 15px;
-        font-weight: 600;
+        font-family: var(--font-diatype);
+        font-size: calc(1rem - 2px);
+        font-weight: 400;
         cursor: pointer;
         text-decoration: none;
         text-align: center;
+        text-transform: uppercase;
+        transition:
+          background-color 300ms var(--ease-in-out-quad),
+          color 300ms var(--ease-in-out-quad),
+          border-color 300ms var(--ease-in-out-quad);
       }
+
       .btn-primary {
-        background-color: #007bff;
-        color: white;
+        background: var(--fill-neutral-default);
+        color: var(--text-default-inverse);
       }
+
       .btn-primary:hover {
-        background-color: #0056b3;
+        background: var(--fill-neutral-highlight);
       }
+
       .btn-secondary {
-        background-color: #6c757d;
-        color: white;
+        background: var(--bg-surface-primary-default);
+        color: var(--fill-neutral-default);
+        border-color: var(--border-neutral-softest);
       }
+
       .btn-secondary:hover {
-        background-color: #545b62;
+        background: var(--bg-surface-secondary-default);
+        color: var(--fill-neutral-highlight);
       }
     </style>
   </head>
   <body>
-    <div class="consent-container">
+    <main class="main">
+      <div class="consent-container">
       <div class="header">
         <h1>Authorize {{.ClientName}}</h1>
         <p>
@@ -133,9 +305,29 @@
         {{end}}
       </dl>
 
+      {{if .RemoteSessionCards}}
+      <div class="remotes">
+        <h3>Connect required services</h3>
+        {{range .RemoteSessionCards}}
+        <div class="remote-card">
+          <div class="meta">
+            <div class="issuer">{{.IssuerSlug}}</div>
+            {{if .Connected}}
+            <div class="state connected">✓ Connected</div>
+            {{else}}
+            <div class="state disconnected">Not connected</div>
+            {{end}}
+          </div>
+          <a class="btn-link {{if .Connected}}connected{{end}}" href="{{.ChallengeURL}}">{{if .Connected}}Reconnect{{else}}Connect{{end}}</a>
+        </div>
+        {{end}}
+      </div>
+      {{end}}
+
       <div class="actions">
         <form method="POST" action="/mcp/{{.MCPSlug}}/connect">
           <input type="hidden" name="state" value="{{.State}}" />
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
           <button
             type="submit"
             name="action"
@@ -147,6 +339,7 @@
         </form>
         <form method="POST" action="/mcp/{{.MCPSlug}}/connect">
           <input type="hidden" name="state" value="{{.State}}" />
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
           <button
             type="submit"
             name="action"
@@ -158,5 +351,6 @@
         </form>
       </div>
     </div>
+    </main>
   </body>
 </html>

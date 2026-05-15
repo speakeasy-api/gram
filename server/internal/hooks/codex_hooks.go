@@ -20,21 +20,31 @@ import (
 )
 
 func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.CodexHookResult, error) {
+	logger := s.logger.With(
+		attr.SlogHookSource("codex"),
+		attr.SlogHookEvent(payload.HookEventName),
+		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
+		attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
+	)
+
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		logger.WarnContext(ctx, "rejected unauthorized codex hook request",
+			attr.SlogEvent("codex_hook_unauthorized"),
+		)
 		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	}
 
-	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Codex: %s", payload.HookEventName),
-		attr.SlogEvent("codex_hook"),
-		attr.SlogValueAny(map[string]any{
-			"hookEventName": payload.HookEventName,
-			"toolName":      payload.ToolName,
-		}),
-	)
-
 	orgID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
+	logger = logger.With(
+		attr.SlogOrganizationID(orgID),
+		attr.SlogProjectID(projectID),
+	)
+
+	logger.InfoContext(ctx, "codex hook received",
+		attr.SlogEvent("codex_hook"),
+	)
 
 	var blockReason, userReason string
 
@@ -49,15 +59,11 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 		if policy != nil {
 			toolName := conv.PtrValOr(payload.ToolName, "")
 			if detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, payload.ToolInput, toolName, orgID); denied {
-				s.logger.InfoContext(ctx, "denying codex tool call: failed gram toolset validation",
+				logger.InfoContext(ctx, "denying codex tool call: failed gram toolset validation",
 					attr.SlogEvent("codex_hook_denied"),
-					attr.SlogValueAny(map[string]any{
-						"hookEventName": payload.HookEventName,
-						"toolName":      toolName,
-						"reason":        detail,
-						"policyID":      policy.ID,
-						"policyName":    policy.Name,
-					}),
+					attr.SlogHookBlockReason(detail),
+					attr.SlogRiskPolicyID(policy.ID),
+					attr.SlogRiskPolicyName(policy.Name),
 				)
 				blockReason = fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 				userReason = renderUserBlockReason(policy.UserMessage, blockReason)

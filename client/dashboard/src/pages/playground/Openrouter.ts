@@ -1,5 +1,5 @@
 import { useProject, useSession } from "@/contexts/Auth";
-import { getServerURL } from "@/lib/utils";
+import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 
 export const useMiniModel = () => {
@@ -15,7 +15,7 @@ export const useModel = (
 
   const openrouter = createOpenRouter({
     apiKey: "this is required",
-    baseURL: getServerURL(),
+    baseURL: getPlaygroundMcpBaseURL(),
     headers: {
       "Gram-Session": session.session,
       "Gram-Project": project.slug,

@@ -21,6 +21,10 @@ type Client struct {
 	// the createRemoteSessionClient endpoint.
 	CreateRemoteSessionClientDoer goahttp.Doer
 
+	// CloneClientFromOAuthProxyProvider Doer is the HTTP client used to make
+	// requests to the cloneClientFromOAuthProxyProvider endpoint.
+	CloneClientFromOAuthProxyProviderDoer goahttp.Doer
+
 	// UpdateRemoteSessionClient Doer is the HTTP client used to make requests to
 	// the updateRemoteSessionClient endpoint.
 	UpdateRemoteSessionClientDoer goahttp.Doer
@@ -58,16 +62,17 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateRemoteSessionClientDoer: doer,
-		UpdateRemoteSessionClientDoer: doer,
-		ListRemoteSessionClientsDoer:  doer,
-		GetRemoteSessionClientDoer:    doer,
-		DeleteRemoteSessionClientDoer: doer,
-		RestoreResponseBody:           restoreBody,
-		scheme:                        scheme,
-		host:                          host,
-		decoder:                       dec,
-		encoder:                       enc,
+		CreateRemoteSessionClientDoer:         doer,
+		CloneClientFromOAuthProxyProviderDoer: doer,
+		UpdateRemoteSessionClientDoer:         doer,
+		ListRemoteSessionClientsDoer:          doer,
+		GetRemoteSessionClientDoer:            doer,
+		DeleteRemoteSessionClientDoer:         doer,
+		RestoreResponseBody:                   restoreBody,
+		scheme:                                scheme,
+		host:                                  host,
+		decoder:                               dec,
+		encoder:                               enc,
 	}
 }
 
@@ -90,6 +95,31 @@ func (c *Client) CreateRemoteSessionClient() goa.Endpoint {
 		resp, err := c.CreateRemoteSessionClientDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("remoteSessionClients", "createRemoteSessionClient", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CloneClientFromOAuthProxyProvider returns an endpoint that makes HTTP
+// requests to the remoteSessionClients service
+// cloneClientFromOAuthProxyProvider server.
+func (c *Client) CloneClientFromOAuthProxyProvider() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCloneClientFromOAuthProxyProviderRequest(c.encoder)
+		decodeResponse = DecodeCloneClientFromOAuthProxyProviderResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCloneClientFromOAuthProxyProviderRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CloneClientFromOAuthProxyProviderDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
 		}
 		return decodeResponse(resp)
 	}
