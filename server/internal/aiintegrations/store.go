@@ -20,7 +20,7 @@ import (
 
 const ProviderCursor = "cursor"
 
-type Client struct {
+type Store struct {
 	logger *slog.Logger
 	db     *pgxpool.Pool
 	repo   *repo.Queries
@@ -39,8 +39,8 @@ type Config struct {
 	UpdatedAt      time.Time
 }
 
-func NewClient(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client) *Client {
-	return &Client{
+func NewStore(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client) *Store {
+	return &Store{
 		logger: logger.With(attr.SlogComponent("aiintegrations")),
 		db:     db,
 		repo:   repo.New(db),
@@ -48,7 +48,7 @@ func NewClient(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client) *C
 	}
 }
 
-func NormalizeProvider(provider string) (string, error) {
+func normalizeProvider(provider string) (string, error) {
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	if provider == "" {
 		return "", oops.E(oops.CodeInvalid, nil, "provider is required")
@@ -59,13 +59,13 @@ func NormalizeProvider(provider string) (string, error) {
 	return provider, nil
 }
 
-func (c *Client) LoadForOrgAndProviderRow(ctx context.Context, orgID string, provider string) (Config, *repo.GetConfigByOrgAndProviderRow, error) {
-	provider, err := NormalizeProvider(provider)
+func (s *Store) loadForOrgAndProviderRow(ctx context.Context, orgID string, provider string) (Config, *repo.GetConfigByOrgAndProviderRow, error) {
+	provider, err := normalizeProvider(provider)
 	if err != nil {
 		return emptyConfig(orgID, provider), nil, err
 	}
 
-	row, err := c.repo.GetConfigByOrgAndProvider(ctx, repo.GetConfigByOrgAndProviderParams{
+	row, err := s.repo.GetConfigByOrgAndProvider(ctx, repo.GetConfigByOrgAndProviderParams{
 		OrganizationID: orgID,
 		Provider:       provider,
 	})
@@ -76,15 +76,15 @@ func (c *Client) LoadForOrgAndProviderRow(ctx context.Context, orgID string, pro
 		return emptyConfig(orgID, provider), nil, oops.E(oops.CodeUnexpected, err, "failed to load ai integration config")
 	}
 
-	cfg, err := c.configFromGetRow(row)
+	cfg, err := s.configFromGetRow(row)
 	if err != nil {
 		return emptyConfig(orgID, provider), nil, err
 	}
 	return cfg, &row, nil
 }
 
-func (c *Client) UpsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string, apiKey string, enabled bool) (Config, *repo.AiIntegrationConfig, error) {
-	provider, err := NormalizeProvider(provider)
+func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string, apiKey string, enabled bool) (Config, *repo.AiIntegrationConfig, error) {
+	provider, err := normalizeProvider(provider)
 	if err != nil {
 		return emptyConfig(orgID, provider), nil, err
 	}
@@ -98,7 +98,7 @@ func (c *Client) UpsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string,
 		return emptyConfig(orgID, provider), nil, oops.E(oops.CodeUnexpected, err, "failed to resolve ai integration project")
 	}
 
-	encrypted, err := c.encryptAPIKey(apiKey)
+	encrypted, err := s.encryptAPIKey(apiKey)
 	if err != nil {
 		return emptyConfig(orgID, provider), nil, err
 	}
@@ -119,15 +119,15 @@ func (c *Client) UpsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string,
 		return emptyConfig(orgID, provider), nil, oops.E(oops.CodeUnexpected, err, "failed to save ai integration sync")
 	}
 
-	cfg, err := c.configFromRows(row, syncRow.LastPolledAt)
+	cfg, err := s.configFromRows(row, syncRow.LastPolledAt)
 	if err != nil {
 		return emptyConfig(orgID, provider), nil, err
 	}
 	return cfg, &row, nil
 }
 
-func (c *Client) SoftDeleteWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string) error {
-	provider, err := NormalizeProvider(provider)
+func (s *Store) softDeleteWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string) error {
+	provider, err := normalizeProvider(provider)
 	if err != nil {
 		return err
 	}
@@ -140,22 +140,22 @@ func (c *Client) SoftDeleteWithTx(ctx context.Context, dbtx repo.DBTX, orgID str
 	return nil
 }
 
-func (c *Client) ListEnabledConfigsByProvider(ctx context.Context, provider string) ([]Config, error) {
-	provider, err := NormalizeProvider(provider)
+func (s *Store) ListEnabledConfigsByProvider(ctx context.Context, provider string) ([]Config, error) {
+	provider, err := normalizeProvider(provider)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := c.repo.ListEnabledConfigsByProvider(ctx, provider)
+	rows, err := s.repo.ListEnabledConfigsByProvider(ctx, provider)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list ai integration configs")
 	}
 
 	configs := make([]Config, 0, len(rows))
 	for _, row := range rows {
-		cfg, err := c.configFromListRow(row)
+		cfg, err := s.configFromListRow(row)
 		if err != nil {
-			c.logger.WarnContext(ctx, "failed to decrypt ai integration config",
+			s.logger.WarnContext(ctx, "failed to decrypt ai integration config",
 				attr.SlogError(err),
 				attr.SlogOrganizationID(row.OrganizationID),
 				attr.SlogProjectID(row.ProjectID.String()),
@@ -167,8 +167,8 @@ func (c *Client) ListEnabledConfigsByProvider(ctx context.Context, provider stri
 	return configs, nil
 }
 
-func (c *Client) UpdateSyncLastPolledAt(ctx context.Context, configID uuid.UUID, t time.Time) error {
-	if err := c.repo.UpdateSyncLastPolledAt(ctx, repo.UpdateSyncLastPolledAtParams{
+func (s *Store) UpdateSyncLastPolledAt(ctx context.Context, configID uuid.UUID, t time.Time) error {
+	if err := s.repo.UpdateSyncLastPolledAt(ctx, repo.UpdateSyncLastPolledAtParams{
 		AiIntegrationConfigID: configID,
 		LastPolledAt: pgtype.Timestamptz{
 			Time:  t.UTC(),
@@ -180,8 +180,8 @@ func (c *Client) UpdateSyncLastPolledAt(ctx context.Context, configID uuid.UUID,
 	return nil
 }
 
-func (c *Client) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config, error) {
-	apiKey, err := c.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config, error) {
+	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -198,8 +198,8 @@ func (c *Client) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config
 	}, nil
 }
 
-func (c *Client) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Config, error) {
-	apiKey, err := c.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Config, error) {
+	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -216,8 +216,8 @@ func (c *Client) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Co
 	}, nil
 }
 
-func (c *Client) configFromRows(row repo.AiIntegrationConfig, lastPolledAt pgtype.Timestamptz) (Config, error) {
-	apiKey, err := c.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromRows(row repo.AiIntegrationConfig, lastPolledAt pgtype.Timestamptz) (Config, error) {
+	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -234,23 +234,23 @@ func (c *Client) configFromRows(row repo.AiIntegrationConfig, lastPolledAt pgtyp
 	}, nil
 }
 
-func (c *Client) encryptAPIKey(apiKey string) (pgtype.Text, error) {
+func (s *Store) encryptAPIKey(apiKey string) (pgtype.Text, error) {
 	apiKey = strings.TrimSpace(apiKey)
 	if apiKey == "" {
 		return pgtype.Text{}, oops.E(oops.CodeInvalid, nil, "api_key is required")
 	}
-	ct, err := c.enc.Encrypt([]byte(apiKey))
+	ct, err := s.enc.Encrypt([]byte(apiKey))
 	if err != nil {
 		return pgtype.Text{}, oops.E(oops.CodeUnexpected, err, "encrypt ai integration api key")
 	}
 	return pgtype.Text{String: ct, Valid: true}, nil
 }
 
-func (c *Client) decryptAPIKey(stored pgtype.Text) (string, error) {
+func (s *Store) decryptAPIKey(stored pgtype.Text) (string, error) {
 	if !stored.Valid || stored.String == "" {
 		return "", nil
 	}
-	plaintext, err := c.enc.Decrypt(stored.String)
+	plaintext, err := s.enc.Decrypt(stored.String)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "decrypt ai integration api key")
 	}

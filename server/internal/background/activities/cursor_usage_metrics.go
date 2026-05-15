@@ -36,7 +36,7 @@ var (
 type CursorUsageMetrics struct {
 	logger          *slog.Logger
 	db              *pgxpool.Pool
-	integrations    *aiintegrations.Client
+	integrations    *aiintegrations.Store
 	apiClient       *cursorapi.Client
 	telemetryLogger *telemetry.Logger
 	telemetryRepo   *telemetryrepo.Queries
@@ -46,7 +46,7 @@ func NewCursorUsageMetrics(logger *slog.Logger, db *pgxpool.Pool, encryptionClie
 	return &CursorUsageMetrics{
 		logger:          logger.With(attr.SlogComponent("cursor_usage_metrics")),
 		db:              db,
-		integrations:    aiintegrations.NewClient(logger, db, encryptionClient),
+		integrations:    aiintegrations.NewStore(logger, db, encryptionClient),
 		apiClient:       cursorapi.New(),
 		telemetryLogger: telemetryLogger,
 		telemetryRepo:   telemetryRepo,

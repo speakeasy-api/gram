@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -33,7 +34,7 @@ type Service struct {
 	auth   *auth.Auth
 	authz  *authz.Engine
 	audit  *audit.Logger
-	client *Client
+	store  *Store
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -46,7 +47,7 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	client *Client,
+	encryptionClient *encryption.Client,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("aiintegrations.api"))
 	return &Service{
@@ -56,7 +57,7 @@ func NewService(
 		auth:   auth.New(logger, db, sessions, authzEngine),
 		authz:  authzEngine,
 		audit:  auditLogger,
-		client: client,
+		store:  NewStore(logger, db, encryptionClient),
 	}
 }
 
@@ -83,12 +84,12 @@ func (s *Service) GetConfig(ctx context.Context, payload *gen.GetConfigPayload) 
 		return nil, err
 	}
 
-	provider, err := NormalizeProvider(payload.Provider)
+	provider, err := normalizeProvider(payload.Provider)
 	if err != nil {
 		return nil, err
 	}
 
-	cfg, row, err := s.client.LoadForOrgAndProviderRow(ctx, authCtx.ActiveOrganizationID, provider)
+	cfg, row, err := s.store.loadForOrgAndProviderRow(ctx, authCtx.ActiveOrganizationID, provider)
 	if err != nil {
 		return nil, err
 	}
@@ -107,14 +108,14 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 		return nil, err
 	}
 
-	provider, err := NormalizeProvider(payload.Provider)
+	provider, err := normalizeProvider(payload.Provider)
 	if err != nil {
 		return nil, err
 	}
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogUserID(authCtx.UserID))
 
-	before, beforeRow, err := s.client.LoadForOrgAndProviderRow(ctx, authCtx.ActiveOrganizationID, provider)
+	before, beforeRow, err := s.store.loadForOrgAndProviderRow(ctx, authCtx.ActiveOrganizationID, provider)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +133,7 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	cfg, row, err := s.client.UpsertWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider, apiKey, payload.Enabled)
+	cfg, row, err := s.store.upsertWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider, apiKey, payload.Enabled)
 	if err != nil {
 		return nil, err
 	}
@@ -173,14 +174,14 @@ func (s *Service) DeleteConfig(ctx context.Context, payload *gen.DeleteConfigPay
 		return err
 	}
 
-	provider, err := NormalizeProvider(payload.Provider)
+	provider, err := normalizeProvider(payload.Provider)
 	if err != nil {
 		return err
 	}
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogUserID(authCtx.UserID))
 
-	cfg, row, err := s.client.LoadForOrgAndProviderRow(ctx, authCtx.ActiveOrganizationID, provider)
+	cfg, row, err := s.store.loadForOrgAndProviderRow(ctx, authCtx.ActiveOrganizationID, provider)
 	if err != nil {
 		return err
 	}
@@ -194,7 +195,7 @@ func (s *Service) DeleteConfig(ctx context.Context, payload *gen.DeleteConfigPay
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	if err := s.client.SoftDeleteWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider); err != nil {
+	if err := s.store.softDeleteWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider); err != nil {
 		return err
 	}
 
