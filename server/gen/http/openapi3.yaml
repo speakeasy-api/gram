@@ -32076,6 +32076,10 @@ components:
                 id:
                     type: string
                     description: Gram relationship row ID.
+                last_login:
+                    type: string
+                    description: Timestamp of the user's most recent login.
+                    format: date-time
                 name:
                     type: string
                     description: User display name.

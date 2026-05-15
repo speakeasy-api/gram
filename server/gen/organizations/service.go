@@ -178,6 +178,8 @@ type OrganizationUser struct {
 	WorkosMembershipID *string
 	CreatedAt          string
 	UpdatedAt          string
+	// Timestamp of the user's most recent login.
+	LastLogin *string
 }
 
 // RemoveUserPayload is the payload type of the organizations service

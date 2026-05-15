@@ -24,6 +24,7 @@ import {
   useRevokeInviteMutation,
   useRemoveOrganizationUserMutation,
 } from "@gram/client/react-query";
+import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import {
   OrganizationUser,
@@ -92,14 +93,27 @@ export function TeamInner() {
   const { data: membersData } = useListOrganizationUsersSuspense();
   const { data: invitesData } = useListInvitesSuspense();
   const { data: rolesData } = useRoles();
+  const { data: accessMembersData } = useMembers();
 
   const members = membersData?.users ?? [];
   const invites = invitesData?.invitations ?? [];
   const roles = rolesData?.roles ?? [];
+  const accessMembers = accessMembersData?.members ?? [];
   const defaultRoleId = roles.find(
     (r) => r.name.toLowerCase() === "member",
   )?.id;
   const effectiveInviteRoleId = inviteRoleId ?? defaultRoleId;
+
+  // Cross-reference AccessMember (has roleId) by user ID
+  const roleByUserId = new Map(accessMembers.map((m) => [m.id, m.roleId]));
+  const getRoleName = (roleId: string) =>
+    roles.find((r) => r.id === roleId)?.name ?? "Unknown";
+
+  // Identify admin role and count admins for last-admin protection
+  const adminRoleId = roles.find((r) => r.name.toLowerCase() === "admin")?.id;
+  const adminCount = adminRoleId
+    ? accessMembers.filter((m) => m.roleId === adminRoleId).length
+    : 0;
 
   const invalidateTeamData = async () => {
     await Promise.all([
@@ -276,11 +290,57 @@ export function TeamInner() {
       ),
     },
     {
+      key: "role",
+      header: "Role",
+      width: "140px",
+      render: (member) => {
+        const roleId = roleByUserId.get(member.userId);
+        return (
+          <Type variant="body" className="text-muted-foreground">
+            {roleId ? getRoleName(roleId) : "—"}
+          </Type>
+        );
+      },
+    },
+    {
+      key: "lastLogin",
+      header: "Last active",
+      width: "200px",
+      render: (member) => (
+        <Type
+          variant="body"
+          className="text-muted-foreground whitespace-nowrap"
+        >
+          {member.lastLogin ? (
+            <HumanizeDateTime date={member.lastLogin} />
+          ) : (
+            <span className="text-muted-foreground/50">—</span>
+          )}
+        </Type>
+      ),
+    },
+    {
       key: "actions",
       header: "",
       width: "80px",
-      render: (member) =>
-        member.email !== user.email ? (
+      render: (member) => {
+        const memberRoleId = roleByUserId.get(member.userId);
+        const isLastAdmin =
+          adminRoleId != null &&
+          memberRoleId === adminRoleId &&
+          adminCount <= 1;
+
+        if (member.email === user.email) {
+          return (
+            <Type variant="body" className="text-muted-foreground text-sm">
+              You
+            </Type>
+          );
+        }
+
+        if (isLastAdmin) return null;
+
+        return (
           <RequireScope scope="org:admin" level="component">
             <Button
               variant="tertiary"
@@ -294,11 +354,8 @@ export function TeamInner() {
               <Button.Text className="sr-only">Remove member</Button.Text>
             </Button>
           </RequireScope>
-        ) : (
-          <Type variant="body" className="text-muted-foreground text-sm">
-            You
-          </Type>
-        ),
+        );
+      },
     },
   ];
 
@@ -544,6 +601,9 @@ export function TeamInner() {
               autoCapitalize="off"
               autoComplete="off"
               autoCorrect="off"
+              data-1p-ignore
+              data-lpignore="true"
+              data-bwignore
             />
             {roles.length > 0 && (
               <AnyField

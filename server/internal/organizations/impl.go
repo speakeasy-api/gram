@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -28,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -40,7 +42,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/speakeasy-api/gram/server/internal/users"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	svix "github.com/svix/svix-webhooks/go"
 	"github.com/svix/svix-webhooks/go/models"
@@ -54,51 +55,61 @@ const (
 // *workos.Client implements it.
 type OrganizationProvider interface {
 	DeleteOrganizationMembership(ctx context.Context, workosMembershipID string) error
+	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
 	CreatePasswordlessSession(ctx context.Context, opts workos.CreatePasswordlessSessionOpts) (*workos.PasswordlessSession, error)
 	AuthenticateWithInviteLink(ctx context.Context, code string) (*workos.InviteLinkProfile, error)
+	ListRoles(ctx context.Context, workosOrgID string) ([]workos.Role, error)
 }
 
 var _ OrganizationProvider = (*workos.Client)(nil)
+
+// UserProvisioner handles user upsert logic shared between the normal auth
+// callback and the invite acceptance flow.
+type UserProvisioner interface {
+	UpsertUserFromIDP(ctx context.Context, idpUser *identity.IDPUserInfo) (string, error)
+}
 
 type orgFeatureChecker interface {
 	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
 }
 
 type Service struct {
-	logger   *slog.Logger
-	tracer   trace.Tracer
-	db       *pgxpool.Pool
-	auth     *auth.Auth
-	authz    *authz.Engine
-	sessions *sessions.Manager
-	orgs     OrganizationProvider
-	features orgFeatureChecker
-	email    *email.Service
-	siteURL  string // dashboard URL; used for invite callback RedirectURI and post-callback redirect
-	audit    *audit.Logger
-	svix     *svix.Svix
+	logger        *slog.Logger
+	tracer        trace.Tracer
+	db            *pgxpool.Pool
+	auth          *auth.Auth
+	authz         *authz.Engine
+	sessions      *sessions.Manager
+	orgs          OrganizationProvider
+	userProvision UserProvisioner
+	features      orgFeatureChecker
+	email         *email.Service
+	siteURL       string // dashboard URL; used for invite callback RedirectURI and post-callback redirect
+	audit         *audit.Logger
+	svix          *svix.Svix
 }
 
 var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, features orgFeatureChecker, authzEngine *authz.Engine, emailService *email.Service, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, userProvision UserProvisioner, features orgFeatureChecker, authzEngine *authz.Engine, emailService *email.Service, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 
 	return &Service{
-		logger:   logger,
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/organizations"),
-		db:       db,
-		auth:     auth.New(logger, db, sessionMgr, authzEngine),
-		authz:    authzEngine,
-		sessions: sessionMgr,
-		orgs:     orgs,
-		features: features,
-		email:    emailService,
-		siteURL:  siteURL,
-		audit:    auditLogger,
-		svix:     svix,
+		logger:        logger,
+		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/organizations"),
+		db:            db,
+		auth:          auth.New(logger, db, sessionMgr, authzEngine),
+		authz:         authzEngine,
+		sessions:      sessionMgr,
+		orgs:          orgs,
+		userProvision: userProvision,
+		features:      features,
+		email:         emailService,
+		siteURL:       siteURL,
+		audit:         auditLogger,
+		svix:          svix,
 	}
 }
 
@@ -173,9 +184,30 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		return nil, oops.E(oops.CodeUnexpected, err, "generate invite token").Log(ctx, logger)
 	}
 
+	// Resolve the WorkOS role ID sent by the dashboard into a WorkOS role slug
+	// so the invite stores the slug (needed by CreateOrganizationMembership and
+	// SyncUserOrganizationRoleAssignments at acceptance time).
 	roleSlug := pgtype.Text{String: "", Valid: false}
 	if payload.RoleID != nil && *payload.RoleID != "" {
-		roleSlug = conv.ToPGText(*payload.RoleID)
+		org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, logger)
+		}
+		if org.WorkosID.Valid && org.WorkosID.String != "" {
+			roles, err := s.orgs.ListRoles(ctx, org.WorkosID.String)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "list roles for invite").Log(ctx, logger)
+			}
+			for _, r := range roles {
+				if r.ID == *payload.RoleID {
+					roleSlug = conv.ToPGText(r.Slug)
+					break
+				}
+			}
+			if !roleSlug.Valid {
+				return nil, oops.E(oops.CodeBadRequest, nil, "role not found").Log(ctx, logger)
+			}
+		}
 	}
 
 	row, err := orgrepo.New(s.db).CreateInvitation(ctx, orgrepo.CreateInvitationParams{
@@ -696,9 +728,11 @@ func dbInvitationToGen(row *orgrepo.OrganizationInvitation, inviterUserID *strin
 // invite token, accept the invite, add the user to the org, then redirect to the
 // dashboard where the normal login flow will create a session for the invitee.
 func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	ctx, span := s.tracer.Start(r.Context(), "organizations.handleInviteCallback")
+	defer span.End()
 
 	redirectError := func(msg string) {
+		span.SetStatus(codes.Error, msg)
 		http.Redirect(w, r, s.siteURL+"?signin_error="+url.QueryEscape(msg), http.StatusTemporaryRedirect)
 	}
 
@@ -713,9 +747,14 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	profile, err := s.orgs.AuthenticateWithInviteLink(ctx, code)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: code exchange failed", attr.SlogError(err))
+		span.RecordError(err)
 		redirectError("invite link expired or already used")
 		return
 	}
+	span.SetAttributes(
+		attr.WorkOSUserID(profile.ID),
+		attr.AuthUserEmail(profile.Email),
+	)
 
 	// Extract invite_token from the state parameter.
 	stateParam := r.URL.Query().Get("state")
@@ -759,40 +798,68 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find or create the user in Gram. The invitee is already authenticated
-	// via the magic link — we have their verified email and name from the
-	// SSO profile, so we can provision them directly.
-	userQueries := userrepo.New(s.db)
-	var gramUserID string
-	if existingUser, lookupErr := userQueries.GetUserByEmail(ctx, inviteeEmail); lookupErr == nil {
-		gramUserID = existingUser.ID
-	} else {
-		// User doesn't exist yet — create them from the SSO profile.
-		displayName := strings.TrimSpace(profile.FirstName + " " + profile.LastName)
-		if displayName == "" {
-			displayName = inviteeEmail
-		}
-		newUserID := users.UserIDFromWorkOSID(profile.ID)
-		upserted, upsertErr := userQueries.UpsertUser(ctx, userrepo.UpsertUserParams{
-			ID:          newUserID,
-			Email:       inviteeEmail,
-			DisplayName: displayName,
-			PhotoUrl:    pgtype.Text{String: "", Valid: false},
-			Admin:       false,
-		})
-		if upsertErr != nil {
-			s.logger.ErrorContext(ctx, "invite callback: failed to create user", attr.SlogError(upsertErr))
-			redirectError("failed to create user account")
-			return
-		}
-		gramUserID = upserted.ID
+	// Provision the user via the shared identity upsert path. This handles
+	// user creation, workos_id stamping, external_id sync, and PostHog events
+	// — the same logic the normal auth callback uses.
+	displayName := strings.TrimSpace(profile.FirstName + " " + profile.LastName)
+	if displayName == "" {
+		displayName = inviteeEmail
 	}
+	gramUserID, err := s.userProvision.UpsertUserFromIDP(ctx, &identity.IDPUserInfo{
+		Sub:   profile.ID,
+		Email: inviteeEmail,
+		Name:  displayName,
+	})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "invite callback: failed to provision user", attr.SlogError(err))
+		span.RecordError(err)
+		redirectError("failed to create user account")
+		return
+	}
+	span.SetAttributes(
+		attr.UserID(gramUserID),
+		attr.OrganizationID(invite.OrganizationID),
+	)
 
 	if _, err := repo.UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
 		OrganizationID: invite.OrganizationID,
 		UserID:         conv.ToPGText(gramUserID),
 	}); err != nil {
 		s.logger.WarnContext(ctx, "invite callback: failed to create org membership", attr.SlogError(err))
+	}
+
+	// Create the WorkOS organization membership so ListMembers returns the
+	// invited user with the correct role.
+	var workosMembershipID string
+	if invite.RoleSlug.Valid {
+		org, err := repo.GetOrganizationMetadata(ctx, invite.OrganizationID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "invite callback: failed to get org metadata for WorkOS membership", attr.SlogError(err))
+		} else if org.WorkosID.Valid && org.WorkosID.String != "" {
+			mid, err := s.orgs.CreateOrganizationMembership(ctx, profile.ID, org.WorkosID.String, invite.RoleSlug.String)
+			if err != nil {
+				s.logger.WarnContext(ctx, "invite callback: failed to create WorkOS membership", attr.SlogError(err))
+			} else {
+				workosMembershipID = mid
+			}
+		}
+	}
+
+	// Eagerly sync role assignments so the invited user gets RBAC grants
+	// immediately. The background sync job will eventually do this too, but
+	// it isn't running in all environments yet.
+	if invite.RoleSlug.Valid {
+		if err := repo.SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
+			OrganizationID:     invite.OrganizationID,
+			WorkosUserID:       profile.ID,
+			WorkosRoleSlugs:    []string{invite.RoleSlug.String},
+			UserID:             conv.ToPGText(gramUserID),
+			WorkosMembershipID: conv.ToPGText(workosMembershipID),
+			WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Now(), Valid: true},
+			WorkosLastEventID:  pgtype.Text{},
+		}); err != nil {
+			s.logger.WarnContext(ctx, "invite callback: failed to sync role assignments", attr.SlogError(err))
+		}
 	}
 
 	// Create a Gram session directly — no need to bounce through an external
@@ -839,6 +906,11 @@ func organizationUserToGen(row *orgrepo.ListOrganizationUsersRow) *gen.Organizat
 	if row.UpdatedAt.Valid {
 		updatedAt = row.UpdatedAt.Time.UTC().Format(time.RFC3339)
 	}
+	var lastLogin *string
+	if row.UserLastLogin.Valid {
+		s := row.UserLastLogin.Time.UTC().Format(time.RFC3339)
+		lastLogin = &s
+	}
 	return &gen.OrganizationUser{
 		ID:                 strconv.FormatInt(row.ID, 10),
 		OrganizationID:     row.OrganizationID,
@@ -849,6 +921,7 @@ func organizationUserToGen(row *orgrepo.ListOrganizationUsersRow) *gen.Organizat
 		WorkosMembershipID: conv.FromPGText[string](row.WorkosMembershipID),
 		CreatedAt:          createdAt,
 		UpdatedAt:          updatedAt,
+		LastLogin:          lastLogin,
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -49,12 +50,39 @@ func (m *MockOrganizationProvider) AuthenticateWithInviteLink(ctx context.Contex
 	return nil, nil
 }
 
+func (m *MockOrganizationProvider) CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error) {
+	args := m.Called(ctx, workosUserID, workosOrgID, roleSlug)
+	if err := args.Error(1); err != nil {
+		return "", fmt.Errorf("mock CreateOrganizationMembership: %w", err)
+	}
+	return args.String(0), nil
+}
+
+func (m *MockOrganizationProvider) ListRoles(ctx context.Context, workosOrgID string) ([]thirdpartyworkos.Role, error) {
+	args := m.Called(ctx, workosOrgID)
+	if err := args.Error(1); err != nil {
+		return nil, fmt.Errorf("mock ListRoles: %w", err)
+	}
+	if roles, ok := args.Get(0).([]thirdpartyworkos.Role); ok {
+		return roles, nil
+	}
+	return nil, nil
+}
+
 func (m *MockOrganizationProvider) DeleteOrganizationMembership(ctx context.Context, workosMembershipID string) error {
 	args := m.Called(ctx, workosMembershipID)
 	if err := args.Error(0); err != nil {
 		return fmt.Errorf("mock DeleteOrganizationMembership: %w", err)
 	}
 	return nil
+}
+
+// stubUserProvisioner is a no-op implementation of UserProvisioner for tests
+// that don't exercise the invite callback HTTP handler.
+type stubUserProvisioner struct{}
+
+func (stubUserProvisioner) UpsertUserFromIDP(_ context.Context, idpUser *identity.IDPUserInfo) (string, error) {
+	return idpUser.Sub, nil
 }
 
 func mockErr(args mock.Arguments, index int) error {

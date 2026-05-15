@@ -541,7 +541,8 @@ SELECT
   our.id, our.organization_id, our.user_id, our.workos_user_id, our.workos_membership_id, our.workos_updated_at, our.workos_last_event_id, our.created_at, our.updated_at, our.deleted_at, our.deleted,
   u.email AS user_email,
   u.display_name AS user_display_name,
-  u.photo_url AS user_photo_url
+  u.photo_url AS user_photo_url,
+  u.last_login AS user_last_login
 FROM organization_user_relationships our
 JOIN users u ON u.id = our.user_id
 WHERE our.organization_id = $1
@@ -563,6 +564,7 @@ type ListOrganizationUsersRow struct {
 	UserEmail          string
 	UserDisplayName    string
 	UserPhotoUrl       pgtype.Text
+	UserLastLogin      pgtype.Timestamptz
 }
 
 func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID string) ([]ListOrganizationUsersRow, error) {
@@ -589,6 +591,7 @@ func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID stri
 			&i.UserEmail,
 			&i.UserDisplayName,
 			&i.UserPhotoUrl,
+			&i.UserLastLogin,
 		); err != nil {
 			return nil, err
 		}
@@ -1092,7 +1095,9 @@ INSERT INTO organization_user_relationships (
     $2
 )
 ON CONFLICT (organization_id, user_id) DO UPDATE SET
-    updated_at = clock_timestamp()
+    updated_at = clock_timestamp(),
+    deleted_at = NULL,
+    created_at = CASE WHEN organization_user_relationships.deleted_at IS NOT NULL THEN clock_timestamp() ELSE organization_user_relationships.created_at END
 RETURNING id, organization_id, user_id, workos_user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
 `
 

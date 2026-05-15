@@ -1795,6 +1795,8 @@ type OrganizationUserResponseBody struct {
 	WorkosMembershipID *string `form:"workos_membership_id,omitempty" json:"workos_membership_id,omitempty" xml:"workos_membership_id,omitempty"`
 	CreatedAt          string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt          string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Timestamp of the user's most recent login.
+	LastLogin *string `form:"last_login,omitempty" json:"last_login,omitempty" xml:"last_login,omitempty"`
 }
 
 // NewGetResponseBody builds the HTTP response body from the result of the

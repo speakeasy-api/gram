@@ -351,7 +351,7 @@ func (s *StubClient) CreateOrganization(_ context.Context, name, gramOrgID strin
 	return workosOrgID, nil
 }
 
-func (s *StubClient) CreateOrganizationMembership(_ context.Context, workosUserID, workosOrgID string) error {
+func (s *StubClient) CreateOrganizationMembership(_ context.Context, workosUserID, workosOrgID, roleSlug string) (string, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -363,13 +363,13 @@ func (s *StubClient) CreateOrganizationMembership(_ context.Context, workosUserI
 		UserID:         workosUserID,
 		OrganizationID: workosOrgID,
 		Organization:   "",
-		RoleSlug:       "admin",
+		RoleSlug:       roleSlug,
 		Status:         "active",
 		CreatedAt:      "",
 		UpdatedAt:      "",
 	}
 
-	return nil
+	return membershipID, nil
 }
 
 func (s *StubClient) ListOrgUsers(_ context.Context, orgID string) (map[string]User, error) {

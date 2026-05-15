@@ -1815,6 +1815,7 @@ func marshalOrganizationsOrganizationUserToOrganizationUserResponseBody(v *organ
 		WorkosMembershipID: v.WorkosMembershipID,
 		CreatedAt:          v.CreatedAt,
 		UpdatedAt:          v.UpdatedAt,
+		LastLogin:          v.LastLogin,
 	}
 
 	return res

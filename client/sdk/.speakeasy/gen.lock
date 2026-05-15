@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 5a995547f21749da25af3dd79c09bdfe
+  docChecksum: 0ed804aaf32a6ec74e50eaeffd8096d7
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -575,7 +575,7 @@ trackedFiles:
   docs/models/components/organizationinvitation.md:
     last_write_checksum: sha1:1f75cd944a8e3e459e2700c8bf92adcd6d199600
   docs/models/components/organizationuser.md:
-    last_write_checksum: sha1:982e7f6d036e03381dc82ff336ab5c6bf6a3f20e
+    last_write_checksum: sha1:f9c65c3ae8b5afc67f32af3d91b60052132f4413
   docs/models/components/otelattribute.md:
     last_write_checksum: sha1:cae5e6f364e5e3dc3aa0b6a49ca6d0075df7ec13
   docs/models/components/otelattributevalue.md:
@@ -4139,7 +4139,7 @@ trackedFiles:
   src/models/components/organizationinvitation.ts:
     last_write_checksum: sha1:5b4db2f1d5d14f39989f6961487468a11ebd7caf
   src/models/components/organizationuser.ts:
-    last_write_checksum: sha1:5fbeb489e54a940b59403d1576dcfe43266a72ea
+    last_write_checksum: sha1:89f515772b4c31f2d64911762b37efe2664541d2
   src/models/components/otelattribute.ts:
     last_write_checksum: sha1:c12d9f7385d4a54ac7113e78c497ae708ff8eccc
   src/models/components/otelattributevalue.ts:

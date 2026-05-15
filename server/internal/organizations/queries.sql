@@ -55,7 +55,9 @@ INSERT INTO organization_user_relationships (
     @user_id
 )
 ON CONFLICT (organization_id, user_id) DO UPDATE SET
-    updated_at = clock_timestamp()
+    updated_at = clock_timestamp(),
+    deleted_at = NULL,
+    created_at = CASE WHEN organization_user_relationships.deleted_at IS NOT NULL THEN clock_timestamp() ELSE organization_user_relationships.created_at END
 RETURNING *;
 
 -- name: HasOrganizationUserRelationship :one
@@ -79,7 +81,8 @@ SELECT
   our.*,
   u.email AS user_email,
   u.display_name AS user_display_name,
-  u.photo_url AS user_photo_url
+  u.photo_url AS user_photo_url,
+  u.last_login AS user_last_login
 FROM organization_user_relationships our
 JOIN users u ON u.id = our.user_id
 WHERE our.organization_id = @organization_id

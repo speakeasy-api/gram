@@ -8,6 +8,7 @@
 //	GET  /user_management/users                                              (?email, ?organization_id, ?after, ?limit)
 //	GET  /organizations/{id}
 //	GET  /user_management/organization_memberships                           (?user_id, ?organization_id, ?after, ?limit)
+//	POST /user_management/organization_memberships                          ({user_id, organization_id, role_slug})
 //	PUT  /user_management/organization_memberships/{id}                      ({role_slug})
 //	DELETE /user_management/organization_memberships/{id}
 //	POST   /user_management/invitations                                      (send)
@@ -71,6 +72,7 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /organizations/{id}", h.handleWorkosGetOrganization)
 
 	mux.HandleFunc("GET /user_management/organization_memberships", h.handleWorkosListMemberships)
+	mux.HandleFunc("POST /user_management/organization_memberships", h.handleWorkosCreateMembership)
 	mux.HandleFunc("PUT /user_management/organization_memberships/{id}", h.handleWorkosUpdateMembership)
 	mux.HandleFunc("DELETE /user_management/organization_memberships/{id}", h.handleWorkosDeleteMembership)
 
@@ -158,7 +160,7 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 	sessionID := "mock_session_" + randomToken()
 	resp := map[string]any{
 		"user": map[string]any{
-			"id":                  user.ID.String(),
+			"id":                  workosUserID(user.ID),
 			"first_name":          first,
 			"last_name":           last,
 			"email":               user.Email,
@@ -324,17 +326,35 @@ func (h *Handler) handleSSOToken(w http.ResponseWriter, r *http.Request) {
 			writeWorkosError(w, http.StatusInternalServerError, "failed to resolve user")
 			return
 		}
+
+		// Simulate what real WorkOS does on invite acceptance: create the
+		// membership so ListMembers returns the invited user with a role.
+		orgs, err := queries.ListOrganizations(ctx, repo.ListOrganizationsParams{
+			After:   uuid.Nil,
+			MaxRows: 1,
+		})
+		if err == nil && len(orgs) > 0 {
+			if _, err := queries.CreateMembership(ctx, repo.CreateMembershipParams{
+				ID:             uuid.New(),
+				UserID:         user.ID,
+				OrganizationID: orgs[0].ID,
+				Role:           sql.NullString{String: "member", Valid: true},
+			}); err != nil {
+				h.logger.WarnContext(ctx, "sso token: failed to create membership for passwordless user", slog.Any("error", err))
+			}
+		}
+
 		first, last := splitName(user.DisplayName)
 		writeJSON(w, http.StatusOK, map[string]any{
 			"access_token": randomToken(),
 			"profile": map[string]any{
-				"id":              user.ID.String(),
+				"id":              workosUserID(user.ID),
 				"email":           user.Email,
 				"first_name":      first,
 				"last_name":       last,
 				"connection_id":   "",
 				"connection_type": "passwordless",
-				"idp_id":          user.ID.String(),
+				"idp_id":          workosUserID(user.ID),
 				"organization_id": "",
 				"raw_attributes":  map[string]string{},
 			},
@@ -363,13 +383,13 @@ func (h *Handler) handleSSOToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"access_token": randomToken(),
 		"profile": map[string]any{
-			"id":              user.ID.String(),
+			"id":              workosUserID(user.ID),
 			"email":           user.Email,
 			"first_name":      first,
 			"last_name":       last,
 			"connection_id":   "",
 			"connection_type": "passwordless",
-			"idp_id":          user.ID.String(),
+			"idp_id":          workosUserID(user.ID),
 			"organization_id": "",
 			"raw_attributes":  map[string]string{},
 		},
@@ -382,7 +402,7 @@ func (h *Handler) handleSSOToken(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleWorkosGetUser(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id, err := uuid.Parse(r.PathValue("id"))
+	id, err := resolveUserID(r.PathValue("id"))
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, "invalid user id")
 		return
@@ -432,7 +452,7 @@ func (h *Handler) handleWorkosListUsers(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	page, nextCursor := trimPage(rows, limit, func(u repo.User) string { return u.ID.String() })
+	page, nextCursor := trimPage(rows, limit, func(u repo.User) string { return workosUserID(u.ID) })
 
 	out := workosUserList{
 		Data:         make([]workosUser, 0, len(page)),
@@ -514,6 +534,77 @@ func (h *Handler) handleWorkosListMemberships(w http.ResponseWriter, r *http.Req
 		out.Data = append(out.Data, workosMembershipView(m))
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (h *Handler) handleWorkosCreateMembership(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	h.logger.InfoContext(ctx, "workos create membership: request received")
+
+	var body struct {
+		UserID         string `json:"user_id"`
+		OrganizationID string `json:"organization_id"`
+		RoleSlug       string `json:"role_slug"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		h.logger.ErrorContext(ctx, "workos create membership: invalid body", slog.Any("error", err))
+		writeWorkosError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	h.logger.InfoContext(ctx, "workos create membership: parsed body",
+		slog.String("user_id", body.UserID),
+		slog.String("organization_id", body.OrganizationID),
+		slog.String("role_slug", body.RoleSlug),
+	)
+
+	if body.UserID == "" || body.OrganizationID == "" {
+		h.logger.WarnContext(ctx, "workos create membership: missing required fields")
+		writeWorkosError(w, http.StatusBadRequest, "user_id and organization_id are required")
+		return
+	}
+	userID, err := resolveUserID(body.UserID)
+	if err != nil {
+		h.logger.WarnContext(ctx, "workos create membership: invalid user_id", slog.String("raw", body.UserID), slog.Any("error", err))
+		writeWorkosError(w, http.StatusBadRequest, "invalid user_id")
+		return
+	}
+	orgID, err := h.resolveOrgID(ctx, body.OrganizationID)
+	if err != nil {
+		h.logger.WarnContext(ctx, "workos create membership: invalid organization_id", slog.String("raw", body.OrganizationID), slog.Any("error", err))
+		writeWorkosError(w, http.StatusBadRequest, "invalid organization_id")
+		return
+	}
+	role := body.RoleSlug
+	if role == "" {
+		role = "member"
+	}
+
+	h.logger.InfoContext(ctx, "workos create membership: resolved IDs",
+		slog.String("user_uuid", userID.String()),
+		slog.String("org_uuid", orgID.String()),
+		slog.String("role", role),
+	)
+
+	queries := repo.New(h.db)
+	m, err := queries.CreateMembership(ctx, repo.CreateMembershipParams{
+		ID:             uuid.New(),
+		UserID:         userID,
+		OrganizationID: orgID,
+		Role:           sql.NullString{String: role, Valid: true},
+	})
+	if err != nil {
+		h.logger.ErrorContext(ctx, "workos create membership: db insert failed", slog.Any("error", err))
+		writeWorkosError(w, http.StatusInternalServerError, "failed to create membership")
+		return
+	}
+	h.logger.InfoContext(ctx, "workos create membership: created", slog.String("membership_id", m.ID.String()))
+
+	row, err := queries.GetMembershipWithOrgName(ctx, m.ID)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "workos create membership: refetch failed", slog.Any("error", err))
+		writeWorkosError(w, http.StatusInternalServerError, "failed to load membership")
+		return
+	}
+	writeJSON(w, http.StatusCreated, workosMembershipView(repo.ListMembershipsWithOrgNameRow(row)))
 }
 
 func (h *Handler) handleWorkosUpdateMembership(w http.ResponseWriter, r *http.Request) {
@@ -599,7 +690,7 @@ func (h *Handler) handleWorkosSendInvitation(w http.ResponseWriter, r *http.Requ
 
 	inviterNarg := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if body.InviterUserID != "" {
-		inv, err := uuid.Parse(body.InviterUserID)
+		inv, err := resolveUserID(body.InviterUserID)
 		if err != nil {
 			writeWorkosError(w, http.StatusBadRequest, "invalid inviter_user_id")
 			return
@@ -977,7 +1068,7 @@ func (h *Handler) handleWorkosDeleteRole(w http.ResponseWriter, r *http.Request)
 func workosUserView(u repo.User) workosUser {
 	first, last := splitName(u.DisplayName)
 	return workosUser{
-		ID:                u.ID.String(),
+		ID:                workosUserID(u.ID),
 		FirstName:         first,
 		LastName:          last,
 		Email:             u.Email,
@@ -1023,7 +1114,7 @@ func workosMembershipView(m repo.ListMembershipsWithOrgNameRow) workosOrganizati
 	}
 	return workosOrganizationMembership{
 		ID:               m.ID.String(),
-		UserID:           m.UserID.String(),
+		UserID:           workosUserID(m.UserID),
 		OrganizationID:   orgID,
 		OrganizationName: m.OrganizationName,
 		Role:             workosRoleSlug{Slug: m.Role},
@@ -1093,7 +1184,7 @@ func parsePageParams(q map[string][]string) (limit int, after uuid.UUID, err err
 	}
 	after = uuid.Nil
 	if raw := firstQuery(q, "after"); raw != "" {
-		parsed, perr := uuid.Parse(raw)
+		parsed, perr := resolveUserID(raw)
 		if perr != nil {
 			return 0, uuid.Nil, errors.New("invalid after cursor")
 		}
@@ -1108,7 +1199,7 @@ func optionalQueryUUID(q map[string][]string, key string) (uuid.NullUUID, error)
 	if raw == "" {
 		return none, nil
 	}
-	parsed, err := uuid.Parse(raw)
+	parsed, err := resolveUserID(raw)
 	if err != nil {
 		return none, fmt.Errorf("invalid %s", key)
 	}
@@ -1160,7 +1251,7 @@ func nullUUIDOrEmpty(u uuid.NullUUID) string {
 	if !u.Valid {
 		return ""
 	}
-	return u.UUID.String()
+	return workosUserID(u.UUID)
 }
 
 func ptrToNullString(p *string) sql.NullString {
@@ -1168,6 +1259,27 @@ func ptrToNullString(p *string) sql.NullString {
 		return sql.NullString{}
 	}
 	return sql.NullString{String: *p, Valid: true}
+}
+
+const workosUserIDPrefix = "user_devidp_"
+
+// workosUserID formats an internal UUID as a WorkOS-style user ID.
+// Real WorkOS returns IDs like "user_01J5C09..."; we use "user_devidp_<hex>".
+func workosUserID(id uuid.UUID) string {
+	return workosUserIDPrefix + strings.ReplaceAll(id.String(), "-", "")
+}
+
+// resolveUserID parses a WorkOS-style user ID back to a UUID.
+// Accepts both "user_devidp_<hex>" and plain UUIDs for backward compat.
+func resolveUserID(raw string) (uuid.UUID, error) {
+	if strings.HasPrefix(raw, workosUserIDPrefix) {
+		hex := raw[len(workosUserIDPrefix):]
+		if len(hex) == 32 {
+			hex = hex[:8] + "-" + hex[8:12] + "-" + hex[12:16] + "-" + hex[16:20] + "-" + hex[20:]
+		}
+		return uuid.Parse(hex)
+	}
+	return uuid.Parse(raw)
 }
 
 // writeWorkosError follows the WorkOS error envelope shape closely enough

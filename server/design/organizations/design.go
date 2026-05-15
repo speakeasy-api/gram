@@ -247,6 +247,9 @@ var OrganizationUser = Type("OrganizationUser", func() {
 	Attribute("updated_at", String, func() {
 		Format(FormatDateTime)
 	})
+	Attribute("last_login", String, "Timestamp of the user's most recent login.", func() {
+		Format(FormatDateTime)
+	})
 
 	Required("id", "organization_id", "user_id", "name", "email", "created_at", "updated_at")
 })
