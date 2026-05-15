@@ -660,6 +660,7 @@ func TestFlyRuntimeBackendEnsureRecyclesStaleImageWhenIdle(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, flapsClient.updateCalls)
+	require.GreaterOrEqual(t, flapsClient.startCalls, 1)
 	require.True(t, result.ColdStart)
 
 	var metadata flyRuntimeMetadata
@@ -901,6 +902,7 @@ type testFlyRuntimeFlapsClient struct {
 	launchMachine *fly.Machine
 	launchErr     error
 	startErr      error
+	startCalls    int
 	stopErr       error
 	stopCalls     int
 	destroyErr    error
@@ -948,6 +950,7 @@ func (c *testFlyRuntimeFlapsClient) List(_ context.Context, _ string, _ string) 
 }
 
 func (c *testFlyRuntimeFlapsClient) Start(_ context.Context, _ string, _ string, _ string) (*fly.MachineStartResponse, error) {
+	c.startCalls++
 	if c.startErr != nil {
 		return nil, c.startErr
 	}
