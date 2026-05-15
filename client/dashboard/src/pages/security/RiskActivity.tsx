@@ -28,7 +28,7 @@ import { toast } from "sonner";
 import { CategoryLabel, MaskedMatch } from "./risk-ui";
 
 const RISK_ACTIVITY_GRID =
-  "grid grid-cols-[172px_minmax(140px,0.9fr)_minmax(160px,1fr)_minmax(180px,1.15fr)_minmax(160px,1fr)_minmax(200px,1.25fr)_minmax(180px,1.1fr)_110px] gap-3";
+  "grid grid-cols-[172px_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_110px] gap-3";
 
 export default function RiskActivity() {
   return (
@@ -374,8 +374,9 @@ function RiskActivityRow({
   const isShadowMCP = result.source === "shadow_mcp";
 
   return (
-    <button
-      type="button"
+    <div
+      role={result.chatId ? "button" : undefined}
+      tabIndex={result.chatId ? 0 : undefined}
       className={cn(
         RISK_ACTIVITY_GRID,
         "hover:bg-muted/30 w-full items-center border-b px-8 py-3 text-left text-sm transition-colors",
@@ -383,6 +384,13 @@ function RiskActivityRow({
       )}
       onClick={() => {
         if (result.chatId) {
+          onSelectChat(result.chatId);
+        }
+      }}
+      onKeyDown={(e) => {
+        if (!result.chatId) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
           onSelectChat(result.chatId);
         }
       }}
@@ -427,7 +435,7 @@ function RiskActivityRow({
           </Button>
         ) : null}
       </div>
-    </button>
+    </div>
   );
 }
 
