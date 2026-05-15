@@ -24,6 +24,7 @@ import {
 import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { MetricCard } from "@/components/chart/MetricCard";
+import { Button as MoonshineButton, Icon } from "@speakeasy-api/moonshine";
 
 const RULE_ID_TO_CATEGORY = new Map<string, RuleCategory>();
 for (const [category, rules] of Object.entries(DETECTION_RULES)) {
@@ -198,17 +199,33 @@ function SecurityOverviewContent() {
 
   if (policies.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 py-20">
-        <Shield className="text-muted-foreground h-12 w-12" />
-        <h2 className="text-lg font-semibold">Risk Analysis</h2>
-        <p className="text-muted-foreground max-w-md text-center text-sm">
-          Monitor your chat messages for leaked secrets and sensitive data. Set
-          up a risk policy to get started.
-        </p>
-        <Button onClick={() => routes.policyCenter.goTo()}>
-          Go to Policy Center
-        </Button>
-      </div>
+      <Page.Section>
+        <Page.Section.Title>Risk Overview</Page.Section.Title>
+        <Page.Section.Description className="max-w-2xl">
+          Recent findings from risk analysis scans across your project.
+        </Page.Section.Description>
+        <Page.Section.CTA>
+          <MoonshineButton
+            variant="secondary"
+            onClick={() => routes.policyCenter.goTo()}
+          >
+            <MoonshineButton.Text>Manage Policies</MoonshineButton.Text>
+            <MoonshineButton.RightIcon>
+              <Icon name="arrow-right" />
+            </MoonshineButton.RightIcon>
+          </MoonshineButton>
+        </Page.Section.CTA>
+        <Page.Section.Body>
+          <div className="flex flex-col items-center justify-center gap-4 py-20">
+            <Shield className="text-muted-foreground h-12 w-12" />
+            <h2 className="text-lg font-semibold">Risk Analysis</h2>
+            <p className="text-muted-foreground max-w-md text-center text-sm">
+              Monitor your chat messages for leaked secrets and sensitive data.
+              Set up a risk policy to get started.
+            </p>
+          </div>
+        </Page.Section.Body>
+      </Page.Section>
     );
   }
 
@@ -231,9 +248,15 @@ function SecurityOverviewContent() {
         </Page.Section.Description>
 
         <Page.Section.CTA>
-          <Button variant="outline" onClick={() => routes.policyCenter.goTo()}>
-            Manage Policies
-          </Button>
+          <MoonshineButton
+            variant="secondary"
+            onClick={() => routes.policyCenter.goTo()}
+          >
+            <MoonshineButton.Text>Manage Policies</MoonshineButton.Text>
+            <MoonshineButton.RightIcon>
+              <Icon name="arrow-right" />
+            </MoonshineButton.RightIcon>
+          </MoonshineButton>
         </Page.Section.CTA>
 
         <Page.Section.Body>
