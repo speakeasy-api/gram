@@ -88,7 +88,6 @@ const ALL_CATEGORIES: RuleCategory[] = [
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
   "destructive_tool",
-  "prompt_attacks",
   "prompt_injection",
   "off_policy",
 ];

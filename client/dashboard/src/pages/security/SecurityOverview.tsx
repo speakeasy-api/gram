@@ -21,22 +21,19 @@ import {
   RULE_CATEGORY_META,
   type RuleCategory,
 } from "./policy-data";
-import { canonicalizeRuleId, humanizeRuleId } from "./rule-ids";
+import { humanizeRuleId } from "./rule-ids";
 import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { MetricCard } from "@/components/chart/MetricCard";
 
-// Lookup keyed by the canonical (kebab-case) rule id. DETECTION_RULES.id
-// still stores some entries in UPPER_SNAKE (Presidio entity types) because
-// that is the wire format sent to Presidio; canonicalizing here lets us
-// match the kebab-case rule_id the backend writes to risk_results.
+// DETECTION_RULES.id is the canonical rule_id the backend writes to
+// risk_results, so lookup maps key by it directly.
 const RULE_ID_TO_CATEGORY = new Map<string, RuleCategory>();
 const RULE_ID_TO_TITLE = new Map<string, string>();
 for (const [category, rules] of Object.entries(DETECTION_RULES)) {
   for (const rule of rules) {
-    const key = canonicalizeRuleId(rule.id, rule.source);
-    RULE_ID_TO_CATEGORY.set(key, category as RuleCategory);
-    RULE_ID_TO_TITLE.set(key, rule.title);
+    RULE_ID_TO_CATEGORY.set(rule.id, category as RuleCategory);
+    RULE_ID_TO_TITLE.set(rule.id, rule.title);
   }
 }
 
@@ -52,7 +49,7 @@ function getCategoryForFinding(
   ruleId: string | undefined,
 ): RuleCategory | null {
   if (ruleId) {
-    const byRule = RULE_ID_TO_CATEGORY.get(canonicalizeRuleId(ruleId, source));
+    const byRule = RULE_ID_TO_CATEGORY.get(ruleId);
     if (byRule) return byRule;
   }
   if (source) {
@@ -61,14 +58,9 @@ function getCategoryForFinding(
   return null;
 }
 
-function getRuleTitleFallback(
-  source: string | undefined,
-  ruleId: string | undefined,
-): string {
+function getRuleTitleFallback(ruleId: string | undefined): string {
   if (!ruleId) return "-";
-  const known = RULE_ID_TO_TITLE.get(canonicalizeRuleId(ruleId, source));
-  if (known) return known;
-  return humanizeRuleId(ruleId);
+  return RULE_ID_TO_TITLE.get(ruleId) ?? humanizeRuleId(ruleId);
 }
 
 function CategoryLabel({
@@ -99,9 +91,9 @@ function CategoryLabel({
 // hasn't seen this rule before. The backend may roll out new gitleaks,
 // presidio, or prompt_injection rules independently of the dashboard, so
 // every kebab id needs to display legibly without a code change.
-function RuleLabel({ source, ruleId }: { source?: string; ruleId?: string }) {
+function RuleLabel({ ruleId }: { source?: string; ruleId?: string }) {
   if (!ruleId) return <span className="font-mono text-xs">-</span>;
-  const title = getRuleTitleFallback(source, ruleId);
+  const title = getRuleTitleFallback(ruleId);
   return (
     <span className="font-mono text-xs" title={ruleId}>
       {title}

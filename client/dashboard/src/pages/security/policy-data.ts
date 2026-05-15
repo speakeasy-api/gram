@@ -13,7 +13,6 @@ export type RuleCategory =
   | "pii"
   | "government_ids"
   | "healthcare"
-  | "prompt_attacks"
   | "prompt_injection"
   | "off_policy"
   | "shadow_mcp"
@@ -78,11 +77,6 @@ export const RULE_CATEGORY_META: Record<
     label: "Healthcare Information",
     description: "Medical record numbers, patient data, Medicare IDs",
     icon: "heart-pulse",
-  },
-  prompt_attacks: {
-    label: "Prompt Attacks",
-    description: "Jailbreak attempts, role overrides, safety bypasses",
-    icon: "shield-alert",
   },
   prompt_injection: {
     label: "Prompt Injection",
@@ -1387,28 +1381,6 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
     {
       id: "pii.medical-family-history",
       title: "Family medical history reference",
-      source: "presidio",
-    },
-  ],
-  prompt_attacks: [
-    {
-      id: "pii.jailbreak-attempt",
-      title: "Jailbreak / safety bypass attempt",
-      source: "presidio",
-    },
-    {
-      id: "pii.role-override",
-      title: "Role or persona override attempt",
-      source: "presidio",
-    },
-    {
-      id: "pii.system-prompt-extraction",
-      title: "System prompt extraction attempt",
-      source: "presidio",
-    },
-    {
-      id: "pii.multi-turn-manipulation",
-      title: "Multi-turn conversation manipulation",
       source: "presidio",
     },
   ],
