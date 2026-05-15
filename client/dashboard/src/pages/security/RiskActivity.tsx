@@ -264,7 +264,7 @@ function RiskActivityContent() {
 function RiskActivityHeader() {
   return (
     <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-8 py-2.5 text-xs font-medium tracking-wide uppercase">
-      <div className="w-[150px] shrink-0">Occurred</div>
+      <div className="w-[150px] shrink-0">Timestamp</div>
       <div className="w-[140px] shrink-0">Category</div>
       <div className="w-[160px] shrink-0">Rule</div>
       <div className="min-w-[160px] flex-1">Chat</div>
@@ -378,7 +378,7 @@ function RiskActivityRow({
         }
       }}
     >
-      <div className="text-muted-foreground w-[150px] shrink-0 text-xs">
+      <div className="text-muted-foreground w-[150px] shrink-0 font-mono text-xs">
         {result.createdAt ? new Date(result.createdAt).toLocaleString() : "-"}
       </div>
       <div className="w-[140px] shrink-0">
