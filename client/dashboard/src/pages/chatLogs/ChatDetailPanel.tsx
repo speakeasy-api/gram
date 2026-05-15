@@ -32,6 +32,7 @@ import { MessageContent } from "@gram-ai/elements";
 import { useIsAdmin } from "@/contexts/Auth";
 import { toast } from "sonner";
 import { EntryTypeFilterBar } from "./TraceEntryFilterBar";
+import { TraceEntryIcon } from "./TraceEntryIcon";
 import {
   DEFAULT_ENABLED_ENTRY_TYPES,
   ENTRY_TYPE_META,
@@ -301,7 +302,7 @@ function MessageItem({
     <div>
       <MessageItemToggle
         createdAt={message.createdAt}
-        entryMeta={entryMeta}
+        entryType={entryType}
         isCollapsed={isCollapsed}
         label={label}
         onToggle={() => setExpanded((current) => !current)}
@@ -332,18 +333,16 @@ function MessageItem({
   );
 }
 
-type TraceEntryMeta = (typeof ENTRY_TYPE_META)[TraceEntryType];
-
 function MessageItemToggle({
   createdAt,
-  entryMeta,
+  entryType,
   isCollapsed,
   label,
   onToggle,
   riskResults,
 }: {
   createdAt: Date | string | undefined;
-  entryMeta: TraceEntryMeta;
+  entryType: TraceEntryType;
   isCollapsed: boolean;
   label: string;
   onToggle: () => void;
@@ -360,17 +359,7 @@ function MessageItemToggle({
         "border-t-muted border-y border-b-transparent",
       )}
     >
-      <div
-        className={cn(
-          "flex size-6 shrink-0 items-center justify-center rounded-full",
-          entryMeta.avatarClassName,
-        )}
-      >
-        <Icon
-          name={entryMeta.icon}
-          className={cn("size-4", entryMeta.iconClassName)}
-        />
-      </div>
+      <TraceEntryIcon entryType={entryType} />
       {createdAt && (
         <span className="font-mono text-xs">
           {format(new Date(createdAt), "HH:mm:ss")}

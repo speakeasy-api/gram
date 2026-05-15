@@ -1,11 +1,11 @@
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
-import { Icon } from "@speakeasy-api/moonshine";
 import {
   ENTRY_TYPE_META,
   FILTERABLE_ENTRY_TYPES,
   type FilterableTraceEntryType,
 } from "./traceEntries";
+import { TraceEntryIcon } from "./TraceEntryIcon";
 
 function getFilterableEntryTypes(values: string[]) {
   return FILTERABLE_ENTRY_TYPES.filter((entryType) =>
@@ -71,15 +71,7 @@ export function EntryTypeFilterBar({
                   "bg-muted border-muted-foreground hover:border-muted-foreground shadow-muted hover:shadow-sm",
               )}
             >
-              <Icon
-                name={meta.icon}
-                className={cn(
-                  "size-4 shrink-0",
-                  canShowSelectedState
-                    ? meta.iconClassName
-                    : "text-muted-foreground",
-                )}
-              />
+              <TraceEntryIcon entryType={entryType} disabled={isDisabled} />
               <span className="min-w-0 flex-1 truncate font-medium">
                 {meta.label}
               </span>
