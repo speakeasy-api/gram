@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
+	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
@@ -106,6 +107,18 @@ func MemoryExternalTools(svc *memory.MemoryService) []platformtools.ExternalTool
 		{Executor: platformmemory.NewRememberTool(svc), RequiredFeature: ""},
 		{Executor: platformmemory.NewRecallTool(svc), RequiredFeature: ""},
 		{Executor: platformmemory.NewForgetTool(svc), RequiredFeature: ""},
+	}
+}
+
+// TriggerExternalTools returns the assistant self-config trigger tools
+// (list + configure) for inclusion in the assistants platform toolset. The
+// runtime executor map already registers these via the built-in registry, so
+// these instances only surface in toolset listings — dispatch routes through
+// the shared registry executors.
+func TriggerExternalTools(db *pgxpool.Pool, app *bgtriggers.App, auditLogger *audit.Logger) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformtriggers.NewListTriggersTool(db, app), RequiredFeature: ""},
+		{Executor: platformtriggers.NewConfigureTriggerTool(db, app, auditLogger), RequiredFeature: ""},
 	}
 }
 

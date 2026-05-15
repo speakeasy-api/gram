@@ -280,6 +280,60 @@ func TestFlyRuntimeBackendEnsureExistingAppAfterPartialCreateFailureClearsStaleM
 	require.Equal(t, 0, apiClient.deleteCalls, "partially created current app should not be torn down because metadata came from an older app incarnation")
 }
 
+func TestFlyRuntimeBackendEnsureDestroyedMachineColdLaunches(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	assistantID := uuid.New()
+	apiClient.app = &fly.App{ID: "app-1", Name: "gram-asst-test"}
+	flapsClient.machine = &fly.Machine{
+		ID:     "machine-destroyed",
+		State:  fly.MachineStateDestroyed,
+		Region: "iad",
+		Config: &fly.MachineConfig{
+			Metadata: map[string]string{flyMachineMetadataAssistantID: assistantID.String()},
+		},
+	}
+	flapsClient.listMachines = []*fly.Machine{flapsClient.machine}
+	flapsClient.launchMachine = &fly.Machine{
+		ID:         "machine-new",
+		State:      "started",
+		Region:     "iad",
+		InstanceID: "boot-new",
+		Config: &fly.MachineConfig{
+			Metadata: map[string]string{flyMachineMetadataAssistantID: assistantID.String()},
+		},
+	}
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:    "gram-asst-test",
+		AppID:      "app-1",
+		AppURL:     server.URL,
+		AppIP:      "",
+		MachineID:  "machine-destroyed",
+		Region:     "iad",
+		LastBootID: "boot-old",
+	})
+	require.NoError(t, err)
+
+	result, err := backend.Ensure(context.Background(), assistantRuntimeRecord{
+		AssistantThreadID:   uuid.New(),
+		AssistantID:         assistantID,
+		ProjectID:           uuid.New(),
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.True(t, result.ColdStart)
+
+	var metadata flyRuntimeMetadata
+	require.NoError(t, json.Unmarshal(result.BackendMetadataJSON, &metadata))
+	require.Equal(t, "machine-new", metadata.MachineID, "destroyed machine record must not be reused — admission should cold-launch a replacement")
+	require.Equal(t, "boot-new", metadata.LastBootID)
+}
+
 func TestFlyRuntimeBackendStopWithoutMachineMetadataIsNoop(t *testing.T) {
 	t.Parallel()
 

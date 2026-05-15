@@ -87,11 +87,25 @@ async fn thread_turn(
     // outbound call from the thread's tokio task (chat completions, MCP,
     // bootstrap) reads it via THREAD_TOKEN, so the ThreadID claim
     // propagates to platform tools that depend on `principal.ThreadID`.
+    //
+    // Also rotate the host fallback registry. rmcp's StreamableHttp
+    // transport runs its send loop on a tokio::spawn'd worker task that
+    // does not inherit task-locals from the actor's connect_server scope,
+    // so McpRotatingClient::current_token falls through to
+    // self.read_local() → host.tokens. Without a valid bearer here, MCP
+    // register/post on every protected Gram endpoint returns 401.
+    // Cross-thread mixup is bounded to a swapped ThreadID claim under the
+    // same assistant identity, which the platform-tool path handles via
+    // THREAD_TOKEN (in-scope, correct principal); the worker fallback
+    // only matters for the transport handshake.
     let thread_registry = thread_token_registry(&host, &thread_id);
     if let Some(token) = request.auth_token.as_deref()
         && !token.is_empty()
     {
         thread_registry
+            .rotate(token)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        host.tokens
             .rotate(token)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     }

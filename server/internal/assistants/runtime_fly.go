@@ -433,6 +433,13 @@ func (f *FlyRuntimeBackend) resolveMachine(
 			if !matches(machine) {
 				return nil, fmt.Errorf("assistant fly runtime machine %s does not belong to runtime %s", machineID, runtime.ID)
 			}
+			// Flaps returns destroyed/destroying records for a short window
+			// after teardown. Treat them like not-found so the listing
+			// fallback misses too and the caller cold-launches a replacement
+			// — fly rejects Start on destroyed with a failed_precondition.
+			if !machine.IsActive() {
+				break
+			}
 			return machine, nil
 		case !isFlyNotFound(err):
 			return nil, fmt.Errorf("load assistant fly runtime machine: %w", err)
