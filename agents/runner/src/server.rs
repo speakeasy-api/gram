@@ -8,10 +8,8 @@ use axum::{Json, Router};
 use tokio::net::TcpListener;
 use tokio::sync::{Mutex, Notify};
 
-use crate::http_layer::THREAD_TOKEN;
 use crate::runtime::{
     AppState, DEFAULT_THREAD_IDLE_TTL, build_host, ensure_thread, snapshot_threads,
-    thread_token_registry,
 };
 
 const IDEMPOTENCY_HEADER: &str = "x-idempotency-key";
@@ -82,34 +80,6 @@ async fn thread_turn(
         return Err((StatusCode::BAD_REQUEST, "missing thread_id".to_string()));
     }
 
-    // Rotate this thread's bearer slot under the freshly minted JWT the
-    // backend stamped on the turn body. The slot is thread-scoped — every
-    // outbound call from the thread's tokio task (chat completions, MCP,
-    // bootstrap) reads it via THREAD_TOKEN, so the ThreadID claim
-    // propagates to platform tools that depend on `principal.ThreadID`.
-    //
-    // Also rotate the host fallback registry. rmcp's StreamableHttp
-    // transport runs its send loop on a tokio::spawn'd worker task that
-    // does not inherit task-locals from the actor's connect_server scope,
-    // so McpRotatingClient::current_token falls through to
-    // self.read_local() → host.tokens. Without a valid bearer here, MCP
-    // register/post on every protected Gram endpoint returns 401.
-    // Cross-thread mixup is bounded to a swapped ThreadID claim under the
-    // same assistant identity, which the platform-tool path handles via
-    // THREAD_TOKEN (in-scope, correct principal); the worker fallback
-    // only matters for the transport handshake.
-    let thread_registry = thread_token_registry(&host, &thread_id);
-    if let Some(token) = request.auth_token.as_deref()
-        && !token.is_empty()
-    {
-        thread_registry
-            .rotate(token)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-        host.tokens
-            .rotate(token)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    }
-
     // Idempotency key is namespaced by thread so two threads sharing an
     // event_id namespace can't collide.
     let idempotency_key = headers
@@ -139,29 +109,21 @@ async fn thread_turn(
         return Ok(Json(ThreadTurnResponse::deduped()));
     }
 
-    // Scope the per-thread bearer onto the bootstrap + enqueue path so the
-    // outbound /rpc/assistants.getThreadBootstrap call authenticates under
-    // the calling thread's JWT rather than whichever thread last
-    // rotated the host fallback.
-    THREAD_TOKEN
-        .scope(thread_registry, async {
-            let thread = ensure_thread(&host, &thread_id)
-                .await
-                .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
-
-            thread
-                .enqueue(request.input)
-                .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
-
-            if let Some(ref mut guard) = admission_guard {
-                **guard = true;
-            }
-
-            // The model's response goes out via /chat/completions on the
-            // per-thread task; the HTTP response here is just an ack so the
-            // backend's RunTurn activity can mark the event processed
-            // without blocking on the turn.
-            Ok(Json(ThreadTurnResponse::accepted()))
-        })
+    let thread = ensure_thread(&host, &thread_id, request.auth_token)
         .await
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+
+    thread
+        .enqueue(request.input)
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+
+    if let Some(ref mut guard) = admission_guard {
+        **guard = true;
+    }
+
+    // The model's response goes out via /chat/completions on the
+    // per-thread task; the HTTP response here is just an ack so the
+    // backend's RunTurn activity can mark the event processed without
+    // blocking on the turn.
+    Ok(Json(ThreadTurnResponse::accepted()))
 }

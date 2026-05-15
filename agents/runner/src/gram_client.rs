@@ -11,16 +11,14 @@ const BOOTSTRAP_PATH: &str = "/rpc/assistants.getThreadBootstrap";
 const BOOTSTRAP_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Lightweight client used by the runner to pull a per-thread bootstrap
-/// from the management API. Uses the host's shared `TokenRegistry` so the
-/// bearer always reflects the most recent rotation pushed via /turn. The
-/// underlying client carries `RetryTransientMiddleware` so transient 5xx /
-/// network errors are retried with exponential backoff before the first
-/// turn for an assistant fails.
+/// from the management API. The underlying client carries
+/// `RetryTransientMiddleware` so transient 5xx / network errors are
+/// retried with exponential backoff before the first turn for an
+/// assistant fails.
 #[derive(Clone)]
 pub struct GramBootstrapClient {
     base_url: String,
     http: ClientWithMiddleware,
-    tokens: TokenRegistry,
 }
 
 #[derive(Debug, Error)]
@@ -47,12 +45,8 @@ struct BootstrapRequest<'a> {
 }
 
 impl GramBootstrapClient {
-    pub fn new(base_url: String, http: ClientWithMiddleware, tokens: TokenRegistry) -> Self {
-        Self {
-            base_url,
-            http,
-            tokens,
-        }
+    pub fn new(base_url: String, http: ClientWithMiddleware) -> Self {
+        Self { base_url, http }
     }
 
     /// Fetches the bootstrap blob for a thread. Caller is responsible for
@@ -61,9 +55,10 @@ impl GramBootstrapClient {
     pub async fn fetch_bootstrap(
         &self,
         thread_id: &str,
+        tokens: &TokenRegistry,
     ) -> Result<ThreadBootstrap, GramClientError> {
         let url = format!("{}{}", self.base_url.trim_end_matches('/'), BOOTSTRAP_PATH);
-        let bearer = self.tokens.current().map_err(|_| GramClientError::Token)?;
+        let bearer = tokens.current().map_err(|_| GramClientError::Token)?;
 
         let resp = self
             .http

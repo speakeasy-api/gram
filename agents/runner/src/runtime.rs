@@ -31,9 +31,7 @@ use crate::clip::ClippedToolSource;
 use crate::compaction::build_compactor;
 use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
-use crate::http_layer::{
-    McpRotatingClient, THREAD_TOKEN, TokenRegistry, build_bootstrap_client, build_http,
-};
+use crate::http_layer::{McpRotatingClient, TokenRegistry, build_bootstrap_client, build_http};
 use crate::tools;
 use crate::wire::{McpServer, RunnerMessage, ThreadBootstrap};
 use crate::workdir::ASSISTANT_WORKDIR;
@@ -52,18 +50,10 @@ const EVICTION_SWEEP_INTERVAL: Duration = Duration::from_secs(60);
 
 pub type AppState = Arc<RuntimeHost>;
 
-/// Singleton host shared by every per-thread task on the VM. Owns the
-/// per-thread bearer registries (one slot per live thread, swapped on each
-/// /threads/turn admission), the MCP actor handle (one connection per
-/// server, shared across threads), and the bootstrap client. The
-/// `tokens` registry is the boot-time fallback used only before any
-/// per-thread slot exists; once a thread is admitted, outbound traffic
-/// rides its slot via `THREAD_TOKEN`.
+/// Singleton host shared by every per-thread task on the VM.
 pub struct RuntimeHost {
     pub assistant_id: String,
     pub started_at: Instant,
-    pub tokens: TokenRegistry,
-    pub thread_tokens: DashMap<String, TokenRegistry>,
     /// Per-idempotency-key admission slot. The bool tracks whether the
     /// keyed turn has actually been enqueued: holding the mutex covers
     /// the check + bootstrap + enqueue + mark-done sequence so concurrent
@@ -74,61 +64,27 @@ pub struct RuntimeHost {
     pub gram_client: GramBootstrapClient,
     pub thread_idle_ttl: Duration,
     pub http_client: reqwest::Client,
-    /// MCP server set the host has registered with its actor. Reconciled
-    /// lazily when a thread's bootstrap brings new servers; existing
-    /// connections are preserved across reconciliation. `mcp_cmd_tx`
-    /// addresses the actor; `mcp_source` is the read-side handle every
-    /// per-thread agent uses to discover tools.
-    pub mcp: tokio::sync::Mutex<McpHostState>,
-    pub mcp_cmd_tx: mpsc::Sender<McpCmd>,
-    pub mcp_catalog: CatalogReader,
     pub spill_root: PathBuf,
+    /// Fallback bearer used only when `/threads/turn` arrives with no
+    /// `auth_token` so the bootstrap fetch still has a credential.
+    pub initial_token: String,
 }
 
-pub struct McpHostState {
-    pub registered: Vec<McpServer>,
-    /// Held to keep the actor task alive for the lifetime of the host.
-    /// Drop on host teardown ends the actor; we never abort it explicitly.
-    #[allow(dead_code)]
-    pub actor: tokio::task::JoinHandle<()>,
-}
-
-/// Live per-thread state. Every active thread on the VM has exactly one
-/// `ConfiguredThread`; concurrent first-turn requests for the same thread
-/// race through an `OnceCell` so only one bootstrap fetch and one task
-/// spawn happen.
+/// Live per-thread state. Concurrent first-turn requests for the same
+/// thread race through an `OnceCell` so only one bootstrap fetch and one
+/// task spawn happen.
 pub struct ConfiguredThread {
     pub thread_id: String,
     pub chat_id: String,
     pub idle_since: Arc<Mutex<Option<Instant>>>,
     pub inbox_tx: UnboundedSender<String>,
     pub task_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    pub tokens: TokenRegistry,
+    pub mcp_cmd_tx: mpsc::Sender<McpCmd>,
 }
 
 pub enum McpCmd {
-    /// Force a server to disconnect and reconnect from scratch.
-    ///
-    /// `tokens` is the calling thread's bearer slot — the actor scopes it
-    /// onto `THREAD_TOKEN` for the duration of `connect_server`, otherwise
-    /// the initial handshake (run in the actor's own tokio task) reads the
-    /// empty host fallback and protected Gram MCP endpoints reject it.
     ForceReconnect {
-        server_id: McpServerId,
-        tokens: TokenRegistry,
-        reply: oneshot::Sender<Result<(), String>>,
-    },
-    /// Register a server that the actor has not yet seen. Idempotent — the
-    /// actor skips it if already registered. See `ForceReconnect` for the
-    /// `tokens` rationale.
-    Register {
-        config: McpServerConfig,
-        tokens: TokenRegistry,
-        reply: oneshot::Sender<Result<(), String>>,
-    },
-    /// Disconnect a server that's no longer in the assistant's toolset
-    /// without registering a replacement. The actor drops the transport
-    /// so subsequent agent turns can't call into the removed server.
-    Disconnect {
         server_id: McpServerId,
         reply: oneshot::Sender<Result<(), String>>,
     },
@@ -161,8 +117,6 @@ pub async fn build_host(
     initial_token: String,
     thread_idle_ttl: Duration,
 ) -> Result<Arc<RuntimeHost>, RunnerError> {
-    let tokens = TokenRegistry::new(initial_token);
-
     let mut default_headers = http::HeaderMap::new();
     default_headers.insert(
         http::HeaderName::from_static("x-gram-source"),
@@ -173,35 +127,20 @@ pub async fn build_host(
         .default_headers(default_headers)
         .build()?;
 
-    let manager = McpServerManager::new();
     let spill_root = PathBuf::from(ASSISTANT_WORKDIR).join(TOOL_RESULT_SPILL_DIR);
-    let mcp_catalog = manager.source();
 
-    let (mcp_cmd_tx, mcp_cmd_rx) = mpsc::channel(MCP_CMD_CAPACITY);
-    let mcp_actor = tokio::spawn(run_mcp_actor(manager, mcp_cmd_rx));
-
-    let gram_client = GramBootstrapClient::new(
-        server_url,
-        build_bootstrap_client(http_client.clone()),
-        tokens.clone(),
-    );
+    let gram_client =
+        GramBootstrapClient::new(server_url, build_bootstrap_client(http_client.clone()));
     let host = Arc::new(RuntimeHost {
         assistant_id,
         started_at: Instant::now(),
-        tokens,
-        thread_tokens: DashMap::new(),
         seen: DashMap::new(),
         threads: DashMap::new(),
         gram_client,
         thread_idle_ttl,
         http_client,
-        mcp: tokio::sync::Mutex::new(McpHostState {
-            registered: Vec::new(),
-            actor: mcp_actor,
-        }),
-        mcp_cmd_tx,
-        mcp_catalog,
         spill_root,
+        initial_token,
     });
 
     // Background eviction task: walks the threads map and drops any whose
@@ -265,28 +204,16 @@ async fn sweep_idle(host: &Arc<RuntimeHost>) {
         // them so `seen` does not grow without bound over the VM lifetime.
         let prefix = format!("{thread_id}:");
         host.seen.retain(|key, _| !key.starts_with(&prefix));
-        host.thread_tokens.remove(&thread_id);
     }
 }
 
 /// First-turn bootstrap path. Concurrent /turn requests for the same thread
 /// race through the `OnceCell`; only one wins the bootstrap fetch and task
-/// spawn. Subsequent turns (cached cell) skip directly to enqueue.
-/// Returns the bearer slot for `thread_id`, creating it empty if absent. The
-/// server stamps the freshly-minted thread-scoped JWT on every /threads/turn
-/// admission and the handler rotates this slot under it before
-/// `THREAD_TOKEN.scope`s the bootstrap + enqueue path; outbound HTTP from
-/// the per-thread tokio task then reads it via the task-local override.
-pub fn thread_token_registry(host: &Arc<RuntimeHost>, thread_id: &str) -> TokenRegistry {
-    host.thread_tokens
-        .entry(thread_id.to_string())
-        .or_insert_with(|| TokenRegistry::new(""))
-        .clone()
-}
-
+/// spawn. Subsequent turns rotate the existing thread's bearer slot.
 pub async fn ensure_thread(
     host: &Arc<RuntimeHost>,
     thread_id: &str,
+    auth_token: Option<String>,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
     let cell = host
         .threads
@@ -294,16 +221,27 @@ pub async fn ensure_thread(
         .or_insert_with(|| Arc::new(OnceCell::new()))
         .clone();
 
+    let bearer = auth_token
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(|| host.initial_token.clone());
+
+    let mut initialized = false;
     let thread = cell
         .get_or_try_init(|| async {
+            initialized = true;
+            let tokens = TokenRegistry::new(bearer.clone());
             let bootstrap = host
                 .gram_client
-                .fetch_bootstrap(thread_id)
+                .fetch_bootstrap(thread_id, &tokens)
                 .await
                 .map_err(|e| RunnerError::Loop(format!("bootstrap fetch failed: {e}")))?;
-            spawn_thread(host, thread_id.to_string(), bootstrap).await
+            spawn_thread(host, thread_id.to_string(), bootstrap, tokens).await
         })
         .await?;
+
+    if !initialized && !bearer.is_empty() {
+        thread.tokens.rotate(&bearer)?;
+    }
     Ok(thread.clone())
 }
 
@@ -314,12 +252,9 @@ async fn spawn_thread(
     host: &Arc<RuntimeHost>,
     thread_id: String,
     bootstrap: ThreadBootstrap,
+    tokens: TokenRegistry,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
-    // Reconcile MCP set additively. Removed servers stay registered; the
-    // model can still call them but they go unused. A future pass can
-    // disconnect them; for now, last-writer-wins additive avoids a
-    // destructive race when two threads bootstrap with different sets.
-    reconcile_mcp_servers(host, &bootstrap.mcp_servers).await?;
+    let (mcp_cmd_tx, mcp_catalog) = build_thread_mcp(host, &bootstrap.mcp_servers, &tokens).await?;
 
     let chat_id = bootstrap.chat_id.clone();
 
@@ -345,7 +280,7 @@ async fn spawn_thread(
         .with_base_url(bootstrap.completions_url.clone());
     let provider = OpenRouterProvider::from(openrouter_config);
 
-    let completions_http = build_http(thread_http_client.clone(), host.tokens.clone());
+    let completions_http = build_http(thread_http_client.clone(), tokens.clone());
     let adapter = CompletionsAdapter::with_client(provider.clone(), completions_http);
 
     // Compactor outbound headers carry the same gram-chat-id as the main
@@ -372,7 +307,7 @@ async fn spawn_thread(
         .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))
         .default_headers(compactor_headers)
         .build()?;
-    let compactor_http = build_http(compactor_http_client, host.tokens.clone());
+    let compactor_http = build_http(compactor_http_client, tokens.clone());
     let compactor_adapter = CompletionsAdapter::with_client(provider, compactor_http);
 
     let compactor = build_compactor(
@@ -400,12 +335,12 @@ async fn spawn_thread(
     let mcp_server_ids: Vec<String> = bootstrap.mcp_servers.iter().map(|s| s.id.clone()).collect();
     let native_tools = ToolRegistry::new().with(tools::bun_run::bun_run).with(
         tools::mcp_force_reconnect::McpForceReconnectTool::new(
-            host.mcp_cmd_tx.clone(),
+            Arc::clone(host),
             mcp_server_ids,
         ),
     );
 
-    let mcp_source = ClippedToolSource::new(host.mcp_catalog.clone(), host.spill_root.clone());
+    let mcp_source = ClippedToolSource::new(mcp_catalog, host.spill_root.clone());
     let mut builder = Agent::builder()
         .model(adapter)
         .add_tool_source(native_tools)
@@ -437,15 +372,10 @@ async fn spawn_thread(
     let log_thread_id = thread_id.clone();
     let host_for_eviction = Arc::clone(host);
     let evict_thread_id = thread_id.clone();
-    let thread_registry = thread_token_registry(host, &thread_id);
 
     let task_handle = tokio::spawn(async move {
-        let outcome = THREAD_TOKEN
-            .scope(thread_registry, async move {
-                AssertUnwindSafe(run_loop(driver, inbox_rx, loop_idle))
-                    .catch_unwind()
-                    .await
-            })
+        let outcome = AssertUnwindSafe(run_loop(driver, inbox_rx, loop_idle))
+            .catch_unwind()
             .await;
         match outcome {
             Ok(Ok(reason)) => {
@@ -466,7 +396,6 @@ async fn spawn_thread(
         // Drop the entry on exit so a stale ConfiguredThread doesn't keep
         // holding state for a dead task.
         host_for_eviction.threads.remove(&evict_thread_id);
-        host_for_eviction.thread_tokens.remove(&evict_thread_id);
     });
 
     let configured = Arc::new(ConfiguredThread {
@@ -475,102 +404,52 @@ async fn spawn_thread(
         idle_since,
         inbox_tx,
         task_handle: Mutex::new(Some(task_handle)),
+        tokens,
+        mcp_cmd_tx,
     });
     Ok(configured)
 }
 
-async fn reconcile_mcp_servers(
+async fn build_thread_mcp(
     host: &Arc<RuntimeHost>,
-    incoming: &[McpServer],
-) -> Result<(), RunnerError> {
-    let mut state = host.mcp.lock().await;
+    servers: &[McpServer],
+    tokens: &TokenRegistry,
+) -> Result<(mpsc::Sender<McpCmd>, CatalogReader), RunnerError> {
+    let mut manager = McpServerManager::new();
+    let catalog = manager.source();
 
-    // Caller is in the per-thread tokio task (or the /threads/turn handler
-    // before spawn); THREAD_TOKEN is the calling thread's bearer slot. The
-    // MCP actor runs in its own task and does not inherit task-locals, so we
-    // pass the registry through McpCmd::* and have the actor re-scope it
-    // around `connect_server` — without that, the initial handshake to
-    // protected Gram MCP endpoints carries the empty host fallback bearer.
-    let thread_tokens = THREAD_TOKEN
-        .try_with(|r| r.clone())
-        .unwrap_or_else(|_| host.tokens.clone());
-
-    // Servers absent from the new bootstrap are no longer in the assistant's
-    // toolset; drop them so later turns on this warm VM can't keep calling
-    // tools the assistant no longer exposes. Matched by id — config drift
-    // for still-present ids is handled by the re-register pass below.
-    let removed: Vec<McpServer> = state
-        .registered
-        .iter()
-        .filter(|prev| !incoming.iter().any(|s| s.id == prev.id))
-        .cloned()
-        .collect();
-    for server in &removed {
-        let (reply_tx, reply_rx) = oneshot::channel();
-        if host
-            .mcp_cmd_tx
-            .send(McpCmd::Disconnect {
-                server_id: McpServerId::new(server.id.clone()),
-                reply: reply_tx,
-            })
-            .await
-            .is_err()
-        {
-            return Err(RunnerError::Loop("mcp actor channel closed".into()));
-        }
-        match reply_rx.await {
-            Ok(_) => state.registered.retain(|s| s.id != server.id),
-            Err(_) => return Err(RunnerError::Loop("mcp actor reply dropped".into())),
-        }
+    for server in servers {
+        let config = build_mcp_server_config(server, &host.http_client, tokens)?;
+        let server_id = McpServerId::new(server.id.clone());
+        manager.register_server(config);
+        let _ = connect_and_log(&mut manager, &server_id, "register").await;
     }
 
-    if incoming.is_empty() {
-        return Ok(());
-    }
-    // A warm VM serves multiple threads under one assistant; a later thread's
-    // bootstrap may carry the same MCP server id with a different URL or
-    // header set (e.g. environment switch). Re-register on drift so the actor
-    // disconnects the stale connection and reconnects under the new config —
-    // matching by id alone would freeze every later thread on the first
-    // thread's MCP wiring until the VM is recycled.
-    let pending: Vec<McpServer> = incoming
-        .iter()
-        .filter(|s| {
-            state
-                .registered
-                .iter()
-                .find(|prev| prev.id == s.id)
-                .is_none_or(|prev| prev != *s)
-        })
-        .cloned()
-        .collect();
-    for server in &pending {
-        let config = build_mcp_server_config(server, &host.http_client, &host.tokens)?;
-        let (reply_tx, reply_rx) = oneshot::channel();
-        if host
-            .mcp_cmd_tx
-            .send(McpCmd::Register {
-                config,
-                tokens: thread_tokens.clone(),
-                reply: reply_tx,
-            })
-            .await
-            .is_err()
-        {
-            return Err(RunnerError::Loop("mcp actor channel closed".into()));
+    let (cmd_tx, cmd_rx) = mpsc::channel(MCP_CMD_CAPACITY);
+    tokio::spawn(run_mcp_actor(manager, cmd_rx));
+    Ok((cmd_tx, catalog))
+}
+
+async fn connect_and_log(
+    manager: &mut McpServerManager,
+    server_id: &McpServerId,
+    action: &'static str,
+) -> Result<(), String> {
+    match manager.connect_server(server_id).await {
+        Ok(handle) => {
+            tracing::info!(
+                server_id = %server_id,
+                tools = handle.snapshot().tools.len(),
+                action,
+                "mcp connect ok"
+            );
+            Ok(())
         }
-        match reply_rx.await {
-            Ok(Ok(())) => {
-                state.registered.retain(|s| s.id != server.id);
-                state.registered.push(server.clone());
-            }
-            Ok(Err(e)) => {
-                tracing::warn!(server_id = %server.id, error = %e, "register mcp server failed")
-            }
-            Err(_) => return Err(RunnerError::Loop("mcp actor reply dropped".into())),
+        Err(e) => {
+            tracing::warn!(server_id = %server_id, error = %e, action, "mcp connect failed");
+            Err(e.to_string())
         }
     }
-    Ok(())
 }
 
 fn build_mcp_server_config(
@@ -610,81 +489,11 @@ fn build_mcp_server_config(
 async fn run_mcp_actor(mut manager: McpServerManager, mut cmd_rx: mpsc::Receiver<McpCmd>) {
     while let Some(cmd) = cmd_rx.recv().await {
         match cmd {
-            McpCmd::Register {
-                config,
-                tokens,
-                reply,
-            } => {
-                let server_id = config.id.clone();
-                // Drop the existing connection before re-registering so the
-                // new config (URL or headers) actually takes effect; the
-                // manager itself just overwrites the configs entry without
-                // tearing the live transport down.
-                if manager.connected_server(&server_id).is_some()
-                    && let Err(e) = manager.disconnect_server(&server_id).await
-                {
-                    tracing::debug!(server_id = %server_id, error = %e, "disconnect before re-register");
-                }
-                manager.register_server(config);
-                let result = THREAD_TOKEN
-                    .scope(tokens, async {
-                        match manager.connect_server(&server_id).await {
-                            Ok(handle) => {
-                                tracing::info!(
-                                    server_id = %server_id,
-                                    tools = handle.snapshot().tools.len(),
-                                    "mcp register ok"
-                                );
-                                Ok(())
-                            }
-                            Err(e) => {
-                                tracing::warn!(server_id = %server_id, error = %e, "mcp register/connect failed");
-                                Err(e.to_string())
-                            }
-                        }
-                    })
-                    .await;
-                let _ = reply.send(result);
-            }
-            McpCmd::ForceReconnect {
-                server_id,
-                tokens,
-                reply,
-            } => {
+            McpCmd::ForceReconnect { server_id, reply } => {
                 if let Err(e) = manager.disconnect_server(&server_id).await {
                     tracing::debug!(server_id = %server_id, error = %e, "disconnect during force reconnect");
                 }
-                let result = THREAD_TOKEN
-                    .scope(tokens, async {
-                        match manager.connect_server(&server_id).await {
-                            Ok(handle) => {
-                                tracing::info!(
-                                    server_id = %server_id,
-                                    tools = handle.snapshot().tools.len(),
-                                    "mcp force reconnect ok"
-                                );
-                                Ok(())
-                            }
-                            Err(e) => {
-                                tracing::warn!(server_id = %server_id, error = %e, "mcp force reconnect failed");
-                                Err(e.to_string())
-                            }
-                        }
-                    })
-                    .await;
-                let _ = reply.send(result);
-            }
-            McpCmd::Disconnect { server_id, reply } => {
-                let result = match manager.disconnect_server(&server_id).await {
-                    Ok(()) => {
-                        tracing::info!(server_id = %server_id, "mcp disconnect ok");
-                        Ok(())
-                    }
-                    Err(e) => {
-                        tracing::warn!(server_id = %server_id, error = %e, "mcp disconnect failed");
-                        Err(e.to_string())
-                    }
-                };
+                let result = connect_and_log(&mut manager, &server_id, "force_reconnect").await;
                 let _ = reply.send(result);
             }
         }

@@ -35,19 +35,13 @@ enum MiddlewareError {
     InvalidTokenHeader(#[from] http::header::InvalidHeaderValue),
 }
 
+/// Bearer slot for one assistant thread. Every outbound request the thread
+/// makes (chat completions, MCP, bootstrap fetch) authenticates against
+/// this slot, so the ThreadID claim minted on `/threads/turn` propagates
+/// to platform tools that key off `principal.ThreadID`.
 #[derive(Clone, Debug)]
 pub struct TokenRegistry {
     inner: Arc<RwLock<String>>,
-}
-
-tokio::task_local! {
-    /// Per-thread registry scoped onto the spawning task. Outbound HTTP
-    /// (chat completions, MCP, bootstrap fetch) prefers this over the
-    /// host-shared fallback so a shared VM serving multiple threads still
-    /// authenticates each request under the calling thread's JWT — the
-    /// ThreadID claim then propagates through to platform tools that key
-    /// off `principal.ThreadID` (wake, memory, telemetry).
-    pub static THREAD_TOKEN: TokenRegistry;
 }
 
 impl TokenRegistry {
@@ -66,19 +60,12 @@ impl TokenRegistry {
         Ok(())
     }
 
-    fn read_local(&self) -> Result<String, RunnerError> {
+    pub fn current(&self) -> Result<String, RunnerError> {
         Ok(self
             .inner
             .read()
             .map_err(|_| RunnerError::Loop("token registry read lock poisoned".into()))?
             .clone())
-    }
-
-    pub fn current(&self) -> Result<String, RunnerError> {
-        match THREAD_TOKEN.try_with(|r| r.read_local()) {
-            Ok(res) => res,
-            Err(_) => self.read_local(),
-        }
     }
 }
 
@@ -90,11 +77,8 @@ impl Middleware for TokenRegistry {
         extensions: &mut http::Extensions,
         next: Next<'_>,
     ) -> reqwest_middleware::Result<reqwest::Response> {
-        let token_result = match THREAD_TOKEN.try_with(|r| r.read_local()) {
-            Ok(res) => res,
-            Err(_) => self.read_local(),
-        };
-        let token = token_result
+        let token = self
+            .current()
             .map_err(|_| reqwest_middleware::Error::middleware(MiddlewareError::LockPoisoned))?;
         let value = http::HeaderValue::try_from(format!("Bearer {token}"))
             .map_err(|e| reqwest_middleware::Error::middleware(MiddlewareError::from(e)))?;
@@ -155,7 +139,7 @@ impl McpRotatingClient {
     }
 
     fn current_token(&self) -> Option<String> {
-        self.tokens.current().ok()
+        self.tokens.current().ok().filter(|t| !t.is_empty())
     }
 }
 

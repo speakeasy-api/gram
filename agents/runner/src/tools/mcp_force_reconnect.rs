@@ -1,27 +1,29 @@
+use std::sync::Arc;
+
 use agentkit_core::{MetadataMap, ToolOutput, ToolResultPart};
 use agentkit_mcp::McpServerId;
 use agentkit_tools_core::{
     Tool, ToolAnnotations, ToolContext, ToolError, ToolRequest, ToolResult, ToolSpec,
 };
 use async_trait::async_trait;
+use futures::future::join_all;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::oneshot;
 
-use crate::http_layer::{THREAD_TOKEN, TokenRegistry};
-use crate::runtime::McpCmd;
+use crate::runtime::{McpCmd, RuntimeHost};
 
 const TOOL_NAME: &str = "mcp_force_reconnect";
 
 pub struct McpForceReconnectTool {
-    cmd_tx: mpsc::Sender<McpCmd>,
+    host: Arc<RuntimeHost>,
     spec: ToolSpec,
 }
 
 impl McpForceReconnectTool {
-    pub fn new(cmd_tx: mpsc::Sender<McpCmd>, server_ids: Vec<String>) -> Self {
+    pub fn new(host: Arc<RuntimeHost>, server_ids: Vec<String>) -> Self {
         let spec = build_spec(&server_ids);
-        Self { cmd_tx, spec }
+        Self { host, spec }
     }
 }
 
@@ -87,33 +89,62 @@ impl Tool for McpForceReconnectTool {
         let input: McpForceReconnectInput = serde_json::from_value(request.input)
             .map_err(|e| ToolError::InvalidInput(e.to_string()))?;
 
-        let (reply_tx, reply_rx) = oneshot::channel();
-        let server_id = McpServerId::new(input.server_id.clone());
-        // Tool runs inside the calling thread's task; lift its bearer slot
-        // into the McpCmd so the actor task can re-scope THREAD_TOKEN around
-        // the reconnect handshake.
-        let tokens = THREAD_TOKEN
-            .try_with(|r| r.clone())
-            .unwrap_or_else(|_| TokenRegistry::new(""));
-        self.cmd_tx
-            .send(McpCmd::ForceReconnect {
-                server_id,
-                tokens,
-                reply: reply_tx,
-            })
-            .await
-            .map_err(|_| ToolError::ExecutionFailed("mcp actor channel closed".into()))?;
+        // The model only sees one tool; fan out to every live thread's
+        // actor so sibling threads' transports get reseated too.
+        let senders: Vec<_> = self
+            .host
+            .threads
+            .iter()
+            .filter_map(|entry| entry.value().get().map(|t| t.mcp_cmd_tx.clone()))
+            .collect();
 
-        let outcome = reply_rx
-            .await
-            .map_err(|_| ToolError::ExecutionFailed("mcp actor dropped reply".into()))?;
-
-        let (text, is_error) = match outcome {
-            Ok(()) => (format!("reconnected mcp server {}", input.server_id), false),
-            Err(e) => (
-                format!("failed to reconnect mcp server {}: {e}", input.server_id),
+        let total = senders.len();
+        let (text, is_error) = if total == 0 {
+            (
+                format!("no live threads to reconnect mcp server {}", input.server_id),
                 true,
-            ),
+            )
+        } else {
+            let outcomes = join_all(senders.into_iter().map(|tx| {
+                let server_id = McpServerId::new(input.server_id.clone());
+                async move {
+                    let (reply_tx, reply_rx) = oneshot::channel();
+                    if tx
+                        .send(McpCmd::ForceReconnect {
+                            server_id,
+                            reply: reply_tx,
+                        })
+                        .await
+                        .is_err()
+                    {
+                        return Err("mcp actor channel closed".to_string());
+                    }
+                    reply_rx
+                        .await
+                        .map_err(|_| "mcp actor dropped reply".to_string())?
+                }
+            }))
+            .await;
+
+            let (ok, errs): (usize, Vec<String>) = outcomes.into_iter().fold(
+                (0, Vec::new()),
+                |(ok, mut errs), outcome| match outcome {
+                    Ok(()) => (ok + 1, errs),
+                    Err(e) => {
+                        errs.push(e);
+                        (ok, errs)
+                    }
+                },
+            );
+
+            let mut text = format!(
+                "reconnected mcp server {} on {ok}/{total} threads",
+                input.server_id
+            );
+            if !errs.is_empty() {
+                text.push_str(&format!("; errors: {}", errs.join(", ")));
+            }
+            (text, ok == 0)
         };
 
         Ok(ToolResult {
