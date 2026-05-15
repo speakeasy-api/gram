@@ -1,7 +1,6 @@
 import { LogWorkbench } from "@/components/log-workbench";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Button } from "@/components/ui/button";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import {
   Select,
@@ -19,7 +18,7 @@ import {
   useRiskApproveShadowMCPMutation,
   useRiskListPolicies,
 } from "@gram/client/react-query/index.js";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, ShieldOff } from "lucide-react";
 import { useCallback, useMemo, useRef } from "react";
@@ -178,7 +177,7 @@ function RiskActivityContent() {
       description="Review policy findings across recent analyzed chats."
       actions={
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
           onClick={() => resultsQuery.refetch()}
           disabled={resultsQuery.isFetching}
@@ -461,7 +460,7 @@ function RiskActivityFooter({
       </span>
       {hasNextPage ? (
         <Button
-          variant="ghost"
+          variant="tertiary"
           size="sm"
           disabled={isFetchingNextPage}
           onClick={onLoadMore}
