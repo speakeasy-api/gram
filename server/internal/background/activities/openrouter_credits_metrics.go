@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	meterOpenRouterCreditsRemaining = "openrouter.credits.remaining"
-	meterOpenRouterCreditsUsedRatio = "openrouter.credits.used_ratio"
+	meterOpenRouterCreditsRemaining = "gram.openrouter.credits_remaining"
+	meterOpenRouterCreditsUsedRatio = "gram.openrouter.credits_used_ratio"
 
 	openRouterCreditsPollConcurrency = 10
 )
