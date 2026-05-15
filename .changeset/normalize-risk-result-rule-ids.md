@@ -1,21 +1,20 @@
 ---
 "server": minor
-"dashboard": minor
 ---
 
-Normalize `risk_results.rule_id` and `description` into a single canonical contract across every scanner.
+`RiskResult.rule_id` and `RiskResult.description` now follow a consistent shape across every detection source.
 
-`rule_id` is now lowercase kebab-case with optional dot-separated category prefixes:
+`rule_id` is lowercase, kebab-case, with an optional dot-separated category prefix:
 
-- `secret.<gitleaks-rule>` for credentials / secrets
-- `pii.<presidio-entity>` for personal / financial / medical data
-- `shadow-mcp` for unverified MCP tool calls (single rule)
-- `destructive.tool` for MCP-annotated destructive tool calls
-- `destructive.<category>.<name>` for shell / git / database / cloud command patterns
-- `prompt-injection` for prompt injection findings (engine is org-level feature flag)
+- `secret.<rule>` for credentials and secrets (e.g. `secret.anthropic-api-key`)
+- `pii.<rule>` for personal, financial, and medical data (e.g. `pii.credit-card`, `pii.medical-license`)
+- `shadow-mcp` for unverified MCP tool calls
+- `destructive.tool` for MCP tool calls flagged as destructive
+- `destructive.<category>.<name>` for destructive shell, git, database, and cloud commands (e.g. `destructive.shell.rm-rf`, `destructive.git.push-force`)
+- `prompt-injection` for prompt injection findings
 
-`description` is now a source-agnostic sentence that interpolates the tool name where useful and never echoes the matched value or internal validator detail. Each scanner routes through a typed `Describe*` builder rather than constructing the strings inline. A regex-grammar guard panics in dev/test when any writer hands back a non-canonical rule id.
+`(source, rule_id)` is the stable identifier downstream consumers should match on. The dotted prefix alone is enough to bucket findings by risk category.
 
-Dashboard policy form: prompt-injection becomes a single category-level toggle (no deberta sub-rule); the engine choice is `prompt-injection-use-classifier` per-org feature flag (default regex, opt in for the deberta classifier). The Custom Message field now only renders for block-action policies.
+`description` is a short human-readable sentence describing the finding. It never echoes the matched value and is safe to display verbatim.
 
-Historical rows with legacy rule ids (`MEDICAL_LICENSE`, `shadow_mcp.unverified_call`, `pi.role-hijack.*`, ...) keep working on read; the dashboard's `humanizeRuleId` fallback renders them legibly. A follow-up migration PR will backfill them.
+Historical rows written before this release keep their original `rule_id` and `description` values; a follow-up migration will rewrite them.
