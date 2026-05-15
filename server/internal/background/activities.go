@@ -42,10 +42,12 @@ import (
 )
 
 type Activities struct {
+	collectOpenRouterCreditsMetrics *activities.CollectOpenRouterCreditsMetrics
 	collectPlatformUsageMetrics     *activities.CollectPlatformUsageMetrics
 	cursorUsageMetrics              *activities.CursorUsageMetrics
 	customDomainIngress             *activities.CustomDomainIngress
 	fallbackModelUsageTracking      *activities.FallbackModelUsageTracking
+	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
 	freeTierReportingUsageMetrics   *activities.FreeTierReportingUsageMetrics
 	generateChatTitle               *activities.GenerateChatTitle
@@ -129,10 +131,12 @@ func NewActivities(
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
 
 	return &Activities{
+		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		cursorUsageMetrics:              activities.NewCursorUsageMetrics(logger, db, guardianPolicy, encryption, telemetryLogger, telemetryRepo),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
 		fallbackModelUsageTracking:      activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
+		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		freeTierReportingUsageMetrics:   activities.NewFreeTierReportingMetrics(logger, db, billingRepo, posthogClient),
 		generateChatTitle:               activities.NewGenerateChatTitle(logger, db, chatClient),
@@ -241,6 +245,14 @@ func (a *Activities) CollectPlatformUsageMetrics(ctx context.Context) ([]activit
 
 func (a *Activities) FirePlatformUsageMetrics(ctx context.Context, metrics []activities.PlatformUsageMetrics) error {
 	return a.firePlatformUsageMetrics.Do(ctx, metrics)
+}
+
+func (a *Activities) CollectOpenRouterCreditsMetrics(ctx context.Context, args activities.CollectOpenRouterCreditsMetricsArgs) ([]activities.OpenRouterCreditsMetric, error) {
+	return a.collectOpenRouterCreditsMetrics.Do(ctx, args)
+}
+
+func (a *Activities) FireOpenRouterCreditsMetrics(ctx context.Context, metrics []activities.OpenRouterCreditsMetric) error {
+	return a.fireOpenRouterCreditsMetrics.Do(ctx, metrics)
 }
 
 func (a *Activities) FreeTierReportingUsageMetrics(ctx context.Context, orgIDs []string) error {
