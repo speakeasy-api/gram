@@ -32,7 +32,9 @@ export function canonicalizeRuleId(
     return "destructive.tool";
   }
   if (src === "cli_destructive") {
-    return "destructive.cli-" + id.toLowerCase().replace(/[._/]/g, "-");
+    // Backend already emits `destructive.<category>.<name>` for cli
+    // patterns, so this branch is a pass-through. Lowercase for safety.
+    return id.toLowerCase();
   }
   if (src === "prompt_injection") {
     // The deberta classifier rule id in the policy form maps to `pi` on

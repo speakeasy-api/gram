@@ -480,7 +480,7 @@ func (a *AnalyzeBatch) scanMessageDestructiveCLICalls(ctx context.Context, raw [
 			continue
 		}
 
-		ruleID, description := Normalize(SourceCLIDestructive, CanonicalCLIDestructiveRuleID(matched.FullName()), "", RuleContext{
+		ruleID, description := Normalize(SourceCLIDestructive, matched.FullName(), "", RuleContext{
 			ToolName:       toolName,
 			MatchedPattern: matched.FullName(),
 		})

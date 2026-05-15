@@ -32,14 +32,18 @@ type cliDestructivePattern struct {
 	Guard    *regexp.Regexp
 }
 
-// FullName returns "category/name" for use in rule_ids and finding metadata.
+// FullName returns the canonical rule id for this pattern, in
+// `destructive.<category>.<name>` form (e.g. `destructive.shell.rm-rf`).
+// The pattern is a peer of `destructive.tool` under the `destructive.`
+// category, with shell/git/database/cloud as a second-layer grouping.
 func (p cliDestructivePattern) FullName() string {
 	if p.Category == "" && p.Name == "" {
 		return ""
 	}
 	var b strings.Builder
+	b.WriteString("destructive.")
 	b.WriteString(p.Category)
-	b.WriteByte('/')
+	b.WriteByte('.')
 	b.WriteString(p.Name)
 	return b.String()
 }

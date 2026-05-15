@@ -181,7 +181,7 @@ func TestAnalyzeBatch_CLIDestructive_BashRmRf(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.True(t, rows[0].Found)
 	assert.Equal(t, risk_analysis.SourceCLIDestructive, rows[0].Source)
-	assert.Equal(t, "destructive.cli-rm-rf", rows[0].RuleID.String)
+	assert.Equal(t, "destructive.shell.rm-rf", rows[0].RuleID.String)
 	assert.Equal(t, "Bash", rows[0].Match.String)
 }
 
@@ -204,7 +204,7 @@ func TestAnalyzeBatch_CLIDestructive_GitForcePush(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, "destructive.cli-git-force-push", rows[0].RuleID.String)
+	assert.Equal(t, "destructive.git.push-force", rows[0].RuleID.String)
 }
 
 // TestAnalyzeBatch_CLIDestructive_MCPArgsDropTable proves the cli_destructive
@@ -230,7 +230,7 @@ func TestAnalyzeBatch_CLIDestructive_MCPArgsDropTable(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, "destructive.cli-database-drop", rows[0].RuleID.String)
+	assert.Equal(t, "destructive.database.drop", rows[0].RuleID.String)
 }
 
 // TestAnalyzeBatch_CLIDestructive_StableRuleIDAcrossKeys exercises the
@@ -264,7 +264,7 @@ func TestAnalyzeBatch_CLIDestructive_StableRuleIDAcrossKeys(t *testing.T) {
 	// Sorted-key iteration walks "alt" → "command" → "context", so the
 	// first match is git/push-force from the "alt" key. Locking this in
 	// a test catches accidental reintroduction of random map ordering.
-	assert.Equal(t, "destructive.cli-git-force-push", rows[0].RuleID.String)
+	assert.Equal(t, "destructive.git.push-force", rows[0].RuleID.String)
 }
 
 // TestAnalyzeBatch_BothSources_OnSameMCPCall asserts that destructive_tool
@@ -299,7 +299,7 @@ func TestAnalyzeBatch_BothSources_OnSameMCPCall(t *testing.T) {
 	require.Len(t, rows, 2)
 	ruleIDs := []string{rows[0].RuleID.String, rows[1].RuleID.String}
 	assert.Contains(t, ruleIDs, "destructive.tool")
-	assert.Contains(t, ruleIDs, "destructive.cli-database-drop")
+	assert.Contains(t, ruleIDs, "destructive.database.drop")
 }
 
 func TestAnalyzeBatch_CLIDestructive_BenignBash(t *testing.T) {

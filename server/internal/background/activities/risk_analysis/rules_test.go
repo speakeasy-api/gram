@@ -24,24 +24,15 @@ func TestCanonicalPresidioRuleID_KebabsAndPrependsPII(t *testing.T) {
 	assert.Equal(t, "pii.email-address", CanonicalPresidioRuleID("EMAIL_ADDRESS"))
 }
 
-func TestCanonicalCLIDestructiveRuleID_MapsCuratedPatterns(t *testing.T) {
+func TestCLIDestructivePattern_FullNameProducesCanonicalRuleID(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "destructive.cli-rm-rf", CanonicalCLIDestructiveRuleID("shell/rm-rf"))
-	assert.Equal(t, "destructive.cli-git-force-push", CanonicalCLIDestructiveRuleID("git/push-force"))
-	assert.Equal(t, "destructive.cli-database-drop", CanonicalCLIDestructiveRuleID("database/drop"))
-	assert.Equal(t, "destructive.cli-kubectl-delete-namespace", CanonicalCLIDestructiveRuleID("cloud/kubectl-delete-namespace"))
-}
-
-func TestCanonicalCLIDestructiveRuleID_FallbackDropsImplicitCategories(t *testing.T) {
-	t.Parallel()
-
-	// Unknown shell-category pattern: shell/ prefix dropped, kebab body preserved.
-	assert.Equal(t, "destructive.cli-future-shell-thing", CanonicalCLIDestructiveRuleID("shell/future-shell-thing"))
-	// Unknown cloud-category pattern: cloud/ prefix dropped.
-	assert.Equal(t, "destructive.cli-azure-rg-delete", CanonicalCLIDestructiveRuleID("cloud/azure-rg-delete"))
-	// Unknown git-category pattern: prefix retained.
-	assert.Equal(t, "destructive.cli-git-future-thing", CanonicalCLIDestructiveRuleID("git/future-thing"))
+	// FullName on the matched pattern is the canonical rule id — no
+	// indirection table. Verify the shape directly.
+	assert.Equal(t, "destructive.shell.rm-rf", (cliDestructivePattern{Category: "shell", Name: "rm-rf"}).FullName())
+	assert.Equal(t, "destructive.git.push-force", (cliDestructivePattern{Category: "git", Name: "push-force"}).FullName())
+	assert.Equal(t, "destructive.database.drop", (cliDestructivePattern{Category: "database", Name: "drop"}).FullName())
+	assert.Equal(t, "destructive.cloud.kubectl-delete-namespace", (cliDestructivePattern{Category: "cloud", Name: "kubectl-delete-namespace"}).FullName())
 }
 
 func TestNormalize_UsesCatalogDescriptionWhenPresent(t *testing.T) {
@@ -93,7 +84,7 @@ func TestNormalize_DestructiveToolDescriptionIncludesToolName(t *testing.T) {
 func TestNormalize_CLIDestructiveDescriptionIncludesToolAndCommand(t *testing.T) {
 	t.Parallel()
 
-	_, desc := Normalize(SourceCLIDestructive, CanonicalCLIDestructiveRuleID("shell/rm-rf"), "", RuleContext{ToolName: "Bash", MatchedPattern: "shell/rm-rf"})
+	_, desc := Normalize(SourceCLIDestructive, "destructive.shell.rm-rf", "", RuleContext{ToolName: "Bash", MatchedPattern: "destructive.shell.rm-rf"})
 	assert.Contains(t, desc, "Bash", "description must include the tool name")
 	assert.Contains(t, desc, "rm -rf", "description must include the human-readable command")
 }
@@ -135,9 +126,9 @@ func TestRuleCatalog_ContainsExpectedAnchors(t *testing.T) {
 		"pii.dead-letter",
 		RuleShadowMCP,
 		RuleDestructiveTool,
-		"destructive.cli-rm-rf",
-		"destructive.cli-git-force-push",
-		"destructive.cli-database-drop",
+		"destructive.shell.rm-rf",
+		"destructive.git.push-force",
+		"destructive.database.drop",
 		RulePromptInjectionClassifier,
 		"pi.instruction-override",
 		"pi.role-hijack",

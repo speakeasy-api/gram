@@ -69,54 +69,6 @@ func CanonicalPresidioRuleID(raw string) string {
 	return prefixPII + strings.ReplaceAll(strings.ToLower(raw), "_", "-")
 }
 
-// CanonicalCLIDestructiveRuleID maps a cliDestructivePattern.FullName
-// (`shell/rm-rf`, `git/push-force`, `database/drop`, ...) to the canonical
-// `destructive.cli-<command>` rule id. Shell and cloud categories are
-// implicit and dropped from the rule id; git and database categories are
-// retained because they convey real grouping.
-func CanonicalCLIDestructiveRuleID(fullName string) string {
-	if id, ok := cliDestructiveCanonical[fullName]; ok {
-		return id
-	}
-	// Fallback for any cli pattern we haven't pinned in the map above:
-	// drop "shell/" and "cloud/" prefixes (implicit), kebab the rest.
-	body := fullName
-	for _, drop := range []string{"shell/", "cloud/"} {
-		if strings.HasPrefix(body, drop) {
-			body = body[len(drop):]
-			break
-		}
-	}
-	body = strings.ReplaceAll(body, "/", "-")
-	return prefixDestructive + "cli-" + body
-}
-
-// cliDestructiveCanonical pins the rule id for every curated cli pattern.
-// Kept explicit so adding a pattern in cli_destructive.go is a deliberate
-// catalog change rather than an opaque rename.
-var cliDestructiveCanonical = map[string]string{
-	"shell/rm-rf":                    "destructive.cli-rm-rf",
-	"shell/dd":                       "destructive.cli-dd",
-	"shell/mkfs":                     "destructive.cli-mkfs",
-	"shell/fork-bomb":                "destructive.cli-fork-bomb",
-	"shell/chmod-recursive":          "destructive.cli-chmod-recursive",
-	"shell/chown-recursive":          "destructive.cli-chown-recursive",
-	"shell/sudo":                     "destructive.cli-sudo",
-	"git/push-force":                 "destructive.cli-git-force-push",
-	"git/reset-hard":                 "destructive.cli-git-reset-hard",
-	"git/clean-force":                "destructive.cli-git-clean-force",
-	"git/branch-delete-force":        "destructive.cli-git-branch-delete-force",
-	"database/drop":                  "destructive.cli-database-drop",
-	"database/truncate":              "destructive.cli-database-truncate",
-	"database/delete-without-where":  "destructive.cli-database-delete-without-where",
-	"database/dropdb":                "destructive.cli-database-dropdb",
-	"cloud/aws-ec2-terminate":        "destructive.cli-aws-ec2-terminate",
-	"cloud/aws-s3-rb":                "destructive.cli-aws-s3-rb",
-	"cloud/gcloud-projects-delete":   "destructive.cli-gcloud-projects-delete",
-	"cloud/kubectl-delete-namespace": "destructive.cli-kubectl-delete-namespace",
-	"cloud/kubectl-delete-workload":  "destructive.cli-kubectl-delete-workload",
-}
-
 // ruleSpec describes one normalized rule. Describe builds the human-readable
 // description for a finding, optionally interpolating fields from
 // RuleContext. The function must not include the `match` value.
@@ -300,26 +252,28 @@ var ruleCatalog = func() map[string]ruleSpec {
 		),
 
 		// cli_destructive: one entry per curated pattern in cli_destructive.go.
-		cliDestructiveRule("destructive.cli-rm-rf", "rm -rf"),
-		cliDestructiveRule("destructive.cli-dd", "dd"),
-		cliDestructiveRule("destructive.cli-mkfs", "mkfs"),
-		cliDestructiveRule("destructive.cli-fork-bomb", "fork bomb"),
-		cliDestructiveRule("destructive.cli-chmod-recursive", "chmod -R"),
-		cliDestructiveRule("destructive.cli-chown-recursive", "chown -R"),
-		cliDestructiveRule("destructive.cli-sudo", "sudo"),
-		cliDestructiveRule("destructive.cli-git-force-push", "git push --force"),
-		cliDestructiveRule("destructive.cli-git-reset-hard", "git reset --hard"),
-		cliDestructiveRule("destructive.cli-git-clean-force", "git clean -f"),
-		cliDestructiveRule("destructive.cli-git-branch-delete-force", "git branch -D"),
-		cliDestructiveRule("destructive.cli-database-drop", "DROP TABLE"),
-		cliDestructiveRule("destructive.cli-database-truncate", "TRUNCATE"),
-		cliDestructiveRule("destructive.cli-database-delete-without-where", "DELETE without WHERE"),
-		cliDestructiveRule("destructive.cli-database-dropdb", "dropdb"),
-		cliDestructiveRule("destructive.cli-aws-ec2-terminate", "aws ec2 terminate-instances"),
-		cliDestructiveRule("destructive.cli-aws-s3-rb", "aws s3 rb"),
-		cliDestructiveRule("destructive.cli-gcloud-projects-delete", "gcloud projects delete"),
-		cliDestructiveRule("destructive.cli-kubectl-delete-namespace", "kubectl delete namespace"),
-		cliDestructiveRule("destructive.cli-kubectl-delete-workload", "kubectl delete workload"),
+		// Rule ids are produced directly by cliDestructivePattern.FullName()
+		// in `destructive.<category>.<name>` form.
+		cliDestructiveRule("destructive.shell.rm-rf", "rm -rf"),
+		cliDestructiveRule("destructive.shell.dd", "dd"),
+		cliDestructiveRule("destructive.shell.mkfs", "mkfs"),
+		cliDestructiveRule("destructive.shell.fork-bomb", "fork bomb"),
+		cliDestructiveRule("destructive.shell.chmod-recursive", "chmod -R"),
+		cliDestructiveRule("destructive.shell.chown-recursive", "chown -R"),
+		cliDestructiveRule("destructive.shell.sudo", "sudo"),
+		cliDestructiveRule("destructive.git.push-force", "git push --force"),
+		cliDestructiveRule("destructive.git.reset-hard", "git reset --hard"),
+		cliDestructiveRule("destructive.git.clean-force", "git clean -f"),
+		cliDestructiveRule("destructive.git.branch-delete-force", "git branch -D"),
+		cliDestructiveRule("destructive.database.drop", "DROP TABLE"),
+		cliDestructiveRule("destructive.database.truncate", "TRUNCATE"),
+		cliDestructiveRule("destructive.database.delete-without-where", "DELETE without WHERE"),
+		cliDestructiveRule("destructive.database.dropdb", "dropdb"),
+		cliDestructiveRule("destructive.cloud.aws-ec2-terminate", "aws ec2 terminate-instances"),
+		cliDestructiveRule("destructive.cloud.aws-s3-rb", "aws s3 rb"),
+		cliDestructiveRule("destructive.cloud.gcloud-projects-delete", "gcloud projects delete"),
+		cliDestructiveRule("destructive.cloud.kubectl-delete-namespace", "kubectl delete namespace"),
+		cliDestructiveRule("destructive.cloud.kubectl-delete-workload", "kubectl delete workload"),
 
 		// prompt_injection. The L1 classifier rule_id is just `pi` — the
 		// model (deberta-v3) is implementation detail. L0 heuristic
