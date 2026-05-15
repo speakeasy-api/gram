@@ -1248,6 +1248,47 @@ func (q *Queries) ListToolsetsWithVersionsByOrganization(ctx context.Context, or
 	return items, nil
 }
 
+const lockToolsetForAutoSync = `-- name: LockToolsetForAutoSync :one
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, auto_sync_sources, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, created_at, updated_at, deleted_at, deleted
+FROM toolsets
+WHERE id = $1
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+// Row-level lock used by the deployment-completed activity to serialize
+// concurrent auto-sync writers on the same toolset. Pair with a follow-up
+// CreateToolsetVersion inside the same transaction. Returns the locked
+// toolset row so the caller can read auto_sync_sources without a second
+// query.
+func (q *Queries) LockToolsetForAutoSync(ctx context.Context, id uuid.UUID) (Toolset, error) {
+	row := q.db.QueryRow(ctx, lockToolsetForAutoSync, id)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.AutoSyncSources,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const setToolsetMCPEnabledByID = `-- name: SetToolsetMCPEnabledByID :exec
 UPDATE toolsets
 SET mcp_enabled = $1

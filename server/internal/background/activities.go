@@ -53,6 +53,7 @@ type Activities struct {
 	processDeployment               *activities.ProcessDeployment
 	provisionFunctionsAccess        *activities.ProvisionFunctionsAccess
 	deployFunctionRunners           *activities.DeployFunctionRunners
+	autoSyncToolsets                *activities.AutoSyncToolsets
 	reapFlyApps                     *activities.ReapFlyApps
 	refreshBillingUsage             *activities.RefreshBillingUsage
 	refreshOpenRouterKey            *activities.RefreshOpenRouterKey
@@ -138,6 +139,7 @@ func NewActivities(
 		processDeployment:               activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpRegistryClient),
 		provisionFunctionsAccess:        activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:           activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
+		autoSyncToolsets:                activities.NewAutoSyncToolsets(logger, db, auditLogger),
 		reapFlyApps:                     activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		refreshBillingUsage:             activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		refreshOpenRouterKey:            activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
@@ -205,6 +207,10 @@ func (a *Activities) TransitionDeployment(ctx context.Context, projectID uuid.UU
 
 func (a *Activities) ProcessDeployment(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID) error {
 	return a.processDeployment.Do(ctx, projectID, deploymentID)
+}
+
+func (a *Activities) AutoSyncToolsets(ctx context.Context, req activities.AutoSyncToolsetsRequest) (*activities.AutoSyncToolsetsResult, error) {
+	return a.autoSyncToolsets.Do(ctx, req)
 }
 
 func (a *Activities) GetSlackProjectContext(ctx context.Context, event slacktypes.SlackEvent) (*activities.SlackProjectContextResponse, error) {

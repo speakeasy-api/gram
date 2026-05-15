@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const finalizeFlyApp = `-- name: FinalizeFlyApp :one
@@ -358,6 +359,45 @@ func (q *Queries) InitFlyApp(ctx context.Context, arg InitFlyAppParams) (uuid.UU
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const listFunctionToolURNsByDeployment = `-- name: ListFunctionToolURNsByDeployment :many
+SELECT
+  ftd.tool_urn AS tool_urn,
+  df.slug AS function_slug
+FROM function_tool_definitions ftd
+JOIN deployments_functions df ON df.id = ftd.function_id
+WHERE ftd.deployment_id = $1
+  AND ftd.deleted IS FALSE
+ORDER BY df.slug, ftd.tool_urn
+`
+
+type ListFunctionToolURNsByDeploymentRow struct {
+	ToolUrn      urn.Tool
+	FunctionSlug string
+}
+
+// Returns one row per non-deleted function tool definition in a deployment,
+// with the parent function's slug exposed as the "source" segment to ease
+// bucketing in callers. Used by the deployment-completed auto-sync activity.
+func (q *Queries) ListFunctionToolURNsByDeployment(ctx context.Context, deploymentID uuid.UUID) ([]ListFunctionToolURNsByDeploymentRow, error) {
+	rows, err := q.db.Query(ctx, listFunctionToolURNsByDeployment, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFunctionToolURNsByDeploymentRow
+	for rows.Next() {
+		var i ListFunctionToolURNsByDeploymentRow
+		if err := rows.Scan(&i.ToolUrn, &i.FunctionSlug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const markFlyAppReaped = `-- name: MarkFlyAppReaped :exec

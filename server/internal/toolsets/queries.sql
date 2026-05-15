@@ -104,6 +104,18 @@ WHERE project_id = @project_id
   AND auto_sync_sources && @sources::TEXT[]
 ORDER BY id;
 
+-- name: LockToolsetForAutoSync :one
+-- Row-level lock used by the deployment-completed activity to serialize
+-- concurrent auto-sync writers on the same toolset. Pair with a follow-up
+-- CreateToolsetVersion inside the same transaction. Returns the locked
+-- toolset row so the caller can read auto_sync_sources without a second
+-- query.
+SELECT *
+FROM toolsets
+WHERE id = @id
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: DeleteToolset :one
 UPDATE toolsets
 SET deleted_at = clock_timestamp()

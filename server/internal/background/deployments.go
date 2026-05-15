@@ -158,6 +158,26 @@ func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWor
 				string(attr.DeploymentIDKey), params.DeploymentID,
 			)
 		}
+
+		// Auto-sync any toolsets subscribed to this deployment's function
+		// sources. Best-effort: a failure here does NOT fail the deployment;
+		// subscribers can still be reconciled on the next push.
+		autoSyncErr := workflow.ExecuteActivity(
+			ctx,
+			a.AutoSyncToolsets,
+			activities.AutoSyncToolsetsRequest{
+				ProjectID:    params.ProjectID,
+				DeploymentID: params.DeploymentID,
+			},
+		).Get(ctx, nil)
+		if autoSyncErr != nil {
+			logger.Error(
+				"failed to auto-sync subscribed toolsets",
+				"error", autoSyncErr.Error(),
+				string(attr.ProjectIDKey), params.ProjectID,
+				string(attr.DeploymentIDKey), params.DeploymentID,
+			)
+		}
 	}
 
 	var finalTransition activities.TransitionDeploymentResult
