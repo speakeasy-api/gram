@@ -26,7 +26,7 @@ func TestPresidio_DetectsPersonName(t *testing.T) {
 
 	findings := results[0]
 	ruleIDs := findingRuleIDs(findings)
-	assert.Contains(t, ruleIDs, "person", "expected PERSON entity")
+	assert.Contains(t, ruleIDs, "pii.person", "expected PERSON entity")
 }
 
 func TestPresidio_DetectsEmail(t *testing.T) {
@@ -40,10 +40,10 @@ func TestPresidio_DetectsEmail(t *testing.T) {
 
 	findings := results[0]
 	ruleIDs := findingRuleIDs(findings)
-	assert.Contains(t, ruleIDs, "email-address", "expected EMAIL_ADDRESS entity")
+	assert.Contains(t, ruleIDs, "pii.email-address", "expected EMAIL_ADDRESS entity")
 
 	for _, f := range findings {
-		if f.RuleID == "email-address" {
+		if f.RuleID == "pii.email-address" {
 			assert.Equal(t, "john.smith@acmecorp.com", f.Match)
 			assert.InDelta(t, 1.0, f.Confidence, 0.1)
 			assert.Equal(t, "presidio", f.Source)
@@ -69,7 +69,7 @@ func TestPresidio_BatchResultsMapBackToInputIndexes(t *testing.T) {
 	for i, findings := range results {
 		var got string
 		for _, f := range findings {
-			if f.RuleID == "email-address" {
+			if f.RuleID == "pii.email-address" {
 				got = f.Match
 				break
 			}
@@ -91,7 +91,7 @@ func TestPresidio_DetectsCreditCard(t *testing.T) {
 
 	for i, findings := range results {
 		ruleIDs := findingRuleIDs(findings)
-		assert.Contains(t, ruleIDs, "credit-card", "expected CREDIT_CARD for message %d", i)
+		assert.Contains(t, ruleIDs, "pii.credit-card", "expected CREDIT_CARD for message %d", i)
 	}
 }
 
@@ -110,7 +110,7 @@ func TestPresidio_DetectsPhoneNumber(t *testing.T) {
 	for _, findings := range results {
 		ruleIDs := findingRuleIDs(findings)
 		for _, id := range ruleIDs {
-			if id == "phone-number" {
+			if id == "pii.phone-number" {
 				anyDetected = true
 			}
 		}
@@ -129,9 +129,9 @@ func TestPresidio_DetectsMultiplePIIInSingleMessage(t *testing.T) {
 
 	findings := results[0]
 	ruleIDs := findingRuleIDs(findings)
-	assert.Contains(t, ruleIDs, "person")
-	assert.Contains(t, ruleIDs, "email-address")
-	assert.Contains(t, ruleIDs, "credit-card")
+	assert.Contains(t, ruleIDs, "pii.person")
+	assert.Contains(t, ruleIDs, "pii.email-address")
+	assert.Contains(t, ruleIDs, "pii.credit-card")
 }
 
 // --- False positives: text that should NOT be flagged ---
@@ -179,7 +179,7 @@ func TestPresidio_NoFalsePositiveOnCodeSnippets(t *testing.T) {
 		highConfidence := filterHighConfidence(piiFindings, 0.8)
 		for _, f := range highConfidence {
 			// URL detections in code are expected and OK
-			if f.RuleID != "url" {
+			if f.RuleID != "pii.url" {
 				t.Errorf("message %d: unexpected high-confidence PII %q (%s) in code snippet", i, f.RuleID, f.Match)
 			}
 		}
@@ -267,7 +267,7 @@ func TestPresidio_StressBatch(t *testing.T) {
 	t.Logf("Stress test completed in %s. Finding counts: %v", elapsed, counts)
 
 	// Messages with emails should have findings
-	assert.Positive(t, counts["email-address"], "expected some EMAIL_ADDRESS detections")
+	assert.Positive(t, counts["pii.email-address"], "expected some EMAIL_ADDRESS detections")
 }
 
 // --- Helpers ---

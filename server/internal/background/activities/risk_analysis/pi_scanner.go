@@ -121,7 +121,7 @@ func (s *PromptInjectionScanner) findingFromResult(text string, r ClassifierResu
 	if r.Label != LabelInjection {
 		return nil
 	}
-	ruleID, description := Normalize(SourcePromptInjection, RulePromptInjectionClassifierDeberta, promptInjectionClassifierFindingDescription, RuleContext{ToolName: "", MatchedPattern: ""})
+	ruleID, description := Normalize(SourcePromptInjection, RulePromptInjectionClassifier, promptInjectionClassifierFindingDescription, RuleContext{ToolName: "", MatchedPattern: ""})
 	return &Finding{
 		RuleID:           ruleID,
 		Description:      description,

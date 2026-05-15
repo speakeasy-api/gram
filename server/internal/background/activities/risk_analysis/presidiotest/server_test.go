@@ -47,9 +47,9 @@ func TestMockServer_DetectsEmail(t *testing.T) {
 	require.Len(t, results, 1)
 
 	ids := ruleIDs(results[0])
-	require.Contains(t, ids, "email-address")
+	require.Contains(t, ids, "pii.email-address")
 	for _, f := range results[0] {
-		if f.RuleID == "email-address" {
+		if f.RuleID == "pii.email-address" {
 			require.Equal(t, "john.smith@acmecorp.com", f.Match)
 			require.Equal(t, "presidio", f.Source)
 		}
@@ -68,9 +68,9 @@ func TestMockServer_DetectsCreditCardWithLuhnCheck(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 3)
 
-	require.Contains(t, ruleIDs(results[0]), "credit-card")
-	require.Contains(t, ruleIDs(results[1]), "credit-card")
-	require.NotContains(t, ruleIDs(results[2]), "credit-card")
+	require.Contains(t, ruleIDs(results[0]), "pii.credit-card")
+	require.Contains(t, ruleIDs(results[1]), "pii.credit-card")
+	require.NotContains(t, ruleIDs(results[2]), "pii.credit-card")
 }
 
 func TestMockServer_DetectsPhoneNumber(t *testing.T) {
@@ -82,7 +82,7 @@ func TestMockServer_DetectsPhoneNumber(t *testing.T) {
 	}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	require.Contains(t, ruleIDs(results[0]), "phone-number")
+	require.Contains(t, ruleIDs(results[0]), "pii.phone-number")
 }
 
 func TestMockServer_DetectsPersonName(t *testing.T) {
@@ -94,7 +94,7 @@ func TestMockServer_DetectsPersonName(t *testing.T) {
 	}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	require.Contains(t, ruleIDs(results[0]), "person")
+	require.Contains(t, ruleIDs(results[0]), "pii.person")
 }
 
 func TestMockServer_NoFalsePositiveOnVersionString(t *testing.T) {
@@ -108,7 +108,7 @@ func TestMockServer_NoFalsePositiveOnVersionString(t *testing.T) {
 	require.Len(t, results, 1)
 
 	for _, f := range results[0] {
-		require.NotEqual(t, "phone-number", f.RuleID, "version string should not match phone regex")
+		require.NotEqual(t, "pii.phone-number", f.RuleID, "version string should not match phone regex")
 	}
 }
 
@@ -123,7 +123,7 @@ func TestMockServer_NoFalsePositiveOnUUID(t *testing.T) {
 	require.Len(t, results, 1)
 
 	for _, f := range results[0] {
-		require.NotEqual(t, "credit-card", f.RuleID)
+		require.NotEqual(t, "pii.credit-card", f.RuleID)
 	}
 }
 
@@ -141,8 +141,8 @@ func TestMockServer_EntityFilterRespected(t *testing.T) {
 	require.Len(t, results, 1)
 
 	ids := ruleIDs(results[0])
-	require.Contains(t, ids, "email-address")
-	require.NotContains(t, ids, "phone-number")
+	require.Contains(t, ids, "pii.email-address")
+	require.NotContains(t, ids, "pii.phone-number")
 }
 
 func TestMockServer_BatchResultsMapBackToInputIndexes(t *testing.T) {
@@ -164,7 +164,7 @@ func TestMockServer_BatchResultsMapBackToInputIndexes(t *testing.T) {
 	for i, findings := range results {
 		var got string
 		for _, f := range findings {
-			if f.RuleID == "email-address" {
+			if f.RuleID == "pii.email-address" {
 				got = f.Match
 				break
 			}
@@ -190,7 +190,7 @@ func TestMockServer_CustomDetectorOverride(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Len(t, results[0], 1)
-	require.Equal(t, "custom-entity", results[0][0].RuleID)
+	require.Equal(t, "pii.custom-entity", results[0][0].RuleID)
 	require.Equal(t, "anything", results[0][0].Match)
 }
 

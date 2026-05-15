@@ -10,6 +10,7 @@ import (
 // per-policy family toggle (e.g. PromptInjectionConfig.DetectRoleHijack).
 type heuristicRule struct {
 	id          string
+	canonicalID string
 	description string
 	family      ruleFamily
 	confidence  float64
@@ -41,6 +42,7 @@ func init() {
 	heuristicRules = []heuristicRule{
 		{
 			id:          "pi.role-hijack.you-are-now",
+			canonicalID: "pi.role-hijack",
 			description: "Role hijack: 'you are now' assertion",
 			family:      familyRoleHijack,
 			confidence:  0.75,
@@ -48,6 +50,7 @@ func init() {
 		},
 		{
 			id:          "pi.role-hijack.act-as-privileged",
+			canonicalID: "pi.role-hijack",
 			description: "Role hijack: 'act as <privileged role>'",
 			family:      familyRoleHijack,
 			confidence:  0.85,
@@ -55,6 +58,7 @@ func init() {
 		},
 		{
 			id:          "pi.system-prompt-leak",
+			canonicalID: "pi.system-prompt-leak",
 			description: "Attempt to elicit system prompt or initial instructions",
 			family:      familySystemPromptLeak,
 			confidence:  0.85,
@@ -62,6 +66,7 @@ func init() {
 		},
 		{
 			id:          "pi.encoded-payload",
+			canonicalID: "pi.encoded-payload",
 			description: "Long encoded blob with explicit decode/eval intent",
 			family:      familyEncodedPayload,
 			confidence:  0.7,
@@ -181,7 +186,7 @@ func runFamily(text string, fam ruleFamily) []Finding {
 		if loc == nil {
 			continue
 		}
-		ruleID, description := Normalize(SourcePromptInjection, rule.id, rule.description, RuleContext{ToolName: "", MatchedPattern: ""})
+		ruleID, description := Normalize(SourcePromptInjection, rule.canonicalID, rule.description, RuleContext{ToolName: "", MatchedPattern: ""})
 		out = append(out, Finding{
 			RuleID:           ruleID,
 			Description:      description,

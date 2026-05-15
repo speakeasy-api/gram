@@ -32,9 +32,8 @@ const SourcePresidio = "presidio"
 
 // DeadLetterRuleID is set on the synthetic Finding emitted when a message
 // permanently fails analysis after exhausting the retry budget. buildRows
-// uses it as the rule_id for the dead-letter row. Canonicalized form keeps
-// the same kebab-case shape as every other Presidio rule id.
-const DeadLetterRuleID = "dead-letter"
+// uses it as the rule_id for the dead-letter row.
+const DeadLetterRuleID = "pii.dead-letter"
 
 // PIIScanner detects personally identifiable information in text.
 type PIIScanner interface {
@@ -528,7 +527,7 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 		startByte := len(string(runes[:start]))
 		endByte := len(string(runes[:end]))
 
-		ruleID, description := Normalize(SourcePresidio, r.EntityType, "", RuleContext{ToolName: "", MatchedPattern: ""})
+		ruleID, description := Normalize(SourcePresidio, CanonicalPresidioRuleID(r.EntityType), "", RuleContext{ToolName: "", MatchedPattern: ""})
 		findings = append(findings, Finding{
 			RuleID:           ruleID,
 			Description:      description,

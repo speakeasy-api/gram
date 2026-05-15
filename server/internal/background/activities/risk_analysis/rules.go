@@ -16,66 +16,128 @@ type RuleContext struct {
 	MatchedPattern string
 }
 
+// Rule id conventions
+//
+// All rule ids are lowercase. They are grouped by **risk category** via a
+// short dotted prefix so consumers can pattern-match on category without a
+// switch on `source`:
+//
+//	secret.<gitleaks-rule>           — credentials / API keys / tokens
+//	pii.<presidio-entity>            — personal / financial / medical data
+//	shadow-mcp                       — unverified MCP tool call (single rule)
+//	destructive.tool                 — MCP tool annotated as destructive
+//	destructive.cli-<command>        — destructive shell / git / db / cloud command
+//	pi                               — ML classifier prompt injection verdict
+//	pi.<heuristic>                   — L0 heuristic prompt injection match
+//
+// The pair (source, rule_id) is the stable composite identity for downstream
+// consumers, but the prefix alone is enough to bucket findings into
+// dashboard categories.
+
+const (
+	prefixSecret      = "secret."
+	prefixPII         = "pii."
+	prefixDestructive = "destructive."
+	prefixPI          = "pi."
+
+	// RuleShadowMCP is the canonical rule id emitted for every shadow_mcp
+	// finding. The detection mechanism (missing toolset id, unknown
+	// toolset, ...) is implementation detail kept in logs; the rule_id
+	// describes the risk itself.
+	RuleShadowMCP = "shadow-mcp"
+
+	// RuleDestructiveTool is the canonical rule id emitted for every
+	// destructive_tool finding.
+	RuleDestructiveTool = prefixDestructive + "tool"
+
+	// RulePromptInjectionClassifier is the canonical rule id emitted when
+	// the L1 ML classifier flags a message. The specific classifier
+	// (deberta-v3 today) is implementation detail.
+	RulePromptInjectionClassifier = "pi"
+)
+
+// CanonicalGitleaksRuleID prepends the `secret.` prefix to a gitleaks rule
+// id. Gitleaks rule ids are already kebab-case so no other normalization
+// is needed.
+func CanonicalGitleaksRuleID(raw string) string {
+	return prefixSecret + strings.ToLower(raw)
+}
+
+// CanonicalPresidioRuleID converts a Presidio entity type (UPPER_SNAKE) to
+// the canonical `pii.<kebab>` rule id (`MEDICAL_LICENSE` -> `pii.medical-license`).
+func CanonicalPresidioRuleID(raw string) string {
+	return prefixPII + strings.ReplaceAll(strings.ToLower(raw), "_", "-")
+}
+
+// CanonicalCLIDestructiveRuleID maps a cliDestructivePattern.FullName
+// (`shell/rm-rf`, `git/push-force`, `database/drop`, ...) to the canonical
+// `destructive.cli-<command>` rule id. Shell and cloud categories are
+// implicit and dropped from the rule id; git and database categories are
+// retained because they convey real grouping.
+func CanonicalCLIDestructiveRuleID(fullName string) string {
+	if id, ok := cliDestructiveCanonical[fullName]; ok {
+		return id
+	}
+	// Fallback for any cli pattern we haven't pinned in the map above:
+	// drop "shell/" and "cloud/" prefixes (implicit), kebab the rest.
+	body := fullName
+	for _, drop := range []string{"shell/", "cloud/"} {
+		if strings.HasPrefix(body, drop) {
+			body = body[len(drop):]
+			break
+		}
+	}
+	body = strings.ReplaceAll(body, "/", "-")
+	return prefixDestructive + "cli-" + body
+}
+
+// cliDestructiveCanonical pins the rule id for every curated cli pattern.
+// Kept explicit so adding a pattern in cli_destructive.go is a deliberate
+// catalog change rather than an opaque rename.
+var cliDestructiveCanonical = map[string]string{
+	"shell/rm-rf":                    "destructive.cli-rm-rf",
+	"shell/dd":                       "destructive.cli-dd",
+	"shell/mkfs":                     "destructive.cli-mkfs",
+	"shell/fork-bomb":                "destructive.cli-fork-bomb",
+	"shell/chmod-recursive":          "destructive.cli-chmod-recursive",
+	"shell/chown-recursive":          "destructive.cli-chown-recursive",
+	"shell/sudo":                     "destructive.cli-sudo",
+	"git/push-force":                 "destructive.cli-git-force-push",
+	"git/reset-hard":                 "destructive.cli-git-reset-hard",
+	"git/clean-force":                "destructive.cli-git-clean-force",
+	"git/branch-delete-force":        "destructive.cli-git-branch-delete-force",
+	"database/drop":                  "destructive.cli-database-drop",
+	"database/truncate":              "destructive.cli-database-truncate",
+	"database/delete-without-where":  "destructive.cli-database-delete-without-where",
+	"database/dropdb":                "destructive.cli-database-dropdb",
+	"cloud/aws-ec2-terminate":        "destructive.cli-aws-ec2-terminate",
+	"cloud/aws-s3-rb":                "destructive.cli-aws-s3-rb",
+	"cloud/gcloud-projects-delete":   "destructive.cli-gcloud-projects-delete",
+	"cloud/kubectl-delete-namespace": "destructive.cli-kubectl-delete-namespace",
+	"cloud/kubectl-delete-workload":  "destructive.cli-kubectl-delete-workload",
+}
+
 // ruleSpec describes one normalized rule. Describe builds the human-readable
 // description for a finding, optionally interpolating fields from
 // RuleContext. The function must not include the `match` value.
 type ruleSpec struct {
-	source      string
 	ruleID      string
 	description func(RuleContext) string
 }
 
-// CanonicalRuleID returns the kebab-case canonical form of a raw rule id
-// emitted by one of the scanners. The transformation is:
-//  1. lowercase
-//  2. strip a leading "<source>." prefix when present (legacy writers used
-//     dotted prefixes that are now redundant with the `source` column)
-//  3. replace any remaining ".", "_", or "/" with "-"
-//
-// The function is deterministic and idempotent so the same input always
-// produces the same key in the catalog and in the database.
-func CanonicalRuleID(source, raw string) string {
-	id := strings.ToLower(strings.TrimSpace(raw))
-	if id == "" {
-		return ""
-	}
-
-	// Legacy prefixes that some scanners stamped onto rule ids before the
-	// `source` column carried the disambiguation.
-	for _, prefix := range []string{
-		strings.ToLower(source) + ".",
-		"pi.", // prompt_injection wrote rule ids as `pi.<rule>`.
-	} {
-		if strings.HasPrefix(id, prefix) {
-			id = id[len(prefix):]
-			break
-		}
-	}
-
-	id = strings.NewReplacer(".", "-", "_", "-", "/", "-").Replace(id)
-	return id
-}
-
 // Normalize returns the canonical rule id and a sanitized description for a
-// finding emitted by one of the scanners. The description never echoes
-// `match` and never leaks internal validator strings; when the catalog has
-// no entry, fallbackDescription is used (set this to the upstream library's
-// description for gitleaks; pass "" elsewhere to get a per-source default).
-func Normalize(source, rawRuleID, fallbackDescription string, rctx RuleContext) (string, string) {
-	ruleID := CanonicalRuleID(source, rawRuleID)
-	if spec, ok := ruleCatalog[catalogKey(source, ruleID)]; ok {
-		return ruleID, spec.description(rctx)
+// finding. Callers pass the already-canonical rule id (see the
+// `CanonicalXxxRuleID` helpers and the per-source `Rule*` constants); the
+// description either comes from the catalog or, when absent, from
+// fallbackDescription, or a per-source default.
+func Normalize(source, canonicalRuleID, fallbackDescription string, rctx RuleContext) (string, string) {
+	if spec, ok := ruleCatalog[canonicalRuleID]; ok {
+		return canonicalRuleID, spec.description(rctx)
 	}
-
 	if fallbackDescription != "" {
-		return ruleID, fallbackDescription
+		return canonicalRuleID, fallbackDescription
 	}
-
-	return ruleID, defaultDescription(source, rctx)
-}
-
-func catalogKey(source, ruleID string) string {
-	return source + "/" + ruleID
+	return canonicalRuleID, defaultDescription(source, rctx)
 }
 
 // defaultDescription is used when a finding has no catalog entry and no
@@ -112,23 +174,15 @@ func quote(s string) string {
 	return "\"" + s + "\""
 }
 
-// presidioCatalog returns the canonical description for each Presidio
-// entity type the dashboard offers in DETECTION_RULES. The wording mirrors
-// gitleaks: a short, declarative sentence that names the category without
-// echoing the matched value.
 func presidioRule(ruleID, desc string) ruleSpec {
 	return ruleSpec{
-		source:      SourcePresidio,
 		ruleID:      ruleID,
 		description: func(RuleContext) string { return desc },
 	}
 }
 
-// shadowMCPDescribe wraps a fmt.Sprintf-style template that takes the tool
-// name. The template MUST include exactly one `%s` placeholder.
 func shadowMCPRule(ruleID, withTool, withoutTool string) ruleSpec {
 	return ruleSpec{
-		source: "shadow_mcp",
 		ruleID: ruleID,
 		description: func(rctx RuleContext) string {
 			if rctx.ToolName == "" {
@@ -141,7 +195,6 @@ func shadowMCPRule(ruleID, withTool, withoutTool string) ruleSpec {
 
 func destructiveToolRule(ruleID, withTool, withoutTool string) ruleSpec {
 	return ruleSpec{
-		source: "destructive_tool",
 		ruleID: ruleID,
 		description: func(rctx RuleContext) string {
 			if rctx.ToolName == "" {
@@ -157,7 +210,6 @@ func destructiveToolRule(ruleID, withTool, withoutTool string) ruleSpec {
 // the description sentence.
 func cliDestructiveRule(ruleID, command string) ruleSpec {
 	return ruleSpec{
-		source: SourceCLIDestructive,
 		ruleID: ruleID,
 		description: func(rctx RuleContext) string {
 			if rctx.ToolName == "" {
@@ -170,124 +222,119 @@ func cliDestructiveRule(ruleID, command string) ruleSpec {
 
 func promptInjectionRule(ruleID, desc string) ruleSpec {
 	return ruleSpec{
-		source:      SourcePromptInjection,
 		ruleID:      ruleID,
 		description: func(RuleContext) string { return desc },
 	}
 }
 
 // ruleCatalog is the single source of truth for canonical descriptions of
-// every rule_id Gram writes to risk_results. The map is keyed by
-// "<source>/<canonical-rule-id>". Sources that already emit safe upstream
-// descriptions (gitleaks) are intentionally absent — they fall through the
-// `fallbackDescription` path in Normalize.
+// every rule_id Gram writes to risk_results. Keyed by the canonical rule id.
+// Sources that already emit safe upstream descriptions (gitleaks) are
+// intentionally absent — they fall through the `fallbackDescription` path
+// in Normalize.
 var ruleCatalog = func() map[string]ruleSpec {
 	specs := []ruleSpec{
 		// Presidio: financial.
-		presidioRule("credit-card", "Identified a credit card number, which may expose cardholder data."),
-		presidioRule("iban-code", "Identified an International Bank Account Number, which may expose financial account data."),
-		presidioRule("us-bank-number", "Identified a US bank account number, which may expose financial account data."),
-		presidioRule("crypto", "Identified a cryptocurrency wallet address."),
+		presidioRule(prefixPII+"credit-card", "Identified a credit card number, which may expose cardholder data."),
+		presidioRule(prefixPII+"iban-code", "Identified an International Bank Account Number, which may expose financial account data."),
+		presidioRule(prefixPII+"us-bank-number", "Identified a US bank account number, which may expose financial account data."),
+		presidioRule(prefixPII+"crypto", "Identified a cryptocurrency wallet address."),
 
 		// Presidio: PII.
-		presidioRule("email-address", "Identified an email address."),
-		presidioRule("phone-number", "Identified a telephone number."),
-		presidioRule("ip-address", "Identified an IP address."),
-		presidioRule("mac-address", "Identified a network interface (MAC) address."),
-		presidioRule("person", "Identified a person name."),
-		presidioRule("location", "Identified a location reference."),
-		presidioRule("date-time", "Identified a date or time reference that may correlate with a person."),
-		presidioRule("nrp", "Identified a nationality, religious, or political reference."),
-		presidioRule("url", "Identified a URL that may carry sensitive context."),
+		presidioRule(prefixPII+"email-address", "Identified an email address."),
+		presidioRule(prefixPII+"phone-number", "Identified a telephone number."),
+		presidioRule(prefixPII+"ip-address", "Identified an IP address."),
+		presidioRule(prefixPII+"mac-address", "Identified a network interface (MAC) address."),
+		presidioRule(prefixPII+"person", "Identified a person name."),
+		presidioRule(prefixPII+"location", "Identified a location reference."),
+		presidioRule(prefixPII+"date-time", "Identified a date or time reference that may correlate with a person."),
+		presidioRule(prefixPII+"nrp", "Identified a nationality, religious, or political reference."),
+		presidioRule(prefixPII+"url", "Identified a URL that may carry sensitive context."),
 
 		// Presidio: government identifiers.
-		presidioRule("us-ssn", "Identified a US Social Security Number."),
-		presidioRule("us-passport", "Identified a US passport number."),
-		presidioRule("us-driver-license", "Identified a US driver license number."),
-		presidioRule("us-itin", "Identified a US Individual Taxpayer Identification Number."),
-		presidioRule("uk-nhs", "Identified a UK National Health Service number."),
-		presidioRule("uk-nino", "Identified a UK National Insurance Number."),
-		presidioRule("uk-passport", "Identified a UK passport number."),
-		presidioRule("es-nif", "Identified a Spanish personal tax identifier (NIF)."),
-		presidioRule("it-fiscal-code", "Identified an Italian personal fiscal code."),
-		presidioRule("au-tfn", "Identified an Australian Tax File Number."),
-		presidioRule("in-pan", "Identified an Indian Permanent Account Number."),
-		presidioRule("in-aadhaar", "Identified an Indian Aadhaar identifier."),
-		presidioRule("sg-nric-fin", "Identified a Singapore NRIC or FIN identifier."),
+		presidioRule(prefixPII+"us-ssn", "Identified a US Social Security Number."),
+		presidioRule(prefixPII+"us-passport", "Identified a US passport number."),
+		presidioRule(prefixPII+"us-driver-license", "Identified a US driver license number."),
+		presidioRule(prefixPII+"us-itin", "Identified a US Individual Taxpayer Identification Number."),
+		presidioRule(prefixPII+"uk-nhs", "Identified a UK National Health Service number."),
+		presidioRule(prefixPII+"uk-nino", "Identified a UK National Insurance Number."),
+		presidioRule(prefixPII+"uk-passport", "Identified a UK passport number."),
+		presidioRule(prefixPII+"es-nif", "Identified a Spanish personal tax identifier (NIF)."),
+		presidioRule(prefixPII+"it-fiscal-code", "Identified an Italian personal fiscal code."),
+		presidioRule(prefixPII+"au-tfn", "Identified an Australian Tax File Number."),
+		presidioRule(prefixPII+"in-pan", "Identified an Indian Permanent Account Number."),
+		presidioRule(prefixPII+"in-aadhaar", "Identified an Indian Aadhaar identifier."),
+		presidioRule(prefixPII+"sg-nric-fin", "Identified a Singapore NRIC or FIN identifier."),
 
 		// Presidio: healthcare.
-		presidioRule("medical-license", "Identified a medical license number, which may expose protected health information."),
-		presidioRule("us-mbi", "Identified a US Medicare Beneficiary Identifier."),
-		presidioRule("us-npi", "Identified a US National Provider Identifier."),
-		presidioRule("medical-disease-disorder", "Identified a disease or disorder reference that may expose protected health information."),
-		presidioRule("medical-medication", "Identified a medication or drug reference that may expose protected health information."),
-		presidioRule("medical-therapeutic-procedure", "Identified a treatment or diagnostic procedure that may expose protected health information."),
-		presidioRule("medical-clinical-event", "Identified a clinical event that may expose protected health information."),
-		presidioRule("medical-biological-attribute", "Identified a biological attribute that may expose protected health information."),
-		presidioRule("medical-family-history", "Identified a family medical history reference that may expose protected health information."),
+		presidioRule(prefixPII+"medical-license", "Identified a medical license number, which may expose protected health information."),
+		presidioRule(prefixPII+"us-mbi", "Identified a US Medicare Beneficiary Identifier."),
+		presidioRule(prefixPII+"us-npi", "Identified a US National Provider Identifier."),
+		presidioRule(prefixPII+"medical-disease-disorder", "Identified a disease or disorder reference that may expose protected health information."),
+		presidioRule(prefixPII+"medical-medication", "Identified a medication or drug reference that may expose protected health information."),
+		presidioRule(prefixPII+"medical-therapeutic-procedure", "Identified a treatment or diagnostic procedure that may expose protected health information."),
+		presidioRule(prefixPII+"medical-clinical-event", "Identified a clinical event that may expose protected health information."),
+		presidioRule(prefixPII+"medical-biological-attribute", "Identified a biological attribute that may expose protected health information."),
+		presidioRule(prefixPII+"medical-family-history", "Identified a family medical history reference that may expose protected health information."),
 
 		// Presidio: dead-letter sentinel for messages the scanner could not analyze.
 		{
-			source: SourcePresidio,
-			ruleID: "dead-letter",
+			ruleID: prefixPII + "dead-letter",
 			description: func(RuleContext) string {
 				return "Presidio could not analyze this message after exhausting its retry budget."
 			},
 		},
 
-		// shadow_mcp: a single risk — an unverified MCP tool call. Which
-		// validator path rejected it (missing toolset id, unknown toolset,
-		// tool not in toolset, ...) is implementation detail kept in logs;
-		// the public rule_id describes the risk itself.
+		// shadow_mcp: single rule. The detection mechanism stays in logs.
 		shadowMCPRule(
-			"shadow-mcp",
+			RuleShadowMCP,
 			"Detected an unverified MCP tool call to %s.",
 			"Detected an unverified MCP tool call.",
 		),
 
 		// destructive_tool.
 		destructiveToolRule(
-			"annotated-destructive",
+			RuleDestructiveTool,
 			"Detected a call to %s, which its MCP server annotates as destructive.",
 			"Detected a call to a tool annotated as destructive by its MCP server.",
 		),
 
 		// cli_destructive: one entry per curated pattern in cli_destructive.go.
-		cliDestructiveRule("shell-rm-rf", "rm -rf"),
-		cliDestructiveRule("shell-dd", "dd"),
-		cliDestructiveRule("shell-mkfs", "mkfs"),
-		cliDestructiveRule("shell-fork-bomb", "fork bomb"),
-		cliDestructiveRule("shell-chmod-recursive", "chmod -R"),
-		cliDestructiveRule("shell-chown-recursive", "chown -R"),
-		cliDestructiveRule("shell-sudo", "sudo"),
-		cliDestructiveRule("git-push-force", "git push --force"),
-		cliDestructiveRule("git-reset-hard", "git reset --hard"),
-		cliDestructiveRule("git-clean-force", "git clean -f"),
-		cliDestructiveRule("git-branch-delete-force", "git branch -D"),
-		cliDestructiveRule("database-drop", "DROP TABLE"),
-		cliDestructiveRule("database-truncate", "TRUNCATE"),
-		cliDestructiveRule("database-delete-without-where", "DELETE without WHERE"),
-		cliDestructiveRule("database-dropdb", "dropdb"),
-		cliDestructiveRule("cloud-aws-ec2-terminate", "aws ec2 terminate-instances"),
-		cliDestructiveRule("cloud-aws-s3-rb", "aws s3 rb"),
-		cliDestructiveRule("cloud-gcloud-projects-delete", "gcloud projects delete"),
-		cliDestructiveRule("cloud-kubectl-delete-namespace", "kubectl delete namespace"),
-		cliDestructiveRule("cloud-kubectl-delete-workload", "kubectl delete workload"),
+		cliDestructiveRule("destructive.cli-rm-rf", "rm -rf"),
+		cliDestructiveRule("destructive.cli-dd", "dd"),
+		cliDestructiveRule("destructive.cli-mkfs", "mkfs"),
+		cliDestructiveRule("destructive.cli-fork-bomb", "fork bomb"),
+		cliDestructiveRule("destructive.cli-chmod-recursive", "chmod -R"),
+		cliDestructiveRule("destructive.cli-chown-recursive", "chown -R"),
+		cliDestructiveRule("destructive.cli-sudo", "sudo"),
+		cliDestructiveRule("destructive.cli-git-force-push", "git push --force"),
+		cliDestructiveRule("destructive.cli-git-reset-hard", "git reset --hard"),
+		cliDestructiveRule("destructive.cli-git-clean-force", "git clean -f"),
+		cliDestructiveRule("destructive.cli-git-branch-delete-force", "git branch -D"),
+		cliDestructiveRule("destructive.cli-database-drop", "DROP TABLE"),
+		cliDestructiveRule("destructive.cli-database-truncate", "TRUNCATE"),
+		cliDestructiveRule("destructive.cli-database-delete-without-where", "DELETE without WHERE"),
+		cliDestructiveRule("destructive.cli-database-dropdb", "dropdb"),
+		cliDestructiveRule("destructive.cli-aws-ec2-terminate", "aws ec2 terminate-instances"),
+		cliDestructiveRule("destructive.cli-aws-s3-rb", "aws s3 rb"),
+		cliDestructiveRule("destructive.cli-gcloud-projects-delete", "gcloud projects delete"),
+		cliDestructiveRule("destructive.cli-kubectl-delete-namespace", "kubectl delete namespace"),
+		cliDestructiveRule("destructive.cli-kubectl-delete-workload", "kubectl delete workload"),
 
-		// prompt_injection rules. Descriptions stay generic so they never echo
-		// the matched phrase, which is preserved in the `match` column.
-		promptInjectionRule("instruction-override", "Detected an instruction override phrase that attempts to bypass prior instructions."),
-		promptInjectionRule("role-hijack-you-are-now", "Detected a role hijack attempt that asserts a new role."),
-		promptInjectionRule("role-hijack-act-as-privileged", "Detected a role hijack attempt that asks the model to act as a privileged role."),
-		promptInjectionRule("system-prompt-leak", "Detected an attempt to elicit the system prompt or initial instructions."),
-		promptInjectionRule("delimiter-injection", "Detected a forged role or instruction delimiter."),
-		promptInjectionRule("encoded-payload", "Detected an encoded blob with an explicit decode or execute instruction."),
-		promptInjectionRule("deberta-v3-classifier", "An ML classifier flagged this message as a prompt injection attempt."),
+		// prompt_injection. The L1 classifier rule_id is just `pi` — the
+		// model (deberta-v3) is implementation detail. L0 heuristic
+		// matches carry a `pi.<heuristic>` sub-rule.
+		promptInjectionRule(RulePromptInjectionClassifier, "An ML classifier flagged this message as a prompt injection attempt."),
+		promptInjectionRule(prefixPI+"instruction-override", "Detected an instruction override phrase that attempts to bypass prior instructions."),
+		promptInjectionRule(prefixPI+"role-hijack", "Detected a role hijack attempt."),
+		promptInjectionRule(prefixPI+"system-prompt-leak", "Detected an attempt to elicit the system prompt or initial instructions."),
+		promptInjectionRule(prefixPI+"delimiter-injection", "Detected a forged role or instruction delimiter."),
+		promptInjectionRule(prefixPI+"encoded-payload", "Detected an encoded blob with an explicit decode or execute instruction."),
 	}
 
 	out := make(map[string]ruleSpec, len(specs))
 	for _, s := range specs {
-		out[catalogKey(s.source, s.ruleID)] = s
+		out[s.ruleID] = s
 	}
 	return out
 }()

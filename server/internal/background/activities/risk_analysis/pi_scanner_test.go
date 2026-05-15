@@ -67,7 +67,7 @@ func TestPromptInjectionScanner_L1FiresWhenRuleSelected(t *testing.T) {
 	findings, err := s.Scan(t.Context(), "totally benign text without heuristic markers", []string{risk_analysis.RulePromptInjectionClassifierDeberta})
 	require.NoError(t, err)
 	require.Len(t, findings, 1)
-	assert.Equal(t, risk_analysis.RulePromptInjectionClassifierDeberta, findings[0].RuleID)
+	assert.Equal(t, risk_analysis.RulePromptInjectionClassifier, findings[0].RuleID)
 	assert.Equal(t, risk_analysis.SourcePromptInjection, findings[0].Source)
 	assert.InDelta(t, 0.7, findings[0].Confidence, 0.001)
 	assert.Contains(t, findings[0].Tags, "ml")
