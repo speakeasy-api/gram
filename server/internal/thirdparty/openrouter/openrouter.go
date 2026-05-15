@@ -122,9 +122,28 @@ func IsSpecialLimitOrg(orgID string) bool {
 
 type Provisioner interface {
 	ProvisionAPIKey(ctx context.Context, orgID string) (string, error)
+
+	// RefreshAPIKeyLimit mutates the upstream OpenRouter key limit (PATCH
+	// /v1/keys/:hash) and mirrors the new value into the local DB.
 	RefreshAPIKeyLimit(ctx context.Context, orgID string, limit *int) (int, error)
+
 	GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error)
-	GetKeyUsage(ctx context.Context, apiKey string) (float64, error)
+
+	// GetKeyUsage issues GET /v1/key for the given API key and returns the
+	// rounded monthly usage along with the upstream-configured monthly limit
+	// already rounded to the int64 representation used by the DB. The limit is
+	// nil when OpenRouter returns an unlimited key.
+	GetKeyUsage(ctx context.Context, apiKey string) (used float64, limit *int64, err error)
+
+	// ReconcileMonthlyCredits compares upstreamLimit against the caller-supplied
+	// currentLimit (the DB-cached value) and writes the upstream value to the
+	// openrouter_api_keys row when they diverge. It is a DB-only reconciliation
+	// — it does NOT call OpenRouter — and is intended to self-heal drift
+	// introduced by out-of-band edits on the OpenRouter dashboard. A nil
+	// upstreamLimit (unlimited key) is treated as a no-op. Returns the
+	// effective limit the caller should use for the current tick.
+	ReconcileMonthlyCredits(ctx context.Context, orgID string, currentLimit int64, upstreamLimit *int64) (int64, error)
+
 	GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error)
 }
 
@@ -142,6 +161,8 @@ type OpenRouter struct {
 	refresher       KeyRefresher
 	featureClient   *productfeatures.Client
 }
+
+var _ Provisioner = (*OpenRouter)(nil)
 
 func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker) *OpenRouter {
 	orClient := guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
@@ -284,7 +305,7 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64,
 		return 0, limit, nil // the key doesn't exist yet
 	}
 
-	used, err := o.GetKeyUsage(ctx, key.Key)
+	used, _, err := o.GetKeyUsage(ctx, key.Key)
 	if err != nil {
 		return 0, limit, err
 	}
@@ -293,14 +314,17 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64,
 }
 
 // GetKeyUsage issues the upstream `/v1/key` call with the given API key and
-// returns the rounded monthly usage. Callers that already have the key (e.g.
-// the credits monitoring activity, which joins openrouter_api_keys in a
-// single SQL query) can skip the org/key DB lookups in GetCreditsUsed.
-func (o *OpenRouter) GetKeyUsage(ctx context.Context, apiKey string) (float64, error) {
+// returns the rounded monthly usage along with the upstream-configured monthly
+// limit already rounded to the int64 representation used by the DB. The
+// returned limit is nil when OpenRouter reports an unlimited key. Callers that
+// already have the key (e.g. the credits monitoring activity, which joins
+// openrouter_api_keys in a single SQL query) can skip the org/key DB lookups
+// in GetCreditsUsed.
+func (o *OpenRouter) GetKeyUsage(ctx context.Context, apiKey string) (float64, *int64, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", OpenRouterBaseURL+"/v1/key", nil)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to build openrouter key usage request", attr.SlogError(err))
-		return 0, fmt.Errorf("build key usage request: %w", err)
+		return 0, nil, fmt.Errorf("build key usage request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -309,7 +333,7 @@ func (o *OpenRouter) GetKeyUsage(ctx context.Context, apiKey string) (float64, e
 	resp, err := o.orClient.Do(req)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to send openrouter key usage request", attr.SlogError(err))
-		return 0, fmt.Errorf("send key usage request: %w", err)
+		return 0, nil, fmt.Errorf("send key usage request: %w", err)
 	}
 
 	defer o11y.NoLogDefer(func() error {
@@ -317,13 +341,13 @@ func (o *OpenRouter) GetKeyUsage(ctx context.Context, apiKey string) (float64, e
 	})
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, errors.New("fetch OpenRouter key usage: " + resp.Status)
+		return 0, nil, errors.New("fetch OpenRouter key usage: " + resp.Status)
 	}
 
 	var usageResp keyUsageResponse
 	if err := json.NewDecoder(resp.Body).Decode(&usageResp); err != nil {
 		o.logger.ErrorContext(ctx, "failed to decode key usage response", attr.SlogError(err))
-		return 0, fmt.Errorf("decode key usage response: %w", err)
+		return 0, nil, fmt.Errorf("decode key usage response: %w", err)
 	}
 
 	var creditsUsed float64
@@ -331,7 +355,42 @@ func (o *OpenRouter) GetKeyUsage(ctx context.Context, apiKey string) (float64, e
 		creditsUsed = math.Round(*usageResp.Data.UsageMonthly*100) / 100
 	}
 
-	return creditsUsed, nil
+	var limit *int64
+	if usageResp.Data.Limit != nil {
+		l := int64(math.Round(*usageResp.Data.Limit))
+		limit = &l
+	}
+
+	return creditsUsed, limit, nil
+}
+
+// ReconcileMonthlyCredits self-heals drift in the locally cached monthly limit
+// after an out-of-band change on the OpenRouter dashboard. See the
+// Provisioner interface doc for the full contract.
+func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, currentLimit int64, upstreamLimit *int64) (int64, error) {
+	if upstreamLimit == nil {
+		return currentLimit, nil
+	}
+
+	newLimit := *upstreamLimit
+	if newLimit == currentLimit {
+		return currentLimit, nil
+	}
+
+	if err := o.repo.UpdateOpenRouterKeyMonthlyCredits(ctx, repo.UpdateOpenRouterKeyMonthlyCreditsParams{
+		OrganizationID: orgID,
+		MonthlyCredits: newLimit,
+	}); err != nil {
+		return currentLimit, fmt.Errorf("reconcile openrouter monthly credits: %w", err)
+	}
+
+	o.logger.InfoContext(ctx, "reconciled openrouter monthly credits from upstream",
+		attr.SlogOrganizationID(orgID),
+		attr.SlogOpenRouterKeyPreviousLimit(int(currentLimit)),
+		attr.SlogOpenRouterKeyLimit(int(newLimit)),
+	)
+
+	return newLimit, nil
 }
 
 func (o *OpenRouter) getLimitForOrg(org orgRepo.OrganizationMetadatum) int {

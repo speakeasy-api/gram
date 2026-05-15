@@ -71,7 +71,7 @@ func (c *CollectOpenRouterCreditsMetrics) Do(ctx context.Context, args CollectOp
 	g.SetLimit(openRouterCreditsPollConcurrency)
 	for i, row := range rows {
 		g.Go(func() error {
-			used, err := c.openRouter.GetKeyUsage(gctx, row.ApiKey)
+			used, upstreamLimit, err := c.openRouter.GetKeyUsage(gctx, row.ApiKey)
 			if err != nil {
 				// Skip on a per-org failure so one bad key does not blank the
 				// whole batch. The error is logged for diagnosis and swallowed
@@ -84,12 +84,27 @@ func (c *CollectOpenRouterCreditsMetrics) Do(ctx context.Context, args CollectOp
 				return nil
 			}
 
+			// Self-heal drift introduced by out-of-band edits on the OpenRouter
+			// dashboard so the same tick reports a consistent ratio. A failed
+			// write is swallowed for the same reason GetKeyUsage failures are
+			// — one bad org should not blank the batch — and we fall back to
+			// the cached DB value for this tick.
+			effectiveLimit, err := c.openRouter.ReconcileMonthlyCredits(gctx, row.OrganizationID, row.MonthlyCredits, upstreamLimit)
+			if err != nil {
+				c.logger.ErrorContext(gctx, "reconcile openrouter monthly credits",
+					attr.SlogOrganizationID(row.OrganizationID),
+					attr.SlogOrganizationSlug(row.OrganizationSlug),
+					attr.SlogError(err),
+				)
+				effectiveLimit = row.MonthlyCredits
+			}
+
 			results[i] = OpenRouterCreditsMetric{
 				OrganizationID:   row.OrganizationID,
 				OrganizationSlug: row.OrganizationSlug,
 				AccountType:      row.GramAccountType,
 				CreditsUsed:      used,
-				CreditLimit:      row.MonthlyCredits,
+				CreditLimit:      effectiveLimit,
 			}
 			return nil
 		})
