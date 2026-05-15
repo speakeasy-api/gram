@@ -25,7 +25,7 @@ import { RefreshCw, ShieldOff } from "lucide-react";
 import { useCallback, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { CategoryLabel, MaskedMatch } from "./risk-finding-ui";
+import { CategoryLabel, MaskedMatch } from "./risk-ui";
 
 export default function RiskActivity() {
   return (
