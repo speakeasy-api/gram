@@ -12,6 +12,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acceptInvitation = `-- name: AcceptInvitation :execrows
+UPDATE organization_invitations
+SET state = 'accepted',
+    accepted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND state = 'pending'
+  AND expires_at > clock_timestamp()
+`
+
+func (q *Queries) AcceptInvitation(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, acceptInvitation, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const attachWorkOSUserToOrg = `-- name: AttachWorkOSUserToOrg :exec
 INSERT INTO organization_user_relationships (
     organization_id,
@@ -50,6 +68,61 @@ UPDATE organization_metadata SET workos_id = NULL WHERE id = $1
 func (q *Queries) ClearOrganizationWorkosID(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, clearOrganizationWorkosID, organizationID)
 	return err
+}
+
+const createInvitation = `-- name: CreateInvitation :one
+INSERT INTO organization_invitations (
+    organization_id,
+    email,
+    token_hash,
+    inviter_user_id,
+    role_slug,
+    expires_at
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    clock_timestamp() + make_interval(days => $6::int)
+)
+RETURNING id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
+`
+
+type CreateInvitationParams struct {
+	OrganizationID string
+	Email          string
+	TokenHash      string
+	InviterUserID  pgtype.Text
+	RoleSlug       pgtype.Text
+	ExpiresInDays  int32
+}
+
+func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationParams) (OrganizationInvitation, error) {
+	row := q.db.QueryRow(ctx, createInvitation,
+		arg.OrganizationID,
+		arg.Email,
+		arg.TokenHash,
+		arg.InviterUserID,
+		arg.RoleSlug,
+		arg.ExpiresInDays,
+	)
+	var i OrganizationInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.TokenHash,
+		&i.InviterUserID,
+		&i.RoleSlug,
+		&i.State,
+		&i.ExpiresAt,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const createOrganizationMetadata = `-- name: CreateOrganizationMetadata :exec
@@ -107,6 +180,92 @@ func (q *Queries) DisableOrganizationByWorkosID(ctx context.Context, arg Disable
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const expireInvitationForTest = `-- name: ExpireInvitationForTest :exec
+UPDATE organization_invitations
+SET expires_at = clock_timestamp() - interval '1 hour'
+WHERE id = $1
+`
+
+func (q *Queries) ExpireInvitationForTest(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, expireInvitationForTest, id)
+	return err
+}
+
+const expireStaleInvitations = `-- name: ExpireStaleInvitations :exec
+UPDATE organization_invitations
+SET state = 'expired',
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND email = $2
+  AND state = 'pending'
+  AND expires_at <= clock_timestamp()
+`
+
+type ExpireStaleInvitationsParams struct {
+	OrganizationID string
+	Email          string
+}
+
+// Transition pending invitations that have passed their expires_at to 'expired'
+// state. Called before creating a new invitation so the partial unique index
+// (org_id, email) WHERE state = 'pending' does not block re-inviting.
+func (q *Queries) ExpireStaleInvitations(ctx context.Context, arg ExpireStaleInvitationsParams) error {
+	_, err := q.db.Exec(ctx, expireStaleInvitations, arg.OrganizationID, arg.Email)
+	return err
+}
+
+const getInvitationByID = `-- name: GetInvitationByID :one
+SELECT id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
+FROM organization_invitations
+WHERE id = $1
+`
+
+func (q *Queries) GetInvitationByID(ctx context.Context, id uuid.UUID) (OrganizationInvitation, error) {
+	row := q.db.QueryRow(ctx, getInvitationByID, id)
+	var i OrganizationInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.TokenHash,
+		&i.InviterUserID,
+		&i.RoleSlug,
+		&i.State,
+		&i.ExpiresAt,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getInvitationByTokenHash = `-- name: GetInvitationByTokenHash :one
+SELECT id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
+FROM organization_invitations
+WHERE token_hash = $1
+`
+
+func (q *Queries) GetInvitationByTokenHash(ctx context.Context, tokenHash string) (OrganizationInvitation, error) {
+	row := q.db.QueryRow(ctx, getInvitationByTokenHash, tokenHash)
+	var i OrganizationInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.TokenHash,
+		&i.InviterUserID,
+		&i.RoleSlug,
+		&i.State,
+		&i.ExpiresAt,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getOrganizationByWorkosID = `-- name: GetOrganizationByWorkosID :one
@@ -504,7 +663,8 @@ SELECT
   our.id, our.organization_id, our.user_id, our.workos_user_id, our.workos_membership_id, our.workos_updated_at, our.workos_last_event_id, our.created_at, our.updated_at, our.deleted_at, our.deleted,
   u.email AS user_email,
   u.display_name AS user_display_name,
-  u.photo_url AS user_photo_url
+  u.photo_url AS user_photo_url,
+  u.last_login AS user_last_login
 FROM organization_user_relationships our
 JOIN users u ON u.id = our.user_id
 WHERE our.organization_id = $1
@@ -526,6 +686,7 @@ type ListOrganizationUsersRow struct {
 	UserEmail          string
 	UserDisplayName    string
 	UserPhotoUrl       pgtype.Text
+	UserLastLogin      pgtype.Timestamptz
 }
 
 func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID string) ([]ListOrganizationUsersRow, error) {
@@ -552,6 +713,7 @@ func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID stri
 			&i.UserEmail,
 			&i.UserDisplayName,
 			&i.UserPhotoUrl,
+			&i.UserLastLogin,
 		); err != nil {
 			return nil, err
 		}
@@ -593,6 +755,48 @@ func (q *Queries) ListOrganizationsForUser(ctx context.Context, userID pgtype.Te
 			&i.Name,
 			&i.Slug,
 			&i.WorkosID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingInvitations = `-- name: ListPendingInvitations :many
+SELECT id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
+FROM organization_invitations
+WHERE organization_id = $1
+  AND state = 'pending'
+  AND expires_at > clock_timestamp()
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListPendingInvitations(ctx context.Context, organizationID string) ([]OrganizationInvitation, error) {
+	rows, err := q.db.Query(ctx, listPendingInvitations, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrganizationInvitation
+	for rows.Next() {
+		var i OrganizationInvitation
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Email,
+			&i.TokenHash,
+			&i.InviterUserID,
+			&i.RoleSlug,
+			&i.State,
+			&i.ExpiresAt,
+			&i.AcceptedAt,
+			&i.RevokedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -694,6 +898,20 @@ func (q *Queries) MarkWorkOSMembershipDeleted(ctx context.Context, arg MarkWorkO
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
 	)
+	return err
+}
+
+const revokeInvitation = `-- name: RevokeInvitation :exec
+UPDATE organization_invitations
+SET state = 'revoked',
+    revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND state = 'pending'
+`
+
+func (q *Queries) RevokeInvitation(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, revokeInvitation, id)
 	return err
 }
 
@@ -1054,7 +1272,9 @@ INSERT INTO organization_user_relationships (
     $2
 )
 ON CONFLICT (organization_id, user_id) DO UPDATE SET
-    updated_at = clock_timestamp()
+    updated_at = clock_timestamp(),
+    deleted_at = NULL,
+    created_at = CASE WHEN organization_user_relationships.deleted_at IS NOT NULL THEN clock_timestamp() ELSE organization_user_relationships.created_at END
 RETURNING id, organization_id, user_id, workos_user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
 `
 

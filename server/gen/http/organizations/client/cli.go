@@ -37,7 +37,7 @@ func BuildSendInvitePayload(organizationsSendInviteBody string, organizationsSen
 	{
 		err = json.Unmarshal([]byte(organizationsSendInviteBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"abc123\",\n      \"role_slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"abc123\",\n      \"role_id\": \"abc123\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -47,8 +47,8 @@ func BuildSendInvitePayload(organizationsSendInviteBody string, organizationsSen
 		}
 	}
 	v := &organizations.SendInvitePayload{
-		Email:    body.Email,
-		RoleSlug: body.RoleSlug,
+		Email:  body.Email,
+		RoleID: body.RoleID,
 	}
 	v.SessionToken = sessionToken
 
@@ -86,19 +86,6 @@ func BuildListInvitesPayload(organizationsListInvitesSessionToken string) (*orga
 	}
 	v := &organizations.ListInvitesPayload{}
 	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildGetInviteByTokenPayload builds the payload for the organizations
-// getInviteByToken endpoint from CLI flags.
-func BuildGetInviteByTokenPayload(organizationsGetInviteByTokenToken string) (*organizations.GetInviteByTokenPayload, error) {
-	var token string
-	{
-		token = organizationsGetInviteByTokenToken
-	}
-	v := &organizations.GetInviteByTokenPayload{}
-	v.Token = token
 
 	return v, nil
 }

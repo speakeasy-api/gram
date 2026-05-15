@@ -96,7 +96,7 @@ func UsageCommands() []string {
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|update-mcp-server|delete-mcp-server)",
-		"organizations (get|send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session)",
+		"organizations (get|send-invite|revoke-invite|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins)",
@@ -840,9 +840,6 @@ func ParseEndpoint(
 
 		organizationsListInvitesFlags            = flag.NewFlagSet("list-invites", flag.ExitOnError)
 		organizationsListInvitesSessionTokenFlag = organizationsListInvitesFlags.String("session-token", "", "")
-
-		organizationsGetInviteByTokenFlags     = flag.NewFlagSet("get-invite-by-token", flag.ExitOnError)
-		organizationsGetInviteByTokenTokenFlag = organizationsGetInviteByTokenFlags.String("token", "REQUIRED", "")
 
 		organizationsListUsersFlags            = flag.NewFlagSet("list-users", flag.ExitOnError)
 		organizationsListUsersSessionTokenFlag = organizationsListUsersFlags.String("session-token", "", "")
@@ -1833,7 +1830,6 @@ func ParseEndpoint(
 	organizationsSendInviteFlags.Usage = organizationsSendInviteUsage
 	organizationsRevokeInviteFlags.Usage = organizationsRevokeInviteUsage
 	organizationsListInvitesFlags.Usage = organizationsListInvitesUsage
-	organizationsGetInviteByTokenFlags.Usage = organizationsGetInviteByTokenUsage
 	organizationsListUsersFlags.Usage = organizationsListUsersUsage
 	organizationsRemoveUserFlags.Usage = organizationsRemoveUserUsage
 	organizationsEnableWebhooksFlags.Usage = organizationsEnableWebhooksUsage
@@ -2610,9 +2606,6 @@ func ParseEndpoint(
 
 			case "list-invites":
 				epf = organizationsListInvitesFlags
-
-			case "get-invite-by-token":
-				epf = organizationsGetInviteByTokenFlags
 
 			case "list-users":
 				epf = organizationsListUsersFlags
@@ -3618,9 +3611,6 @@ func ParseEndpoint(
 			case "list-invites":
 				endpoint = c.ListInvites()
 				data, err = organizationsc.BuildListInvitesPayload(*organizationsListInvitesSessionTokenFlag)
-			case "get-invite-by-token":
-				endpoint = c.GetInviteByToken()
-				data, err = organizationsc.BuildGetInviteByTokenPayload(*organizationsGetInviteByTokenTokenFlag)
 			case "list-users":
 				endpoint = c.ListUsers()
 				data, err = organizationsc.BuildListUsersPayload(*organizationsListUsersSessionTokenFlag)
@@ -7168,7 +7158,6 @@ func organizationsUsage() {
 	fmt.Fprintln(os.Stderr, `    send-invite: Send a WorkOS invitation for the active organization.`)
 	fmt.Fprintln(os.Stderr, `    revoke-invite: Revoke a pending WorkOS invitation.`)
 	fmt.Fprintln(os.Stderr, `    list-invites: List pending WorkOS invitations for the active organization.`)
-	fmt.Fprintln(os.Stderr, `    get-invite-by-token: Resolve a WorkOS invitation from its token (e.g. accept-flow).`)
 	fmt.Fprintln(os.Stderr, `    list-users: List users in the active organization from Gram organization_user_relationships.`)
 	fmt.Fprintln(os.Stderr, `    remove-user: Remove a user from the active organization in Gram and delete their WorkOS organization membership.`)
 	fmt.Fprintln(os.Stderr, `    enable-webhooks: Enable  webhooks for the active organization.`)
@@ -7213,7 +7202,7 @@ func organizationsSendInviteUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations send-invite --body '{\n      \"email\": \"abc123\",\n      \"role_slug\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations send-invite --body '{\n      \"email\": \"abc123\",\n      \"role_id\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func organizationsRevokeInviteUsage() {
@@ -7252,24 +7241,6 @@ func organizationsListInvitesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations list-invites --session-token \"abc123\"")
-}
-
-func organizationsGetInviteByTokenUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] organizations get-invite-by-token", os.Args[0])
-	fmt.Fprint(os.Stderr, " -token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Resolve a WorkOS invitation from its token (e.g. accept-flow).`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations get-invite-by-token --token \"abc123\"")
 }
 
 func organizationsListUsersUsage() {

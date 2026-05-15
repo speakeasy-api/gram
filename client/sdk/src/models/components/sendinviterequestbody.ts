@@ -11,15 +11,15 @@ export type SendInviteRequestBody = {
    */
   email: string;
   /**
-   * Optional WorkOS role slug for the invitee.
+   * Optional role ID for the invitee.
    */
-  roleSlug?: string | undefined;
+  roleId?: string | undefined;
 };
 
 /** @internal */
 export type SendInviteRequestBody$Outbound = {
   email: string;
-  role_slug?: string | undefined;
+  role_id?: string | undefined;
 };
 
 /** @internal */
@@ -29,11 +29,11 @@ export const SendInviteRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     email: z.string(),
-    roleSlug: z.optional(z.string()),
+    roleId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      roleSlug: "role_slug",
+      roleId: "role_id",
     });
   }),
 );

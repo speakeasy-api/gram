@@ -20,8 +20,8 @@ import (
 type SendInviteRequestBody struct {
 	// Email address to invite.
 	Email string `form:"email" json:"email" xml:"email"`
-	// Optional WorkOS role slug for the invitee.
-	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
+	// Optional role ID for the invitee.
+	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
 }
 
 // GetResponseBody is the type of the "organizations" service "get" endpoint
@@ -72,20 +72,6 @@ type ListInvitesResponseBody struct {
 	// Pending invitations for the organization only; accepted, expired, and
 	// revoked invitations are omitted.
 	Invitations []*OrganizationInvitationResponseBody `form:"invitations,omitempty" json:"invitations,omitempty" xml:"invitations,omitempty"`
-}
-
-// GetInviteByTokenResponseBody is the type of the "organizations" service
-// "getInviteByToken" endpoint HTTP response body.
-type GetInviteByTokenResponseBody struct {
-	// Invitee email address.
-	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
-	// Invitation lifecycle state.
-	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
-	// Gram organization display name when the org is linked in Gram; empty if
-	// unknown.
-	OrganizationName *string `form:"organization_name,omitempty" json:"organization_name,omitempty" xml:"organization_name,omitempty"`
-	// URL to complete acceptance in WorkOS (may be empty when not actionable).
-	AcceptInvitationURL *string `form:"accept_invitation_url,omitempty" json:"accept_invitation_url,omitempty" xml:"accept_invitation_url,omitempty"`
 }
 
 // ListUsersResponseBody is the type of the "organizations" service "listUsers"
@@ -823,196 +809,6 @@ type ListInvitesUnexpectedResponseBody struct {
 // service "listInvites" endpoint HTTP response body for the "gateway_error"
 // error.
 type ListInvitesGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetInviteByTokenUnauthorizedResponseBody is the type of the "organizations"
-// service "getInviteByToken" endpoint HTTP response body for the
-// "unauthorized" error.
-type GetInviteByTokenUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetInviteByTokenForbiddenResponseBody is the type of the "organizations"
-// service "getInviteByToken" endpoint HTTP response body for the "forbidden"
-// error.
-type GetInviteByTokenForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetInviteByTokenBadRequestResponseBody is the type of the "organizations"
-// service "getInviteByToken" endpoint HTTP response body for the "bad_request"
-// error.
-type GetInviteByTokenBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetInviteByTokenNotFoundResponseBody is the type of the "organizations"
-// service "getInviteByToken" endpoint HTTP response body for the "not_found"
-// error.
-type GetInviteByTokenNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetInviteByTokenConflictResponseBody is the type of the "organizations"
-// service "getInviteByToken" endpoint HTTP response body for the "conflict"
-// error.
-type GetInviteByTokenConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetInviteByTokenUnsupportedMediaResponseBody is the type of the
-// "organizations" service "getInviteByToken" endpoint HTTP response body for
-// the "unsupported_media" error.
-type GetInviteByTokenUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetInviteByTokenInvalidResponseBody is the type of the "organizations"
-// service "getInviteByToken" endpoint HTTP response body for the "invalid"
-// error.
-type GetInviteByTokenInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetInviteByTokenInvariantViolationResponseBody is the type of the
-// "organizations" service "getInviteByToken" endpoint HTTP response body for
-// the "invariant_violation" error.
-type GetInviteByTokenInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetInviteByTokenUnexpectedResponseBody is the type of the "organizations"
-// service "getInviteByToken" endpoint HTTP response body for the "unexpected"
-// error.
-type GetInviteByTokenUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetInviteByTokenGatewayErrorResponseBody is the type of the "organizations"
-// service "getInviteByToken" endpoint HTTP response body for the
-// "gateway_error" error.
-type GetInviteByTokenGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2002,14 +1798,16 @@ type OrganizationUserResponseBody struct {
 	WorkosMembershipID *string `form:"workos_membership_id,omitempty" json:"workos_membership_id,omitempty" xml:"workos_membership_id,omitempty"`
 	CreatedAt          *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt          *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Timestamp of the user's most recent login.
+	LastLogin *string `form:"last_login,omitempty" json:"last_login,omitempty" xml:"last_login,omitempty"`
 }
 
 // NewSendInviteRequestBody builds the HTTP request body from the payload of
 // the "sendInvite" endpoint of the "organizations" service.
 func NewSendInviteRequestBody(p *organizations.SendInvitePayload) *SendInviteRequestBody {
 	body := &SendInviteRequestBody{
-		Email:    p.Email,
-		RoleSlug: p.RoleSlug,
+		Email:  p.Email,
+		RoleID: p.RoleID,
 	}
 	return body
 }
@@ -2649,169 +2447,6 @@ func NewListInvitesUnexpected(body *ListInvitesUnexpectedResponseBody) *goa.Serv
 // NewListInvitesGatewayError builds a organizations service listInvites
 // endpoint gateway_error error.
 func NewListInvitesGatewayError(body *ListInvitesGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetInviteByTokenOrganizationInvitationAcceptOK builds a "organizations"
-// service "getInviteByToken" endpoint result from a HTTP "OK" response.
-func NewGetInviteByTokenOrganizationInvitationAcceptOK(body *GetInviteByTokenResponseBody) *organizations.OrganizationInvitationAccept {
-	v := &organizations.OrganizationInvitationAccept{
-		Email:               *body.Email,
-		State:               *body.State,
-		OrganizationName:    *body.OrganizationName,
-		AcceptInvitationURL: *body.AcceptInvitationURL,
-	}
-
-	return v
-}
-
-// NewGetInviteByTokenUnauthorized builds a organizations service
-// getInviteByToken endpoint unauthorized error.
-func NewGetInviteByTokenUnauthorized(body *GetInviteByTokenUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetInviteByTokenForbidden builds a organizations service getInviteByToken
-// endpoint forbidden error.
-func NewGetInviteByTokenForbidden(body *GetInviteByTokenForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetInviteByTokenBadRequest builds a organizations service
-// getInviteByToken endpoint bad_request error.
-func NewGetInviteByTokenBadRequest(body *GetInviteByTokenBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetInviteByTokenNotFound builds a organizations service getInviteByToken
-// endpoint not_found error.
-func NewGetInviteByTokenNotFound(body *GetInviteByTokenNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetInviteByTokenConflict builds a organizations service getInviteByToken
-// endpoint conflict error.
-func NewGetInviteByTokenConflict(body *GetInviteByTokenConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetInviteByTokenUnsupportedMedia builds a organizations service
-// getInviteByToken endpoint unsupported_media error.
-func NewGetInviteByTokenUnsupportedMedia(body *GetInviteByTokenUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetInviteByTokenInvalid builds a organizations service getInviteByToken
-// endpoint invalid error.
-func NewGetInviteByTokenInvalid(body *GetInviteByTokenInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetInviteByTokenInvariantViolation builds a organizations service
-// getInviteByToken endpoint invariant_violation error.
-func NewGetInviteByTokenInvariantViolation(body *GetInviteByTokenInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetInviteByTokenUnexpected builds a organizations service
-// getInviteByToken endpoint unexpected error.
-func NewGetInviteByTokenUnexpected(body *GetInviteByTokenUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetInviteByTokenGatewayError builds a organizations service
-// getInviteByToken endpoint gateway_error error.
-func NewGetInviteByTokenGatewayError(body *GetInviteByTokenGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3696,29 +3331,6 @@ func ValidateListInvitesResponseBody(body *ListInvitesResponseBody) (err error) 
 			if err2 := ValidateOrganizationInvitationResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
-		}
-	}
-	return
-}
-
-// ValidateGetInviteByTokenResponseBody runs the validations defined on
-// GetInviteByTokenResponseBody
-func ValidateGetInviteByTokenResponseBody(body *GetInviteByTokenResponseBody) (err error) {
-	if body.Email == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("email", "body"))
-	}
-	if body.State == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
-	}
-	if body.OrganizationName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_name", "body"))
-	}
-	if body.AcceptInvitationURL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("accept_invitation_url", "body"))
-	}
-	if body.State != nil {
-		if !(*body.State == "pending" || *body.State == "accepted" || *body.State == "expired" || *body.State == "revoked") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"pending", "accepted", "expired", "revoked"}))
 		}
 	}
 	return
@@ -4691,246 +4303,6 @@ func ValidateListInvitesUnexpectedResponseBody(body *ListInvitesUnexpectedRespon
 // ValidateListInvitesGatewayErrorResponseBody runs the validations defined on
 // listInvites_gateway_error_response_body
 func ValidateListInvitesGatewayErrorResponseBody(body *ListInvitesGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetInviteByTokenUnauthorizedResponseBody runs the validations
-// defined on getInviteByToken_unauthorized_response_body
-func ValidateGetInviteByTokenUnauthorizedResponseBody(body *GetInviteByTokenUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetInviteByTokenForbiddenResponseBody runs the validations defined
-// on getInviteByToken_forbidden_response_body
-func ValidateGetInviteByTokenForbiddenResponseBody(body *GetInviteByTokenForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetInviteByTokenBadRequestResponseBody runs the validations defined
-// on getInviteByToken_bad_request_response_body
-func ValidateGetInviteByTokenBadRequestResponseBody(body *GetInviteByTokenBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetInviteByTokenNotFoundResponseBody runs the validations defined on
-// getInviteByToken_not_found_response_body
-func ValidateGetInviteByTokenNotFoundResponseBody(body *GetInviteByTokenNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetInviteByTokenConflictResponseBody runs the validations defined on
-// getInviteByToken_conflict_response_body
-func ValidateGetInviteByTokenConflictResponseBody(body *GetInviteByTokenConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetInviteByTokenUnsupportedMediaResponseBody runs the validations
-// defined on getInviteByToken_unsupported_media_response_body
-func ValidateGetInviteByTokenUnsupportedMediaResponseBody(body *GetInviteByTokenUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetInviteByTokenInvalidResponseBody runs the validations defined on
-// getInviteByToken_invalid_response_body
-func ValidateGetInviteByTokenInvalidResponseBody(body *GetInviteByTokenInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetInviteByTokenInvariantViolationResponseBody runs the validations
-// defined on getInviteByToken_invariant_violation_response_body
-func ValidateGetInviteByTokenInvariantViolationResponseBody(body *GetInviteByTokenInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetInviteByTokenUnexpectedResponseBody runs the validations defined
-// on getInviteByToken_unexpected_response_body
-func ValidateGetInviteByTokenUnexpectedResponseBody(body *GetInviteByTokenUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetInviteByTokenGatewayErrorResponseBody runs the validations
-// defined on getInviteByToken_gateway_error_response_body
-func ValidateGetInviteByTokenGatewayErrorResponseBody(body *GetInviteByTokenGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -6222,6 +5594,9 @@ func ValidateOrganizationUserResponseBody(body *OrganizationUserResponseBody) (e
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.LastLogin != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_login", *body.LastLogin, goa.FormatDateTime))
 	}
 	return
 }
