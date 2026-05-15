@@ -21,7 +21,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -55,6 +57,7 @@ type testInstance struct {
 	service        *remotesessions.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
+	envEntries     *environments.EnvironmentEntries
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -82,6 +85,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	enc := testenv.NewEncryptionClient(t)
+	envEntries := environments.NewEnvironmentEntries(logger, conn, enc, mcpmetadatarepo.New(conn))
 
 	svc := remotesessions.NewService(
 		logger,
@@ -90,6 +94,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager,
 		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache),
 		enc,
+		envEntries,
 		guardianPolicy,
 		audit.NewLogger(),
 	)
@@ -98,6 +103,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
+		envEntries:     envEntries,
 	}
 }
 

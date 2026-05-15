@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -522,19 +523,86 @@ func TestCloneClientFromOAuthProxyProvider_RejectsGramProvider(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
-func TestCloneClientFromOAuthProxyProvider_RejectsEnvBackedSecrets(t *testing.T) {
+// seedEnvironmentWithEntries creates an environment + entries via the same
+// EnvironmentEntries helper the production code uses, so values land encrypted
+// under the test encryption key. Returns the environment slug.
+func seedEnvironmentWithEntries(t *testing.T, ctx context.Context, ti *testInstance, slug string, entries map[string]string) string {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	envRow, err := environmentsrepo.New(ti.conn).CreateEnvironment(ctx, environmentsrepo.CreateEnvironmentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		Name:           slug,
+		Slug:           slug,
+		Description:    pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	names := make([]string, 0, len(entries))
+	values := make([]string, 0, len(entries))
+	for name, value := range entries {
+		names = append(names, name)
+		values = append(values, value)
+	}
+	_, err = ti.envEntries.CreateEnvironmentEntries(ctx, environmentsrepo.CreateEnvironmentEntriesParams{
+		EnvironmentID: envRow.ID,
+		Names:         names,
+		Values:        values,
+	})
+	require.NoError(t, err)
+	return envRow.Slug
+}
+
+func TestCloneClientFromOAuthProxyProvider_EnvBackedSecrets(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	ctx = withAdmin(t, ctx)
 
-	// Env-backed credentials: the proxy resolves these at runtime via the
-	// environments service. Clone explicitly refuses so the migration trail
-	// stays auditable and operators inline credentials before cloning.
-	secrets := []byte(`{"environment_slug":"prod"}`)
-	proxyProviderID := insertProxyProvider(t, ctx, ti.conn, "clone-envback", "custom", secrets)
-	issuerID := createRemoteIssuer(t, ctx, ti, "clone-envback", "")
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "clone-envback").String()
+	// Operators commonly store CLIENT_ID / CLIENT_SECRET in an environment and
+	// reference it from the proxy provider's secrets via environment_slug. The
+	// clone path resolves these the same way the runtime OAuth proxy does so
+	// cutover works for existing env-backed providers without forcing operators
+	// to inline credentials first.
+	envSlug := seedEnvironmentWithEntries(t, ctx, ti, "envback-ok", map[string]string{
+		"CLIENT_ID":     "env-upstream-cid",
+		"CLIENT_SECRET": "env-upstream-shhh",
+	})
+	secrets := []byte(`{"environment_slug":"` + envSlug + `"}`)
+	proxyProviderID := insertProxyProvider(t, ctx, ti.conn, "clone-envback-ok", "custom", secrets)
+	issuerID := createRemoteIssuer(t, ctx, ti, "clone-envback-ok", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "clone-envback-ok").String()
+
+	result, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
+		OauthProxyProviderID:  proxyProviderID.String(),
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerID:   userIssuerID,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "env-upstream-cid", result.ClientID, "resolves CLIENT_ID from the linked environment case-insensitively")
+}
+
+func TestCloneClientFromOAuthProxyProvider_EnvMissingCredential(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	// Environment exists and is linked, but CLIENT_SECRET is absent. The clone
+	// must surface a bad-request rather than persist a half-populated client.
+	envSlug := seedEnvironmentWithEntries(t, ctx, ti, "envback-missing", map[string]string{
+		"CLIENT_ID": "only-cid",
+	})
+	secrets := []byte(`{"environment_slug":"` + envSlug + `"}`)
+	proxyProviderID := insertProxyProvider(t, ctx, ti.conn, "clone-envback-missing", "custom", secrets)
+	issuerID := createRemoteIssuer(t, ctx, ti, "clone-envback-missing", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "clone-envback-missing").String()
 
 	_, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
 		OauthProxyProviderID:  proxyProviderID.String(),
