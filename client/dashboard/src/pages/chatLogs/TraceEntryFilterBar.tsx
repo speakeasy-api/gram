@@ -46,7 +46,7 @@ export function EntryTypeFilterBar({
             onChange(nextValue);
           }
         }}
-        className="grid w-full grid-cols-2 gap-2 rounded-none p-2 pt-0 lg:grid-cols-4"
+        className="grid w-full grid-cols-2 gap-2 rounded-none px-3 pt-0 pb-2 lg:grid-cols-4"
       >
         {FILTERABLE_ENTRY_TYPES.map((entryType) => {
           const meta = ENTRY_TYPE_META[entryType];
@@ -64,11 +64,11 @@ export function EntryTypeFilterBar({
               disabled={isDisabled}
               className={cn(
                 "h-10 min-w-0 cursor-pointer px-3 disabled:cursor-not-allowed disabled:opacity-45",
-                "text-foreground hover:text-foreground justify-start text-left",
-                "bg-muted hover:bg-muted/50 rounded-lg shadow-none inset-shadow-xs transition-all",
+                "text-muted-foreground hover:text-foreground justify-start text-left",
+                "bg-background hover:bg-muted/40 rounded-lg shadow-none inset-shadow-xs transition-all",
                 "hover:border-muted-foreground/50 border-muted border",
                 canShowSelectedState &&
-                  "bg-muted border-muted-foreground hover:border-muted-foreground shadow-muted hover:shadow-sm",
+                  "bg-muted/80 border-muted-foreground hover:border-muted-foreground shadow-muted hover:shadow-sm",
               )}
             >
               <TraceEntryIcon entryType={entryType} disabled={isDisabled} />
@@ -77,10 +77,10 @@ export function EntryTypeFilterBar({
               </span>
               <span
                 className={cn(
-                  "rounded px-1.5 py-0.5 font-mono text-[10px] leading-none",
+                  "rounded-sm px-1.5 py-0.5 font-mono text-[10px] leading-none",
                   canShowSelectedState
-                    ? "bg-background/80 text-foreground"
-                    : "bg-muted text-muted-foreground",
+                    ? "bg-background text-foreground"
+                    : "bg-muted/40 text-muted-foreground",
                 )}
               >
                 {count.toLocaleString()}
