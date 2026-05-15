@@ -118,6 +118,26 @@ func TestServiceCoreAdmitPendingThreadsReleasesPartialHeadroom(t *testing.T) {
 	require.Len(t, admitted.ThreadIDs, 1, "cap=2 with 1 existing-active sibling leaves headroom for 1 pending admit")
 }
 
+func TestServiceCoreAdmitPendingThreadsBypassesCapForReservedStarter(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_admit_cold_cap_bypass")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	// MaxConcurrency=1, one warm sibling already counts against the cap,
+	// no live v2 runtime row → cold admit reserves a new one. The reserved
+	// starter must be admitted or the runtime stays in starting forever.
+	assistantID, _, pending := seedAssistantWithActiveAndPending(t, conn, "assistants-cold-bypass", 1, 1, 1)
+	require.NotEmpty(t, pending)
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	admitted, err := core.AdmitPendingThreads(ctx, assistantID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{pending[0]}, admitted.ThreadIDs, "cold-admit must release the starter even when active count is at the cap")
+}
+
 func seedAssistantWithPendingThreads(t *testing.T, conn *pgxpool.Pool, slug string, maxConcurrency int, pending int) (uuid.UUID, []uuid.UUID) {
 	t.Helper()
 	assistantID, _, pendingIDs := seedAssistantWithActiveAndPending(t, conn, slug, maxConcurrency, 0, pending)

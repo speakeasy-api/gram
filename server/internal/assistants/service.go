@@ -1356,15 +1356,18 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 	}
 
 	if firstThreadOnly {
+		// We just reserved the runtime row; the starter must be admitted
+		// even when active siblings already saturate MaxConcurrency, or
+		// nothing drives Ensure and the row stays starting until reaped.
 		threads = threads[:1]
-	}
-
-	headroom := assistant.MaxConcurrency - int(active)
-	if headroom <= 0 {
-		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
-	}
-	if len(threads) > headroom {
-		threads = threads[:headroom]
+	} else {
+		headroom := assistant.MaxConcurrency - int(active)
+		if headroom <= 0 {
+			return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
+		}
+		if len(threads) > headroom {
+			threads = threads[:headroom]
+		}
 	}
 
 	admitted := make([]uuid.UUID, 0, len(threads))
