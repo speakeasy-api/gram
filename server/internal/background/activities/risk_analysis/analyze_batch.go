@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
@@ -96,6 +97,20 @@ type AnalyzeBatchArgs struct {
 type AnalyzeBatchResult struct {
 	Processed int
 	Findings  int
+}
+
+type riskFindingOutboxEntry struct {
+	ID                uuid.UUID `json:"id"`
+	ProjectID         uuid.UUID `json:"project_id"`
+	OrganizationID    string    `json:"organization_id"`
+	RiskPolicyID      uuid.UUID `json:"risk_policy_id"`
+	RiskPolicyVersion int64     `json:"risk_policy_version"`
+	ChatMessageID     uuid.UUID `json:"chat_message_id"`
+	RuleID            string    `json:"rule_id"`
+	Description       string    `json:"description"`
+	Confidence        float64   `json:"confidence"`
+	Tags              []string  `json:"tags"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *AnalyzeBatchResult, err error) {
@@ -659,6 +674,37 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 		if _, err := txRepo.InsertRiskResults(ctx, rows); err != nil {
 			writeSpan.SetStatus(codes.Error, err.Error())
 			return fmt.Errorf("insert risk results: %w", err)
+		}
+	}
+
+	now := time.Now()
+	var outboxParams []outbox.AppendParams
+	for _, row := range rows {
+		if !row.Found || !row.RuleID.Valid {
+			continue
+		}
+		outboxParams = append(outboxParams, outbox.AppendParams{
+			OrganizationID: row.OrganizationID,
+			EventType:      outbox.EventTypeRiskFindingCreated,
+			Payload: riskFindingOutboxEntry{
+				ID:                row.ID,
+				ProjectID:         row.ProjectID,
+				OrganizationID:    row.OrganizationID,
+				RiskPolicyID:      row.RiskPolicyID,
+				RiskPolicyVersion: row.RiskPolicyVersion,
+				ChatMessageID:     row.ChatMessageID,
+				RuleID:            row.RuleID.String,
+				Description:       row.Description.String,
+				Confidence:        row.Confidence.Float64,
+				Tags:              row.Tags,
+				CreatedAt:         now,
+			},
+		})
+	}
+	if len(outboxParams) > 0 {
+		if _, err := outbox.AppendBatch(ctx, tx, outboxParams); err != nil {
+			writeSpan.SetStatus(codes.Error, err.Error())
+			return fmt.Errorf("append risk findings to outbox: %w", err)
 		}
 	}
 
