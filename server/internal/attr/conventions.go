@@ -253,6 +253,7 @@ const (
 	ToolsetIDKey                    = attribute.Key("gram.toolset.id")
 	ToolsetSlugKey                  = attribute.Key("gram.toolset.slug")
 	ToolsetMCPSlugKey               = attribute.Key("gram.toolset.mcp_slug")
+	ToolsetMCPEnabledKey            = attribute.Key("gram.toolset.mcp_enabled")
 	VisibilityKey                   = attribute.Key("gram.visibility")
 
 	// Hooks
@@ -1117,6 +1118,9 @@ func SlogToolsetSlug(v string) slog.Attr      { return slog.String(string(Toolse
 
 func ToolsetMCPSlug(v string) attribute.KeyValue { return ToolsetMCPSlugKey.String(v) }
 func SlogToolsetMCPSlug(v string) slog.Attr      { return slog.String(string(ToolsetMCPSlugKey), v) }
+
+func ToolsetMCPEnabled(v bool) attribute.KeyValue { return ToolsetMCPEnabledKey.Bool(v) }
+func SlogToolsetMCPEnabled(v bool) slog.Attr      { return slog.Bool(string(ToolsetMCPEnabledKey), v) }
 
 func McpURL(v string) attribute.KeyValue { return McpURLKey.String(v) }
 func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey), v) }
