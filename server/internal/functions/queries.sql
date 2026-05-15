@@ -156,3 +156,16 @@ WHERE
   AND df.id = @function_id
   AND a.id = @asset_id
   AND a.deleted IS FALSE;
+
+-- name: ListFunctionToolURNsByDeployment :many
+-- Returns one row per non-deleted function tool definition in a deployment,
+-- with the parent function's slug exposed as the "source" segment to ease
+-- bucketing in callers. Used by the deployment-completed auto-sync activity.
+SELECT
+  ftd.tool_urn AS tool_urn,
+  df.slug AS function_slug
+FROM function_tool_definitions ftd
+JOIN deployments_functions df ON df.id = ftd.function_id
+WHERE ftd.deployment_id = @deployment_id
+  AND ftd.deleted IS FALSE
+ORDER BY df.slug, ftd.tool_urn;

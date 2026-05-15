@@ -250,6 +250,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.TransitionDeployment)
 	temporalWorker.RegisterActivity(activities.ProvisionFunctionsAccess)
 	temporalWorker.RegisterActivity(activities.DeployFunctionRunners)
+	temporalWorker.RegisterActivity(activities.AutoSyncToolsets)
 	temporalWorker.RegisterActivity(activities.ReapFlyApps)
 	temporalWorker.RegisterActivity(activities.GetSlackProjectContext)
 	temporalWorker.RegisterActivity(activities.PostSlackMessage)

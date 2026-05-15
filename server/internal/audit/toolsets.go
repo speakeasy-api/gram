@@ -21,6 +21,7 @@ const (
 	ActionToolsetAttachOAuthProxy    Action = "toolset:attach_oauth_proxy"
 	ActionToolsetUpdateOAuthProxy    Action = "toolset:update_oauth_proxy"
 	ActionToolsetDetachOAuthProxy    Action = "toolset:detach_oauth_proxy"
+	ActionToolsetToolsAutoAdded      Action = "toolset:tools_auto_added"
 )
 
 type LogToolsetCreateEvent struct {
@@ -460,6 +461,64 @@ func (l *Logger) LogToolsetUpdateOAuthProxy(ctx context.Context, dbtx repo.DBTX,
 		Metadata:       metadata,
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
+	}
+
+	return l.log(ctx, dbtx, entry)
+}
+
+type LogToolsetToolsAutoAddedEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	ToolsetURN          urn.Toolset
+	ToolsetName         string
+	ToolsetSlug         string
+	ToolsetVersionAfter int64
+
+	DeploymentID uuid.UUID
+	Sources      []string
+	AddedURNs    []string
+}
+
+// LogToolsetToolsAutoAdded records that the deployment-completed activity
+// extended a toolset with new tool URNs because the toolset is subscribed to
+// the deployment's function sources.
+func (l *Logger) LogToolsetToolsAutoAdded(ctx context.Context, dbtx repo.DBTX, event LogToolsetToolsAutoAddedEvent) error {
+	action := ActionToolsetToolsAutoAdded
+
+	metadata, err := marshalAuditPayload(map[string]any{
+		"deployment_id":         event.DeploymentID.String(),
+		"sources":               event.Sources,
+		"added_urns":            event.AddedURNs,
+		"toolset_version_after": event.ToolsetVersionAfter,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.ToolsetURN.ID.String(),
+		SubjectType:        string(subjectTypeToolset),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.ToolsetName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.ToolsetSlug),
+
+		Metadata:       metadata,
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
 	}
 
 	return l.log(ctx, dbtx, entry)
