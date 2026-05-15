@@ -22,11 +22,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -270,7 +272,7 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 		return nil, oops.E(oops.CodeBadRequest, nil, "only custom oauth_proxy_providers carry a clonable client; provider_type=%q", provider.ProviderType).Log(ctx, logger)
 	}
 
-	clientID, clientSecret, err := extractProxyClientCredentials(provider.Secrets)
+	clientID, clientSecret, err := resolveProxyClientCredentials(ctx, s.environments, provider.ProjectID, provider.Secrets)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "oauth proxy provider client credentials unavailable for clone").Log(ctx, logger)
 	}
@@ -324,13 +326,14 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 	return mv.BuildRemoteSessionClientView(created), nil
 }
 
-// extractProxyClientCredentials pulls client_id and client_secret out of an
-// oauth_proxy_provider's secrets JSONB. We deliberately do not resolve
-// environment-backed credentials here: the clone path is admin-only and meant
-// to be auditable end-to-end, so we refuse rather than silently reach into the
-// environments service. Operators with env-backed proxies should inline the
-// credentials before cloning.
-func extractProxyClientCredentials(secretsJSON []byte) (clientID string, clientSecret string, err error) {
+// resolveProxyClientCredentials pulls client_id and client_secret out of an
+// oauth_proxy_provider's secrets JSONB, falling back to the linked environment
+// when either field is missing. The fallback mirrors the runtime resolver in
+// server/internal/oauth/providers/custom.go so cutover works for both inline
+// and env-backed proxy providers. Environment values are loaded through the
+// EnvironmentEntries helper, which decrypts them; case-insensitive matching
+// reflects how operators name CLIENT_ID / CLIENT_SECRET in practice.
+func resolveProxyClientCredentials(ctx context.Context, env *environments.EnvironmentEntries, projectID uuid.UUID, secretsJSON []byte) (clientID string, clientSecret string, err error) {
 	if len(secretsJSON) == 0 {
 		return "", "", fmt.Errorf("provider has no stored secrets")
 	}
@@ -340,16 +343,33 @@ func extractProxyClientCredentials(secretsJSON []byte) (clientID string, clientS
 	}
 	clientID = strings.TrimSpace(secrets["client_id"])
 	clientSecret = strings.TrimSpace(secrets["client_secret"])
-	if clientID == "" {
-		if envSlug := strings.TrimSpace(secrets["environment_slug"]); envSlug != "" {
-			return "", "", fmt.Errorf("client_id is sourced from environment %q; inline it on the provider before cloning", envSlug)
+
+	if envSlug := strings.TrimSpace(secrets["environment_slug"]); (clientID == "" || clientSecret == "") && envSlug != "" {
+		if env == nil {
+			return "", "", fmt.Errorf("provider references environment %q but environment loader is unavailable", envSlug)
 		}
+		envMap, loadErr := env.Load(ctx, projectID, toolconfig.Slug(envSlug))
+		if loadErr != nil {
+			return "", "", fmt.Errorf("load environment %q: %w", envSlug, loadErr)
+		}
+		for k, v := range envMap {
+			switch strings.ToLower(k) {
+			case "client_id":
+				if clientID == "" {
+					clientID = strings.TrimSpace(v)
+				}
+			case "client_secret":
+				if clientSecret == "" {
+					clientSecret = strings.TrimSpace(v)
+				}
+			}
+		}
+	}
+
+	if clientID == "" {
 		return "", "", fmt.Errorf("client_id is empty")
 	}
 	if clientSecret == "" {
-		if envSlug := strings.TrimSpace(secrets["environment_slug"]); envSlug != "" {
-			return "", "", fmt.Errorf("client_secret is sourced from environment %q; inline it on the provider before cloning", envSlug)
-		}
 		return "", "", fmt.Errorf("client_secret is empty")
 	}
 	return clientID, clientSecret, nil

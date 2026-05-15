@@ -27,19 +27,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 )
 
 type Service struct {
-	tracer      trace.Tracer
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	auth        *auth.Auth
-	authz       *authz.Engine
-	enc         *encryption.Client
-	policy      *guardian.Policy
-	auditLogger *audit.Logger
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	auth         *auth.Auth
+	authz        *authz.Engine
+	enc          *encryption.Client
+	environments *environments.EnvironmentEntries
+	policy       *guardian.Policy
+	auditLogger  *audit.Logger
 }
 
 var (
@@ -51,18 +53,19 @@ var (
 	_ sessionsgen.Auther  = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, policy *guardian.Policy, auditLogger *audit.Logger) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 
 	return &Service{
-		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
-		logger:      logger,
-		db:          db,
-		auth:        auth.New(logger, db, sessionManager, authzEngine),
-		authz:       authzEngine,
-		enc:         enc,
-		policy:      policy,
-		auditLogger: auditLogger,
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
+		logger:       logger,
+		db:           db,
+		auth:         auth.New(logger, db, sessionManager, authzEngine),
+		authz:        authzEngine,
+		enc:          enc,
+		environments: env,
+		policy:       policy,
+		auditLogger:  auditLogger,
 	}
 }
 
