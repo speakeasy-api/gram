@@ -153,7 +153,7 @@ func seedRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizatio
 	updatedAt, err := time.Parse(time.RFC3339, role.UpdatedAt)
 	require.NoError(t, err)
 
-	err = accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+	_, err = accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
 		OrganizationID:    organizationID,
 		WorkosSlug:        role.Slug,
 		WorkosName:        role.Name,

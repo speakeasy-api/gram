@@ -109,10 +109,11 @@ FROM organization_roles
 WHERE organization_id = @organization_id
   AND workos_slug = @workos_slug;
 
--- name: UpsertOrganizationRole :exec
+-- name: UpsertOrganizationRole :one
 -- Upsert an org-scoped WorkOS role. Caller must have already passed the row
 -- through ShouldProcessEvent. Resurrects a previously soft-deleted role on
 -- conflict.
+WITH upserted AS (
 INSERT INTO organization_roles (
     organization_id,
     workos_slug,
@@ -137,7 +138,30 @@ ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     deleted_at = NULL,
     workos_deleted_at = NULL,
-    updated_at = clock_timestamp();
+    updated_at = clock_timestamp()
+RETURNING
+    id,
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at
+)
+SELECT
+  upserted.id,
+  upserted.workos_slug,
+  upserted.workos_name,
+  upserted.workos_description,
+  upserted.workos_created_at,
+  upserted.workos_updated_at,
+  COUNT(ora.id)::bigint AS member_count
+FROM upserted
+LEFT JOIN organization_role_assignments AS ora
+  ON ora.organization_id = upserted.organization_id
+  AND ora.role_urn = 'role:organization:' || upserted.id::text
+  AND ora.user_id IS NOT NULL
+GROUP BY upserted.id, upserted.workos_slug, upserted.workos_name, upserted.workos_description, upserted.workos_created_at, upserted.workos_updated_at;
 
 -- name: MarkOrganizationRoleDeleted :execrows
 UPDATE organization_roles

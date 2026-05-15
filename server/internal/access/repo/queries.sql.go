@@ -875,7 +875,8 @@ func (q *Queries) UpsertGlobalRole(ctx context.Context, arg UpsertGlobalRolePara
 	return err
 }
 
-const upsertOrganizationRole = `-- name: UpsertOrganizationRole :exec
+const upsertOrganizationRole = `-- name: UpsertOrganizationRole :one
+WITH upserted AS (
 INSERT INTO organization_roles (
     organization_id,
     workos_slug,
@@ -901,6 +902,29 @@ ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
     deleted_at = NULL,
     workos_deleted_at = NULL,
     updated_at = clock_timestamp()
+RETURNING
+    id,
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at
+)
+SELECT
+  upserted.id,
+  upserted.workos_slug,
+  upserted.workos_name,
+  upserted.workos_description,
+  upserted.workos_created_at,
+  upserted.workos_updated_at,
+  COUNT(ora.id)::bigint AS member_count
+FROM upserted
+LEFT JOIN organization_role_assignments AS ora
+  ON ora.organization_id = upserted.organization_id
+  AND ora.role_urn = 'role:organization:' || upserted.id::text
+  AND ora.user_id IS NOT NULL
+GROUP BY upserted.id, upserted.workos_slug, upserted.workos_name, upserted.workos_description, upserted.workos_created_at, upserted.workos_updated_at
 `
 
 type UpsertOrganizationRoleParams struct {
@@ -913,11 +937,21 @@ type UpsertOrganizationRoleParams struct {
 	WorkosLastEventID pgtype.Text
 }
 
+type UpsertOrganizationRoleRow struct {
+	ID                uuid.UUID
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	MemberCount       int64
+}
+
 // Upsert an org-scoped WorkOS role. Caller must have already passed the row
 // through ShouldProcessEvent. Resurrects a previously soft-deleted role on
 // conflict.
-func (q *Queries) UpsertOrganizationRole(ctx context.Context, arg UpsertOrganizationRoleParams) error {
-	_, err := q.db.Exec(ctx, upsertOrganizationRole,
+func (q *Queries) UpsertOrganizationRole(ctx context.Context, arg UpsertOrganizationRoleParams) (UpsertOrganizationRoleRow, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationRole,
 		arg.OrganizationID,
 		arg.WorkosSlug,
 		arg.WorkosName,
@@ -926,7 +960,17 @@ func (q *Queries) UpsertOrganizationRole(ctx context.Context, arg UpsertOrganiza
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
 	)
-	return err
+	var i UpsertOrganizationRoleRow
+	err := row.Scan(
+		&i.ID,
+		&i.WorkosSlug,
+		&i.WorkosName,
+		&i.WorkosDescription,
+		&i.WorkosCreatedAt,
+		&i.WorkosUpdatedAt,
+		&i.MemberCount,
+	)
+	return i, err
 }
 
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one

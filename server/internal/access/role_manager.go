@@ -130,20 +130,26 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	if err := repo.New(r.db).UpsertOrganizationRole(ctx, organizationRoleParams(gramOrgID, workos.Role{
+	createdRow, err := repo.New(r.db).UpsertOrganizationRole(ctx, organizationRoleParams(gramOrgID, workos.Role{
 		ID:          "",
 		Name:        payload.Name,
 		Slug:        roleSlug,
 		Description: payload.Description,
 		CreatedAt:   now,
 		UpdatedAt:   now,
-	})); err != nil {
+	}))
+	if err != nil {
 		trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
 		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "upsert local role record").Log(ctx, r.logger)
 	}
-	createdRole, err := r.getLocalRoleBySlug(ctx, gramOrgID, roleSlug)
-	if err != nil {
-		return roleCreateResult{}, err
+	createdRole := localRole{
+		ID:          createdRow.ID.String(),
+		Name:        createdRow.WorkosName,
+		Slug:        createdRow.WorkosSlug,
+		Description: conv.FromPGTextOrEmpty[string](createdRow.WorkosDescription),
+		CreatedAt:   conv.FromPGTimestamptz(createdRow.WorkosCreatedAt),
+		UpdatedAt:   conv.FromPGTimestamptz(createdRow.WorkosUpdatedAt),
+		MemberCount: int(createdRow.MemberCount),
 	}
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleID(createdRole.ID))
 
@@ -235,20 +241,26 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 			localRecord.Description = *payload.Description
 		}
 		localRecord.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-		if err := repo.New(r.db).UpsertOrganizationRole(ctx, organizationRoleParams(gramOrgID, workos.Role{
+		updatedRow, err := repo.New(r.db).UpsertOrganizationRole(ctx, organizationRoleParams(gramOrgID, workos.Role{
 			ID:          "",
 			Name:        localRecord.Name,
 			Slug:        localRecord.Slug,
 			Description: localRecord.Description,
 			CreatedAt:   localRecord.CreatedAt,
 			UpdatedAt:   localRecord.UpdatedAt,
-		})); err != nil {
+		}))
+		if err != nil {
 			trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
 			return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "upsert local role record").Log(ctx, r.logger)
 		}
-		updatedRole, err = r.getLocalRoleBySlug(ctx, gramOrgID, localRecord.Slug)
-		if err != nil {
-			return roleUpdateResult{}, err
+		updatedRole = localRole{
+			ID:          updatedRow.ID.String(),
+			Name:        updatedRow.WorkosName,
+			Slug:        updatedRow.WorkosSlug,
+			Description: conv.FromPGTextOrEmpty[string](updatedRow.WorkosDescription),
+			CreatedAt:   conv.FromPGTimestamptz(updatedRow.WorkosCreatedAt),
+			UpdatedAt:   conv.FromPGTimestamptz(updatedRow.WorkosUpdatedAt),
+			MemberCount: int(updatedRow.MemberCount),
 		}
 
 		if payload.Grants != nil {

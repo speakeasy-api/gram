@@ -378,7 +378,7 @@ func upsertOrganizationRole(ctx context.Context, logger *slog.Logger, dbtx datab
 		return nil
 	}
 
-	if err := repo.UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+	if _, err := repo.UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
 		OrganizationID:    org.ID,
 		WorkosSlug:        payload.Slug,
 		WorkosName:        payload.Name,

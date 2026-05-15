@@ -566,7 +566,7 @@ func seedOrganizationRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 	t.Helper()
 
 	eventTime := time.Date(2026, 5, 6, 10, 0, 0, 0, time.UTC)
-	err := accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+	_, err := accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
 		OrganizationID:    organizationID,
 		WorkosSlug:        slug,
 		WorkosName:        slug,
