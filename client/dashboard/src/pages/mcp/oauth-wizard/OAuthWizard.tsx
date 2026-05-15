@@ -2,15 +2,19 @@ import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Dialog } from "@/components/ui/dialog";
 import { useSession } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
+import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
 import { useProductTier } from "@/hooks/useProductTier";
+import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import {
   invalidateAllGetMcpMetadata,
   invalidateAllListEnvironments,
+  invalidateAllRemoteSessionClients,
+  invalidateAllRemoteSessionIssuers,
   invalidateAllToolset,
-  useGramContext,
+  invalidateAllUserSessionIssuers,
 } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
@@ -86,7 +90,7 @@ function WizardBody({
   toolsetSlug: string;
   toolset: Toolset;
 }) {
-  const client = useGramContext();
+  const client = useSdkClient();
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const session = useSession();
@@ -105,6 +109,12 @@ function WizardBody({
             invalidateAllGetMcpMetadata(queryClient);
             invalidateAllListEnvironments(queryClient);
           },
+          invalidateOnUserSessionsCreate: () => {
+            invalidateAllToolset(queryClient);
+            invalidateAllRemoteSessionIssuers(queryClient);
+            invalidateAllRemoteSessionClients(queryClient);
+            invalidateAllUserSessionIssuers(queryClient);
+          },
           captureExternalSuccess: () =>
             telemetry.capture("mcp_event", {
               action: "external_oauth_configured",
@@ -113,6 +123,11 @@ function WizardBody({
           captureProxyCreateSuccess: () =>
             telemetry.capture("mcp_event", {
               action: "oauth_proxy_configured",
+              slug: toolsetSlug,
+            }),
+          captureUserSessionsCreateSuccess: () =>
+            telemetry.capture("mcp_event", {
+              action: "user_sessions_oauth_configured",
               slug: toolsetSlug,
             }),
         },
@@ -125,6 +140,9 @@ function WizardBody({
     toolsetSlug,
     toolsetName: toolset.name,
     activeOrganizationId: session.activeOrganizationId,
+    onboardToUserSessions:
+      telemetry.isFeatureEnabled(ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG) ??
+      false,
   };
 
   return (
@@ -147,6 +165,9 @@ function WizardSteps({
   const hasMultipleOAuth2AuthCode = oauth2SecurityCount > 1;
 
   const isProxyCreating = state.matches({ proxy: "submitting" });
+  const isUserSessionsCreating = state.matches({
+    userSessions: "submitting",
+  });
   const isAutoRegistering = state.context.autoRegistering;
 
   return (
@@ -167,7 +188,12 @@ function WizardSteps({
       {state.matches({ proxy: "metadata" }) && <ProxyMetadataForm />}
 
       {(state.matches({ proxy: "registering" }) ||
-        (isProxyCreating && isAutoRegistering)) && <AutoConfigureLoader />}
+        (isProxyCreating && isAutoRegistering) ||
+        isUserSessionsCreating) && (
+        <AutoConfigureLoader
+          mode={isUserSessionsCreating ? "user-sessions" : "proxy"}
+        />
+      )}
 
       {state.matches({ proxy: "autoRegisterFailed" }) && (
         <AutoRegisterFailedStep error={state.context.error} onClose={onClose} />

@@ -15,7 +15,11 @@ import type { DiscoveredOAuth } from "./machine-types";
 export function PathSelection() {
   const send = WizardContext.useActorRef().send;
   const discovered = WizardContext.useSelector((s) => s.context.discovered);
+  const onboardToUserSessions = WizardContext.useSelector(
+    (s) => s.context.onboardToUserSessions,
+  );
   const canAutoConfigure = canAutoConfigureFromDiscovered(discovered);
+  const interactiveAuthEnabled = onboardToUserSessions && canAutoConfigure;
 
   return (
     <div className="space-y-4">
@@ -31,11 +35,21 @@ export function PathSelection() {
             title="Auto-Configure"
             onClick={() => send({ type: "SELECT_PROXY_AUTO" })}
             icon={ZapIcon}
-            badges={<Badge variant="information">Recommended</Badge>}
+            badges={[
+              <Badge key="recommended" variant="information">
+                Recommended
+              </Badge>,
+              interactiveAuthEnabled && (
+                <Badge key="interactive-auth" variant="success">
+                  Interactive auth enabled
+                </Badge>
+              ),
+            ]}
           >
             <Type muted small>
-              Automatically set up OAuth Proxy based on pre-discovered details
-              about this MCP server.
+              {onboardToUserSessions
+                ? "Automatically set up user sessions based on pre-discovered OAuth details about this MCP server."
+                : "Automatically set up OAuth Proxy based on pre-discovered details about this MCP server."}
             </Type>
           </PathOptionCard>
         )}
@@ -46,9 +60,15 @@ export function PathSelection() {
           icon={WaypointsIcon}
           badges={[
             !canAutoConfigure && discovered?.version === "2.0" && (
-              <Badge variant="information">Recommended</Badge>
+              <Badge key="recommended" variant="information">
+                Recommended
+              </Badge>
             ),
-            discovered && <Badge variant="neutral">Discovered</Badge>,
+            discovered && (
+              <Badge key="discovered" variant="neutral">
+                Discovered
+              </Badge>
+            ),
           ]}
         >
           <Type muted small>

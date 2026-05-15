@@ -10,6 +10,7 @@ import {
 import { useIsAdmin, useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
+import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import type { McpEnvironmentConfigInput } from "@gram/client/models/components";
@@ -900,10 +901,12 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
   ] = useState(false);
 
   const isAdmin = useIsAdmin();
+  const telemetry = useTelemetry();
 
   const { data: environmentsData } = useListEnvironments();
   const environments = environmentsData?.environments ?? [];
 
+  const loginSecured = !!toolset.userSessionIssuerSlug;
   const isOAuthConnected = !!(
     toolset?.oauthProxyServer || toolset?.externalOauthServer
   );
@@ -947,7 +950,11 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
   // OAuth-Proxy → user-sessions migration has produced a user_session_issuer
   // for this toolset. Admin-only on the dashboard side: regular project
   // members aren't expected to think about the user-session plumbing.
-  const userSessionIssuerWired = isAdmin && !!toolset.userSessionIssuerSlug;
+  const userSessionIssuerWired = !!toolset.userSessionIssuerSlug;
+  const hideConfigureButton =
+    (telemetry.isFeatureEnabled(ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG) ??
+      false) &&
+    !isOAuthConnected;
 
   return (
     <PageSection
@@ -957,12 +964,12 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
       action={
         <div className="flex items-center gap-2">
           {userSessionIssuerWired && (
-            <span
-              className="rounded-full border border-green-500/40 bg-green-50 px-2 py-0.5 text-[11px] font-medium tracking-wide text-green-900 dark:bg-green-950 dark:text-green-200"
-              title={`User session issuer: ${toolset.userSessionIssuerSlug}`}
-            >
-              User session issuer wired
-            </span>
+            <Badge variant="success">
+              <Badge.LeftIcon>
+                <CheckCircle className="h-3.5 w-3.5" />
+              </Badge.LeftIcon>
+              <Badge.Text>Login Secured</Badge.Text>
+            </Badge>
           )}
           {showWireUserSessionIssuer && (
             <Button
@@ -972,26 +979,28 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
               <Button.Text>Wire User Session Issuer</Button.Text>
             </Button>
           )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              {!isOAuthEligible ? (
-                <span className="inline-block">
-                  <Button disabled>
-                    <Button.Text>Configure</Button.Text>
+          {!hideConfigureButton && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {!isOAuthEligible ? (
+                  <span className="inline-block">
+                    <Button disabled>
+                      <Button.Text>Configure</Button.Text>
+                    </Button>
+                  </span>
+                ) : (
+                  <Button onClick={handleConfigureClick}>
+                    <Button.Text>
+                      {isOAuthConnected ? "Manage" : "Configure"}
+                    </Button.Text>
                   </Button>
-                </span>
-              ) : (
-                <Button onClick={handleConfigureClick}>
-                  <Button.Text>
-                    {isOAuthConnected ? "Manage" : "Configure"}
-                  </Button.Text>
-                </Button>
+                )}
+              </TooltipTrigger>
+              {!isOAuthEligible && (
+                <TooltipContent>{disabledTooltipText}</TooltipContent>
               )}
-            </TooltipTrigger>
-            {!isOAuthEligible && (
-              <TooltipContent>{disabledTooltipText}</TooltipContent>
-            )}
-          </Tooltip>
+            </Tooltip>
+          )}
         </div>
       }
     >
@@ -999,6 +1008,8 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
         isOAuthConnected={isOAuthConnected}
         isOAuthEligible={!!isOAuthEligible}
         externalMcpRequiresOAuth={externalMcpRequiresOAuth}
+        loginSecured={loginSecured}
+        showConfigureAction={!hideConfigureButton}
         oauthParadigm={oauthParadigm}
         mcpEnabled={!!toolset.mcpEnabled}
         proxyEnvironmentSlug={proxyEnvironmentSlug}
@@ -1056,6 +1067,8 @@ function OAuthStatusDisplay({
   isOAuthConnected,
   isOAuthEligible,
   externalMcpRequiresOAuth,
+  loginSecured,
+  showConfigureAction,
   oauthParadigm,
   mcpEnabled,
   proxyEnvironmentSlug,
@@ -1065,6 +1078,8 @@ function OAuthStatusDisplay({
   isOAuthConnected: boolean;
   isOAuthEligible: boolean;
   externalMcpRequiresOAuth: boolean;
+  loginSecured: boolean;
+  showConfigureAction: boolean;
   oauthParadigm: OAuthParadigm | null;
   mcpEnabled: boolean;
   proxyEnvironmentSlug: string | undefined;
@@ -1072,6 +1087,21 @@ function OAuthStatusDisplay({
   onConfigureClick: () => void;
 }) {
   const routes = useRoutes();
+
+  if (loginSecured) {
+    return (
+      <div className="border-success-softest bg-success-softest rounded-lg border border-dashed p-8 text-center">
+        <p className="text-success-foreground mb-1">
+          <CheckCircle className="text-success-foreground mx-auto mb-1 h-5 w-5" />
+          Login Secured
+        </p>
+        <p className="text-success-foreground text-sm">
+          Users will authenticate with interactive auth before accessing this
+          MCP server.
+        </p>
+      </div>
+    );
+  }
 
   if (isOAuthConnected && oauthParadigm) {
     return (
@@ -1109,7 +1139,7 @@ function OAuthStatusDisplay({
 
   if (externalMcpRequiresOAuth) {
     return (
-      <div className="border-warning-foreground/80 bg-warning rounded-lg border border-dashed px-6 py-8 text-center">
+      <div className="border-warning-foreground/80 bg-warning dark:bg-warning/10 dark:border-warning-foreground/30 rounded-lg border border-dashed px-6 py-8 text-center">
         <AlertTriangle className="text-warning mx-auto mb-1 h-5 w-5" />
         <p className="text-warning-foreground mb-1 font-bold">
           OAuth setup required
@@ -1117,9 +1147,11 @@ function OAuthStatusDisplay({
         <p className="text-warning-foreground/80 mb-3 text-sm">
           This MCP server requires OAuth configuration before it can be used.
         </p>
-        <Button variant="secondary" onClick={onConfigureClick}>
-          <Button.Text>Configure OAuth</Button.Text>
-        </Button>
+        {showConfigureAction && (
+          <Button variant="secondary" onClick={onConfigureClick}>
+            <Button.Text>Configure OAuth</Button.Text>
+          </Button>
+        )}
       </div>
     );
   }
@@ -1135,9 +1167,11 @@ function OAuthStatusDisplay({
           Enable OAuth to require users to authenticate before accessing this
           MCP server.
         </p>
-        <Button variant="secondary" onClick={onConfigureClick}>
-          <Button.Text>Configure OAuth</Button.Text>
-        </Button>
+        {showConfigureAction && (
+          <Button variant="secondary" onClick={onConfigureClick}>
+            <Button.Text>Configure OAuth</Button.Text>
+          </Button>
+        )}
       </div>
     );
   }
