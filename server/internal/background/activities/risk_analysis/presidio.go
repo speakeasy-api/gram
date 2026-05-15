@@ -587,6 +587,10 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 
 		match := string(runes[start:end])
 
+		if isPresidioFalsePositive(r.EntityType, match) {
+			continue
+		}
+
 		// Convert rune offsets to byte offsets for storage.
 		startByte := len(string(runes[:start]))
 		endByte := len(string(runes[:end]))
@@ -605,6 +609,22 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 		})
 	}
 	return findings
+}
+
+// isPresidioFalsePositive filters Presidio matches the policy author
+// would treat as noise. Today it catches the IPv6 unspecified address
+// `::` (and its all-zeros equivalents) which Presidio's IP_ADDRESS
+// detector aggressively flags wherever it appears in code, networking
+// configs, or stack traces but which is never a meaningful PII finding.
+func isPresidioFalsePositive(entityType, match string) bool {
+	if entityType != "IP_ADDRESS" {
+		return false
+	}
+	switch strings.TrimSpace(match) {
+	case "::", "::0", "0::0", "0:0:0:0:0:0:0:0":
+		return true
+	}
+	return false
 }
 
 // computeRetryBackoff returns a full-jittered exponential backoff for the
