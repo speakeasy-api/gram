@@ -264,6 +264,252 @@ func DecodeCreateRemoteSessionClientResponse(decoder func(*http.Response) goahtt
 	}
 }
 
+// BuildCloneClientFromOAuthProxyProviderRequest instantiates a HTTP request
+// object with method and path set to call the "remoteSessionClients" service
+// "cloneClientFromOAuthProxyProvider" endpoint
+func (c *Client) BuildCloneClientFromOAuthProxyProviderRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CloneClientFromOAuthProxyProviderRemoteSessionClientsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessionClients", "cloneClientFromOAuthProxyProvider", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCloneClientFromOAuthProxyProviderRequest returns an encoder for
+// requests sent to the remoteSessionClients cloneClientFromOAuthProxyProvider
+// server.
+func EncodeCloneClientFromOAuthProxyProviderRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessionclients.CloneClientFromOAuthProxyProviderPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessionClients", "cloneClientFromOAuthProxyProvider", "*remotesessionclients.CloneClientFromOAuthProxyProviderPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewCloneClientFromOAuthProxyProviderRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCloneClientFromOAuthProxyProviderResponse returns a decoder for
+// responses returned by the remoteSessionClients
+// cloneClientFromOAuthProxyProvider endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeCloneClientFromOAuthProxyProviderResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCloneClientFromOAuthProxyProviderResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CloneClientFromOAuthProxyProviderResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+			}
+			err = ValidateCloneClientFromOAuthProxyProviderResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+			}
+			res := NewCloneClientFromOAuthProxyProviderRemoteSessionClientOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CloneClientFromOAuthProxyProviderUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+			}
+			err = ValidateCloneClientFromOAuthProxyProviderUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+			}
+			return nil, NewCloneClientFromOAuthProxyProviderUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CloneClientFromOAuthProxyProviderForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+			}
+			err = ValidateCloneClientFromOAuthProxyProviderForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+			}
+			return nil, NewCloneClientFromOAuthProxyProviderForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CloneClientFromOAuthProxyProviderBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+			}
+			err = ValidateCloneClientFromOAuthProxyProviderBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+			}
+			return nil, NewCloneClientFromOAuthProxyProviderBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CloneClientFromOAuthProxyProviderNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+			}
+			err = ValidateCloneClientFromOAuthProxyProviderNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+			}
+			return nil, NewCloneClientFromOAuthProxyProviderNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CloneClientFromOAuthProxyProviderConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+			}
+			err = ValidateCloneClientFromOAuthProxyProviderConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+			}
+			return nil, NewCloneClientFromOAuthProxyProviderConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CloneClientFromOAuthProxyProviderUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+			}
+			err = ValidateCloneClientFromOAuthProxyProviderUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+			}
+			return nil, NewCloneClientFromOAuthProxyProviderUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CloneClientFromOAuthProxyProviderInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+			}
+			err = ValidateCloneClientFromOAuthProxyProviderInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+			}
+			return nil, NewCloneClientFromOAuthProxyProviderInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CloneClientFromOAuthProxyProviderInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+				}
+				err = ValidateCloneClientFromOAuthProxyProviderInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+				}
+				return nil, NewCloneClientFromOAuthProxyProviderInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CloneClientFromOAuthProxyProviderUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+				}
+				err = ValidateCloneClientFromOAuthProxyProviderUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+				}
+				return nil, NewCloneClientFromOAuthProxyProviderUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "cloneClientFromOAuthProxyProvider", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CloneClientFromOAuthProxyProviderGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+			}
+			err = ValidateCloneClientFromOAuthProxyProviderGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "cloneClientFromOAuthProxyProvider", err)
+			}
+			return nil, NewCloneClientFromOAuthProxyProviderGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "cloneClientFromOAuthProxyProvider", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildUpdateRemoteSessionClientRequest instantiates a HTTP request object
 // with method and path set to call the "remoteSessionClients" service
 // "updateRemoteSessionClient" endpoint

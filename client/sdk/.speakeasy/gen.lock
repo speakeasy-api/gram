@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 0af29334b330c66eee75cdf07387a787
+  docChecksum: 1a273f33cd5d96d41c639fcea8fe0b1e
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -156,6 +156,8 @@ trackedFiles:
     last_write_checksum: sha1:9aeeb4a542ec059884f17b4d64a4200ea5f462f5
   docs/models/components/claudehookresult.md:
     last_write_checksum: sha1:e29f7febd8b2bebbe3c91639ce9b538e22f23356
+  docs/models/components/cloneclientfromoauthproxyproviderform.md:
+    last_write_checksum: sha1:8b7c704d386943adb2fe3410a94ba2391201a7b2
   docs/models/components/cloneenvironmentrequestbody.md:
     last_write_checksum: sha1:b8f70e603600ad77b21e37d50cdcde0ee184a2c9
   docs/models/components/codexhookpayload.md:
@@ -802,6 +804,8 @@ trackedFiles:
     last_write_checksum: sha1:ca0a42489f870939188a9646b227e8d0039b1453
   docs/models/components/settoolsetenvironmentlinkrequestbody.md:
     last_write_checksum: sha1:f70322cc0be8a3119e961c0a6c46035cbedd81fe
+  docs/models/components/setusersessionissuerrequestbody.md:
+    last_write_checksum: sha1:ceae3021adb182e78c41962bb83962f960c6d351
   docs/models/components/severitytext.md:
     last_write_checksum: sha1:15969d4a62e02ba012c6724258259371a0a81bbb
   docs/models/components/skillbreakdownrow.md:
@@ -851,7 +855,7 @@ trackedFiles:
   docs/models/components/toolmetric.md:
     last_write_checksum: sha1:bcb67ef196ad7c4ef453f5bb187dd420decb9d48
   docs/models/components/toolset.md:
-    last_write_checksum: sha1:5725e86544ddb46c678d5db4d98f8e205ca26c3a
+    last_write_checksum: sha1:d2fe3153c2090bdbf6324368c657d23056af2a18
   docs/models/components/toolsetentry.md:
     last_write_checksum: sha1:5a00688fe13621349ae44f35054e8264d913553a
   docs/models/components/toolsetenvironmentlink.md:
@@ -1060,6 +1064,14 @@ trackedFiles:
     last_write_checksum: sha1:df0ade5b1bee55ad3029d5e609fe67d8dbfbc2b5
   docs/models/operations/clearmcpregistrycachesecurityoption2.md:
     last_write_checksum: sha1:4b9e06e065173677603f86f6b62ddf0c843a356e
+  docs/models/operations/cloneclientfromoauthproxyproviderrequest.md:
+    last_write_checksum: sha1:19a1462a5597dda30576271ce85240f7d77fce6a
+  docs/models/operations/cloneclientfromoauthproxyprovidersecurity.md:
+    last_write_checksum: sha1:95d322de1089de3efd28e5651f0f7dbc36cb8f1e
+  docs/models/operations/cloneclientfromoauthproxyprovidersecurityoption1.md:
+    last_write_checksum: sha1:4f8da61e0ed05ac5f471016a3e085c400b4b1eb2
+  docs/models/operations/cloneclientfromoauthproxyprovidersecurityoption2.md:
+    last_write_checksum: sha1:cd05ad2bc4b66ae922dea4dae350256b1d542556
   docs/models/operations/cloneenvironmentrequest.md:
     last_write_checksum: sha1:bfc0cdb38b0d30ee58d15832eefa0e1a50af0330
   docs/models/operations/cloneenvironmentsecurity.md:
@@ -2358,6 +2370,14 @@ trackedFiles:
     last_write_checksum: sha1:9f00649d1a53b8016b14a532e8c7ad0b3854140a
   docs/models/operations/settoolsetenvironmentlinksecurity.md:
     last_write_checksum: sha1:d429d0f232be88e75a211efc30f71d6ecb42c21c
+  docs/models/operations/settoolsetusersessionissuerrequest.md:
+    last_write_checksum: sha1:27cff0a80623c34e2937e0875c640c11bc72084f
+  docs/models/operations/settoolsetusersessionissuersecurity.md:
+    last_write_checksum: sha1:5242d8497e97357bab2661c36af2f4b79465ec59
+  docs/models/operations/settoolsetusersessionissuersecurityoption1.md:
+    last_write_checksum: sha1:eedcce782a5d1d8224243f1558608b6b498aa490
+  docs/models/operations/settoolsetusersessionissuersecurityoption2.md:
+    last_write_checksum: sha1:1268c85290fd4f2f3a7d2a2035350bca0e824919
   docs/models/operations/sortby.md:
     last_write_checksum: sha1:e634b96c47cd8768b661409c7a207a8766551ef0
   docs/models/operations/sortorder.md:
@@ -2651,7 +2671,7 @@ trackedFiles:
   docs/sdks/remotemcp/README.md:
     last_write_checksum: sha1:ba40ec39aacdc278cab5c33f3c7668bade49ca6c
   docs/sdks/remotesessionclients/README.md:
-    last_write_checksum: sha1:f92af989def5cbd7fa482fc179c2b8eb6659f3b0
+    last_write_checksum: sha1:5423bae0e7002d370a455a446ff196279fb6639c
   docs/sdks/remotesessionissuers/README.md:
     last_write_checksum: sha1:69682b216c8455f4aefa76ef8e94a7058b59857b
   docs/sdks/remotesessions/README.md:
@@ -2669,7 +2689,7 @@ trackedFiles:
   docs/sdks/tools/README.md:
     last_write_checksum: sha1:73c0e5a99b2d5a2bfa29e1937f9255e5228d1a86
   docs/sdks/toolsets/README.md:
-    last_write_checksum: sha1:dfc7e57a0d89efb2b755730311c8f6e891c89066
+    last_write_checksum: sha1:e275ad4acd5090e39054535a665f4371d13dcfc0
   docs/sdks/triggers/README.md:
     last_write_checksum: sha1:83cba427bf9553fb5cd63ce59def4d855d272e77
   docs/sdks/usage/README.md:
@@ -3174,6 +3194,8 @@ trackedFiles:
     last_write_checksum: sha1:f078bf874d38cfebf8e5614af75b94d3af6239ca
   src/funcs/remoteMcpVerifyURL.ts:
     last_write_checksum: sha1:9f0f774d3c687cdc2a068a156179cf6efea40cac
+  src/funcs/remoteSessionClientsCloneClientFromOAuthProxyProvider.ts:
+    last_write_checksum: sha1:e5ada8454c71337288791c99c48aff6a7ed3d7b1
   src/funcs/remoteSessionClientsCreate.ts:
     last_write_checksum: sha1:355d9b6f91985725b78f816ec087c55da0c1e61e
   src/funcs/remoteSessionClientsDelete.ts:
@@ -3340,6 +3362,8 @@ trackedFiles:
     id: 1bcbce53ee72
     last_write_checksum: sha1:1b386f960230fa0ed2052a1cfd5a123cf47b115a
     pristine_git_object: 06b77e7809ffcda3d992fa7bdbb6638ee63615fb
+  src/funcs/toolsetsSetUserSessionIssuer.ts:
+    last_write_checksum: sha1:0ba5d9dd088666ec74b9615212cc170368697bdd
   src/funcs/toolsetsUpdateBySlug.ts:
     id: 11ddf65847cb
     last_write_checksum: sha1:f5744e9ac43cdea5f946443aca2443e441a45437
@@ -3588,6 +3612,8 @@ trackedFiles:
     last_write_checksum: sha1:f990486e8333c922eb2244e05361ba69c4c472b7
   src/models/components/claudehookresult.ts:
     last_write_checksum: sha1:d72da8680ef447c6322a6f1162d87dfeca8bf1ca
+  src/models/components/cloneclientfromoauthproxyproviderform.ts:
+    last_write_checksum: sha1:436daac86b753fad5eb848aeeeedc26456ac4a5c
   src/models/components/cloneenvironmentrequestbody.ts:
     last_write_checksum: sha1:b1706b25cf4df77a03adf7a51df0566edb5b9147
   src/models/components/codexhookpayload.ts:
@@ -3884,7 +3910,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:584db13d611b1f3d3dc7ae46f26420a78b064e86
+    last_write_checksum: sha1:af70874600c4332d43307a7f8c4b2431faa0776d
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -4372,6 +4398,8 @@ trackedFiles:
     id: fdce1112a599
     last_write_checksum: sha1:d263fbc867d12c688e6cf05a8a69083ca43aece1
     pristine_git_object: df1eaccb023d9e93f54b641c8791f902963df99a
+  src/models/components/setusersessionissuerrequestbody.ts:
+    last_write_checksum: sha1:7c356da0075d8d9895abaa7cd04b5d9b2d6d3cb8
   src/models/components/skillbreakdownrow.ts:
     last_write_checksum: sha1:553768c909bc6d4953baff1dfbf71111768c1bb5
   src/models/components/skillsummary.ts:
@@ -4414,7 +4442,7 @@ trackedFiles:
     last_write_checksum: sha1:ca1d07131744d819aab5576b42801d6764c38528
   src/models/components/toolset.ts:
     id: dba8195a7f5f
-    last_write_checksum: sha1:95c6a0b3cc03740e6b3811feeba5a24dfcf379b7
+    last_write_checksum: sha1:29a01f147ae06f73c77e40f15673ebfec8c90479
     pristine_git_object: 3b4743bbb66a98251cb9a6b87bef530dc0aabbb5
   src/models/components/toolsetentry.ts:
     id: ee0bfdcf358d
@@ -4626,6 +4654,8 @@ trackedFiles:
     pristine_git_object: 0e1b5a154af078c04c6e289ed4796e1379b1460f
   src/models/operations/clearmcpregistrycache.ts:
     last_write_checksum: sha1:d6fd706c54c7f486d9cf289ea3ebe4b848e4a92d
+  src/models/operations/cloneclientfromoauthproxyprovider.ts:
+    last_write_checksum: sha1:0703bd13fe6c4285a5d8769ec4d316b7e5b2e025
   src/models/operations/cloneenvironment.ts:
     last_write_checksum: sha1:9924c5d3a7174f48f167e36d9b1f77cf2fa24653
   src/models/operations/clonetoolset.ts:
@@ -4930,7 +4960,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:e5cc7956d5d89a183a23c475762a7c1a7de4e3e3
+    last_write_checksum: sha1:28a72040a89b14fec7588ff0d05f147e041cae24
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -5208,6 +5238,8 @@ trackedFiles:
     id: 88f194de51ea
     last_write_checksum: sha1:262772bd45b6fdf63eb341b203b344ac67e9fc91
     pristine_git_object: 3a6aab09a2a3a1931f0e408ef9178472683485cb
+  src/models/operations/settoolsetusersessionissuer.ts:
+    last_write_checksum: sha1:7869537b6e7450220ebe4217b2f54558496bb834
   src/models/operations/submitfeedback.ts:
     last_write_checksum: sha1:08946361c95bc56fc01e41751ed6e1cf303e5458
   src/models/operations/switchauthscopes.ts:
@@ -5380,6 +5412,8 @@ trackedFiles:
     id: fb34660efa37
     last_write_checksum: sha1:f894807a99070df2c7c69fe762665b475ee7efa1
     pristine_git_object: 0469e624ed8634d1885e61591fedbba189a28eb4
+  src/react-query/cloneClientFromOAuthProxyProvider.ts:
+    last_write_checksum: sha1:12a74af12efb5958952336758d916295f5a14e42
   src/react-query/cloneEnvironment.ts:
     last_write_checksum: sha1:a9e55bd54f67750bc5326edae1f15e048459ed1e
   src/react-query/cloneToolset.ts:
@@ -5692,7 +5726,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:e00971c04baff511fbbdffa7cca5cade536d37bc
+    last_write_checksum: sha1:a77d72ce3edd769c10cf711a77cd3cdd822ecaa8
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -6170,6 +6204,8 @@ trackedFiles:
     id: eb7f2c957212
     last_write_checksum: sha1:67149aa3981bf96df946e29cecd8a23ec10a7ab4
     pristine_git_object: f81377b2b53c8cd0c4f191e23b41567ee7c7b65e
+  src/react-query/setToolsetUserSessionIssuer.ts:
+    last_write_checksum: sha1:6b828ce006ac402dec23c9ff75552a006d4bb226
   src/react-query/switchScopes.ts:
     id: 89899b6a30ab
     last_write_checksum: sha1:dbf86dcacdd6cf6443e195320fd1e00bfb0e2284
@@ -6413,7 +6449,7 @@ trackedFiles:
   src/sdk/remotemcp.ts:
     last_write_checksum: sha1:b441a0e7f045edc5e8e346027d0b9b9b5ca17d3c
   src/sdk/remotesessionclients.ts:
-    last_write_checksum: sha1:4d37ea00a0f97673497698af9cca29a09aae0fe0
+    last_write_checksum: sha1:fb6ce207fea0c5121f2bd9a135f843a03f86e6a6
   src/sdk/remotesessionissuers.ts:
     last_write_checksum: sha1:22b8a84e9a75cd661e51a4326c328f94f3107e27
   src/sdk/remotesessions.ts:
@@ -6448,7 +6484,7 @@ trackedFiles:
     pristine_git_object: 4c7e184e2d9dee5ccd82b2ef46f3236d7ec30efb
   src/sdk/toolsets.ts:
     id: 0715c1588060
-    last_write_checksum: sha1:9962151594a11edebf6f2b23c2fbcb70ed8ad93a
+    last_write_checksum: sha1:d9f289d398d07943c3102177270c44fb46478de3
     pristine_git_object: 499da61dc8ecf32ab1637b84167ecef2052c32b2
   src/sdk/triggers.ts:
     last_write_checksum: sha1:e38ef614f5ad5706d131c34193150531a46af67b
@@ -9580,6 +9616,42 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  cloneOAuthProxyProvider:
+    speakeasy-default-clone-O-auth-proxy-provider:
+      requestBody:
+        application/json: {"oauth_proxy_provider_id": "635fd5d5-dd94-4b68-ac14-9e43e62bfc3f", "remote_session_issuer_id": "dd7f0b47-9e44-4a03-b85d-24403425a4e0", "user_session_issuer_id": "b31ad3a5-1392-4428-9621-7177c0c344f8"}
+      responses:
+        "200":
+          application/json: {"client_id": "<id>", "client_id_issued_at": "2024-09-09T16:12:40.803Z", "created_at": "2025-07-06T02:09:41.503Z", "id": "63084392-ab6b-4697-8d3a-46fd0cc18030", "project_id": "34f7ba33-10e4-4b1e-9f2c-2a4ca017638a", "remote_session_issuer_id": "2748ecb5-b9e4-4425-8df8-217b37f116f3", "updated_at": "2026-04-19T21:27:43.099Z", "user_session_issuer_id": "28f9e9ae-b982-4233-965f-405edc1ac0ec"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  cloneClientFromOAuthProxyProvider:
+    speakeasy-default-clone-client-from-O-auth-proxy-provider:
+      requestBody:
+        application/json: {"oauth_proxy_provider_id": "4a856623-2d21-4b55-b070-a5607b54b87a", "remote_session_issuer_id": "3895728d-43a4-4b97-8f00-c03a994bce37", "user_session_issuer_id": "b0f7056a-e9d9-4356-a167-cc7cd78aaddc"}
+      responses:
+        "200":
+          application/json: {"client_id": "<id>", "client_id_issued_at": "2024-06-09T04:24:29.173Z", "created_at": "2025-02-18T14:09:42.387Z", "id": "f3fc5b5a-e998-4c89-a8f2-8cf8a8b51f4a", "project_id": "25d93e75-99b2-46ab-b933-b11be662a0e4", "remote_session_issuer_id": "a828f763-fcd9-422a-8e23-e0c7f1bdc3de", "updated_at": "2025-10-11T07:26:15.440Z", "user_session_issuer_id": "dd99072f-e0be-47b3-b497-023cf5c0ab85"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  setToolsetUserSessionIssuer:
+    speakeasy-default-set-toolset-user-session-issuer:
+      parameters:
+        query:
+          slug: "<value>"
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2026-09-08T18:44:39.379Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 16455}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>", "<value 3>"], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [], "toolset_version": 503506, "updated_at": "2024-09-22T05:20:40.508Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

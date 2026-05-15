@@ -6,7 +6,7 @@ import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { Toolset } from "@/lib/toolTypes";
-import { getServerURL } from "@/lib/utils";
+import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
   useGetMcpMetadata,
@@ -62,7 +62,7 @@ function ExternalMcpOAuthConnection({
   const { data: toolset } = useToolset(toolsetSlug);
   const project = useProject();
   const queryClient = useQueryClient();
-  const apiUrl = getServerURL();
+  const apiUrl = getPlaygroundMcpBaseURL();
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Clean up poll timer on unmount
