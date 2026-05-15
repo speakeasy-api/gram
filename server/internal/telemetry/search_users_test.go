@@ -227,7 +227,7 @@ func TestSearchUsers_FallsBackToUserEmail(t *testing.T) {
 	require.Equal(t, email, result.Users[0].UserID)
 	require.Equal(t, int64(100), result.Users[0].TotalInputTokens)
 	require.Equal(t, int64(50), result.Users[0].TotalOutputTokens)
-	require.Equal(t, 1.25, result.Users[0].TotalCost)
+	require.InDelta(t, 1.25, result.Users[0].TotalCost, 0.0001)
 
 	filtered, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
 		Filter: &gen.SearchUsersFilter{

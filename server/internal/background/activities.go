@@ -130,7 +130,7 @@ func NewActivities(
 
 	return &Activities{
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
-		cursorUsageMetrics:              activities.NewCursorUsageMetrics(logger, db, encryption, telemetryLogger, telemetryRepo),
+		cursorUsageMetrics:              activities.NewCursorUsageMetrics(logger, db, guardianPolicy, encryption, telemetryLogger, telemetryRepo),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
 		fallbackModelUsageTracking:      activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
@@ -248,19 +248,33 @@ func (a *Activities) FreeTierReportingUsageMetrics(ctx context.Context, orgIDs [
 }
 
 func (a *Activities) ListCursorAIIntegrationConfigs(ctx context.Context) ([]activities.CursorAIIntegrationConfig, error) {
-	return a.cursorUsageMetrics.ListCursorAIIntegrationConfigs(ctx)
+	configs, err := a.cursorUsageMetrics.ListCursorAIIntegrationConfigs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list cursor ai integration configs: %w", err)
+	}
+	return configs, nil
 }
 
 func (a *Activities) PollCursorUsageEventsPage(ctx context.Context, input activities.PollCursorUsageEventsPageInput) (*activities.PollCursorUsageEventsPageOutput, error) {
-	return a.cursorUsageMetrics.PollCursorUsageEventsPage(ctx, input)
+	page, err := a.cursorUsageMetrics.PollCursorUsageEventsPage(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("poll cursor usage events page: %w", err)
+	}
+	return page, nil
 }
 
 func (a *Activities) DeduplicateAndWriteCursorEvents(ctx context.Context, input activities.DeduplicateAndWriteCursorEventsInput) error {
-	return a.cursorUsageMetrics.DeduplicateAndWriteCursorEvents(ctx, input)
+	if err := a.cursorUsageMetrics.DeduplicateAndWriteCursorEvents(ctx, input); err != nil {
+		return fmt.Errorf("deduplicate and write cursor events: %w", err)
+	}
+	return nil
 }
 
 func (a *Activities) UpdateCursorPollWatermark(ctx context.Context, input activities.UpdateCursorPollWatermarkInput) error {
-	return a.cursorUsageMetrics.UpdateCursorPollWatermark(ctx, input)
+	if err := a.cursorUsageMetrics.UpdateCursorPollWatermark(ctx, input); err != nil {
+		return fmt.Errorf("update cursor poll watermark: %w", err)
+	}
+	return nil
 }
 
 func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) error {

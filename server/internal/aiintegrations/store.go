@@ -171,8 +171,9 @@ func (s *Store) UpdateSyncLastPolledAt(ctx context.Context, configID uuid.UUID, 
 	if err := s.repo.UpdateSyncLastPolledAt(ctx, repo.UpdateSyncLastPolledAtParams{
 		AiIntegrationConfigID: configID,
 		LastPolledAt: pgtype.Timestamptz{
-			Time:  t.UTC(),
-			Valid: true,
+			Time:             t.UTC(),
+			InfinityModifier: pgtype.Finite,
+			Valid:            true,
 		},
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to update ai integration sync watermark")

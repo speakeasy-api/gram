@@ -212,7 +212,7 @@ func (q *Queries) ListExistingCursorEventHashes(ctx context.Context, projectID s
 	if err != nil {
 		return nil, fmt.Errorf("query existing cursor hashes: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	out := make([]string, 0, len(hashes))
 	for rows.Next() {

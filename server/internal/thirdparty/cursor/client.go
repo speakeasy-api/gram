@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
 
 const (
@@ -17,20 +19,12 @@ const (
 )
 
 type Client struct {
-	httpClient *http.Client
+	httpClient *guardian.HTTPClient
 	baseURL    string
 	pageSize   int
 }
 
 type Option func(*Client)
-
-func WithHTTPClient(httpClient *http.Client) Option {
-	return func(c *Client) {
-		if httpClient != nil {
-			c.httpClient = httpClient
-		}
-	}
-}
 
 func WithBaseURL(baseURL string) Option {
 	return func(c *Client) {
@@ -48,9 +42,9 @@ func WithPageSize(pageSize int) Option {
 	}
 }
 
-func New(opts ...Option) *Client {
+func New(guardianPolicy *guardian.Policy, opts ...Option) *Client {
 	c := &Client{
-		httpClient: http.DefaultClient,
+		httpClient: guardianPolicy.PooledClient(),
 		baseURL:    defaultBaseURL,
 		pageSize:   defaultPageSize,
 	}
@@ -133,7 +127,7 @@ func (c *Client) FetchUsageEventsPage(ctx context.Context, apiKey string, start,
 		return nil, fmt.Errorf("cursor usage page must be positive")
 	}
 	if !end.After(start) {
-		return &UsageEventsPage{}, nil
+		return &UsageEventsPage{Events: nil, HasNextPage: false}, nil
 	}
 
 	resp, err := c.fetchUsageEventsPage(ctx, apiKey, filteredUsageEventsRequest{
@@ -189,7 +183,7 @@ func (c *Client) fetchUsageEventsPage(ctx context.Context, apiKey string, payloa
 	if err != nil {
 		return nil, fmt.Errorf("cursor usage request failed: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode == http.StatusTooManyRequests {
 		return nil, &RateLimitError{

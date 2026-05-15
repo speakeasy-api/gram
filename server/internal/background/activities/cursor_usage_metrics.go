@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -42,12 +44,12 @@ type CursorUsageMetrics struct {
 	telemetryRepo   *telemetryrepo.Queries
 }
 
-func NewCursorUsageMetrics(logger *slog.Logger, db *pgxpool.Pool, encryptionClient *encryption.Client, telemetryLogger *telemetry.Logger, telemetryRepo *telemetryrepo.Queries) *CursorUsageMetrics {
+func NewCursorUsageMetrics(logger *slog.Logger, db *pgxpool.Pool, guardianPolicy *guardian.Policy, encryptionClient *encryption.Client, telemetryLogger *telemetry.Logger, telemetryRepo *telemetryrepo.Queries) *CursorUsageMetrics {
 	return &CursorUsageMetrics{
 		logger:          logger.With(attr.SlogComponent("cursor_usage_metrics")),
 		db:              db,
 		integrations:    aiintegrations.NewStore(logger, db, encryptionClient),
-		apiClient:       cursorapi.New(),
+		apiClient:       cursorapi.New(guardianPolicy),
 		telemetryLogger: telemetryLogger,
 		telemetryRepo:   telemetryRepo,
 	}
@@ -88,7 +90,7 @@ type UpdateCursorPollWatermarkInput struct {
 func (c *CursorUsageMetrics) ListCursorAIIntegrationConfigs(ctx context.Context) ([]CursorAIIntegrationConfig, error) {
 	configs, err := c.integrations.ListEnabledConfigsByProvider(ctx, aiintegrations.ProviderCursor)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list enabled cursor ai integration configs: %w", err)
 	}
 
 	out := make([]CursorAIIntegrationConfig, 0, len(configs))
@@ -114,7 +116,7 @@ func (c *CursorUsageMetrics) PollCursorUsageEventsPage(ctx context.Context, inpu
 				NextRetryDelay: rateLimitErr.RetryAfter,
 			})
 		}
-		return nil, err
+		return nil, fmt.Errorf("fetch cursor usage events page: %w", err)
 	}
 	return &PollCursorUsageEventsPageOutput{
 		Events:      page.Events,
@@ -205,7 +207,10 @@ func (c *CursorUsageMetrics) UpdateCursorPollWatermark(ctx context.Context, inpu
 	if err != nil {
 		return oops.E(oops.CodeInvalid, err, "invalid ai integration config id")
 	}
-	return c.integrations.UpdateSyncLastPolledAt(ctx, id, input.At)
+	if err := c.integrations.UpdateSyncLastPolledAt(ctx, id, input.At); err != nil {
+		return fmt.Errorf("update cursor poll watermark: %w", err)
+	}
+	return nil
 }
 
 func CursorEventHash(event CursorUsageEvent) string {
