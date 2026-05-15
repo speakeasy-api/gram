@@ -26,3 +26,8 @@ func LogoutAdminPath() string {
 func GetProjectAdminPath() string {
 	return "/admin/project.get"
 }
+
+// ListOrganizationsAdminPath returns the URL path to the admin service listOrganizations HTTP endpoint.
+func ListOrganizationsAdminPath() string {
+	return "/admin/organizations.list"
+}

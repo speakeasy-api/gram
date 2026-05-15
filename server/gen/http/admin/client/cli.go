@@ -8,6 +8,9 @@
 package client
 
 import (
+	"fmt"
+	"strconv"
+
 	admin "github.com/speakeasy-api/gram/server/gen/admin"
 )
 
@@ -81,6 +84,68 @@ func BuildGetProjectPayload(adminGetProjectIDOrSlug string, adminGetProjectAdmin
 	}
 	v := &admin.GetProjectPayload{}
 	v.IDOrSlug = idOrSlug
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListOrganizationsPayload builds the payload for the admin
+// listOrganizations endpoint from CLI flags.
+func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsIncludeDisabled string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
+	var err error
+	var q *string
+	{
+		if adminListOrganizationsQ != "" {
+			q = &adminListOrganizationsQ
+		}
+	}
+	var accountType *string
+	{
+		if adminListOrganizationsAccountType != "" {
+			accountType = &adminListOrganizationsAccountType
+		}
+	}
+	var includeDisabled *bool
+	{
+		if adminListOrganizationsIncludeDisabled != "" {
+			var val bool
+			val, err = strconv.ParseBool(adminListOrganizationsIncludeDisabled)
+			includeDisabled = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeDisabled, must be BOOL")
+			}
+		}
+	}
+	var cursor *string
+	{
+		if adminListOrganizationsCursor != "" {
+			cursor = &adminListOrganizationsCursor
+		}
+	}
+	var limit *int
+	{
+		if adminListOrganizationsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListOrganizationsLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListOrganizationsAdminSessionToken != "" {
+			adminSessionToken = &adminListOrganizationsAdminSessionToken
+		}
+	}
+	v := &admin.ListOrganizationsPayload{}
+	v.Q = q
+	v.AccountType = accountType
+	v.IncludeDisabled = includeDisabled
+	v.Cursor = cursor
+	v.Limit = limit
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

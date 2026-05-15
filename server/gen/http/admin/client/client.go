@@ -31,6 +31,10 @@ type Client struct {
 	// endpoint.
 	GetProjectDoer goahttp.Doer
 
+	// ListOrganizations Doer is the HTTP client used to make requests to the
+	// listOrganizations endpoint.
+	ListOrganizationsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -51,15 +55,16 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		LoginDoer:           doer,
-		CallbackDoer:        doer,
-		LogoutDoer:          doer,
-		GetProjectDoer:      doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		LoginDoer:             doer,
+		CallbackDoer:          doer,
+		LogoutDoer:            doer,
+		GetProjectDoer:        doer,
+		ListOrganizationsDoer: doer,
+		RestoreResponseBody:   restoreBody,
+		scheme:                scheme,
+		host:                  host,
+		decoder:               dec,
+		encoder:               enc,
 	}
 }
 
@@ -154,6 +159,30 @@ func (c *Client) GetProject() goa.Endpoint {
 		resp, err := c.GetProjectDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getProject", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListOrganizations returns an endpoint that makes HTTP requests to the admin
+// service listOrganizations server.
+func (c *Client) ListOrganizations() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListOrganizationsRequest(c.encoder)
+		decodeResponse = DecodeListOrganizationsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListOrganizationsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListOrganizationsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listOrganizations", err)
 		}
 		return decodeResponse(resp)
 	}

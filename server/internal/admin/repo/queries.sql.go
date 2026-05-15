@@ -9,7 +9,99 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const adminListOrganizations = `-- name: AdminListOrganizations :many
+SELECT
+    om.id,
+    om.name,
+    om.slug,
+    om.gram_account_type AS account_type,
+    om.workos_id,
+    om.whitelisted,
+    om.disabled_at,
+    om.free_trial_started_at,
+    om.free_trial_ends_at,
+    om.created_at,
+    om.updated_at,
+    (
+        SELECT count(*)
+        FROM organization_user_relationships our
+        WHERE our.organization_id = om.id
+          AND our.deleted IS FALSE
+    )::bigint AS member_count
+FROM organization_metadata om
+WHERE
+    ($1::text IS NULL OR om.name ILIKE '%' || $1::text || '%' OR om.slug ILIKE '%' || $1::text || '%')
+    AND ($2::text IS NULL OR om.gram_account_type = $2::text)
+    AND ($3::boolean OR om.disabled_at IS NULL)
+    AND ($4::text IS NULL OR om.id > $4::text)
+ORDER BY om.id ASC
+LIMIT $5::int
+`
+
+type AdminListOrganizationsParams struct {
+	Q               pgtype.Text
+	AccountType     pgtype.Text
+	IncludeDisabled bool
+	AfterID         pgtype.Text
+	PageLimit       int32
+}
+
+type AdminListOrganizationsRow struct {
+	ID                 string
+	Name               string
+	Slug               string
+	AccountType        string
+	WorkosID           pgtype.Text
+	Whitelisted        bool
+	DisabledAt         pgtype.Timestamptz
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	MemberCount        int64
+}
+
+func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrganizationsParams) ([]AdminListOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, adminListOrganizations,
+		arg.Q,
+		arg.AccountType,
+		arg.IncludeDisabled,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListOrganizationsRow
+	for rows.Next() {
+		var i AdminListOrganizationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.AccountType,
+			&i.WorkosID,
+			&i.Whitelisted,
+			&i.DisabledAt,
+			&i.FreeTrialStartedAt,
+			&i.FreeTrialEndsAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.MemberCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 const getProjectByID = `-- name: GetProjectByID :one
 SELECT id, slug

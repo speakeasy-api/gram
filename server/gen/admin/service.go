@@ -24,6 +24,8 @@ type Service interface {
 	Logout(context.Context, *LogoutPayload) (err error)
 	// Returns the project with the given id or slug.
 	GetProject(context.Context, *GetProjectPayload) (res *GetProjectResult, err error)
+	// Lists organizations for admin operations with optional search and filters.
+	ListOrganizations(context.Context, *ListOrganizationsPayload) (res *AdminListOrganizationsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -46,7 +48,44 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"login", "callback", "logout", "getProject"}
+var MethodNames = [5]string{"login", "callback", "logout", "getProject", "listOrganizations"}
+
+// AdminListOrganizationsResult is the result type of the admin service
+// listOrganizations method.
+type AdminListOrganizationsResult struct {
+	// The page of organizations.
+	Organizations []*AdminOrganization
+	// Cursor for the next page; empty when exhausted.
+	NextCursor *string
+}
+
+// Organization details surfaced to admin operators.
+type AdminOrganization struct {
+	// The ID of the organization
+	ID string
+	// The name of the organization
+	Name string
+	// The slug of the organization
+	Slug string
+	// Gram account type (e.g. free, pro, enterprise).
+	AccountType string
+	// WorkOS organization ID, if linked.
+	WorkosID *string
+	// Whether the organization is whitelisted for full access.
+	Whitelisted bool
+	// The time at which the organization was disabled, if any.
+	DisabledAt *string
+	// The time at which the free trial started.
+	FreeTrialStartedAt *string
+	// The time at which the free trial ends.
+	FreeTrialEndsAt *string
+	// Number of active members in the organization.
+	MemberCount int
+	// The creation date of the organization.
+	CreatedAt string
+	// The last update date of the organization.
+	UpdatedAt string
+}
 
 // CallbackPayload is the payload type of the admin service callback method.
 type CallbackPayload struct {
@@ -77,6 +116,22 @@ type GetProjectPayload struct {
 type GetProjectResult struct {
 	ID   string
 	Slug string
+}
+
+// ListOrganizationsPayload is the payload type of the admin service
+// listOrganizations method.
+type ListOrganizationsPayload struct {
+	AdminSessionToken *string
+	// Search term applied to name and slug (case-insensitive substring).
+	Q *string
+	// Filter by gram_account_type (e.g. free, pro, enterprise).
+	AccountType *string
+	// Include organizations with disabled_at set. Defaults to false.
+	IncludeDisabled *bool
+	// Pagination cursor: id of the last item from the previous page.
+	Cursor *string
+	// Page size (default 50, max 100).
+	Limit *int
 }
 
 // LoginPayload is the payload type of the admin service login method.

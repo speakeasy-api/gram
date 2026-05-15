@@ -257,6 +257,121 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+    /admin/organizations.list:
+        get:
+            description: Lists organizations for admin operations with optional search and filters.
+            operationId: adminListOrganizations
+            parameters:
+                - allowEmptyValue: true
+                  description: Search term applied to name and slug (case-insensitive substring).
+                  in: query
+                  name: q
+                  schema:
+                    description: Search term applied to name and slug (case-insensitive substring).
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter by gram_account_type (e.g. free, pro, enterprise).
+                  in: query
+                  name: account_type
+                  schema:
+                    description: Filter by gram_account_type (e.g. free, pro, enterprise).
+                    type: string
+                - allowEmptyValue: true
+                  description: Include organizations with disabled_at set. Defaults to false.
+                  in: query
+                  name: include_disabled
+                  schema:
+                    description: Include organizations with disabled_at set. Defaults to false.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: 'Pagination cursor: id of the last item from the previous page.'
+                  in: query
+                  name: cursor
+                  schema:
+                    description: 'Pagination cursor: id of the last item from the previous page.'
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size (default 50, max 100).
+                  in: query
+                  name: limit
+                  schema:
+                    description: Page size (default 50, max 100).
+                    format: int64
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminListOrganizationsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listOrganizations admin
+            tags:
+                - admin
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
     /admin/project.get:
         get:
             tags:
@@ -24524,6 +24639,74 @@ components:
                 - plugin_id
                 - toolset_id
                 - display_name
+        AdminListOrganizationsResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; empty when exhausted.
+                organizations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOrganization'
+                    description: The page of organizations.
+            required:
+                - organizations
+        AdminOrganization:
+            type: object
+            properties:
+                account_type:
+                    type: string
+                    description: Gram account type (e.g. free, pro, enterprise).
+                created_at:
+                    type: string
+                    description: The creation date of the organization.
+                    format: date-time
+                disabled_at:
+                    type: string
+                    description: The time at which the organization was disabled, if any.
+                    format: date-time
+                free_trial_ends_at:
+                    type: string
+                    description: The time at which the free trial ends.
+                    format: date-time
+                free_trial_started_at:
+                    type: string
+                    description: The time at which the free trial started.
+                    format: date-time
+                id:
+                    type: string
+                    description: The ID of the organization
+                member_count:
+                    type: integer
+                    description: Number of active members in the organization.
+                    format: int64
+                name:
+                    type: string
+                    description: The name of the organization
+                slug:
+                    type: string
+                    description: The slug of the organization
+                updated_at:
+                    type: string
+                    description: The last update date of the organization.
+                    format: date-time
+                whitelisted:
+                    type: boolean
+                    description: Whether the organization is whitelisted for full access.
+                workos_id:
+                    type: string
+                    description: WorkOS organization ID, if linked.
+            description: Organization details surfaced to admin operators.
+            required:
+                - id
+                - name
+                - slug
+                - account_type
+                - whitelisted
+                - member_count
+                - created_at
+                - updated_at
         AllowedOrigin:
             type: object
             properties:

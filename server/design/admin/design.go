@@ -10,6 +10,46 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 )
 
+var AdminOrganization = Type("AdminOrganization", func() {
+	Description("Organization details surfaced to admin operators.")
+	Required("id", "name", "slug", "account_type", "whitelisted", "member_count", "created_at", "updated_at")
+
+	Attribute("id", String, "The ID of the organization")
+	Attribute("name", String, "The name of the organization")
+	Attribute("slug", String, "The slug of the organization")
+	Attribute("account_type", String, "Gram account type (e.g. free, pro, enterprise).")
+	Attribute("workos_id", String, "WorkOS organization ID, if linked.")
+	Attribute("whitelisted", Boolean, "Whether the organization is whitelisted for full access.")
+	Attribute("disabled_at", String, func() {
+		Description("The time at which the organization was disabled, if any.")
+		Format(FormatDateTime)
+	})
+	Attribute("free_trial_started_at", String, func() {
+		Description("The time at which the free trial started.")
+		Format(FormatDateTime)
+	})
+	Attribute("free_trial_ends_at", String, func() {
+		Description("The time at which the free trial ends.")
+		Format(FormatDateTime)
+	})
+	Attribute("member_count", Int, "Number of active members in the organization.")
+	Attribute("created_at", String, func() {
+		Description("The creation date of the organization.")
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Description("The last update date of the organization.")
+		Format(FormatDateTime)
+	})
+})
+
+var AdminListOrganizationsResult = Type("AdminListOrganizationsResult", func() {
+	Required("organizations")
+
+	Attribute("organizations", ArrayOf(AdminOrganization), "The page of organizations.")
+	Attribute("next_cursor", String, "Cursor for the next page; empty when exhausted.")
+})
+
 var _ = Service("admin", func() {
 	Description("Operations supporting admin tasks, protected by Google workspace auth.")
 	Security(security.AdminAuth)
@@ -113,5 +153,35 @@ var _ = Service("admin", func() {
 			Param("id_or_slug")
 			Response(StatusOK)
 		})
+	})
+
+	Method("listOrganizations", func() {
+		Description("Lists organizations for admin operations with optional search and filters.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+
+			Attribute("q", String, "Search term applied to name and slug (case-insensitive substring).")
+			Attribute("account_type", String, "Filter by gram_account_type (e.g. free, pro, enterprise).")
+			Attribute("include_disabled", Boolean, "Include organizations with disabled_at set. Defaults to false.")
+			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page.")
+			Attribute("limit", Int, "Page size (default 50, max 100).")
+		})
+
+		Result(AdminListOrganizationsResult)
+
+		HTTP(func() {
+			GET("/admin/organizations.list")
+
+			Param("q")
+			Param("account_type")
+			Param("include_disabled")
+			Param("cursor")
+			Param("limit")
+			Response(StatusOK)
+		})
+
+		shared.CursorPagination()
+		Meta("openapi:operationId", "adminListOrganizations")
 	})
 })

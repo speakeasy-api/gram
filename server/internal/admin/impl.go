@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/trace"
@@ -233,4 +234,77 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "lookup project by slug").Log(ctx, s.logger)
 	}
 	return &gen.GetProjectResult{ID: row.ID.String(), Slug: row.Slug}, nil
+}
+
+const (
+	listOrganizationsDefaultLimit = 50
+	listOrganizationsMaxLimit     = 100
+)
+
+func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrganizationsPayload) (*gen.AdminListOrganizationsResult, error) {
+	queries := repo.New(s.db)
+
+	limit := int32(listOrganizationsDefaultLimit)
+	if payload.Limit != nil {
+		l := *payload.Limit
+		if l < 1 {
+			l = listOrganizationsDefaultLimit
+		}
+		if l > listOrganizationsMaxLimit {
+			l = listOrganizationsMaxLimit
+		}
+		limit = int32(l)
+	}
+
+	rows, err := queries.AdminListOrganizations(ctx, repo.AdminListOrganizationsParams{
+		Q:               conv.PtrToPGText(payload.Q),
+		AccountType:     conv.PtrToPGText(payload.AccountType),
+		IncludeDisabled: conv.PtrValOr(payload.IncludeDisabled, false),
+		AfterID:         conv.PtrToPGText(payload.Cursor),
+		PageLimit:       limit,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organizations").Log(ctx, s.logger)
+	}
+
+	orgs := make([]*gen.AdminOrganization, len(rows))
+	for i := range rows {
+		orgs[i] = adminOrganizationFromRow(rows[i])
+	}
+
+	var nextCursor *string
+	if len(rows) == int(limit) && len(rows) > 0 {
+		id := rows[len(rows)-1].ID
+		nextCursor = &id
+	}
+
+	return &gen.AdminListOrganizationsResult{
+		Organizations: orgs,
+		NextCursor:    nextCursor,
+	}, nil
+}
+
+func adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *gen.AdminOrganization {
+	return &gen.AdminOrganization{
+		ID:                 row.ID,
+		Name:               row.Name,
+		Slug:               row.Slug,
+		AccountType:        row.AccountType,
+		WorkosID:           conv.FromPGText[string](row.WorkosID),
+		Whitelisted:        row.Whitelisted,
+		DisabledAt:         pgTimestampPtr(row.DisabledAt),
+		FreeTrialStartedAt: pgTimestampPtr(row.FreeTrialStartedAt),
+		FreeTrialEndsAt:    pgTimestampPtr(row.FreeTrialEndsAt),
+		MemberCount:        int(row.MemberCount),
+		CreatedAt:          row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:          row.UpdatedAt.Time.Format(time.RFC3339),
+	}
+}
+
+func pgTimestampPtr(t pgtype.Timestamptz) *string {
+	if !t.Valid {
+		return nil
+	}
+	s := t.Time.Format(time.RFC3339)
+	return &s
 }
