@@ -74,6 +74,7 @@ WHERE t.id = @thread_id
 SELECT id, project_id, assistant_id, correlation_id
 FROM assistant_threads
 WHERE id = @thread_id
+  AND project_id = @project_id
   AND deleted IS FALSE;
 
 -- name: ResolveToolsetsForWrite :many

@@ -2011,8 +2011,14 @@ const resolveThreadCorrelation = `-- name: ResolveThreadCorrelation :one
 SELECT id, project_id, assistant_id, correlation_id
 FROM assistant_threads
 WHERE id = $1
+  AND project_id = $2
   AND deleted IS FALSE
 `
+
+type ResolveThreadCorrelationParams struct {
+	ThreadID  uuid.UUID
+	ProjectID uuid.UUID
+}
 
 type ResolveThreadCorrelationRow struct {
 	ID            uuid.UUID
@@ -2021,8 +2027,8 @@ type ResolveThreadCorrelationRow struct {
 	CorrelationID string
 }
 
-func (q *Queries) ResolveThreadCorrelation(ctx context.Context, threadID uuid.UUID) (ResolveThreadCorrelationRow, error) {
-	row := q.db.QueryRow(ctx, resolveThreadCorrelation, threadID)
+func (q *Queries) ResolveThreadCorrelation(ctx context.Context, arg ResolveThreadCorrelationParams) (ResolveThreadCorrelationRow, error) {
+	row := q.db.QueryRow(ctx, resolveThreadCorrelation, arg.ThreadID, arg.ProjectID)
 	var i ResolveThreadCorrelationRow
 	err := row.Scan(
 		&i.ID,

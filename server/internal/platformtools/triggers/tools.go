@@ -347,7 +347,10 @@ func (t *ListTriggers) Call(ctx context.Context, _ toolconfig.ToolCallEnv, paylo
 			return fmt.Errorf("assistant list-triggers requires an assistant principal")
 		}
 		selfTargetRef = principal.AssistantID.String()
-		callerThread, err := assistantrepo.New(t.db).ResolveThreadCorrelation(ctx, principal.ThreadID)
+		callerThread, err := assistantrepo.New(t.db).ResolveThreadCorrelation(ctx, assistantrepo.ResolveThreadCorrelationParams{
+			ThreadID:  principal.ThreadID,
+			ProjectID: *authCtx.ProjectID,
+		})
 		if err != nil {
 			return fmt.Errorf("resolve thread correlation: %w", err)
 		}
@@ -641,11 +644,14 @@ func (t *ConfigureTrigger) upsertWake(
 		return nil, fmt.Errorf("name is required")
 	}
 
-	thread, err := assistantrepo.New(t.db).ResolveThreadCorrelation(ctx, principal.ThreadID)
+	thread, err := assistantrepo.New(t.db).ResolveThreadCorrelation(ctx, assistantrepo.ResolveThreadCorrelationParams{
+		ThreadID:  principal.ThreadID,
+		ProjectID: *authCtx.ProjectID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("resolve thread correlation: %w", err)
 	}
-	if thread.ProjectID != *authCtx.ProjectID || thread.AssistantID != principal.AssistantID {
+	if thread.AssistantID != principal.AssistantID {
 		return nil, fmt.Errorf("thread does not belong to the calling assistant")
 	}
 
@@ -723,7 +729,10 @@ func (t *ConfigureTrigger) cancelWake(
 
 	// One wake per (assistant, correlation); without this, a sibling
 	// thread under the same assistant could cancel a peer's reminder.
-	callerThread, err := assistantrepo.New(t.db).ResolveThreadCorrelation(ctx, principal.ThreadID)
+	callerThread, err := assistantrepo.New(t.db).ResolveThreadCorrelation(ctx, assistantrepo.ResolveThreadCorrelationParams{
+		ThreadID:  principal.ThreadID,
+		ProjectID: *authCtx.ProjectID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("resolve thread correlation: %w", err)
 	}
