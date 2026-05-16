@@ -109,11 +109,11 @@ export function NavButton({
       {title === "Billing" && <ProductTierBadge />}
       {stage && (
         // Hide in collapsed-icon mode so the rail stays icon-only; the page
-        // title still carries the stage signal.
+        // title still carries the stage signal. The badge keeps its own
+        // tooltip so users learn what "preview"/"beta" mean on hover.
         <ReleaseStageBadge
           stage={stage}
           size="xs"
-          noTooltip
           className="ml-auto group-data-[collapsible=icon]:hidden"
         />
       )}
