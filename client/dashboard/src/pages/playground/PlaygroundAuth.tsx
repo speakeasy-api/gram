@@ -54,10 +54,12 @@ function ExternalMcpOAuthConnection({
   toolsetSlug,
   oauthMode,
   providerName,
+  isIssuerGated,
 }: {
   toolsetSlug: string;
   oauthMode: "custom-proxy" | "external";
   providerName: string;
+  isIssuerGated: boolean;
 }) {
   const { data: toolset } = useToolset(toolsetSlug);
   const project = useProject();
@@ -72,6 +74,18 @@ function ExternalMcpOAuthConnection({
         clearInterval(pollTimerRef.current);
       }
     };
+  }, []);
+
+  // Auto-close when this page is loaded inside the issuer-connect popup:
+  // the server redirects back to the dashboard URL with ?issuer_connected=1
+  // after writing remote_sessions; the parent window's popup-close polling
+  // then refetches status.
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.opener) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("issuer_connected") === "1") {
+      window.close();
+    }
   }, []);
 
   // Query OAuth status using the shared hook
@@ -130,7 +144,10 @@ function ExternalMcpOAuthConnection({
       project: project.slug,
     });
 
-    const authUrl = `${apiUrl}/oauth-external/authorize?${params.toString()}`;
+    const endpoint = isIssuerGated
+      ? "/oauth-external/issuer-connect"
+      : "/oauth-external/authorize";
+    const authUrl = `${apiUrl}${endpoint}?${params.toString()}`;
 
     const width = 600;
     const height = 700;
@@ -197,16 +214,18 @@ function ExternalMcpOAuthConnection({
         </Type>
 
         {isConnected ? (
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full"
-            onClick={() => disconnectMutation.mutate()}
-            disabled={disconnectMutation.isPending}
-          >
-            <LogOut className="mr-2 size-3" />
-            Disconnect
-          </Button>
+          isIssuerGated ? null : (
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full"
+              onClick={() => disconnectMutation.mutate()}
+              disabled={disconnectMutation.isPending}
+            >
+              <LogOut className="mr-2 size-3" />
+              Disconnect
+            </Button>
+          )
         ) : (
           <Button
             size="sm"
@@ -405,6 +424,7 @@ export function PlaygroundAuth({
             toolsetSlug={toolset.slug}
             oauthMode={oauthMode}
             providerName={oauthProviderName}
+            isIssuerGated={loginSecured}
           />
         )}
 

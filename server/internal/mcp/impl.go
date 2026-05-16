@@ -491,12 +491,12 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		}
 	}
 
-	var oauthProtectedResourceURL string
+	oauthProtectedResourceURL, err := url.JoinPath(baseURL, wellknown.OAuthProtectedResourcePath, mcpRouteBase, mcpSlug)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to build OAuth protected resource URL").Log(ctx, s.logger)
+	}
+
 	if !issuerGated {
-		oauthProtectedResourceURL, err = url.JoinPath(baseURL, wellknown.OAuthProtectedResourcePath, mcpRouteBase, mcpSlug)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to build OAuth protected resource URL").Log(ctx, s.logger)
-		}
 		switch {
 		case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
 			// External OAuth server flow — collect token if present
