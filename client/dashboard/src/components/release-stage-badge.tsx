@@ -11,17 +11,14 @@ type ReleaseStageBadgeProps = {
   className?: string;
 };
 
+// Styling matches `ProductTierBadge` (the Enterprise pill on the Billing nav
+// entry) so the two badge families read as one component family in the nav
+// rail. Same shape (rounded-sm, px-1, py-0.5, text-xs), no border, title-case
+// label. Only the bg/text tokens differ — warning palette for preview,
+// information palette for beta.
 const stageStyles: Record<ReleaseStage, string> = {
-  // Preview = experimental, shape may change. Uses the Moonshine `warning`
-  // semantic palette so it reads as "use with caution" without screaming
-  // destructive — and stays in lockstep with brand if the warning hue is
-  // ever retuned at the token level.
-  preview: "bg-warning-softest text-default-warning border-warning-default/40",
-  // Beta = stable enough for production but still evolving. Uses the
-  // Moonshine `information` semantic palette (Speakeasy brand blue) — the
-  // same family that backs the `--feature` token, which is what the design
-  // system reserves for "new product feature" callouts.
-  beta: "bg-information-softest text-default-information border-information-default/40",
+  preview: "bg-warning-softest text-default-warning",
+  beta: "bg-information-softest text-default-information",
 };
 
 const stageLabel: Record<ReleaseStage, string> = {
@@ -42,14 +39,12 @@ export function ReleaseStageBadge({
   className,
 }: ReleaseStageBadgeProps) {
   const sizeClass =
-    size === "xs"
-      ? "text-[10px] leading-none px-1 py-0.5"
-      : "text-xs px-1.5 py-0.5";
+    size === "xs" ? "text-xs px-1 py-0.5" : "text-xs px-1.5 py-0.5";
 
   const pill = (
     <span
       className={cn(
-        "inline-flex w-fit shrink-0 items-center rounded-sm border font-medium tracking-wide uppercase",
+        "inline-flex w-fit shrink-0 items-center rounded-sm",
         sizeClass,
         stageStyles[stage],
         className,
