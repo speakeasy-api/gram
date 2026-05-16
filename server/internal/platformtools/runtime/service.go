@@ -141,12 +141,9 @@ func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, e
 		}
 	}
 
-	// Caller-supplied executor wins over the URN registry. Platform-toolset
-	// endpoints (assistants, etc.) pin the executor on the plan after matching
-	// against their toolset slice; falling back to URN lookup there would
-	// silently swap in a registry default that shares the same URN — see the
-	// assistant-scoped trigger tools, where the non-self-scoped variant
-	// rejects the input the assistant schema is allowed to send.
+	// A pinned executor wins over the URN registry: scoped variants of a
+	// platform tool share a URN, so the caller's match is more specific than
+	// what the registry would resolve.
 	if plan.Platform != nil && plan.Platform.Executor != nil {
 		var out bytes.Buffer
 		if err := plan.Platform.Executor.Call(ctx, env, requestBody, &out); err != nil {

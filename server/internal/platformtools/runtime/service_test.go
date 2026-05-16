@@ -92,64 +92,34 @@ func TestService_ExecuteTool_RejectsMismatchedProjectAuthContext(t *testing.T) {
 	require.ErrorContains(t, err, "does not match project")
 }
 
+// overridePlan builds a plan whose URN is unregistered, so any test that
+// reaches the URN registry instead of the pinned executor would 404.
+func overridePlan(projectID uuid.UUID, exec gateway.PlatformDirectExecutor) *gateway.ToolCallPlan {
+	return &gateway.ToolCallPlan{
+		Kind: gateway.ToolKindPlatform,
+		Descriptor: &gateway.ToolDescriptor{
+			ProjectID: projectID.String(),
+			URN:       urn.NewTool(urn.ToolKindPlatform, "unregistered", "tool"),
+		},
+		Platform: &gateway.PlatformToolCallPlan{Executor: exec},
+	}
+}
+
 func TestService_ExecuteTool_UsesPlanExecutorOverride(t *testing.T) {
 	t.Parallel()
 
 	svc := NewService(testenv.NewLogger(t), nil, nil, audit.NewLogger())
 	projectID := uuid.New()
 	ctx := contextvalues.SetAuthContext(context.Background(), &contextvalues.AuthContext{
-		ActiveOrganizationID:  "org-1",
-		UserID:                "user-1",
-		ExternalUserID:        "",
-		APIKeyID:              "",
-		SessionID:             nil,
-		ProjectID:             &projectID,
-		OrganizationSlug:      "org",
-		Email:                 nil,
-		AccountType:           "",
-		HasActiveSubscription: false,
-		Whitelisted:           false,
-		ProjectSlug:           nil,
-		APIKeyScopes:          nil,
-		IsAdmin:               false,
+		ActiveOrganizationID: "org-1",
+		ProjectID:            &projectID,
 	})
 
-	exec := &stubDirectExecutor{response: `{"ok":true}`, err: nil, called: false, gotBody: ""}
+	exec := &stubDirectExecutor{response: `{"ok":true}`}
 
-	// The plan's URN deliberately points at no registered executor; the
-	// override must short-circuit the registry lookup that would otherwise
-	// 404.
-	result, err := svc.ExecuteTool(ctx, &gateway.ToolCallPlan{
-		Kind:        gateway.ToolKindPlatform,
-		BillingType: "",
-		Descriptor: &gateway.ToolDescriptor{
-			ID:               "",
-			Name:             "",
-			Description:      nil,
-			DeploymentID:     "",
-			ProjectID:        projectID.String(),
-			ProjectSlug:      "",
-			OrganizationID:   "",
-			OrganizationSlug: "",
-			URN:              urn.NewTool(urn.ToolKindPlatform, "unregistered", "tool"),
-		},
-		HTTP:     nil,
-		Function: nil,
-		Prompt:   nil,
-		Platform: &gateway.PlatformToolCallPlan{
-			SourceSlug:  "unregistered",
-			Managed:     false,
-			OwnerKind:   "",
-			OwnerID:     "",
-			InputSchema: nil,
-			Executor:    exec,
-		},
-		ExternalMCP: nil,
-	}, toolconfig.ToolCallEnv{
+	result, err := svc.ExecuteTool(ctx, overridePlan(projectID, exec), toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
-		GramEmail:  "",
 	}, strings.NewReader(`{"hello":"world"}`))
 	require.NoError(t, err)
 	require.True(t, exec.called)
@@ -164,55 +134,15 @@ func TestService_ExecuteTool_PlanExecutorOverrideSurfacesError(t *testing.T) {
 	svc := NewService(testenv.NewLogger(t), nil, nil, audit.NewLogger())
 	projectID := uuid.New()
 	ctx := contextvalues.SetAuthContext(context.Background(), &contextvalues.AuthContext{
-		ActiveOrganizationID:  "org-1",
-		UserID:                "user-1",
-		ExternalUserID:        "",
-		APIKeyID:              "",
-		SessionID:             nil,
-		ProjectID:             &projectID,
-		OrganizationSlug:      "org",
-		Email:                 nil,
-		AccountType:           "",
-		HasActiveSubscription: false,
-		Whitelisted:           false,
-		ProjectSlug:           nil,
-		APIKeyScopes:          nil,
-		IsAdmin:               false,
+		ActiveOrganizationID: "org-1",
+		ProjectID:            &projectID,
 	})
 
-	exec := &stubDirectExecutor{response: "", err: errors.New("boom"), called: false, gotBody: ""}
+	exec := &stubDirectExecutor{err: errors.New("boom")}
 
-	_, err := svc.ExecuteTool(ctx, &gateway.ToolCallPlan{
-		Kind:        gateway.ToolKindPlatform,
-		BillingType: "",
-		Descriptor: &gateway.ToolDescriptor{
-			ID:               "",
-			Name:             "",
-			Description:      nil,
-			DeploymentID:     "",
-			ProjectID:        projectID.String(),
-			ProjectSlug:      "",
-			OrganizationID:   "",
-			OrganizationSlug: "",
-			URN:              urn.NewTool(urn.ToolKindPlatform, "unregistered", "tool"),
-		},
-		HTTP:     nil,
-		Function: nil,
-		Prompt:   nil,
-		Platform: &gateway.PlatformToolCallPlan{
-			SourceSlug:  "unregistered",
-			Managed:     false,
-			OwnerKind:   "",
-			OwnerID:     "",
-			InputSchema: nil,
-			Executor:    exec,
-		},
-		ExternalMCP: nil,
-	}, toolconfig.ToolCallEnv{
+	_, err := svc.ExecuteTool(ctx, overridePlan(projectID, exec), toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
-		GramEmail:  "",
 	}, nil)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "boom")

@@ -12,13 +12,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// PlatformDirectExecutor is the in-process call shape platform tools expose to
-// the runtime. PlatformToolCallPlan.Executor is set by callers that have
-// already resolved the executor (e.g. the platform-toolset endpoint, which
-// pins it to the toolset's matched entry) so the runtime skips its URN-keyed
-// registry lookup. Without this hook, an assistant-scoped executor in a
-// toolset slice can be silently overridden by a registry default that shares
-// the same URN.
+// PlatformDirectExecutor lets a caller pin a specific executor to a plan so
+// the runtime skips URN resolution. Used where the caller's matching context
+// (e.g. a platform toolset slice) is more authoritative than the URN-keyed
+// registry — multiple scoped variants of one tool can share a URN.
 type PlatformDirectExecutor interface {
 	Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error
 }
@@ -149,8 +146,8 @@ type PlatformToolCallPlan struct {
 	OwnerKind   string `json:"owner_kind" yaml:"owner_kind"`
 	OwnerID     string `json:"owner_id" yaml:"owner_id"`
 	InputSchema []byte `json:"input_schema" yaml:"input_schema"`
-	// Executor pins this call to a specific executor instance and bypasses URN
-	// resolution in the platform runtime. In-process only; never serialized.
+	// Executor, when set, bypasses URN resolution in the platform runtime.
+	// In-process only; never serialized.
 	Executor PlatformDirectExecutor `json:"-" yaml:"-"`
 }
 
