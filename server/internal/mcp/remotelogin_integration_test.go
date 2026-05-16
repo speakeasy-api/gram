@@ -174,6 +174,7 @@ func TestRemoteLoginChallenge_CustomDomainRegistersGramCallback(t *testing.T) {
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Subject:             &userSubject,
 		McpSlug:             result.Toolset.McpSlug.String,
+		FinalRedirectURI:    "",
 	}, clients[0])
 	require.NoError(t, err)
 
@@ -221,6 +222,7 @@ func runRemoteLoginRoundTrip(
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Subject:             expectedSubject,
 		McpSlug:             result.Toolset.McpSlug.String,
+		FinalRedirectURI:    "",
 	}
 	authURL, err := mgr.BuildAuthorizationUrl(ctx, parent, clients[0])
 	require.NoError(t, err)
