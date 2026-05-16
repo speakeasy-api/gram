@@ -241,9 +241,6 @@ const (
 	forgetOutcomeForgotten = "forgotten"
 	forgetOutcomeNoMatch   = "no_match"
 	forgetOutcomeAmbiguous = "ambiguous"
-
-	forgetReasonToolForget       = "tool_forget"
-	forgetReasonManualUUIDDelete = "manual_uuid_delete"
 )
 
 func (s *MemoryService) Remember(
