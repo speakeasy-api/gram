@@ -130,3 +130,54 @@ Use `<Tooltip>`, `<TooltipTrigger>`, and `<TooltipContent>` directly — they in
 - **ALWAYS use Moonshine design system utilities** from `@speakeasy-api/moonshine` instead of hardcoded Tailwind color values
 - **NEVER use hardcoded Tailwind colors** like `bg-neutral-100`, `border-gray-200`, `text-gray-500`, etc.
 - `@tailwindcss/typography` must remain in `devDependencies` — the dashboard uses `prose` and `not-prose` classes directly (e.g. `CatalogDetail.tsx`, `tool.tsx`) which are provided by this plugin.
+
+### Release Stage Badges (Preview / Beta)
+
+Pre-GA features in the dashboard get a `Preview` or `Beta` badge in **two places**: the sidebar nav entry and the page-top section title. Both surfaces use the same component, so the labels always agree.
+
+**Source of truth:** `client/dashboard/src/components/release-stage-badge.tsx` — exports `ReleaseStageBadge` and the `ReleaseStage = "preview" | "beta"` type.
+
+**Semantic meaning** (don't repaint these without product/design buy-in):
+
+- `preview` — early / experimental, shape may change. Rendered with the `warning` Moonshine palette (amber).
+- `beta` — open for use, stable enough for production, still evolving. Rendered with the violet brand tone (matches the paid product tier badge).
+
+#### Adding a badge to a navigation item
+
+Set `stage` on the route declaration in `client/dashboard/src/routes.tsx`. `nav-menu.tsx` picks it up automatically and renders the badge inline with the route's title in the sidebar.
+
+```tsx
+// client/dashboard/src/routes.tsx
+assistants: {
+  title: "Assistants",
+  url: "assistants",
+  icon: "bot",
+  stage: "preview", // ← adds the badge to this sidebar entry
+  component: AssistantsRoot,
+  // ...
+},
+```
+
+The badge is hidden when the sidebar is collapsed to icon-only mode — the page-top badge still carries the signal in that state.
+
+#### Adding a badge to a page
+
+Pass `stage` on the `Page.Section.Title` for the page's primary section (usually the first `Page.Section` under `Page.Body`). Do **not** add it to secondary section titles like "Recent Chats" — the badge labels the whole feature, not individual sections.
+
+```tsx
+<Page.Section>
+  <Page.Section.Title stage="preview">Assistants</Page.Section.Title>
+  <Page.Section.Description>…</Page.Section.Description>
+  {/* … */}
+</Page.Section>
+```
+
+#### When to use which surface
+
+- **Both nav + page** is the default — they reinforce each other.
+- **Nav-only** is rare; only do it if the feature has no dedicated landing page (e.g., the badge applies to a tab inside another route).
+- **Page-only** is also rare; consider whether the route should also be marked.
+
+#### When to remove a badge
+
+When a feature ships GA, delete the `stage` from `routes.tsx` and the matching `stage` prop on the page title. Grep for `stage="preview"` or `stage="beta"` to find leftover usages.

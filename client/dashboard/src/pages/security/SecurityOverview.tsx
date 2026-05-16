@@ -258,7 +258,7 @@ function SecurityOverviewContent() {
   if (policies.length === 0) {
     return (
       <Page.Section>
-        <Page.Section.Title>Risk Overview</Page.Section.Title>
+        <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
         <Page.Section.Description className="max-w-2xl">
           Recent findings from risk analysis scans across your project.
         </Page.Section.Description>
@@ -299,7 +299,7 @@ function SecurityOverviewContent() {
   return (
     <>
       <Page.Section>
-        <Page.Section.Title>Risk Overview</Page.Section.Title>
+        <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
 
         <Page.Section.Description>
           Recent findings from risk analysis scans across your project.

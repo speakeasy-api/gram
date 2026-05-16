@@ -8,6 +8,7 @@ import { AppRoute } from "@/routes";
 import { Loader2 } from "lucide-react";
 import React from "react";
 import { ProductTierBadge } from "./product-tier-badge";
+import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge";
 import { Type } from "./ui/type";
 
 const NAV_LOADING_DURATION_MS = 600;
@@ -41,6 +42,7 @@ function NavMenuButton({ item }: { item: AppRoute }) {
       active={item.active}
       Icon={item.Icon}
       target={item.external ? "_blank" : undefined}
+      stage={item.stage}
     />
   );
 }
@@ -53,6 +55,7 @@ export function NavButton({
   active,
   Icon,
   onClick,
+  stage,
 }: {
   title: string;
   titleNode?: React.ReactNode;
@@ -61,6 +64,7 @@ export function NavButton({
   onClick?: () => void;
   active?: boolean;
   Icon?: React.ComponentType<{ className?: string }>;
+  stage?: ReleaseStage;
 }) {
   const [isLoading, setIsLoading] = React.useState(false);
   const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -103,6 +107,16 @@ export function NavButton({
         {titleNode ?? title}
       </Type>
       {title === "Billing" && <ProductTierBadge />}
+      {stage && (
+        // Hide in collapsed-icon mode so the rail stays icon-only; the page
+        // title still carries the stage signal.
+        <ReleaseStageBadge
+          stage={stage}
+          size="xs"
+          noTooltip
+          className="ml-auto group-data-[collapsible=icon]:hidden"
+        />
+      )}
     </SidebarMenuButton>
   );
 }

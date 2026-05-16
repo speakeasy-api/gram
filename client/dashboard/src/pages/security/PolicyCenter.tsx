@@ -386,7 +386,7 @@ function PolicyCenterContent() {
       </Page.Header>
       <Page.Body>
         <Page.Section>
-          <Page.Section.Title>Risk Policies</Page.Section.Title>
+          <Page.Section.Title stage="beta">Risk Policies</Page.Section.Title>
           <Page.Section.Description className="max-w-2xl">
             Configure risk analysis rules to detect secrets and sensitive
             information in chat messages.
