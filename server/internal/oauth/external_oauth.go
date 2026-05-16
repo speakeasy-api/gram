@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -687,7 +688,7 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 	// by the dashboard user's subject URN. The legacy user_oauth_tokens
 	// path is the wrong source for these.
 	if toolset.UserSessionIssuerID.Valid {
-		return s.writeIssuerGatedStatus(ctx, w, authCtx.UserID, toolset.UserSessionIssuerID.UUID)
+		return s.writeIssuerGatedStatus(ctx, w, authCtx.UserID, toolset.ProjectID, toolset.UserSessionIssuerID.UUID)
 	}
 
 	// Check if user has a token for this toolset
@@ -745,19 +746,23 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 	return nil
 }
 
-// writeIssuerGatedStatus reports whether the dashboard user has any active
-// remote_sessions row under the toolset's user_session_issuer. Issuer-gated
-// toolsets bind upstream credentials to (subject, user_session_issuer_id)
-// in remote_sessions, not (user_id, toolset_id) in user_oauth_tokens.
-func (s *ExternalOAuthService) writeIssuerGatedStatus(ctx context.Context, w http.ResponseWriter, userID string, issuerID uuid.UUID) error {
+// writeIssuerGatedStatus reports whether the dashboard user has a USABLE
+// remote_sessions row under the toolset's user_session_issuer. Mirrors the
+// runtime's ResolveOneAccessToken view: a row whose access token expired
+// without a workable refresh path resolves to "needs_auth", not
+// "authenticated" — otherwise the dashboard badge lies about a connection
+// that the next /mcp/{slug} call will 401 on.
+func (s *ExternalOAuthService) writeIssuerGatedStatus(ctx context.Context, w http.ResponseWriter, userID string, projectID, issuerID uuid.UUID) error {
 	subject := urn.NewUserSubject(userID)
-	connected, err := s.remoteChallengeMgr.ConnectedClientIDs(ctx, subject, issuerID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list connected remote sessions").Log(ctx, s.logger)
-	}
+	token, err := s.remoteChallengeMgr.ResolveOneAccessToken(ctx, projectID, issuerID, subject)
 
 	status := "needs_auth"
-	if len(connected) > 0 {
+	switch {
+	case errors.Is(err, remotesessions.ErrNoValidToken):
+		// fall through with status="needs_auth"
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "resolve remote session").Log(ctx, s.logger)
+	case token != "":
 		status = "authenticated"
 	}
 
