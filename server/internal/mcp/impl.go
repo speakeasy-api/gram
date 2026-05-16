@@ -453,9 +453,11 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	if issuerGated {
 		newCtx, subject, ok := s.validateUserSessionToken(ctx, authToken, toolset)
 		if !ok {
-			// Accept an assistant-runtime JWT as its owning user, so the
-			// resolver picks up the remote_session keyed by user:<UserID>.
-			if assistCtx, claims, aerr := s.assistantTokens.Authorize(ctx, authToken); aerr == nil {
+			// Accept an assistant-runtime JWT, but only when the assistant
+			// belongs to the toolset's project — otherwise a token minted
+			// in project A could resolve a remote_session linked under
+			// the same user in project B.
+			if assistCtx, claims, aerr := s.assistantTokens.Authorize(ctx, authToken); aerr == nil && claims.ProjectID == toolset.ProjectID.String() {
 				ssubj := urn.NewUserSubject(claims.UserID)
 				newCtx, subject, ok = assistCtx, &ssubj, true
 			}

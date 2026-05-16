@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -117,6 +118,40 @@ func TestServePublic_AssistantTokenWithoutRemoteSessionChallenges(t *testing.T) 
 	require.Contains(t, err.Error(), "unauthorized")
 	require.Contains(t, w.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+fixture.Toolset.McpSlug.String,
 		"assistant-token fallback must still 401 when the owner has no remote_session for the issuer")
+}
+
+func TestServePublic_AssistantTokenFromForeignProjectChallenges(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "assistant-resolver-foreign")
+
+	ownerSubject := urn.NewUserSubject(authCtx.UserID)
+	insertRemoteSessionAccessToken(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, ownerSubject, "valid-upstream-token", time.Now().Add(time.Hour))
+
+	foreignProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "foreign-" + uuid.NewString()[:8],
+		Slug:           "foreign-" + uuid.NewString()[:8],
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	foreignAuthCtx := &contextvalues.AuthContext{
+		ActiveOrganizationID: authCtx.ActiveOrganizationID,
+		UserID:               authCtx.UserID,
+		ProjectID:            &foreignProject.ID,
+	}
+	foreignToken := mintAssistantBearerForOwner(t, ti, foreignAuthCtx)
+
+	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), foreignToken, nil)
+	require.Error(t, err)
+	require.Contains(t, w.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+fixture.Toolset.McpSlug.String,
+		"assistant token minted for a different project must not resolve this toolset's remote_session")
 }
 
 func mintAssistantBearerForOwner(
