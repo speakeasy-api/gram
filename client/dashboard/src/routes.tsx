@@ -442,7 +442,7 @@ const ROUTE_STRUCTURE = {
     component: SecurityOverview,
   },
   policyCenter: {
-    title: "Policy Center",
+    title: "Risk Policies",
     url: "risk-policies",
     icon: "shield-check",
     stage: "beta",
