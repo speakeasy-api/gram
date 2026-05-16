@@ -139,8 +139,10 @@ Pre-GA features in the dashboard get a `Preview` or `Beta` badge in **two places
 
 **Semantic meaning** (don't repaint these without product/design buy-in):
 
-- `preview` — early / experimental, shape may change. Rendered with the `warning` Moonshine palette (amber).
-- `beta` — open for use, stable enough for production, still evolving. Rendered with the violet brand tone (matches the paid product tier badge).
+- `preview` — early / experimental, shape may change. Rendered with the Moonshine `warning` semantic palette (`bg-warning-softest text-default-warning border-warning-default/40`) — amber.
+- `beta` — open for use, stable enough for production, still evolving. Rendered with the Moonshine `information` semantic palette (`bg-information-softest text-default-information border-information-default/40`) — Speakeasy brand blue. This is the same family that backs the `--feature` token.
+
+**Never hardcode colors** for these badges. Both palettes are Moonshine semantic tokens so they automatically retune with theme/brand changes.
 
 #### Adding a badge to a navigation item
 
@@ -163,6 +165,10 @@ The badge is hidden when the sidebar is collapsed to icon-only mode — the page
 #### Adding a badge to a page
 
 Pass `stage` on the `Page.Section.Title` for the page's primary section (usually the first `Page.Section` under `Page.Body`). Do **not** add it to secondary section titles like "Recent Chats" — the badge labels the whole feature, not individual sections.
+
+#### Adding a badge to a tab
+
+For sub-route tabs (e.g., `ObserveTabNav` tabs under Insights), add a `stage` field to the local tab descriptor and render `<ReleaseStageBadge size="xs" noTooltip>` inline. Use `inline-flex items-center gap-2` on the tab so the badge tracks the label.
 
 ```tsx
 <Page.Section>

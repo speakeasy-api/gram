@@ -12,13 +12,16 @@ type ReleaseStageBadgeProps = {
 };
 
 const stageStyles: Record<ReleaseStage, string> = {
-  // Preview = experimental, shape may change. Uses the warning palette so it
-  // reads as "use with caution" without screaming destructive.
-  preview: "bg-warning-softest text-warning-default border-warning-default/30",
-  // Beta = feature is open for use but still pre-GA. Uses the violet brand
-  // tone shared with the paid product tier badge, so beta features feel like
-  // promoted/active surfaces rather than dangerous ones.
-  beta: "bg-violet-500/10 text-violet-700 border-violet-500/30 dark:text-violet-300",
+  // Preview = experimental, shape may change. Uses the Moonshine `warning`
+  // semantic palette so it reads as "use with caution" without screaming
+  // destructive — and stays in lockstep with brand if the warning hue is
+  // ever retuned at the token level.
+  preview: "bg-warning-softest text-default-warning border-warning-default/40",
+  // Beta = stable enough for production but still evolving. Uses the
+  // Moonshine `information` semantic palette (Speakeasy brand blue) — the
+  // same family that backs the `--feature` token, which is what the design
+  // system reserves for "new product feature" callouts.
+  beta: "bg-information-softest text-default-information border-information-default/40",
 };
 
 const stageLabel: Record<ReleaseStage, string> = {
