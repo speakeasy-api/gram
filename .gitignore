@@ -53,6 +53,7 @@ gram.code-workspace
 /server/cmd/local
 /server/custom-gcl
 /local/cmd
+/hooks/.local/
 dist/
 **/.claude/settings.local.json
 **/.claude/.gram-install-prompted
