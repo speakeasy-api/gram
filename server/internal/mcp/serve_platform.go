@@ -258,6 +258,11 @@ func (s *Service) callPlatformToolsetTool(
 		OwnerKind:   conv.PtrValOrEmpty(desc.OwnerKind, ""),
 		OwnerID:     conv.PtrValOrEmpty(desc.OwnerID, ""),
 		InputSchema: desc.InputSchema,
+		// The toolset slice is the source of truth for which executor backs a
+		// platform-toolset call. Skip the runtime's URN registry, which can
+		// hold a differently scoped variant (e.g. the non-assistant trigger
+		// tools registered for the general MCP path).
+		Executor: matched.Executor,
 	})
 
 	ctx, logger := o11y.EnrichToolCallContext(ctx, s.logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
