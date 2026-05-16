@@ -619,6 +619,10 @@ func (f *FlyRuntimeBackend) maybeRecycleImage(
 	if err != nil {
 		return nil, fmt.Errorf("recycle assistant fly runtime machine: %w", err)
 	}
+	// flaps Update leaves the machine stopped; Start before waiting.
+	if _, err := flapsClient.Start(ctx, appName, updated.ID, ""); err != nil {
+		return nil, fmt.Errorf("start assistant fly runtime machine after recycle: %w", err)
+	}
 	if err := f.tracedWaitStarted(ctx, flapsClient, appName, updated, true); err != nil {
 		return nil, fmt.Errorf("wait for assistant fly runtime machine recycle: %w", err)
 	}
