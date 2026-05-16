@@ -79,7 +79,7 @@ func TestRemoteLoginCallback_AuthenticatedSubject(t *testing.T) {
 		CreatedAt:           time.Now(),
 	}))
 
-	runRemoteLoginRoundTrip(t, ctx, ti, mgr, result, parentID, &userSubject)
+	runRemoteLoginRoundTrip(t, ctx, ti, mgr, result, parentID, &userSubject, "")
 }
 
 // TestRemoteLoginCallback_AnonymousSubject covers the public-toolset
@@ -141,7 +141,39 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 	require.NotNil(t, stamped.Subject)
 	require.Equal(t, anonymousSubject, *stamped.Subject)
 
-	runRemoteLoginRoundTrip(t, ctx, ti, mgr, result, parentID, stamped.Subject)
+	runRemoteLoginRoundTrip(t, ctx, ti, mgr, result, parentID, stamped.Subject, "")
+}
+
+func TestRemoteLoginCallback_FinalRedirectURI(t *testing.T) {
+	t.Parallel()
+
+	idp := devidptest.Launch(t, devidptest.LaunchOpts{})
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	result := oauthtest.CreateIssuerGatedToolset(t, ctx, ti.conn, ti.enc, authCtx, oauthtest.IssuerGatedToolsetOpts{
+		Slug:                         "issuer-final-redirect",
+		IsPublic:                     false,
+		UpstreamMetadata:             idp.OAuth21Metadata(t),
+		RemoteSessionCallbackBaseURL: ti.serverURL.String(),
+	})
+
+	mgr, _ := buildChallengeManagerForTest(t, ti)
+	userSubject := urn.NewUserSubject(uuid.NewString())
+
+	runRemoteLoginRoundTrip(
+		t,
+		ctx,
+		ti,
+		mgr,
+		result,
+		uuid.NewString(),
+		&userSubject,
+		"https://dashboard.example.com/playground?existing=1",
+	)
 }
 
 func TestRemoteLoginChallenge_CustomDomainRegistersGramCallback(t *testing.T) {
@@ -209,6 +241,7 @@ func runRemoteLoginRoundTrip(
 	result oauthtest.IssuerGatedToolsetResult,
 	parentChallengeID string,
 	expectedSubject *urn.SessionSubject,
+	finalRedirectURI string,
 ) {
 	t.Helper()
 
@@ -222,7 +255,7 @@ func runRemoteLoginRoundTrip(
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Subject:             expectedSubject,
 		McpSlug:             result.Toolset.McpSlug.String,
-		FinalRedirectURI:    "",
+		FinalRedirectURI:    finalRedirectURI,
 	}
 	authURL, err := mgr.BuildAuthorizationUrl(ctx, parent, clients[0])
 	require.NoError(t, err)
@@ -243,9 +276,13 @@ func runRemoteLoginRoundTrip(
 
 	cbW := httptest.NewRecorder()
 	require.NoError(t, mgr.HandleRemoteLoginCallback(cbW, cbReq))
-	require.Equal(t, http.StatusSeeOther, cbW.Code, "callback should redirect back to /connect")
-	require.Contains(t, cbW.Header().Get("Location"), "/mcp/"+result.Toolset.McpSlug.String+"/connect")
-	require.Contains(t, cbW.Header().Get("Location"), parentChallengeID)
+	require.Equal(t, http.StatusSeeOther, cbW.Code, "callback should redirect")
+	if finalRedirectURI != "" {
+		require.Equal(t, finalRedirectURI, cbW.Header().Get("Location"))
+	} else {
+		require.Contains(t, cbW.Header().Get("Location"), "/mcp/"+result.Toolset.McpSlug.String+"/connect")
+		require.Contains(t, cbW.Header().Get("Location"), parentChallengeID)
+	}
 
 	sessions, err := remotesessions_repo.New(ti.conn).ListRemoteSessionsByProjectID(ctx, remotesessions_repo.ListRemoteSessionsByProjectIDParams{
 		ProjectID:  result.Toolset.ProjectID,

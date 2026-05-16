@@ -429,6 +429,9 @@ func (s *ExternalOAuthService) handleIssuerConnect(w http.ResponseWriter, r *htt
 	if !s.isAllowedRedirectHost(parsedRedirect.Hostname()) {
 		return oops.E(oops.CodeBadRequest, nil, "redirect_uri hostname not allowed").Log(ctx, s.logger)
 	}
+	redirectQuery := parsedRedirect.Query()
+	redirectQuery.Set("issuer_connected", "1")
+	parsedRedirect.RawQuery = redirectQuery.Encode()
 
 	toolsetID, err := uuid.Parse(toolsetIDStr)
 	if err != nil {
@@ -467,7 +470,7 @@ func (s *ExternalOAuthService) handleIssuerConnect(w http.ResponseWriter, r *htt
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Subject:             &subject,
 		McpSlug:             mcpSlug,
-		FinalRedirectURI:    redirectURI,
+		FinalRedirectURI:    parsedRedirect.String(),
 	}
 	authURL, err := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, clients[0])
 	if err != nil {

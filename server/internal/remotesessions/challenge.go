@@ -404,14 +404,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 
 	redirect := fmt.Sprintf("%s/mcp/%s/connect?state=%s", strings.TrimRight(m.serverURL.String(), "/"), mcpSlug, url.QueryEscape(state.ParentChallengeID))
 	if state.FinalRedirectURI != "" {
-		if u, perr := url.Parse(state.FinalRedirectURI); perr == nil {
-			q := u.Query()
-			q.Set("issuer_connected", "1")
-			u.RawQuery = q.Encode()
-			redirect = u.String()
-		} else {
-			redirect = state.FinalRedirectURI
-		}
+		redirect = state.FinalRedirectURI
 	}
 	http.Redirect(w, r, redirect, http.StatusSeeOther)
 	return nil
