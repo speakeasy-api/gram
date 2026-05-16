@@ -40,6 +40,7 @@ function ScopeGatedNavItem({
           href={item.href()}
           active={item.active}
           Icon={item.Icon}
+          stage={item.stage}
         />
       </SidebarMenuItem>
     </RequireScope>
