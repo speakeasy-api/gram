@@ -75,3 +75,25 @@ func (q *Queries) GetLatestAuditLogByAction(ctx context.Context, action string) 
 	)
 	return i, err
 }
+
+const getLatestOutboxPayloadByOrg = `-- name: GetLatestOutboxPayloadByOrg :one
+SELECT payload
+FROM outbox
+WHERE organization_id = $1
+  AND event_type = $2
+ORDER BY id DESC
+LIMIT 1
+`
+
+type GetLatestOutboxPayloadByOrgParams struct {
+	OrganizationID string
+	EventType      string
+}
+
+// Returns the JSON payload of the most-recently inserted outbox entry for an org+event_type pair.
+func (q *Queries) GetLatestOutboxPayloadByOrg(ctx context.Context, arg GetLatestOutboxPayloadByOrgParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getLatestOutboxPayloadByOrg, arg.OrganizationID, arg.EventType)
+	var payload []byte
+	err := row.Scan(&payload)
+	return payload, err
+}
