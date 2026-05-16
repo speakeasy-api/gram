@@ -249,9 +249,17 @@ function SecurityOverviewContent() {
 
   if (isInitialLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <p className="text-muted-foreground text-sm">Loading...</p>
-      </div>
+      <Page.Section>
+        <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
+        <Page.Section.Description className="max-w-2xl">
+          Recent findings from risk analysis scans across your project.
+        </Page.Section.Description>
+        <Page.Section.Body>
+          <div className="flex items-center justify-center py-20">
+            <p className="text-muted-foreground text-sm">Loading...</p>
+          </div>
+        </Page.Section.Body>
+      </Page.Section>
     );
   }
 
