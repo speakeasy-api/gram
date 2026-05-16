@@ -384,6 +384,7 @@ func (s *Service) buildRemoteSessionCards(
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		Subject:             challengeState.Subject,
 		McpSlug:             mcpSlug,
+		FinalRedirectURI:    "",
 	}
 
 	cards := make([]remoteSessionCard, 0, len(clients))
