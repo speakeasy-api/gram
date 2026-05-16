@@ -148,6 +148,8 @@ linters:
               disabled: false
             audit-event-urn-typing:
               disabled: false
+            audit-action-naming:
+              disabled: true
     gosec:
       excludes:
         # Temporarily ignore this lint rule because it needs to be a separate
