@@ -899,13 +899,10 @@ func (s *Service) TriggerRiskAnalysis(ctx context.Context, payload *gen.TriggerR
 		return oops.E(oops.CodeUnexpected, err, "log risk policy trigger").Log(ctx, s.logger)
 	}
 
-	// limit nil or 0 means full backfill (the legacy behavior of this
-	// endpoint). A positive value caps the run at the most recent N
-	// unanalyzed messages.
-	var maxMessages int32
-	if payload.Limit != nil && *payload.Limit > 0 {
-		maxMessages = *payload.Limit
-	}
+	// payload.Limit defaults to 100 (Goa fills in the recent-N budget
+	// when callers omit it). Explicit 0 requests a full backfill of
+	// every unanalyzed message.
+	maxMessages := payload.Limit
 
 	if err := s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
 		ProjectID:    policy.ProjectID,
@@ -983,14 +980,20 @@ func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID strin
 		return s.fallbackPolicyName(sources, action)
 	}
 
+	// Policy authors think in *what* is detected, not *how* (gitleaks,
+	// presidio). Translate sources to user-facing category labels and
+	// scrub library names so the LLM cannot regurgitate them. See AGE-2378.
+	categories := sourcesToCategoryLabels(sources)
+
 	prompt := fmt.Sprintf(
 		"Generate a short, human-friendly name (2-5 words) for a security policy with these settings:\n"+
-			"- Detection sources: %v\n"+
-			"- PII entities: %v\n"+
+			"- Detection categories: %v\n"+
+			"- PII entity types: %v\n"+
 			"- Action: %s\n"+
 			"- Existing policy names to avoid: %v\n\n"+
-			"Return ONLY the name, no quotes or explanation. Make it descriptive and distinct from existing names.",
-		sources, presidioEntities, action, existingNames,
+			"Return ONLY the name, no quotes or explanation. Make it descriptive and distinct from existing names. "+
+			"Do not mention internal tool or library names; describe what is detected.",
+		categories, presidioEntities, action, existingNames,
 	)
 
 	// Tight timeout: this runs synchronously in the API request path. If
@@ -1038,22 +1041,38 @@ func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID strin
 	return name
 }
 
-func (s *Service) fallbackPolicyName(sources []string, action string) string {
-	var parts []string
+// sourcesToCategoryLabels maps internal source identifiers (gitleaks,
+// presidio, …) to the user-facing detection category they implement.
+// Library names are an implementation detail; policy authors think in
+// what is detected, not how. See AGE-2378.
+func sourcesToCategoryLabels(sources []string) []string {
+	out := make([]string, 0, len(sources))
 	for _, src := range sources {
 		switch src {
 		case "gitleaks":
-			parts = append(parts, "Secret")
+			out = append(out, "Secrets")
 		case "presidio":
-			parts = append(parts, "PII")
+			out = append(out, "PII")
 		case shadowmcp.SourceShadowMCP:
-			parts = append(parts, "Shadow MCP")
+			out = append(out, "Shadow MCP")
 		case shadowmcp.SourceDestructiveTool:
-			parts = append(parts, "Destructive Tool")
+			out = append(out, "Destructive Tool")
 		case ra.SourceCLIDestructive:
-			parts = append(parts, "Destructive CLI Command")
+			out = append(out, "Destructive CLI Command")
 		case ra.SourcePromptInjection:
-			parts = append(parts, "Prompt Injection")
+			out = append(out, "Prompt Injection")
+		}
+	}
+	return out
+}
+
+func (s *Service) fallbackPolicyName(sources []string, action string) string {
+	parts := sourcesToCategoryLabels(sources)
+	// Singularize the leading "Secrets" label when used in a name like
+	// "Secret Blocker" — preserves the previous look of fallback names.
+	for i, p := range parts {
+		if p == "Secrets" {
+			parts[i] = "Secret"
 		}
 	}
 	if len(parts) == 0 {

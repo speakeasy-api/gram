@@ -259,9 +259,10 @@ type TriggerRiskAnalysisPayload struct {
 	ProjectSlugInput *string
 	// The policy ID.
 	ID string
-	// Cap the backfill at the most recent N unanalyzed messages. Omit (or pass 0)
-	// for a full backfill.
-	Limit *int32
+	// Cap the backfill at the most recent N unanalyzed messages. Defaults to 100
+	// (the recent-N drain budget). Pass 0 to request a full backfill of every
+	// unanalyzed message.
+	Limit int32
 }
 
 // UpdateRiskPolicyPayload is the payload type of the risk service

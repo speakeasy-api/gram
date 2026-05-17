@@ -77,8 +77,9 @@ type ApproveShadowMCPRequestBody struct {
 type TriggerRiskAnalysisRequestBody struct {
 	// The policy ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Cap the backfill at the most recent N unanalyzed messages. Omit (or pass 0)
-	// for a full backfill.
+	// Cap the backfill at the most recent N unanalyzed messages. Defaults to 100
+	// (the recent-N drain budget). Pass 0 to request a full backfill of every
+	// unanalyzed message.
 	Limit *int32 `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
 }
 
@@ -5082,8 +5083,13 @@ func NewRevokeShadowMCPApprovalPayload(policyID string, match string, apikeyToke
 // endpoint payload.
 func NewTriggerRiskAnalysisPayload(body *TriggerRiskAnalysisRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.TriggerRiskAnalysisPayload {
 	v := &risk.TriggerRiskAnalysisPayload{
-		ID:    *body.ID,
-		Limit: body.Limit,
+		ID: *body.ID,
+	}
+	if body.Limit != nil {
+		v.Limit = *body.Limit
+	}
+	if body.Limit == nil {
+		v.Limit = 100
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

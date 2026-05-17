@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 0a8500b5ece3045c445f7fb75aca68a8
+  docChecksum: 72b986ac80ea1b28e826fac6fd05ec8a
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -887,7 +887,7 @@ trackedFiles:
   docs/models/components/triggerinstancestatus.md:
     last_write_checksum: sha1:7315b78cbccc915a21a8c1ec4ee7155d40a41b80
   docs/models/components/triggerriskanalysisrequestbody.md:
-    last_write_checksum: sha1:9f75df3ef1eb9ccb274ad415aaed9f7725dfdf46
+    last_write_checksum: sha1:e1730432575c14fc1c66fbfa5e20e951bb04669b
   docs/models/components/type.md:
     last_write_checksum: sha1:f3606d62bd77e8ac3c11011316949e80d0803890
   docs/models/components/typestoinclude.md:
@@ -4507,7 +4507,7 @@ trackedFiles:
   src/models/components/triggerinstance.ts:
     last_write_checksum: sha1:dceaf672ef4d6872f103f0339ec0849ffb8fbb9a
   src/models/components/triggerriskanalysisrequestbody.ts:
-    last_write_checksum: sha1:a3c7e2a86366495b77e849afdecd89a17820c246
+    last_write_checksum: sha1:8a63ff3fe0087235a73b982cd99161a2aeed8376
   src/models/components/updateassistantform.ts:
     last_write_checksum: sha1:283f390810d1857e8c3c90505812e490b7c0e665
   src/models/components/updateenvironmentrequestbody.ts:
@@ -8851,7 +8851,7 @@ examples:
   triggerRiskAnalysis:
     speakeasy-default-trigger-risk-analysis:
       requestBody:
-        application/json: {"id": "627f5b17-9f75-4837-81cc-2f7a2510ed27"}
+        application/json: {"id": "627f5b17-9f75-4837-81cc-2f7a2510ed27", "limit": 100}
       responses:
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}

@@ -395,8 +395,9 @@ var _ = Service("risk", func() {
 			Attribute("id", String, "The policy ID.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("limit", Int32, "Cap the backfill at the most recent N unanalyzed messages. Omit (or pass 0) for a full backfill.", func() {
+			Attribute("limit", Int32, "Cap the backfill at the most recent N unanalyzed messages. Defaults to 100 (the recent-N drain budget). Pass 0 to request a full backfill of every unanalyzed message.", func() {
 				Minimum(0)
+				Default(100)
 			})
 			Required("id")
 		})
