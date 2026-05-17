@@ -6,6 +6,7 @@ import {
   RedirectToLogAgents,
   RedirectToLogTools,
 } from "./components/observe/ObserveRedirects";
+import { ReleaseStage } from "./components/release-stage-badge";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
 import AssistantPage from "./pages/assistants/Assistant";
@@ -95,6 +96,10 @@ type AppRouteBasic = {
   subPages?: AppRoutesBasic;
   unauthenticated?: boolean;
   outsideMainLayout?: boolean;
+  // Release stage badge shown on this route's nav entry. Use sparingly —
+  // only for features that are genuinely pre-GA. Page-level badges live on
+  // <Page.Section.Title stage="..." /> and must be set separately.
+  stage?: ReleaseStage;
 };
 
 type GoToFunction = (...params: string[]) => void;
@@ -123,6 +128,7 @@ type RouteEntry = {
   url: string;
   icon?: IconName;
   customIcon?: React.ComponentType<{ className?: string }>;
+  stage?: ReleaseStage;
 } & (
   | {
       external: true;
@@ -278,6 +284,7 @@ const ROUTE_STRUCTURE = {
     title: "Assistants",
     url: "assistants",
     icon: "bot",
+    stage: "preview",
     component: AssistantsRoot,
     indexComponent: AssistantsIndex,
     subPages: {
@@ -431,12 +438,14 @@ const ROUTE_STRUCTURE = {
     title: "Risk Overview",
     url: "risk-overview",
     icon: "shield",
+    stage: "beta",
     component: SecurityOverview,
   },
   policyCenter: {
-    title: "Policy Center",
+    title: "Risk Policies",
     url: "risk-policies",
     icon: "shield-check",
+    stage: "beta",
     component: PolicyCenter,
   },
   sdks: {

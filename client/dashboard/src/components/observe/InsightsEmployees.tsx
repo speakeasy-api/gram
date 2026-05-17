@@ -1,6 +1,7 @@
 import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -426,7 +427,10 @@ export function InsightsEmployeesContent() {
             )}
           >
             <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="text-xl font-semibold">Employee Enrollment</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-semibold">Employee Enrollment</h1>
+                <ReleaseStageBadge stage="preview" />
+              </div>
               <p className="text-muted-foreground text-sm">
                 Track Gram uptake for organization members in this project over{" "}
                 {rangeLabel}. Employees with Gram Hooks activity are marked

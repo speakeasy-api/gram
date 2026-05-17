@@ -1,23 +1,33 @@
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "react-router";
 import { useSlugs } from "@/contexts/Sdk";
+import {
+  ReleaseStage,
+  ReleaseStageBadge,
+} from "@/components/release-stage-badge";
+
+type Tab = { label: string; href: string; stage?: ReleaseStage };
 
 export function ObserveTabNav({ base }: { base: "insights" | "logs" }) {
   const { orgSlug, projectSlug } = useSlugs();
   const location = useLocation();
 
   const baseSlug = `/${orgSlug}/projects/${projectSlug}/${base}`;
-  const tabs = [
+  const tabs: Tab[] = [
     { label: "Tools", href: `${baseSlug}/tools` },
     { label: "MCP Servers", href: `${baseSlug}/mcp` },
     ...(base === "logs"
       ? [{ label: "Agents", href: `${baseSlug}/agents` }]
       : []),
     ...(base === "insights"
-      ? [{ label: "Employees", href: `${baseSlug}/employees` }]
-      : []),
-    ...(base === "insights"
-      ? [{ label: "Costs", href: `${baseSlug}/costs` }]
+      ? ([
+          {
+            label: "Employees",
+            href: `${baseSlug}/employees`,
+            stage: "preview",
+          },
+          { label: "Costs", href: `${baseSlug}/costs`, stage: "preview" },
+        ] satisfies Tab[])
       : []),
   ];
 
@@ -34,12 +44,16 @@ export function ObserveTabNav({ base }: { base: "insights" | "logs" }) {
             className={cn(
               "relative flex-none px-4 py-3 text-sm font-medium no-underline transition-colors",
               "after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5",
+              "inline-flex items-center gap-2",
               isActive
                 ? "text-foreground after:bg-primary"
                 : "text-muted-foreground hover:text-foreground bg-transparent after:bg-transparent",
             )}
           >
             {tab.label}
+            {tab.stage && (
+              <ReleaseStageBadge stage={tab.stage} size="xs" noTooltip />
+            )}
           </Link>
         );
       })}

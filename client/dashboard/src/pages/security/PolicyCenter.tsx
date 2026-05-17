@@ -317,9 +317,18 @@ function PolicyCenterContent() {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-          </div>
+          <Page.Section>
+            <Page.Section.Title stage="beta">Risk Policies</Page.Section.Title>
+            <Page.Section.Description className="max-w-2xl">
+              Configure risk analysis rules to detect secrets and sensitive
+              information in chat messages.
+            </Page.Section.Description>
+            <Page.Section.Body>
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+              </div>
+            </Page.Section.Body>
+          </Page.Section>
         </Page.Body>
       </Page>
     );
@@ -332,6 +341,13 @@ function PolicyCenterContent() {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
+          <Page.Section>
+            <Page.Section.Title stage="beta">Risk Policies</Page.Section.Title>
+            <Page.Section.Description className="max-w-2xl">
+              Configure risk analysis rules to detect secrets and sensitive
+              information in chat messages.
+            </Page.Section.Description>
+          </Page.Section>
           <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
             <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
               <Shield className="text-muted-foreground h-6 w-6" />
@@ -386,7 +402,7 @@ function PolicyCenterContent() {
       </Page.Header>
       <Page.Body>
         <Page.Section>
-          <Page.Section.Title>Risk Policies</Page.Section.Title>
+          <Page.Section.Title stage="beta">Risk Policies</Page.Section.Title>
           <Page.Section.Description className="max-w-2xl">
             Configure risk analysis rules to detect secrets and sensitive
             information in chat messages.
