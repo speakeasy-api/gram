@@ -1104,7 +1104,7 @@ function RunPanel({
             type="number"
             min={1}
             value={backfillLimit}
-            onChange={(e) => setBackfillLimit(e.target.value)}
+            onChange={(value) => setBackfillLimit(value)}
             disabled={isTriggerPending}
             className="w-32"
             aria-label="Backfill message limit"
