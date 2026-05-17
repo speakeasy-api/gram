@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
@@ -167,15 +168,27 @@ func (s *Service) OnMessagesStored(ctx context.Context, projectID uuid.UUID) {
 		attr.SlogRiskPolicyCount(len(policies)),
 	)
 
+	// Each SignalNewMessages call round-trips to Temporal (~20ms),
+	// and this runs on the chat-message hot path. Fan out so total
+	// latency is the slowest signal, not the sum of all signals.
+	var wg sync.WaitGroup
+	wg.Add(len(policies))
 	for _, p := range policies {
-		if err := s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
-			ProjectID:    p.ProjectID,
-			RiskPolicyID: p.ID,
-			MaxMessages:  background.DefaultRecentMessagesBudget,
-		}); err != nil {
-			s.logger.ErrorContext(ctx, "signal risk drain workflow", attr.SlogError(err))
-		}
+		go func(p repo.RiskPolicy) {
+			defer wg.Done()
+			if err := s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
+				ProjectID:    p.ProjectID,
+				RiskPolicyID: p.ID,
+				MaxMessages:  background.DefaultRecentMessagesBudget,
+			}); err != nil {
+				s.logger.ErrorContext(ctx, "signal risk drain workflow",
+					attr.SlogError(err),
+					attr.SlogRiskPolicyID(p.ID.String()),
+				)
+			}
+		}(p)
 	}
+	wg.Wait()
 }
 
 func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskPolicyPayload) (*types.RiskPolicy, error) {
