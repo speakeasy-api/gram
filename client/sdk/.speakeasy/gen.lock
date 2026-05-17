@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 72b986ac80ea1b28e826fac6fd05ec8a
+  docChecksum: a12c4f98463c7347b342093875ea9c8a
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -2691,7 +2691,7 @@ trackedFiles:
   docs/sdks/plugins/README.md:
     last_write_checksum: sha1:1db1ff15e99af9efc38c654bdff23180d91827d8
   docs/sdks/policies/README.md:
-    last_write_checksum: sha1:5f2978214733a8cbfd3a30756b3a857bb330dc47
+    last_write_checksum: sha1:cdd3f7dc142798bd13cfe0fb5c109301a47c5e16
   docs/sdks/projects/README.md:
     last_write_checksum: sha1:69eaa9d9ecba768b0e979a00aa5e77ebe1a4e23b
   docs/sdks/remotemcp/README.md:
@@ -3271,7 +3271,7 @@ trackedFiles:
   src/funcs/riskPoliciesStatus.ts:
     last_write_checksum: sha1:cff2198821aa462a441354ca7bc5779bd8bd2e03
   src/funcs/riskPoliciesTrigger.ts:
-    last_write_checksum: sha1:31c7925287eff300f5b6f8c8151952c6dc44c22b
+    last_write_checksum: sha1:899e5f614e8968b44a6793a0603de89eb5449b19
   src/funcs/riskPoliciesUpdate.ts:
     last_write_checksum: sha1:a837a34d87bcdc48af1ae9b78862c425fedf3bc2
   src/funcs/riskResultsByChat.ts:
@@ -6155,7 +6155,7 @@ trackedFiles:
   src/react-query/riskPoliciesStatus.ts:
     last_write_checksum: sha1:db08364ccd265be6fe641f0433f79dace59b714b
   src/react-query/riskPoliciesTrigger.ts:
-    last_write_checksum: sha1:dbb9ae73a498c2f8d442d6999d96381d15815192
+    last_write_checksum: sha1:9fdb2d7fa8da575cb7647eea732f40b657ad21e6
   src/react-query/riskPoliciesUpdate.ts:
     last_write_checksum: sha1:3a389d4b7dd4e40a405a444fec22905fa633bca1
   src/react-query/role.core.ts:
@@ -6485,7 +6485,7 @@ trackedFiles:
   src/sdk/plugins.ts:
     last_write_checksum: sha1:7028ca7dfba43671e325dd5f14920e007e88e378
   src/sdk/policies.ts:
-    last_write_checksum: sha1:d45057c7fd84ded721dbddcf138c5bb1617ca1a7
+    last_write_checksum: sha1:7df5f8ff60b6ce77f41555f75e34a2364f53e9cf
   src/sdk/projects.ts:
     id: 28088373a118
     last_write_checksum: sha1:a80e20f3e6686ec35437d4054d5f1ff74b78c346

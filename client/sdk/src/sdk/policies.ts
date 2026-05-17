@@ -114,7 +114,7 @@ export class Policies extends ClientSDK {
    * triggerRiskAnalysis risk
    *
    * @remarks
-   * Manually trigger risk analysis for a policy, starting or signaling the drain workflow. Defaults to a full backfill; pass `limit` to cap the run at the most recent N unanalyzed messages.
+   * Manually trigger risk analysis for a policy, starting or signaling the drain workflow. Defaults to the most recent 100 unanalyzed messages; pass `limit=0` to backfill every unanalyzed message.
    */
   async trigger(
     request: operations.TriggerRiskAnalysisRequest,

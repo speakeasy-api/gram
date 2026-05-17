@@ -19,62 +19,38 @@ import (
 )
 
 const (
-	// SignalRiskAnalysisRequested wakes the drain workflow on new messages or
-	// policy updates.
 	SignalRiskAnalysisRequested = "risk-analysis-requested"
 
-	// drainFetchLimit is how many unanalyzed message IDs to fetch per round.
-	drainFetchLimit int32 = 20_000
+	drainFetchLimit          int32 = 20_000
+	drainBatchSize                 = 100
+	perDrainBatchConcurrency       = 1
 
 	// DefaultRecentMessagesBudget caps the per-cycle drain triggered by
-	// new-message ingest and policy edits to the most recent N
-	// unanalyzed messages. Explicit user backfill (TriggerRiskAnalysis)
-	// can override this with a higher cap or 0 (unbounded).
+	// new-message ingest and policy edits. Explicit user backfill
+	// (TriggerRiskAnalysis) can override this with a higher cap or 0
+	// (unbounded).
 	DefaultRecentMessagesBudget int32 = 100
 
-	// drainBatchSize is how many messages each AnalyzeBatch activity
-	// processes. Sized 2026-05-13 alongside analyzeBatchStartToCloseTimeout:
-	// Presidio is serialized (presidioMaxMessageBytes = byte semaphore
-	// budget) at up to ~30 s per message under load, so 100 messages caps
-	// the worst-case happy-path activity wall-clock at ~50 minutes.
-	drainBatchSize = 100
-
-	// Tuned 2026-05-01. Fleet-wide cap is perPodAnalyzeBatchConcurrency.
-	perDrainBatchConcurrency = 1
-
-	// analyzeBatchStartToCloseTimeout caps how long a single AnalyzeBatch
-	// activity may run before Temporal cancels it. Derived from the
-	// drainBatchSize × per-message worst-case happy-path latency budget
-	// (100 × ~30 s ≈ 50 min). Cancellation is a hard kill: any in-flight
-	// presidio retries lose their budget, and Temporal will retry the
+	// Presidio serializes per-call (~30 s worst-case) so a drainBatchSize
+	// batch can take up to ~50 min. On cancellation Temporal retries the
 	// whole activity per RetryPolicy below.
 	analyzeBatchStartToCloseTimeout = 50 * time.Minute
 )
 
 // DrainRiskAnalysisParams identifies the policy this workflow drains.
-// Version and sources are read from the DB on each drain cycle so that
-// policy updates are picked up without restarting the workflow.
-//
-// MaxMessages caps how many unanalyzed messages this workflow processes
-// before completing. 0 means unbounded (drain until empty, the legacy
-// behavior used by explicit backfill). A positive value caps the run at
-// that many messages and skips ContinueAsNew, so new-message and policy
-// update signals only trigger a small "recent N" drain by default.
-//
-// When SignalWithStart finds an existing run, params are ignored; use
-// SignalNewMessagesPayload.MaxMessages on the signal itself to deliver
-// the budget to the running workflow.
+// MaxMessages caps how many unanalyzed messages this run processes; 0
+// means unbounded. SignalWithStart ignores params for an existing run,
+// so SignalNewMessagesPayload.MaxMessages on the signal is what
+// escalates an in-flight run.
 type DrainRiskAnalysisParams struct {
 	ProjectID    uuid.UUID
 	RiskPolicyID uuid.UUID
 	MaxMessages  int32
 }
 
-// SignalNewMessagesPayload is the payload delivered with
-// SignalRiskAnalysisRequested. It lets concurrent signal sites bump the
-// per-cycle budget of an already-running workflow. The workflow takes
-// the most-permissive value across all pending signals (0 = unbounded
-// wins over any positive cap).
+// SignalNewMessagesPayload is delivered with SignalRiskAnalysisRequested.
+// The workflow takes the most-permissive value across all pending
+// signals (0 = unbounded wins over any positive cap).
 type SignalNewMessagesPayload struct {
 	MaxMessages int32
 }
@@ -86,11 +62,13 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 	logger := workflow.GetLogger(ctx)
 	signalCh := workflow.GetSignalChannel(ctx, SignalRiskAnalysisRequested)
 
-	// budget caps how many messages this run will fetch and process.
-	// 0 means unbounded (drain to empty). Signals that arrive during
-	// the drain are folded into the next cycle's budget below; we don't
-	// rescale mid-fetch.
-	budget := params.MaxMessages
+	// SignalWithStart leaves the triggering signal in the channel for
+	// the new run. Drain it here so the end-of-cycle drain doesn't see
+	// our own start signal as "new work arrived" and ContinueAsNew
+	// forever with the same params. Any budget on the start signal
+	// merges into params.MaxMessages — `0` (unbounded) wins.
+	startSignals, _ := drainPendingSignalBudgets(signalCh)
+	budget := mergeBackfillBudget(params.MaxMessages, startSignals)
 
 	activityOpts := workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Minute,
@@ -104,20 +82,12 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOpts)
 
-	// AnalyzeBatch runs on a dedicated, capped queue derived from the
-	// workflow's own queue so each environment stays isolated.
+	// AnalyzeBatch runs on a dedicated, capped queue so each environment
+	// stays isolated. Per-batch timeouts allow ~50 min wall-clock plus a
+	// 2x heartbeat buffer over analyzeRequestTimeout (~30 s).
 	analyzeBatchOpts := activityOpts
 	analyzeBatchOpts.TaskQueue = RiskAnalysisTaskQueue(tenv.TaskQueueName(workflow.GetInfo(ctx).TaskQueueName))
-	// StartToCloseTimeout overrides activityOpts (5m). Presidio calls
-	// serialize at up to ~30 s per message, so a drainBatchSize batch can
-	// take up to ~50 minutes in the worst case. See analyzeBatchStartToCloseTimeout
-	// for the derivation; keep the constants moving together.
 	analyzeBatchOpts.StartToCloseTimeout = analyzeBatchStartToCloseTimeout
-	// HeartbeatTimeout overrides activityOpts (30s). onProgress() (which
-	// emits the heartbeat) fires before each /analyze call and again
-	// while blocked on the byte-throttle semaphore; the per-request
-	// timeout is analyzeRequestTimeout = 30 s. 60 s gives a 2x buffer over
-	// that ceiling so a single stalled call cannot starve the heartbeat.
 	analyzeBatchOpts.HeartbeatTimeout = 60 * time.Second
 	analyzeBatchCtx := workflow.WithActivityOptions(ctx, analyzeBatchOpts)
 
