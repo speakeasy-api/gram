@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -347,10 +348,6 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 		attr.SlogHookHasPluginAuth(hasPluginAuth),
 	)
 
-	logger.InfoContext(ctx, "claude hook received",
-		attr.SlogEvent("claude_hook"),
-	)
-
 	if hasPluginAuth {
 		// Auth is optional. Returning a 401 on failure deadlocks the client:
 		// send_hook.sh maps any non-2xx to "block all tool calls", but
@@ -372,6 +369,10 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 			)
 		}
 	}
+
+	logger.InfoContext(ctx, "claude hook received",
+		attr.SlogEvent("claude_hook"),
+	)
 
 	s.recordHook(ctx, payload)
 
@@ -536,7 +537,8 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 		// response (Stop especially — the client closes the connection
 		// immediately on the response). Run it detached so the response
 		// returns promptly and the work completes in the background.
-		go s.persistHook(ctx, payload, &metadata)
+		detachedCtx := trace.ContextWithSpanContext(ctx, trace.SpanContext{})
+		go s.persistHook(detachedCtx, payload, &metadata)
 	} else {
 		if err := s.bufferHook(ctx, sessionID, payload); err != nil {
 			logger.ErrorContext(ctx, "Failed to buffer hook",

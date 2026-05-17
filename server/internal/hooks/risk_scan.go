@@ -48,6 +48,21 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
+	logAttrs := []any{
+		attr.SlogEvent("claude_hook_scan_decision"),
+		attr.SlogHookSource("claude"),
+		attr.SlogHookEvent(payload.HookEventName),
+		attr.SlogGenAIConversationID(*payload.SessionID),
+		attr.SlogRiskMatched(result != nil),
+	}
+	if result != nil {
+		logAttrs = append(logAttrs,
+			attr.SlogRiskPolicyID(result.PolicyID),
+			attr.SlogRiskPolicyName(result.PolicyName),
+		)
+	}
+	s.logger.InfoContext(ctx, "claude risk scan completed", logAttrs...)
+
 	return result
 }
 
@@ -57,15 +72,31 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 // the fallback. Returns ok=false when neither source yields a project_id.
 func (s *Service) resolveClaudeScanProjectID(ctx context.Context, sessionID string) (uuid.UUID, bool) {
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
-	if err == nil {
+	hasCachedMetadata := err == nil
+	if hasCachedMetadata {
 		pid, perr := uuid.Parse(metadata.ProjectID)
 		if perr == nil {
 			return pid, true
 		}
+		s.logger.WarnContext(ctx, "claude risk scan skipped: no project resolved",
+			attr.SlogEvent("claude_scan_no_project"),
+			attr.SlogHookSource("claude"),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogSessionHasCachedMetadata(true),
+			attr.SlogSessionHasAuthCtx(false),
+		)
 		return uuid.Nil, false
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+	hasAuthCtx := ok && authCtx != nil && authCtx.ProjectID != nil
+	if !hasAuthCtx {
+		s.logger.WarnContext(ctx, "claude risk scan skipped: no project resolved",
+			attr.SlogEvent("claude_scan_no_project"),
+			attr.SlogHookSource("claude"),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogSessionHasCachedMetadata(false),
+			attr.SlogSessionHasAuthCtx(ok && authCtx != nil && authCtx.ProjectID == nil),
+		)
 		return uuid.Nil, false
 	}
 	return *authCtx.ProjectID, true
