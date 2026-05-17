@@ -137,14 +137,16 @@ Pre-GA features get a `Preview` or `Beta` badge wherever the user would otherwis
 
 **Source of truth:** `client/dashboard/src/components/release-stage-badge.tsx` — exports `ReleaseStageBadge` and the `ReleaseStage = "preview" | "beta"` type.
 
-**Sibling component:** `ProductTierBadge` (the `Enterprise` pill on the Billing nav entry). `ReleaseStageBadge` deliberately mirrors its shape (`rounded-sm`, `text-xs`, `px-1 py-0.5`, no border, title-case label, default font weight). If you change one, change both — they need to read as one badge family in the sidebar.
+**Underlying primitive:** Moonshine's `<Badge>` component (`@speakeasy-api/moonshine`). `ReleaseStageBadge` composes Moonshine's Badge with `background` enabled — this is the source of truth for shape (mono, uppercase, tracked, bordered, `rounded-xs`, `h-5`, `text-[12px]`). Do **not** override these classes; the design system owns them. The wrapper just picks a semantic variant and adds a tooltip.
 
-**Semantic palettes** (don't repaint without product/design buy-in):
+**Variant → stage mapping** (variant names are hooks, not literal semantics):
 
-- `preview` — early / experimental, shape may change. Moonshine `warning` palette: `bg-warning-softest text-default-warning` (amber).
-- `beta` — stable enough for production but still evolving. Moonshine `information` palette: `bg-information-softest text-default-information` (Speakeasy brand blue — the same family that backs `--feature`).
+- `preview` → Moonshine `warning` variant (amber).
+- `beta` → Moonshine `information` variant (Speakeasy brand blue).
 
-**Never hardcode Tailwind colors** (no `bg-violet-500`, no `dark:` overrides). Both palettes are Moonshine semantic tokens and will retune automatically if brand/theme changes.
+> Moonshine's badge variants (`neutral | destructive | information | success | warning`) are tuned for alert/feedback contexts, but the names are just hooks — `warning` here means "experimental, use with caution," not "alert." That's the intended way to reuse the palettes; don't invent new variants without design buy-in.
+
+**Never hardcode Tailwind colors** (no `bg-violet-500`, no raw `bg-warning-softest` spans). If you find yourself reaching for raw classes for a new badge use case, that's a signal to either pick an existing Moonshine variant or add one upstream.
 
 #### Surface 1 — sidebar nav (route-driven)
 

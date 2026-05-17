@@ -41,6 +41,7 @@ export function ReleaseStageBadge({
   const pill = (
     <Badge
       variant={stageVariant[stage]}
+      background
       className={className}
       data-release-stage={stage}
     >
