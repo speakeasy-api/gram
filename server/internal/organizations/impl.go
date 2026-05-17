@@ -176,9 +176,11 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		return nil, err
 	}
 
-	trace.SpanFromContext(ctx).SetAttributes(
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
+		attr.OrganizationInviteEmail(strings.ToLower(strings.TrimSpace(payload.Email))),
 	)
 
 	rawToken, tokenHash, err := generateInviteToken()
@@ -211,6 +213,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		if !roleSlug.Valid {
 			return nil, oops.E(oops.CodeBadRequest, nil, "role not found").Log(ctx, logger)
 		}
+		span.AddEvent("invite.role_resolved", trace.WithAttributes(attr.OrganizationInviteRoleSlug(roleSlug.String)))
 	}
 
 	normalizedEmail := strings.ToLower(strings.TrimSpace(payload.Email))
@@ -246,19 +249,27 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create invitation").Log(ctx, logger)
 	}
+	span.SetAttributes(attr.OrganizationInviteID(row.ID.String()))
+	span.AddEvent("invite.created", trace.WithAttributes(
+		attr.OrganizationInviteID(row.ID.String()),
+		attr.OrganizationInviteEmail(normalizedEmail),
+	))
 
 	// Create the WorkOS passwordless magic-link session BEFORE committing
 	// the invite. If this fails the transaction rolls back, avoiding an
 	// orphaned invite row with no magic link.
+	redirectURI := s.serverURL + inviteCallbackPath
 	pwlSess, pwlErr := s.orgs.CreatePasswordlessSession(ctx, workos.CreatePasswordlessSessionOpts{
 		Email:       row.Email,
-		RedirectURI: s.serverURL + inviteCallbackPath,
+		RedirectURI: redirectURI,
 		ExpiresIn:   defaultInviteExpiryDays * 24 * 60 * 60,
 		State:       fmt.Sprintf("invite_token=%s", rawToken),
 	})
 	if pwlErr != nil {
+		span.RecordError(pwlErr)
 		return nil, oops.E(oops.CodeUnexpected, pwlErr, "failed to create invite link").Log(ctx, logger)
 	}
+	span.AddEvent("invite.workos_session_created")
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit invitation").Log(ctx, logger)
@@ -282,11 +293,14 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 			InviterName:      inviterName,
 			InviterEmail:     inviterEmail,
 		}); err != nil {
+			span.RecordError(err)
+			span.AddEvent("invite.email_failed")
 			// Revoke the invite so the user can retry — the invitee never
 			// received the magic link so the invite is useless.
 			_ = orgrepo.New(s.db).RevokeInvitation(ctx, row.ID)
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to send invite email").Log(ctx, logger)
 		}
+		span.AddEvent("invite.email_sent")
 	}
 
 	return dbInvitationToGen(&row, &ac.UserID), nil
@@ -307,9 +321,11 @@ func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePay
 		return err
 	}
 
-	trace.SpanFromContext(ctx).SetAttributes(
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
+		attr.OrganizationInviteID(payload.InvitationID),
 	)
 
 	inviteID, err := uuid.Parse(payload.InvitationID)
@@ -328,10 +344,16 @@ func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePay
 		return oops.E(oops.CodeForbidden, nil, "invitation does not belong to this organization").Log(ctx, logger)
 	}
 
+	span.SetAttributes(
+		attr.OrganizationInviteEmail(invite.Email),
+		attr.OrganizationInviteState(invite.State),
+	)
+
 	if err := orgrepo.New(s.db).RevokeInvitation(ctx, inviteID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "revoke invitation").Log(ctx, logger)
 	}
 
+	span.AddEvent("invite.revoked")
 	return nil
 }
 
@@ -785,6 +807,10 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		attr.WorkOSUserID(profile.ID),
 		attr.AuthUserEmail(profile.Email),
 	)
+	span.AddEvent("invite.callback.code_exchanged", trace.WithAttributes(
+		attr.WorkOSUserID(profile.ID),
+		attr.AuthUserEmail(profile.Email),
+	))
 
 	// Extract invite_token from the state parameter.
 	stateParam := r.URL.Query().Get("state")
@@ -803,19 +829,32 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		redirectError("invite not found")
 		return
 	}
+	span.SetAttributes(
+		attr.OrganizationInviteID(invite.ID.String()),
+		attr.OrganizationInviteEmail(invite.Email),
+		attr.OrganizationInviteState(invite.State),
+		attr.OrganizationID(invite.OrganizationID),
+	)
 	if invite.State != "pending" {
+		span.AddEvent("invite.callback.rejected", trace.WithAttributes(attr.OrganizationInviteState(invite.State)))
 		redirectError("invite already used or revoked")
 		return
 	}
 	if invite.ExpiresAt.Valid && invite.ExpiresAt.Time.Before(time.Now()) {
+		span.AddEvent("invite.callback.rejected", trace.WithAttributes(attr.OrganizationInviteState("expired")))
 		redirectError("invite expired")
 		return
 	}
+	span.AddEvent("invite.callback.token_validated")
 
 	// Verify the authenticated email matches the invite.
 	inviteeEmail := strings.ToLower(profile.Email)
 	if invite.Email != inviteeEmail {
 		s.logger.WarnContext(ctx, fmt.Sprintf("invite callback: email mismatch (invite=%s, authenticated=%s)", invite.Email, inviteeEmail))
+		span.AddEvent("invite.callback.email_mismatch", trace.WithAttributes(
+			attr.OrganizationInviteEmail(invite.Email),
+			attr.AuthUserEmail(inviteeEmail),
+		))
 		redirectError("email does not match invitation")
 		return
 	}
@@ -848,6 +887,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		attr.UserID(gramUserID),
 		attr.OrganizationID(invite.OrganizationID),
 	)
+	span.AddEvent("invite.callback.user_provisioned", trace.WithAttributes(attr.UserID(gramUserID)))
 
 	if _, err := repo.UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
 		OrganizationID: invite.OrganizationID,
@@ -858,6 +898,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		redirectError("failed to join organization")
 		return
 	}
+	span.AddEvent("invite.callback.org_membership_created")
 
 	// Create the WorkOS organization membership so ListMembers returns the
 	// invited user with the correct role.
@@ -870,8 +911,10 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 			mid, err := s.orgs.CreateOrganizationMembership(ctx, profile.ID, org.WorkosID.String, invite.RoleSlug.String)
 			if err != nil {
 				s.logger.WarnContext(ctx, "invite callback: failed to create WorkOS membership", attr.SlogError(err))
+				span.RecordError(err)
 			} else {
 				workosMembershipID = mid
+				span.AddEvent("invite.callback.workos_membership_created")
 			}
 		}
 	}
@@ -890,6 +933,11 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 			WorkosLastEventID:  pgtype.Text{String: "", Valid: false},
 		}); err != nil {
 			s.logger.WarnContext(ctx, "invite callback: failed to sync role assignments", attr.SlogError(err))
+			span.RecordError(err)
+		} else {
+			span.AddEvent("invite.callback.rbac_synced", trace.WithAttributes(
+				attr.OrganizationInviteRoleSlug(invite.RoleSlug.String),
+			))
 		}
 	}
 
@@ -905,9 +953,11 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	if rowsAffected == 0 {
 		s.logger.WarnContext(ctx, "invite callback: invite was revoked or expired before acceptance")
+		span.AddEvent("invite.callback.acceptance_race_lost")
 		redirectError("invite already used, revoked, or expired")
 		return
 	}
+	span.AddEvent("invite.callback.invitation_accepted")
 
 	// Create a Gram session directly — no need to bounce through an external
 	// OIDC login. The invitee is already authenticated via the magic link.
@@ -920,9 +970,14 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: failed to store session", attr.SlogError(err))
+		span.RecordError(err)
 		redirectError("failed to create session")
 		return
 	}
+	span.AddEvent("invite.callback.session_created", trace.WithAttributes(
+		attr.UserID(gramUserID),
+		attr.OrganizationID(invite.OrganizationID),
+	))
 
 	// Invalidate cached user info so the session picks up fresh org memberships.
 	if err := s.sessions.InvalidateUserInfoCache(ctx, gramUserID); err != nil {
@@ -937,7 +992,15 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		Secure:   true,
 		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
 	})
+	span.AddEvent("invite.callback.cookie_set")
+	s.logger.InfoContext(ctx, "invite callback: complete",
+		attr.SlogUserID(gramUserID),
+		attr.SlogOrganizationID(invite.OrganizationID),
+		attr.SlogOrganizationInviteID(invite.ID.String()),
+		attr.SlogAuthUserEmail(inviteeEmail),
+	)
 	http.Redirect(w, r, s.siteURL, http.StatusTemporaryRedirect)
 }
 
