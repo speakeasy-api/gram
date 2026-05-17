@@ -67,7 +67,7 @@ function OrgWebhooksInner() {
         Webhooks
       </Heading>
       <Type muted small className="mb-6">
-        Configure webhook delivery for various system events.
+        Configure webhook delivery for various platform events.
       </Type>
       <div className="border-border bg-card rounded-lg border p-4">
         <Stack gap={4}>

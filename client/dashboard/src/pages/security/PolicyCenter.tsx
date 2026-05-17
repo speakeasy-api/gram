@@ -321,7 +321,7 @@ function PolicyCenterContent() {
             <Page.Section.Title stage="beta">Risk Policies</Page.Section.Title>
             <Page.Section.Description className="max-w-2xl">
               Configure risk analysis rules to detect secrets and sensitive
-              information in chat messages.
+              information in agent session interactions.
             </Page.Section.Description>
             <Page.Section.Body>
               <div className="flex items-center justify-center py-20">
@@ -345,7 +345,7 @@ function PolicyCenterContent() {
             <Page.Section.Title stage="beta">Risk Policies</Page.Section.Title>
             <Page.Section.Description className="max-w-2xl">
               Configure risk analysis rules to detect secrets and sensitive
-              information in chat messages.
+              information in agent session interactions.
             </Page.Section.Description>
           </Page.Section>
           <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
@@ -405,7 +405,7 @@ function PolicyCenterContent() {
           <Page.Section.Title stage="beta">Risk Policies</Page.Section.Title>
           <Page.Section.Description className="max-w-2xl">
             Configure risk analysis rules to detect secrets and sensitive
-            information in chat messages.
+            information in agent session interactions.
           </Page.Section.Description>
           <Page.Section.CTA>
             <MoonshineButton onClick={handleCreate}>
