@@ -142,7 +142,7 @@ func TestGetRiskPolicyStatus_Success(t *testing.T) {
 	require.Equal(t, int64(0), status.FindingsCount)
 }
 
-func TestTriggerRiskAnalysis_DoesNotBumpVersion(t *testing.T) {
+func TestTriggerRiskAnalysis_BumpsVersion(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -155,21 +155,10 @@ func TestTriggerRiskAnalysis_DoesNotBumpVersion(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), created.Version)
 
-	// Trigger must not bump the version: bumping would orphan results
-	// from previous bounded backfills under the old version, so
-	// successive "Backfill last N" clicks wouldn't accumulate. Policy
-	// edits that change detection rules still bump via UpdateRiskPolicy.
 	err = ti.service.TriggerRiskAnalysis(ctx, &gen.TriggerRiskAnalysisPayload{ID: created.ID})
 	require.NoError(t, err)
 
 	got, err := ti.service.GetRiskPolicy(ctx, &gen.GetRiskPolicyPayload{ID: created.ID})
 	require.NoError(t, err)
-	require.Equal(t, int64(1), got.Version, "trigger must not bump version")
-
-	// Second trigger also leaves version untouched.
-	err = ti.service.TriggerRiskAnalysis(ctx, &gen.TriggerRiskAnalysisPayload{ID: created.ID, Limit: 50})
-	require.NoError(t, err)
-	got, err = ti.service.GetRiskPolicy(ctx, &gen.GetRiskPolicyPayload{ID: created.ID})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), got.Version)
+	require.Equal(t, int64(2), got.Version, "trigger should bump version")
 }
