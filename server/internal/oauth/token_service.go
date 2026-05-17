@@ -138,8 +138,13 @@ func (ts *TokenService) ExchangeRefreshToken(ctx context.Context, req *TokenRequ
 	// Look up existing token by refresh token hash
 	refreshHash := sha256.Sum256([]byte(req.RefreshToken))
 	refreshTokenHash := base64.RawURLEncoding.EncodeToString(refreshHash[:])
-	oldToken, err := ts.tokenStorage.Get(ctx, RefreshTokenCacheKey(toolsetID, refreshTokenHash))
+	cacheKey := RefreshTokenCacheKey(toolsetID, refreshTokenHash)
+	oldToken, err := ts.tokenStorage.Get(ctx, cacheKey)
 	if err != nil {
+		ts.logger.WarnContext(ctx, "refresh token cache miss",
+			attr.SlogToolsetID(toolsetID.String()),
+			attr.SlogCacheKey(cacheKey),
+			attr.SlogError(err))
 		return nil, fmt.Errorf("invalid refresh token: %w", err)
 	}
 
