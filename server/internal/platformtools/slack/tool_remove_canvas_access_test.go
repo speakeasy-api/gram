@@ -2,6 +2,7 @@ package slack
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -46,31 +47,17 @@ func TestRemoveCanvasAccessTool_SendsTargets(t *testing.T) {
 	require.Equal(t, "U1,U2", requestPayload.Get("user_ids"))
 }
 
-func TestRemoveCanvasAccessTool_AllowsCanvasOnly(t *testing.T) {
+func TestRemoveCanvasAccessTool_RequiresTarget(t *testing.T) {
 	t.Parallel()
-
-	var requestPayload url.Values
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestPayload = readForm(t, r)
-		w.Header().Set("Content-Type", "application/json")
-		_, err := w.Write([]byte(`{"ok":true}`))
-		if err != nil {
-			t.Errorf("write response: %v", err)
-		}
-	}))
-	defer server.Close()
 
 	tool := &slackTool{
 		descriptor: NewRemoveCanvasAccessTool(nil).Descriptor(),
-		client:     newAPIClient(server.URL, server.Client()),
+		client:     newAPIClient("https://slack.test.invalid", nil),
 		callFn:     callRemoveCanvasAccess,
 	}
 
-	var out bytes.Buffer
-	err := tool.Call(t.Context(), testSlackEnv(), bytes.NewBufferString(`{"canvas_id":"F1"}`), &out)
-	require.NoError(t, err)
-
-	require.Equal(t, "F1", requestPayload.Get("canvas_id"))
-	require.Empty(t, requestPayload.Get("channel_ids"))
-	require.Empty(t, requestPayload.Get("user_ids"))
+	err := tool.Call(t.Context(), testSlackEnv(), bytes.NewBufferString(`{"canvas_id":"F1"}`), io.Discard)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "channel_ids")
+	require.ErrorContains(t, err, "user_ids")
 }

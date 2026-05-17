@@ -14,7 +14,7 @@ const toolNameSetCanvasAccess = "platform_slack_set_canvas_access"
 
 type setCanvasAccessInput struct {
 	CanvasID    string   `json:"canvas_id" jsonschema:"ID of the canvas to update access on."`
-	AccessLevel string   `json:"access_level" jsonschema:"Access level to grant. One of read, write, none."`
+	AccessLevel string   `json:"access_level" jsonschema:"Access level to grant. One of read or write. Use the remove_canvas_access tool (canvases.access.delete) to revoke."`
 	ChannelIDs  []string `json:"channel_ids,omitempty" jsonschema:"Channel IDs to grant access to."`
 	UserIDs     []string `json:"user_ids,omitempty" jsonschema:"User IDs to grant access to."`
 }

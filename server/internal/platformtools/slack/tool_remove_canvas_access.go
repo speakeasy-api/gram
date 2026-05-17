@@ -2,6 +2,7 @@ package slack
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -28,7 +29,7 @@ func NewRemoveCanvasAccessTool(httpClient *guardian.HTTPClient) core.PlatformToo
 			SourceSlug:  sourceSlack,
 			HandlerName: "remove_canvas_access",
 			Name:        toolNameRemoveCanvasAccess,
-			Description: "Revoke access from a Slack canvas via canvases.access.delete using the server's Slack token from SLACK_BOT_TOKEN or SLACK_TOKEN. Omitting both channel_ids and user_ids removes access for all non-owners.",
+			Description: "Revoke access from a Slack canvas via canvases.access.delete using the server's Slack token from SLACK_BOT_TOKEN or SLACK_TOKEN. At least one of channel_ids or user_ids must be supplied.",
 			InputSchema: core.BuildInputSchema[removeCanvasAccessInput](),
 			Variables:   nil,
 			Annotations: slackToolAnnotations(readOnly, destructive, idempotent, openWorld),
@@ -50,6 +51,9 @@ func callRemoveCanvasAccess(ctx context.Context, client *apiClient, env toolconf
 	canvasID, err := requireString("canvas_id", input.CanvasID)
 	if err != nil {
 		return err
+	}
+	if len(input.ChannelIDs) == 0 && len(input.UserIDs) == 0 {
+		return fmt.Errorf("at least one of channel_ids or user_ids is required; canvases.access.delete returns invalid_parameters otherwise")
 	}
 
 	request := map[string]any{
