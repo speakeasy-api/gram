@@ -37,8 +37,7 @@ func TestSetCanvasAccessTool_SendsTargets(t *testing.T) {
 	err := tool.Call(t.Context(), testSlackEnv(), bytes.NewBufferString(`{
 		"canvas_id":"F1",
 		"access_level":"write",
-		"channel_ids":["C1","C2"],
-		"user_ids":["U1"]
+		"channel_ids":["C1","C2"]
 	}`), &out)
 	require.NoError(t, err)
 
@@ -46,7 +45,7 @@ func TestSetCanvasAccessTool_SendsTargets(t *testing.T) {
 	require.Equal(t, "F1", requestPayload.Get("canvas_id"))
 	require.Equal(t, "write", requestPayload.Get("access_level"))
 	require.Equal(t, "C1,C2", requestPayload.Get("channel_ids"))
-	require.Equal(t, "U1", requestPayload.Get("user_ids"))
+	require.Empty(t, requestPayload.Get("user_ids"))
 }
 
 func TestSetCanvasAccessTool_RequiresTarget(t *testing.T) {
@@ -62,4 +61,23 @@ func TestSetCanvasAccessTool_RequiresTarget(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "channel_ids")
 	require.ErrorContains(t, err, "user_ids")
+}
+
+func TestSetCanvasAccessTool_RejectsBothTargets(t *testing.T) {
+	t.Parallel()
+
+	tool := &slackTool{
+		descriptor: NewSetCanvasAccessTool(nil).Descriptor(),
+		client:     newAPIClient("https://slack.test.invalid", nil),
+		callFn:     callSetCanvasAccess,
+	}
+
+	err := tool.Call(t.Context(), testSlackEnv(), bytes.NewBufferString(`{
+		"canvas_id":"F1",
+		"access_level":"read",
+		"channel_ids":["C1"],
+		"user_ids":["U1"]
+	}`), io.Discard)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "mutually exclusive")
 }

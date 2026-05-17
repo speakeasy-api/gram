@@ -2,7 +2,6 @@ package slack
 
 import (
 	"context"
-	"fmt"
 	"io"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -19,8 +18,8 @@ type canvasEditChange struct {
 }
 
 type editCanvasInput struct {
-	CanvasID string             `json:"canvas_id" jsonschema:"ID of the canvas to edit."`
-	Changes  []canvasEditChange `json:"changes" jsonschema:"Ordered list of edit operations to apply to the canvas."`
+	CanvasID string           `json:"canvas_id" jsonschema:"ID of the canvas to edit."`
+	Change   canvasEditChange `json:"change" jsonschema:"The edit operation to apply. Slack canvases.edit accepts a single change per call; issue separate tool calls for multi-step edits."`
 }
 
 func NewEditCanvasTool(httpClient *guardian.HTTPClient) core.PlatformToolExecutor {
@@ -57,13 +56,13 @@ func callEditCanvas(ctx context.Context, client *apiClient, env toolconfig.ToolC
 	if err != nil {
 		return err
 	}
-	if len(input.Changes) == 0 {
-		return fmt.Errorf("changes is required")
+	if _, err := requireString("change.operation", input.Change.Operation); err != nil {
+		return err
 	}
 
 	request := map[string]any{
 		"canvas_id": canvasID,
-		"changes":   input.Changes,
+		"changes":   []canvasEditChange{input.Change},
 	}
 
 	body, err := client.call(ctx, "canvases.edit", request, tokenPreferBot, env)

@@ -57,18 +57,23 @@ func callSetCanvasAccess(ctx context.Context, client *apiClient, env toolconfig.
 	if err != nil {
 		return err
 	}
-	if len(input.ChannelIDs) == 0 && len(input.UserIDs) == 0 {
-		return fmt.Errorf("at least one of channel_ids or user_ids is required")
+	hasChannels := len(input.ChannelIDs) > 0
+	hasUsers := len(input.UserIDs) > 0
+	switch {
+	case !hasChannels && !hasUsers:
+		return fmt.Errorf("exactly one of channel_ids or user_ids is required")
+	case hasChannels && hasUsers:
+		return fmt.Errorf("channel_ids and user_ids are mutually exclusive; canvases.access.set returns invalid_parameters when both are set")
 	}
 
 	request := map[string]any{
 		"canvas_id":    canvasID,
 		"access_level": accessLevel,
 	}
-	if len(input.ChannelIDs) > 0 {
+	if hasChannels {
 		request["channel_ids"] = input.ChannelIDs
 	}
-	if len(input.UserIDs) > 0 {
+	if hasUsers {
 		request["user_ids"] = input.UserIDs
 	}
 
