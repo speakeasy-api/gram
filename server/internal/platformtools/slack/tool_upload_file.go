@@ -24,7 +24,7 @@ type uploadFileInput struct {
 	Title          *string `json:"title,omitempty" jsonschema:"Optional human-friendly title for the file."`
 	AltText        *string `json:"alt_text,omitempty" jsonschema:"Optional screen-reader description for image uploads. Sent to Slack as alt_txt."`
 	SnippetType    *string `json:"snippet_type,omitempty" jsonschema:"Syntax type for code snippet uploads (for example: python, go, json)."`
-	ChannelID      *string `json:"channel_id,omitempty" jsonschema:"Optional channel ID or comma-separated list of channel IDs to share the file into. Omit to keep the file private to the uploader."`
+	ChannelID      *string `json:"channel_id,omitempty" jsonschema:"Optional channel ID to share the file into. Omit to keep the file private to the uploader. To share into multiple channels, invoke the tool once per channel."`
 	InitialComment *string `json:"initial_comment,omitempty" jsonschema:"Optional message text to post alongside the shared file."`
 	ThreadTS       *string `json:"thread_ts,omitempty" jsonschema:"Optional thread timestamp to share the file as a reply in an existing thread."`
 }
@@ -51,7 +51,7 @@ func NewUploadFileTool(httpClient *guardian.HTTPClient) core.PlatformToolExecuto
 			SourceSlug:  sourceSlack,
 			HandlerName: "upload_file",
 			Name:        toolNameUploadFile,
-			Description: "Upload a file to Slack using the modern external upload flow (files.getUploadURLExternal + binary upload + files.completeUploadExternal). File bytes are passed as base64. Optionally shares the file into one or more channels with an initial comment or thread reply.",
+			Description: "Upload a file to Slack using the modern external upload flow (files.getUploadURLExternal + binary upload + files.completeUploadExternal). File bytes are passed as base64. Optionally shares the file into a single channel with an initial comment or thread reply; call the tool multiple times to share into more channels.",
 			InputSchema: core.BuildInputSchema[uploadFileInput](),
 			Variables:   nil,
 			Annotations: slackToolAnnotations(readOnly, destructive, idempotent, openWorld),
