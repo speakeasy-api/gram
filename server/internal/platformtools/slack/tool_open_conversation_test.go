@@ -43,7 +43,7 @@ func TestOpenConversationTool_OpensWithUsers(t *testing.T) {
 	require.Equal(t, "/conversations.open", requestPath)
 	require.Equal(t, "U1,U2", requestPayload.Get("users"))
 	require.Equal(t, "true", requestPayload.Get("return_im"))
-	require.Equal(t, "", requestPayload.Get("channel"))
+	require.Empty(t, requestPayload.Get("channel"))
 }
 
 func TestOpenConversationTool_RejectsMissingAndBothInputs(t *testing.T) {

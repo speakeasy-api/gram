@@ -38,13 +38,18 @@ func TestUploadFileTool_RunsThreeStepFlow(t *testing.T) {
 			"upload_url": uploadURL,
 			"file_id":    "F123",
 		}
-		require.NoError(t, json.NewEncoder(w).Encode(resp))
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("encode response: %v", err)
+		}
 	})
 	mux.HandleFunc("/upload/v1/ABC", func(w http.ResponseWriter, r *http.Request) {
 		uploadedCT = r.Header.Get("Content-Type")
 		uploadedAuth = r.Header.Get("Authorization")
 		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
+		if err != nil {
+			t.Errorf("read upload body: %v", err)
+			return
+		}
 		uploadedBody = body
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("OK - " + http.StatusText(http.StatusOK)))
