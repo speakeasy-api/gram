@@ -1125,7 +1125,7 @@ function RunPanel({
           </Button>
         </div>
         <Button
-          onClick={() => onTrigger()}
+          onClick={() => onTrigger(0)}
           disabled={isTriggerPending}
           className="w-full"
         >
