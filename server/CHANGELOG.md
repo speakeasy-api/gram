@@ -1,5 +1,17 @@
 # server
 
+## 0.54.0
+
+### Minor Changes
+
+- 0f52a3e: The playground's Connect button now drives the issuer-gated OAuth flow when a toolset is bound to a user-session issuer, so connecting to MCP servers like `speakeasy-team-github` lands an upstream session that the runtime can resolve. The connection-status badge and the 401 challenge on `/mcp/{slug}` both read from the issuer-gated session store for these toolsets, and the security-check fallback now always emits a non-empty `resource_metadata` URL.
+
+### Patch Changes
+
+- e40ac39: Assistant runtimes no longer get stuck unresponsive after a Gram release. When the assistant runtime image was upgraded in place, the underlying VM was being left stopped, so the next chat turn timed out and the assistant stopped responding. Subsequent turns now bring the runtime back up cleanly.
+- 9ee283c: Issuer-gated MCP servers now accept an assistant-runtime JWT and use the assistant owner's linked upstream account, so the runtime can call `/mcp/{slug}` without re-prompting for login. Requests with no linked upstream still return a 401 + WWW-Authenticate as before.
+- 48779ef: Fixed a bug where snapshot and metadata fields in audit log outbox entries were being base64-encoded instead of preserved as inline JSON objects.
+
 ## 0.53.0
 
 ### Minor Changes
