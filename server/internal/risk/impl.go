@@ -892,12 +892,19 @@ func (s *Service) TriggerRiskAnalysis(ctx context.Context, payload *gen.TriggerR
 		return oops.C(oops.CodeInvalid)
 	}
 
-	policy, err := s.repo.BumpRiskPolicyVersion(ctx, repo.BumpRiskPolicyVersionParams{
+	// Trigger no longer bumps the policy version. Bumping would orphan
+	// any prior results under the old version (CountAnalyzedMessages
+	// filters by current version), so a "Backfill last 100" followed by
+	// "Backfill last 400" would show 400 analyzed instead of 500 — the
+	// user's mental model is "clicks accumulate". Policy edits that
+	// change detection rules still bump the version via UpdateRiskPolicy
+	// when the operator actually wants a re-analysis.
+	policy, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "bump policy version").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
 	}
 
 	if err := s.audit.LogRiskPolicyTrigger(ctx, s.db, audit.LogRiskPolicyTriggerEvent{
