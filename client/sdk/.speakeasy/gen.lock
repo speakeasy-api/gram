@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: e3d92ee1b99d5355f9c5224a472bc1a3
+  docChecksum: 0a8500b5ece3045c445f7fb75aca68a8
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -887,7 +887,7 @@ trackedFiles:
   docs/models/components/triggerinstancestatus.md:
     last_write_checksum: sha1:7315b78cbccc915a21a8c1ec4ee7155d40a41b80
   docs/models/components/triggerriskanalysisrequestbody.md:
-    last_write_checksum: sha1:3eb61971c8af9840b56ea23ae779b828af9afc0d
+    last_write_checksum: sha1:9f75df3ef1eb9ccb274ad415aaed9f7725dfdf46
   docs/models/components/type.md:
     last_write_checksum: sha1:f3606d62bd77e8ac3c11011316949e80d0803890
   docs/models/components/typestoinclude.md:
@@ -2691,7 +2691,7 @@ trackedFiles:
   docs/sdks/plugins/README.md:
     last_write_checksum: sha1:1db1ff15e99af9efc38c654bdff23180d91827d8
   docs/sdks/policies/README.md:
-    last_write_checksum: sha1:d611fbfbc8f551d796c65b23ce4fecd2cce69aa1
+    last_write_checksum: sha1:5f2978214733a8cbfd3a30756b3a857bb330dc47
   docs/sdks/projects/README.md:
     last_write_checksum: sha1:69eaa9d9ecba768b0e979a00aa5e77ebe1a4e23b
   docs/sdks/remotemcp/README.md:
@@ -3271,7 +3271,7 @@ trackedFiles:
   src/funcs/riskPoliciesStatus.ts:
     last_write_checksum: sha1:cff2198821aa462a441354ca7bc5779bd8bd2e03
   src/funcs/riskPoliciesTrigger.ts:
-    last_write_checksum: sha1:32fdeface151d897e3315d5d2e5a4dd65728c881
+    last_write_checksum: sha1:31c7925287eff300f5b6f8c8151952c6dc44c22b
   src/funcs/riskPoliciesUpdate.ts:
     last_write_checksum: sha1:a837a34d87bcdc48af1ae9b78862c425fedf3bc2
   src/funcs/riskResultsByChat.ts:
@@ -4507,7 +4507,7 @@ trackedFiles:
   src/models/components/triggerinstance.ts:
     last_write_checksum: sha1:dceaf672ef4d6872f103f0339ec0849ffb8fbb9a
   src/models/components/triggerriskanalysisrequestbody.ts:
-    last_write_checksum: sha1:eb170c788b7b869a0d10d69b79de686e25de4616
+    last_write_checksum: sha1:a3c7e2a86366495b77e849afdecd89a17820c246
   src/models/components/updateassistantform.ts:
     last_write_checksum: sha1:283f390810d1857e8c3c90505812e490b7c0e665
   src/models/components/updateenvironmentrequestbody.ts:
@@ -6155,7 +6155,7 @@ trackedFiles:
   src/react-query/riskPoliciesStatus.ts:
     last_write_checksum: sha1:db08364ccd265be6fe641f0433f79dace59b714b
   src/react-query/riskPoliciesTrigger.ts:
-    last_write_checksum: sha1:0ffe5380301808fa0c998a5cbcb51d1623bcf1a1
+    last_write_checksum: sha1:dbb9ae73a498c2f8d442d6999d96381d15815192
   src/react-query/riskPoliciesUpdate.ts:
     last_write_checksum: sha1:3a389d4b7dd4e40a405a444fec22905fa633bca1
   src/react-query/role.core.ts:
@@ -6485,7 +6485,7 @@ trackedFiles:
   src/sdk/plugins.ts:
     last_write_checksum: sha1:7028ca7dfba43671e325dd5f14920e007e88e378
   src/sdk/policies.ts:
-    last_write_checksum: sha1:bf3c4e4a212f66d947d76cf149b309aa94397d00
+    last_write_checksum: sha1:d45057c7fd84ded721dbddcf138c5bb1617ca1a7
   src/sdk/projects.ts:
     id: 28088373a118
     last_write_checksum: sha1:a80e20f3e6686ec35437d4054d5f1ff74b78c346

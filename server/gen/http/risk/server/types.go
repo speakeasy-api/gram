@@ -77,6 +77,9 @@ type ApproveShadowMCPRequestBody struct {
 type TriggerRiskAnalysisRequestBody struct {
 	// The policy ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Cap the backfill at the most recent N unanalyzed messages. Omit (or pass 0)
+	// for a full backfill.
+	Limit *int32 `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
 }
 
 // CreateRiskPolicyResponseBody is the type of the "risk" service
@@ -5079,7 +5082,8 @@ func NewRevokeShadowMCPApprovalPayload(policyID string, match string, apikeyToke
 // endpoint payload.
 func NewTriggerRiskAnalysisPayload(body *TriggerRiskAnalysisRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.TriggerRiskAnalysisPayload {
 	v := &risk.TriggerRiskAnalysisPayload{
-		ID: *body.ID,
+		ID:    *body.ID,
+		Limit: body.Limit,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -5142,6 +5146,11 @@ func ValidateTriggerRiskAnalysisRequestBody(body *TriggerRiskAnalysisRequestBody
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Limit != nil {
+		if *body.Limit < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 0, true))
+		}
 	}
 	return
 }

@@ -120,6 +120,9 @@ WHERE rr.project_id = @project_id
   AND rr.found IS TRUE;
 
 -- name: FetchUnanalyzedMessageIDs :many
+-- uuidv7 is k-sortable, so the primary-key btree gives us "most recent first"
+-- without a dedicated index. Combined with LIMIT this lets Postgres stop
+-- scanning early when only the recent tail is needed.
 SELECT cm.id
 FROM chat_messages cm
 WHERE cm.project_id = @project_id
@@ -132,6 +135,7 @@ WHERE cm.project_id = @project_id
       AND rr.risk_policy_version = @risk_policy_version
     LIMIT 1
   )
+ORDER BY cm.id DESC
 LIMIT @batch_limit;
 
 -- name: GetMessageContentBatch :many

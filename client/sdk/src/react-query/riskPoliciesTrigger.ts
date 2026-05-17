@@ -50,7 +50,7 @@ export type RiskPoliciesTriggerMutationError =
  * triggerRiskAnalysis risk
  *
  * @remarks
- * Manually trigger risk analysis for a policy, starting or signaling the drain workflow.
+ * Manually trigger risk analysis for a policy, starting or signaling the drain workflow. Defaults to a full backfill; pass `limit` to cap the run at the most recent N unanalyzed messages.
  */
 export function useRiskPoliciesTriggerMutation(
   options?: MutationHookOptions<

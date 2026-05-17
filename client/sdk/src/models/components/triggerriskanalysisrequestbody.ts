@@ -9,11 +9,16 @@ export type TriggerRiskAnalysisRequestBody = {
    * The policy ID.
    */
   id: string;
+  /**
+   * Cap the backfill at the most recent N unanalyzed messages. Omit (or pass 0) for a full backfill.
+   */
+  limit?: number | undefined;
 };
 
 /** @internal */
 export type TriggerRiskAnalysisRequestBody$Outbound = {
   id: string;
+  limit?: number | undefined;
 };
 
 /** @internal */
@@ -22,6 +27,7 @@ export const TriggerRiskAnalysisRequestBody$outboundSchema: z.ZodMiniType<
   TriggerRiskAnalysisRequestBody
 > = z.object({
   id: z.string(),
+  limit: z.optional(z.int()),
 });
 
 export function triggerRiskAnalysisRequestBodyToJSON(

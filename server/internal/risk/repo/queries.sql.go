@@ -254,6 +254,7 @@ WHERE cm.project_id = $1
       AND rr.risk_policy_version = $3
     LIMIT 1
   )
+ORDER BY cm.id DESC
 LIMIT $4
 `
 
@@ -264,6 +265,9 @@ type FetchUnanalyzedMessageIDsParams struct {
 	BatchLimit        int32
 }
 
+// uuidv7 is k-sortable, so the primary-key btree gives us "most recent first"
+// without a dedicated index. Combined with LIMIT this lets Postgres stop
+// scanning early when only the recent tail is needed.
 func (q *Queries) FetchUnanalyzedMessageIDs(ctx context.Context, arg FetchUnanalyzedMessageIDsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, fetchUnanalyzedMessageIDs,
 		arg.ProjectID,

@@ -292,9 +292,9 @@ function PolicyCenterContent() {
     deleteMutation.mutate({ request: { id } });
   };
 
-  const handleTrigger = (id: string) => {
+  const handleTrigger = (id: string, limit?: number) => {
     triggerMutation.mutate({
-      request: { triggerRiskAnalysisRequestBody: { id } },
+      request: { triggerRiskAnalysisRequestBody: { id, limit } },
     });
   };
 
@@ -563,7 +563,7 @@ function PolicyCenterContent() {
             {runPanelPolicy && (
               <RunPanel
                 policy={runPanelPolicy}
-                onTrigger={() => handleTrigger(runPanelPolicy.id)}
+                onTrigger={(limit) => handleTrigger(runPanelPolicy.id, limit)}
                 isTriggerPending={triggerMutation.isPending}
               />
             )}
@@ -976,9 +976,10 @@ function RunPanel({
   isTriggerPending,
 }: {
   policy: RiskPolicy;
-  onTrigger: () => void;
+  onTrigger: (limit?: number) => void;
   isTriggerPending: boolean;
 }) {
+  const [backfillLimit, setBackfillLimit] = useState<string>("1000");
   const {
     data: status,
     isLoading,
@@ -1097,16 +1098,41 @@ function RunPanel({
         ) : null}
       </div>
 
-      <SheetFooter className="border-border border-t px-6 py-4">
+      <SheetFooter className="border-border flex-col gap-2 border-t px-6 py-4">
+        <div className="flex gap-2">
+          <Input
+            type="number"
+            min={1}
+            value={backfillLimit}
+            onChange={(e) => setBackfillLimit(e.target.value)}
+            disabled={isTriggerPending}
+            className="w-32"
+            aria-label="Backfill message limit"
+          />
+          <Button
+            variant="outline"
+            onClick={() => {
+              const n = parseInt(backfillLimit, 10);
+              if (Number.isFinite(n) && n > 0) onTrigger(n);
+            }}
+            disabled={isTriggerPending}
+            className="flex-1"
+          >
+            {isTriggerPending && (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            )}
+            Backfill last N
+          </Button>
+        </div>
         <Button
-          onClick={onTrigger}
+          onClick={() => onTrigger()}
           disabled={isTriggerPending}
           className="w-full"
         >
           {isTriggerPending && (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           )}
-          Trigger Analysis
+          Backfill all messages
         </Button>
       </SheetFooter>
     </>

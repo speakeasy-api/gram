@@ -18690,7 +18690,7 @@ paths:
       x-speakeasy-name-override: status
   /rpc/risk.policies.trigger:
     post:
-      description: Manually trigger risk analysis for a policy, starting or signaling the drain workflow.
+      description: Manually trigger risk analysis for a policy, starting or signaling the drain workflow. Defaults to a full backfill; pass `limit` to cap the run at the most recent N unanalyzed messages.
       operationId: triggerRiskAnalysis
       parameters:
         - allowEmptyValue: true
@@ -36123,6 +36123,11 @@ components:
           type: string
           description: The policy ID.
           format: uuid
+        limit:
+          type: integer
+          description: Cap the backfill at the most recent N unanalyzed messages. Omit (or pass 0) for a full backfill.
+          format: int32
+          minimum: 0
       required:
         - id
     UpdateAssistantForm:

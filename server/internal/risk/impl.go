@@ -171,6 +171,7 @@ func (s *Service) OnMessagesStored(ctx context.Context, projectID uuid.UUID) {
 		if err := s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
 			ProjectID:    p.ProjectID,
 			RiskPolicyID: p.ID,
+			MaxMessages:  background.DefaultRecentMessagesBudget,
 		}); err != nil {
 			s.logger.ErrorContext(ctx, "signal risk drain workflow", attr.SlogError(err))
 		}
@@ -292,11 +293,14 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		s.shadowMCPClient.Invalidate(ctx, row.ProjectID)
 	}
 
-	// Trigger the drain workflow for the new policy.
+	// Trigger the drain workflow for the new policy. New policies only
+	// scan the most recent slice by default; users can request a full
+	// backfill explicitly via TriggerRiskAnalysis on the Progress tab.
 	if enabled {
 		_ = s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
 			ProjectID:    row.ProjectID,
 			RiskPolicyID: row.ID,
+			MaxMessages:  background.DefaultRecentMessagesBudget,
 		})
 	}
 
@@ -496,10 +500,13 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	}
 
 	// Signal the drain workflow — it reads the current enabled/version
-	// from the DB, so it will clean up results if the policy was disabled.
+	// from the DB, so it will clean up results if the policy was
+	// disabled. Policy edits default to the recent-N budget; full
+	// backfill is opt-in via TriggerRiskAnalysis.
 	_ = s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
 		ProjectID:    row.ProjectID,
 		RiskPolicyID: row.ID,
+		MaxMessages:  background.DefaultRecentMessagesBudget,
 	})
 
 	return s.policyToType(ctx, row)
@@ -892,9 +899,18 @@ func (s *Service) TriggerRiskAnalysis(ctx context.Context, payload *gen.TriggerR
 		return oops.E(oops.CodeUnexpected, err, "log risk policy trigger").Log(ctx, s.logger)
 	}
 
+	// limit nil or 0 means full backfill (the legacy behavior of this
+	// endpoint). A positive value caps the run at the most recent N
+	// unanalyzed messages.
+	var maxMessages int32
+	if payload.Limit != nil && *payload.Limit > 0 {
+		maxMessages = *payload.Limit
+	}
+
 	if err := s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
 		ProjectID:    policy.ProjectID,
 		RiskPolicyID: policy.ID,
+		MaxMessages:  maxMessages,
 	}); err != nil {
 		return fmt.Errorf("signal risk analysis workflow: %w", err)
 	}
