@@ -1,24 +1,25 @@
-import { cn } from "@/lib/utils";
+import { Badge } from "@speakeasy-api/moonshine";
 import { SimpleTooltip } from "./ui/tooltip";
 
 export type ReleaseStage = "preview" | "beta";
 
 type ReleaseStageBadgeProps = {
   stage: ReleaseStage;
+  /** Size is kept for API back-compat; both values map to the same Moonshine Badge. */
   size?: "xs" | "sm";
-  /** When true, omit the tooltip wrapper (e.g., inside a sidebar item that already has a tooltip). */
+  /** When true, omit the tooltip wrapper (e.g., inside a parent that already has a tooltip). */
   noTooltip?: boolean;
   className?: string;
 };
 
-// Styling matches `ProductTierBadge` (the Enterprise pill on the Billing nav
-// entry) so the two badge families read as one component family in the nav
-// rail. Same shape (rounded-sm, px-1, py-0.5, text-xs), no border, title-case
-// label. Only the bg/text tokens differ — warning palette for preview,
-// information palette for beta.
-const stageStyles: Record<ReleaseStage, string> = {
-  preview: "bg-warning-softest text-default-warning",
-  beta: "bg-information-softest text-default-information",
+// Map each release stage onto Moonshine's built-in Badge semantic variants.
+// `warning` (amber) for preview = "use with caution, may change."
+// `information` (Speakeasy brand blue) for beta = "open for use, still evolving."
+// Moonshine's Badge handles the shape, padding, typography, and theme/brand
+// retuning — we just pick the semantic variant.
+const stageVariant: Record<ReleaseStage, "warning" | "information"> = {
+  preview: "warning",
+  beta: "information",
 };
 
 const stageLabel: Record<ReleaseStage, string> = {
@@ -34,25 +35,17 @@ const stageTooltip: Record<ReleaseStage, string> = {
 
 export function ReleaseStageBadge({
   stage,
-  size = "sm",
   noTooltip = false,
   className,
 }: ReleaseStageBadgeProps) {
-  const sizeClass =
-    size === "xs" ? "text-xs px-1 py-0.5" : "text-xs px-1.5 py-0.5";
-
   const pill = (
-    <span
-      className={cn(
-        "inline-flex w-fit shrink-0 items-center rounded-sm",
-        sizeClass,
-        stageStyles[stage],
-        className,
-      )}
+    <Badge
+      variant={stageVariant[stage]}
+      className={className}
       data-release-stage={stage}
     >
-      {stageLabel[stage]}
-    </span>
+      <Badge.Text>{stageLabel[stage]}</Badge.Text>
+    </Badge>
   );
 
   if (noTooltip) return pill;
