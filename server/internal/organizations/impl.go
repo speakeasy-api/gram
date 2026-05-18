@@ -410,7 +410,14 @@ func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePay
 		return oops.E(oops.CodeBadRequest, err, "invalid invitation id").Log(ctx, logger)
 	}
 
-	invite, err := orgrepo.New(s.db).GetInvitationByID(ctx, inviteID)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	txRepo := orgrepo.New(tx)
+	invite, err := txRepo.GetInvitationByID(ctx, inviteID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return oops.C(oops.CodeNotFound).Log(ctx, logger)
@@ -426,8 +433,34 @@ func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePay
 		attr.OrganizationInviteState(invite.State),
 	)
 
-	if err := orgrepo.New(s.db).RevokeInvitation(ctx, inviteID); err != nil {
+	beforeSnapshot := dbInvitationToGen(&invite, conv.FromPGText[string](invite.InviterUserID))
+	row, err := txRepo.RevokeInvitationForOrganization(ctx, orgrepo.RevokeInvitationForOrganizationParams{
+		ID:             inviteID,
+		OrganizationID: ac.ActiveOrganizationID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "revoke invitation").Log(ctx, logger)
+	}
+
+	afterSnapshot := dbInvitationToGen(&row, conv.FromPGText[string](row.InviterUserID))
+	if err := s.audit.LogOrganizationInviteRevoke(ctx, tx, audit.LogOrganizationInviteRevokeEvent{
+		OrganizationID:           ac.ActiveOrganizationID,
+		Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName:         ac.Email,
+		ActorSlug:                nil,
+		InvitationURN:            urn.NewOrganizationInvitation(row.ID),
+		InviteeEmail:             row.Email,
+		InvitationSnapshotBefore: beforeSnapshot,
+		InvitationSnapshotAfter:  afterSnapshot,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log organization invitation revocation").Log(ctx, logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit invitation revocation").Log(ctx, logger)
 	}
 
 	span.AddEvent("invite.revoked")
