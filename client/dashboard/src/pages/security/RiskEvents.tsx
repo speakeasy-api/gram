@@ -202,7 +202,11 @@ export default function RiskEvents() {
           </div>
         ) : null
       }
-      header={<RiskEventsHeader />}
+      header={
+        <div className="min-w-[1120px]">
+          <RiskEventsHeader />
+        </div>
+      }
       footer={
         results.length > 0 ? (
           <RiskEventsFooter
@@ -235,6 +239,8 @@ export default function RiskEvents() {
       }
       scrollRef={containerRef}
       onScroll={handleScroll}
+      surfaceClassName="overflow-x-auto"
+      contentClassName="min-w-[1120px]"
     >
       <RiskEventsRows
         error={resultsQuery.error}
@@ -255,7 +261,7 @@ function RiskEventsHeader() {
     <div
       className={cn(
         RISK_EVENTS_GRID,
-        "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-8 py-2.5 text-xs font-medium tracking-wide",
+        "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-8 py-2.5 text-xs font-medium tracking-wide uppercase",
       )}
     >
       <div className="min-w-0">Timestamp</div>
