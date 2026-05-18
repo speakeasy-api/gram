@@ -1,4 +1,4 @@
-package activities
+package main
 
 import (
 	"context"
@@ -20,10 +20,10 @@ import (
 type BackfillWorkOSGlobalRoles struct {
 	logger *slog.Logger
 	db     *pgxpool.Pool
-	workos WorkOSClient
+	workos Client
 }
 
-func NewBackfillWorkOSGlobalRoles(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSClient) *BackfillWorkOSGlobalRoles {
+func NewBackfillWorkOSGlobalRoles(logger *slog.Logger, db *pgxpool.Pool, workosClient Client) *BackfillWorkOSGlobalRoles {
 	return &BackfillWorkOSGlobalRoles{
 		logger: logger.With(attr.SlogComponent("backfill_workos_global_roles")),
 		db:     db,
@@ -69,7 +69,7 @@ func (b *BackfillWorkOSGlobalRoles) Do(ctx context.Context) error {
 		if existing.WorkosUpdatedAt.Valid {
 			rowUpdatedAt = &existing.WorkosUpdatedAt.Time
 		}
-		if !ShouldProcessEvent(lastEventID, rowUpdatedAt, "", updatedAt) {
+		if !shouldProcessEvent(lastEventID, rowUpdatedAt, "", updatedAt) {
 			continue
 		}
 
@@ -103,7 +103,7 @@ func (b *BackfillWorkOSGlobalRoles) Do(ctx context.Context) error {
 			rowUpdatedAt = &localRole.WorkosUpdatedAt.Time
 		}
 		deletedAt := time.Now().UTC()
-		if !ShouldProcessEvent(lastEventID, rowUpdatedAt, "", deletedAt) {
+		if !shouldProcessEvent(lastEventID, rowUpdatedAt, "", deletedAt) {
 			continue
 		}
 

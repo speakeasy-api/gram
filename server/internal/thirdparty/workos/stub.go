@@ -232,6 +232,14 @@ func (s *StubClient) UpsertOrganizationMembership(member Member) {
 	state.memberships[member.ID] = member
 }
 
+func (s *StubClient) UpsertUser(orgID string, user User) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	state := s.orgState(orgID)
+	state.users[user.ID] = user
+}
+
 func (s *StubClient) UpdateMemberRole(_ context.Context, membershipID string, roleSlug string) (*Member, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()

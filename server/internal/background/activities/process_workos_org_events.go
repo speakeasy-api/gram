@@ -14,6 +14,7 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -236,6 +237,8 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 	repo := orgrepo.New(dbtx)
 
 	row, err := repo.GetOrganizationByWorkosID(ctx, conv.ToPGText(payload.ID))
+	organizationID := payload.ExternalID
+	var slug string
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		if payload.ExternalID == "" {
@@ -247,8 +250,26 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 			logger.WarnContext(ctx, "skipping organization event for unlinked org with no external_id", attr.SlogWorkOSOrganizationID(payload.ID))
 			return nil
 		}
+		row, err = repo.GetOrganizationMetadata(ctx, payload.ExternalID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			slug, err = uniqueOrganizationSlug(ctx, repo, payload.Name, payload.ID)
+			if err != nil {
+				return err
+			}
+		case err != nil:
+			return fmt.Errorf("get organization by external id %q: %w", payload.ExternalID, err)
+		case row.WorkosID.Valid && row.WorkosID.String != payload.ID:
+			return fmt.Errorf("workos organization %q resolved to gram organization %q with different workos_id %q", payload.ID, row.ID, row.WorkosID.String)
+		default:
+			organizationID = row.ID
+			slug = row.Slug
+		}
 	case err != nil:
 		return fmt.Errorf("get organization by workos id %q: %w", payload.ID, err)
+	default:
+		organizationID = row.ID
+		slug = row.Slug
 	}
 
 	var lastEventID *string
@@ -263,15 +284,17 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 		return nil
 	}
 
-	organizationID := payload.ExternalID
-	if err == nil {
-		organizationID = row.ID
+	if slug == "" {
+		slug, err = uniqueOrganizationSlug(ctx, repo, payload.Name, payload.ID)
+		if err != nil {
+			return err
+		}
 	}
 
 	_, err = repo.UpsertOrganizationMetadataFromWorkOS(ctx, orgrepo.UpsertOrganizationMetadataFromWorkOSParams{
 		ID:                organizationID,
 		Name:              payload.Name,
-		Slug:              conv.ToSlug(payload.Name),
+		Slug:              slug,
 		WorkosID:          conv.ToPGText(payload.ID),
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(payload.UpdatedAt),
 		WorkosLastEventID: conv.ToPGText(event.ID),
@@ -281,6 +304,18 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 	}
 
 	return nil
+}
+
+func uniqueOrganizationSlug(ctx context.Context, repo orgslug.Lookup, name, fallback string) (string, error) {
+	base := orgslug.Slugify(name)
+	if base == "" {
+		base = fallback
+	}
+	slug, err := orgslug.FindUnique(ctx, repo, base)
+	if err != nil {
+		return "", fmt.Errorf("find unique organization slug: %w", err)
+	}
+	return slug, nil
 }
 
 func handleOrganizationDeleted(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
@@ -446,30 +481,4 @@ func handleRoleDeleted(ctx context.Context, logger *slog.Logger, dbtx database.D
 	}
 
 	return nil
-}
-
-// ShouldProcessEvent decides whether a WorkOS event should be applied to a
-// row, guarding against duplicate-apply when the sync replays history (e.g.
-// reconcile schedule overlapping with webhook delivery, or a manual
-// backfill).
-//
-// Algorithm:
-//
-//   - If the row has no recorded last_event_id, it has not yet been touched
-//     by an event-driven update. Use the row's workos_updated_at as the
-//     baseline: apply the event only if its payload's updated_at is at least
-//     as recent as the row.
-//   - Otherwise, compare event IDs lexicographically. WorkOS event IDs are
-//     time-ordered (ULIDs), so a strictly greater ID means the event is
-//     newer than the last one we applied.
-//
-// Inputs are nilable to model NULL columns directly.
-func ShouldProcessEvent(rowLastEventID *string, rowWorkOSUpdatedAt *time.Time, eventID string, eventUpdatedAt time.Time) bool {
-	if rowLastEventID == nil || *rowLastEventID == "" {
-		if rowWorkOSUpdatedAt == nil {
-			return true
-		}
-		return !eventUpdatedAt.Before(*rowWorkOSUpdatedAt)
-	}
-	return eventID > *rowLastEventID
 }

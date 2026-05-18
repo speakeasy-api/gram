@@ -1,8 +1,10 @@
-package activities_test
+package main
 
 import (
 	"context"
 	"fmt"
+	"log"
+	"os"
 	"testing"
 	"time"
 
@@ -12,18 +14,104 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
-	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
+var infra *testenv.Environment
+
+func TestMain(m *testing.M) {
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true})
+	if err != nil {
+		log.Fatalf("Failed to launch test infrastructure: %v", err)
+	}
+
+	infra = res
+
+	code := m.Run()
+
+	if err := cleanup(); err != nil {
+		log.Fatalf("Failed to cleanup test infrastructure: %v", err)
+	}
+
+	os.Exit(code)
+}
+
+func newBackfillTestConn(t *testing.T, name string) *pgxpool.Pool {
+	t.Helper()
+
+	conn, err := infra.CloneTestDatabase(t, name)
+	require.NoError(t, err)
+	return conn
+}
+
+func TestRunOrganizationBackfill_SkipsNoopOrganization(t *testing.T) {
+	t.Parallel()
+
+	rep := runOrganizationBackfill(
+		context.Background(),
+		testenv.NewLogger(t),
+		nil,
+		nil,
+		options{
+			phase:            phaseOrganizations,
+			environment:      envLocal,
+			databaseURL:      "",
+			workosAPIKey:     "",
+			workosEndpoint:   "",
+			workosOrgIDs:     nil,
+			limit:            0,
+			dryRun:           false,
+			autoApprove:      false,
+			pauseAfterEach:   false,
+			confirmProd:      "",
+			breakpointBefore: false,
+		},
+		[]orgExpectation{{
+			workosOrgID: "org_noop",
+			gramOrgID:   "gram_noop",
+			name:        "Noop",
+			skipped:     false,
+			roles:       nil,
+			users:       nil,
+			members:     nil,
+			orgChanges: changeCounts{
+				Create:    0,
+				Update:    0,
+				Noop:      1,
+				Delete:    0,
+				StaleSkip: 0,
+			},
+			roleChanges:       changeCounts{Create: 0, Update: 0, Noop: 0, Delete: 0, StaleSkip: 0},
+			userChanges:       changeCounts{Create: 0, Update: 0, Noop: 0, Delete: 0, StaleSkip: 0},
+			membershipChanges: changeCounts{Create: 0, Update: 0, Noop: 0, Delete: 0, StaleSkip: 0},
+			assignmentChanges: changeCounts{Create: 0, Update: 0, Noop: 0, Delete: 0, StaleSkip: 0},
+		}},
+	)
+
+	require.Equal(t, report{
+		scanned:            1,
+		skipped:            0,
+		skippedNoop:        1,
+		written:            0,
+		validated:          0,
+		failed:             0,
+		validationFailures: 0,
+		organizationRows:   changeCounts{Create: 0, Update: 0, Noop: 0, Delete: 0, StaleSkip: 0},
+		roleRows:           changeCounts{Create: 0, Update: 0, Noop: 0, Delete: 0, StaleSkip: 0},
+		userRows:           changeCounts{Create: 0, Update: 0, Noop: 0, Delete: 0, StaleSkip: 0},
+		membershipRows:     changeCounts{Create: 0, Update: 0, Noop: 0, Delete: 0, StaleSkip: 0},
+		assignmentRows:     changeCounts{Create: 0, Update: 0, Noop: 0, Delete: 0, StaleSkip: 0},
+	}, rep)
+}
+
 func TestBackfillWorkOSOrganization_CreatesUnlinkedOrganizationWithExternalID(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conn := newOrgEventsTestConn(t, "workos_backfill_create_org_external_id")
+	conn := newBackfillTestConn(t, "workos_backfill_create_org_external_id")
 	logger := testenv.NewLogger(t)
 
 	const organizationID = "gram_org_from_workos_external_id"
@@ -40,9 +128,9 @@ func TestBackfillWorkOSOrganization_CreatesUnlinkedOrganizationWithExternalID(t 
 		nil,
 		nil,
 	)
-	activity := activities.NewBackfillWorkOSOrganization(logger, conn, workosClient)
+	activity := NewBackfillWorkOSOrganization(logger, conn, workosClient)
 
-	err := activity.Do(ctx, activities.BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
+	err := activity.Do(ctx, BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
 	org, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
@@ -54,11 +142,56 @@ func TestBackfillWorkOSOrganization_CreatesUnlinkedOrganizationWithExternalID(t 
 	require.Empty(t, org.WorkosLastEventID.String)
 }
 
+func TestBackfillWorkOSOrganization_CreatesUniqueSlugOnNameCollision(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newBackfillTestConn(t, "workos_backfill_create_org_slug_collision")
+	logger := testenv.NewLogger(t)
+
+	const existingOrganizationID = "gram_org_existing_tester"
+	const organizationID = "gram_org_new_tester"
+	const workosOrgID = "org_01JBACKFILLSLUGCOLLISION"
+
+	_, err := orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID:          existingOrganizationID,
+		Name:        "tester",
+		Slug:        "tester",
+		WorkosID:    conv.ToPGText("org_01JEXISTINGTESTER"),
+		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+	})
+	require.NoError(t, err)
+
+	workosClient := newWorkOSSnapshotClient(t, ctx,
+		workos.Organization{
+			ID:         workosOrgID,
+			Name:       "tester",
+			ExternalID: organizationID,
+			CreatedAt:  "2026-05-07T11:00:00Z",
+			UpdatedAt:  "2026-05-07T11:00:00Z",
+		},
+		nil,
+		nil,
+	)
+	activity := NewBackfillWorkOSOrganization(logger, conn, workosClient)
+
+	err = activity.Do(ctx, BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+
+	org, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.Equal(t, organizationID, org.ID)
+	require.Equal(t, "tester", org.Name)
+	require.NotEqual(t, "tester", org.Slug)
+	require.Contains(t, org.Slug, "tester-")
+	require.Len(t, org.Slug, len("tester-")+4)
+}
+
 func TestBackfillWorkOSOrganization_ExternalIDChangeDoesNotChangeOrganizationID(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conn := newOrgEventsTestConn(t, "workos_backfill_external_id_immutable")
+	conn := newBackfillTestConn(t, "workos_backfill_external_id_immutable")
 	logger := testenv.NewLogger(t)
 
 	const organizationID = "gram_org_original_external_id"
@@ -78,9 +211,9 @@ func TestBackfillWorkOSOrganization_ExternalIDChangeDoesNotChangeOrganizationID(
 		nil,
 		nil,
 	)
-	activity := activities.NewBackfillWorkOSOrganization(logger, conn, workosClient)
+	activity := NewBackfillWorkOSOrganization(logger, conn, workosClient)
 
-	err := activity.Do(ctx, activities.BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
+	err := activity.Do(ctx, BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
 	org, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
@@ -92,17 +225,18 @@ func TestBackfillWorkOSOrganization_ExternalIDChangeDoesNotChangeOrganizationID(
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
-func TestBackfillWorkOSOrganization_UnknownUserSyncsSingleRoleAssignment(t *testing.T) {
+func TestBackfillWorkOSOrganization_BackfillsUserAndSyncsSingleRoleAssignment(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conn := newOrgEventsTestConn(t, "workos_backfill_unknown_user_single_role")
+	conn := newBackfillTestConn(t, "workos_backfill_user_single_role")
 	logger := testenv.NewLogger(t)
 
-	const organizationID = "gram_org_backfill_unknown_user"
-	const workosOrgID = "org_01JBACKFILLUNKNOWN"
-	const workosUserID = "user_01JBACKFILLUNKNOWN"
-	const membershipID = "mem_01JBACKFILLUNKNOWN"
+	const organizationID = "gram_org_backfill_user"
+	const workosOrgID = "org_01JBACKFILLUSER"
+	const workosUserID = "user_01JBACKFILLUSER"
+	const gramUserID = "gram_user_01JBACKFILLUSER"
+	const membershipID = "mem_01JBACKFILLUSER"
 	const roleSlug = "org-support"
 
 	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
@@ -110,7 +244,7 @@ func TestBackfillWorkOSOrganization_UnknownUserSyncsSingleRoleAssignment(t *test
 	workosClient := newWorkOSSnapshotClient(t, ctx,
 		workos.Organization{
 			ID:         workosOrgID,
-			Name:       "Backfill Unknown User",
+			Name:       "Backfill User",
 			ExternalID: "",
 			CreatedAt:  "2026-05-07T11:00:00Z",
 			UpdatedAt:  "2026-05-07T11:00:00Z",
@@ -128,16 +262,16 @@ func TestBackfillWorkOSOrganization_UnknownUserSyncsSingleRoleAssignment(t *test
 			ID:             membershipID,
 			UserID:         workosUserID,
 			OrganizationID: workosOrgID,
-			Organization:   "Backfill Unknown User",
+			Organization:   "Backfill User",
 			RoleSlug:       roleSlug,
 			Status:         "active",
 			CreatedAt:      "2026-05-07T11:05:00Z",
 			UpdatedAt:      "2026-05-07T11:05:00Z",
 		}},
 	)
-	activity := activities.NewBackfillWorkOSOrganization(logger, conn, workosClient)
+	activity := NewBackfillWorkOSOrganization(logger, conn, workosClient)
 
-	err := activity.Do(ctx, activities.BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
+	err := activity.Do(ctx, BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
 	role, err := accessrepo.New(conn).GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{
@@ -153,13 +287,15 @@ func TestBackfillWorkOSOrganization_UnknownUserSyncsSingleRoleAssignment(t *test
 	require.NoError(t, err)
 	require.Len(t, assignments, 1)
 	require.Equal(t, fmt.Sprintf("role:organization:%s", role.ID.String()), assignments[0].RoleUrn)
-	require.False(t, assignments[0].UserID.Valid)
+	require.True(t, assignments[0].UserID.Valid)
+	require.Equal(t, gramUserID, assignments[0].UserID.String)
 	require.Equal(t, membershipID, assignments[0].WorkosMembershipID.String)
 	require.Empty(t, assignments[0].WorkosLastEventID.String)
 
 	relationship, err := orgrepo.New(conn).GetRelationshipByMembershipID(ctx, conv.ToPGText(membershipID))
 	require.NoError(t, err)
-	require.False(t, relationship.UserID.Valid)
+	require.True(t, relationship.UserID.Valid)
+	require.Equal(t, gramUserID, relationship.UserID.String)
 	require.Equal(t, workosUserID, relationship.WorkosUserID.String)
 }
 
@@ -167,7 +303,7 @@ func TestBackfillWorkOSOrganization_MembershipWithNewerEventSkipsRoleSnapshot(t 
 	t.Parallel()
 
 	ctx := context.Background()
-	conn := newOrgEventsTestConn(t, "workos_backfill_membership_newer_event_wins")
+	conn := newBackfillTestConn(t, "workos_backfill_membership_newer_event_wins")
 	logger := testenv.NewLogger(t)
 
 	const organizationID = "gram_org_backfill_membership_event_wins"
@@ -217,9 +353,9 @@ func TestBackfillWorkOSOrganization_MembershipWithNewerEventSkipsRoleSnapshot(t 
 			UpdatedAt:      "2026-05-07T11:00:00Z",
 		}},
 	)
-	activity := activities.NewBackfillWorkOSOrganization(logger, conn, workosClient)
+	activity := NewBackfillWorkOSOrganization(logger, conn, workosClient)
 
-	err = activity.Do(ctx, activities.BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
+	err = activity.Do(ctx, BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
 	assignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
@@ -235,7 +371,7 @@ func TestBackfillWorkOSOrganization_RoleWithLastEventIDSkipsSnapshot(t *testing.
 	t.Parallel()
 
 	ctx := context.Background()
-	conn := newOrgEventsTestConn(t, "workos_backfill_role_last_event_wins")
+	conn := newBackfillTestConn(t, "workos_backfill_role_last_event_wins")
 	logger := testenv.NewLogger(t)
 
 	const organizationID = "gram_org_backfill_event_wins"
@@ -264,9 +400,9 @@ func TestBackfillWorkOSOrganization_RoleWithLastEventIDSkipsSnapshot(t *testing.
 		}},
 		nil,
 	)
-	activity := activities.NewBackfillWorkOSOrganization(logger, conn, workosClient)
+	activity := NewBackfillWorkOSOrganization(logger, conn, workosClient)
 
-	err := activity.Do(ctx, activities.BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
+	err := activity.Do(ctx, BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
 	role, err := accessrepo.New(conn).GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{
@@ -282,7 +418,7 @@ func TestBackfillWorkOSOrganization_MissingRoleSoftDeleted(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conn := newOrgEventsTestConn(t, "workos_backfill_role_deleted")
+	conn := newBackfillTestConn(t, "workos_backfill_role_deleted")
 	logger := testenv.NewLogger(t)
 
 	const organizationID = "gram_org_backfill_delete_role"
@@ -303,9 +439,9 @@ func TestBackfillWorkOSOrganization_MissingRoleSoftDeleted(t *testing.T) {
 		nil,
 		nil,
 	)
-	activity := activities.NewBackfillWorkOSOrganization(logger, conn, workosClient)
+	activity := NewBackfillWorkOSOrganization(logger, conn, workosClient)
 
-	err := activity.Do(ctx, activities.BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
+	err := activity.Do(ctx, BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
 	role, err := accessrepo.New(conn).GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{
@@ -332,6 +468,16 @@ func newWorkOSSnapshotClient(t *testing.T, ctx context.Context, org workos.Organ
 		require.NoError(t, err)
 	}
 	for _, member := range members {
+		client.UpsertUser(org.ID, workos.User{
+			ID:                member.UserID,
+			FirstName:         "Test",
+			LastName:          "User",
+			Email:             member.UserID + "@example.com",
+			ProfilePictureURL: "",
+			ExternalID:        "gram_" + member.UserID,
+			CreatedAt:         member.CreatedAt,
+			UpdatedAt:         member.UpdatedAt,
+		})
 		client.UpsertOrganizationMembership(member)
 	}
 

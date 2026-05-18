@@ -288,9 +288,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.SignalAssistantThread)
 	temporalWorker.RegisterActivity(activities.CancelAssistantsSubscription)
 	// WorkOS sync activities
-	temporalWorker.RegisterActivity(activities.ListWorkOSOrganizations)
-	temporalWorker.RegisterActivity(activities.BackfillWorkOSOrganization)
-	temporalWorker.RegisterActivity(activities.BackfillWorkOSGlobalRoles)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSGlobalRoleEvents)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSUserEvents)
@@ -331,7 +328,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessWorkOSGlobalRoleEventsWorkflowDebounced)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSUserEventsWorkflow)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSUserEventsWorkflowDebounced)
-	temporalWorker.RegisterWorkflow(BackfillWorkOSWorkflow)
 	// Assistants signup followups
 	temporalWorker.RegisterWorkflow(CancelAssistantsSubscriptionWorkflow)
 	// Outbox -> Relay workflow and GC

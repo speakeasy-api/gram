@@ -237,6 +237,48 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreatedAndUpdated(t *testin
 	require.False(t, row.DisabledAt.Valid)
 }
 
+func TestProcessWorkOSOrganizationEvents_OrganizationCreateUsesUniqueSlugOnCollision(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_org_slug_collision")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZSLUGCOLLISION"
+	const externalID = "sb_01HZSLUGCOLLISION"
+
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   "existing-tester-org",
+		Name: "tester",
+		Slug: "tester",
+	})
+	require.NoError(t, err)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{
+				ID:        "event_01HZSLUG",
+				Event:     "organization.created",
+				CreatedAt: time.Now(),
+				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"tester","external_id":"` + externalID +
+					`","updated_at":"2026-05-06T10:00:00Z"}`),
+			},
+		},
+	})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.Equal(t, externalID, row.ID)
+	require.Equal(t, "tester", row.Name)
+	require.NotEqual(t, "tester", row.Slug)
+	require.Contains(t, row.Slug, "tester-")
+	require.Len(t, row.Slug, len("tester-")+4)
+}
+
 func TestProcessWorkOSOrganizationEvents_OrganizationUpdateSkippedWhenStale(t *testing.T) {
 	t.Parallel()
 

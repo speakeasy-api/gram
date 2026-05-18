@@ -78,9 +78,6 @@ type Activities struct {
 	reapSoftDeletedAssistantMems    *activities.ReapSoftDeletedAssistantMemories
 	signalAssistantCoordinator      *activities.SignalAssistantCoordinator
 	signalAssistantThread           *activities.SignalAssistantThread
-	listWorkOSOrganizations         *activities.ListWorkOSOrganizations
-	backfillWorkOSOrganization      *activities.BackfillWorkOSOrganization
-	backfillWorkOSGlobalRoles       *activities.BackfillWorkOSGlobalRoles
 	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
 	processWorkOSGlobalRoleEvents   *activities.ProcessWorkOSGlobalRoleEvents
 	processWorkOSUserEvents         *activities.ProcessWorkOSUserEvents
@@ -163,9 +160,6 @@ func NewActivities(
 		reapSoftDeletedAssistantMems:    activities.NewReapSoftDeletedAssistantMemories(logger, db),
 		signalAssistantCoordinator:      activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		signalAssistantThread:           activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
-		listWorkOSOrganizations:         activities.NewListWorkOSOrganizations(logger, workosClient),
-		backfillWorkOSOrganization:      activities.NewBackfillWorkOSOrganization(logger, db, workosClient),
-		backfillWorkOSGlobalRoles:       activities.NewBackfillWorkOSGlobalRoles(logger, db, workosClient),
 		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient),
 		processWorkOSGlobalRoleEvents:   activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient),
 		processWorkOSUserEvents:         activities.NewProcessWorkOSUserEvents(logger, db, workosClient),
@@ -173,18 +167,6 @@ func NewActivities(
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
 	}
-}
-
-func (a *Activities) ListWorkOSOrganizations(ctx context.Context) ([]string, error) {
-	return a.listWorkOSOrganizations.Do(ctx)
-}
-
-func (a *Activities) BackfillWorkOSOrganization(ctx context.Context, params activities.BackfillWorkOSOrganizationParams) error {
-	return a.backfillWorkOSOrganization.Do(ctx, params)
-}
-
-func (a *Activities) BackfillWorkOSGlobalRoles(ctx context.Context) error {
-	return a.backfillWorkOSGlobalRoles.Do(ctx)
 }
 
 func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {
