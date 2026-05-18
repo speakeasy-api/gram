@@ -29,9 +29,9 @@ export const ENV_DOCS: readonly EnvDoc[] = [
       "Externally reachable URL of the dev-idp listener. The mode detector compares WORKOS_API_URL against this base.",
   },
   {
-    name: "GRAM_IDP_CLIENT_SECRET",
+    name: "WORKOS_API_KEY",
     description:
-      "WorkOS API key. In mock-workos mode any value works; in workos mode must be a real sk_test_... key for the live /workos passthrough.",
+      "API key the dev-idp uses for its live /workos passthrough. The /workos mount is only active when this is set.",
     sensitive: true,
   },
 ] as const;

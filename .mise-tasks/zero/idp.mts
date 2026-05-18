@@ -16,9 +16,9 @@ async function run() {
 
   if (mode === "mock-workos" && process.env["usage_restart"] !== "true") {
     // Check if the user previously made an explicit choice (not just the default).
-    const secret = process.env["GRAM_IDP_CLIENT_SECRET"];
+    const apiKey = process.env["WORKOS_API_KEY"];
     const hasExplicitChoice =
-      (typeof secret === "string" && secret !== "" && secret !== "unset") ||
+      (typeof apiKey === "string" && apiKey !== "" && apiKey !== "unset") ||
       process.env["GRAM_IDP_SKIPPED"] === "true";
     if (hasExplicitChoice) {
       console.log("✅ IDP mode: mock-workos (already configured).");
@@ -75,7 +75,7 @@ async function setupRealWorkOS() {
 
   await $`touch mise.local.toml`;
   await $`mise set --file mise.local.toml GRAM_IDP_MODE=workos`;
-  await $`mise set --file mise.local.toml GRAM_IDP_CLIENT_SECRET=${key.trim()}`;
+  await $`mise set --file mise.local.toml WORKOS_API_KEY=${key.trim()}`;
   await $`mise set --file mise.local.toml WORKOS_API_URL=${devidpURL}/workos`;
   await $`mise set --file mise.local.toml GRAM_IDP_CLIENT_ID=${clientId.trim()}`;
 

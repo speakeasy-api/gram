@@ -129,9 +129,9 @@ GRAM_DEVIDP_EXTERNAL_URL = "http://{{env.GRAM_DEVIDP_HOST}}:{{env.GRAM_DEVIDP_PO
 GRAM_DEVIDP_DB = "file:{{ config_root }}/local/devidp/devidp.db"
 GRAM_IDP_BASE_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/oauth2"
 GRAM_IDP_CLIENT_ID = "gram-local-dev"
-## WorkOS API key. In mock-workos mode the mock endpoint accepts any value.
+## Mock API key for the WorkOS SDK — any non-empty value works in mock-workos mode.
 ## Override in mise.local.toml with a real sk_test_... key for workos mode.
-GRAM_IDP_CLIENT_SECRET = "unset"
+GRAM_IDP_CLIENT_SECRET = "mock-workos-api-key"
 ## IDP mode: "mock-workos" (default) or "workos".
 ##
 ## mock-workos — fully local, zero config. dev-idp emulates the WorkOS API.
@@ -139,7 +139,7 @@ GRAM_IDP_CLIENT_SECRET = "unset"
 ##
 ## workos      — real WorkOS via dev-idp proxy. Add these to mise.local.toml:
 ##                 GRAM_IDP_MODE = "workos"
-##                 GRAM_IDP_CLIENT_SECRET = "sk_test_..."
+##                 WORKOS_API_KEY = "sk_test_..."
 ##                 WORKOS_API_URL = "https://api.workos.com"
 ##                 GRAM_IDP_CLIENT_ID = "<your WorkOS client ID>"
 ##

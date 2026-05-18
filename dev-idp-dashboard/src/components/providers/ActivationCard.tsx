@@ -49,8 +49,7 @@ function ActiveState() {
 function InactiveState({ mode }: { mode: ActivatableMode }) {
   const { data } = useGramMode();
   const workosKeySet =
-    data?.meta.env.find((v) => v.name === "GRAM_IDP_CLIENT_SECRET")?.is_set ??
-    false;
+    data?.meta.env.find((v) => v.name === "WORKOS_API_KEY")?.is_set ?? false;
 
   return (
     <div className="space-y-3">
@@ -64,7 +63,7 @@ function InactiveState({ mode }: { mode: ActivatableMode }) {
             <CopyableCommand command="mise set --file mise.local.toml WORKOS_API_URL=https://api.workos.com" />
             {!workosKeySet && (
               <div className="space-y-2 pt-3 border-t border-border">
-                <CopyableCommand command="mise set --file mise.local.toml GRAM_IDP_CLIENT_SECRET=<paste-key>" />
+                <CopyableCommand command="mise set --file mise.local.toml WORKOS_API_KEY=<paste-key>" />
                 <p className="text-xs text-muted-foreground">
                   Grab a fresh API key from{" "}
                   <a

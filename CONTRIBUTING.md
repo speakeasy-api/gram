@@ -39,7 +39,7 @@ For Speakeasy employees testing against real WorkOS data. The `./zero` script pr
 ```toml
 [env]
 GRAM_IDP_MODE = "workos"
-GRAM_IDP_CLIENT_SECRET = "sk_test_..."
+WORKOS_API_KEY = "sk_test_..."
 WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/workos"
 GRAM_IDP_CLIENT_ID = "client_..."
 ```

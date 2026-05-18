@@ -200,9 +200,6 @@ const (
 	OpenRouterKeyPreviousLimitKey   = attribute.Key("gram.openrouter.key.previous_limit")
 	OrganizationAccountTypeKey      = attribute.Key("gram.org.account_type")
 	OrganizationInviteIDKey         = attribute.Key("gram.org.invite.id")
-	OrganizationInviteEmailKey      = attribute.Key("gram.org.invite.email")
-	OrganizationInviteStateKey      = attribute.Key("gram.org.invite.state")
-	OrganizationInviteRoleSlugKey   = attribute.Key("gram.org.invite.role_slug")
 	OutboxIDKey                     = attribute.Key("gram.outbox.id")
 	OutboxPublicIDKey               = attribute.Key("gram.outbox.public_id")
 	OutboxBatchSizeKey              = attribute.Key("gram.outbox.batch_size")
@@ -958,18 +955,6 @@ func SlogOrganizationAccountType(v string) slog.Attr {
 func OrganizationInviteID(v string) attribute.KeyValue { return OrganizationInviteIDKey.String(v) }
 func SlogOrganizationInviteID(v string) slog.Attr {
 	return slog.String(string(OrganizationInviteIDKey), v)
-}
-
-func OrganizationInviteEmail(v string) attribute.KeyValue {
-	return OrganizationInviteEmailKey.String(v)
-}
-
-func OrganizationInviteState(v string) attribute.KeyValue {
-	return OrganizationInviteStateKey.String(v)
-}
-
-func OrganizationInviteRoleSlug(v string) attribute.KeyValue {
-	return OrganizationInviteRoleSlugKey.String(v)
 }
 
 func Outcome[V ~string](v V) attribute.KeyValue { return OutcomeKey.String(string(v)) }

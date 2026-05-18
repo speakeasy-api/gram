@@ -12,8 +12,7 @@ export const MODE_SUBTITLES: Record<Mode, string> = {
     "Mock WorkOS REST surface — fully offline user/org/membership lookups.",
   "oauth2-1": "OAuth 2.1 AS — PKCE required, DCR, OIDC.",
   oauth2: "OAuth 2.0 AS — PKCE optional, no DCR, OIDC.",
-  workos:
-    "Live WorkOS REST proxy (mounted only when GRAM_IDP_CLIENT_SECRET is a real key).",
+  workos: "Live WorkOS REST proxy (mounted only when WORKOS_API_KEY is set).",
 };
 
 /** Sidebar grouping for the providers sub-nav. Order here is render order. */

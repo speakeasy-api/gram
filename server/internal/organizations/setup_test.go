@@ -116,7 +116,7 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 	svixClient, err := svix.New("test-token", &svix.SvixOptions{ServerUrl: svixSrv.URL()})
 	require.NoError(t, err)
 
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeatures{}, authzEngine, nil, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeatures{}, authzEngine, nil, "http://localhost:5173", auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service: svc,
@@ -172,7 +172,7 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 	svixClient, err := svix.New("test-token", &svix.SvixOptions{ServerUrl: svixSrv.URL()})
 	require.NoError(t, err)
 
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeaturesEnabled{}, authzEngine, nil, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeaturesEnabled{}, authzEngine, nil, "http://localhost:5173", auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service: svc,
@@ -227,7 +227,7 @@ func newTestOrganizationsServiceWithEmail(t *testing.T) (context.Context, *testI
 	require.NoError(t, err)
 
 	emailService := email.NewService(logger, loopsMock)
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeatures{}, authzEngine, emailService, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeatures{}, authzEngine, emailService, "http://localhost:5173", auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service: svc,
