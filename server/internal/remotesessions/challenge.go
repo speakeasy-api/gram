@@ -449,13 +449,10 @@ func (m *ChallengeManager) exchangeCode(
 	form.Set("client_id", externalClientID)
 	form.Set("code_verifier", state.CodeVerifier)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, state.TokenEndpoint, strings.NewReader(form.Encode()))
+	req, err := newTokenEndpointRequest(ctx, state.TokenEndpoint, form, authMethod, externalClientID, clientSecret)
 	if err != nil {
 		return tokenResponse{}, fmt.Errorf("new token request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
-	applyTokenEndpointAuth(req, form, authMethod, externalClientID, clientSecret)
 
 	resp, err := m.policy.PooledClient().Do(req)
 	if err != nil {
