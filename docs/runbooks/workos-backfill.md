@@ -14,18 +14,33 @@ The entrypoint is `server/cmd/workos-backfill`.
 
 ## Prerequisites
 
-Set a database URL and WorkOS API key before running the script:
+Set a WorkOS API key before running the script:
 
 ```sh
-export GRAM_DATABASE_URL='postgres://...'
 export WORKOS_API_KEY='sk_test_...'
 ```
 
 For prod, use the live WorkOS key and add `--environment=prod`. For local and
 dev, the real WorkOS endpoint requires a test key that starts with `sk_test_`.
 
+For local database access, set `GRAM_DATABASE_URL` or pass `--database-url`.
+For dev and prod Cloud SQL access, run the script with `--cloudsql-proxy`;
+that mode ignores `GRAM_DATABASE_URL` and builds a local proxy URL.
+
 If you need to point at a non-standard WorkOS API endpoint, set
 `WORKOS_API_URL` or pass `--workos-endpoint`.
+
+Before using Cloud SQL, grant your IAM database user the right permissions from
+the `gram-infra` repo:
+
+```sh
+cd ~/github.com/speakeasy-api/gram-infra
+mise gcp:db:master dev
+```
+
+Choose `READ` for preflight/validate and `ALL` before writes. The backfill
+command starts the Cloud SQL proxy and connects as your active `gcloud` account;
+it does not create the IAM database user or grant privileges.
 
 ## Commands
 
@@ -38,55 +53,55 @@ mise backfill:workos
 Equivalent explicit command:
 
 ```sh
-mise backfill:workos --phase=preflight --environment=dev
+mise backfill:workos --phase=preflight --environment=dev --cloudsql-proxy
 ```
 
 Limit the scope while testing:
 
 ```sh
-mise backfill:workos --phase=preflight --environment=dev --limit=5
+mise backfill:workos --phase=preflight --environment=dev --cloudsql-proxy --limit=5
 ```
 
 Run a specific WorkOS organization:
 
 ```sh
-mise backfill:workos --phase=preflight --environment=dev --workos-org-id=org_...
+mise backfill:workos --phase=preflight --environment=dev --cloudsql-proxy --workos-org-id=org_...
 ```
 
 Multiple organizations can be repeated or comma-separated:
 
 ```sh
-mise backfill:workos --phase=preflight --environment=dev --workos-org-id=org_1,org_2
+mise backfill:workos --phase=preflight --environment=dev --cloudsql-proxy --workos-org-id=org_1,org_2
 ```
 
 Run global roles only:
 
 ```sh
-mise backfill:workos --phase=global-roles --environment=dev --dry-run=false
+mise backfill:workos --phase=global-roles --environment=dev --cloudsql-proxy --dry-run=false
 ```
 
 Run organizations, users, memberships, and assignments:
 
 ```sh
-mise backfill:workos --phase=organizations --environment=dev --dry-run=false
+mise backfill:workos --phase=organizations --environment=dev --cloudsql-proxy --dry-run=false
 ```
 
 Run everything:
 
 ```sh
-mise backfill:workos --phase=all --environment=dev --dry-run=false
+mise backfill:workos --phase=all --environment=dev --cloudsql-proxy --dry-run=false
 ```
 
 Validate after writes:
 
 ```sh
-mise backfill:workos --phase=validate --environment=dev
+mise backfill:workos --phase=validate --environment=dev --cloudsql-proxy
 ```
 
 For prod, the command requires explicit prod confirmation:
 
 ```sh
-mise backfill:workos --phase=all --environment=prod --dry-run=false --confirm-prod=prod
+mise backfill:workos --phase=all --environment=prod --cloudsql-proxy --dry-run=false --confirm-prod=prod
 ```
 
 Non-prod writes prompt for `backfill` unless `--auto-approve` is passed. Prod
@@ -96,6 +111,9 @@ writes never skip the prod confirmation.
 
 - `--phase`: `preflight`, `global-roles`, `organizations`, `validate`, or `all`.
 - `--environment`: `local`, `dev`, or `prod`.
+- `--cloudsql-proxy`: start a local Cloud SQL proxy for dev/prod DB access.
+- `--cloudsql-port`: local proxy port; defaults to a free port.
+- `--cloudsql-db-name`: database name; defaults to `gram`.
 - `--dry-run`: defaults to `true`; set `--dry-run=false` to write.
 - `--workos-org-id`: process selected WorkOS organizations only.
 - `--limit`: cap the number of WorkOS organizations inspected.
@@ -206,6 +224,11 @@ Each organization write runs inside a database transaction. The write path:
 7. Upserts users, memberships, and role assignments for resolved users.
 8. Commits the transaction and validates the expected rows.
 
+When `--cloudsql-proxy` is set, the script derives the Cloud SQL instance from
+`--environment`, starts `cloud-sql-proxy` with `--auto-iam-authn`, picks a free
+local port unless `--cloudsql-port` is provided, and connects to `127.0.0.1` as
+the active `gcloud` account.
+
 The script sets `lock_timeout=5s` and `statement_timeout=5min` for DB sessions.
 Preflight, validate, and dry-run sessions are read-only.
 
@@ -214,13 +237,13 @@ Preflight, validate, and dry-run sessions are read-only.
 Use `--breakpoint-before-write` to pause after preflight and before writes:
 
 ```sh
-mise backfill:workos --phase=organizations --environment=dev --dry-run=false --breakpoint-before-write
+mise backfill:workos --phase=organizations --environment=dev --cloudsql-proxy --dry-run=false --breakpoint-before-write
 ```
 
 Use `--pause-after-each` when stepping through a small batch:
 
 ```sh
-mise backfill:workos --phase=organizations --environment=dev --dry-run=false --limit=1 --pause-after-each
+mise backfill:workos --phase=organizations --environment=dev --cloudsql-proxy --dry-run=false --limit=1 --pause-after-each
 ```
 
 For VSCode, launch `server/cmd/workos-backfill` as a Go program and pass the

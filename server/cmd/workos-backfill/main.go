@@ -49,6 +49,9 @@ type options struct {
 	phase            phase
 	environment      environment
 	databaseURL      string
+	cloudSQLProxy    bool
+	cloudSQLPort     int
+	cloudSQLDBName   string
 	workosAPIKey     string
 	workosEndpoint   string
 	workosOrgIDs     []string
@@ -155,6 +158,9 @@ func parseFlags() options {
 		phase:            phasePreflight,
 		environment:      envLocal,
 		databaseURL:      strings.TrimSpace(os.Getenv("GRAM_DATABASE_URL")),
+		cloudSQLProxy:    false,
+		cloudSQLPort:     0,
+		cloudSQLDBName:   "gram",
 		workosAPIKey:     strings.TrimSpace(firstNonEmpty(os.Getenv("WORKOS_API_KEY"), os.Getenv("WORK_OS_SECRET_KEY"))),
 		workosEndpoint:   strings.TrimSpace(os.Getenv("WORKOS_API_URL")),
 		workosOrgIDs:     nil,
@@ -172,6 +178,9 @@ func parseFlags() options {
 	flag.StringVar(&rawPhase, "phase", string(opts.phase), "phase to run: preflight, global-roles, organizations, validate, all")
 	flag.StringVar(&rawEnv, "environment", string(opts.environment), "target environment: local, dev, prod")
 	flag.StringVar(&opts.databaseURL, "database-url", opts.databaseURL, "Postgres connection URL (defaults to GRAM_DATABASE_URL)")
+	flag.BoolVar(&opts.cloudSQLProxy, "cloudsql-proxy", opts.cloudSQLProxy, "start a local Cloud SQL proxy and connect through it")
+	flag.IntVar(&opts.cloudSQLPort, "cloudsql-port", opts.cloudSQLPort, "local Cloud SQL proxy port (defaults to a free port)")
+	flag.StringVar(&opts.cloudSQLDBName, "cloudsql-db-name", opts.cloudSQLDBName, "Cloud SQL database name")
 	flag.StringVar(&opts.workosAPIKey, "workos-api-key", opts.workosAPIKey, "WorkOS API key (defaults to WORKOS_API_KEY or WORK_OS_SECRET_KEY)")
 	flag.StringVar(&opts.workosEndpoint, "workos-endpoint", opts.workosEndpoint, "WorkOS API endpoint override (defaults to WORKOS_API_URL)")
 	flag.Var(&orgIDs, "workos-org-id", "WorkOS organization id to process; repeat or comma-separate")
@@ -203,7 +212,16 @@ func validateOptions(opts options) error {
 		return fmt.Errorf("invalid environment %q", opts.environment)
 	}
 
-	if opts.databaseURL == "" {
+	if opts.cloudSQLProxy && opts.environment == envLocal {
+		return errors.New("--cloudsql-proxy requires --environment=dev or --environment=prod")
+	}
+	if opts.cloudSQLPort < 0 || opts.cloudSQLPort > 65535 {
+		return errors.New("--cloudsql-port must be between 0 and 65535")
+	}
+	if strings.TrimSpace(opts.cloudSQLDBName) == "" {
+		return errors.New("--cloudsql-db-name must be non-empty")
+	}
+	if opts.databaseURL == "" && !opts.cloudSQLProxy {
 		return errors.New("--database-url or GRAM_DATABASE_URL is required")
 	}
 	if opts.workosAPIKey == "" {
@@ -238,9 +256,23 @@ func run(ctx context.Context, opts options) error {
 		}
 	}
 
+	databaseURL := opts.databaseURL
+	var cleanupCloudSQLProxy func()
+	if opts.cloudSQLProxy {
+		var err error
+		databaseURL, cleanupCloudSQLProxy, err = startCloudSQLProxy(ctx, opts)
+		if err != nil {
+			return err
+		}
+		defer cleanupCloudSQLProxy()
+	}
+
 	readOnly := opts.dryRun || opts.phase == phasePreflight || opts.phase == phaseValidate
-	db, err := connectDB(ctx, opts.databaseURL, readOnly)
+	db, err := connectDB(ctx, databaseURL, readOnly)
 	if err != nil {
+		if opts.cloudSQLProxy {
+			return fmt.Errorf("%w%s", err, cloudSQLProxyHint())
+		}
 		return err
 	}
 	defer db.Close()
@@ -251,6 +283,9 @@ func run(ctx context.Context, opts options) error {
 	}
 
 	fmt.Printf("WorkOS backfill phase=%s environment=%s dry_run=%t read_only_db=%t\n", opts.phase, opts.environment, opts.dryRun, readOnly)
+	if opts.cloudSQLProxy {
+		fmt.Println("Database connection: local Cloud SQL proxy")
+	}
 	if opts.workosEndpoint != "" {
 		fmt.Printf("WorkOS endpoint override: %s\n", opts.workosEndpoint)
 	}
