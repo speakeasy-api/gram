@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -144,4 +145,39 @@ func seedConnectedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, or
 		WorkosMembershipID: conv.PtrToPGText(conv.PtrEmpty(workosMembershipID)),
 	})
 	require.NoError(t, err)
+}
+
+func seedRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, slug string) string {
+	t.Helper()
+
+	now := time.Now().UTC()
+	role, err := accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+		OrganizationID:    organizationID,
+		WorkosSlug:        slug,
+		WorkosName:        slug,
+		WorkosDescription: conv.ToPGTextEmpty(""),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(now),
+		WorkosLastEventID: conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	return "role:organization:" + role.ID.String()
+}
+
+func seedRoleAssignment(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, userID string, workosUserID string, workosMembershipID string, roleSlug string) {
+	t.Helper()
+
+	seedRole(t, ctx, conn, organizationID, roleSlug)
+	rows, err := accessrepo.New(conn).UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       workosUserID,
+		UserID:             conv.ToPGTextEmpty(userID),
+		WorkosMembershipID: conv.ToPGTextEmpty(workosMembershipID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		WorkosRoleSlug:     roleSlug,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), rows)
 }

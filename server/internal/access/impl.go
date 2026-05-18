@@ -28,6 +28,7 @@ import (
 	chrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -146,31 +147,18 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 		return nil, err
 	}
 
-	logger := s.logger.With(
-		attr.SlogOrganizationID(ac.ActiveOrganizationID),
-		attr.SlogUserID(ac.UserID),
-	)
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
 	)
 
-	created, err := s.roleMgr.CreateRole(ctx, ac.ActiveOrganizationID, workosOrgID, payload)
+	created, err := s.roleMgr.CreateRole(ctx, ac.ActiveOrganizationID, workosOrgID, accessAuditActor{
+		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		DisplayName: ac.Email,
+		Slug:        nil,
+	}, payload)
 	if err != nil {
 		return nil, err
-	}
-	logger = logger.With(attr.SlogAccessRoleSlug(created.Slug))
-
-	if err := s.audit.LogAccessRoleCreate(ctx, s.db, audit.LogAccessRoleCreateEvent{
-		OrganizationID:   ac.ActiveOrganizationID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName: ac.Email,
-		ActorSlug:        nil,
-		RoleID:           created.Role.ID,
-		RoleName:         created.Role.Name,
-		RoleSlug:         created.Slug,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log access role creation").Log(ctx, logger)
 	}
 
 	return created.Role, nil
@@ -184,37 +172,21 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
-	logger := s.logger.With(
-		attr.SlogOrganizationID(ac.ActiveOrganizationID),
-		attr.SlogUserID(ac.UserID),
-		attr.SlogAccessRoleID(payload.ID),
-	)
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
 		attr.AccessRoleID(payload.ID),
 	)
 
-	updated, err := s.roleMgr.UpdateRole(ctx, ac.ActiveOrganizationID, workosOrgID, payload)
+	updated, err := s.roleMgr.UpdateRole(ctx, ac.ActiveOrganizationID, workosOrgID, accessAuditActor{
+		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		DisplayName: ac.Email,
+		Slug:        nil,
+	}, payload)
 	if err != nil {
 		return nil, err
 	}
-	logger = logger.With(attr.SlogAccessRoleSlug(updated.Role.Slug))
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSlug(updated.Role.Slug))
-
-	if err := s.audit.LogAccessRoleUpdate(ctx, s.db, audit.LogAccessRoleUpdateEvent{
-		OrganizationID:     ac.ActiveOrganizationID,
-		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName:   ac.Email,
-		ActorSlug:          nil,
-		RoleID:             updated.Role.ID,
-		RoleName:           updated.After.Name,
-		RoleSlug:           updated.Role.Slug,
-		RoleSnapshotBefore: updated.Before,
-		RoleSnapshotAfter:  updated.After,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log access role update").Log(ctx, logger)
-	}
 
 	return updated.After, nil
 }
@@ -227,35 +199,22 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return err
 	}
-	logger := s.logger.With(
-		attr.SlogOrganizationID(ac.ActiveOrganizationID),
-		attr.SlogUserID(ac.UserID),
-		attr.SlogAccessRoleID(payload.ID),
-	)
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
 		attr.AccessRoleID(payload.ID),
 	)
 
-	deletedRole, err := s.roleMgr.DeleteRole(ctx, ac.ActiveOrganizationID, workosOrgID, payload.ID)
+	deleted, err := s.roleMgr.DeleteRole(ctx, ac.ActiveOrganizationID, workosOrgID, payload.ID, accessAuditActor{
+		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		DisplayName: ac.Email,
+		Slug:        nil,
+	})
 	if err != nil {
 		return err
 	}
-	logger = logger.With(attr.SlogAccessRoleSlug(deletedRole.Slug))
+	deletedRole := deleted.Role
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSlug(deletedRole.Slug))
-
-	if err := s.audit.LogAccessRoleDelete(ctx, s.db, audit.LogAccessRoleDeleteEvent{
-		OrganizationID:   ac.ActiveOrganizationID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName: ac.Email,
-		ActorSlug:        nil,
-		RoleID:           deletedRole.ID,
-		RoleName:         deletedRole.Name,
-		RoleSlug:         deletedRole.Slug,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log access role deletion").Log(ctx, logger)
-	}
 
 	return nil
 }
@@ -387,12 +346,6 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
-	logger := s.logger.With(
-		attr.SlogOrganizationID(ac.ActiveOrganizationID),
-		attr.SlogUserID(ac.UserID),
-		attr.SlogAccessMemberID(payload.UserID),
-		attr.SlogAccessRoleID(payload.RoleID),
-	)
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
@@ -400,31 +353,20 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 		attr.AccessRoleID(payload.RoleID),
 	)
 
-	memberUpdate, err := s.roleMgr.UpdateMemberRole(ctx, ac.ActiveOrganizationID, payload.UserID, payload.RoleID)
+	memberUpdate, err := s.roleMgr.UpdateMemberRole(ctx, ac.ActiveOrganizationID, payload.UserID, payload.RoleID, accessAuditActor{
+		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		DisplayName: ac.Email,
+		Slug:        nil,
+	})
 	if err != nil {
 		return nil, err
 	}
 	roleSlug := memberUpdate.RoleSlug
-	logger = logger.With(attr.SlogAccessRoleSlug(roleSlug))
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
 		attr.AccessRoleSlug(roleSlug),
 	)
-
-	if err := s.audit.LogAccessMemberRoleUpdate(ctx, s.db, audit.LogAccessMemberRoleUpdateEvent{
-		OrganizationID:       ac.ActiveOrganizationID,
-		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName:     ac.Email,
-		ActorSlug:            nil,
-		MemberID:             memberUpdate.UserID,
-		MemberName:           memberUpdate.After.Name,
-		MemberEmail:          memberUpdate.After.Email,
-		MemberSnapshotBefore: memberUpdate.Before,
-		MemberSnapshotAfter:  memberUpdate.After,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log access member role update").Log(ctx, logger)
-	}
 
 	return memberUpdate.After, nil
 }
@@ -564,7 +506,7 @@ func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 	return out
 }
 
-func connectedUser(ctx context.Context, db *pgxpool.Pool, organizationID string, userID string) (usersrepo.User, error) {
+func connectedUser(ctx context.Context, db database.DBTX, organizationID string, userID string) (usersrepo.User, error) {
 	hasRelationship, err := orgrepo.New(db).HasOrganizationUserRelationship(ctx, orgrepo.HasOrganizationUserRelationshipParams{
 		OrganizationID: organizationID,
 		UserID:         userID,

@@ -122,18 +122,18 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 
 	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)}
 
-	roleSlug, err := e.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	roleSlugs, err := e.resolveRoleSlugs(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
 	if err != nil {
 		e.logger.ErrorContext(
 			ctx,
-			"failed to resolve role for authz grants",
+			"failed to resolve roles for authz grants",
 			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 			attr.SlogUserID(authCtx.UserID),
 			attr.SlogError(err),
 		)
-		return ctx, fmt.Errorf("resolve role slug: %w", err)
+		return ctx, fmt.Errorf("resolve role slugs: %w", err)
 	}
-	if roleSlug != "" {
+	for _, roleSlug := range roleSlugs {
 		principals = append(principals, urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug))
 	}
 
@@ -152,37 +152,27 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	return GrantsToContext(ctx, grants), nil
 }
 
-func (e *Engine) resolveRoleSlug(ctx context.Context, userID, orgID string) (string, error) {
+func (e *Engine) resolveRoleSlugs(ctx context.Context, userID, orgID string) ([]string, error) {
 	user, err := usersrepo.New(e.db).GetUser(ctx, userID)
 	if err != nil {
-		return "", fmt.Errorf("get user: %w", err)
+		return nil, fmt.Errorf("get user: %w", err)
 	}
 	if !user.WorkosID.Valid || user.WorkosID.String == "" {
-		return "", nil
+		return nil, nil
 	}
 
+	// Role assignments are local source-of-truth records. They are written by
+	// the access write path and by WorkOS sync, so invitation/admin-console
+	// changes can lag until the sync job catches up.
 	roleSlugs, err := accessrepo.New(e.db).ListMemberRoleSlugsByWorkosUser(ctx, accessrepo.ListMemberRoleSlugsByWorkosUserParams{
 		OrganizationID: orgID,
 		WorkosUserID:   user.WorkosID.String,
 	})
 	if err != nil {
-		return "", fmt.Errorf("list member role slugs: %w", err)
-	}
-	if len(roleSlugs) == 0 {
-		return "", nil
+		return nil, fmt.Errorf("list member role slugs: %w", err)
 	}
 
-	return roleSlugs[0], nil
-}
-
-// InvalidateRoleCache is retained for callers that used to clear the Redis role cache.
-// Role resolution now reads Postgres directly, so this is intentionally a no-op.
-func (e *Engine) InvalidateRoleCache(ctx context.Context, userID, orgID string) {
-}
-
-// InvalidateAllRoleCaches is retained for callers that used to clear the Redis role cache.
-// Role resolution now reads Postgres directly, so this is intentionally a no-op.
-func (e *Engine) InvalidateAllRoleCaches(ctx context.Context, orgID string) {
+	return roleSlugs, nil
 }
 
 func (e *Engine) Require(ctx context.Context, checks ...Check) error {

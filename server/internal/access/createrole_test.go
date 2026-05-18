@@ -230,7 +230,11 @@ func TestService_CreateRole_LocalRoleWriteFailureDoesNotAssignMembers(t *testing
 	t.Cleanup(inspectConn.Close)
 
 	ti.conn.Close()
-	_, err = ti.service.roleMgr.CreateRole(ctx, authCtx.ActiveOrganizationID, mockidp.MockOrgID, &gen.CreateRolePayload{
+	_, err = ti.service.roleMgr.CreateRole(ctx, authCtx.ActiveOrganizationID, mockidp.MockOrgID, accessAuditActor{
+		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		DisplayName: authCtx.Email,
+		Slug:        nil,
+	}, &gen.CreateRolePayload{
 		Name:        "Broken Builder",
 		Description: "Will fail local write",
 		Grants: []*gen.RoleGrant{
@@ -239,7 +243,7 @@ func TestService_CreateRole_LocalRoleWriteFailureDoesNotAssignMembers(t *testing
 		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "upsert local role record")
+	require.Contains(t, err.Error(), "role transaction")
 
 	grants, err := accessrepo.New(inspectConn).ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
 		OrganizationID: authCtx.ActiveOrganizationID,

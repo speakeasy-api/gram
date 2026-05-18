@@ -99,7 +99,7 @@ func TestEngineRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 }
 
-func TestResolveRoleSlug_readsLocalAssignmentsOnly(t *testing.T) {
+func TestResolveRoleSlugs_readsLocalAssignmentsOnly(t *testing.T) {
 	t.Parallel()
 
 	ctx := enterpriseTestCtx(t.Context())
@@ -116,14 +116,39 @@ func TestResolveRoleSlug_readsLocalAssignmentsOnly(t *testing.T) {
 	require.NoError(t, err)
 	engine := NewEngine(testenv.NewLogger(t), conn, chConn, staticRBAC(true), staticChallengeLogging(true), membership)
 
-	roleSlug, err := engine.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	roleSlugs, err := engine.resolveRoleSlugs(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
-	require.Empty(t, roleSlug)
+	require.Empty(t, roleSlugs)
 
-	roleSlug, err = engine.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	roleSlugs, err = engine.resolveRoleSlugs(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
-	require.Empty(t, roleSlug)
+	require.Empty(t, roleSlugs)
 	require.Equal(t, 0, membership.calls)
+}
+
+func TestResolveRoleSlugs_returnsAllLocalAssignments(t *testing.T) {
+	t.Parallel()
+
+	ctx := enterpriseTestCtx(t.Context())
+	conn := newTestDB(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	seedOrganization(t, ctx, conn, authCtx.ActiveOrganizationID)
+	seedConnectedUser(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, "test@example.com", "Test User", "user_workos_test", "membership_test")
+	seedRole(t, ctx, conn, authCtx.ActiveOrganizationID, "custom-alpha")
+	seedRole(t, ctx, conn, authCtx.ActiveOrganizationID, "custom-beta")
+	seedRoleAssignment(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, "user_workos_test", "membership_test", "custom-alpha")
+	seedRoleAssignment(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, "user_workos_test", "membership_test", "custom-beta")
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, staticRBAC(true), staticChallengeLogging(true), &countingMembershipFetcher{})
+
+	roleSlugs, err := engine.resolveRoleSlugs(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"custom-alpha", "custom-beta"}, roleSlugs)
 }
 
 func TestEngineRequireAny_mapsDeniedToForbidden(t *testing.T) {

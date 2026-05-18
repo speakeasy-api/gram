@@ -98,7 +98,7 @@ func TestRoleManager_AssignMembersToRoleRequiresLocalAssignment(t *testing.T) {
 	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Can build"))
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "u1@example.com", "User 1", "user_1", "membership_1")
 
-	assigned, err := ti.service.roleMgr.assignMembersToRole(ctx, authCtx.ActiveOrganizationID, "custom-builder", []string{"local_user_1"})
+	assigned, _, err := ti.service.roleMgr.assignMembersToRoleTx(ctx, ti.conn, authCtx.ActiveOrganizationID, "custom-builder", []string{"local_user_1"})
 	require.Error(t, err)
 	require.Equal(t, 0, assigned)
 	require.Contains(t, err.Error(), "member role assignment not found")

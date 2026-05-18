@@ -96,7 +96,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	auditLogger := audit.NewLogger()
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, NewRoleManager(logger, conn, roles, authzEngine), authzEngine, noopFeatureCacheWriter{}, auditLogger)
+	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, NewRoleManager(logger, conn, roles, auditLogger), authzEngine, noopFeatureCacheWriter{}, auditLogger)
 
 	return ctx, &testInstance{
 		service: svc,

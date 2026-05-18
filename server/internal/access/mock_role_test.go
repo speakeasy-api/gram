@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -25,11 +26,21 @@ func newMockRoleProvider(t *testing.T) *MockRoleProvider {
 
 	roles := &MockRoleProvider{}
 	t.Cleanup(func() {
-		require.True(t, roles.AssertExpectations(t))
+		require.Eventually(t, func() bool {
+			return roles.AssertExpectations(mockExpectationProbe{})
+		}, 2*time.Second, 10*time.Millisecond)
 	})
 
 	return roles
 }
+
+type mockExpectationProbe struct{}
+
+func (mockExpectationProbe) Logf(string, ...any) {}
+
+func (mockExpectationProbe) Errorf(string, ...any) {}
+
+func (mockExpectationProbe) FailNow() {}
 
 func (m *MockRoleProvider) CreateRole(ctx context.Context, orgID string, opts thirdpartyworkos.CreateRoleOpts) (*thirdpartyworkos.Role, error) {
 	args := m.Called(ctx, orgID, opts)
