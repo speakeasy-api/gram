@@ -49,6 +49,27 @@ Never use immediately-invoked function expressions inside JSX (`{(() => { ... })
 
 A component that has grown past ~150 lines of JSX is doing too much. Break it up. If a page has multiple tabs, each tab's content is its own component.
 
+#### Page headers and subtext are a common duplication trap
+
+Many pages render the same `<h1>` + `<p>` header block in 2–3 conditional render paths (loading skeleton, empty state, populated state). Examples observed: `InsightsTools.tsx`, `LogsTools.tsx`, `LogsAgents.tsx`, `SecurityOverview.tsx`, `PolicyCenter.tsx`. Symptoms: a copy change touches the same string in 3 places; `Edit` with `replace_all` fails because indentation differs between the duplicates.
+
+When adding or editing page headers, lift the title and subtitle into a small `<PageHeader title="…" subtitle="…" />` (or pass them as props to a shared shell), not into each render branch. When editing existing duplicated copy, target a unique trailing fragment of the string (e.g. `"in chat messages."`) so a single `replace_all` covers every copy regardless of indentation — and file a follow-up to extract a shared header.
+
+#### Shared empty states: props with defaults, not forks
+
+When the same empty-state component is reused across pages but needs different copy per caller (e.g. `HooksEmptyState` rendered from both `/insights/tools` and `/logs/tools`), add optional `title` / `subtitle` props with sensible defaults rather than forking the component:
+
+```tsx
+export function HooksEmptyState({
+  title = "No logs captured",
+  subtitle = "Install Observability plugin in your AI agent to start capturing tool execution logs",
+}: { title?: string; subtitle?: string } = {}) {
+  /* … */
+}
+```
+
+Backwards-compatible callers stay `<HooksEmptyState />`; only the variant caller passes overrides. Avoids divergent copies of the surrounding scaffolding (provider cards, setup dialogs, etc.).
+
 ### React Performance Patterns
 
 These patterns were established in the audit log (#2140) and deployment log (#2167) redesigns. Apply them whenever building search, filtering, or keyboard navigation.
@@ -124,6 +145,52 @@ Use `<Tooltip>`, `<TooltipTrigger>`, and `<TooltipContent>` directly — they in
   </Tooltip>
 </TooltipProvider>
 ```
+
+### Navigation and Links
+
+Use the right primitive for the link type — mixing them causes full-page reloads, broken multi-tenancy, or missing security headers.
+
+**Internal navigation (any URL inside the dashboard):** Use the route helpers from `client/dashboard/src/routes.tsx`. Top-level routes _and_ subpages expose `.Link`, `.href()`, and `.goTo()`:
+
+```tsx
+// Wrap a child node with .Link
+<routes.sources.Link>
+  <Button>Connect a Source</Button>
+</routes.sources.Link>
+
+// Subpages get .Link too — use it instead of building strings
+<routes.insights.tools.Link>
+  <Button>Track AI usage</Button>
+</routes.insights.tools.Link>
+
+// Plain react-router Link with .href() when you need a className or are inside <p>
+<Link to={routes.plugins.href()} className="underline underline-offset-2">
+  Observability plugin
+</Link>
+```
+
+Never hardcode org/project slugs in an `href` (e.g. `https://app.getgram.ai/speakeasy-team/projects/default/plugins`). The route helpers resolve the current `:orgSlug` / `:projectSlug` from the URL, so the same call works for every tenant.
+
+**External links (anywhere outside the dashboard):** Use a plain `<a>` with `target="_blank"` and `rel="noopener noreferrer"`. This matches the existing pattern (`AddServerDialog.tsx:1162`, `CatalogDetail.tsx:229`) and the security attributes are mandatory — `noopener` blocks `window.opener` access; `noreferrer` strips the Referer header.
+
+```tsx
+<a
+  href="https://www.speakeasy.com/product/mcp-gateway/catalog"
+  target="_blank"
+  rel="noopener noreferrer"
+  className="underline underline-offset-2 hover:text-foreground"
+>
+  MCP Registry
+</a>
+```
+
+The `@/components/ui/link` wrapper sets `target="_blank"` when `external` is true but also injects an icon — fine for nav rows, too heavy for inline links inside subtext. Reach for the plain `<a>` for inline external links.
+
+### Editing copy
+
+- **Preserve dynamic tokens.** Page subtext often interpolates state like `{rangeLabel}`, `{periodUsage.credits}`, or `{projectName}`. When rewording copy that contains a token, keep the token in place — replace it with the literal current value (e.g. "the last 30 days") only when the data fetch itself is locked to that value. Otherwise the copy starts lying as soon as the user changes a filter.
+- **Don't fight the Tailwind class sorter.** Prettier's `prettier-plugin-tailwindcss` reorders classes on save. Write classes in any order; the formatter will normalize them and the diff stays clean across the codebase.
+- **AI context strings shadow user-visible names.** When renaming a chart or card (e.g. "Most Used LLM Clients" → "Most Used Agents"), search for the old name in nearby `contextInfo=` / `suggestions=` props passed to `ExploreWithAI` / `InsightsConfig`. Those strings are sent to the LLM as analytical context; if they drift from the visible label, the AI assistant talks about a card the user can't see.
 
 ### Styling and Design System
 

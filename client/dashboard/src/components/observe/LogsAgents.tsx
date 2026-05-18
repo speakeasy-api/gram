@@ -452,7 +452,8 @@ function AgentSessionsPageContent({
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="text-xl font-semibold">Agent Sessions</h1>
           <p className="text-muted-foreground text-sm">
-            View and debug individual agent sessions
+            View and debug individual agent sessions captured for organization
+            members in this project
           </p>
         </div>
         <div className="relative flex-1">
@@ -475,7 +476,8 @@ function AgentSessionsPageContent({
           <div className="flex min-w-0 flex-col gap-1">
             <h1 className="text-xl font-semibold">Agent Sessions</h1>
             <p className="text-muted-foreground text-sm">
-              View and debug individual agent sessions
+              View and debug individual agent sessions captured for organization
+              members in this project
             </p>
           </div>
           <div className="flex items-center gap-3">

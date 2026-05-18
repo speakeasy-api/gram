@@ -79,7 +79,9 @@ export default function AssistantsIndex() {
       <Page.Section>
         <Page.Section.Title stage="preview">Assistants</Page.Section.Title>
         <Page.Section.Description>
-          Configure model, instructions, and MCP servers for each assistant.
+          Claude Code-inspired secure Assistants. Every assistant connects
+          through the MCPs and Skills your org already uses, with identity,
+          guardrails, and audit built in. Deployed to Slack.
         </Page.Section.Description>
         <Page.Section.CTA>
           <RequireScope
@@ -121,8 +123,8 @@ export default function AssistantsIndex() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <UsageSection />
         {content}
+        <UsageSection />
       </Page.Body>
     </Page>
   );

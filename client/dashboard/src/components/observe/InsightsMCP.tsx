@@ -456,7 +456,7 @@ export function InsightsOverviewShell({
   mapFilterOptions,
   showSetupRequiredModal = true,
   title = "MCP Servers",
-  subtitle = "Monitor agent sessions, tool performance, and system health",
+  subtitle = "Focused view of MCP server health and performance for hosted, 3rd-party catalog or servers proxied by URL.",
 }: {
   children: (props: InsightsContentProps) => React.ReactNode;
   noDataKind: "tools" | "agent_sessions";
