@@ -150,9 +150,9 @@ export function CollectionCard({ collection }: { collection: Collection }) {
           }
           onClick={handleInstallClick}
         >
-          <Button.Icon>
+          <Button.LeftIcon>
             <Download />
-          </Button.Icon>
+          </Button.LeftIcon>
           <Button.Text>Install</Button.Text>
         </Button>
       </div>

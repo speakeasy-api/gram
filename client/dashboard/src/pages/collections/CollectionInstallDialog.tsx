@@ -3,19 +3,19 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
 import { Type } from "@/components/ui/type";
+import { cn } from "@/lib/utils";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
+import { useRoutes } from "@/routes";
 import type { ProjectEntry } from "@gram/client/models/components";
-import { Button, Input } from "@speakeasy-api/moonshine";
+import { Button, Icon, Input } from "@speakeasy-api/moonshine";
 import {
-  AlertCircle,
-  Check,
+  ArrowRight,
   Circle,
   FolderOpen,
   Loader2,
   Search,
   Server,
-  X,
 } from "lucide-react";
 import type { ChangeEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -24,9 +24,11 @@ type InstallResult = {
   projectId: string;
   projectSlug: string;
   projectName: string;
-  status: "succeeded" | "partial" | "failed";
+  status: "succeeded" | "failed";
   succeededCount: number;
   failedCount: number;
+  firstCompletedToolsetSlug?: string;
+  firstCompletedMcpSlug?: string;
   error?: string;
 };
 
@@ -91,7 +93,6 @@ export function CollectionInstallDialog({
 
   const currentProject = selectedProjects[currentProjectIndex];
   const successfulProjects = results.filter((r) => r.status === "succeeded");
-  const partialProjects = results.filter((r) => r.status === "partial");
   const failedProjects = results.filter((r) => r.status === "failed");
 
   const toggleProject = (slug: string) => {
@@ -131,6 +132,8 @@ export function CollectionInstallDialog({
               status: result.status,
               succeededCount: result.succeededCount,
               failedCount: result.failedCount,
+              firstCompletedToolsetSlug: result.firstCompletedToolsetSlug,
+              firstCompletedMcpSlug: result.firstCompletedMcpSlug,
               error: result.error,
             };
 
@@ -187,16 +190,11 @@ export function CollectionInstallDialog({
                 </Dialog.Description>
               </Dialog.Header>
               <div className="space-y-4 py-2">
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <ResultStat
                     label="Succeeded"
                     value={successfulProjects.length}
                     tone="success"
-                  />
-                  <ResultStat
-                    label="Partial"
-                    value={partialProjects.length}
-                    tone="warning"
                   />
                   <ResultStat
                     label="Failed"
@@ -363,7 +361,11 @@ function ProjectProgressList({
         return (
           <div
             key={project.slug}
-            className="flex items-start gap-3 rounded-lg border p-3"
+            className={cn(
+              "bg-card flex items-start gap-3 rounded-lg border p-3 transition-colors",
+              status === "installing" && "border-primary/30 bg-primary/5",
+              status === "failed" && "border-destructive/30 bg-destructive/5",
+            )}
           >
             <ProjectAvatar
               project={project}
@@ -382,6 +384,12 @@ function ProjectProgressList({
                     `${result.succeededCount} succeeded, ${result.failedCount} failed.`}
                 </Type>
               )}
+              {result?.firstCompletedToolsetSlug && (
+                <ProjectConfigureLink
+                  projectSlug={project.slug}
+                  toolsetSlug={result.firstCompletedToolsetSlug}
+                />
+              )}
             </div>
           </div>
         );
@@ -397,18 +405,20 @@ function ResultStat({
 }: {
   label: string;
   value: number;
-  tone: "success" | "warning" | "danger";
+  tone: "success" | "danger";
 }) {
   const toneClass = {
     success: "border-emerald-500/20 bg-emerald-500/10",
-    warning: "border-amber-500/20 bg-amber-500/10",
-    danger: "border-destructive/20 bg-destructive/10",
+    danger: "border-destructive/30 bg-destructive/5",
   }[tone];
 
   return (
-    <div className={`rounded-lg border p-3 text-center ${toneClass}`}>
-      <div className="text-lg font-semibold">{value}</div>
-      <Type small muted>
+    <div className={cn("rounded-lg border p-3 text-center", toneClass)}>
+      <div className="flex items-center justify-center gap-1.5">
+        <StatusCircleIcon tone={tone} />
+        <span className="text-lg font-semibold">{value}</span>
+      </div>
+      <Type small muted className="block text-center">
         {label}
       </Type>
     </div>
@@ -419,24 +429,15 @@ function InstallResultBadge({ status }: { status: InstallResult["status"] }) {
   if (status === "succeeded") {
     return (
       <Badge variant="secondary" className="text-emerald-600">
-        <Check className="mr-1 h-3 w-3" />
+        <StatusCircleIcon tone="success" size="sm" />
         Succeeded
-      </Badge>
-    );
-  }
-
-  if (status === "partial") {
-    return (
-      <Badge variant="outline" className="text-amber-600">
-        <AlertCircle className="mr-1 h-3 w-3" />
-        Partial
       </Badge>
     );
   }
 
   return (
     <Badge variant="outline" className="text-destructive">
-      <X className="mr-1 h-3 w-3" />
+      <StatusCircleIcon tone="danger" size="sm" />
       Failed
     </Badge>
   );
@@ -454,7 +455,7 @@ function ProjectStatusIndicator({ status }: { status: ProjectInstallStatus }) {
 
   if (status === "installing") {
     return (
-      <Badge variant="secondary">
+      <Badge variant="secondary" className="text-primary">
         <Loader2 className="mr-1 h-3 w-3 animate-spin" />
         Installing
       </Badge>
@@ -462,4 +463,50 @@ function ProjectStatusIndicator({ status }: { status: ProjectInstallStatus }) {
   }
 
   return <InstallResultBadge status={status} />;
+}
+
+function StatusCircleIcon({
+  tone,
+  size = "md",
+}: {
+  tone: "success" | "danger";
+  size?: "sm" | "md";
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center rounded-full",
+        tone === "success"
+          ? "bg-success text-success-foreground"
+          : "bg-destructive/20 text-destructive-foreground",
+        size === "sm" ? "mr-1 h-4 w-4" : "h-5 w-5",
+      )}
+    >
+      <Icon name={tone === "success" ? "check" : "x"} className="h-3 w-3" />
+    </span>
+  );
+}
+
+function ProjectConfigureLink({
+  projectSlug,
+  toolsetSlug,
+}: {
+  projectSlug: string;
+  toolsetSlug: string;
+}) {
+  const routes = useRoutes({ projectSlug });
+
+  return (
+    <routes.mcp.details.Link
+      params={[toolsetSlug]}
+      className="mt-3 inline-flex no-underline hover:no-underline"
+    >
+      <Button variant="secondary" size="sm">
+        <Button.Text>Configure MCP</Button.Text>
+        <Button.RightIcon>
+          <ArrowRight className="h-4 w-4" />
+        </Button.RightIcon>
+      </Button>
+    </routes.mcp.details.Link>
+  );
 }

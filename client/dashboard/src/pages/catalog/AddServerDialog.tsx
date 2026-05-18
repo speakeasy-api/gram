@@ -192,9 +192,11 @@ export interface AddServerDialogProps {
   onServersAdded?: () => void;
   onInstallFinished?: (result: {
     projectSlug?: string;
-    status: "succeeded" | "partial" | "failed";
+    status: "succeeded" | "failed";
     succeededCount: number;
     failedCount: number;
+    firstCompletedToolsetSlug?: string;
+    firstCompletedMcpSlug?: string;
     error?: string;
   }) => void;
   projectSlug?: string;
@@ -431,18 +433,18 @@ export function AddServerDialog({
       (s) => s.status === "completed",
     ).length;
     const failedCount = statuses.filter((s) => s.status === "failed").length;
+    const firstCompleted = statuses.find(
+      (s) => s.status === "completed" && s.toolsetSlug && s.mcpSlug,
+    );
 
     finishedRef.current = true;
     onInstallFinished({
       projectSlug,
-      status:
-        failedCount === 0
-          ? "succeeded"
-          : succeededCount > 0
-            ? "partial"
-            : "failed",
+      status: failedCount === 0 ? "succeeded" : "failed",
       succeededCount,
       failedCount,
+      firstCompletedToolsetSlug: firstCompleted?.toolsetSlug,
+      firstCompletedMcpSlug: firstCompleted?.mcpSlug,
       error: statuses
         .filter((s) => s.status === "failed" && s.error)
         .map((s) => `${s.name}: ${s.error}`)

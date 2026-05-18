@@ -235,8 +235,6 @@ function CollectionDetailInner() {
     setShowBulkInstallDialog(true);
   };
 
-  const totalTools = servers.reduce((sum, s) => sum + s.toolCount, 0);
-
   const handleDownloadCollectionMcpJson = () => {
     if (!collection || collectionMcpJson.includedCount === 0) {
       return;
@@ -318,10 +316,6 @@ function CollectionDetailInner() {
                           {servers.length}{" "}
                           {servers.length === 1 ? "server" : "servers"}
                         </span>
-                        <span aria-hidden="true">/</span>
-                        <span>
-                          {totalTools} {totalTools === 1 ? "tool" : "tools"}
-                        </span>
                         {collectionMcpJson.excludedCount > 0 && (
                           <>
                             <span aria-hidden="true">/</span>
@@ -350,9 +344,9 @@ function CollectionDetailInner() {
                       }
                       onClick={openBulkInstallDialog}
                     >
-                      <Button.Icon>
+                      <Button.LeftIcon>
                         <Download />
-                      </Button.Icon>
+                      </Button.LeftIcon>
                       <Button.Text>Install</Button.Text>
                     </Button>
                   </RequireScope>
@@ -365,9 +359,9 @@ function CollectionDetailInner() {
                     }
                     onClick={handleDownloadCollectionMcpJson}
                   >
-                    <Button.Icon>
+                    <Button.LeftIcon>
                       <Download />
-                    </Button.Icon>
+                    </Button.LeftIcon>
                     <Button.Text>Generate mcp.json</Button.Text>
                   </Button>
                   <RequireScope scope="org:admin" level="component">
@@ -383,9 +377,9 @@ function CollectionDetailInner() {
                         setEditing(true);
                       }}
                     >
-                      <Button.Icon>
+                      <Button.LeftIcon>
                         <Pencil />
-                      </Button.Icon>
+                      </Button.LeftIcon>
                       <Button.Text>Edit</Button.Text>
                     </Button>
                   </RequireScope>
@@ -697,9 +691,9 @@ function CollectionDetailInner() {
                                 }
                               }}
                             >
-                              <Button.Icon>
+                              <Button.LeftIcon>
                                 <Download />
-                              </Button.Icon>
+                              </Button.LeftIcon>
                               <Button.Text>Install Server</Button.Text>
                             </Button>
                           </RequireScope>
@@ -721,10 +715,6 @@ function CollectionDetailInner() {
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Servers</span>
                   <span className="font-medium">{servers.length}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Total Tools</span>
-                  <span className="font-medium">{totalTools}</span>
                 </div>
               </div>
             </div>
