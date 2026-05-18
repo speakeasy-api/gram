@@ -58,7 +58,7 @@ VALUES (
     $6,
     $7
 )
-RETURNING id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateRemoteSessionClientParams struct {
@@ -91,6 +91,7 @@ func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemot
 		&i.ClientSecretEncrypted,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -196,7 +197,7 @@ const deleteRemoteSessionClient = `-- name: DeleteRemoteSessionClient :one
 UPDATE remote_session_clients
 SET deleted_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteRemoteSessionClientParams struct {
@@ -216,6 +217,7 @@ func (q *Queries) DeleteRemoteSessionClient(ctx context.Context, arg DeleteRemot
 		&i.ClientSecretEncrypted,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -370,7 +372,7 @@ func (q *Queries) GetRemoteSessionByID(ctx context.Context, arg GetRemoteSession
 }
 
 const getRemoteSessionClientByID = `-- name: GetRemoteSessionClientByID :one
-SELECT id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, created_at, updated_at, deleted_at, deleted
 FROM remote_session_clients
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -392,6 +394,7 @@ func (q *Queries) GetRemoteSessionClientByID(ctx context.Context, arg GetRemoteS
 		&i.ClientSecretEncrypted,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -630,7 +633,7 @@ func (q *Queries) ListConnectedClientIDsForSubject(ctx context.Context, arg List
 }
 
 const listRemoteSessionClientsByProjectID = `-- name: ListRemoteSessionClientsByProjectID :many
-SELECT id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, created_at, updated_at, deleted_at, deleted
 FROM remote_session_clients
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -673,6 +676,7 @@ func (q *Queries) ListRemoteSessionClientsByProjectID(ctx context.Context, arg L
 			&i.ClientSecretEncrypted,
 			&i.ClientIDIssuedAt,
 			&i.ClientSecretExpiresAt,
+			&i.TokenEndpointAuthMethod,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -944,7 +948,7 @@ SET
     user_session_issuer_id = COALESCE($3, user_session_issuer_id),
     updated_at = clock_timestamp()
 WHERE id = $4 AND project_id = $5 AND deleted IS FALSE
-RETURNING id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRemoteSessionClientParams struct {
@@ -973,6 +977,7 @@ func (q *Queries) UpdateRemoteSessionClient(ctx context.Context, arg UpdateRemot
 		&i.ClientSecretEncrypted,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

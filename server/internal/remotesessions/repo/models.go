@@ -27,18 +27,19 @@ type RemoteSession struct {
 }
 
 type RemoteSessionClient struct {
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
-	RemoteSessionIssuerID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-	ClientID              string
-	ClientSecretEncrypted pgtype.Text
-	ClientIDIssuedAt      pgtype.Timestamptz
-	ClientSecretExpiresAt pgtype.Timestamptz
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	DeletedAt             pgtype.Timestamptz
-	Deleted               bool
+	ID                      uuid.UUID
+	ProjectID               uuid.UUID
+	RemoteSessionIssuerID   uuid.UUID
+	UserSessionIssuerID     uuid.UUID
+	ClientID                string
+	ClientSecretEncrypted   pgtype.Text
+	ClientIDIssuedAt        pgtype.Timestamptz
+	ClientSecretExpiresAt   pgtype.Timestamptz
+	TokenEndpointAuthMethod pgtype.Text
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	DeletedAt               pgtype.Timestamptz
+	Deleted                 bool
 }
 
 type RemoteSessionIssuer struct {
