@@ -186,7 +186,7 @@ func prepareCloudSQLIAMAccess(ctx context.Context, instance cloudSQLInstance, po
 		return err
 	}
 	adminURL := cloudSQLAdminDatabaseURL("127.0.0.1", port, dbName, password)
-	adminDB, err := connectDB(ctx, adminURL, false)
+	adminDB, err := connectDB(ctx, adminURL, false, defaultStatementTimeout)
 	if err != nil {
 		return fmt.Errorf("connect Cloud SQL admin database: %w", err)
 	}

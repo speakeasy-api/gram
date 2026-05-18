@@ -28,6 +28,7 @@ import (
 const sampleSize = 5
 const updateDetailLimit = 20
 const changeSummarySampleLimit = 3
+const defaultStatementTimeout = 30 * time.Minute
 
 type phase string
 
@@ -58,6 +59,9 @@ type options struct {
 	workosEndpoint   string
 	workosOrgIDs     []string
 	limit            int
+	pageSize         int
+	pageOffset       int
+	statementTimeout time.Duration
 	dryRun           bool
 	autoApprove      bool
 	pauseAfterEach   bool
@@ -177,6 +181,9 @@ func parseFlags() options {
 		workosEndpoint:   strings.TrimSpace(os.Getenv("WORKOS_API_URL")),
 		workosOrgIDs:     nil,
 		limit:            0,
+		pageSize:         0,
+		pageOffset:       0,
+		statementTimeout: defaultStatementTimeout,
 		dryRun:           true,
 		autoApprove:      false,
 		pauseAfterEach:   false,
@@ -197,6 +204,9 @@ func parseFlags() options {
 	flag.StringVar(&opts.workosEndpoint, "workos-endpoint", opts.workosEndpoint, "WorkOS API endpoint override (defaults to WORKOS_API_URL)")
 	flag.Var(&orgIDs, "workos-org-id", "WorkOS organization id to process; repeat or comma-separate")
 	flag.IntVar(&opts.limit, "limit", opts.limit, "maximum organizations to inspect or backfill")
+	flag.IntVar(&opts.pageSize, "page-size", opts.pageSize, "number of organizations to inspect or backfill after page offset (0 means all remaining)")
+	flag.IntVar(&opts.pageOffset, "page-offset", opts.pageOffset, "number of organizations to skip after deterministic sorting")
+	flag.DurationVar(&opts.statementTimeout, "statement-timeout", opts.statementTimeout, "Postgres statement_timeout for each DB connection")
 	flag.BoolVar(&opts.dryRun, "dry-run", opts.dryRun, "inspect and validate without DB writes")
 	flag.BoolVar(&opts.autoApprove, "auto-approve", opts.autoApprove, "skip non-prod write confirmations")
 	flag.BoolVar(&opts.pauseAfterEach, "pause-after-each", opts.pauseAfterEach, "wait for Enter after each organization")
@@ -242,6 +252,15 @@ func validateOptions(opts options) error {
 	if opts.limit < 0 {
 		return errors.New("--limit must be non-negative")
 	}
+	if opts.pageSize < 0 {
+		return errors.New("--page-size must be non-negative")
+	}
+	if opts.pageOffset < 0 {
+		return errors.New("--page-offset must be non-negative")
+	}
+	if opts.statementTimeout <= 0 {
+		return errors.New("--statement-timeout must be positive")
+	}
 	if opts.workosEndpoint == "" {
 		if opts.environment == envProd {
 			if strings.HasPrefix(opts.workosAPIKey, "sk_test_") || !strings.HasPrefix(opts.workosAPIKey, "sk_") {
@@ -280,7 +299,7 @@ func run(ctx context.Context, opts options) error {
 		defer cleanupCloudSQLProxy()
 	}
 
-	db, err := connectDB(ctx, databaseURL, readOnly)
+	db, err := connectDB(ctx, databaseURL, readOnly, opts.statementTimeout)
 	if err != nil {
 		if opts.cloudSQLProxy {
 			return fmt.Errorf("%w%s", err, cloudSQLProxyHint())
@@ -295,6 +314,10 @@ func run(ctx context.Context, opts options) error {
 	}
 
 	fmt.Printf("WorkOS backfill phase=%s environment=%s dry_run=%t read_only_db=%t\n", opts.phase, opts.environment, opts.dryRun, readOnly)
+	fmt.Printf("Database statement_timeout: %s\n", opts.statementTimeout)
+	if opts.pageOffset > 0 || opts.pageSize > 0 {
+		fmt.Printf("Organization page: offset=%d size=%d\n", opts.pageOffset, opts.pageSize)
+	}
 	if opts.cloudSQLProxy {
 		fmt.Println("Database connection: local Cloud SQL proxy")
 	}
@@ -397,16 +420,17 @@ func shouldValidate(opts options) bool {
 	return opts.phase == phaseValidate || !opts.dryRun
 }
 
-func connectDB(ctx context.Context, databaseURL string, readOnly bool) (*pgxpool.Pool, error) {
+func connectDB(ctx context.Context, databaseURL string, readOnly bool, statementTimeout time.Duration) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse database URL: %w", err)
 	}
+	statementTimeoutMs := max(1, statementTimeout.Milliseconds())
 	cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 		if _, err := conn.Exec(ctx, "SET lock_timeout = '5s'"); err != nil {
 			return fmt.Errorf("set lock_timeout: %w", err)
 		}
-		if _, err := conn.Exec(ctx, "SET statement_timeout = '5min'"); err != nil {
+		if _, err := conn.Exec(ctx, fmt.Sprintf("SET statement_timeout = %d", statementTimeoutMs)); err != nil {
 			return fmt.Errorf("set statement_timeout: %w", err)
 		}
 		if readOnly {
@@ -593,7 +617,7 @@ func selectedOrganizations(ctx context.Context, workosClient *workos.Client, opt
 			}
 			out = append(out, *org)
 		}
-		return out, nil
+		return applyOrganizationWindow(out, opts), nil
 	}
 
 	fmt.Println("Listing WorkOS organizations")
@@ -603,11 +627,28 @@ func selectedOrganizations(ctx context.Context, workosClient *workos.Client, opt
 	}
 	fmt.Printf("Listed %d WorkOS organizations\n", len(orgs))
 	sort.Slice(orgs, func(i, j int) bool { return orgs[i].ID < orgs[j].ID })
+	return applyOrganizationWindow(orgs, opts), nil
+}
+
+func applyOrganizationWindow(orgs []workos.Organization, opts options) []workos.Organization {
+	originalLen := len(orgs)
+	if opts.pageOffset > 0 {
+		if opts.pageOffset >= len(orgs) {
+			fmt.Printf("Applying organization page offset: %d of %d leaves 0 organizations\n", opts.pageOffset, originalLen)
+			return orgs[:0]
+		}
+		orgs = orgs[opts.pageOffset:]
+		fmt.Printf("Applying organization page offset: skipped %d of %d\n", opts.pageOffset, originalLen)
+	}
+	if opts.pageSize > 0 && len(orgs) > opts.pageSize {
+		fmt.Printf("Applying organization page size: %d of %d remaining\n", opts.pageSize, len(orgs))
+		orgs = orgs[:opts.pageSize]
+	}
 	if opts.limit > 0 && len(orgs) > opts.limit {
 		fmt.Printf("Applying organization limit: %d of %d\n", opts.limit, len(orgs))
 		orgs = orgs[:opts.limit]
 	}
-	return orgs, nil
+	return orgs
 }
 
 func expectedGramOrgID(ctx context.Context, db *pgxpool.Pool, org workos.Organization) (string, bool, error) {

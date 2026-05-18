@@ -55,6 +55,14 @@ Limit the scope while testing:
 mise backfill:workos --phase=preflight --environment=dev --cloudsql-proxy --limit=5
 ```
 
+Process organizations in deterministic batches. Organizations are sorted by
+WorkOS organization ID, then the offset and size are applied:
+
+```sh
+mise backfill:workos --phase=preflight --environment=dev --cloudsql-proxy --page-size=25 --page-offset=0
+mise backfill:workos --phase=preflight --environment=dev --cloudsql-proxy --page-size=25 --page-offset=25
+```
+
 Run a specific WorkOS organization:
 
 ```sh
@@ -110,6 +118,9 @@ writes never skip the prod confirmation.
 - `--dry-run`: defaults to `true`; set `--dry-run=false` to write.
 - `--workos-org-id`: process selected WorkOS organizations only.
 - `--limit`: cap the number of WorkOS organizations inspected.
+- `--page-size`: process at most this many organizations after the offset.
+- `--page-offset`: skip this many organizations after deterministic sorting.
+- `--statement-timeout`: Postgres `statement_timeout`; defaults to `30m`.
 - `--breakpoint-before-write`: pause after preflight and before DB writes.
 - `--pause-after-each`: pause after each organization backfill.
 - `--auto-approve`: skip the non-prod `backfill` prompt.

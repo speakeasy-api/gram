@@ -48,6 +48,43 @@ func newBackfillTestConn(t *testing.T, name string) *pgxpool.Pool {
 	return conn
 }
 
+func TestApplyOrganizationWindow_PageOffsetAndSize(t *testing.T) {
+	t.Parallel()
+
+	orgs := []workos.Organization{
+		{ID: "org_1", Name: "One", ExternalID: "", CreatedAt: "", UpdatedAt: ""},
+		{ID: "org_2", Name: "Two", ExternalID: "", CreatedAt: "", UpdatedAt: ""},
+		{ID: "org_3", Name: "Three", ExternalID: "", CreatedAt: "", UpdatedAt: ""},
+		{ID: "org_4", Name: "Four", ExternalID: "", CreatedAt: "", UpdatedAt: ""},
+	}
+
+	window := applyOrganizationWindow(orgs, options{
+		phase:            phasePreflight,
+		environment:      envLocal,
+		databaseURL:      "",
+		cloudSQLProxy:    false,
+		cloudSQLPort:     0,
+		cloudSQLDBName:   "gram",
+		workosAPIKey:     "",
+		workosEndpoint:   "",
+		workosOrgIDs:     nil,
+		limit:            0,
+		pageSize:         2,
+		pageOffset:       1,
+		statementTimeout: defaultStatementTimeout,
+		dryRun:           true,
+		autoApprove:      false,
+		pauseAfterEach:   false,
+		confirmProd:      "",
+		breakpointBefore: false,
+	})
+
+	require.Equal(t, []workos.Organization{
+		{ID: "org_2", Name: "Two", ExternalID: "", CreatedAt: "", UpdatedAt: ""},
+		{ID: "org_3", Name: "Three", ExternalID: "", CreatedAt: "", UpdatedAt: ""},
+	}, window)
+}
+
 func TestRunOrganizationBackfill_SkipsNoopOrganization(t *testing.T) {
 	t.Parallel()
 
@@ -67,6 +104,9 @@ func TestRunOrganizationBackfill_SkipsNoopOrganization(t *testing.T) {
 			workosEndpoint:   "",
 			workosOrgIDs:     nil,
 			limit:            0,
+			pageSize:         0,
+			pageOffset:       0,
+			statementTimeout: defaultStatementTimeout,
 			dryRun:           false,
 			autoApprove:      false,
 			pauseAfterEach:   false,
