@@ -130,7 +130,7 @@ func TestAnalyzeBatch_DestructiveToolAnnotationFinding(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		CursorID:               uuid.NullUUID{},
+		CursorID:     uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestAnalyzeBatch_DestructiveToolAnnotationFinding(t *testing.T) {
 	require.Equal(t, msgID, rows[0].ChatMessageID)
 	require.True(t, rows[0].Found)
 	require.Equal(t, shadowmcp.SourceDestructiveTool, rows[0].Source)
-	require.Equal(t, "destructive_tool.annotation", rows[0].RuleID.String)
+	require.Equal(t, "destructive.tool", rows[0].RuleID.String)
 	require.Equal(t, "delete_records", rows[0].Match.String)
 }
 
@@ -175,14 +175,14 @@ func TestAnalyzeBatch_CLIDestructive_BashRmRf(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		CursorID:               uuid.NullUUID{},
+		CursorID:     uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.True(t, rows[0].Found)
 	assert.Equal(t, risk_analysis.SourceCLIDestructive, rows[0].Source)
-	assert.Equal(t, "cli_destructive.shell/rm-rf", rows[0].RuleID.String)
+	assert.Equal(t, "destructive.shell.rm_rf", rows[0].RuleID.String)
 	assert.Equal(t, "Bash", rows[0].Match.String)
 }
 
@@ -200,12 +200,12 @@ func TestAnalyzeBatch_CLIDestructive_GitForcePush(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		CursorID:               uuid.NullUUID{},
+		CursorID:     uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, "cli_destructive.git/push-force", rows[0].RuleID.String)
+	assert.Equal(t, "destructive.git.push_force", rows[0].RuleID.String)
 }
 
 // TestAnalyzeBatch_CLIDestructive_MCPArgsDropTable proves the cli_destructive
@@ -226,12 +226,12 @@ func TestAnalyzeBatch_CLIDestructive_MCPArgsDropTable(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		CursorID:               uuid.NullUUID{},
+		CursorID:     uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, "cli_destructive.database/drop", rows[0].RuleID.String)
+	assert.Equal(t, "destructive.database.drop", rows[0].RuleID.String)
 }
 
 // TestAnalyzeBatch_CLIDestructive_StableRuleIDAcrossKeys exercises the
@@ -246,9 +246,9 @@ func TestAnalyzeBatch_CLIDestructive_StableRuleIDAcrossKeys(t *testing.T) {
 	td := seedTestData(t, conn, true)
 
 	msgID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{
-		"command": "rm -rf *",                     // shell/rm-rf
+		"command": "rm -rf *",                     // shell/rm_rf
 		"context": "DROP TABLE x",                 // database/drop
-		"alt":     "git push --force origin main", // git/push-force
+		"alt":     "git push --force origin main", // git/push_force
 	})
 
 	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{risk_analysis.SourceCLIDestructive})
@@ -257,15 +257,15 @@ func TestAnalyzeBatch_CLIDestructive_StableRuleIDAcrossKeys(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		CursorID:               uuid.NullUUID{},
+		CursorID:     uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	// Sorted-key iteration walks "alt" → "command" → "context", so the
-	// first match is git/push-force from the "alt" key. Locking this in
+	// first match is git/push_force from the "alt" key. Locking this in
 	// a test catches accidental reintroduction of random map ordering.
-	assert.Equal(t, "cli_destructive.git/push-force", rows[0].RuleID.String)
+	assert.Equal(t, "destructive.git.push_force", rows[0].RuleID.String)
 }
 
 // TestAnalyzeBatch_BothSources_OnSameMCPCall asserts that destructive_tool
@@ -293,14 +293,14 @@ func TestAnalyzeBatch_BothSources_OnSameMCPCall(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		CursorID:               uuid.NullUUID{},
+		CursorID:     uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 	ruleIDs := []string{rows[0].RuleID.String, rows[1].RuleID.String}
-	assert.Contains(t, ruleIDs, "destructive_tool.annotation")
-	assert.Contains(t, ruleIDs, "cli_destructive.database/drop")
+	assert.Contains(t, ruleIDs, "destructive.tool")
+	assert.Contains(t, ruleIDs, "destructive.database.drop")
 }
 
 func TestAnalyzeBatch_CLIDestructive_BenignBash(t *testing.T) {
@@ -608,7 +608,7 @@ func TestAnalyzeBatch_SkipsWhenPolicyDisabled(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		CursorID:               uuid.NullUUID{},
+		CursorID:     uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)

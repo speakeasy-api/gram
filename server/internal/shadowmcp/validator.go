@@ -41,9 +41,9 @@ type ResolvedToolCall struct {
 // ValidateToolsetCall enforces that a Gram-hosted tool call carries the
 // required x-gram-toolset-id property, that the referenced toolset exists in
 // the calling organization, and that the toolset contains a tool whose
-// post-variation name matches toolName. Returns (reason, true) when the call
-// fails validation; the reason is suitable for surfacing alongside a policy
-// name in deny / flag messages.
+// post-variation name matches toolName. Returns (detail, true) when the call
+// fails validation; the detail is suitable for surfacing alongside a policy
+// name in deny / flag messages on the hook path.
 //
 // Toolset lookups go through the Client's bundled toolset cache so callers
 // on hot paths (tools/list hooks, batch scanner) share a single Redis-backed

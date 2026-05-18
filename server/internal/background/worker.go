@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	svix "github.com/svix/svix-webhooks/go"
-	"github.com/ClickHouse/clickhouse-go/v2"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/interceptor"
