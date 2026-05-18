@@ -297,23 +297,21 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 	member := parsed.member
 	orgQueries := orgrepo.New(dbtx)
 
-	cursor, err := latestMembershipCursor(ctx, orgQueries, organizationID, gramUserID, member.UserID)
+	relationshipCursor, err := latestRelationshipCursor(ctx, orgQueries, organizationID, gramUserID)
 	if err != nil {
 		return err
 	}
-	if !shouldProcessEvent(cursor.lastEventID, cursor.updatedAt, "", parsed.updatedAt) {
-		return nil
-	}
-
-	if err := orgQueries.UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
-		OrganizationID:     organizationID,
-		UserID:             conv.ToPGText(gramUserID),
-		WorkosUserID:       conv.ToPGText(member.UserID),
-		WorkosMembershipID: conv.ToPGText(member.ID),
-		WorkosUpdatedAt:    conv.ToPGTimestamptz(parsed.updatedAt),
-		WorkosLastEventID:  conv.ToPGText(""),
-	}); err != nil {
-		return fmt.Errorf("upsert organization membership %q: %w", member.ID, err)
+	if shouldProcessEvent(relationshipCursor.lastEventID, relationshipCursor.updatedAt, "", parsed.updatedAt) {
+		if err := orgQueries.UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
+			OrganizationID:     organizationID,
+			UserID:             conv.ToPGText(gramUserID),
+			WorkosUserID:       conv.ToPGText(member.UserID),
+			WorkosMembershipID: conv.ToPGText(member.ID),
+			WorkosUpdatedAt:    conv.ToPGTimestamptz(parsed.updatedAt),
+			WorkosLastEventID:  conv.ToPGText(""),
+		}); err != nil {
+			return fmt.Errorf("upsert organization membership %q: %w", member.ID, err)
+		}
 	}
 
 	roleSlugs := []string{}
@@ -326,6 +324,13 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 			return nil
 		}
 		roleSlugs = []string{member.RoleSlug}
+	}
+	assignmentCursor, err := latestAssignmentCursor(ctx, orgQueries, organizationID, member.UserID)
+	if err != nil {
+		return err
+	}
+	if !shouldProcessEvent(assignmentCursor.lastEventID, assignmentCursor.updatedAt, "", parsed.updatedAt) {
+		return nil
 	}
 	if err := orgQueries.SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
 		OrganizationID:     organizationID,
@@ -347,14 +352,7 @@ type membershipCursor struct {
 	updatedAt   *time.Time
 }
 
-// latestMembershipCursor returns the newest local WorkOS state for a membership
-// before applying a snapshot. Membership backfill writes two local shapes:
-// organization_user_relationships when the WorkOS user is linked to a Gram
-// user, and organization_role_assignments even when the user is still unknown
-// locally. Both can be updated by event processing, so the snapshot must compare
-// against the freshest cursor/timestamp from both tables before it overwrites
-// either table.
-func latestMembershipCursor(ctx context.Context, repo *orgrepo.Queries, organizationID, gramUserID, workosUserID string) (membershipCursor, error) {
+func latestAssignmentCursor(ctx context.Context, repo *orgrepo.Queries, organizationID, workosUserID string) (membershipCursor, error) {
 	var cursor membershipCursor
 
 	assignments, err := repo.ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
@@ -368,10 +366,11 @@ func latestMembershipCursor(ctx context.Context, repo *orgrepo.Queries, organiza
 		moveMembershipCursor(&cursor, assignment.WorkosLastEventID, assignment.WorkosUpdatedAt)
 	}
 
-	// No relationship row exists when the WorkOS user is not linked to a Gram user.
-	if gramUserID == "" {
-		return cursor, nil
-	}
+	return cursor, nil
+}
+
+func latestRelationshipCursor(ctx context.Context, repo *orgrepo.Queries, organizationID, gramUserID string) (membershipCursor, error) {
+	var cursor membershipCursor
 
 	existing, err := repo.GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
 		OrganizationID: organizationID,

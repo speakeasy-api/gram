@@ -518,6 +518,92 @@ func TestBackfillWorkOSOrganization_MembershipWithNewerEventSkipsRoleSnapshot(t 
 	require.Equal(t, "event_99FRESH", assignments[0].WorkosLastEventID.String)
 }
 
+func TestBackfillWorkOSOrganization_NewerRelationshipDoesNotSkipMissingAssignment(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newBackfillTestConn(t, "workos_backfill_relationship_newer_assignment_missing")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_backfill_relationship_newer"
+	const workosOrgID = "org_01JBACKFILLRELNEWER"
+	const workosUserID = "user_01JBACKFILLRELNEWER"
+	const gramUserID = "gram_user_01JBACKFILLRELNEWER"
+	const membershipID = "om_01JBACKFILLRELNEWER"
+	const roleSlug = "org-member"
+
+	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	_, err := usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          gramUserID,
+		Email:       "relationship-newer@example.com",
+		DisplayName: "Relationship Newer",
+		PhotoUrl:    conv.ToPGTextEmpty(""),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	err = orgrepo.New(conn).UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
+		OrganizationID:     organizationID,
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosUserID:       conv.ToPGText(workosUserID),
+		WorkosMembershipID: conv.ToPGText(membershipID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)),
+		WorkosLastEventID:  conv.ToPGText("event_99RELATIONSHIP"),
+	})
+	require.NoError(t, err)
+
+	workosClient := newWorkOSSnapshotClient(t, ctx,
+		workos.Organization{
+			ID:         workosOrgID,
+			Name:       "Backfill Relationship Newer",
+			ExternalID: "",
+			CreatedAt:  "2026-05-07T11:00:00Z",
+			UpdatedAt:  "2026-05-07T11:00:00Z",
+		},
+		[]workos.Role{{
+			ID:          "role_01JRELNEWER",
+			Name:        "Member",
+			Slug:        roleSlug,
+			Description: "",
+			Type:        "OrganizationRole",
+			CreatedAt:   "2026-05-07T11:00:00Z",
+			UpdatedAt:   "2026-05-07T11:00:00Z",
+		}},
+		[]workos.Member{{
+			ID:             membershipID,
+			UserID:         workosUserID,
+			OrganizationID: workosOrgID,
+			Organization:   "Backfill Relationship Newer",
+			RoleSlug:       roleSlug,
+			Status:         "active",
+			CreatedAt:      "2026-05-07T11:00:00Z",
+			UpdatedAt:      "2026-05-07T11:00:00Z",
+		}},
+	)
+	activity := NewBackfillWorkOSOrganization(logger, conn, workosClient)
+
+	err = activity.Do(ctx, BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+
+	relationship, err := orgrepo.New(conn).GetRelationshipByMembershipID(ctx, conv.ToPGText(membershipID))
+	require.NoError(t, err)
+	require.Equal(t, "event_99RELATIONSHIP", relationship.WorkosLastEventID.String)
+
+	role, err := accessrepo.New(conn).GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{
+		OrganizationID: organizationID,
+		WorkosSlug:     roleSlug,
+	})
+	require.NoError(t, err)
+
+	assignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.Len(t, assignments, 1)
+	require.Equal(t, fmt.Sprintf("role:organization:%s", role.ID.String()), assignments[0].RoleUrn)
+	require.Equal(t, membershipID, assignments[0].WorkosMembershipID.String)
+}
+
 func TestBackfillWorkOSOrganization_RoleWithLastEventIDSkipsSnapshot(t *testing.T) {
 	t.Parallel()
 
