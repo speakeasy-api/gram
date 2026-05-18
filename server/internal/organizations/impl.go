@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/workos/workos-go/v6/pkg/workos_errors"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -824,6 +825,11 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 
 	idpUser, err := s.inviteIdentity.AuthenticateWithMagicAuth(ctx, invite.Email)
 	if err != nil {
+		if inviteRequiresNormalLogin(err) {
+			span.AddEvent("invite.callback.normal_login_redirect")
+			http.Redirect(w, r, "/rpc/auth.login", http.StatusTemporaryRedirect)
+			return
+		}
 		s.logger.ErrorContext(ctx, "invite callback: magic auth failed", attr.SlogError(err))
 		span.RecordError(err)
 		redirectError("invite authentication failed")
@@ -988,6 +994,35 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		attr.SlogAuthUserEmail(inviteeEmail),
 	)
 	http.Redirect(w, r, s.siteURL, http.StatusTemporaryRedirect)
+}
+
+func inviteRequiresNormalLogin(err error) bool {
+	var ssoRequired *workos_errors.SSORequiredError
+	if errors.As(err, &ssoRequired) {
+		return true
+	}
+
+	var orgAuthRequired *workos_errors.OrganizationAuthenticationMethodsRequiredError
+	if errors.As(err, &orgAuthRequired) {
+		return !magicAuthAllowed(orgAuthRequired.AuthMethods)
+	}
+
+	return false
+}
+
+func magicAuthAllowed(authMethods map[string]bool) bool {
+	if authMethods == nil {
+		return true
+	}
+
+	for method, allowed := range authMethods {
+		normalized := strings.ReplaceAll(strings.ToLower(method), "_", "")
+		if normalized == "magicauth" {
+			return allowed
+		}
+	}
+
+	return true
 }
 
 func organizationUserToGen(row *orgrepo.ListOrganizationUsersRow) *gen.OrganizationUser {
