@@ -302,6 +302,9 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 		return err
 	}
 	if shouldProcessEvent(relationshipCursor.lastEventID, relationshipCursor.updatedAt, "", parsed.updatedAt) {
+		if err := mergeConflictingWorkOSMembership(ctx, dbtx, organizationID, gramUserID, member.ID); err != nil {
+			return err
+		}
 		if err := orgQueries.UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
 			OrganizationID:     organizationID,
 			UserID:             conv.ToPGText(gramUserID),
@@ -344,6 +347,32 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 		return fmt.Errorf("sync organization role assignments for membership %q: %w", member.ID, err)
 	}
 
+	return nil
+}
+
+func mergeConflictingWorkOSMembership(ctx context.Context, dbtx pgx.Tx, organizationID, gramUserID, workosMembershipID string) error {
+	if gramUserID == "" {
+		return nil
+	}
+	_, err := dbtx.Exec(ctx, `
+UPDATE organization_user_relationships
+SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+WHERE workos_membership_id = $3
+  AND deleted IS FALSE
+  AND EXISTS (
+      SELECT 1
+      FROM organization_user_relationships target
+      WHERE target.organization_id = $1
+        AND target.user_id = $2
+  )
+  AND NOT (
+      organization_id = $1
+      AND user_id IS NOT DISTINCT FROM $2
+  )`, organizationID, gramUserID, workosMembershipID)
+	if err != nil {
+		return fmt.Errorf("merge conflicting WorkOS membership %q: %w", workosMembershipID, err)
+	}
 	return nil
 }
 
