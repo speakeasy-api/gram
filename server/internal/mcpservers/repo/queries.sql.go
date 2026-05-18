@@ -26,7 +26,7 @@ VALUES (
     $4,
     $5
 )
-RETURNING id, project_id, name, slug, environment_id, external_oauth_server_id, oauth_proxy_server_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateMCPServerParams struct {
@@ -52,8 +52,7 @@ func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams
 		&i.Name,
 		&i.Slug,
 		&i.EnvironmentID,
-		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
 		&i.ToolsetID,
 		&i.Visibility,
@@ -69,7 +68,7 @@ const deleteMCPServer = `-- name: DeleteMCPServer :one
 UPDATE mcp_servers
 SET deleted_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, name, slug, environment_id, external_oauth_server_id, oauth_proxy_server_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteMCPServerParams struct {
@@ -86,8 +85,7 @@ func (q *Queries) DeleteMCPServer(ctx context.Context, arg DeleteMCPServerParams
 		&i.Name,
 		&i.Slug,
 		&i.EnvironmentID,
-		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
 		&i.ToolsetID,
 		&i.Visibility,
@@ -100,7 +98,7 @@ func (q *Queries) DeleteMCPServer(ctx context.Context, arg DeleteMCPServerParams
 }
 
 const getMCPServerByID = `-- name: GetMCPServerByID :one
-SELECT id, project_id, name, slug, environment_id, external_oauth_server_id, oauth_proxy_server_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -119,8 +117,7 @@ func (q *Queries) GetMCPServerByID(ctx context.Context, arg GetMCPServerByIDPara
 		&i.Name,
 		&i.Slug,
 		&i.EnvironmentID,
-		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
 		&i.ToolsetID,
 		&i.Visibility,
@@ -133,7 +130,7 @@ func (q *Queries) GetMCPServerByID(ctx context.Context, arg GetMCPServerByIDPara
 }
 
 const listMCPServersByProjectID = `-- name: ListMCPServersByProjectID :many
-SELECT id, project_id, name, slug, environment_id, external_oauth_server_id, oauth_proxy_server_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -163,8 +160,7 @@ func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServ
 			&i.Name,
 			&i.Slug,
 			&i.EnvironmentID,
-			&i.ExternalOauthServerID,
-			&i.OauthProxyServerID,
+			&i.UserSessionIssuerID,
 			&i.RemoteMcpServerID,
 			&i.ToolsetID,
 			&i.Visibility,
@@ -192,7 +188,7 @@ SET
     visibility = $4,
     updated_at = clock_timestamp()
 WHERE id = $5 AND project_id = $6 AND deleted IS FALSE
-RETURNING id, project_id, name, slug, environment_id, external_oauth_server_id, oauth_proxy_server_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateMCPServerParams struct {
@@ -220,8 +216,7 @@ func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams
 		&i.Name,
 		&i.Slug,
 		&i.EnvironmentID,
-		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
 		&i.ToolsetID,
 		&i.Visibility,
