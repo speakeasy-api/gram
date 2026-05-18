@@ -16,7 +16,7 @@ import type {
 } from "@gram/client/models/components";
 import { useLoadChat, useSearchLogsMutation } from "@gram/client/react-query";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
-import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Icon, Stack, type IconName } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
@@ -163,6 +163,97 @@ interface ToolCall {
   };
 }
 
+type MessageKind =
+  | "user"
+  | "tool-call"
+  | "tool-result"
+  | "assistant"
+  | "system";
+
+type MessageKindMeta = {
+  label: string;
+  icon: IconName;
+  rowClassName: string;
+  iconClassName: string;
+};
+
+const MESSAGE_KIND_ORDER: MessageKind[] = [
+  "user",
+  "tool-call",
+  "tool-result",
+  "assistant",
+  "system",
+];
+
+const MESSAGE_KIND_META: Record<MessageKind, MessageKindMeta> = {
+  user: {
+    label: "User",
+    icon: "user",
+    rowClassName: "border-primary/30 bg-primary/5",
+    iconClassName: "bg-primary/10 text-primary",
+  },
+  "tool-call": {
+    label: "Tool Call",
+    icon: "zap",
+    rowClassName: "border-warning/40 bg-warning/10",
+    iconClassName: "bg-warning/15 text-warning",
+  },
+  "tool-result": {
+    label: "Tool Result",
+    icon: "terminal",
+    rowClassName: "border-success/40 bg-success/10",
+    iconClassName: "bg-success/15 text-success",
+  },
+  assistant: {
+    label: "Assistant",
+    icon: "bot",
+    rowClassName: "border-muted bg-muted/40",
+    iconClassName: "bg-muted text-foreground",
+  },
+  system: {
+    label: "System Prompt",
+    icon: "settings",
+    rowClassName: "border-border bg-muted/20",
+    iconClassName: "bg-muted text-muted-foreground",
+  },
+};
+
+function getMessageKind(
+  message: ChatMessage,
+  hasToolCalls: boolean,
+): MessageKind {
+  if (message.role === "tool") return "tool-result";
+  if (message.role === "system") return "system";
+  if (hasToolCalls) return "tool-call";
+  if (message.role === "user") return "user";
+  return "assistant";
+}
+
+function getMessageLabel(
+  message: ChatMessage,
+  parsedToolCalls: ToolCall[] | null,
+) {
+  const kind = getMessageKind(message, !!parsedToolCalls);
+  if (kind === "tool-call") {
+    return `Tool Call: ${parsedToolCalls?.[0]?.function?.name ?? "unknown"}`;
+  }
+  return MESSAGE_KIND_META[kind].label;
+}
+
+function parseToolCalls(toolCalls?: string): ToolCall[] | null {
+  if (!toolCalls) return null;
+  try {
+    let parsed: unknown = JSON.parse(toolCalls);
+    // Handle double-encoded JSON strings
+    if (typeof parsed === "string") {
+      parsed = JSON.parse(parsed);
+    }
+    return Array.isArray(parsed) ? (parsed as ToolCall[]) : null;
+  } catch {
+    return null;
+  }
+}
+
 function ChatMessagesList({
   messages,
   messageResolutionMap,
@@ -174,9 +265,37 @@ function ChatMessagesList({
   riskResultsByMessage: Map<string, RiskResult[]>;
   collapseNonRisk?: boolean;
 }) {
+  const [activeKind, setActiveKind] = useState<MessageKind | null>(null);
+
+  const messageKinds = useMemo(() => {
+    const map = new Map<string, MessageKind>();
+    for (const message of messages) {
+      map.set(
+        message.id,
+        getMessageKind(message, !!parseToolCalls(message.toolCalls)),
+      );
+    }
+    return map;
+  }, [messages]);
+
+  const kindCounts = useMemo(() => {
+    const counts = new Map<MessageKind, number>();
+    for (const kind of messageKinds.values()) {
+      counts.set(kind, (counts.get(kind) ?? 0) + 1);
+    }
+    return counts;
+  }, [messageKinds]);
+
+  const filteredMessages = useMemo(() => {
+    if (!activeKind) return messages;
+    return messages.filter(
+      (message) => messageKinds.get(message.id) === activeKind,
+    );
+  }, [activeKind, messageKinds, messages]);
+
   const groups = useMemo(() => {
     const byGeneration = new Map<number, ChatMessage[]>();
-    for (const m of messages) {
+    for (const m of filteredMessages) {
       const list = byGeneration.get(m.generation) ?? [];
       list.push(m);
       byGeneration.set(m.generation, list);
@@ -184,57 +303,110 @@ function ChatMessagesList({
     return Array.from(byGeneration.entries())
       .sort(([a], [b]) => a - b)
       .map(([generation, items]) => ({ generation, messages: items }));
-  }, [messages]);
+  }, [filteredMessages]);
 
   const maxGeneration =
     groups.length > 0 ? groups[groups.length - 1]!.generation : 0;
+  const visibleKinds = MESSAGE_KIND_ORDER.filter((kind) =>
+    kindCounts.has(kind),
+  );
+  const filterBar =
+    visibleKinds.length > 1 ? (
+      <div className="mb-4 flex flex-wrap items-center gap-2 border-b pb-3">
+        <button
+          type="button"
+          onClick={() => setActiveKind(null)}
+          className={cn(
+            "hover:bg-muted inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
+            activeKind === null
+              ? "border-primary bg-primary/5 text-foreground"
+              : "border-border text-muted-foreground",
+          )}
+        >
+          All
+          <span className="bg-muted rounded-full px-1.5 text-[10px]">
+            {messages.length}
+          </span>
+        </button>
+        {visibleKinds.map((kind) => {
+          const meta = MESSAGE_KIND_META[kind];
+          return (
+            <button
+              key={kind}
+              type="button"
+              onClick={() =>
+                setActiveKind((current) => (current === kind ? null : kind))
+              }
+              className={cn(
+                "hover:bg-muted inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
+                activeKind === kind
+                  ? "border-primary bg-primary/5 text-foreground"
+                  : "border-border text-muted-foreground",
+              )}
+            >
+              <Icon name={meta.icon} className="size-3.5" />
+              {meta.label}
+              <span className="bg-muted rounded-full px-1.5 text-[10px]">
+                {kindCounts.get(kind)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    ) : null;
 
   // A single segment (no compaction has ever occurred) stays flat — no accordion.
   if (maxGeneration === 0) {
     return (
-      <Stack direction="vertical" gap={4}>
-        {messages.map((message) => (
-          <MessageItem
-            key={message.id}
-            message={message}
-            resolution={messageResolutionMap.get(message.id)}
-            riskResults={riskResultsByMessage.get(message.id)}
-            collapseNonRisk={collapseNonRisk}
-          />
-        ))}
-      </Stack>
+      <>
+        {filterBar}
+        <Stack direction="vertical" gap={4}>
+          {filteredMessages.map((message) => (
+            <MessageItem
+              key={message.id}
+              message={message}
+              resolution={messageResolutionMap.get(message.id)}
+              riskResults={riskResultsByMessage.get(message.id)}
+              collapseNonRisk={collapseNonRisk}
+            />
+          ))}
+        </Stack>
+      </>
     );
   }
 
   return (
-    <Accordion type="multiple" defaultValue={[`gen-${maxGeneration}`]}>
-      {groups.map(({ generation, messages: groupMessages }) => (
-        <AccordionItem key={generation} value={`gen-${generation}`}>
-          <AccordionTrigger>
-            <div className="flex items-center gap-2">
-              <span>Conversation segment {generation + 1}</span>
-              <span className="text-muted-foreground text-xs font-normal">
-                {groupMessages.length} message
-                {groupMessages.length === 1 ? "" : "s"}
-              </span>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent>
-            <Stack direction="vertical" gap={4}>
-              {groupMessages.map((message) => (
-                <MessageItem
-                  key={message.id}
-                  message={message}
-                  resolution={messageResolutionMap.get(message.id)}
-                  riskResults={riskResultsByMessage.get(message.id)}
-                  collapseNonRisk={collapseNonRisk}
-                />
-              ))}
-            </Stack>
-          </AccordionContent>
-        </AccordionItem>
-      ))}
-    </Accordion>
+    <>
+      {filterBar}
+      <Accordion type="multiple" defaultValue={[`gen-${maxGeneration}`]}>
+        {groups.map(({ generation, messages: groupMessages }) => (
+          <AccordionItem key={generation} value={`gen-${generation}`}>
+            <AccordionTrigger>
+              <div className="flex items-center gap-2">
+                <span>Conversation segment {generation + 1}</span>
+                <span className="text-muted-foreground text-xs font-normal">
+                  {groupMessages.length} message
+                  {groupMessages.length === 1 ? "" : "s"}
+                </span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              <Stack direction="vertical" gap={4}>
+                {groupMessages.map((message) => (
+                  <MessageItem
+                    key={message.id}
+                    message={message}
+                    resolution={messageResolutionMap.get(message.id)}
+                    riskResults={riskResultsByMessage.get(message.id)}
+                    collapseNonRisk={collapseNonRisk}
+                  />
+                ))}
+              </Stack>
+            </AccordionContent>
+          </AccordionItem>
+        ))}
+      </Accordion>
+    </>
   );
 }
 
@@ -258,29 +430,15 @@ function MessageItem({
   const [contentRevealed, setContentRevealed] = useState(false);
   const isCollapsed = collapseNonRisk && !hasRisk && !expanded;
 
-  const parsedToolCalls: ToolCall[] | null = useMemo(() => {
-    if (!message.toolCalls) return null;
-    try {
-      let parsed: unknown = JSON.parse(message.toolCalls);
-      // Handle double-encoded JSON strings
-      if (typeof parsed === "string") {
-        parsed = JSON.parse(parsed);
-      }
-      return Array.isArray(parsed) ? (parsed as ToolCall[]) : null;
-    } catch {
-      return null;
-    }
-  }, [message.toolCalls]);
+  const parsedToolCalls: ToolCall[] | null = useMemo(
+    () => parseToolCalls(message.toolCalls),
+    [message.toolCalls],
+  );
+  const messageKind = getMessageKind(message, !!parsedToolCalls);
+  const messageMeta = MESSAGE_KIND_META[messageKind];
 
   if (isCollapsed) {
-    const label =
-      message.role === "tool"
-        ? "Tool Result"
-        : message.role === "system"
-          ? "System Prompt"
-          : parsedToolCalls
-            ? `Tool Call: ${parsedToolCalls[0]?.function?.name ?? "unknown"}`
-            : message.role;
+    const label = getMessageLabel(message, parsedToolCalls);
     const preview =
       !parsedToolCalls && typeof message.content === "string"
         ? message.content.trim().slice(0, 80)
@@ -290,12 +448,25 @@ function MessageItem({
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        className="text-muted-foreground hover:bg-muted/50 flex w-full items-center gap-2 rounded px-1 py-1 text-xs transition-colors"
+        className={cn(
+          "text-muted-foreground flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-xs transition-colors hover:brightness-95",
+          messageMeta.rowClassName,
+        )}
       >
         <Icon name="chevron-right" className="size-3 shrink-0" />
-        <span className="capitalize">{label}</span>
+        <span
+          className={cn(
+            "inline-flex size-5 shrink-0 items-center justify-center rounded-full",
+            messageMeta.iconClassName,
+          )}
+        >
+          <Icon name={messageMeta.icon} className="size-3" />
+        </span>
+        <span className="text-foreground font-medium">{label}</span>
         {message.createdAt && (
-          <span>{format(new Date(message.createdAt), "HH:mm:ss")}</span>
+          <span className="tabular-nums">
+            {format(new Date(message.createdAt), "HH:mm:ss")}
+          </span>
         )}
         {preview && <span className="truncate opacity-60">{preview}...</span>}
       </button>
@@ -885,23 +1056,21 @@ export function ChatDetailPanel({
             )}
           </div>
           <div className="flex items-center gap-1">
+            <button
+              onClick={() => exportChatAsJson(chat)}
+              className="hover:bg-muted text-muted-foreground rounded-md p-1 transition-colors"
+              aria-label="Export chat as JSON"
+            >
+              <Icon name="download" className="size-5" />
+            </button>
             {isAdmin && (
-              <>
-                <button
-                  onClick={() => exportChatAsJson(chat)}
-                  className="hover:bg-muted text-muted-foreground rounded-md p-1 transition-colors"
-                  aria-label="Export chat as JSON"
-                >
-                  <Icon name="download" className="size-5" />
-                </button>
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md p-1 transition-colors"
-                  aria-label="Delete chat"
-                >
-                  <Icon name="trash-2" className="size-5" />
-                </button>
-              </>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md p-1 transition-colors"
+                aria-label="Delete chat"
+              >
+                <Icon name="trash-2" className="size-5" />
+              </button>
             )}
             <button
               onClick={onClose}
