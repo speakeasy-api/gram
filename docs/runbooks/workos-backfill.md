@@ -30,17 +30,10 @@ that mode ignores `GRAM_DATABASE_URL` and builds a local proxy URL.
 If you need to point at a non-standard WorkOS API endpoint, set
 `WORKOS_API_URL` or pass `--workos-endpoint`.
 
-Before using Cloud SQL, grant your IAM database user the right permissions from
-the `gram-infra` repo:
-
-```sh
-cd ~/github.com/speakeasy-api/gram-infra
-mise gcp:db:master dev
-```
-
-Choose `READ` for preflight/validate and `ALL` before writes. The backfill
-command starts the Cloud SQL proxy and connects as your active `gcloud` account;
-it does not create the IAM database user or grant privileges.
+When `--cloudsql-proxy` is used, the script follows the `gram-infra` access
+pattern: it starts the proxy, creates your IAM database user if needed, grants
+read-only access for preflight/validate or write access for write phases, then
+connects as your active `gcloud` account.
 
 ## Commands
 
@@ -226,8 +219,9 @@ Each organization write runs inside a database transaction. The write path:
 
 When `--cloudsql-proxy` is set, the script derives the Cloud SQL instance from
 `--environment`, starts `cloud-sql-proxy` with `--auto-iam-authn`, picks a free
-local port unless `--cloudsql-port` is provided, and connects to `127.0.0.1` as
-the active `gcloud` account.
+local port unless `--cloudsql-port` is provided, reads the `*_gram_db_password`
+secret to prepare IAM user access, and connects to `127.0.0.1` as the active
+`gcloud` account.
 
 The script sets `lock_timeout=5s` and `statement_timeout=5min` for DB sessions.
 Preflight, validate, and dry-run sessions are read-only.
@@ -281,7 +275,7 @@ When stopped before an organization write, inspect:
 ## Troubleshooting
 
 If the command fails with `SQLSTATE 42501` or `permission denied for table ...`,
-the Cloud SQL proxy connected successfully, but your IAM database user does not
-have enough table privileges. Go to `~/github.com/speakeasy-api/gram-infra`,
-run `mise gcp:db:master dev` or `mise gcp:db:master prod`, and choose `READ`
-for preflight/validate or `ALL` before write phases.
+the Cloud SQL proxy connected successfully, but the automatic grant step did not
+apply the expected table privileges. Check that your `gcloud` account can manage
+Cloud SQL users and read the `*_gram_db_password` secret for the target
+environment.

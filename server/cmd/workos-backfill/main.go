@@ -257,18 +257,18 @@ func run(ctx context.Context, opts options) error {
 		}
 	}
 
+	readOnly := opts.dryRun || opts.phase == phasePreflight || opts.phase == phaseValidate
 	databaseURL := opts.databaseURL
 	var cleanupCloudSQLProxy func()
 	if opts.cloudSQLProxy {
 		var err error
-		databaseURL, cleanupCloudSQLProxy, err = startCloudSQLProxy(ctx, opts)
+		databaseURL, cleanupCloudSQLProxy, err = startCloudSQLProxy(ctx, opts, readOnly)
 		if err != nil {
 			return err
 		}
 		defer cleanupCloudSQLProxy()
 	}
 
-	readOnly := opts.dryRun || opts.phase == phasePreflight || opts.phase == phaseValidate
 	db, err := connectDB(ctx, databaseURL, readOnly)
 	if err != nil {
 		if opts.cloudSQLProxy {
