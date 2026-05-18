@@ -353,7 +353,8 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		clientSecret = decoded
 	}
 
-	tok, err := m.exchangeCode(ctx, state, clientRow.ClientID, clientSecret, code)
+	authMethod := ResolveTokenEndpointAuthMethod(clientRow.TokenEndpointAuthMethod.String)
+	tok, err := m.exchangeCode(ctx, state, clientRow.ClientID, clientSecret, authMethod, code)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").Log(ctx, logger)
 	}
@@ -433,14 +434,12 @@ func (t tokenResponse) Scopes() []string {
 	return strings.Split(t.Scope, " ")
 }
 
-// exchangeCode POSTs application/x-www-form-urlencoded to the upstream
-// token endpoint per RFC 6749 §4.1.3. Auth methods: client_secret_basic
-// when a secret is set, otherwise public-client (PKCE-only).
 func (m *ChallengeManager) exchangeCode(
 	ctx context.Context,
 	state RemoteLoginState,
 	externalClientID string,
 	clientSecret string,
+	authMethod TokenEndpointAuthMethod,
 	code string,
 ) (tokenResponse, error) {
 	form := url.Values{}
@@ -456,9 +455,7 @@ func (m *ChallengeManager) exchangeCode(
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	if clientSecret != "" {
-		req.SetBasicAuth(externalClientID, clientSecret)
-	}
+	applyTokenEndpointAuth(req, form, authMethod, externalClientID, clientSecret)
 
 	resp, err := m.policy.PooledClient().Do(req)
 	if err != nil {

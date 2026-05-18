@@ -42,6 +42,33 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// applyTokenEndpointAuth attaches client credentials to req per RFC 6749
+// §2.3 using the supplied method. Both exchangeCode (initial login) and
+// refreshAccessToken (silent refresh) call into here so the basic-vs-post
+// branch lives in exactly one place.
+//
+//   - client_secret_post: appends client_secret to form and re-encodes the
+//     request body. RFC 6749 §2.3.1 prohibits sending the secret in the
+//     Authorization header in this mode.
+//   - client_secret_basic (default): leaves form alone and sets
+//     Authorization: Basic <id:secret>.
+//   - Empty secret: public client (PKCE-only). No credentials sent either
+//     way; PKCE provides per-flow integrity.
+func applyTokenEndpointAuth(req *http.Request, form url.Values, method TokenEndpointAuthMethod, clientID, clientSecret string) {
+	if clientSecret == "" {
+		return
+	}
+	switch method {
+	case TokenEndpointAuthMethodPost:
+		form.Set("client_secret", clientSecret)
+		encoded := form.Encode()
+		req.Body = io.NopCloser(strings.NewReader(encoded))
+		req.ContentLength = int64(len(encoded))
+	default:
+		req.SetBasicAuth(clientID, clientSecret)
+	}
+}
+
 // ErrNoValidToken signals "there is a remote-session requirement for
 // this toolset but the subject has no usable token." Callers (the MCP
 // runtime) surface this as a fresh auth challenge so the user can
@@ -185,6 +212,8 @@ func (m *ChallengeManager) refreshAccessToken(
 		}
 	}
 
+	authMethod := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String)
+
 	form := url.Values{}
 	form.Set("grant_type", "refresh_token")
 	form.Set("refresh_token", refreshToken)
@@ -196,9 +225,7 @@ func (m *ChallengeManager) refreshAccessToken(
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	if clientSecret != "" {
-		req.SetBasicAuth(client.ExternalClientID, clientSecret)
-	}
+	applyTokenEndpointAuth(req, form, authMethod, client.ExternalClientID, clientSecret)
 
 	resp, err := m.policy.PooledClient().Do(req)
 	if err != nil {
