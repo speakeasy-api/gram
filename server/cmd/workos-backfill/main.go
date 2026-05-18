@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace/noop"
@@ -427,6 +428,48 @@ func connectDB(ctx context.Context, databaseURL string, readOnly bool) (*pgxpool
 	return db, nil
 }
 
+func retryTransientDBDisconnect(ctx context.Context, label string, fn func() error) error {
+	const attempts = 3
+	var err error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		err = fn()
+		if err == nil {
+			return nil
+		}
+		if !isTransientDBDisconnect(err) || attempt == attempts {
+			return err
+		}
+
+		delay := time.Duration(attempt) * 500 * time.Millisecond
+		fmt.Fprintf(os.Stderr, "WARN  transient database disconnect during %s; retrying in %s: %v\n", label, delay, err)
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return fmt.Errorf("%s: %w", label, ctx.Err())
+		case <-timer.C:
+		}
+	}
+	return err
+}
+
+func isTransientDBDisconnect(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case "57P01", "57P02", "57P03", "08000", "08003", "08006", "08007", "08P01":
+			return true
+		default:
+			return false
+		}
+	}
+	return strings.Contains(err.Error(), "SQLSTATE 57P01") ||
+		strings.Contains(err.Error(), "terminating connection due to administrator command") ||
+		strings.Contains(err.Error(), "conn closed")
+}
+
 func newWorkOSClient(opts options) (*workos.Client, error) {
 	tracerProvider := noop.NewTracerProvider()
 	policy := guardian.NewDefaultPolicy(tracerProvider)
@@ -454,66 +497,88 @@ func buildOrganizationPlan(ctx context.Context, db *pgxpool.Pool, workosClient *
 	out := make([]orgExpectation, 0, len(workosOrgs))
 	for i, org := range workosOrgs {
 		fmt.Printf("[%d/%d] plan %s name=%q\n", i+1, len(workosOrgs), org.ID, org.Name)
-		gramOrgID, skipped, err := expectedGramOrgID(ctx, db, org)
+		expectation, err := planOrganizationWithRetry(ctx, db, workosClient, org)
 		if err != nil {
 			return nil, err
 		}
-		roles, err := workosClient.ListRoles(ctx, org.ID)
-		if err != nil {
-			return nil, fmt.Errorf("list roles for %s: %w", org.ID, err)
-		}
-		users, err := workosClient.ListOrgUsers(ctx, org.ID)
-		if err != nil {
-			return nil, fmt.Errorf("list users for %s: %w", org.ID, err)
-		}
-		members, err := workosClient.ListOrgMemberships(ctx, org.ID)
-		if err != nil {
-			return nil, fmt.Errorf("list memberships for %s: %w", org.ID, err)
-		}
-
-		orgChanges, err := classifyOrganizationMetadataChange(ctx, db, org, gramOrgID, skipped)
-		if err != nil {
-			return nil, err
-		}
-		roleChanges, err := classifyOrganizationRoleChanges(ctx, db, gramOrgID, skipped, roles)
-		if err != nil {
-			return nil, err
-		}
-		userChanges, err := classifyUserChanges(ctx, db, skipped, users)
-		if err != nil {
-			return nil, err
-		}
-		membershipChanges, err := classifyMembershipChanges(ctx, db, gramOrgID, skipped, users, members)
-		if err != nil {
-			return nil, err
-		}
-		assignmentChanges, err := classifyAssignmentChanges(ctx, db, gramOrgID, skipped, roles, users, members)
-		if err != nil {
-			return nil, err
-		}
-		changeDetails, err := collectOrganizationChangeDetails(ctx, db, org, gramOrgID, skipped, roles, users, members)
-		if err != nil {
-			return nil, err
-		}
-
-		out = append(out, orgExpectation{
-			workosOrgID:       org.ID,
-			gramOrgID:         gramOrgID,
-			name:              org.Name,
-			skipped:           skipped,
-			roles:             roles,
-			users:             users,
-			members:           members,
-			orgChanges:        orgChanges,
-			roleChanges:       roleChanges,
-			userChanges:       userChanges,
-			membershipChanges: membershipChanges,
-			assignmentChanges: assignmentChanges,
-			changeDetails:     changeDetails,
-		})
+		out = append(out, expectation)
 	}
 
 	return out, nil
+}
+
+func planOrganizationWithRetry(ctx context.Context, db *pgxpool.Pool, workosClient *workos.Client, org workos.Organization) (orgExpectation, error) {
+	var expectation orgExpectation
+	err := retryTransientDBDisconnect(ctx, fmt.Sprintf("plan organization %s", org.ID), func() error {
+		next, err := planOrganization(ctx, db, workosClient, org)
+		if err != nil {
+			return err
+		}
+		expectation = next
+		return nil
+	})
+	return expectation, err
+}
+
+func planOrganization(ctx context.Context, db *pgxpool.Pool, workosClient *workos.Client, org workos.Organization) (orgExpectation, error) {
+	var zero orgExpectation
+	gramOrgID, skipped, err := expectedGramOrgID(ctx, db, org)
+	if err != nil {
+		return zero, err
+	}
+	roles, err := workosClient.ListRoles(ctx, org.ID)
+	if err != nil {
+		return zero, fmt.Errorf("list roles for %s: %w", org.ID, err)
+	}
+	users, err := workosClient.ListOrgUsers(ctx, org.ID)
+	if err != nil {
+		return zero, fmt.Errorf("list users for %s: %w", org.ID, err)
+	}
+	members, err := workosClient.ListOrgMemberships(ctx, org.ID)
+	if err != nil {
+		return zero, fmt.Errorf("list memberships for %s: %w", org.ID, err)
+	}
+
+	orgChanges, err := classifyOrganizationMetadataChange(ctx, db, org, gramOrgID, skipped)
+	if err != nil {
+		return zero, err
+	}
+	roleChanges, err := classifyOrganizationRoleChanges(ctx, db, gramOrgID, skipped, roles)
+	if err != nil {
+		return zero, err
+	}
+	userChanges, err := classifyUserChanges(ctx, db, skipped, users)
+	if err != nil {
+		return zero, err
+	}
+	membershipChanges, err := classifyMembershipChanges(ctx, db, gramOrgID, skipped, users, members)
+	if err != nil {
+		return zero, err
+	}
+	assignmentChanges, err := classifyAssignmentChanges(ctx, db, gramOrgID, skipped, roles, users, members)
+	if err != nil {
+		return zero, err
+	}
+	changeDetails, err := collectOrganizationChangeDetails(ctx, db, org, gramOrgID, skipped, roles, users, members)
+	if err != nil {
+		return zero, err
+	}
+
+	return orgExpectation{
+		workosOrgID:       org.ID,
+		gramOrgID:         gramOrgID,
+		name:              org.Name,
+		skipped:           skipped,
+		roles:             roles,
+		users:             users,
+		members:           members,
+		orgChanges:        orgChanges,
+		roleChanges:       roleChanges,
+		userChanges:       userChanges,
+		membershipChanges: membershipChanges,
+		assignmentChanges: assignmentChanges,
+		changeDetails:     changeDetails,
+	}, nil
 }
 
 func selectedOrganizations(ctx context.Context, workosClient *workos.Client, opts options) ([]workos.Organization, error) {
