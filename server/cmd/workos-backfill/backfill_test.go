@@ -604,6 +604,103 @@ func TestBackfillWorkOSOrganization_NewerRelationshipDoesNotSkipMissingAssignmen
 	require.Equal(t, membershipID, assignments[0].WorkosMembershipID.String)
 }
 
+func TestBackfillWorkOSOrganization_RecreatesDeletedAssignmentFromSnapshot(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newBackfillTestConn(t, "workos_backfill_recreate_deleted_assignment")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_backfill_recreate_deleted_assignment"
+	const workosOrgID = "org_01JBACKFILLRECREATEDELETED"
+	const workosUserID = "user_01JBACKFILLRECREATEDELETED"
+	const gramUserID = "gram_user_01JBACKFILLRECREATEDELETED"
+	const membershipID = "om_01JBACKFILLRECREATEDELETED"
+	const roleSlug = "org-member"
+
+	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	seedOrganizationRoleWithCursor(t, ctx, conn, organizationID, roleSlug, "Member", "")
+	_, err := usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          gramUserID,
+		Email:       "recreate-deleted@example.com",
+		DisplayName: "Recreate Deleted",
+		PhotoUrl:    conv.ToPGTextEmpty(""),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	err = orgrepo.New(conn).SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       workosUserID,
+		WorkosRoleSlugs:    []string{roleSlug},
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosMembershipID: conv.ToPGText(membershipID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Date(2026, 5, 7, 11, 0, 0, 0, time.UTC)),
+		WorkosLastEventID:  conv.ToPGText("event_01DELETESETUP"),
+	})
+	require.NoError(t, err)
+	err = orgrepo.New(conn).SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       workosUserID,
+		WorkosRoleSlugs:    []string{},
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosMembershipID: conv.ToPGText(membershipID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)),
+		WorkosLastEventID:  conv.ToPGText("event_02DELETESETUP"),
+	})
+	require.NoError(t, err)
+
+	workosClient := newWorkOSSnapshotClient(t, ctx,
+		workos.Organization{
+			ID:         workosOrgID,
+			Name:       "Backfill Recreate Deleted Assignment",
+			ExternalID: "",
+			CreatedAt:  "2026-05-07T11:00:00Z",
+			UpdatedAt:  "2026-05-07T11:00:00Z",
+		},
+		[]workos.Role{{
+			ID:          "role_01JRECREATE",
+			Name:        "Member",
+			Slug:        roleSlug,
+			Description: "",
+			Type:        "OrganizationRole",
+			CreatedAt:   "2026-05-07T11:00:00Z",
+			UpdatedAt:   "2026-05-07T11:00:00Z",
+		}},
+		[]workos.Member{{
+			ID:             membershipID,
+			UserID:         workosUserID,
+			OrganizationID: workosOrgID,
+			Organization:   "Backfill Recreate Deleted Assignment",
+			RoleSlug:       roleSlug,
+			Status:         "active",
+			CreatedAt:      "2026-05-07T13:00:00Z",
+			UpdatedAt:      "2026-05-07T13:00:00Z",
+		}},
+	)
+	activity := NewBackfillWorkOSOrganization(logger, conn, workosClient)
+
+	err = activity.Do(ctx, BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+
+	assignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	activeAssignments := 0
+	deletedAssignments := 0
+	for _, assignment := range assignments {
+		if assignment.DeletedAt.Valid {
+			deletedAssignments++
+		} else {
+			activeAssignments++
+			require.Equal(t, membershipID, assignment.WorkosMembershipID.String)
+		}
+	}
+	require.Equal(t, 1, deletedAssignments)
+	require.Equal(t, 1, activeAssignments)
+}
+
 func TestBackfillWorkOSOrganization_RoleWithLastEventIDSkipsSnapshot(t *testing.T) {
 	t.Parallel()
 

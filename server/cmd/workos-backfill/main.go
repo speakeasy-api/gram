@@ -1592,17 +1592,19 @@ func runOrganizationBackfill(ctx context.Context, logger *slog.Logger, db *pgxpo
 		if err := backfill.Do(ctx, BackfillWorkOSOrganizationParams{WorkOSOrganizationID: org.workosOrgID}); err != nil {
 			rep.failed++
 			fmt.Fprintf(os.Stderr, "  failed: %v\n", err)
-		} else if err := validateOrganization(ctx, db, org); err != nil {
-			rep.validationFailures++
-			fmt.Fprintf(os.Stderr, "  validation failed: %v\n", err)
 		} else {
 			rep.written++
-			rep.validated++
 			rep.organizationRows = rep.organizationRows.Add(org.orgChanges)
 			rep.roleRows = rep.roleRows.Add(org.roleChanges)
 			rep.userRows = rep.userRows.Add(org.userChanges)
 			rep.membershipRows = rep.membershipRows.Add(org.membershipChanges)
 			rep.assignmentRows = rep.assignmentRows.Add(org.assignmentChanges)
+			if err := validateOrganization(ctx, db, org); err != nil {
+				rep.validationFailures++
+				fmt.Fprintf(os.Stderr, "  validation failed: %v\n", err)
+			} else {
+				rep.validated++
+			}
 		}
 
 		if opts.pauseAfterEach {

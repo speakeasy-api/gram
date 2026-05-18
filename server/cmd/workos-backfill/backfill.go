@@ -363,6 +363,9 @@ func latestAssignmentCursor(ctx context.Context, repo *orgrepo.Queries, organiza
 		return membershipCursor{}, fmt.Errorf("list organization role assignments for WorkOS user %q: %w", workosUserID, err)
 	}
 	for _, assignment := range assignments {
+		if assignment.DeletedAt.Valid {
+			continue
+		}
 		moveMembershipCursor(&cursor, assignment.WorkosLastEventID, assignment.WorkosUpdatedAt)
 	}
 
