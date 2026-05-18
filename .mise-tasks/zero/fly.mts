@@ -145,30 +145,6 @@ async function run() {
     process.exit(0);
   }
 
-  const initialAssistantApp =
-    process.env["GRAM_ASSISTANT_RUNTIME_OCI_IMAGE"]?.split("/")[1] ||
-    `${app}-assistants`;
-  const assistantApp = await text({
-    message:
-      "🎈 Enter your Fly.io app name for Gram assistant runtime images (must be separate from the functions app)",
-    initialValue: initialAssistantApp,
-    validate: (value) => {
-      if (!value) return "Assistant runtime app name is required.";
-      if (value === app) {
-        return "Must be different from the Gram Functions app to avoid tag collisions.";
-      }
-    },
-  });
-  if (isCancel(assistantApp)) {
-    cancel("Operation cancelled.");
-    process.exit(0);
-  }
-
-  note(
-    `Create the app if it does not exist yet:\n  fly apps create -o ${org} ${assistantApp}\n\nThen build + push:\n  mise run build:assistants-runtime-image --arch amd64`,
-    "Assistant runtime registry",
-  );
-
   const initialTigrisBucket =
     process.env["GRAM_FUNCTIONS_TIGRIS_BUCKET_URI"]?.slice("s3://".length) ||
     undefined;
@@ -234,7 +210,10 @@ async function run() {
     `GRAM_FUNCTIONS_RUNNER_OCI_IMAGE=registry.fly.io/${app}`,
     `GRAM_FUNCTIONS_RUNNER_VERSION=main`,
     `GRAM_FUNCTIONS_FLYIO_REGION=us`,
-    `GRAM_ASSISTANT_RUNTIME_OCI_IMAGE=registry.fly.io/${assistantApp}`,
+    `GRAM_ASSISTANT_RUNTIME_FLYIO_ORG=${org}`,
+    `GRAM_ASSISTANT_RUNTIME_FLYIO_API_TOKEN=${token}`,
+    `GRAM_ASSISTANT_RUNTIME_FLYIO_REGION=us`,
+    `GRAM_ASSISTANT_RUNTIME_OCI_IMAGE=registry.fly.io/${app}`,
     `GRAM_ASSISTANT_RUNTIME_IMAGE_VERSION=dev`,
     `GRAM_FUNCTIONS_TIGRIS_BUCKET_URI=s3://${bucket}`,
     `GRAM_FUNCTIONS_TIGRIS_KEY=${tigrisKey}`,
