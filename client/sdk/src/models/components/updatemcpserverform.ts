@@ -22,7 +22,7 @@ export type UpdateMcpServerFormVisibility = ClosedEnum<
 >;
 
 /**
- * Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.
+ * Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided.
  */
 export type UpdateMcpServerForm = {
   /**
@@ -30,17 +30,9 @@ export type UpdateMcpServerForm = {
    */
   environmentId?: string | undefined;
   /**
-   * The ID of the external OAuth server to associate with the server
-   */
-  externalOauthServerId?: string | undefined;
-  /**
    * The ID of the MCP server to update
    */
   id: string;
-  /**
-   * The ID of the OAuth proxy server to associate with the server
-   */
-  oauthProxyServerId?: string | undefined;
   /**
    * The ID of the remote MCP server to use as the backend
    */
@@ -63,9 +55,7 @@ export const UpdateMcpServerFormVisibility$outboundSchema: z.ZodMiniEnum<
 /** @internal */
 export type UpdateMcpServerForm$Outbound = {
   environment_id?: string | undefined;
-  external_oauth_server_id?: string | undefined;
   id: string;
-  oauth_proxy_server_id?: string | undefined;
   remote_mcp_server_id?: string | undefined;
   toolset_id?: string | undefined;
   visibility: string;
@@ -78,9 +68,7 @@ export const UpdateMcpServerForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     environmentId: z.optional(z.string()),
-    externalOauthServerId: z.optional(z.string()),
     id: z.string(),
-    oauthProxyServerId: z.optional(z.string()),
     remoteMcpServerId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),
     visibility: UpdateMcpServerFormVisibility$outboundSchema,
@@ -88,8 +76,6 @@ export const UpdateMcpServerForm$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       environmentId: "environment_id",
-      externalOauthServerId: "external_oauth_server_id",
-      oauthProxyServerId: "oauth_proxy_server_id",
       remoteMcpServerId: "remote_mcp_server_id",
       toolsetId: "toolset_id",
     });

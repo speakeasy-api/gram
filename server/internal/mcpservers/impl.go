@@ -29,7 +29,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -96,8 +95,6 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 
 	ids, err := parseServerIDs(
 		payload.EnvironmentID,
-		payload.ExternalOauthServerID,
-		payload.OauthProxyServerID,
 		payload.RemoteMcpServerID,
 		payload.ToolsetID,
 	)
@@ -105,9 +102,6 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server").Log(ctx, logger)
 	}
 	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.ToolsetID); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").Log(ctx, logger)
-	}
-	if err := validateServerOAuthExclusivity(ids.ExternalOAuthServerID, ids.OAuthProxyServerID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").Log(ctx, logger)
 	}
 
@@ -124,13 +118,11 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	}
 
 	server, err := txRepo.CreateMCPServer(ctx, repo.CreateMCPServerParams{
-		ProjectID:             *authCtx.ProjectID,
-		EnvironmentID:         ids.EnvironmentID,
-		ExternalOauthServerID: ids.ExternalOAuthServerID,
-		OauthProxyServerID:    ids.OAuthProxyServerID,
-		RemoteMcpServerID:     ids.RemoteMcpServerID,
-		ToolsetID:             ids.ToolsetID,
-		Visibility:            string(payload.Visibility),
+		ProjectID:         *authCtx.ProjectID,
+		EnvironmentID:     ids.EnvironmentID,
+		RemoteMcpServerID: ids.RemoteMcpServerID,
+		ToolsetID:         ids.ToolsetID,
+		Visibility:        string(payload.Visibility),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create mcp server").Log(ctx, logger)
@@ -238,8 +230,6 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 
 	ids, err := parseServerIDs(
 		payload.EnvironmentID,
-		payload.ExternalOauthServerID,
-		payload.OauthProxyServerID,
 		payload.RemoteMcpServerID,
 		payload.ToolsetID,
 	)
@@ -247,9 +237,6 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server").Log(ctx, logger)
 	}
 	if err := validateServerBackendExclusivity(ids.RemoteMcpServerID, ids.ToolsetID); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").Log(ctx, logger)
-	}
-	if err := validateServerOAuthExclusivity(ids.ExternalOAuthServerID, ids.OAuthProxyServerID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").Log(ctx, logger)
 	}
 
@@ -279,14 +266,12 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 
 	updated, err := txRepo.UpdateMCPServer(ctx, repo.UpdateMCPServerParams{
-		EnvironmentID:         ids.EnvironmentID,
-		ExternalOauthServerID: ids.ExternalOAuthServerID,
-		OauthProxyServerID:    ids.OAuthProxyServerID,
-		RemoteMcpServerID:     ids.RemoteMcpServerID,
-		ToolsetID:             ids.ToolsetID,
-		Visibility:            string(payload.Visibility),
-		ID:                    serverID,
-		ProjectID:             *authCtx.ProjectID,
+		EnvironmentID:     ids.EnvironmentID,
+		RemoteMcpServerID: ids.RemoteMcpServerID,
+		ToolsetID:         ids.ToolsetID,
+		Visibility:        string(payload.Visibility),
+		ID:                serverID,
+		ProjectID:         *authCtx.ProjectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -400,19 +385,15 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 // create/update payloads so they can be passed around without a long
 // positional argument list.
 type serverIDs struct {
-	EnvironmentID         uuid.NullUUID
-	ExternalOAuthServerID uuid.NullUUID
-	OAuthProxyServerID    uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
-	ToolsetID             uuid.NullUUID
+	EnvironmentID     uuid.NullUUID
+	RemoteMcpServerID uuid.NullUUID
+	ToolsetID         uuid.NullUUID
 }
 
-// parseServerIDs parses the five optional UUID payload fields into a
+// parseServerIDs parses the optional UUID payload fields into a
 // serverIDs struct. Any malformed UUID surfaces with a field-specific error.
 func parseServerIDs(
 	environmentIDStr *string,
-	externalOAuthServerIDStr *string,
-	oauthProxyServerIDStr *string,
 	remoteMcpServerIDStr *string,
 	toolsetIDStr *string,
 ) (serverIDs, error) {
@@ -423,12 +404,6 @@ func parseServerIDs(
 
 	if ids.EnvironmentID, err = conv.PtrToNullUUID(environmentIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid environment_id: %w", err)
-	}
-	if ids.ExternalOAuthServerID, err = conv.PtrToNullUUID(externalOAuthServerIDStr); err != nil {
-		return serverIDs{}, fmt.Errorf("invalid external_oauth_server_id: %w", err)
-	}
-	if ids.OAuthProxyServerID, err = conv.PtrToNullUUID(oauthProxyServerIDStr); err != nil {
-		return serverIDs{}, fmt.Errorf("invalid oauth_proxy_server_id: %w", err)
 	}
 	if ids.RemoteMcpServerID, err = conv.PtrToNullUUID(remoteMcpServerIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid remote_mcp_server_id: %w", err)
@@ -445,15 +420,6 @@ func parseServerIDs(
 func validateServerBackendExclusivity(remoteMcpServerID, toolsetID uuid.NullUUID) error {
 	if remoteMcpServerID.Valid == toolsetID.Valid {
 		return fmt.Errorf("exactly one of remote_mcp_server_id or toolset_id must be provided")
-	}
-	return nil
-}
-
-// validateServerOAuthExclusivity enforces that at most one OAuth source
-// (external or proxy) is configured for an mcp server. Both null is allowed.
-func validateServerOAuthExclusivity(externalOAuthServerID, oauthProxyServerID uuid.NullUUID) error {
-	if externalOAuthServerID.Valid && oauthProxyServerID.Valid {
-		return fmt.Errorf("at most one of external_oauth_server_id or oauth_proxy_server_id may be provided")
 	}
 	return nil
 }
@@ -480,30 +446,6 @@ func verifyServerReferenceOwnership(
 				return fmt.Errorf("environment_id does not reference a resource in this project")
 			}
 			return fmt.Errorf("check environment ownership: %w", err)
-		}
-	}
-
-	if ids.ExternalOAuthServerID.Valid {
-		if _, err := oauthrepo.New(dbtx).GetExternalOAuthServerMetadata(ctx, oauthrepo.GetExternalOAuthServerMetadataParams{
-			ProjectID: projectID,
-			ID:        ids.ExternalOAuthServerID.UUID,
-		}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("external_oauth_server_id does not reference a resource in this project")
-			}
-			return fmt.Errorf("check external oauth server ownership: %w", err)
-		}
-	}
-
-	if ids.OAuthProxyServerID.Valid {
-		if _, err := oauthrepo.New(dbtx).GetOAuthProxyServer(ctx, oauthrepo.GetOAuthProxyServerParams{
-			ProjectID: projectID,
-			ID:        ids.OAuthProxyServerID.UUID,
-		}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("oauth_proxy_server_id does not reference a resource in this project")
-			}
-			return fmt.Errorf("check oauth proxy server ownership: %w", err)
 		}
 	}
 
