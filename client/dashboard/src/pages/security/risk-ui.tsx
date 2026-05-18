@@ -2,6 +2,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { RULE_CATEGORY_META } from "./policy-data";
 import { getCategoryForFinding, getRuleTitleFallback } from "./risk-utils";
+import { humanizeRuleId } from "./rule-ids";
 import { Badge } from "@speakeasy-api/moonshine";
 
 export function CategoryLabel({
@@ -13,14 +14,21 @@ export function CategoryLabel({
 }) {
   const category = getCategoryForFinding(source, ruleId);
   const meta = category ? RULE_CATEGORY_META[category] : null;
+  const unknownSourceLabel = source ? humanizeRuleId(source) : "-";
   return (
     <span
       className="block min-w-0 truncate"
-      title={meta ? `${meta.label}: ${meta.description}` : undefined}
+      title={
+        meta
+          ? `${meta.label}: ${meta.description}`
+          : source
+            ? `Unknown source: ${source}`
+            : undefined
+      }
     >
       <Badge variant="neutral" className="max-w-full">
         <Badge.Text className="min-w-0 truncate">
-          {meta?.label ?? "Unknown"}
+          {meta?.label ?? unknownSourceLabel}
         </Badge.Text>
       </Badge>
     </span>
