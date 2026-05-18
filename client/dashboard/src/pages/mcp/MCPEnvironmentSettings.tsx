@@ -45,6 +45,7 @@ import {
   getValueForEnvironment,
 } from "./environmentVariableUtils";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
+import { shouldRenderWireUserSessionIssuerModal } from "./wire-user-session-issuer/rendering";
 import { WireUserSessionIssuerModal } from "./wire-user-session-issuer/WireUserSessionIssuerModal";
 
 // Empty array constant to avoid creating new references
@@ -1047,7 +1048,10 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
           proxyServer={toolset.oauthProxyServer}
         />
       )}
-      {showWireUserSessionIssuer && (
+      {shouldRenderWireUserSessionIssuerModal({
+        showWireUserSessionIssuer,
+        isOpen: isWireUserSessionIssuerModalOpen,
+      }) && (
         <WireUserSessionIssuerModal
           isOpen={isWireUserSessionIssuerModalOpen}
           onClose={() => setIsWireUserSessionIssuerModalOpen(false)}
