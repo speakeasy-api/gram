@@ -11,17 +11,29 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
+
+// SourcePresidio is the source label written on every risk_results row
+// produced by the Presidio path, including dead-letter sentinels.
+const SourcePresidio = "presidio"
+
+// DeadLetterRuleID is set on the synthetic Finding emitted when a message
+// permanently fails analysis after exhausting the retry budget. buildRows
+// uses it as the rule_id for the dead-letter row.
+const DeadLetterRuleID = "presidio.dead_letter"
 
 // PIIScanner detects personally identifiable information in text.
 type PIIScanner interface {
@@ -29,14 +41,56 @@ type PIIScanner interface {
 	// findings for each. The outer slice is indexed by input position.
 	// When entities is non-empty, only those entity types are detected.
 	//
-	// Implementations may return partial results alongside a non-nil error
-	// when some inputs were analyzed successfully but others failed —
-	// callers MUST consume results regardless of error so successful
-	// findings are not discarded. The returned error reflects the most
-	// diagnostic failure observed (cancellation errors are de-prioritized
-	// in favor of underlying causes).
+	// Permanent per-message failures surface as a single Finding with
+	// DeadLetterReason populated rather than as an error; the returned
+	// error is non-nil only on outer-ctx cancellation.
 	AnalyzeBatch(ctx context.Context, texts []string, entities []string, onProgress func()) ([][]Finding, error)
 }
+
+// presidioMaxMessageBytes serves a dual role:
+//
+//  1. It caps the size of a single text we will hand to Presidio. Anything
+//     longer is truncated to a UTF-8 boundary before the request and a
+//     warning is logged so operators can spot the offender.
+//  2. It is the budget of the in-flight byte semaphore that bounds
+//     concurrent /analyze requests against a single PresidioClient. Since
+//     every request is capped at this size, the budget equals the cap and
+//     calls serialize.
+//
+// Sized 2026-05-13 from production observations: ≤2 KB completes in <2 s,
+// 80 KB takes ~30 s, 1 MB crashes the analyzer. 50 KB keeps us in the
+// linear-latency band while we work on Presidio capacity. Raise (and
+// optionally split into separate per-message-cap vs in-flight-budget
+// constants) once the analyzer scales.
+const presidioMaxMessageBytes = 50 * 1024
+
+// presidioThrottleHeartbeatInterval is how often the byte-throttle wait loop
+// calls onProgress while blocked. Must stay well below the Temporal activity
+// HeartbeatTimeout (60s in drain_risk_analysis.go) so a queue of large
+// messages cannot starve heartbeats.
+const presidioThrottleHeartbeatInterval = 1 * time.Second
+
+// Per-request timeout for /analyze. Tuned 2026-05-12 from production
+// risk.presidio.request_duration data: healthy avg <1s, healthy max 5s typical
+// (occasional 40-75s tail), degraded calls observed at 60-180s. 30s detects
+// degradation aggressively while clearing healthy traffic with ~6x margin.
+// Must stay <= AnalyzeBatch HeartbeatTimeout in drain_risk_analysis.go (60s),
+// otherwise a single stalled call can starve the activity heartbeat.
+const analyzeRequestTimeout = 30 * time.Second
+
+const (
+	// retryMaxAttempts caps how many times a single text is sent to Presidio
+	// before giving up and dead-lettering.
+	retryMaxAttempts = 3
+
+	// retryBaseBackoff is the initial inter-attempt sleep. Subsequent
+	// attempts use full-jittered exponential backoff up to retryMaxBackoff.
+	retryBaseBackoff = 100 * time.Millisecond
+
+	// retryMaxBackoff caps the per-attempt jittered backoff so a stalled
+	// upstream cannot drag the whole batch past the activity heartbeat.
+	retryMaxBackoff = 1 * time.Second
+)
 
 // presidioRequest is the payload sent to POST /analyze.
 type presidioRequest struct {
@@ -52,98 +106,6 @@ type presidioResult struct {
 	Start      int     `json:"start"`
 	End        int     `json:"end"`
 	Score      float64 `json:"score"`
-}
-
-// Tuned to Presidio capacity 2026-05-01. Fleet-wide cap is perPodAnalyzeBatchConcurrency.
-const perBatchRequestConcurrency = 4
-
-// /analyze accepts a string or array; array returns ordered nested list. Bounds blast radius on retry-bisect.
-const presidioHTTPBatchSize = 50
-
-// Keep jitter small: bisection is bounded, but sleeping still counts against the activity timeout.
-const presidioRetryBackoff = 100 * time.Millisecond
-
-const presidioRetryBackoffCap = 1 * time.Second
-
-// Per-request timeout for /analyze. Tuned 2026-05-12 from production
-// risk.presidio.request_duration data: healthy avg <1s, healthy max 5s typical
-// (occasional 40-75s tail), degraded calls observed at 60-180s. 30s detects
-// degradation aggressively while clearing healthy traffic with ~6x margin.
-// Must stay <= AnalyzeBatch HeartbeatTimeout in drain_risk_analysis.go (60s),
-// otherwise a single stalled call can starve the activity heartbeat.
-const analyzeRequestTimeout = 30 * time.Second
-
-// PresidioClient calls the Presidio Analyzer HTTP API.
-// Presidio is a trusted cluster-internal service, so the client uses an
-// unsafe guardian policy with an empty blocklist. The default policy blocks
-// RFC 1918 private ranges (10.0.0.0/8) which Kubernetes ClusterIPs fall into.
-type PresidioClient struct {
-	baseURL            string
-	httpClient         *guardian.HTTPClient
-	tracer             trace.Tracer
-	logger             *slog.Logger
-	requestConcurrency int
-	retryBackoff       time.Duration
-	requestTimeout     time.Duration
-	requestDuration    metric.Float64Histogram
-	requestSize        metric.Int64Histogram
-	requestFailures    metric.Int64Counter
-}
-
-// NewPresidioClient creates a client pointing at the given base URL.
-func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger) *PresidioClient {
-	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio")
-
-	requestDuration, _ := meter.Float64Histogram(
-		"risk.presidio.request_duration",
-		metric.WithDescription("Duration of individual Presidio /analyze HTTP requests in seconds"),
-		metric.WithUnit("s"),
-		metric.WithExplicitBucketBoundaries(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
-	)
-
-	// Bucket boundaries span 1 KiB to 4 MiB on powers of 4 to cover both
-	// typical chat-message batches and tail payloads dominated by
-	// oversized tool-call JSON.
-	requestSize, _ := meter.Int64Histogram(
-		"risk.presidio.request_size",
-		metric.WithDescription("Size of Presidio /analyze HTTP request bodies in bytes"),
-		metric.WithUnit("By"),
-		metric.WithExplicitBucketBoundaries(1024, 4096, 16384, 65536, 262144, 1048576, 4194304),
-	)
-
-	requestFailures, _ := meter.Int64Counter(
-		"risk.presidio.failures",
-		metric.WithDescription("Number of failed Presidio /analyze requests"),
-		metric.WithUnit("{request}"),
-	)
-
-	// Empty blocklist allows connections to private IPs (Kubernetes ClusterIPs).
-	unsafePolicy, _ := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	httpClient := unsafePolicy.PooledClient()
-
-	return &PresidioClient{
-		baseURL:            strings.TrimRight(baseURL, "/"),
-		httpClient:         httpClient,
-		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio"),
-		logger:             logger,
-		requestConcurrency: perBatchRequestConcurrency,
-		retryBackoff:       presidioRetryBackoff,
-		requestTimeout:     analyzeRequestTimeout,
-		requestDuration:    requestDuration,
-		requestSize:        requestSize,
-		requestFailures:    requestFailures,
-	}
-}
-
-// NewPresidioClientWithConcurrency is like NewPresidioClient but allows
-// overriding the per-batch HTTP request concurrency. Used for benchmarking
-// and tests; the retry backoff is disabled so test sweeps don't pay 500ms
-// per bisect step.
-func NewPresidioClientWithConcurrency(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger, requestConcurrency int) *PresidioClient {
-	c := NewPresidioClient(baseURL, tracerProvider, meterProvider, logger)
-	c.requestConcurrency = requestConcurrency
-	c.retryBackoff = 0
-	return c
 }
 
 // presidioEntityBlacklist is the set of Presidio entity types we refuse to
@@ -177,10 +139,142 @@ func filterEntities(entities []string) []string {
 	return out
 }
 
+// PresidioClient is the production PIIScanner implementation, calling the
+// Presidio Analyzer HTTP API.
+//
+// AnalyzeBatch fans the input texts out to per-text goroutines and retries
+// each one up to retryMaxAttempts times. Total in-flight HTTP request bytes
+// are bounded by a process-shared byte-budget semaphore, and while blocked
+// on the semaphore the client calls onProgress on a fixed cadence so the
+// Temporal activity heartbeat stays alive.
+//
+// Presidio is a trusted cluster-internal service, so the client uses an
+// unsafe guardian policy with an empty blocklist. The default policy blocks
+// RFC 1918 private ranges (10.0.0.0/8) which Kubernetes ClusterIPs fall into.
+type PresidioClient struct {
+	baseURL              string
+	httpClient           *guardian.HTTPClient
+	tracer               trace.Tracer
+	logger               *slog.Logger
+	requestTimeout       time.Duration
+	throttle             *semaphore.Weighted
+	throttleBudget       int64
+	throttleHeartbeat    time.Duration
+	maxAttempts          int
+	baseBackoff          time.Duration
+	requestDuration      metric.Float64Histogram
+	requestSize          metric.Int64Histogram
+	requestFailures      metric.Int64Counter
+	throttleWaitDuration metric.Float64Histogram
+	attemptFailures      metric.Int64Counter
+	deadLetters          metric.Int64Counter
+	truncations          metric.Int64Counter
+}
+
+// NewPresidioClient creates a client pointing at the given base URL.
+func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger) *PresidioClient {
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio")
+
+	requestDuration, _ := meter.Float64Histogram(
+		"risk.presidio.request_duration",
+		metric.WithDescription("Duration of individual Presidio /analyze HTTP requests in seconds"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
+	)
+
+	// Bucket boundaries span 1 KiB to 4 MiB on powers of 4 to cover both
+	// typical chat-message batches and tail payloads dominated by
+	// oversized tool-call JSON.
+	requestSize, _ := meter.Int64Histogram(
+		"risk.presidio.request_size",
+		metric.WithDescription("Size of Presidio /analyze HTTP request bodies in bytes"),
+		metric.WithUnit("By"),
+		metric.WithExplicitBucketBoundaries(1024, 4096, 16384, 65536, 262144, 1048576, 4194304),
+	)
+
+	requestFailures, _ := meter.Int64Counter(
+		"risk.presidio.failures",
+		metric.WithDescription("Number of failed Presidio /analyze requests"),
+		metric.WithUnit("{request}"),
+	)
+
+	throttleWaitDuration, _ := meter.Float64Histogram(
+		"risk.presidio.throttle_wait_duration",
+		metric.WithDescription("Time spent waiting for the in-flight byte-budget semaphore before issuing a Presidio /analyze request"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(0.001, 0.01, 0.1, 0.5, 1, 2.5, 5, 10, 30),
+	)
+
+	attemptFailures, _ := meter.Int64Counter(
+		"risk.presidio.attempt_failures",
+		metric.WithDescription("Number of per-message Presidio attempts that failed before retry or dead-letter"),
+		metric.WithUnit("{attempt}"),
+	)
+
+	deadLetters, _ := meter.Int64Counter(
+		"risk.presidio.dead_letters",
+		metric.WithDescription("Number of messages dead-lettered after exhausting the Presidio retry budget"),
+		metric.WithUnit("{message}"),
+	)
+
+	truncations, _ := meter.Int64Counter(
+		"risk.presidio.truncations",
+		metric.WithDescription("Number of messages truncated to presidioMaxMessageBytes before being sent to Presidio"),
+		metric.WithUnit("{message}"),
+	)
+
+	// Empty blocklist allows connections to private IPs (Kubernetes ClusterIPs).
+	unsafePolicy, _ := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	httpClient := unsafePolicy.PooledClient()
+
+	return &PresidioClient{
+		baseURL:              strings.TrimRight(baseURL, "/"),
+		httpClient:           httpClient,
+		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio"),
+		logger:               logger,
+		requestTimeout:       analyzeRequestTimeout,
+		throttle:             semaphore.NewWeighted(presidioMaxMessageBytes),
+		throttleBudget:       presidioMaxMessageBytes,
+		throttleHeartbeat:    presidioThrottleHeartbeatInterval,
+		maxAttempts:          retryMaxAttempts,
+		baseBackoff:          retryBaseBackoff,
+		requestDuration:      requestDuration,
+		requestSize:          requestSize,
+		requestFailures:      requestFailures,
+		throttleWaitDuration: throttleWaitDuration,
+		attemptFailures:      attemptFailures,
+		deadLetters:          deadLetters,
+		truncations:          truncations,
+	}
+}
+
+// AnalyzeBatch fans the input texts out to per-text goroutines, retries each
+// up to maxAttempts times against /analyze, and returns a results slice
+// indexed by input position. Texts that exhaust the retry budget are
+// returned as a single Finding with DeadLetterReason set so the caller can
+// persist a dead-letter row.
+//
+// Returns a non-nil error only on outer-ctx cancellation. Per-message
+// failures surface as DeadLetterReason sentinels so the rest of the batch
+// can still write.
 func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entities []string, onProgress func()) (_ [][]Finding, err error) {
 	n := len(texts)
 	if n == 0 {
 		return nil, nil
+	}
+
+	// Short-circuit when every input is empty: /analyze would either 500 on
+	// the empty array or return no findings, so we save the HTTP round-trip
+	// and avoid the byte-semaphore wait.
+	allEmpty := true
+	for _, t := range texts {
+		if t != "" {
+			allEmpty = false
+			break
+		}
+	}
+	if allEmpty {
+		return make([][]Finding, n), nil
 	}
 
 	// Apply the entity blacklist at the lowest level so every caller (hook
@@ -194,7 +288,7 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 
 	ctx, span := p.tracer.Start(ctx, "presidio.analyzeBatch", trace.WithAttributes(
 		attribute.Int("presidio.batch_size", n),
-		attribute.Int("presidio.http_batch_size", presidioHTTPBatchSize),
+		attribute.Int("presidio.max_attempts", p.maxAttempts),
 	))
 	defer func() {
 		if err != nil {
@@ -204,177 +298,156 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 	}()
 
 	results := make([][]Finding, n)
-	batches := chunkTextIndexes(n, presidioHTTPBatchSize)
-	workers := min(max(1, p.requestConcurrency), len(batches))
-
-	ch := make(chan indexRange, len(batches))
-	for _, batch := range batches {
-		ch <- batch
-	}
-	close(ch)
-
-	var firstErrMu sync.Mutex
-	var firstErr error
-	captureErr := func(e error) {
-		firstErrMu.Lock()
-		defer firstErrMu.Unlock()
-		firstErr = mergeFirstErr(firstErr, e)
-	}
+	var deadLetters atomic.Int64
 
 	var wg sync.WaitGroup
-	for range workers {
+	for i, text := range texts {
 		wg.Go(func() {
-			for batch := range ch {
-				p.analyzeRange(ctx, texts, entities, batch, results, onProgress, captureErr)
+			finding, dl := p.analyzeOne(ctx, i, text, entities, onProgress)
+			results[i] = finding
+			if dl {
+				deadLetters.Add(1)
 			}
 		})
 	}
-
 	wg.Wait()
-	return results, firstErr
-}
 
-func (p *PresidioClient) analyzeRange(ctx context.Context, texts []string, entities []string, batch indexRange, results [][]Finding, onProgress func(), captureErr func(error)) {
-	if ok, err := p.tryAnalyzeRange(ctx, texts, entities, batch, results, onProgress, captureErr); !ok {
-		p.splitFailedRange(ctx, texts, entities, batch, results, onProgress, captureErr, err, 0)
+	span.SetAttributes(attribute.Int("presidio.dead_letters", int(deadLetters.Load())))
+
+	if ctx.Err() != nil {
+		return results, fmt.Errorf("presidio analyze batch canceled: %w", ctx.Err())
 	}
+	return results, nil
 }
 
-func (p *PresidioClient) tryAnalyzeRange(ctx context.Context, texts []string, entities []string, batch indexRange, results [][]Finding, onProgress func(), captureErr func(error)) (bool, error) {
+// analyzeOne runs the retry loop for a single text. Returns the per-text
+// findings slice (real findings, or a single dead-letter sentinel) and a
+// boolean indicating whether the result was a dead letter.
+func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, entities []string, onProgress func()) ([]Finding, bool) {
 	if onProgress != nil {
 		onProgress()
 	}
 
-	findings, err := p.analyze(ctx, texts[batch.start:batch.end], entities)
-	if err != nil {
-		captureErr(err)
-		return false, err
-	}
-
-	for i, f := range findings {
-		results[batch.start+i] = f
-		if onProgress != nil {
-			onProgress()
-		}
-	}
-	return true, nil
-}
-
-func (p *PresidioClient) splitFailedRange(ctx context.Context, texts []string, entities []string, batch indexRange, results [][]Finding, onProgress func(), captureErr func(error), cause error, depth int) {
-	if ctx.Err() != nil {
-		return
-	}
-	if batch.end-batch.start == 1 {
-		p.logger.WarnContext(ctx, "presidio analyze failed for text, skipping",
-			attr.SlogError(cause),
+	if originalSize := len(text); originalSize > presidioMaxMessageBytes {
+		text = truncateAtRuneBoundary(text, presidioMaxMessageBytes)
+		p.logger.WarnContext(ctx, "presidio: truncating oversized message",
+			attr.SlogRiskScanTextSize(originalSize),
+			attr.SlogRiskScanBatchIndex(idx),
 		)
-		if onProgress != nil {
-			onProgress()
+		if p.truncations != nil {
+			p.truncations.Add(ctx, 1)
 		}
-		return
 	}
 
-	p.logger.WarnContext(ctx, "presidio analyze failed for text batch, splitting",
-		attr.SlogError(cause),
-	)
+	var lastErr error
+	for attempt := 1; attempt <= p.maxAttempts; attempt++ {
+		if ctx.Err() != nil {
+			return nil, false
+		}
 
-	if !sleepCtx(ctx, computePresidioBackoff(p.retryBackoff, depth)) {
-		return
-	}
+		findings, err := p.analyzeOnce(ctx, text, entities, onProgress)
+		if err == nil {
+			return findings, false
+		}
 
-	mid := batch.start + ((batch.end - batch.start) / 2)
-	left := indexRange{start: batch.start, end: mid}
-	right := indexRange{start: mid, end: batch.end}
+		lastErr = err
+		if p.attemptFailures != nil {
+			p.attemptFailures.Add(ctx, 1)
+		}
 
-	leftOK, leftErr := p.tryAnalyzeRange(ctx, texts, entities, left, results, onProgress, captureErr)
-	rightOK, rightErr := p.tryAnalyzeRange(ctx, texts, entities, right, results, onProgress, captureErr)
-	if !leftOK {
-		p.splitFailedRange(ctx, texts, entities, left, results, onProgress, captureErr, leftErr, depth+1)
-	}
-	if !rightOK {
-		p.splitFailedRange(ctx, texts, entities, right, results, onProgress, captureErr, rightErr, depth+1)
-	}
-}
+		// Bail only when the outer ctx is cancelled — inner per-request
+		// timeouts (analyzeRequestTimeout) and other transient errors
+		// should consume retry budget instead.
+		if ctx.Err() != nil {
+			return nil, false
+		}
 
-func isCancelErr(err error) bool {
-	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
-}
-
-// mergeFirstErr returns the better of two errors for surfacing in the
-// activity-level error chain. Prefers non-cancel errors: cancellation is a
-// downstream consequence (parent ctx canceled, sibling's timeout elapsed) —
-// the underlying Presidio failure that triggered it is what the caller needs
-// to see.
-func mergeFirstErr(existing, candidate error) error {
-	switch {
-	case candidate == nil:
-		return existing
-	case existing == nil:
-		return candidate
-	case isCancelErr(existing) && !isCancelErr(candidate):
-		return candidate
-	default:
-		return existing
-	}
-}
-
-// computePresidioBackoff returns a full-jittered exponential backoff for the
-// given split depth: uniform in [0, min(cap, base*2^depth)). Returns 0 when
-// base is 0 (tests disable backoff that way).
-func computePresidioBackoff(base time.Duration, depth int) time.Duration {
-	if base <= 0 {
-		return 0
-	}
-	backoff := base
-	for range depth {
-		backoff *= 2
-		if backoff >= presidioRetryBackoffCap {
-			backoff = presidioRetryBackoffCap
+		if attempt == p.maxAttempts {
 			break
 		}
+
+		p.logger.WarnContext(ctx, "presidio analyze attempt failed, retrying",
+			attr.SlogError(err),
+			attr.SlogRiskScanAttempt(attempt),
+			attr.SlogRiskScanMaxAttempts(p.maxAttempts),
+			attr.SlogRiskScanTextSize(len(text)),
+		)
+
+		if !sleepCtx(ctx, computeRetryBackoff(p.baseBackoff, attempt-1)) {
+			return nil, false
+		}
 	}
-	return time.Duration(rand.Int64N(int64(backoff))) // #nosec G404 -- jitter, not security-sensitive
+
+	p.logger.WarnContext(ctx, "presidio dead-letter: exhausted retry budget",
+		attr.SlogError(lastErr),
+		attr.SlogRiskScanMaxAttempts(p.maxAttempts),
+		attr.SlogRiskScanTextSize(len(text)),
+		attr.SlogRiskScanBatchIndex(idx),
+	)
+	if p.deadLetters != nil {
+		p.deadLetters.Add(ctx, 1)
+	}
+
+	return []Finding{{
+		Source:           SourcePresidio,
+		RuleID:           DeadLetterRuleID,
+		Description:      "presidio could not analyze message after exhausting retry budget",
+		Match:            "",
+		StartPos:         0,
+		EndPos:           0,
+		Tags:             nil,
+		Confidence:       0,
+		DeadLetterReason: lastErr.Error(),
+		toolCallID:       "",
+	}}, true
 }
 
-// sleepCtx pauses for d, returning false if ctx is cancelled before the
-// timer fires. A non-positive d is treated as no sleep.
-func sleepCtx(ctx context.Context, d time.Duration) bool {
-	if d <= 0 {
-		return ctx.Err() == nil
+// analyzeOnce issues a single POST /analyze for one text, gated by the
+// byte-budget semaphore. Returns Presidio's findings on 200, or an error
+// (HTTP failure, non-200, decode failure) on anything else. No retry.
+func (p *PresidioClient) analyzeOnce(ctx context.Context, text string, entities []string, onProgress func()) ([]Finding, error) {
+	cost := requestByteCost(text, p.throttleBudget)
+	if err := p.acquireThrottle(ctx, cost, onProgress); err != nil {
+		return nil, err
 	}
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-t.C:
-		return true
-	case <-ctx.Done():
-		return false
+	defer p.throttle.Release(cost)
+
+	return p.analyze(ctx, text, entities)
+}
+
+// requestByteCost returns the semaphore cost for a single-text request,
+// capped to the budget so an oversized message cannot deadlock a fresh
+// client whose semaphore has full capacity but cannot satisfy an N>budget
+// request. Floor of 1 keeps the cost positive for semaphore.TryAcquire.
+func requestByteCost(text string, budget int64) int64 {
+	cost := min(max(int64(len(text)), 1), budget)
+	return cost
+}
+
+// acquireThrottle blocks until the byte semaphore can satisfy the request,
+// or ctx is cancelled. Uses TryAcquire + sleep instead of
+// semaphore.Acquire(ctx) so it can fire onProgress periodically while
+// waiting — Acquire blocks until cancellation and would let the activity
+// heartbeat lapse under sustained back-pressure.
+func (p *PresidioClient) acquireThrottle(ctx context.Context, cost int64, onProgress func()) error {
+	start := time.Now()
+	for {
+		if p.throttle.TryAcquire(cost) {
+			if p.throttleWaitDuration != nil {
+				p.throttleWaitDuration.Record(ctx, time.Since(start).Seconds())
+			}
+			return nil
+		}
+		if onProgress != nil {
+			onProgress()
+		}
+		if !sleepCtx(ctx, p.throttleHeartbeat) {
+			return fmt.Errorf("presidio throttle wait: %w", ctx.Err())
+		}
 	}
 }
 
-type indexRange struct {
-	start int
-	end   int
-}
-
-func chunkTextIndexes(n, size int) []indexRange {
-	if n == 0 {
-		return nil
-	}
-	var batches []indexRange
-	for start := 0; start < n; start += size {
-		end := min(start+size, n)
-		batches = append(batches, indexRange{start: start, end: end})
-	}
-	return batches
-}
-
-func (p *PresidioClient) analyze(ctx context.Context, texts []string, entities []string) (_ [][]Finding, err error) {
-	// /analyze 500s on empty array ("No text provided"). Short-circuit.
-	if len(texts) == 0 {
-		return nil, nil
-	}
-
+func (p *PresidioClient) analyze(ctx context.Context, text string, entities []string) (_ []Finding, err error) {
 	ctx, span := p.tracer.Start(ctx, "presidio.analyze")
 	start := time.Now()
 	defer func() {
@@ -392,7 +465,7 @@ func (p *PresidioClient) analyze(ctx context.Context, texts []string, entities [
 	}()
 
 	body, err := json.Marshal(presidioRequest{
-		Text:     texts,
+		Text:     []string{text},
 		Language: "en",
 		ScoreMin: 0.5,
 		Entities: entities,
@@ -428,20 +501,12 @@ func (p *PresidioClient) analyze(ctx context.Context, texts []string, entities [
 	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
 		return nil, fmt.Errorf("decode presidio response: %w", err)
 	}
-	if len(results) != len(texts) {
-		return nil, fmt.Errorf("presidio returned %d result sets for %d texts", len(results), len(texts))
+	if len(results) != 1 {
+		return nil, fmt.Errorf("presidio returned %d result sets for 1 text", len(results))
 	}
 
-	findings := make([][]Finding, len(texts))
-	findingsCount := 0
-	for i, text := range texts {
-		findings[i] = convertPresidioFindings(text, results[i])
-		findingsCount += len(findings[i])
-	}
-	span.SetAttributes(
-		attribute.Int("presidio.http_batch_size", len(texts)),
-		attribute.Int("presidio.findings_count", findingsCount),
-	)
+	findings := convertPresidioFindings(text, results[0])
+	span.SetAttributes(attribute.Int("presidio.findings_count", len(findings)))
 	return findings, nil
 }
 
@@ -463,17 +528,70 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 		endByte := len(string(runes[:end]))
 
 		findings = append(findings, Finding{
-			RuleID:      r.EntityType,
-			Description: "PII detected: " + r.EntityType,
-			Match:       match,
-			StartPos:    startByte,
-			EndPos:      endByte,
-			Tags:        []string{"pii", strings.ToLower(r.EntityType)},
-			Source:      "presidio",
-			Confidence:  r.Score,
+			RuleID:           r.EntityType,
+			Description:      "PII detected: " + r.EntityType,
+			Match:            match,
+			StartPos:         startByte,
+			EndPos:           endByte,
+			Tags:             []string{"pii", strings.ToLower(r.EntityType)},
+			Source:           SourcePresidio,
+			Confidence:       r.Score,
+			DeadLetterReason: "",
+			toolCallID:       "",
 		})
 	}
 	return findings
+}
+
+// computeRetryBackoff returns a full-jittered exponential backoff for the
+// given attempt index (0-based): uniform in [0, min(cap, base*2^attempt)).
+// Returns 0 when base is 0 so tests can disable the wait.
+func computeRetryBackoff(base time.Duration, attempt int) time.Duration {
+	if base <= 0 {
+		return 0
+	}
+	backoff := base
+	for range attempt {
+		backoff *= 2
+		if backoff >= retryMaxBackoff {
+			backoff = retryMaxBackoff
+			break
+		}
+	}
+	return time.Duration(rand.Int64N(int64(backoff))) // #nosec G404 -- jitter, not security-sensitive
+}
+
+// truncateAtRuneBoundary returns the longest prefix of s whose byte length is
+// <= n and that does not split a UTF-8 rune. Returns s unchanged when it
+// already fits.
+func truncateAtRuneBoundary(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
+}
+
+// sleepCtx pauses for d, returning false if ctx is cancelled before the
+// timer fires. A non-positive d is treated as no sleep.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	if d <= 0 {
+		return ctx.Err() == nil
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func isCancelErr(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 // StubPIIScanner is a no-op implementation for environments without Presidio.

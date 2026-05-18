@@ -40,6 +40,10 @@ export type CreateRiskPolicyRequestBody = {
    */
   presidioEntities?: Array<string> | undefined;
   /**
+   * Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').
+   */
+  promptInjectionRules?: Array<string> | undefined;
+  /**
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
@@ -61,6 +65,7 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   enabled?: boolean | undefined;
   name?: string | undefined;
   presidio_entities?: Array<string> | undefined;
+  prompt_injection_rules?: Array<string> | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
 };
@@ -76,6 +81,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     enabled: z.optional(z.boolean()),
     name: z.optional(z.string()),
     presidioEntities: z.optional(z.array(z.string())),
+    promptInjectionRules: z.optional(z.array(z.string())),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
   }),
@@ -83,6 +89,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       autoName: "auto_name",
       presidioEntities: "presidio_entities",
+      promptInjectionRules: "prompt_injection_rules",
       userMessage: "user_message",
     });
   }),

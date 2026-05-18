@@ -33,9 +33,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -63,12 +63,23 @@ import (
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
+
+// IdentityResolver abstracts the identity operations the authn-challenge OAuth
+// flow needs. Satisfied by *identity.Resolver.
+type IdentityResolver interface {
+	BuildAuthorizationURL(ctx context.Context, params sessions.AuthURLParams) (*url.URL, error)
+	ExchangeCodeForTokens(ctx context.Context, code string) (*identity.IDPUserInfo, error)
+	UpsertUserFromIDP(ctx context.Context, idpUser *identity.IDPUserInfo) (string, error)
+	HasAccessToOrganization(ctx context.Context, organizationID, userID string) (*sessions.Organization, string, bool)
+}
 
 type Service struct {
 	logger                 *slog.Logger
@@ -95,6 +106,7 @@ type Service struct {
 	temporal               *temporal.Environment
 	assistantTokens        *assistanttokens.Manager
 	sessions               *sessions.Manager
+	identityResolver       IdentityResolver
 	chatSessionsManager    *chatsessions.Manager
 	externalmcpRepo        *externalmcp_repo.Queries
 	deploymentsRepo        *deployments_repo.Queries
@@ -106,17 +118,14 @@ type Service struct {
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
 	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
-	// idpClient drives the user-session AS authn-challenge path's calls to
-	// the Speakeasy IDP (issuer-gated /authorize → /idp_callback flow). The
-	// same client backs the chat-session Manager via auth/sessions, so both
-	// paths share the user-bootstrap side effects (UpsertUser, posthog
-	// signup, WorkOS sync). See auth/speakeasyclient.
-	idpClient *speakeasyclient.Client
 	// userSessionSigner mints the SessionClaims JWT issued at /token.
 	// HS256 with GRAM_JWT_SIGNING_KEY -- same key the chat-session signer
 	// uses, intentionally separate signer code so each path is removable
 	// in isolation.
 	userSessionSigner *usersessions.Signer
+	// remoteChallengeMgr drives the per-remote OAuth authn leg used by the
+	// interactive /connect cards and the /remote_login_callback handler.
+	remoteChallengeMgr *remotesessions.ChallengeManager
 }
 
 type oauthTokenInputs struct {
@@ -168,8 +177,9 @@ func NewService(
 	platformExtras []platformtools.ExternalTool,
 	platformFeatureChecker platformtools.FeatureChecker,
 	platformToolsets map[string]platformtools.Toolset,
-	idpClient *speakeasyclient.Client,
+	identityResolver IdentityResolver,
 	userSessionSigner *usersessions.Signer,
+	remoteChallengeMgr *remotesessions.ChallengeManager,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -240,13 +250,16 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		idpClient:         idpClient,
-		userSessionSigner: userSessionSigner,
+		identityResolver:   identityResolver,
+		userSessionSigner:  userSessionSigner,
+		remoteChallengeMgr: remoteChallengeMgr,
 	}
 }
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.ErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.remoteChallengeMgr.HandleRemoteLoginCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.ServePublic).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", oops.ErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return service.HandleGetServer(w, r, metadataService)
@@ -267,6 +280,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/token", oops.ErrHandle(service.logger, service.HandleToken).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/revoke", oops.ErrHandle(service.logger, service.HandleRevoke).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/remote_login_callback", oops.ErrHandle(service.logger, service.remoteChallengeMgr.HandleRemoteLoginCallback).ServeHTTP)
 }
 
 // HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests
@@ -437,19 +451,52 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// can discover the AS surface.
 	issuerGated := toolset.UserSessionIssuerID.Valid
 	if issuerGated {
-		newCtx, ok := s.validateUserSessionToken(ctx, authToken, toolset)
+		newCtx, subject, ok := s.validateUserSessionToken(ctx, authToken, toolset)
+		if !ok {
+			// Accept an assistant-runtime JWT, but only when the assistant
+			// belongs to the toolset's project — otherwise a token minted
+			// in project A could resolve a remote_session linked under
+			// the same user in project B.
+			if assistCtx, claims, aerr := s.assistantTokens.Authorize(ctx, authToken); aerr == nil && claims.ProjectID == toolset.ProjectID.String() {
+				ssubj := urn.NewUserSubject(claims.UserID)
+				newCtx, subject, ok = assistCtx, &ssubj, true
+			}
+		}
 		if !ok {
 			return WriteAuthenticateChallenge(w, baseURL, mcpSlug, "expired or invalid access token")
 		}
 		ctx = newCtx
+
+		// Resolve the upstream remote_session for this subject before
+		// running the legacy auth chain. The resolver short-circuits to
+		// no-op when the issuer has no remote_session_clients bound;
+		// otherwise it either supplies the upstream access token (fed
+		// into tokenInputs so it satisfies the toolset's oauth2 scheme
+		// downstream) or fails with ErrNoValidToken — which the user
+		// resolves by re-linking via /mcp/{slug}/connect.
+		if subject != nil {
+			upstream, rerr := s.remoteChallengeMgr.ResolveOneAccessToken(ctx, toolset.ProjectID, toolset.UserSessionIssuerID.UUID, *subject)
+			switch {
+			case errors.Is(rerr, remotesessions.ErrNoValidToken):
+				return WriteAuthenticateChallenge(w, baseURL, mcpSlug, "")
+			case rerr != nil:
+				return oops.E(oops.CodeUnexpected, rerr, "resolve remote session").Log(ctx, s.logger)
+			}
+			if upstream != "" {
+				tokenInputs = append(tokenInputs, oauthTokenInputs{
+					securityKeys: []string{},
+					Token:        upstream,
+				})
+			}
+		}
 	}
 
-	var oauthProtectedResourceURL string
+	oauthProtectedResourceURL, err := url.JoinPath(baseURL, wellknown.OAuthProtectedResourcePath, mcpRouteBase, mcpSlug)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to build OAuth protected resource URL").Log(ctx, s.logger)
+	}
+
 	if !issuerGated {
-		oauthProtectedResourceURL, err = url.JoinPath(baseURL, wellknown.OAuthProtectedResourcePath, mcpRouteBase, mcpSlug)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to build OAuth protected resource URL").Log(ctx, s.logger)
-		}
 		switch {
 		case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
 			// External OAuth server flow — collect token if present
@@ -738,28 +785,39 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 	return anySchemeSatisfied(schemes, mergedEnv, oauthToken), nil
 }
 
+// loadToolsetFromMcpSlug resolves the toolset for a route-driven request
+// (path mcpSlug + optional customdomains.Context). Distinct from
+// resolveMcp: when there is no customdomain context, it falls back to
+// GetToolsetByMcpSlug — which prefers a platform-domain toolset but
+// accepts a custom-domain toolset when no platform-only row exists. The
+// fallback is load-bearing (TestServePublic_CustomDomain_PlatformDomainStillWorks)
+// because customers attach custom domains to existing toolsets without
+// retiring the platform URL.
+//
+// resolveMcp, used by stored-state callbacks, is strict-platform on an
+// unset CustomDomainID — there the value is an explicit assertion
+// rather than a route inference.
 func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *customdomains.Context, error) {
-	var toolset toolsets_repo.Toolset
-	var toolsetErr error
-	var customDomainCtx *customdomains.Context
-	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
-		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
-			McpSlug:        conv.ToPGText(mcpSlug),
-			CustomDomainID: uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true},
+	customDomainCtx := customdomains.FromContext(ctx)
+	if customDomainCtx != nil {
+		toolset, err := s.resolveMcp(ctx, LegacyMcpEndpointRef{
+			McpSlug:        mcpSlug,
+			CustomDomainID: uuid.NullUUID{UUID: customDomainCtx.DomainID, Valid: true},
 		})
-		customDomainCtx = domainCtx
-	} else {
-		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
+		if err != nil {
+			return nil, nil, err
+		}
+		return toolset, customDomainCtx, nil
 	}
 
+	toolset, err := s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
 	switch {
-	case errors.Is(toolsetErr, pgx.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil, errToolsetNotFound
-	case toolsetErr != nil:
-		return nil, nil, fmt.Errorf("lookup toolset: %w", toolsetErr)
+	case err != nil:
+		return nil, nil, fmt.Errorf("lookup toolset: %w", err)
 	}
-
-	return &toolset, customDomainCtx, nil
+	return &toolset, nil, nil
 }
 
 // loadHeaderDisplayNames loads the header display names mapping from MCP metadata.

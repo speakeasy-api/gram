@@ -3,10 +3,22 @@
  */
 
 import { ClientSDK } from "../lib/sdks.js";
+import { Approvals } from "./approvals.js";
+import { Capabilities } from "./capabilities.js";
 import { Policies } from "./policies.js";
 import { Results } from "./results.js";
 
 export class Risk extends ClientSDK {
+  private _approvals?: Approvals;
+  get approvals(): Approvals {
+    return (this._approvals ??= new Approvals(this._options));
+  }
+
+  private _capabilities?: Capabilities;
+  get capabilities(): Capabilities {
+    return (this._capabilities ??= new Capabilities(this._options));
+  }
+
   private _policies?: Policies;
   get policies(): Policies {
     return (this._policies ??= new Policies(this._options));

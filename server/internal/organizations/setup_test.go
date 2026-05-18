@@ -7,21 +7,22 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	svix "github.com/svix/svix-webhooks/go"
 
-	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/svix/svixtest"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -67,6 +68,8 @@ type testInstance struct {
 	service *organizations.Service
 	conn    *pgxpool.Pool
 	orgs    *MockOrganizationProvider
+	loops   *MockLoopsClient
+	svixSrv *svixtest.MockServer
 }
 
 func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) {
@@ -76,9 +79,6 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	require.NoError(t, err)
-
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
@@ -86,16 +86,17 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 	require.NoError(t, err)
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	// workos_id is set by InitAuthContext via UpsertOrganizationMetadata (from the mock IDP's workos_id).
-
-	err = userrepo.New(conn).SetUserWorkosID(ctx, userrepo.SetUserWorkosIDParams{
+	// UpsertUserFromIDP (called inside InitAuthContext) now backfills workos_id
+	// with the mock IDP's user ID. Override it to the test-specific WorkOS user
+	// ID so that mock expectations on GetOrgMembership match.
+	err = userrepo.New(conn).OverwriteUserWorkosID(ctx, userrepo.OverwriteUserWorkosIDParams{
 		ID:       authCtx.UserID,
 		WorkosID: conv.ToPGText(testAuthUserWorkOSID),
 	})
@@ -107,12 +108,21 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 	require.NoError(t, err)
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient(), cache.NoopCache)
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeatures{}, authzEngine)
+
+	auditLogger := audit.NewLogger()
+
+	svixSrv := svixtest.NewMockServer(logger)
+	t.Cleanup(svixSrv.Close)
+	svixClient, err := svix.New("test-token", &svix.SvixOptions{ServerUrl: svixSrv.URL()})
+	require.NoError(t, err)
+
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeatures{}, authzEngine, nil, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service: svc,
 		conn:    conn,
 		orgs:    orgs,
+		svixSrv: svixSrv,
 	}
 }
 
@@ -125,9 +135,6 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	require.NoError(t, err)
-
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
@@ -135,16 +142,17 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 	require.NoError(t, err)
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	// workos_id is set by InitAuthContext via UpsertOrganizationMetadata (from the mock IDP's workos_id).
-
-	err = userrepo.New(conn).SetUserWorkosID(ctx, userrepo.SetUserWorkosIDParams{
+	// UpsertUserFromIDP (called inside InitAuthContext) now backfills workos_id
+	// with the mock IDP's user ID. Override it to the test-specific WorkOS user
+	// ID so that mock expectations on GetOrgMembership match.
+	err = userrepo.New(conn).OverwriteUserWorkosID(ctx, userrepo.OverwriteUserWorkosIDParams{
 		ID:       authCtx.UserID,
 		WorkosID: conv.ToPGText(testAuthUserWorkOSID),
 	})
@@ -156,23 +164,76 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 	require.NoError(t, err)
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient(), cache.NoopCache)
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeaturesEnabled{}, authzEngine)
+
+	auditLogger := audit.NewLogger()
+
+	svixSrv := svixtest.NewMockServer(logger)
+	t.Cleanup(svixSrv.Close)
+	svixClient, err := svix.New("test-token", &svix.SvixOptions{ServerUrl: svixSrv.URL()})
+	require.NoError(t, err)
+
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeaturesEnabled{}, authzEngine, nil, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service: svc,
 		conn:    conn,
 		orgs:    orgs,
+		svixSrv: svixSrv,
 	}
 }
 
-// expectWorkOSOrgAdminRole stubs a successful WorkOS admin membership check for the session user.
-func expectWorkOSOrgAdminRole(t *testing.T, orgs *MockOrganizationProvider) {
+// newTestOrganizationsServiceWithEmail creates a service with a mock email
+// sender so tests can assert on email delivery success/failure paths.
+func newTestOrganizationsServiceWithEmail(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
-	orgs.On("GetOrgMembership", mock.Anything, testAuthUserWorkOSID, mockidp.MockOrgID).Return(&thirdpartyworkos.Member{RoleSlug: "admin"}, nil).Once()
-}
 
-// expectWorkOSOrgNonAdminRole stubs WorkOS membership with a non-admin role.
-func expectWorkOSOrgNonAdminRole(t *testing.T, orgs *MockOrganizationProvider) {
-	t.Helper()
-	orgs.On("GetOrgMembership", mock.Anything, testAuthUserWorkOSID, mockidp.MockOrgID).Return(&thirdpartyworkos.Member{RoleSlug: "member"}, nil).Once()
+	ctx := t.Context()
+
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	billingClient := billing.NewStubClient(logger, tracerProvider)
+
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+
+	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	err = userrepo.New(conn).OverwriteUserWorkosID(ctx, userrepo.OverwriteUserWorkosIDParams{
+		ID:       authCtx.UserID,
+		WorkosID: conv.ToPGText(testAuthUserWorkOSID),
+	})
+	require.NoError(t, err)
+
+	orgs := newMockOrganizationProvider(t)
+	loopsMock := newMockLoopsClient(t)
+
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient(), cache.NoopCache)
+
+	auditLogger := audit.NewLogger()
+
+	svixSrv := svixtest.NewMockServer(logger)
+	t.Cleanup(svixSrv.Close)
+	svixClient, err := svix.New("test-token", &svix.SvixOptions{ServerUrl: svixSrv.URL()})
+	require.NoError(t, err)
+
+	emailService := email.NewService(logger, loopsMock)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeatures{}, authzEngine, emailService, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
+
+	return ctx, &testInstance{
+		service: svc,
+		conn:    conn,
+		orgs:    orgs,
+		loops:   loopsMock,
+		svixSrv: svixSrv,
+	}
 }

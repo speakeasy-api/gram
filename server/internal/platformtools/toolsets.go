@@ -18,14 +18,18 @@ type Toolset struct {
 // platform toolset registry. Add a field here when a new toolset needs an
 // external service or pre-built tool slice.
 type ToolsetDependencies struct {
-	AssistantMemoryTools []ExternalTool
+	AssistantMemoryTools  []ExternalTool
+	AssistantTriggerTools []ExternalTool
 }
 
 type toolsetBuilder func(deps ToolsetDependencies) Toolset
 
 var toolsetRegistry = []toolsetBuilder{
 	func(deps ToolsetDependencies) Toolset {
-		return NewAssistantsToolset(deps.AssistantMemoryTools...)
+		tools := make([]ExternalTool, 0, len(deps.AssistantMemoryTools)+len(deps.AssistantTriggerTools))
+		tools = append(tools, deps.AssistantMemoryTools...)
+		tools = append(tools, deps.AssistantTriggerTools...)
+		return NewAssistantsToolset(tools...)
 	},
 }
 
@@ -59,5 +63,5 @@ func NewAssistantsToolset(tools ...ExternalTool) Toolset {
 // platform toolset. Keep the path segments in lockstep with the chi route
 // registered by the mcp package.
 func PlatformToolsetURL(base *url.URL, slug string) string {
-	return base.JoinPath("x", "platform-mcp", slug).String()
+	return base.JoinPath("platform", "mcp", slug).String()
 }

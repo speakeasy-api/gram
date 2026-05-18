@@ -30,6 +30,7 @@ type WorkOSClient interface {
 	ListOrgMemberships(ctx context.Context, orgID string) ([]workos.Member, error)
 	ListGlobalRoles(ctx context.Context) ([]workos.Role, error)
 	ListEvents(ctx context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error)
+	UpdateUserExternalID(ctx context.Context, workosUserID, externalID string) error
 }
 
 type BackfillWorkOSOrganizationParams struct {
@@ -266,16 +267,15 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 		return nil
 	}
 
-	if gramUserID != "" {
-		if err := orgQueries.UpsertOrganizationUserRelationshipFromWorkOS(ctx, orgrepo.UpsertOrganizationUserRelationshipFromWorkOSParams{
-			OrganizationID:     organizationID,
-			UserID:             gramUserID,
-			WorkosMembershipID: conv.ToPGText(member.ID),
-			WorkosUpdatedAt:    conv.ToPGTimestamptz(parsed.updatedAt),
-			WorkosLastEventID:  conv.ToPGText(""),
-		}); err != nil {
-			return fmt.Errorf("upsert organization membership %q: %w", member.ID, err)
-		}
+	if err := orgQueries.UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
+		OrganizationID:     organizationID,
+		UserID:             conv.ToPGTextEmpty(gramUserID),
+		WorkosUserID:       conv.ToPGText(member.UserID),
+		WorkosMembershipID: conv.ToPGText(member.ID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(parsed.updatedAt),
+		WorkosLastEventID:  conv.ToPGText(""),
+	}); err != nil {
+		return fmt.Errorf("upsert organization membership %q: %w", member.ID, err)
 	}
 
 	roleSlugs := []string{}
@@ -330,7 +330,7 @@ func latestMembershipCursor(ctx context.Context, repo *orgrepo.Queries, organiza
 
 	existing, err := repo.GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
 		OrganizationID: organizationID,
-		UserID:         gramUserID,
+		UserID:         conv.ToPGText(gramUserID),
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):

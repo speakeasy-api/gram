@@ -38,12 +38,17 @@ type AnalyzeBatch struct {
 	db              *pgxpool.Pool
 	scanner         *Scanner
 	piiScanner      PIIScanner
+	piScanner       *PromptInjectionScanner
 	shadowMCPClient *shadowmcp.Client
+	mcpMatchLookup  MCPMatchLookup
 }
 
-func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner PIIScanner, shadowMCPClient *shadowmcp.Client) *AnalyzeBatch {
+func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner PIIScanner, piScanner *PromptInjectionScanner, shadowMCPClient *shadowmcp.Client, mcpMatchLookup MCPMatchLookup) *AnalyzeBatch {
 	if piiScanner == nil {
 		piiScanner = &StubPIIScanner{}
+	}
+	if piScanner == nil {
+		piScanner = NewPromptInjectionScanner(logger, StubClassifier{})
 	}
 	return &AnalyzeBatch{
 		logger:          logger,
@@ -52,18 +57,21 @@ func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, m
 		db:              db,
 		scanner:         NewScanner(),
 		piiScanner:      piiScanner,
+		piScanner:       piScanner,
 		shadowMCPClient: shadowMCPClient,
+		mcpMatchLookup:  mcpMatchLookup,
 	}
 }
 
 type AnalyzeBatchArgs struct {
-	ProjectID        uuid.UUID
-	OrganizationID   string
-	RiskPolicyID     uuid.UUID
-	PolicyVersion    int64
-	MessageIDs       []uuid.UUID
-	Sources          []string
-	PresidioEntities []string
+	ProjectID            uuid.UUID
+	OrganizationID       string
+	RiskPolicyID         uuid.UUID
+	PolicyVersion        int64
+	MessageIDs           []uuid.UUID
+	Sources              []string
+	PresidioEntities     []string
+	PromptInjectionRules []string
 }
 
 type AnalyzeBatchResult struct {
@@ -232,14 +240,12 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	if slices.Contains(args.Sources, SourcePromptInjection) {
 		wg.Go(func() {
-			for i, content := range contents {
-				f, err := DetectPromptInjection(ctx, content)
-				if err != nil {
-					a.logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
-					continue
-				}
-				promptInjectionFindings[i] = f
+			results, err := a.piScanner.ScanBatch(ctx, contents, args.PromptInjectionRules)
+			if err != nil {
+				a.logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
+				return
 			}
+			promptInjectionFindings = results
 			activity.RecordHeartbeat(ctx, "prompt_injection")
 		})
 	}
@@ -272,7 +278,7 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	}
 
 	if slices.Contains(args.Sources, shadowmcp.SourceShadowMCP) {
-		shadowMCPFindings = a.scanShadowMCP(ctx, args.OrganizationID, messages)
+		shadowMCPFindings = a.scanShadowMCP(ctx, args.OrganizationID, args.ProjectID, messages)
 		activity.RecordHeartbeat(ctx, "shadow_mcp")
 	}
 
@@ -300,22 +306,68 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 // scanShadowMCP validates each message's tool_calls against the shadow-MCP
 // guard. Messages without tool_calls (user prompts, assistant text, tool
 // results) are skipped. Each unsigned or mismatched call produces one Finding.
-func (a *AnalyzeBatch) scanShadowMCP(ctx context.Context, orgID string, messages []repo.GetMessageContentBatchRow) [][]Finding {
+//
+// Two-pass design: the first walk produces findings with placeholder match
+// values and accumulates the tool call IDs that triggered a deny; we then
+// do a single ClickHouse lookup for the `gram.mcp.match` attributes those
+// calls' PreToolUse hooks recorded, and patch them onto the findings. This
+// keeps shadow_mcp findings keyed by the same server identifier the live
+// hook saw (URL / stdio command), instead of a best-guess derivation from
+// the tool name alone.
+func (a *AnalyzeBatch) scanShadowMCP(ctx context.Context, orgID string, projectID uuid.UUID, messages []repo.GetMessageContentBatchRow) [][]Finding {
 	out := make([][]Finding, len(messages))
+	var deniedCallIDs []string
 	for i, msg := range messages {
 		if len(msg.ToolCalls) == 0 {
 			continue
 		}
-		out[i] = a.scanMessageToolCalls(ctx, orgID, msg.ToolCalls)
+		findings, ids := a.scanMessageToolCalls(ctx, orgID, msg.ToolCalls)
+		out[i] = findings
+		deniedCallIDs = append(deniedCallIDs, ids...)
+	}
+
+	if len(deniedCallIDs) == 0 || a.mcpMatchLookup == nil {
+		return out
+	}
+
+	matches, err := a.mcpMatchLookup.LookupMCPMatchesByToolCallID(ctx, projectID, deniedCallIDs)
+	if err != nil {
+		// Non-fatal: the placeholder match (server prefix) is already on
+		// the findings, so the only consequence of a CH lookup failure is
+		// a slightly less precise allowlist key.
+		a.logger.WarnContext(ctx, "shadow_mcp scan: mcp match lookup failed; using server-prefix fallback",
+			attr.SlogError(err),
+		)
+		return out
+	}
+	for i := range out {
+		for j := range out[i] {
+			f := &out[i][j]
+			if f.Source != shadowmcp.SourceShadowMCP {
+				continue
+			}
+			if v, ok := matches[f.toolCallID]; ok && v != "" {
+				f.Match = v
+			}
+		}
 	}
 	return out
 }
 
 type recordedToolCall struct {
+	ID       string `json:"id"`
 	Function struct {
 		Name      string `json:"name"`
 		Arguments string `json:"arguments"`
 	} `json:"function"`
+}
+
+// MCPMatchLookup resolves a stored MCP tool call back to the server
+// identifier the hook saw at the time (`gram.mcp.match` on the
+// ClickHouse log). Returned map is keyed by tool call ID; missing
+// entries mean the hook never recorded a match for that call.
+type MCPMatchLookup interface {
+	LookupMCPMatchesByToolCallID(ctx context.Context, projectID uuid.UUID, toolCallIDs []string) (map[string]string, error)
 }
 
 func (a *AnalyzeBatch) parseRecordedToolCalls(ctx context.Context, source string, raw []byte) []recordedToolCall {
@@ -334,10 +386,16 @@ func (a *AnalyzeBatch) parseRecordedToolCalls(ctx context.Context, source string
 //
 // Toolset lookups are served by the shared shadowmcp.Client cache so a batch
 // covering many calls from the same toolset only pays one DB round-trip.
-func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, raw []byte) []Finding {
+//
+// Returns the findings plus the list of tool call IDs that produced a deny —
+// scanShadowMCP collects these across messages so the resolved MCP match
+// (recorded by the hook on the ClickHouse log) can be patched onto each
+// finding in a single batched query.
+func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, raw []byte) ([]Finding, []string) {
 	calls := a.parseRecordedToolCalls(ctx, shadowmcp.SourceShadowMCP, raw)
 
 	var findings []Finding
+	var deniedCallIDs []string
 	for _, call := range calls {
 		toolName := call.Function.Name
 		if toolName == "" {
@@ -363,18 +421,33 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 		if !denied {
 			continue
 		}
+		// Placeholder match — the server-prefix portion of the tool name
+		// (e.g. "mise" from "mcp__mise__run_task"). scanShadowMCP's second
+		// pass replaces this with the authoritative `gram.mcp.match`
+		// attribute the hook recorded on the corresponding ClickHouse log,
+		// when one exists. The fallback keeps findings useful even if the
+		// CH lookup misses (no hook log yet, ClickHouse outage, ...).
+		match := mcpServerPrefixOf(toolName)
+		if match == "" {
+			match = toolName
+		}
 		findings = append(findings, Finding{
-			Source:      shadowmcp.SourceShadowMCP,
-			RuleID:      "shadow_mcp.unverified_call",
-			Description: detail,
-			Match:       toolName,
-			StartPos:    0,
-			EndPos:      0,
-			Tags:        nil,
-			Confidence:  1.0,
+			Source:           shadowmcp.SourceShadowMCP,
+			RuleID:           "shadow_mcp.unverified_call",
+			Description:      detail,
+			Match:            match,
+			StartPos:         0,
+			EndPos:           0,
+			Tags:             nil,
+			Confidence:       1.0,
+			DeadLetterReason: "",
+			toolCallID:       call.ID,
 		})
+		if call.ID != "" {
+			deniedCallIDs = append(deniedCallIDs, call.ID)
+		}
 	}
-	return findings
+	return findings, deniedCallIDs
 }
 
 // scanDestructiveToolAnnotations flags recorded Gram MCP tool calls whose
@@ -418,14 +491,16 @@ func (a *AnalyzeBatch) scanMessageDestructiveToolCalls(ctx context.Context, orgI
 		}
 
 		findings = append(findings, Finding{
-			Source:      shadowmcp.SourceDestructiveTool,
-			RuleID:      "destructive_tool.annotation",
-			Description: "Tool is annotated as destructive",
-			Match:       resolved.ToolName,
-			StartPos:    0,
-			EndPos:      0,
-			Tags:        nil,
-			Confidence:  1.0,
+			Source:           shadowmcp.SourceDestructiveTool,
+			RuleID:           "destructive_tool.annotation",
+			Description:      "Tool is annotated as destructive",
+			Match:            resolved.ToolName,
+			StartPos:         0,
+			EndPos:           0,
+			Tags:             nil,
+			Confidence:       1.0,
+			DeadLetterReason: "",
+			toolCallID:       "",
 		})
 	}
 	return findings
@@ -473,14 +548,16 @@ func (a *AnalyzeBatch) scanMessageDestructiveCLICalls(ctx context.Context, raw [
 		}
 
 		findings = append(findings, Finding{
-			Source:      SourceCLIDestructive,
-			RuleID:      "cli_destructive." + matched.FullName(),
-			Description: "Tool input matched a destructive CLI pattern",
-			Match:       toolName,
-			StartPos:    0,
-			EndPos:      0,
-			Tags:        nil,
-			Confidence:  1.0,
+			Source:           SourceCLIDestructive,
+			RuleID:           "cli_destructive." + matched.FullName(),
+			Description:      "Tool input matched a destructive CLI pattern",
+			Match:            toolName,
+			StartPos:         0,
+			EndPos:           0,
+			Tags:             nil,
+			Confidence:       1.0,
+			DeadLetterReason: "",
+			toolCallID:       "",
 		})
 	}
 	return findings
@@ -519,6 +596,28 @@ func stripMCPToolPrefix(name string) string {
 	return name
 }
 
+// mcpServerPrefixOf returns the <server> portion of an MCP-routed tool
+// name — e.g. "mise" from "mcp__mise__run_task" — for use as a stable,
+// server-level identifier when writing shadow_mcp findings. This is what
+// the hook-time matcher computes from tool names too, so a finding's
+// match column ends up consistent across batch and hook paths.
+// Returns "" for non-MCP tool names.
+func mcpServerPrefixOf(name string) string {
+	if len(name) >= 5 && name[:5] == "mcp__" {
+		rest := name[5:]
+		for i := 0; i+1 < len(rest); i++ {
+			if rest[i] == '_' && rest[i+1] == '_' {
+				return rest[:i]
+			}
+		}
+		return ""
+	}
+	if len(name) >= 4 && name[:4] == "MCP:" {
+		return name[4:]
+	}
+	return ""
+}
+
 // dedup removes findings that overlap the same text region. Earlier entries
 // in the slice win (gitleaks before presidio), so secrets take priority over PII.
 func dedup(findings []Finding) []Finding {
@@ -551,13 +650,29 @@ func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, mes
 	for i, msg := range messages {
 		findings := batchFindings[i]
 
-		if len(findings) == 0 {
+		// Split dead-letter sentinels from real findings: DL markers do not
+		// contribute to findingsCount, do not feed the confidence histogram,
+		// and are stored with found=false + dead_letter_reason populated.
+		// They coexist with the per-message empty row so the existing
+		// "any row => analyzed" semantics in FetchUnanalyzedMessageIDs
+		// keep working until we add per-source dedup.
+		realFindings := findings[:0:0]
+		for _, f := range findings {
+			if f.DeadLetterReason != "" {
+				resultID, _ := uuid.NewV7()
+				rows = append(rows, deadLetterRow(resultID, args, msg.ID, f))
+				continue
+			}
+			realFindings = append(realFindings, f)
+		}
+
+		if len(realFindings) == 0 {
 			resultID, _ := uuid.NewV7()
 			rows = append(rows, emptyResultRow(resultID, args, msg.ID))
 			continue
 		}
 
-		for _, f := range findings {
+		for _, f := range realFindings {
 			findingsCount++
 			a.metrics.RecordFindingConfidence(ctx, args.OrganizationID, f.RuleID, f.Confidence)
 			resultID, _ := uuid.NewV7()
@@ -577,6 +692,7 @@ func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, mes
 				EndPos:            pgtype.Int4{Int32: conv.SafeInt32(f.EndPos), Valid: true},
 				Confidence:        pgtype.Float8{Float64: f.Confidence, Valid: true},
 				Tags:              f.Tags,
+				DeadLetterReason:  pgtype.Text{String: "", Valid: false},
 			})
 		}
 	}
@@ -636,5 +752,31 @@ func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID) re
 		EndPos:            pgtype.Int4{Int32: 0, Valid: false},
 		Confidence:        pgtype.Float8{Float64: 0, Valid: false},
 		Tags:              nil,
+		DeadLetterReason:  pgtype.Text{String: "", Valid: false},
+	}
+}
+
+// deadLetterRow materializes a Finding flagged with DeadLetterReason as a
+// risk_results row. found=false so the row never shows up in finding counts;
+// the rule_id/description carry the orchestrator's sentinel labels and
+// dead_letter_reason carries the underlying scanner error.
+func deadLetterRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID, f Finding) repo.InsertRiskResultsParams {
+	return repo.InsertRiskResultsParams{
+		ID:                id,
+		ProjectID:         args.ProjectID,
+		OrganizationID:    args.OrganizationID,
+		RiskPolicyID:      args.RiskPolicyID,
+		RiskPolicyVersion: args.PolicyVersion,
+		ChatMessageID:     messageID,
+		Source:            f.Source,
+		Found:             false,
+		RuleID:            pgtype.Text{String: f.RuleID, Valid: f.RuleID != ""},
+		Description:       pgtype.Text{String: f.Description, Valid: f.Description != ""},
+		Match:             pgtype.Text{String: "", Valid: false},
+		StartPos:          pgtype.Int4{Int32: 0, Valid: false},
+		EndPos:            pgtype.Int4{Int32: 0, Valid: false},
+		Confidence:        pgtype.Float8{Float64: 0, Valid: false},
+		Tags:              nil,
+		DeadLetterReason:  pgtype.Text{String: f.DeadLetterReason, Valid: true},
 	}
 }

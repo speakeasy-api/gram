@@ -543,7 +543,7 @@ func seedWorkOSUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, userI
 	})
 	require.NoError(t, err)
 
-	err = usersrepo.New(conn).SetUserWorkosID(ctx, usersrepo.SetUserWorkosIDParams{
+	err = usersrepo.New(conn).OverwriteUserWorkosID(ctx, usersrepo.OverwriteUserWorkosIDParams{
 		WorkosID: conv.ToPGText(workosUserID),
 		ID:       userID,
 	})
@@ -633,7 +633,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipKnownUserSyncsRoles(t *testin
 
 	relationship, err := orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
 		OrganizationID: organizationID,
-		UserID:         userID,
+		UserID:         conv.ToPGText(userID),
 	})
 	require.NoError(t, err)
 	require.False(t, relationship.Deleted)
@@ -719,14 +719,14 @@ func TestProcessWorkOSOrganizationEvents_MembershipDeleteSoftDeletesAndClearsAss
 
 	active, err := orgrepo.New(conn).HasOrganizationUserRelationship(ctx, orgrepo.HasOrganizationUserRelationshipParams{
 		OrganizationID: organizationID,
-		UserID:         userID,
+		UserID:         conv.ToPGText(userID),
 	})
 	require.NoError(t, err)
 	require.False(t, active)
 
 	relationship, err := orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
 		OrganizationID: organizationID,
-		UserID:         userID,
+		UserID:         conv.ToPGText(userID),
 	})
 	require.NoError(t, err)
 	require.True(t, relationship.Deleted)
@@ -737,7 +737,49 @@ func TestProcessWorkOSOrganizationEvents_MembershipDeleteSoftDeletesAndClearsAss
 		WorkosUserID:   workosUserID,
 	})
 	require.NoError(t, err)
-	require.Empty(t, assignments)
+	require.Len(t, assignments, 1)
+	require.True(t, assignments[0].DeletedAt.Valid)
+	require.Equal(t, "event_01HZDEL2", assignments[0].WorkosLastEventID.String)
+}
+
+func TestProcessWorkOSOrganizationEvents_MembershipRejoinReusesTombstone(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_membership_rejoin")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_mem_rejoin"
+	const workosOrgID = "org_01HZMEMREJOIN"
+	const userID = "user_mem_rejoin"
+	const workosUserID = "user_01HZMEMREJOIN"
+	const firstMembershipID = "mem_01HZREJOIN1"
+	const secondMembershipID = "mem_01HZREJOIN2"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZREJOIN1", firstMembershipID, workosOrgID, workosUserID, time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)),
+			newWorkOSMembershipEvent(t, "organization_membership.deleted", "event_01HZREJOIN2", firstMembershipID, workosOrgID, workosUserID, time.Date(2026, 5, 6, 13, 0, 0, 0, time.UTC)),
+			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZREJOIN3", secondMembershipID, workosOrgID, workosUserID, time.Date(2026, 5, 6, 14, 0, 0, 0, time.UTC)),
+		},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZREJOIN3", res.LastEventID)
+
+	relationship, err := orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+	require.False(t, relationship.Deleted)
+	require.Equal(t, secondMembershipID, relationship.WorkosMembershipID.String)
+	require.Equal(t, "event_01HZREJOIN3", relationship.WorkosLastEventID.String)
 }
 
 func TestProcessWorkOSOrganizationEvents_MembershipUnknownOrganizationSkips(t *testing.T) {

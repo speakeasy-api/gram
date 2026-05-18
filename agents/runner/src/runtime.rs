@@ -1,3 +1,5 @@
+use std::panic::AssertUnwindSafe;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -15,187 +17,312 @@ use agentkit_provider_openrouter::{OpenRouterConfig, OpenRouterProvider};
 use agentkit_reporting::TracingReporter;
 use agentkit_tool_fs::{FileSystemToolPolicy, FileSystemToolResources};
 use agentkit_tools_core::{
-    CompositePermissionChecker, PathPolicy, PermissionDecision, ToolRegistry,
+    CatalogReader, CompositePermissionChecker, PathPolicy, PermissionDecision, ToolRegistry,
 };
+use dashmap::DashMap;
+use futures::FutureExt;
 use serde_json::Value;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::sync::{Mutex as AsyncMutex, Notify, oneshot};
+use tokio::sync::{OnceCell, oneshot};
 
 use agentkit_compaction::AgentBuilderCompactorExt;
 
+use crate::clip::ClippedToolSource;
 use crate::compaction::build_compactor;
 use crate::errors::RunnerError;
-use crate::http_layer::{McpRotatingClient, TokenRegistry, build_http};
-use crate::idempotency::IdempotencyCache;
+use crate::gram_client::GramBootstrapClient;
+use crate::http_layer::{McpRotatingClient, TokenRegistry, build_bootstrap_client, build_http};
 use crate::tools;
-use crate::wire::{McpServer, RunnerConfig, RunnerMessage, RunnerRequest};
+use crate::wire::{McpServer, RunnerMessage, ThreadBootstrap};
 use crate::workdir::ASSISTANT_WORKDIR;
 
+const TOOL_RESULT_SPILL_DIR: &str = "tool-results";
 const MCP_CMD_CAPACITY: usize = 32;
 
-/// Maximum time the agent loop waits for `connect_all` before serving its first
-/// turn. Bounded so a single slow server can't gate the whole runtime; servers
-/// still connecting after this deadline keep registering their tools as they
-/// come online via the catalog reader handed to the agent.
-const MCP_STARTUP_DEADLINE: Duration = Duration::from_secs(3);
+/// How long a thread's per-task state can sit idle before the host evicts
+/// it. The VM stays alive across all per-thread events; only individual
+/// thread tasks expire.
+pub const DEFAULT_THREAD_IDLE_TTL: Duration = Duration::from_secs(30 * 60);
 
-pub type AppState = Arc<AsyncMutex<RuntimeHost>>;
+/// How often the eviction sweep runs. Picked to keep the worst-case
+/// over-retention small relative to the TTL while still being cheap.
+const EVICTION_SWEEP_INTERVAL: Duration = Duration::from_secs(60);
 
-/// Commands routed to the MCP manager actor task. Instead of sharing the
-/// `McpServerManager` behind a mutex, we keep it private to a single task and
-/// drive it through this channel; the parent only ever sees the read-side
-/// [`agentkit_tools_core::CatalogReader`] returned by `manager.source()`.
+pub type AppState = Arc<RuntimeHost>;
+
+/// Singleton host shared by every per-thread task on the VM.
+pub struct RuntimeHost {
+    pub assistant_id: String,
+    pub started_at: Instant,
+    /// Per-idempotency-key admission slot. The bool tracks whether the
+    /// keyed turn has actually been enqueued: holding the mutex covers
+    /// the check + bootstrap + enqueue + mark-done sequence so concurrent
+    /// retries with the same key serialize. A failed admission drops the
+    /// guard with `false`, leaving the slot retryable.
+    pub seen: DashMap<String, Arc<tokio::sync::Mutex<bool>>>,
+    pub threads: DashMap<String, Arc<OnceCell<Arc<ConfiguredThread>>>>,
+    pub gram_client: GramBootstrapClient,
+    pub thread_idle_ttl: Duration,
+    pub http_client: reqwest::Client,
+    pub spill_root: PathBuf,
+    /// Fallback bearer used only when `/threads/turn` arrives with no
+    /// `auth_token` so the bootstrap fetch still has a credential.
+    pub initial_token: String,
+}
+
+/// Live per-thread state. Concurrent first-turn requests for the same
+/// thread race through an `OnceCell` so only one bootstrap fetch and one
+/// task spawn happen.
+pub struct ConfiguredThread {
+    pub thread_id: String,
+    pub chat_id: String,
+    pub idle_since: Arc<Mutex<Option<Instant>>>,
+    pub inbox_tx: UnboundedSender<String>,
+    pub task_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    pub tokens: TokenRegistry,
+    pub mcp_cmd_tx: mpsc::Sender<McpCmd>,
+}
+
 pub enum McpCmd {
-    /// Force a server to disconnect and reconnect from scratch. Surfaced to
-    /// the assistant via the `mcp_force_reconnect` tool so the model can
-    /// recover from transport-level errors without operator intervention.
     ForceReconnect {
         server_id: McpServerId,
         reply: oneshot::Sender<Result<(), String>>,
     },
 }
 
-pub struct RuntimeHost {
-    pub runtime: Option<ConfiguredRuntime>,
-    pub seen: IdempotencyCache,
-    /// Signals the HTTP server to shut down. Loop task fires this when it
-    /// exits (warm TTL / fatal error) so the process tears down immediately
-    /// rather than lingering in a configured-but-dead state.
-    pub shutdown: Arc<Notify>,
-}
-
-pub struct ConfiguredRuntime {
-    tokens: TokenRegistry,
-    inbox_tx: UnboundedSender<String>,
-    /// `None` while a turn is in flight; `Some(t)` when idle since `t`. The two
-    /// signals are inherently exclusive — a single optional instant prevents
-    /// representing "in-flight AND idle since X" by construction.
-    idle_since: Arc<Mutex<Option<Instant>>>,
-    // Non-rotating fields of the RunnerConfig this runtime was built from.
-    // `auth_token` is excluded — it rolls on every /turn — so a caller retrying
-    // /configure with a refreshed token is still treated as an identical config.
-    fingerprint: u64,
-    _mcp_actor: tokio::task::JoinHandle<()>,
-    _loop_handle: tokio::task::JoinHandle<()>,
-}
-
-impl ConfiguredRuntime {
-    pub fn idle_for(&self) -> Option<Duration> {
-        let guard = self.idle_since.lock().ok()?;
-        Some(match *guard {
+impl ConfiguredThread {
+    pub fn idle_for(&self) -> Duration {
+        let guard = match self.idle_since.lock() {
+            Ok(g) => g,
+            Err(_) => return Duration::ZERO,
+        };
+        match *guard {
             None => Duration::ZERO,
             Some(t) => Instant::now().saturating_duration_since(t),
-        })
+        }
     }
 
-    pub fn rotate_token(&self, token: &str) -> Result<(), RunnerError> {
-        self.tokens.rotate(token)
-    }
-
-    pub fn matches(&self, config: &RunnerConfig) -> bool {
-        self.fingerprint == fingerprint(config)
-    }
-
-    pub fn enqueue(&self, request: RunnerRequest) -> Result<(), RunnerError> {
+    pub fn enqueue(&self, input: String) -> Result<(), RunnerError> {
         self.inbox_tx
-            .send(request.input)
+            .send(input)
             .map_err(|_| RunnerError::SubmitInput("loop inbox closed".into()))?;
-        // Mark busy synchronously so /state can't report a stale idle window
-        // between enqueue and the loop's mark_busy on AwaitingInput.
         mark_busy(&self.idle_since);
         Ok(())
     }
 }
 
-fn fingerprint(config: &RunnerConfig) -> u64 {
-    use std::hash::{DefaultHasher, Hash, Hasher};
-    let mut hasher = DefaultHasher::new();
-    config.model.hash(&mut hasher);
-    config.instructions.hash(&mut hasher);
-    config.completions_url.hash(&mut hasher);
-    config.chat_id.hash(&mut hasher);
-    config.mcp_servers.hash(&mut hasher);
-    config.history.hash(&mut hasher);
-    hasher.finish()
-}
-
-pub async fn build_runtime(
-    config: &RunnerConfig,
-    shutdown: Arc<Notify>,
-) -> Result<ConfiguredRuntime, RunnerError> {
-    tracing::info!(
-        model = %config.model,
-        mcp_servers = config.mcp_servers.len(),
-        chat_id = %config.chat_id,
-        "build_runtime"
-    );
-
-    let tokens = TokenRegistry::new(config.auth_token.clone());
-
+pub async fn build_host(
+    assistant_id: String,
+    server_url: String,
+    initial_token: String,
+    thread_idle_ttl: Duration,
+) -> Result<Arc<RuntimeHost>, RunnerError> {
     let mut default_headers = http::HeaderMap::new();
-    default_headers.insert(
-        http::HeaderName::from_static("gram-chat-id"),
-        http::HeaderValue::from_str(&config.chat_id)
-            .map_err(|source| RunnerError::HeaderValue { source })?,
-    );
     default_headers.insert(
         http::HeaderName::from_static("x-gram-source"),
         http::HeaderValue::from_static("assistant"),
     );
-
     let http_client = reqwest::Client::builder()
         .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))
         .default_headers(default_headers)
         .build()?;
 
-    let mut manager = McpServerManager::new();
-    let mut mcp_server_ids = Vec::with_capacity(config.mcp_servers.len());
-    for server in &config.mcp_servers {
-        mcp_server_ids.push(server.id.clone());
-        manager.register_server(build_mcp_server_config(server, &http_client, &tokens)?);
+    let spill_root = PathBuf::from(ASSISTANT_WORKDIR).join(TOOL_RESULT_SPILL_DIR);
+
+    let gram_client =
+        GramBootstrapClient::new(server_url, build_bootstrap_client(http_client.clone()));
+    let host = Arc::new(RuntimeHost {
+        assistant_id,
+        started_at: Instant::now(),
+        seen: DashMap::new(),
+        threads: DashMap::new(),
+        gram_client,
+        thread_idle_ttl,
+        http_client,
+        spill_root,
+        initial_token,
+    });
+
+    // Background eviction task: walks the threads map and drops any whose
+    // idle clock has run past the TTL. Runs for the lifetime of the host.
+    let evict_host = Arc::clone(&host);
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(EVICTION_SWEEP_INTERVAL);
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            sweep_idle(&evict_host).await;
+        }
+    });
+
+    Ok(host)
+}
+
+/// Snapshot active threads — used by /state and the eviction sweep.
+pub fn snapshot_threads(host: &RuntimeHost) -> Vec<(String, String, Duration)> {
+    host.threads
+        .iter()
+        .filter_map(|entry| {
+            let cell = entry.value().clone();
+            cell.get().map(|thread| {
+                (
+                    thread.thread_id.clone(),
+                    thread.chat_id.clone(),
+                    thread.idle_for(),
+                )
+            })
+        })
+        .collect()
+}
+
+async fn sweep_idle(host: &Arc<RuntimeHost>) {
+    let ttl = host.thread_idle_ttl;
+    let mut to_evict = Vec::new();
+    for entry in host.threads.iter() {
+        let cell = entry.value().clone();
+        if let Some(thread) = cell.get()
+            && thread.idle_for() > ttl
+        {
+            to_evict.push(thread.thread_id.clone());
+        }
     }
-    let mcp_source = manager.source();
+    for thread_id in to_evict {
+        evict_thread(host, &thread_id);
+    }
+}
 
-    let (mcp_cmd_tx, mcp_cmd_rx) = mpsc::channel(MCP_CMD_CAPACITY);
-    let (mcp_ready_tx, mcp_ready_rx) = oneshot::channel::<()>();
-    let mcp_actor = tokio::spawn(run_mcp_actor(manager, mcp_cmd_rx, mcp_ready_tx));
+fn evict_thread(host: &RuntimeHost, thread_id: &str) {
+    if let Some((_, cell)) = host.threads.remove(thread_id)
+        && let Some(thread) = cell.get()
+    {
+        tracing::info!(thread_id = %thread_id, "evicting thread");
+        // Closing the inbox causes run_loop to return; abort the task
+        // for prompt teardown of any blocked compactor / model call.
+        if let Ok(mut handle_slot) = thread.task_handle.lock()
+            && let Some(handle) = handle_slot.take()
+        {
+            handle.abort();
+        }
+    }
+    // Idempotency keys are scoped per thread (`{thread_id}:{event_id}`),
+    // so an evicted thread's keys can never match a future /turn. Drop
+    // them so `seen` does not grow without bound over the VM lifetime.
+    let prefix = format!("{thread_id}:");
+    host.seen.retain(|key, _| !key.starts_with(&prefix));
+}
 
-    let native_tools = ToolRegistry::new().with(tools::bun_run::bun_run).with(
-        tools::mcp_force_reconnect::McpForceReconnectTool::new(mcp_cmd_tx.clone(), mcp_server_ids),
+fn reap_oldest_idle(host: &RuntimeHost) {
+    let victim = host
+        .threads
+        .iter()
+        .filter_map(|entry| {
+            let thread = entry.value().get()?;
+            let guard = thread.idle_since.lock().ok()?;
+            let since = (*guard)?;
+            Some((thread.thread_id.clone(), since))
+        })
+        .min_by_key(|(_, since)| *since)
+        .map(|(id, _)| id);
+    if let Some(thread_id) = victim {
+        evict_thread(host, &thread_id);
+    }
+}
+
+/// First-turn bootstrap path. Concurrent /turn requests for the same thread
+/// race through the `OnceCell`; only one wins the bootstrap fetch and task
+/// spawn. Subsequent turns rotate the existing thread's bearer slot.
+pub async fn ensure_thread(
+    host: &Arc<RuntimeHost>,
+    thread_id: &str,
+    auth_token: Option<String>,
+) -> Result<Arc<ConfiguredThread>, RunnerError> {
+    let cell = host
+        .threads
+        .entry(thread_id.to_string())
+        .or_insert_with(|| Arc::new(OnceCell::new()))
+        .clone();
+
+    let bearer = auth_token
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(|| host.initial_token.clone());
+
+    let mut initialized = false;
+    let thread = cell
+        .get_or_try_init(|| async {
+            initialized = true;
+            // Reap skips busy threads and our own (still-uninitialized)
+            // OnceCell, so worst case is a no-op.
+            reap_oldest_idle(host);
+            let tokens = TokenRegistry::new(bearer.clone());
+            let bootstrap = host
+                .gram_client
+                .fetch_bootstrap(thread_id, &tokens)
+                .await
+                .map_err(|e| RunnerError::Loop(format!("bootstrap fetch failed: {e}")))?;
+            spawn_thread(host, thread_id.to_string(), bootstrap, tokens).await
+        })
+        .await?;
+
+    if !initialized && !bearer.is_empty() {
+        thread.tokens.rotate(&bearer)?;
+    }
+    Ok(thread.clone())
+}
+
+/// Builds a per-thread agent and spawns its tokio task. Each task is wrapped
+/// in `catch_unwind` so a panic inside one thread's tool call, stream
+/// parser, or MCP client does not take down the VM or sibling threads.
+async fn spawn_thread(
+    host: &Arc<RuntimeHost>,
+    thread_id: String,
+    bootstrap: ThreadBootstrap,
+    tokens: TokenRegistry,
+) -> Result<Arc<ConfiguredThread>, RunnerError> {
+    let (mcp_cmd_tx, mcp_catalog) = build_thread_mcp(host, &bootstrap.mcp_servers, &tokens).await?;
+
+    let chat_id = bootstrap.chat_id.clone();
+
+    // Per-thread completions adapter. Outbound /chat/completions calls
+    // carry the thread's chat id so the server's revalidation check can
+    // confirm the chat belongs to the assistant on the JWT.
+    let mut chat_headers = http::HeaderMap::new();
+    chat_headers.insert(
+        http::HeaderName::from_static("gram-chat-id"),
+        http::HeaderValue::from_str(&chat_id)
+            .map_err(|source| RunnerError::HeaderValue { source })?,
     );
-
-    // Sandbox helpers stay readable so user code can `import` them, but writes
-    // to those paths must fail so an assistant can't shadow `browser.ts` etc.
-    let permissions = CompositePermissionChecker::new(PermissionDecision::Allow).with_policy(
-        PathPolicy::new()
-            .allow_root(ASSISTANT_WORKDIR)
-            .read_only_root(format!("{ASSISTANT_WORKDIR}/node_modules"))
-            .read_only_root(format!("{ASSISTANT_WORKDIR}/browser.ts"))
-            .read_only_root(format!("{ASSISTANT_WORKDIR}/package.json")),
+    chat_headers.insert(
+        http::HeaderName::from_static("x-gram-source"),
+        http::HeaderValue::from_static("assistant"),
     );
+    let thread_http_client = reqwest::Client::builder()
+        .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))
+        .default_headers(chat_headers)
+        .build()?;
 
-    let fs_resources = FileSystemToolResources::new()
-        .with_policy(FileSystemToolPolicy::new().require_read_before_write(true));
-
-    let base_url = config
-        .completions_url
-        .clone()
-        .ok_or_else(|| RunnerError::ConfigError {
-            key: "completions_url".to_string(),
-        })?;
-    let openrouter_config =
-        OpenRouterConfig::new(String::new(), config.model.clone()).with_base_url(base_url);
+    let openrouter_config = OpenRouterConfig::new(String::new(), bootstrap.model.clone())
+        .with_base_url(bootstrap.completions_url.clone());
     let provider = OpenRouterProvider::from(openrouter_config);
 
-    let completions_http = build_http(http_client.clone(), tokens.clone());
+    let completions_http = build_http(thread_http_client.clone(), tokens.clone());
     let adapter = CompletionsAdapter::with_client(provider.clone(), completions_http);
 
-    // Compactor calls reuse the model and bearer rotation but must omit the
-    // Gram-Chat-ID header so they bypass chat-message capture; otherwise gram
-    // treats the compactor's "summarise this transcript" turn as a divergence
-    // and the next replay loads the compactor's transcript instead of the
-    // user's.
+    // Compactor outbound headers carry the same gram-chat-id as the main
+    // adapter so the server's assistant-scope guard (which rejects any
+    // assistant-runtime request without a chat id) lets the call through,
+    // plus gram-skip-capture: 1 so the capture pipeline drops the
+    // compactor's "summarise this transcript" turn instead of persisting
+    // it as divergence on the user's chat.
     let mut compactor_headers = http::HeaderMap::new();
+    compactor_headers.insert(
+        http::HeaderName::from_static("gram-chat-id"),
+        http::HeaderValue::from_str(&chat_id)
+            .map_err(|source| RunnerError::HeaderValue { source })?,
+    );
+    compactor_headers.insert(
+        http::HeaderName::from_static("gram-skip-capture"),
+        http::HeaderValue::from_static("1"),
+    );
     compactor_headers.insert(
         http::HeaderName::from_static("x-gram-source"),
         http::HeaderValue::from_static("assistant"),
@@ -208,17 +335,36 @@ pub async fn build_runtime(
     let compactor_adapter = CompletionsAdapter::with_client(provider, compactor_http);
 
     let compactor = build_compactor(
-        &config.chat_id,
-        config.context_window.unwrap_or(0),
+        &bootstrap.chat_id,
+        bootstrap.context_window.unwrap_or(0),
         compactor_adapter,
     )?;
 
     let mut transcript = Vec::new();
-    if let Some(instructions) = &config.instructions {
-        transcript.push(Item::text(ItemKind::System, instructions));
+    if !bootstrap.instructions.is_empty() {
+        transcript.push(Item::text(ItemKind::System, &bootstrap.instructions));
     }
-    transcript.extend(normalize_history(&config.history)?);
+    transcript.extend(normalize_history(&bootstrap.history)?);
 
+    let permissions = CompositePermissionChecker::new(PermissionDecision::Allow).with_policy(
+        PathPolicy::new()
+            .allow_root(ASSISTANT_WORKDIR)
+            .read_only_root(format!("{ASSISTANT_WORKDIR}/node_modules"))
+            .read_only_root(format!("{ASSISTANT_WORKDIR}/browser.ts"))
+            .read_only_root(format!("{ASSISTANT_WORKDIR}/package.json")),
+    );
+    let fs_resources = FileSystemToolResources::new()
+        .with_policy(FileSystemToolPolicy::new().require_read_before_write(true));
+
+    let mcp_server_ids: Vec<String> = bootstrap.mcp_servers.iter().map(|s| s.id.clone()).collect();
+    let native_tools = ToolRegistry::new().with(tools::bun_run::bun_run).with(
+        tools::mcp_force_reconnect::McpForceReconnectTool::new(
+            Arc::clone(host),
+            mcp_server_ids,
+        ),
+    );
+
+    let mcp_source = ClippedToolSource::new(mcp_catalog, host.spill_root.clone());
     let mut builder = Agent::builder()
         .model(adapter)
         .add_tool_source(native_tools)
@@ -237,38 +383,97 @@ pub async fn build_runtime(
         .build()
         .map_err(|e| RunnerError::AgentBuild(e.to_string()))?;
 
-    let session = SessionConfig::new(config.chat_id.clone())
+    let session = SessionConfig::new(bootstrap.chat_id.clone())
         .with_cache(PromptCacheRequest::automatic().with_retention(PromptCacheRetention::Short));
-
     let driver = agent
         .start(session)
         .await
         .map_err(|e| RunnerError::AgentStart(e.to_string()))?;
 
     let idle_since = Arc::new(Mutex::new(Some(Instant::now())));
-
     let (inbox_tx, inbox_rx) = mpsc::unbounded_channel::<String>();
+    let loop_idle = Arc::clone(&idle_since);
+    let log_thread_id = thread_id.clone();
+    let host_for_eviction = Arc::clone(host);
+    let evict_thread_id = thread_id.clone();
 
-    let loop_idle_since = Arc::clone(&idle_since);
-    let loop_handle = tokio::spawn(async move {
-        let outcome = run_loop(driver, inbox_rx, loop_idle_since, mcp_ready_rx).await;
+    let task_handle = tokio::spawn(async move {
+        let outcome = AssertUnwindSafe(run_loop(driver, inbox_rx, loop_idle))
+            .catch_unwind()
+            .await;
         match outcome {
-            Ok(reason) => tracing::info!(reason = %reason, "loop exited"),
-            Err(err) => tracing::error!(error = %err, "loop exited with error"),
+            Ok(Ok(reason)) => {
+                tracing::info!(thread_id = %log_thread_id, reason = %reason, "thread loop exited")
+            }
+            Ok(Err(err)) => {
+                tracing::error!(thread_id = %log_thread_id, error = %err, "thread loop exited with error")
+            }
+            Err(panic_payload) => {
+                let msg = panic_payload
+                    .downcast_ref::<&'static str>()
+                    .map(|s| (*s).to_string())
+                    .or_else(|| panic_payload.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "<panic payload>".to_string());
+                tracing::error!(thread_id = %log_thread_id, panic = %msg, "thread loop panicked");
+            }
         }
-        shutdown.notify_waiters();
+        // Drop the entry on exit so a stale ConfiguredThread doesn't keep
+        // holding state for a dead task.
+        host_for_eviction.threads.remove(&evict_thread_id);
     });
 
-    tracing::info!("build_runtime ok");
-
-    Ok(ConfiguredRuntime {
-        tokens,
-        inbox_tx,
+    let configured = Arc::new(ConfiguredThread {
+        thread_id,
+        chat_id,
         idle_since,
-        fingerprint: fingerprint(config),
-        _mcp_actor: mcp_actor,
-        _loop_handle: loop_handle,
-    })
+        inbox_tx,
+        task_handle: Mutex::new(Some(task_handle)),
+        tokens,
+        mcp_cmd_tx,
+    });
+    Ok(configured)
+}
+
+async fn build_thread_mcp(
+    host: &Arc<RuntimeHost>,
+    servers: &[McpServer],
+    tokens: &TokenRegistry,
+) -> Result<(mpsc::Sender<McpCmd>, CatalogReader), RunnerError> {
+    let mut manager = McpServerManager::new();
+    let catalog = manager.source();
+
+    for server in servers {
+        let config = build_mcp_server_config(server, &host.http_client, tokens)?;
+        let server_id = McpServerId::new(server.id.clone());
+        manager.register_server(config);
+        let _ = connect_and_log(&mut manager, &server_id, "register").await;
+    }
+
+    let (cmd_tx, cmd_rx) = mpsc::channel(MCP_CMD_CAPACITY);
+    tokio::spawn(run_mcp_actor(manager, cmd_rx));
+    Ok((cmd_tx, catalog))
+}
+
+async fn connect_and_log(
+    manager: &mut McpServerManager,
+    server_id: &McpServerId,
+    action: &'static str,
+) -> Result<(), String> {
+    match manager.connect_server(server_id).await {
+        Ok(handle) => {
+            tracing::info!(
+                server_id = %server_id,
+                tools = handle.snapshot().tools.len(),
+                action,
+                "mcp connect ok"
+            );
+            Ok(())
+        }
+        Err(e) => {
+            tracing::warn!(server_id = %server_id, error = %e, action, "mcp connect failed");
+            Err(e.to_string())
+        }
+    }
 }
 
 fn build_mcp_server_config(
@@ -305,84 +510,28 @@ fn build_mcp_server_config(
     ))
 }
 
-/// Owns the [`McpServerManager`] for the lifetime of a runtime. Connects every
-/// registered server in the background — `/configure` does not wait — and
-/// processes [`McpCmd`]s serially so the manager never needs to be shared.
-///
-/// `ready_tx` resolves once `connect_all` returns (success or aggregate error),
-/// letting the loop start its first turn with a fully-populated tool registry
-/// rather than racing the model against in-flight handshakes. Subsequent
-/// reconnects do not re-arm it — late tools register through the catalog
-/// reader the same way they do today.
-async fn run_mcp_actor(
-    mut manager: McpServerManager,
-    mut cmd_rx: mpsc::Receiver<McpCmd>,
-    ready_tx: oneshot::Sender<()>,
-) {
-    match manager.connect_all().await {
-        Ok(handles) => tracing::info!(servers = handles.len(), "mcp connect_all ok"),
-        Err(e) => tracing::warn!(
-            error = %e,
-            "mcp connect_all failed; affected tools will surface errors and the model can call mcp_force_reconnect"
-        ),
-    }
-    let _ = ready_tx.send(());
-
+async fn run_mcp_actor(mut manager: McpServerManager, mut cmd_rx: mpsc::Receiver<McpCmd>) {
     while let Some(cmd) = cmd_rx.recv().await {
         match cmd {
             McpCmd::ForceReconnect { server_id, reply } => {
                 if let Err(e) = manager.disconnect_server(&server_id).await {
                     tracing::debug!(server_id = %server_id, error = %e, "disconnect during force reconnect");
                 }
-                let result = match manager.connect_server(&server_id).await {
-                    Ok(handle) => {
-                        tracing::info!(
-                            server_id = %server_id,
-                            tools = handle.snapshot().tools.len(),
-                            "mcp force reconnect ok"
-                        );
-                        Ok(())
-                    }
-                    Err(e) => {
-                        tracing::warn!(server_id = %server_id, error = %e, "mcp force reconnect failed");
-                        Err(e.to_string())
-                    }
-                };
+                let result = connect_and_log(&mut manager, &server_id, "force_reconnect").await;
                 let _ = reply.send(result);
             }
         }
     }
 }
 
-/// Drives the agent loop until the inbox closes or a fatal error occurs.
-/// Lifecycle (warm-window eviction, shutdown) is owned by the backend, which
-/// polls `/state` for `idle_seconds` and stops the runner externally.
-///
-/// Input arrives via `inbox`; `/turn` pushes there and returns immediately.
-/// The driver's transcript is preloaded with instructions + history, so the
-/// very first `next()` yields `AwaitingInput` and the first `/turn` supplies
-/// the first user message — same code path as every later turn.
-///
-/// Agent loop events the runner cares about:
-/// - `LoopStep::Finished`: turn ended. Mark idle and loop back into `next()`.
-/// - `LoopInterrupt::AwaitingInput`: drain queued inputs and submit, or block
-///   on the inbox until the next message (or close).
-/// - `LoopInterrupt::AfterToolResult`: cooperative mid-turn yield. Drain any
-///   queued inputs and submit before the next model call.
-/// - `LoopInterrupt::ApprovalRequest`: tools in this environment should not
-///   require approval. Warn and auto-approve so we don't deadlock.
 async fn run_loop<S>(
     mut driver: LoopDriver<S>,
     mut inbox: UnboundedReceiver<String>,
     idle_since: Arc<Mutex<Option<Instant>>>,
-    mcp_ready_rx: oneshot::Receiver<()>,
 ) -> Result<&'static str, RunnerError>
 where
     S: ModelSession,
 {
-    // Consumed before the first `req.submit` and never re-armed. Late servers
-    // surface their tools through the catalog reader without further blocking.
-    let mut mcp_ready: Option<oneshot::Receiver<()>> = Some(mcp_ready_rx);
     loop {
         match driver.next().await? {
             LoopStep::Finished(_turn) => {
@@ -398,9 +547,6 @@ where
                         None => return Ok("inbox closed"),
                     }
                 };
-                if let Some(rx) = mcp_ready.take() {
-                    await_mcp_ready(rx).await;
-                }
                 mark_busy(&idle_since);
                 req.submit(&mut driver, items)?;
             }
@@ -418,20 +564,6 @@ where
                 pending.approve(&mut driver)?;
             }
         }
-    }
-}
-
-/// Wait for the MCP actor's connect_all to finish, capped at
-/// `MCP_STARTUP_DEADLINE`. Logs which side won so an operator can correlate a
-/// thin first-turn registry with a slow upstream.
-async fn await_mcp_ready(rx: oneshot::Receiver<()>) {
-    match tokio::time::timeout(MCP_STARTUP_DEADLINE, rx).await {
-        Ok(Ok(())) => tracing::debug!("mcp ready before first turn"),
-        Ok(Err(_)) => tracing::debug!("mcp actor dropped ready signal; proceeding"),
-        Err(_) => tracing::warn!(
-            deadline_ms = MCP_STARTUP_DEADLINE.as_millis() as u64,
-            "mcp connect_all deadline hit; first turn proceeds with partial tool registry"
-        ),
     }
 }
 
@@ -516,4 +648,112 @@ fn normalize_history(history: &[RunnerMessage]) -> Result<Vec<Item>, RunnerError
         }
     }
     Ok(items)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+    use crate::http_layer::{TokenRegistry, build_bootstrap_client};
+
+    fn empty_host() -> Arc<RuntimeHost> {
+        let http_client = reqwest::Client::new();
+        let gram_client = GramBootstrapClient::new(
+            "http://localhost".to_string(),
+            build_bootstrap_client(http_client.clone()),
+        );
+        Arc::new(RuntimeHost {
+            assistant_id: "asst".to_string(),
+            started_at: Instant::now(),
+            seen: DashMap::new(),
+            threads: DashMap::new(),
+            gram_client,
+            thread_idle_ttl: Duration::from_secs(60 * 30),
+            http_client,
+            spill_root: PathBuf::from("/tmp/runtime-test-spill"),
+            initial_token: String::new(),
+        })
+    }
+
+    fn insert_thread(host: &RuntimeHost, thread_id: &str, idle_since: Option<Instant>) {
+        let (inbox_tx, _inbox_rx) = mpsc::unbounded_channel::<String>();
+        let (mcp_cmd_tx, _mcp_cmd_rx) = mpsc::channel::<McpCmd>(1);
+        let handle = tokio::spawn(async {});
+        let configured = Arc::new(ConfiguredThread {
+            thread_id: thread_id.to_string(),
+            chat_id: format!("chat-{thread_id}"),
+            idle_since: Arc::new(Mutex::new(idle_since)),
+            inbox_tx,
+            task_handle: Mutex::new(Some(handle)),
+            tokens: TokenRegistry::new(""),
+            mcp_cmd_tx,
+        });
+        let cell = Arc::new(OnceCell::new());
+        cell.set(configured)
+            .map_err(|_| ())
+            .expect("OnceCell should accept first set");
+        host.threads.insert(thread_id.to_string(), cell);
+    }
+
+    #[tokio::test]
+    async fn reap_oldest_idle_evicts_longest_idle_first() {
+        let host = empty_host();
+        let now = Instant::now();
+        insert_thread(&host, "recent", Some(now));
+        insert_thread(&host, "old", Some(now - Duration::from_secs(120)));
+        insert_thread(&host, "medium", Some(now - Duration::from_secs(30)));
+
+        reap_oldest_idle(&host);
+
+        assert!(
+            host.threads.get("old").is_none(),
+            "longest-idle thread must be reaped first"
+        );
+        assert!(host.threads.get("recent").is_some());
+        assert!(host.threads.get("medium").is_some());
+    }
+
+    #[tokio::test]
+    async fn reap_oldest_idle_skips_busy_threads() {
+        let host = empty_host();
+        insert_thread(&host, "busy", None);
+
+        reap_oldest_idle(&host);
+
+        assert!(
+            host.threads.get("busy").is_some(),
+            "busy thread (idle_since == None) must never be reaped"
+        );
+    }
+
+    #[tokio::test]
+    async fn reap_oldest_idle_noop_on_empty() {
+        let host = empty_host();
+        reap_oldest_idle(&host);
+        assert_eq!(host.threads.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn evict_thread_clears_seen_keys_with_prefix() {
+        let host = empty_host();
+        insert_thread(&host, "T", Some(Instant::now()));
+        host.seen
+            .insert("T:evt-1".to_string(), Arc::new(tokio::sync::Mutex::new(true)));
+        host.seen
+            .insert("T:evt-2".to_string(), Arc::new(tokio::sync::Mutex::new(true)));
+        host.seen.insert(
+            "other:evt-1".to_string(),
+            Arc::new(tokio::sync::Mutex::new(true)),
+        );
+
+        evict_thread(&host, "T");
+
+        assert!(host.threads.get("T").is_none());
+        assert!(host.seen.get("T:evt-1").is_none());
+        assert!(host.seen.get("T:evt-2").is_none());
+        assert!(
+            host.seen.get("other:evt-1").is_some(),
+            "unrelated idempotency keys must survive eviction"
+        );
+    }
 }

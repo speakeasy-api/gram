@@ -94,3 +94,23 @@ type HttpToolDefinition struct {
 	DeletedAt           pgtype.Timestamptz
 	Deleted             bool
 }
+
+type RiskResult struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	ChatMessageID     uuid.UUID
+	Source            string
+	Found             bool
+	RuleID            pgtype.Text
+	Description       pgtype.Text
+	Match             pgtype.Text
+	StartPos          pgtype.Int4
+	EndPos            pgtype.Int4
+	Confidence        pgtype.Float8
+	Tags              []string
+	DeadLetterReason  pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+}

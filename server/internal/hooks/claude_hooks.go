@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -21,7 +22,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -169,18 +173,42 @@ func (d *formDecoder) Decode(v any) error {
 
 // Logs handles authenticated OTEL logs data from Claude Code
 func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
+	claudeMetadata := extractSessionMetadata(payload)
+
+	logger := s.logger.With(
+		attr.SlogHookSource("claude"),
+		attr.SlogHookEvent("Logs"),
+		attr.SlogServiceName(claudeMetadata.ServiceName),
+		attr.SlogGenAIConversationID(claudeMetadata.SessionID),
+		attr.SlogAuthUserEmail(claudeMetadata.UserEmail),
+	)
+
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		// Auth middleware should have rejected this already; log here so a
+		// stray unauthenticated request is still visible per source/event
+		// when filtering hook traffic in Datadog.
+		logger.WarnContext(ctx, "rejected unauthorized claude OTEL logs request",
+			attr.SlogEvent("claude_logs_unauthorized"),
+		)
 		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	}
 
-	claudeMetadata := extractSessionMetadata(payload)
+	orgID := authCtx.ActiveOrganizationID
+	projectID := authCtx.ProjectID.String()
+	logger = logger.With(
+		attr.SlogOrganizationID(orgID),
+		attr.SlogProjectID(projectID),
+	)
+
 	if claudeMetadata.SessionID == "" {
-		s.logger.WarnContext(ctx, "Logs payload contained no session ID")
+		logger.WarnContext(ctx, "claude OTEL logs payload contained no session ID",
+			attr.SlogEvent("claude_logs_no_session"),
+		)
 		return nil
 	}
 
-	userID := s.resolveUserByEmail(ctx, claudeMetadata.UserEmail, authCtx.ActiveOrganizationID)
+	userID := s.resolveUserByEmail(ctx, claudeMetadata.UserEmail, orgID)
 
 	completeMetadata := SessionMetadata{
 		SessionID:   claudeMetadata.SessionID,
@@ -188,17 +216,20 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		UserEmail:   claudeMetadata.UserEmail,
 		UserID:      userID,
 		ClaudeOrgID: claudeMetadata.ClaudeOrgID,
-		GramOrgID:   authCtx.ActiveOrganizationID,
-		ProjectID:   authCtx.ProjectID.String(),
+		GramOrgID:   orgID,
+		ProjectID:   projectID,
 	}
 
 	if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
-		s.logger.ErrorContext(ctx, "Failed to store session metadata", attr.SlogError(err))
+		logger.ErrorContext(ctx, "Failed to store session metadata",
+			attr.SlogEvent("claude_logs_cache_set_failed"),
+			attr.SlogError(err),
+		)
 	}
 
 	s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata)
 
-	s.logger.InfoContext(ctx, "Stored session metadata",
+	logger.InfoContext(ctx, "Stored session metadata",
 		attr.SlogEvent("session_validated"),
 	)
 
@@ -207,21 +238,30 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 
 // Metrics handles authenticated OTEL metrics data from Claude Code
 func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) error {
+	logger := s.logger.With(
+		attr.SlogHookSource("claude"),
+		attr.SlogHookEvent("Metrics"),
+	)
+
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		logger.WarnContext(ctx, "rejected unauthorized claude OTEL metrics request",
+			attr.SlogEvent("claude_metrics_unauthorized"),
+		)
 		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	}
 
-	s.logger.InfoContext(ctx, "Received Claude token metrics",
+	orgID := authCtx.ActiveOrganizationID
+	projectID := authCtx.ProjectID.String()
+
+	logger.InfoContext(ctx, "Received Claude token metrics",
 		attr.SlogEvent("claude_metrics"),
-		attr.SlogValueAny(map[string]any{
-			"organization_id": authCtx.ActiveOrganizationID,
-			"project_id":      authCtx.ProjectID.String(),
-		}),
+		attr.SlogOrganizationID(orgID),
+		attr.SlogProjectID(projectID),
 	)
 
 	// Write metrics to ClickHouse
-	s.writeMetricsToClickHouse(ctx, payload, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+	s.writeMetricsToClickHouse(ctx, payload, orgID, projectID)
 
 	return nil
 }
@@ -282,16 +322,36 @@ func extractSessionMetadata(payload *gen.LogsPayload) claudeLogMetadata {
 
 // Claude is the unified endpoint for all Claude Code hook events.
 func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
-	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Claude: %s", payload.HookEventName),
-		attr.SlogEvent("claude_hook"),
-		attr.SlogValueAny(map[string]any{
-			"hookEventName": payload.HookEventName,
-			"toolName":      payload.ToolName,
-			"sessionID":     payload.SessionID,
-		}),
+	// project_slug header may be set even when the API key isn't validated
+	// yet on this optional-auth endpoint — log it as a hint up front.
+	projectSlugHint := conv.PtrValOr(payload.ProjectSlugInput, "")
+	hasPluginAuth := hasOptionalPluginAuth(payload)
+
+	// service.name lives in cached SessionMetadata seeded by the OTEL Logs
+	// endpoint. May be empty for the first hooks of a session (before OTEL
+	// catches up) or for OTEL-disabled clients — non-fatal, log either way.
+	serviceName := ""
+	if sid := conv.PtrValOr(payload.SessionID, ""); sid != "" {
+		if md, err := s.getSessionMetadata(ctx, sid); err == nil {
+			serviceName = md.ServiceName
+		}
+	}
+
+	logger := s.logger.With(
+		attr.SlogHookSource("claude"),
+		attr.SlogHookEvent(payload.HookEventName),
+		attr.SlogServiceName(serviceName),
+		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
+		attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
+		attr.SlogProjectSlug(projectSlugHint),
+		attr.SlogHookHasPluginAuth(hasPluginAuth),
 	)
 
-	if hasOptionalPluginAuth(payload) {
+	logger.InfoContext(ctx, "claude hook received",
+		attr.SlogEvent("claude_hook"),
+	)
+
+	if hasPluginAuth {
 		// Auth is optional. Returning a 401 on failure deadlocks the client:
 		// send_hook.sh maps any non-2xx to "block all tool calls", but
 		// recovering (e.g. `gram login`) requires Bash, which the hook just
@@ -299,13 +359,17 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 		// same path a no-headers request takes — recordHook buffers the event
 		// in Redis, and the OTEL Logs endpoint flushes it once the session is
 		// validated. Policies that need auth context degrade gracefully.
-		if authedCtx, err := s.authorizePluginRequest(ctx, *payload.ApikeyToken, *payload.ProjectSlugInput); err != nil {
-			s.logger.WarnContext(ctx, "plugin auth failed on claude hook; falling back to OTEL-buffered path",
+		if authedCtx, err := s.authorizePluginRequest(ctx, conv.PtrValOr(payload.ApikeyToken, ""), projectSlugHint); err != nil {
+			logger.WarnContext(ctx, "plugin auth failed on claude hook; falling back to OTEL-buffered path",
 				attr.SlogEvent("claude_hook_auth_failed"),
 				attr.SlogError(err),
 			)
 		} else {
 			ctx = authedCtx
+			logger = s.withAuthContext(ctx, logger)
+			logger.InfoContext(ctx, "plugin auth ok on claude hook",
+				attr.SlogEvent("claude_hook_auth_ok"),
+			)
 		}
 	}
 
@@ -330,17 +394,76 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 	case "Notification":
 		return s.handleNotification(ctx, payload)
 	default:
-		s.logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
+		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
 		return makeHookResult(payload.HookEventName), nil
 	}
 }
 
 func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+	s.captureMCPListSnapshot(ctx, payload)
+
 	// Always allow sessions to start
 	continueVal := true
 	result := makeHookResult(payload.HookEventName)
 	result.Continue = &continueVal
 	return result, nil
+}
+
+// captureMCPListSnapshot parses the MCP inventory shipped by the
+// SessionStart hook script and caches it under sessionMCPListCacheKey.
+// SessionStart re-fires on startup/resume/clear/compact, so this re-syncs
+// whenever Claude reloads the session — which is the closest thing to a
+// config-change signal the CLI offers today.
+//
+// Two payload shapes are supported, set by the hook script depending on
+// the execution environment it detected:
+//   - additional_data.mcp_inventory_claude_code: raw text from
+//     `claude mcp list`. Parsed by ParseClaudeMCPList.
+//   - additional_data.mcp_inventory_cowork: structured array scraped from
+//     .mcp.json files inside cowork (no `claude` CLI available). Parsed
+//     by ParseCoworkMCPInventory.
+func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.ClaudePayload) {
+	if payload.SessionID == nil || *payload.SessionID == "" || payload.AdditionalData == nil {
+		return
+	}
+
+	var entries []MCPServerEntry
+	switch {
+	case payload.AdditionalData["mcp_inventory_claude_code"] != nil:
+		raw, ok := payload.AdditionalData["mcp_inventory_claude_code"].(string)
+		if !ok || raw == "" {
+			return
+		}
+		entries = ParseClaudeMCPList(raw)
+	case payload.AdditionalData["mcp_inventory_cowork"] != nil:
+		entries = ParseCoworkMCPInventory(payload.AdditionalData["mcp_inventory_cowork"])
+	default:
+		return
+	}
+
+	key := sessionMCPListCacheKey(*payload.SessionID)
+	if err := s.cache.Set(ctx, key, entries, sessionMCPListTTL); err != nil {
+		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
+			attr.SlogEvent("claude_hook_mcp_list_cache_set_failed"),
+			attr.SlogError(err),
+		)
+		return
+	}
+}
+
+// refreshMCPListTTL extends the MCP list cache TTL for the session if the
+// key exists. Called from recordHook on every Claude hook event so the
+// snapshot survives as long as the session is active.
+func (s *Service) refreshMCPListTTL(ctx context.Context, sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	if err := s.cache.Expire(ctx, sessionMCPListCacheKey(sessionID), sessionMCPListTTL); err != nil {
+		s.logger.WarnContext(ctx, "failed to refresh MCP list TTL",
+			attr.SlogEvent("claude_hook_mcp_list_ttl_refresh_failed"),
+			attr.SlogError(err),
+		)
+	}
 }
 
 // hasOptionalPluginAuth returns true when the Claude request carries both
@@ -374,12 +497,30 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 }
 
 func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
+	logger := s.withAuthContext(ctx, s.logger.With(
+		attr.SlogHookSource("claude"),
+		attr.SlogHookEvent(payload.HookEventName),
+	))
+
 	if payload.SessionID == nil || *payload.SessionID == "" {
-		s.logger.WarnContext(ctx, "Tool event called without session ID")
+		logger.WarnContext(ctx, "Tool event called without session ID",
+			attr.SlogEvent("claude_hook_no_session"),
+		)
 		return
 	}
 
+	// Persistence outlives the request: Claude Code may close the connection
+	// the instant the hook returns (Stop especially), which would otherwise
+	// cancel the in-flight INSERT and drop the chat message.
+	ctx = context.WithoutCancel(ctx)
+
 	sessionID := *payload.SessionID
+	logger = logger.With(attr.SlogGenAIConversationID(sessionID))
+
+	// Every hook event for this session is a heartbeat — extend the MCP
+	// list snapshot TTL so it survives long-running sessions and only
+	// expires after ~12h of true inactivity.
+	s.refreshMCPListTTL(ctx, sessionID)
 
 	// Both plugin-authenticated and OTEL-only requests go through the same
 	// Redis-buffered flow: persist when session metadata is in the cache,
@@ -390,10 +531,18 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 	// avoids this because its payload includes UserEmail directly.
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
 	if err == nil {
-		s.persistHook(ctx, payload, &metadata)
+		// Persistence does DB writes plus a Temporal workflow start, which
+		// can take longer than Claude Code is willing to wait for a hook
+		// response (Stop especially — the client closes the connection
+		// immediately on the response). Run it detached so the response
+		// returns promptly and the work completes in the background.
+		go s.persistHook(ctx, payload, &metadata)
 	} else {
 		if err := s.bufferHook(ctx, sessionID, payload); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to buffer hook", attr.SlogError(err))
+			logger.ErrorContext(ctx, "Failed to buffer hook",
+				attr.SlogEvent("claude_hook_buffer_failed"),
+				attr.SlogError(err),
+			)
 		}
 	}
 }
@@ -452,21 +601,21 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	result := makeHookResult(payload.HookEventName)
 	output, _ := result.HookSpecificOutput.(*HookSpecificOutput)
 
-	// Only Gram-hosted (non-local) tool calls carry the x-gram-toolset-id
-	// property. In Claude Code, MCP-routed tools are identified by the
-	// "mcp__<server>__<tool>" name convention; native tools (Read, Edit, Bash,
-	// ...) are skipped.
+	// In Claude Code, MCP-routed tools are identified by the
+	// "mcp__<server>__<tool>" name convention; native tools (Read, Edit,
+	// Bash, ...) are skipped.
 	rawToolName := ""
 	if payload.ToolName != nil {
 		rawToolName = *payload.ToolName
 	}
-	mcpToolName, isMCP := claudeMCPToolName(rawToolName)
-	if !isMCP {
+	parsed := parseClaudeToolName(rawToolName)
+	if !parsed.IsMCP {
 		if output != nil {
 			output.PermissionDecision = &allow
 		}
 		return result, nil
 	}
+	serverPrefix := parsed.Server
 
 	sessionID := ""
 	if payload.SessionID != nil {
@@ -511,6 +660,10 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			// buffered hook will be re-persisted once metadata arrives.
 			s.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; allowing tool call",
 				attr.SlogEvent("claude_hook_pretooluse_no_metadata"),
+				attr.SlogHookSource("claude"),
+				attr.SlogHookEvent(payload.HookEventName),
+				attr.SlogGenAIConversationID(sessionID),
+				attr.SlogToolName(rawToolName),
 				attr.SlogError(err),
 			)
 			if output != nil {
@@ -528,20 +681,112 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		return result, nil
 	}
 
-	detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, payload.ToolInput, mcpToolName, metadata.GramOrgID)
-	if denied {
-		s.logger.InfoContext(ctx, "denying claude tool call: failed gram toolset validation",
-			attr.SlogEvent("claude_hook_denied"),
-			attr.SlogValueAny(map[string]any{
-				"hookEventName": payload.HookEventName,
-				"toolName":      rawToolName,
-				"reason":        detail,
-				"policyID":      policy.ID,
-				"policyName":    policy.Name,
-			}),
+	// Look up the cached `claude mcp list` snapshot captured at SessionStart.
+	// If it's missing we can't enforce the policy — deny with a retry-or-
+	// restart message so the user knows the guard is fail-closed rather
+	// than silently allowing.
+	entries, cacheErr := s.getCachedMCPList(ctx, sessionID)
+	if cacheErr != nil {
+		auditReason := "missing MCP list snapshot for session"
+		userReason := "Speakeasy blocked this tool call: MCP server configuration is not available yet. Please retry in a moment, or restart Claude Code if the issue persists."
+		s.logger.With(
+			attr.SlogHookSource("claude"),
+			attr.SlogHookEvent(payload.HookEventName),
+			attr.SlogOrganizationID(metadata.GramOrgID),
+			attr.SlogProjectID(metadata.ProjectID),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogToolName(rawToolName),
+		).InfoContext(ctx, "denying claude tool call: no cached MCP list",
+			attr.SlogEvent("claude_hook_denied_no_mcp_list"),
+			attr.SlogError(cacheErr),
+			attr.SlogRiskPolicyID(policy.ID),
+			attr.SlogRiskPolicyName(policy.Name),
 		)
+		s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+		result.SystemMessage = &userReason
+		if output != nil {
+			output.PermissionDecision = &deny
+			output.PermissionDecisionReason = &userReason
+		}
+		return result, nil
+	}
+
+	matched := matchCachedMCPEntry(entries, serverPrefix)
+	var detail string
+	switch {
+	case matched == nil:
+		detail = fmt.Sprintf("MCP server %q is not in the active configuration", serverPrefix)
+	case matched.URL != "" && !isGramHostedMCPURL(matched.URL):
+		detail = fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverPrefix, matched.URL)
+	case matched.URL == "" && matched.Command != "":
+		// Local stdio servers have no URL, so the Gram-hosted check above
+		// can't apply. Treat them as shadow MCPs until explicitly approved
+		// by command.
+		detail = fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", serverPrefix, matched.Command)
+	case matched.URL == "" && matched.Command == "":
+		// Defensive: the parser populates either URL or Command for every
+		// real entry, but if a future format slips past it we'd rather
+		// fail closed with a clear reason than silently allow.
+		detail = fmt.Sprintf("MCP server %q has no recognizable target", serverPrefix)
+	}
+	// Allowlist check: if the user has explicitly approved any identifier
+	// for this call (URL, command, or server-prefix), override the would-be
+	// deny. Approvals are a flat list of match strings, so a single lookup
+	// covers all sources — hook-time URL/Command blocks and batch-scanner
+	// server-prefix findings dedupe naturally. Failures from the cache fall
+	// through to the deny path so a flaky Redis can't silently let a real
+	// shadow server through.
+	if detail != "" {
+		approved, approvalErr := s.isMatchedMCPApproved(ctx, metadata.ProjectID, policy.ID, serverPrefix, matched)
+		if approvalErr != nil {
+			s.logger.WarnContext(ctx, "shadow-mcp allowlist lookup failed; treating as not approved",
+				attr.SlogEvent("claude_hook_allowlist_lookup_failed"),
+				attr.SlogError(approvalErr),
+			)
+		}
+		if approved {
+			matchedURL, matchedCommand := "", ""
+			if matched != nil {
+				matchedURL = matched.URL
+				matchedCommand = matched.Command
+			}
+			s.logger.InfoContext(ctx, "shadow-mcp call allowed via approval",
+				attr.SlogEvent("claude_hook_allowlist_allow"),
+				attr.SlogToolName(rawToolName),
+				attr.SlogRiskPolicyID(policy.ID),
+				attr.SlogValueAny(map[string]any{
+					"serverPrefix":   serverPrefix,
+					"matchedURL":     matchedURL,
+					"matchedCommand": matchedCommand,
+				}),
+			)
+			detail = ""
+		}
+	}
+	if detail != "" {
 		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 		userReason := renderUserBlockReason(policy.UserMessage, auditReason)
+		matchedURL := ""
+		if matched != nil {
+			matchedURL = matched.URL
+		}
+		s.logger.With(
+			attr.SlogHookSource("claude"),
+			attr.SlogHookEvent(payload.HookEventName),
+			attr.SlogOrganizationID(metadata.GramOrgID),
+			attr.SlogProjectID(metadata.ProjectID),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogToolName(rawToolName),
+		).InfoContext(ctx, "denying claude tool call: non-gram MCP server",
+			attr.SlogEvent("claude_hook_denied"),
+			attr.SlogHookBlockReason(detail),
+			attr.SlogRiskPolicyID(policy.ID),
+			attr.SlogRiskPolicyName(policy.Name),
+			attr.SlogValueAny(map[string]any{
+				"serverPrefix": serverPrefix,
+				"matchedURL":   matchedURL,
+			}),
+		)
 		// Record a companion ClickHouse entry with gram.hook.block_reason set
 		// so the trace_summaries materialized view can flag this trace as
 		// blocked. Shares the original PreToolUse trace_id (derived from
@@ -549,6 +794,12 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		// Always store the technical reason — the user_message override
 		// is for the agent-facing response only.
 		s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+
+		// Surface the block in the Recent Findings table (risk_results)
+		// alongside batch-scanner findings, with the URL in the match
+		// column so the dashboard can filter and offer "Exclude from
+		// policy" actions against the URL itself.
+		s.recordShadowMCPBlockFinding(ctx, payload, &metadata, policy, matched, serverPrefix, detail)
 
 		// systemMessage renders as a warning in the user's terminal;
 		// permissionDecisionReason is what Claude itself sees and may quote
@@ -567,22 +818,113 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	return result, nil
 }
 
-// claudeMCPToolName returns the bare tool name and true if rawName follows the
-// "mcp__<server>__<tool>" convention used by Claude Code for MCP-routed tools.
-// Returns ("", false) for native Claude Code tools (Read, Edit, Bash, etc.).
-func claudeMCPToolName(rawName string) (string, bool) {
-	if !strings.HasPrefix(rawName, "mcp__") {
-		return "", false
-	}
-	parts := strings.SplitN(rawName, "__", 3)
-	if len(parts) != 3 || parts[2] == "" {
-		return "", false
-	}
-	return parts[2], true
-}
-
 func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	return makeHookResult(payload.HookEventName), nil
+}
+
+// recordShadowMCPBlockFinding writes a risk_results row so the Recent
+// Findings table reflects live hook-time blocks alongside batch-scanner
+// findings. Best-effort: the block decision has already been made and
+// returned to the user, so failures here just log. The chat_message_id
+// FK requires that recordHook successfully persisted the tool-call
+// message (gated by FeatureSessionCapture) — when it didn't, we skip.
+func (s *Service) recordShadowMCPBlockFinding(
+	ctx context.Context,
+	payload *gen.ClaudePayload,
+	metadata *SessionMetadata,
+	policy *risk.ShadowMCPPolicy,
+	matched *MCPServerEntry,
+	serverPrefix string,
+	detail string,
+) {
+	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil {
+		return
+	}
+
+	projectID, err := uuid.Parse(metadata.ProjectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "shadow-mcp block: invalid project id",
+			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
+		return
+	}
+	policyID, err := uuid.Parse(policy.ID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "shadow-mcp block: invalid policy id",
+			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
+		return
+	}
+
+	chatID := sessionIDToUUID(*payload.SessionID)
+	msgID, err := s.repo.FindAssistantToolCallMessageID(ctx, repo.FindAssistantToolCallMessageIDParams{
+		ProjectID:  uuid.NullUUID{UUID: projectID, Valid: true},
+		ChatID:     chatID,
+		ToolCallID: *payload.ToolUseID,
+	})
+	if err != nil {
+		// Most common cause: SessionCapture feature flag is off, so the
+		// tool-call chat_message was never persisted. The ClickHouse path
+		// still records the block; only the Recent Findings surfacing is
+		// skipped.
+		s.logger.DebugContext(ctx, "shadow-mcp block: no chat_message found for tool_use_id; skipping risk_result write",
+			attr.SlogEvent("claude_hook_block_finding_no_message"),
+			attr.SlogError(err),
+		)
+		return
+	}
+
+	// match identifies the server in the dashboard's Recent Findings row and
+	// is also the value the "Exclude from policy" action sends back to
+	// approveShadowMCP. Prefer the URL for HTTP/SSE entries, then the stdio
+	// Command for local servers, and finally fall back to the server-prefix
+	// portion of the tool name (e.g. "mise" from "mcp__mise__run_task") when
+	// the snapshot didn't yield a matched entry — anything but the raw tool
+	// name, which is too granular to allowlist on.
+	match := ""
+	if matched != nil {
+		switch {
+		case matched.URL != "":
+			match = matched.URL
+		case matched.Command != "":
+			match = matched.Command
+		}
+	}
+	if match == "" {
+		match = serverPrefix
+	}
+	description := detail
+	if matched != nil && matched.Name != "" {
+		description = fmt.Sprintf("%s (server: %s)", detail, matched.Name)
+	}
+
+	// Use UUIDv7 so the row sorts in insertion order alongside scanner
+	// findings: ListRiskResultsByProjectFound paginates with ORDER BY id
+	// DESC, which only behaves as "most recent first" when every inserted
+	// id is time-ordered. uuid.New() (v4) is random and would interleave
+	// hook-time block rows at arbitrary positions in the Recent Findings
+	// table.
+	resultID, err := uuid.NewV7()
+	if err != nil {
+		s.logger.WarnContext(ctx, "shadow-mcp block: failed to generate uuidv7",
+			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
+		return
+	}
+	insertParams := repo.InsertShadowMCPBlockResultParams{
+		ID:                resultID,
+		ProjectID:         projectID,
+		OrganizationID:    metadata.GramOrgID,
+		RiskPolicyID:      policyID,
+		RiskPolicyVersion: policy.Version,
+		ChatMessageID:     msgID,
+		Description:       pgtype.Text{String: description, Valid: description != ""},
+		Match:             pgtype.Text{String: match, Valid: match != ""},
+		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
+	}
+	if err := s.repo.InsertShadowMCPBlockResult(ctx, insertParams); err != nil {
+		s.logger.WarnContext(ctx, "shadow-mcp block: failed to insert risk_result",
+			attr.SlogEvent("claude_hook_block_finding_insert_failed"),
+			attr.SlogError(err),
+		)
+	}
 }
 
 // writeClaudeBlockToClickHouse writes a companion ClickHouse log entry for a

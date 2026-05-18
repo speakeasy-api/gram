@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -58,6 +59,8 @@ type Service struct {
 	completionClient openrouter.CompletionClient
 	shadowMCPClient  *shadowmcp.Client
 	audit            *audit.Logger
+	cache            cache.Cache
+	piClassifier     bool
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -84,6 +87,8 @@ func NewObserver(
 		completionClient: nil,
 		shadowMCPClient:  nil,
 		audit:            auditLogger,
+		cache:            nil,
+		piClassifier:     false,
 	}
 }
 
@@ -97,6 +102,8 @@ func NewService(
 	completionClient openrouter.CompletionClient,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
+	redisCache cache.Cache,
+	piClassifier bool,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -111,6 +118,8 @@ func NewService(
 		completionClient: completionClient,
 		shadowMCPClient:  shadowMCPClient,
 		audit:            auditLogger,
+		cache:            redisCache,
+		piClassifier:     piClassifier,
 	}
 }
 
@@ -126,6 +135,21 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+func (s *Service) GetRiskCapabilities(ctx context.Context, payload *gen.GetRiskCapabilitiesPayload) (*gen.RiskCapabilitiesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	return &gen.RiskCapabilitiesResult{
+		PiClassifierEnabled: s.piClassifier,
+	}, nil
 }
 
 // OnMessagesStored implements chat.MessageObserver. The caller
@@ -232,16 +256,17 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	row, err := repo.New(dbtx).CreateRiskPolicy(ctx, repo.CreateRiskPolicyParams{
-		ID:               id,
-		ProjectID:        *authCtx.ProjectID,
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		Name:             name,
-		Sources:          sources,
-		PresidioEntities: payload.PresidioEntities,
-		Enabled:          enabled,
-		Action:           action,
-		AutoName:         autoName,
-		UserMessage:      conv.PtrToPGTextEmpty(payload.UserMessage),
+		ID:                   id,
+		ProjectID:            *authCtx.ProjectID,
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		Name:                 name,
+		Sources:              sources,
+		PresidioEntities:     payload.PresidioEntities,
+		PromptInjectionRules: payload.PromptInjectionRules,
+		Enabled:              enabled,
+		Action:               action,
+		AutoName:             autoName,
+		UserMessage:          conv.PtrToPGTextEmpty(payload.UserMessage),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").Log(ctx, s.logger)
@@ -372,6 +397,11 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		presidioEntities = payload.PresidioEntities
 	}
 
+	promptInjectionRules := current.PromptInjectionRules
+	if payload.PromptInjectionRules != nil {
+		promptInjectionRules = payload.PromptInjectionRules
+	}
+
 	enabled := current.Enabled
 	if payload.Enabled != nil {
 		enabled = *payload.Enabled
@@ -428,15 +458,16 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	row, err := repo.New(dbtx).UpdateRiskPolicy(ctx, repo.UpdateRiskPolicyParams{
-		ID:               id,
-		ProjectID:        *authCtx.ProjectID,
-		Name:             name,
-		Sources:          sources,
-		PresidioEntities: presidioEntities,
-		Enabled:          enabled,
-		Action:           action,
-		AutoName:         autoName,
-		UserMessage:      userMessage,
+		ID:                   id,
+		ProjectID:            *authCtx.ProjectID,
+		Name:                 name,
+		Sources:              sources,
+		PresidioEntities:     presidioEntities,
+		PromptInjectionRules: promptInjectionRules,
+		Enabled:              enabled,
+		Action:               action,
+		AutoName:             autoName,
+		UserMessage:          userMessage,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").Log(ctx, s.logger)
@@ -548,6 +579,48 @@ func resolvePageSize(limit *int) int {
 	return *limit
 }
 
+// riskResultsCursor is the composite cursor used for paginating risk
+// result listings. We sort by (message_created_at, id) so the cursor
+// carries both fields. Encoded as "<RFC3339Nano>|<uuid>" — a small,
+// opaque-to-the-client string that survives URL/query-param round-trips.
+// Legacy id-only cursors are silently dropped (treated as no cursor)
+// rather than rejected, so an in-flight infinite-scroll session that
+// upgrades doesn't error mid-scroll.
+type riskResultsCursor struct {
+	MessageCreatedAt time.Time
+	ID               uuid.UUID
+}
+
+func parseRiskResultsCursor(raw *string) (*riskResultsCursor, error) {
+	if raw == nil || *raw == "" {
+		return nil, nil
+	}
+	parts := strings.SplitN(*raw, "|", 2)
+	if len(parts) != 2 {
+		return nil, nil
+	}
+	t, err := time.Parse(time.RFC3339Nano, parts[0])
+	if err != nil {
+		return nil, fmt.Errorf("parse cursor timestamp: %w", err)
+	}
+	id, err := uuid.Parse(parts[1])
+	if err != nil {
+		return nil, fmt.Errorf("parse cursor id: %w", err)
+	}
+	return &riskResultsCursor{MessageCreatedAt: t, ID: id}, nil
+}
+
+func encodeRiskResultsCursor(c riskResultsCursor) string {
+	return c.MessageCreatedAt.UTC().Format(time.RFC3339Nano) + "|" + c.ID.String()
+}
+
+func cursorToParams(c *riskResultsCursor) (pgtype.Timestamptz, uuid.NullUUID) {
+	if c == nil {
+		return pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return pgtype.Timestamptz{Time: c.MessageCreatedAt, InfinityModifier: pgtype.Finite, Valid: true}, uuid.NullUUID{UUID: c.ID, Valid: true}
+}
+
 func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResultsPayload) (*gen.ListRiskResultsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -558,7 +631,7 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 		return nil, err
 	}
 
-	cursor, err := conv.PtrToNullUUID(payload.Cursor)
+	cursor, err := parseRiskResultsCursor(payload.Cursor)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor").Log(ctx, s.logger)
 	}
@@ -625,74 +698,96 @@ func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRi
 	return &gen.ListRiskResultsByChatResult{Chats: chats, NextCursor: nextCursor}, nil
 }
 
-func (s *Service) paginateResults(results []*types.RiskResult, pageSize int, totalCount int64) *gen.ListRiskResultsResult {
+// paginateResults trims the over-fetched extra row and, if present, encodes
+// the (message_created_at, id) cursor from it so the next page starts
+// strictly after the last returned row.
+func (s *Service) paginateResults(results []*types.RiskResult, extraRow *riskResultsCursor, pageSize int, totalCount int64) *gen.ListRiskResultsResult {
 	var nextCursor *string
-	if len(results) > pageSize {
-		nextCursor = &results[pageSize].ID
+	if len(results) > pageSize && extraRow != nil {
+		encoded := encodeRiskResultsCursor(*extraRow)
+		nextCursor = &encoded
 		results = results[:pageSize]
 	}
 	return &gen.ListRiskResultsResult{Results: results, TotalCount: totalCount, NextCursor: nextCursor}
 }
 
-func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, rawChatID string, cursor uuid.NullUUID, pageSize int, totalCount int64) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, rawChatID string, cursor *riskResultsCursor, pageSize int, totalCount int64) (*gen.ListRiskResultsResult, error) {
 	chatID, err := uuid.Parse(rawChatID)
 	if err != nil {
 		return nil, oops.C(oops.CodeInvalid)
 	}
+	cursorCreatedAt, cursorID := cursorToParams(cursor)
 	rows, err := s.repo.ListRiskResultsByChatFound(ctx, repo.ListRiskResultsByChatFoundParams{
-		ChatID:    chatID,
-		ProjectID: projectID,
-		Cursor:    cursor,
-		PageLimit: conv.SafeInt32(pageSize + 1),
+		ChatID:                 chatID,
+		ProjectID:              projectID,
+		CursorMessageCreatedAt: cursorCreatedAt,
+		CursorID:               cursorID,
+		PageLimit:              conv.SafeInt32(pageSize + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat").Log(ctx, s.logger)
 	}
 	results := make([]*types.RiskResult, 0, len(rows))
-	for _, row := range rows {
+	var nextCursor *riskResultsCursor
+	for i, row := range rows {
 		cid := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
+		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.MessageCreatedAt))
+		if i == pageSize {
+			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
+		}
 	}
-	return s.paginateResults(results, pageSize, totalCount), nil
+	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
 }
 
-func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, rawPolicyID string, cursor uuid.NullUUID, pageSize int, totalCount int64) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, rawPolicyID string, cursor *riskResultsCursor, pageSize int, totalCount int64) (*gen.ListRiskResultsResult, error) {
 	policyID, err := uuid.Parse(rawPolicyID)
 	if err != nil {
 		return nil, oops.C(oops.CodeInvalid)
 	}
+	cursorCreatedAt, cursorID := cursorToParams(cursor)
 	rows, err := s.repo.ListRiskResultsByProjectAndPolicy(ctx, repo.ListRiskResultsByProjectAndPolicyParams{
-		ProjectID:    projectID,
-		RiskPolicyID: policyID,
-		Cursor:       cursor,
-		PageLimit:    conv.SafeInt32(pageSize + 1),
+		ProjectID:              projectID,
+		RiskPolicyID:           policyID,
+		CursorMessageCreatedAt: cursorCreatedAt,
+		CursorID:               cursorID,
+		PageLimit:              conv.SafeInt32(pageSize + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by policy").Log(ctx, s.logger)
 	}
 	results := make([]*types.RiskResult, 0, len(rows))
-	for _, row := range rows {
+	var nextCursor *riskResultsCursor
+	for i, row := range rows {
 		chatID := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
+		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.MessageCreatedAt))
+		if i == pageSize {
+			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
+		}
 	}
-	return s.paginateResults(results, pageSize, totalCount), nil
+	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
 }
 
-func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor uuid.NullUUID, pageSize int, totalCount int64) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64) (*gen.ListRiskResultsResult, error) {
+	cursorCreatedAt, cursorID := cursorToParams(cursor)
 	rows, err := s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
-		ProjectID: projectID,
-		Cursor:    cursor,
-		PageLimit: conv.SafeInt32(pageSize + 1),
+		ProjectID:              projectID,
+		CursorMessageCreatedAt: cursorCreatedAt,
+		CursorID:               cursorID,
+		PageLimit:              conv.SafeInt32(pageSize + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk results").Log(ctx, s.logger)
 	}
 	results := make([]*types.RiskResult, 0, len(rows))
-	for _, row := range rows {
+	var nextCursor *riskResultsCursor
+	for i, row := range rows {
 		chatID := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
+		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.MessageCreatedAt))
+		if i == pageSize {
+			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
+		}
 	}
-	return s.paginateResults(results, pageSize, totalCount), nil
+	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
 }
 
 func (s *Service) GetRiskPolicyStatus(ctx context.Context, payload *gen.GetRiskPolicyStatusPayload) (*types.RiskPolicyStatus, error) {
@@ -825,20 +920,21 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	pendingMessages := max(totalMessages-analyzedMessages, 0)
 
 	return &types.RiskPolicy{
-		ID:               row.ID.String(),
-		ProjectID:        row.ProjectID.String(),
-		Name:             row.Name,
-		Sources:          row.Sources,
-		PresidioEntities: row.PresidioEntities,
-		Enabled:          row.Enabled,
-		Action:           row.Action,
-		AutoName:         row.AutoName,
-		UserMessage:      conv.FromPGText[string](row.UserMessage),
-		Version:          row.Version,
-		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:  pendingMessages,
-		TotalMessages:    totalMessages,
+		ID:                   row.ID.String(),
+		ProjectID:            row.ProjectID.String(),
+		Name:                 row.Name,
+		Sources:              row.Sources,
+		PresidioEntities:     row.PresidioEntities,
+		PromptInjectionRules: row.PromptInjectionRules,
+		Enabled:              row.Enabled,
+		Action:               row.Action,
+		AutoName:             row.AutoName,
+		UserMessage:          conv.FromPGText[string](row.UserMessage),
+		Version:              row.Version,
+		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:      pendingMessages,
+		TotalMessages:        totalMessages,
 	}, nil
 }
 
@@ -848,20 +944,21 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 // they were not computed.
 func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 	return &types.RiskPolicy{
-		ID:               row.ID.String(),
-		ProjectID:        row.ProjectID.String(),
-		Name:             row.Name,
-		Sources:          row.Sources,
-		PresidioEntities: row.PresidioEntities,
-		Enabled:          row.Enabled,
-		Action:           row.Action,
-		AutoName:         row.AutoName,
-		UserMessage:      conv.FromPGText[string](row.UserMessage),
-		Version:          row.Version,
-		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:  -1,
-		TotalMessages:    -1,
+		ID:                   row.ID.String(),
+		ProjectID:            row.ProjectID.String(),
+		Name:                 row.Name,
+		Sources:              row.Sources,
+		PresidioEntities:     row.PresidioEntities,
+		PromptInjectionRules: row.PromptInjectionRules,
+		Enabled:              row.Enabled,
+		Action:               row.Action,
+		AutoName:             row.AutoName,
+		UserMessage:          conv.FromPGText[string](row.UserMessage),
+		Version:              row.Version,
+		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:      -1,
+		TotalMessages:        -1,
 	}
 }
 
@@ -1020,5 +1117,118 @@ func foundRowToResult(
 		Confidence:    conv.FromPGFloat8(confidence),
 		Tags:          tags,
 		CreatedAt:     createdAt.Time.Format(time.RFC3339),
+	}
+}
+
+// ensureApprovalPolicy validates the policy ID for an approval endpoint and
+// confirms the policy belongs to the active project. Returns the parsed
+// UUID on success.
+func (s *Service) ensureApprovalPolicy(ctx context.Context, authCtx *contextvalues.AuthContext, rawPolicyID string) (uuid.UUID, error) {
+	policyID, err := uuid.Parse(rawPolicyID)
+	if err != nil {
+		return uuid.Nil, oops.E(oops.CodeInvalid, err, "invalid policy id")
+	}
+	if _, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+		ID:        policyID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		return uuid.Nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
+	}
+	return policyID, nil
+}
+
+func (s *Service) ListShadowMCPApprovals(ctx context.Context, payload *gen.ListShadowMCPApprovalsPayload) (*gen.ListShadowMCPApprovalsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	policyID, err := s.ensureApprovalPolicy(ctx, authCtx, payload.PolicyID)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := shadowmcp.ListShadowMCPApprovals(ctx, s.cache, authCtx.ProjectID.String(), policyID.String())
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list shadow-mcp approvals").Log(ctx, s.logger)
+	}
+
+	out := make([]*types.ShadowMCPApproval, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, shadowMCPApprovalToType(policyID, r))
+	}
+	return &gen.ListShadowMCPApprovalsResult{Approvals: out}, nil
+}
+
+func (s *Service) ApproveShadowMCP(ctx context.Context, payload *gen.ApproveShadowMCPPayload) (*types.ShadowMCPApproval, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	policyID, err := s.ensureApprovalPolicy(ctx, authCtx, payload.PolicyID)
+	if err != nil {
+		return nil, err
+	}
+
+	canonical := shadowmcp.CanonicalizeMatch(payload.Match)
+	if canonical == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "approval match is empty")
+	}
+
+	approval := shadowmcp.ShadowMCPApproval{
+		Match:      canonical,
+		ServerName: strings.TrimSpace(conv.PtrValOr(payload.ServerName, "")),
+		ApprovedBy: conv.PtrValOr(authCtx.Email, ""),
+		ApprovedAt: time.Now().UTC(),
+	}
+	if err := shadowmcp.AddShadowMCPApproval(ctx, s.cache, authCtx.ProjectID.String(), policyID.String(), approval); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "store shadow-mcp approval").Log(ctx, s.logger)
+	}
+	return shadowMCPApprovalToType(policyID, approval), nil
+}
+
+func (s *Service) RevokeShadowMCPApproval(ctx context.Context, payload *gen.RevokeShadowMCPApprovalPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return err
+	}
+
+	policyID, err := s.ensureApprovalPolicy(ctx, authCtx, payload.PolicyID)
+	if err != nil {
+		return err
+	}
+
+	if err := shadowmcp.RemoveShadowMCPApproval(ctx, s.cache, authCtx.ProjectID.String(), policyID.String(), payload.Match); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "remove shadow-mcp approval").Log(ctx, s.logger)
+	}
+	return nil
+}
+
+func shadowMCPApprovalToType(policyID uuid.UUID, a shadowmcp.ShadowMCPApproval) *types.ShadowMCPApproval {
+	var serverName, approvedBy *string
+	if a.ServerName != "" {
+		s := a.ServerName
+		serverName = &s
+	}
+	if a.ApprovedBy != "" {
+		s := a.ApprovedBy
+		approvedBy = &s
+	}
+	return &types.ShadowMCPApproval{
+		PolicyID:   policyID.String(),
+		Match:      a.Match,
+		ServerName: serverName,
+		ApprovedBy: approvedBy,
+		ApprovedAt: a.ApprovedAt.UTC().Format(time.RFC3339),
 	}
 }

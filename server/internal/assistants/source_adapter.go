@@ -50,6 +50,9 @@ type slackEventPayload struct {
 	ItemChannel  string `json:"item_channel,omitempty"`
 	ItemTs       string `json:"item_ts,omitempty"`
 	ItemType     string `json:"item_type,omitempty"`
+	ActionID     string `json:"action_id,omitempty"`
+	ActionValue  string `json:"action_value,omitempty"`
+	BlockID      string `json:"block_id,omitempty"`
 }
 
 type slackAdapter struct{}
@@ -114,6 +117,15 @@ func (slackAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error)
 	}
 	if payload.ItemType != "" {
 		fmt.Fprintf(&b, "ItemType: %s\n", payload.ItemType)
+	}
+	if payload.ActionID != "" {
+		fmt.Fprintf(&b, "ActionID: %s\n", payload.ActionID)
+	}
+	if payload.BlockID != "" {
+		fmt.Fprintf(&b, "BlockID: %s\n", payload.BlockID)
+	}
+	if payload.ActionValue != "" {
+		fmt.Fprintf(&b, "ActionValue: %s\n", payload.ActionValue)
 	}
 	b.WriteString("</message-context>\n\n")
 	b.WriteString(payload.Text)

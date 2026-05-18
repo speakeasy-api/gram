@@ -1,5 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Type } from "@/components/ui/type";
 import {
   Table,
   TableBody,
@@ -8,14 +9,26 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useRoutes } from "@/routes";
-import { Eye, EyeOff, Shield } from "lucide-react";
+import { Eye, EyeOff, Shield, ShieldOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
-import { useInfiniteQuery } from "@tanstack/react-query";
-import { useRiskListPolicies } from "@gram/client/react-query/index.js";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useRiskApproveShadowMCPMutation,
+  useRiskListPolicies,
+  invalidateAllRiskListShadowMCPApprovals,
+} from "@gram/client/react-query/index.js";
 import { useSdkClient } from "@/contexts/Sdk";
+import { toast } from "sonner";
 import {
   DETECTION_RULES,
   RULE_CATEGORY_META,
@@ -24,6 +37,7 @@ import {
 import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { MetricCard } from "@/components/chart/MetricCard";
+import { Button as MoonshineButton, Icon } from "@speakeasy-api/moonshine";
 
 const RULE_ID_TO_CATEGORY = new Map<string, RuleCategory>();
 for (const [category, rules] of Object.entries(DETECTION_RULES)) {
@@ -120,8 +134,10 @@ function MaskedMatch({ value }: { value: string | undefined }) {
 function SecurityOverviewContent() {
   const routes = useRoutes();
   const client = useSdkClient();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
+  const policyFilter = searchParams.get("policy_id") ?? "";
   const setSelectedChatId = useCallback(
     (chatId: string | null) => {
       setSearchParams((prev) => {
@@ -135,21 +151,65 @@ function SecurityOverviewContent() {
     },
     [setSearchParams],
   );
+  const setPolicyFilter = useCallback(
+    (policyId: string) => {
+      setSearchParams((prev) => {
+        if (policyId) {
+          prev.set("policy_id", policyId);
+        } else {
+          prev.delete("policy_id");
+        }
+        return prev;
+      });
+    },
+    [setSearchParams],
+  );
 
   const { data: policiesData, isLoading: policiesLoading } =
     useRiskListPolicies();
 
   const resultsQuery = useInfiniteQuery({
-    queryKey: ["risk", "results", "list"],
+    queryKey: ["risk", "results", "list", policyFilter],
     queryFn: async ({ pageParam }) => {
       return client.risk.results.list({
         cursor: pageParam,
         limit: pageParam ? 100 : 10,
+        policyId: policyFilter || undefined,
       });
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
+
+  const approveMutation = useRiskApproveShadowMCPMutation();
+  const handleExclude = useCallback(
+    (policyId: string, match: string, serverName?: string) => {
+      approveMutation.mutate(
+        {
+          request: {
+            approveShadowMCPRequestBody: {
+              policyId,
+              match,
+              serverName,
+            },
+          },
+        },
+        {
+          onSuccess: () => {
+            toast.success("Excluded from policy");
+            queryClient.invalidateQueries({
+              queryKey: ["risk", "results", "list"],
+            });
+            invalidateAllRiskListShadowMCPApprovals(queryClient);
+          },
+          onError: (err) => {
+            toast.error(`Failed to exclude: ${err.message ?? "unknown error"}`);
+          },
+        },
+      );
+    },
+    [approveMutation, queryClient],
+  );
 
   const chatSummaryQuery = useInfiniteQuery({
     queryKey: ["risk", "results", "byChat"],
@@ -190,25 +250,53 @@ function SecurityOverviewContent() {
 
   if (isInitialLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <p className="text-muted-foreground text-sm">Loading...</p>
-      </div>
+      <Page.Section>
+        <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
+        <Page.Section.Description className="max-w-2xl">
+          Recent findings from risk analysis scans across your project.
+        </Page.Section.Description>
+        <Page.Section.Body>
+          <div className="flex items-center justify-center py-20">
+            <p className="text-muted-foreground text-sm">Loading...</p>
+          </div>
+        </Page.Section.Body>
+      </Page.Section>
     );
   }
 
   if (policies.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 py-20">
-        <Shield className="text-muted-foreground h-12 w-12" />
-        <h2 className="text-lg font-semibold">Risk Analysis</h2>
-        <p className="text-muted-foreground max-w-md text-center text-sm">
-          Monitor your chat messages for leaked secrets and sensitive data. Set
-          up a risk policy to get started.
-        </p>
-        <Button onClick={() => routes.policyCenter.goTo()}>
-          Go to Policy Center
-        </Button>
-      </div>
+      <Page.Section>
+        <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
+        <Page.Section.Description className="max-w-2xl">
+          Recent findings from risk analysis scans across your project.
+        </Page.Section.Description>
+        <Page.Section.CTA>
+          <MoonshineButton
+            variant="secondary"
+            onClick={() => routes.policyCenter.goTo()}
+          >
+            <MoonshineButton.Text>Manage Policies</MoonshineButton.Text>
+            <MoonshineButton.RightIcon>
+              <Icon name="arrow-right" />
+            </MoonshineButton.RightIcon>
+          </MoonshineButton>
+        </Page.Section.CTA>
+        <Page.Section.Body>
+          <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+            <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+              <Shield className="text-muted-foreground h-6 w-6" />
+            </div>
+            <Type variant="subheading" className="mb-1">
+              Risk Analysis
+            </Type>
+            <Type small muted className="mb-4 max-w-md text-center">
+              Monitor your chat messages for leaked secrets and sensitive data.
+              Set up a risk policy to get started.
+            </Type>
+          </div>
+        </Page.Section.Body>
+      </Page.Section>
     );
   }
 
@@ -224,16 +312,22 @@ function SecurityOverviewContent() {
   return (
     <>
       <Page.Section>
-        <Page.Section.Title>Risk Overview</Page.Section.Title>
+        <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
 
         <Page.Section.Description>
           Recent findings from risk analysis scans across your project.
         </Page.Section.Description>
 
         <Page.Section.CTA>
-          <Button variant="outline" onClick={() => routes.policyCenter.goTo()}>
-            Manage Policies
-          </Button>
+          <MoonshineButton
+            variant="secondary"
+            onClick={() => routes.policyCenter.goTo()}
+          >
+            <MoonshineButton.Text>Manage Policies</MoonshineButton.Text>
+            <MoonshineButton.RightIcon>
+              <Icon name="arrow-right" />
+            </MoonshineButton.RightIcon>
+          </MoonshineButton>
         </Page.Section.CTA>
 
         <Page.Section.Body>
@@ -319,6 +413,26 @@ function SecurityOverviewContent() {
           {results.length > 0 && (
             <Page.Section>
               <Page.Section.Title>Recent Findings</Page.Section.Title>
+              <Page.Section.CTA>
+                <Select
+                  value={policyFilter || "all"}
+                  onValueChange={(value) =>
+                    setPolicyFilter(value === "all" ? "" : value)
+                  }
+                >
+                  <SelectTrigger className="w-[240px]">
+                    <SelectValue placeholder="Filter by policy" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All policies</SelectItem>
+                    {policies.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Page.Section.CTA>
               <Page.Section.Body>
                 <div className="max-h-[412px] overflow-auto rounded-md border **:data-[slot=table-container]:overflow-visible">
                   <Table>
@@ -328,9 +442,10 @@ function SecurityOverviewContent() {
                         <TableHead className="w-1/12">Rule</TableHead>
                         <TableHead className="w-1/12">Chat</TableHead>
                         <TableHead className="w-1/12">User</TableHead>
-                        <TableHead className="w-1/12">Match</TableHead>
+                        <TableHead className="w-2/12">Match</TableHead>
                         <TableHead className="w-1/12">Policy Note</TableHead>
-                        <TableHead className="w-1/12 pr-4">Detected</TableHead>
+                        <TableHead className="w-1/12">Occurred</TableHead>
+                        <TableHead className="w-1/12 pr-4">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -338,6 +453,7 @@ function SecurityOverviewContent() {
                         const policyNote = policyMessageById.get(
                           result.policyId,
                         );
+                        const isShadowMCP = result.source === "shadow_mcp";
                         return (
                           <TableRow
                             key={result.id}
@@ -366,7 +482,16 @@ function SecurityOverviewContent() {
                               {result.userId ?? "-"}
                             </TableCell>
                             <TableCell className="truncate">
-                              <MaskedMatch value={result.match} />
+                              {isShadowMCP && result.match ? (
+                                <span
+                                  className="font-mono text-xs"
+                                  title={result.match}
+                                >
+                                  {result.match}
+                                </span>
+                              ) : (
+                                <MaskedMatch value={result.match} />
+                              )}
                             </TableCell>
                             <TableCell
                               className="text-muted-foreground truncate italic"
@@ -374,10 +499,36 @@ function SecurityOverviewContent() {
                             >
                               {policyNote ?? "-"}
                             </TableCell>
-                            <TableCell className="text-muted-foreground pr-4">
+                            <TableCell className="text-muted-foreground">
                               {result.createdAt
                                 ? new Date(result.createdAt).toLocaleString()
                                 : "-"}
+                            </TableCell>
+                            <TableCell className="pr-4">
+                              {isShadowMCP && result.match ? (
+                                <RequireScope
+                                  scope="org:admin"
+                                  level="component"
+                                  reason="Only organization admins can exclude MCP servers from a policy."
+                                >
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={approveMutation.isPending}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleExclude(
+                                        result.policyId,
+                                        result.match!,
+                                      );
+                                    }}
+                                    title="Exclude this MCP server from the policy"
+                                  >
+                                    <ShieldOff className="mr-1 h-3 w-3" />
+                                    <span className="text-xs">Exclude</span>
+                                  </Button>
+                                </RequireScope>
+                              ) : null}
                             </TableCell>
                           </TableRow>
                         );

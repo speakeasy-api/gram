@@ -55,6 +55,7 @@ func wrapSDKError(err error, context string) error {
 // It is designed to have a caching layer added later.
 type Client struct {
 	apiKey     string
+	clientID   string // IDP client ID (GRAM_IDP_CLIENT_ID), needed for SSO code exchange
 	endpoint   string // base URL for raw HTTP calls; defaults to workosBaseURL
 	httpClient *guardian.HTTPClient
 	orgs       *organizations.Client
@@ -69,6 +70,8 @@ type ClientOpts struct {
 	Endpoint string
 	// HTTPClient overrides the default retryable HTTP client.
 	HTTPClient *guardian.HTTPClient
+	// ClientID is the IDP client ID (GRAM_IDP_CLIENT_ID), needed for SSO code exchange.
+	ClientID string
 }
 
 func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpts) *Client {
@@ -97,6 +100,7 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpt
 
 	return &Client{
 		apiKey:     apiKey,
+		clientID:   opt.ClientID,
 		endpoint:   endpoint,
 		httpClient: httpClient,
 		orgs:       &organizations.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil},
@@ -171,7 +175,42 @@ func convertUser(u usermanagement.User) User {
 		LastName:          u.LastName,
 		Email:             u.Email,
 		ProfilePictureURL: u.ProfilePictureURL,
+		ExternalID:        u.ExternalID,
 	}
+}
+
+// EnsureUserExternalID sets the WorkOS user's external_id to gramUserID if it
+// is not already set. Returns an error if the existing external_id doesn't
+// match gramUserID (indicates a data inconsistency that needs investigation).
+func (wc *Client) EnsureUserExternalID(ctx context.Context, workosUserID, gramUserID string) error {
+	u, err := wc.um.GetUser(ctx, usermanagement.GetUserOpts{User: workosUserID})
+	if err != nil {
+		return fmt.Errorf("get workos user: %w", err)
+	}
+
+	if u.ExternalID == gramUserID {
+		return nil // already correct
+	}
+	if u.ExternalID != "" {
+		return fmt.Errorf("workos user %s external_id mismatch: got %q, want %q", workosUserID, u.ExternalID, gramUserID)
+	}
+
+	if _, err := wc.um.UpdateUser(ctx, usermanagement.UpdateUserOpts{
+		User:             workosUserID,
+		Email:            "",
+		FirstName:        "",
+		LastName:         "",
+		EmailVerified:    false,
+		Password:         "",
+		PasswordHash:     "",
+		PasswordHashType: "",
+		ExternalID:       gramUserID,
+		Metadata:         nil,
+	}); err != nil {
+		return fmt.Errorf("set workos user external_id: %w", err)
+	}
+
+	return nil
 }
 
 func convertMember(m usermanagement.OrganizationMembership) Member {

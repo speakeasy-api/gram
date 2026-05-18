@@ -8,7 +8,7 @@
 package types
 
 type ToolEntry struct {
-	Type string
+	Type ToolType
 	// The ID of the tool
 	ID string
 	// The URN of the tool

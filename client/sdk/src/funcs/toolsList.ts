@@ -100,6 +100,7 @@ async function $do(
     "cursor": payload?.cursor,
     "deployment_id": payload?.deployment_id,
     "limit": payload?.limit,
+    "tool_types": payload?.tool_types,
     "urn_prefix": payload?.urn_prefix,
   });
 

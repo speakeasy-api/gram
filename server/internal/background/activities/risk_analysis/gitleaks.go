@@ -11,15 +11,24 @@ import (
 )
 
 // Finding represents a single secret or sensitive data match found in a message.
+// DeadLetterReason is populated only on synthetic "could not analyze" markers
+// emitted when a scanner exhausts its retry budget for a message; it is empty
+// on every real finding and is not considered by dedup/overlap logic.
 type Finding struct {
-	RuleID      string
-	Description string
-	Match       string
-	StartPos    int // Byte position in string
-	EndPos      int // Byte position in string
-	Tags        []string
-	Source      string  // Detection source (e.g. "gitleaks", "presidio")
-	Confidence  float64 // 0.0-1.0 confidence score
+	RuleID           string
+	Description      string
+	Match            string
+	StartPos         int // Byte position in string
+	EndPos           int // Byte position in string
+	Tags             []string
+	Source           string  // Detection source (e.g. "gitleaks", "presidio")
+	Confidence       float64 // 0.0-1.0 confidence score
+	DeadLetterReason string  // Non-empty => dead-letter sentinel, not a real finding
+	// toolCallID is an internal correlation key used by scanShadowMCP to
+	// patch the resolved MCP server identifier onto findings via the
+	// telemetry CH lookup. Not persisted — converters that map Finding
+	// into repo.InsertRiskResultParams ignore it.
+	toolCallID string
 }
 
 // detectorInitMu serializes gitleaks detector creation process-wide.
@@ -144,14 +153,16 @@ func ConvertFindings(content string, raw []report.Finding) []Finding {
 		startPos := lineColToBytePos(content, f.StartLine, f.StartColumn)
 		endPos := min(lineColToBytePos(content, f.EndLine, f.EndColumn)+1, len(content))
 		out = append(out, Finding{
-			RuleID:      f.RuleID,
-			Description: f.Description,
-			Match:       f.Match,
-			StartPos:    startPos,
-			EndPos:      endPos,
-			Tags:        tags,
-			Source:      "gitleaks",
-			Confidence:  1.0,
+			RuleID:           f.RuleID,
+			Description:      f.Description,
+			Match:            f.Match,
+			StartPos:         startPos,
+			EndPos:           endPos,
+			Tags:             tags,
+			Source:           "gitleaks",
+			Confidence:       1.0,
+			DeadLetterReason: "",
+			toolCallID:       "",
 		})
 	}
 	return out

@@ -11,6 +11,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 // stubBlockingShadowMCPScanner is a RiskScanner that always reports a
@@ -42,7 +43,7 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 	ti.service.productFeatures = alwaysEnabledFeatures{}
 	// lookupShadowMCPBlockingPolicy needs a non-nil scanner that reports a
 	// blocking shadow-MCP policy, otherwise the handler short-circuits to
-	// allow before the toolset validator runs.
+	// allow before the cached-MCP-list check runs.
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -53,8 +54,8 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 	toolName := "mcp__gram__do_thing"
 	toolUseID := "toolu_pretooluse_authctx"
 
-	// Tool input is missing the required x-gram-toolset-id property, so
-	// validateGramToolsetCall must deny. Reaching that check at all proves
+	// No MCP list snapshot is cached for this session, so the guard must
+	// deny with the retry/restart message. Reaching that check at all proves
 	// the auth-context branch ran — before the fix, the empty Redis cache
 	// would have returned allow without consulting the policy.
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
@@ -71,7 +72,187 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 	require.True(t, ok, "HookSpecificOutput should be a *HookSpecificOutput")
 	require.NotNil(t, output.PermissionDecision)
 	assert.Equal(t, "deny", *output.PermissionDecision,
-		"missing x-gram-toolset-id should be denied once auth-context metadata is in play")
+		"shadow-MCP guard must deny when no cached MCP list is available")
+}
+
+// When the MCP list snapshot is missing from the cache (SessionStart hasn't
+// finished yet, or the 12h inactivity TTL elapsed), the guard fails closed
+// and surfaces a retry/restart hint to the user. Failing open would let a
+// shadow MCP server slip past during the snapshot-population window.
+func TestClaude_PreToolUse_DeniesWhenMCPListNotCached(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__gram__do_thing"
+	toolUseID := "toolu_no_mcp_list"
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision)
+	require.NotNil(t, output.PermissionDecisionReason)
+	assert.Contains(t, *output.PermissionDecisionReason, "restart Claude Code",
+		"deny reason should tell the user to retry or restart so they aren't stuck guessing")
+}
+
+// Gram-hosted MCP servers (URL host == app.getgram.ai) are the only ones
+// the shadow-MCP guard permits — even a server present in the cache is
+// rejected when its URL points elsewhere.
+func TestClaude_PreToolUse_DeniesWhenMatchedServerNotGramHosted(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__plugin_slack_slack__send_message"
+	toolUseID := "toolu_non_gram_hosted"
+
+	// Seed the cache with an entry that resolves the tool's server prefix
+	// but points at a non-Gram host.
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "plugin", PluginName: "slack", Name: "slack", URL: "https://mcp.slack.com/mcp"}},
+		sessionMCPListTTL,
+	))
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision)
+}
+
+// Local stdio MCP servers (no URL — Command-only entries from
+// `claude mcp list`) must be denied by the shadow-MCP guard for the same
+// reason a non-Gram-hosted HTTP server is: they're not under the org's
+// control. The deny reason should name the command so the user knows
+// which server to allowlist.
+func TestClaude_PreToolUse_DeniesLocalStdioServer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__mise__install_tool"
+	toolUseID := "toolu_local_stdio"
+
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
+		sessionMCPListTTL,
+	))
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision)
+}
+
+// Once a stdio command is explicitly approved for the active policy, the
+// guard must let calls to that server through — verifying the
+// Command-keyed allowlist actually wires into PreToolUse.
+func TestClaude_PreToolUse_AllowsApprovedLocalStdioServer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__mise__install_tool"
+	toolUseID := "toolu_local_stdio_approved"
+
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
+		sessionMCPListTTL,
+	))
+	require.NoError(t, shadowmcp.AddShadowMCPApproval(ctx, ti.service.cache, authCtx.ProjectID.String(), "stub-policy-id", shadowmcp.ShadowMCPApproval{
+		Match:      "mise mcp",
+		ServerName: "mise",
+	}))
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "allow", *output.PermissionDecision)
+}
+
+// Allow path: a cached entry that resolves the tool's server prefix and
+// points at app.getgram.ai must succeed even under a blocking policy.
+func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__gram__do_thing"
+	toolUseID := "toolu_gram_hosted_ok"
+
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "local", Name: "gram", URL: "https://app.getgram.ai/mcp/team-foo"}},
+		sessionMCPListTTL,
+	))
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "allow", *output.PermissionDecision)
 }
 
 // When plugin auth headers are present but the API key is invalid/expired,

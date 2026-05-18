@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	svix "github.com/svix/svix-webhooks/go"
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/interceptor"
@@ -32,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -63,13 +66,17 @@ type WorkerOptions struct {
 	RagService          *rag.ToolsetVectorStore
 	MCPRegistryClient   *externalmcp.RegistryClient
 	TelemetryLogger     *telemetry.Logger
+	ClickhouseConn      clickhouse.Conn
 	TriggersApp         *bgtriggers.App
 	AssistantsCore      *assistants.ServiceCore
 	TemporalEnv         *tenv.Environment
 	PIIScanner          risk_analysis.PIIScanner
+	PIScanner           *risk_analysis.PromptInjectionScanner
 	ShadowMCPClient     *shadowmcp.Client
 	AuditLogger         *audit.Logger
 	WorkOSClient        activities.WorkOSClient
+	SvixClient          *svix.Svix
+	ProductFeatures     *productfeatures.Client
 }
 
 func ForDeploymentProcessing(
@@ -108,8 +115,12 @@ func ForDeploymentProcessing(
 		AssistantsCore:      nil,
 		TemporalEnv:         nil,
 		PIIScanner:          nil,
+		PIScanner:           nil,
 		ShadowMCPClient:     nil,
 		WorkOSClient:        workos.NewStubClient(),
+		SvixClient:          nil,
+		ProductFeatures:     nil,
+		ClickhouseConn:      nil,
 	}
 }
 
@@ -145,9 +156,13 @@ func NewTemporalWorker(
 		AssistantsCore:      nil,
 		TemporalEnv:         env,
 		PIIScanner:          nil,
+		PIScanner:           nil,
 		ShadowMCPClient:     nil,
 		AuditLogger:         nil,
 		WorkOSClient:        workos.NewStubClient(),
+		SvixClient:          nil,
+		ProductFeatures:     nil,
+		ClickhouseConn:      nil,
 	}
 
 	for _, o := range options {
@@ -176,9 +191,13 @@ func NewTemporalWorker(
 			AssistantsCore:      conv.Default(o.AssistantsCore, opts.AssistantsCore),
 			TemporalEnv:         conv.Default(o.TemporalEnv, opts.TemporalEnv),
 			PIIScanner:          conv.Default(o.PIIScanner, opts.PIIScanner),
+			PIScanner:           conv.Default(o.PIScanner, opts.PIScanner),
 			ShadowMCPClient:     conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
 			AuditLogger:         conv.Default(o.AuditLogger, opts.AuditLogger),
 			WorkOSClient:        conv.Default(o.WorkOSClient, opts.WorkOSClient),
+			SvixClient:          conv.Default(o.SvixClient, opts.SvixClient),
+			ProductFeatures:     conv.Default(o.ProductFeatures, opts.ProductFeatures),
+			ClickhouseConn:      conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
 		}
 	}
 
@@ -220,13 +239,17 @@ func NewTemporalWorker(
 		opts.MCPRegistryClient,
 		opts.TemporalEnv,
 		opts.TelemetryLogger,
+		opts.ClickhouseConn,
 		opts.TriggersApp,
 		opts.CacheAdapter,
 		opts.AssistantsCore,
 		opts.PIIScanner,
+		opts.PIScanner,
 		opts.ShadowMCPClient,
 		opts.AuditLogger,
 		opts.WorkOSClient,
+		opts.SvixClient,
+		opts.ProductFeatures,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -240,6 +263,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RefreshOpenRouterKey)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
+	temporalWorker.RegisterActivity(activities.CollectOpenRouterCreditsMetrics)
+	temporalWorker.RegisterActivity(activities.FireOpenRouterCreditsMetrics)
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FreeTierReportingUsageMetrics)
@@ -269,14 +294,19 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ReapSoftDeletedAssistantMemories)
 	temporalWorker.RegisterActivity(activities.SignalAssistantCoordinator)
 	temporalWorker.RegisterActivity(activities.SignalAssistantThread)
+	temporalWorker.RegisterActivity(activities.CancelAssistantsSubscription)
 	// WorkOS sync activities
 	temporalWorker.RegisterActivity(activities.ListWorkOSOrganizations)
 	temporalWorker.RegisterActivity(activities.BackfillWorkOSOrganization)
 	temporalWorker.RegisterActivity(activities.BackfillWorkOSGlobalRoles)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSGlobalRoleEvents)
-
-	temporalWorker.RegisterActivity(activities.CancelAssistantsSubscription)
+	temporalWorker.RegisterActivity(activities.ProcessWorkOSUserEvents)
+	// Outbox relay activities
+	temporalWorker.RegisterActivity(activities.FetchPendingOutboxEvents)
+	temporalWorker.RegisterActivity(activities.FilterNoopOutboxEvents)
+	temporalWorker.RegisterActivity(activities.RelayOutboxEvents)
+	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
@@ -284,6 +314,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OpenrouterKeyRefreshWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
+	temporalWorker.RegisterWorkflow(CollectOpenRouterCreditsMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
@@ -307,9 +338,14 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflowDebounced)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSGlobalRoleEventsWorkflow)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSGlobalRoleEventsWorkflowDebounced)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSUserEventsWorkflow)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSUserEventsWorkflowDebounced)
 	temporalWorker.RegisterWorkflow(BackfillWorkOSWorkflow)
 	// Assistants signup followups
 	temporalWorker.RegisterWorkflow(CancelAssistantsSubscriptionWorkflow)
+	// Outbox -> Relay workflow and GC
+	temporalWorker.RegisterWorkflow(ProcessOutboxWorkflow)
+	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -317,9 +353,21 @@ func NewTemporalWorker(
 		}
 	}
 
+	if err := AddOpenRouterCreditsMetricsSchedule(context.Background(), env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add openrouter credits metrics schedule", attr.SlogError(err))
+		}
+	}
+
 	if err := AddRefreshBillingUsageSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add refresh billing usage schedule", attr.SlogError(err))
+		}
+	}
+
+	if err := AddProcessOutboxSchedule(context.Background(), env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add relay outbox to svix schedule", attr.SlogError(err))
 		}
 	}
 
@@ -333,6 +381,10 @@ func NewTemporalWorker(
 
 	if err := AddAssistantMemoriesReaperSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add assistant memories reaper schedule", attr.SlogError(err))
+	}
+
+	if err := AddOutboxGCSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add outbox gc schedule", attr.SlogError(err))
 	}
 
 	return &Workers{main: temporalWorker, riskAnalysis: riskWorker}

@@ -2,6 +2,7 @@ package audit
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -11,25 +12,25 @@ import (
 )
 
 type outboxEntry struct {
-	ID                 uuid.UUID     `json:"id,omitzero"`
-	OrganizationID     string        `json:"organization_id,omitzero"`
-	ProjectID          uuid.NullUUID `json:"project_id,omitzero"`
-	ActorID            string        `json:"actor_id,omitzero"`
-	ActorType          string        `json:"actor_type,omitzero"`
-	ActorDisplayName   string        `json:"actor_display_name,omitzero"`
-	ActorSlug          string        `json:"actor_slug,omitzero"`
-	Action             string        `json:"action,omitzero"`
-	SubjectID          string        `json:"subject_id,omitzero"`
-	SubjectType        string        `json:"subject_type,omitzero"`
-	SubjectDisplayName string        `json:"subject_display_name,omitzero"`
-	SubjectSlug        string        `json:"subject_slug,omitzero"`
-	BeforeSnapshot     []byte        `json:"before_snapshot,omitempty"`
-	AfterSnapshot      []byte        `json:"after_snapshot,omitempty"`
-	Metadata           []byte        `json:"metadata,omitempty"`
+	ID                 uuid.UUID       `json:"id,omitzero"`
+	OrganizationID     string          `json:"organization_id,omitzero"`
+	ProjectID          uuid.NullUUID   `json:"project_id,omitzero"`
+	ActorID            string          `json:"actor_id,omitzero"`
+	ActorType          string          `json:"actor_type,omitzero"`
+	ActorDisplayName   string          `json:"actor_display_name,omitzero"`
+	ActorSlug          string          `json:"actor_slug,omitzero"`
+	Action             string          `json:"action,omitzero"`
+	SubjectID          string          `json:"subject_id,omitzero"`
+	SubjectType        string          `json:"subject_type,omitzero"`
+	SubjectDisplayName string          `json:"subject_display_name,omitzero"`
+	SubjectSlug        string          `json:"subject_slug,omitzero"`
+	BeforeSnapshot     json.RawMessage `json:"before_snapshot,omitempty"`
+	AfterSnapshot      json.RawMessage `json:"after_snapshot,omitempty"`
+	Metadata           json.RawMessage `json:"metadata,omitempty"`
 }
 
 func appendToOutbox(ctx context.Context, dbtx repo.DBTX, input repo.InsertAuditLogParams, result repo.InsertAuditLogRow) error {
-	if _, err := outbox.Append(ctx, dbtx, outbox.InsertParams{
+	if _, err := outbox.Append(ctx, dbtx, outbox.AppendParams{
 		OrganizationID: result.OrganizationID,
 		EventType:      outbox.EventTypeAuditLogCreated,
 		Payload: outboxEntry{

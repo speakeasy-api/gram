@@ -127,6 +127,10 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 item={orgRoutes.logs}
                 scope={["org:read", "org:admin"]}
               />
+              <ScopeGatedNavItem
+                item={orgRoutes.webhooks}
+                scope={["org:read", "org:admin"]}
+              />
               {isAdmin && (
                 <SidebarMenuItem>
                   <NavButton

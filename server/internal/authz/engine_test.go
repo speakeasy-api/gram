@@ -593,6 +593,10 @@ func (m *mapCache) Delete(_ context.Context, key string) error {
 	return nil
 }
 
+func (m *mapCache) Expire(_ context.Context, _ string, _ time.Duration) error {
+	return nil
+}
+
 func (m *mapCache) ListAppend(context.Context, string, any, time.Duration) error {
 	return errors.New("not implemented")
 }
@@ -656,6 +660,49 @@ func scopeOverrideCtx(t *testing.T, isAdmin bool, accountType string) context.Co
 		IsAdmin:               isAdmin,
 	})
 	return contextvalues.SetRBACScopeOverride(ctx, "project:read")
+}
+
+// TestPrepareContext_adminImpersonationGrantsAllScopes verifies that when a
+// Speakeasy admin impersonates a customer org (IsAdmin + AdminOverride), the
+// engine injects wildcard grants for every scope so that Require() calls
+// succeed. Without this, the admin has no WorkOS membership in the target org
+// and every endpoint returns 403.
+func TestPrepareContext_adminImpersonationGrantsAllScopes(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+
+	// Build a context that looks like admin impersonation: enterprise account,
+	// IsAdmin flag, and AdminOverride pointing at the target org.
+	sessionID := "session_admin"
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: "org_customer",
+		UserID:               "user_admin",
+		SessionID:            &sessionID,
+		AccountType:          "enterprise",
+		IsAdmin:              true,
+	})
+	ctx = contextvalues.SetAdminOverrideInContext(ctx, "org_customer")
+
+	ctx, err = engine.PrepareContext(ctx)
+	require.NoError(t, err)
+
+	grants, ok := GrantsFromContext(ctx)
+	require.True(t, ok, "grants should be present in context after PrepareContext")
+	require.NotEmpty(t, grants, "admin impersonation should produce non-empty grants")
+
+	// Every scope should be satisfiable via Require.
+	for _, scope := range []Scope{
+		ScopeOrgRead, ScopeOrgAdmin,
+		ScopeProjectRead, ScopeProjectWrite,
+		ScopeMCPRead, ScopeMCPWrite, ScopeMCPConnect,
+		ScopeEnvironmentRead, ScopeEnvironmentWrite,
+	} {
+		err := engine.Require(ctx, Check{Scope: scope, ResourceID: "org_customer"})
+		require.NoError(t, err, "admin impersonation should satisfy scope %s", scope)
+	}
 }
 
 func TestCanUseOverride_devPlusAdmin(t *testing.T) {

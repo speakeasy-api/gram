@@ -6,6 +6,7 @@ import {
   InsightsProvider,
 } from "@/components/insights-sidebar";
 import { Page } from "@/components/page-layout";
+import { Heading } from "@/components/ui/heading";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -213,6 +214,13 @@ function renderSubject(log: AuditLog, orgSlug: string) {
     );
   }
 
+  if (
+    log.action === "organization:webhooks_enabled" ||
+    log.action === "organization:webhooks_disabled"
+  ) {
+    return null;
+  }
+
   if (log.subjectType === "otel_forwarding_config") {
     // The subject ID is a UUID with no human-meaningful slug or display name.
     // The verb text is self-contained (e.g., "enabled OpenTelemetry forwarding
@@ -391,6 +399,10 @@ function renderVerb(log: AuditLog): string {
       return "updated plugin access assignments";
     case "plugin:publish":
       return "published plugins";
+    case "organization:webhooks_enabled":
+      return "enabled webhooks delivery";
+    case "organization:webhooks_disabled":
+      return "disabled webhooks delivery";
     default: {
       const [resource = "activity", verb = "updated"] = log.action.split(":");
       return `${verb.replace(/_/g, " ")} ${getResourceLabel(resource)}`;
@@ -1095,7 +1107,9 @@ export function OrgAuditLogsInner() {
     <div className="flex w-full flex-col gap-4">
       <InsightsConfig contextInfo={insightsContext} />
       <div>
-        <Type className="font-medium">Recent activity across Gram</Type>
+        <Heading variant="h4" className="mb-2">
+          Audit Logs
+        </Heading>
         <Type muted small className="mt-1">
           Review organization-wide and project-level actions in chronological
           order.

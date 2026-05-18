@@ -26,7 +26,7 @@ import (
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil)
+	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil)
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
@@ -52,8 +52,11 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// PresidioClient pointed at a dead URL simulates Presidio being down
-	deadClient := risk_analysis.NewPresidioClient(
+	// Point the production PresidioClient at a dead URL so the activity
+	// path mirrors what runs in the worker. After exhausting the retry
+	// budget the message dead-letters and the activity proceeds — gitleaks
+	// findings on the same message survive.
+	piiScanner := risk_analysis.NewPresidioClient(
 		"http://127.0.0.1:1",
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
@@ -65,7 +68,9 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		conn,
-		deadClient,
+		piiScanner,
+		nil,
+		nil,
 		nil,
 	)
 
@@ -88,6 +93,25 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 	require.NoError(t, val.Get(&result))
 	assert.Equal(t, 1, result.Processed)
 	assert.Positive(t, result.Findings, "gitleaks findings should be preserved when presidio is down")
+
+	// Presidio dead-letter should land as its own row (found=false,
+	// dead_letter_reason populated) so the failure is auditable in the DB.
+	// The production list queries filter on found IS TRUE, so we read every
+	// row via the test fixture query.
+	rows, err := testrepo.New(conn).ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+	})
+	require.NoError(t, err)
+
+	var sawDeadLetter bool
+	for _, row := range rows {
+		if row.Source == "presidio" && row.DeadLetterReason.Valid && row.DeadLetterReason.String != "" {
+			assert.False(t, row.Found, "dead-letter row must not be flagged as a finding")
+			sawDeadLetter = true
+		}
+	}
+	assert.True(t, sawDeadLetter, "expected a presidio dead-letter row with dead_letter_reason set")
 }
 
 func TestAnalyzeBatch_DestructiveToolAnnotationFinding(t *testing.T) {
@@ -106,7 +130,7 @@ func TestAnalyzeBatch_DestructiveToolAnnotationFinding(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		Cursor:       uuid.NullUUID{},
+		CursorID:               uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
@@ -151,7 +175,7 @@ func TestAnalyzeBatch_CLIDestructive_BashRmRf(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		Cursor:       uuid.NullUUID{},
+		CursorID:               uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
@@ -176,7 +200,7 @@ func TestAnalyzeBatch_CLIDestructive_GitForcePush(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		Cursor:       uuid.NullUUID{},
+		CursorID:               uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
@@ -202,7 +226,7 @@ func TestAnalyzeBatch_CLIDestructive_MCPArgsDropTable(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		Cursor:       uuid.NullUUID{},
+		CursorID:               uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
@@ -233,7 +257,7 @@ func TestAnalyzeBatch_CLIDestructive_StableRuleIDAcrossKeys(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		Cursor:       uuid.NullUUID{},
+		CursorID:               uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
@@ -269,7 +293,7 @@ func TestAnalyzeBatch_BothSources_OnSameMCPCall(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		Cursor:       uuid.NullUUID{},
+		CursorID:               uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)
@@ -367,7 +391,9 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		testenv.NewMeterProvider(t),
 		conn,
 		&risk_analysis.StubPIIScanner{},
+		nil,
 		shadowMCPClient,
+		nil,
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -582,7 +608,7 @@ func TestAnalyzeBatch_SkipsWhenPolicyDisabled(t *testing.T) {
 	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
 		ProjectID:    td.projectID,
 		RiskPolicyID: td.policyID,
-		Cursor:       uuid.NullUUID{},
+		CursorID:               uuid.NullUUID{},
 		PageLimit:    10,
 	})
 	require.NoError(t, err)

@@ -507,6 +507,75 @@ func TestGenerateClaudeObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t
 	}
 }
 
+// SessionStart needs its own enrichment script (session_start.sh) so the
+// payload can be augmented with the active MCP server inventory before
+// being forwarded. The standard hook.sh has no way to inject that, and the
+// downstream parser keys off additional_data.mcp_inventory_* fields that
+// only session_start.sh sets.
+func TestGenerateClaudeObservabilityRoutesSessionStartToOwnScript(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	slug := ClaudeObservabilitySlug(cfg)
+
+	sessionScript := files[slug+"/hooks/session_start.sh"]
+	require.NotNil(t, sessionScript, "claude observability hooks/session_start.sh missing")
+
+	var parsed claudeHooksConfig
+	require.NoError(t, json.Unmarshal(files[slug+"/hooks/hooks.json"], &parsed))
+
+	sessionStart, ok := parsed.Hooks["SessionStart"]
+	require.True(t, ok, "SessionStart must be registered")
+	require.Len(t, sessionStart, 1)
+	require.Len(t, sessionStart[0].Hooks, 1)
+	require.Contains(t, sessionStart[0].Hooks[0].Command, "hooks/session_start.sh", "SessionStart must point at session_start.sh, not the generic hook.sh")
+	require.NotContains(t, sessionStart[0].Hooks[0].Command, "hooks/hook.sh")
+
+	for event, matchers := range parsed.Hooks {
+		if event == "SessionStart" {
+			continue
+		}
+		require.Contains(t, matchers[0].Hooks[0].Command, "hooks/hook.sh", "non-SessionStart event %q should still use hook.sh", event)
+	}
+}
+
+// session_start.sh enriches the payload with MCP inventory and posts to the
+// Claude hooks endpoint. It must carry the same Gram-Key + Gram-Project
+// headers the regular hook script uses, otherwise server-side org/project
+// attribution falls back to OTEL session metadata and may misattribute.
+func TestRenderClaudeSessionStartScriptCarriesAuthAndEnrichesPayload(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderClaudeSessionStartScript(cfg))
+
+	require.Contains(t, script, "Gram-Key: gram_local_secret_xyz")
+	require.Contains(t, script, "Gram-Project: acme-prod")
+	require.Contains(t, script, "${server_url}/rpc/hooks.claude")
+	require.Contains(t, script, "https://app.getgram.ai", "server URL must appear as the env var default")
+	// Server-side parsers key off these field names — see
+	// server/internal/hooks/claude_hooks.go and mcp_cowork_parser.go.
+	require.Contains(t, script, "mcp_inventory_claude_code")
+	require.Contains(t, script, "mcp_inventory_cowork")
+	// Cowork detection hinges on CLAUDE_PROJECT_DIR and local_<rid>.json.
+	require.Contains(t, script, "CLAUDE_PROJECT_DIR")
+	require.Contains(t, script, "local_run_json")
+	// Fire-and-forget: SessionStart has no allow/deny path, so exit 0
+	// regardless of HTTP outcome to keep the hook latency invisible.
+	require.Contains(t, script, "exit 0")
+	require.NotContains(t, script, "exit 2", "session_start.sh must never block — SessionStart has no permission decision")
+}
+
 func TestGenerateCodexObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
@@ -582,4 +651,103 @@ func TestWritePluginZipMakesShellScriptsExecutable(t *testing.T) {
 	require.Equal(t, uint32(0o755), modes["hook.sh"], "hook.sh must be executable so ./hook.sh works after unzip")
 	require.Equal(t, uint32(0o644), modes[".claude-plugin/plugin.json"], "non-script files keep default mode")
 	require.Equal(t, uint32(0o644), modes["README.md"], "non-script files keep default mode")
+}
+
+// Each publish must stamp a fresh manifest version into every plugin.json.
+// Claude Code, Cursor, and Codex marketplaces all key cache invalidation off
+// the manifest's version field: if it doesn't change between publishes,
+// previously-installed copies are treated as up-to-date and never refreshed.
+func TestGeneratePluginPackagesStampsConfigVersionIntoEveryManifest(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name:        "Engineering Tools",
+			Slug:        "engineering-tools",
+			Description: "MCP servers",
+			Servers: []PluginServerInfo{
+				{DisplayName: "crm", MCPURL: "https://app.getgram.ai/mcp/crm"},
+			},
+		},
+	}
+
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "acme-prod",
+		Version:     "0.1.1747087200",
+	}
+
+	files, err := GeneratePluginPackages(plugins, cfg)
+	require.NoError(t, err)
+
+	// Every plugin.json the publisher writes — both per-plugin and the
+	// per-org observability bundle, across all three platforms — must carry
+	// the supplied version.
+	manifestPaths := []string{
+		"engineering-tools/.claude-plugin/plugin.json",
+		"engineering-tools-cursor/.cursor-plugin/plugin.json",
+		"engineering-tools-codex/.codex-plugin/plugin.json",
+		"acme-observability/.claude-plugin/plugin.json",
+		"acme-observability-cursor/.cursor-plugin/plugin.json",
+		"acme-observability-codex/.codex-plugin/plugin.json",
+	}
+	for _, p := range manifestPaths {
+		raw, ok := files[p]
+		require.True(t, ok, "missing manifest: %s", p)
+
+		var meta struct {
+			Version string `json:"version"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &meta), "parse %s", p)
+		require.Equal(t, "0.1.1747087200", meta.Version, "%s did not pick up cfg.Version", p)
+	}
+}
+
+// Successive publishes with bumped versions must produce different manifest
+// bytes so platform clients see a new version and pull. This is the core
+// regression test for the "republish doesn't refresh clients" gap.
+func TestGeneratePluginPackagesRepublishWithBumpedVersionRefreshesManifest(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name:        "Engineering Tools",
+			Slug:        "engineering-tools",
+			Description: "MCP servers",
+			Servers: []PluginServerInfo{
+				{DisplayName: "crm", MCPURL: "https://app.getgram.ai/mcp/crm"},
+			},
+		},
+	}
+
+	base := GenerateConfig{
+		OrgName:   "Acme",
+		ServerURL: "https://app.getgram.ai",
+	}
+
+	first := base
+	first.Version = "0.1.100"
+	firstFiles, err := GeneratePluginPackages(plugins, first)
+	require.NoError(t, err)
+
+	second := base
+	second.Version = "0.1.200"
+	secondFiles, err := GeneratePluginPackages(plugins, second)
+	require.NoError(t, err)
+
+	const manifestPath = "engineering-tools/.claude-plugin/plugin.json"
+	require.NotEqual(t,
+		string(firstFiles[manifestPath]),
+		string(secondFiles[manifestPath]),
+		"manifest bytes must differ between publishes — otherwise Claude's marketplace will not refresh",
+	)
+}
+
+// Empty cfg.Version preserves the legacy "0.1.0" so tests that don't care
+// about versioning don't have to construct one. Production callers always
+// set cfg.Version via Service.generateConfig.
+func TestPluginManifestVersionFallsBackTo010WhenUnset(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "0.1.0", pluginManifestVersion(GenerateConfig{}))
+	require.Equal(t, "0.1.42", pluginManifestVersion(GenerateConfig{Version: "0.1.42"}))
 }

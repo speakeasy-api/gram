@@ -2,15 +2,21 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -23,9 +29,12 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/auth/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -38,6 +47,35 @@ import (
 
 const dispositionAssistants = "assistants"
 
+// nonceTTL is the maximum time a login nonce is valid. Nonces are one-time-use
+// and deleted on consumption; this TTL is a safety net for abandoned flows.
+const nonceTTL = 10 * time.Minute
+
+// nonceBindingCookie is the name of the HttpOnly cookie that binds a login
+// nonce to the browser session that initiated the OAuth flow. This prevents
+// login CSRF where an attacker crafts a callback URL that logs the victim
+// into the attacker's account.
+const nonceBindingCookie = "gram_auth_nonce"
+
+type nonceBindingKey struct{}
+
+// withNonceBinding stores a nonce binding value in the context.
+func withNonceBinding(ctx context.Context, binding string) context.Context {
+	return context.WithValue(ctx, nonceBindingKey{}, binding)
+}
+
+// nonceBindingFromContext retrieves the nonce binding value from the context.
+func nonceBindingFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(nonceBindingKey{}).(string)
+	return v
+}
+
+// TestNonceBindingContext injects a nonce binding value into the context.
+// Exported for use in tests only.
+func TestNonceBindingContext(ctx context.Context, binding string) context.Context {
+	return withNonceBinding(ctx, binding)
+}
+
 type authErr string
 
 const (
@@ -45,13 +83,11 @@ const (
 	authErrInit       authErr = "init_error"
 )
 
-const gramWaitlistTypeForm = "https://speakeasyapi.typeform.com/to/h6WJdwWr"
-
 type AuthConfigurations struct {
-	SpeakeasyServerAddress string
-	GramServerURL          string
-	SignInRedirectURL      string
-	Environment            string
+	IDPBaseURL        string
+	GramServerURL     string
+	SignInRedirectURL string
+	Environment       string
 }
 
 // Service for gram dashboard authentication endpoints
@@ -65,11 +101,13 @@ type Service struct {
 	logger              *slog.Logger
 	db                  *pgxpool.Pool
 	sessions            *sessions.Manager
+	identity            *identity.Resolver
 	cfg                 AuthConfigurations
 	authz               *authz.Engine
 	billing             billing.Repository
 	cancelSubsScheduler AssistantsSubscriptionCancelScheduler
 	posthog             *posthog.Posthog
+	nonceStore          cache.Cache
 	projectsRepo        *projectsRepo.Queries
 	envRepo             *envRepo.Queries
 	orgRepo             *orgRepo.Queries
@@ -82,11 +120,13 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
+	identityResolver *identity.Resolver,
 	cfg AuthConfigurations,
 	authzEngine *authz.Engine,
 	billingRepo billing.Repository,
 	cancelSubsScheduler AssistantsSubscriptionCancelScheduler,
 	posthogClient *posthog.Posthog,
+	nonceStore cache.Cache,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
 
@@ -95,11 +135,13 @@ func NewService(
 		logger:              logger,
 		db:                  db,
 		sessions:            sessions,
+		identity:            identityResolver,
 		cfg:                 cfg,
 		authz:               authzEngine,
 		billing:             billingRepo,
 		cancelSubsScheduler: cancelSubsScheduler,
 		posthog:             posthogClient,
+		nonceStore:          nonceStore,
 		projectsRepo:        projectsRepo.New(db),
 		envRepo:             envRepo.New(db),
 		orgRepo:             orgRepo.New(db),
@@ -114,10 +156,71 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
+	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+
+	// Wrap Login handler: generate a random binding token, set it as an
+	// HttpOnly cookie, and inject it into the context so Login() can store
+	// it alongside the nonce in Redis.
+	server.Login = loginNonceBindingMiddleware(service.cfg.Environment)(server.Login)
+
+	// Wrap Callback handler: read the binding cookie and inject it into the
+	// context so validateAuthNonce() can verify it.
+	server.Callback = callbackNonceBindingMiddleware(server.Callback)
+
+	srv.Mount(mux, server)
+}
+
+// loginNonceBindingMiddleware generates a random nonce-binding token, sets it
+// as an HttpOnly/SameSite cookie, and stores it in the request context.
+func loginNonceBindingMiddleware(env string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			binding, err := generateNonce()
+			if err != nil {
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+
+			//nolint:exhaustruct // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
+			http.SetCookie(w, &http.Cookie{
+				Name:     nonceBindingCookie,
+				Value:    binding,
+				MaxAge:   int(nonceTTL.Seconds()),
+				Path:     "/",
+				Secure:   env != "local",
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+			})
+
+			ctx := withNonceBinding(r.Context(), binding)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// callbackNonceBindingMiddleware reads the nonce-binding cookie and injects its
+// value into the request context for validateAuthNonce to verify.
+func callbackNonceBindingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var binding string
+		if c, err := r.Cookie(nonceBindingCookie); err == nil {
+			binding = c.Value
+		}
+
+		// Clear the cookie regardless of outcome — it's single-use.
+		//nolint:exhaustruct // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
+		http.SetCookie(w, &http.Cookie{
+			Name:     nonceBindingCookie,
+			Value:    "",
+			MaxAge:   -1,
+			Path:     "/",
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		})
+
+		ctx := withNonceBinding(r.Context(), binding)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -146,33 +249,42 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrCodeLookup, errors.New("code is required"))
 	}
 
-	idToken, err := s.sessions.ExchangeTokenFromSpeakeasy(ctx, payload.Code)
+	if err := s.validateAuthNonce(ctx, payload); err != nil {
+		return redirectWithError(authErrCodeLookup, err)
+	}
+
+	idpUser, err := s.identity.ExchangeCodeForTokens(ctx, payload.Code)
 	if err != nil {
 		return redirectWithError(authErrCodeLookup, err)
 	}
 
-	userInfo, err := s.sessions.GetUserInfoFromSpeakeasy(ctx, idToken)
+	userID, err := s.identity.UpsertUserFromIDP(ctx, idpUser)
 	if err != nil {
-		return redirectWithError(authErrCodeLookup, err)
+		return redirectWithError(authErrInit, err)
 	}
 
-	if !userInfo.Admin && !userInfo.UserWhitelisted {
-		return &gen.CallbackResult{
-			Location:      gramWaitlistTypeForm,
-			SessionToken:  "",
-			SessionCookie: "",
-		}, nil
+	if idpUser.OrganizationID != "" {
+		if err := s.identity.SyncMembershipsFromWorkOS(ctx, userID, idpUser.Sub); err != nil {
+			return redirectWithError(authErrInit, err)
+		}
 	}
 
+	userInfo, _, err := s.identity.GetUserInfo(ctx, userID)
+	if err != nil {
+		return redirectWithError(authErrInit, err)
+	}
+
+	sessionID := uuid.New().String()
 	session := sessions.Session{
-		SessionID:            idToken,
-		UserID:               userInfo.UserID,
+		SessionID:            sessionID,
+		UserID:               userID,
 		ActiveOrganizationID: "",
+		WorkOSSessionID:      idpUser.WorkOSSessionID,
 	}
 
 	if len(userInfo.Organizations) == 0 {
 		if dispositionFromState(payload) == dispositionAssistants {
-			location, err := s.autoProvisionForAssistants(ctx, idToken, userInfo, &session)
+			location, err := s.autoProvisionForAssistants(ctx, userInfo, &session)
 			if err != nil {
 				return redirectWithError(authErrInit, err)
 			}
@@ -194,32 +306,47 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}, nil
 	}
 
-	activeOrg := userInfo.Organizations[0]
-	selectedActiveOrgFromState := false
-	if org, ok := activeOrganizationFromState(payload, userInfo.Organizations); ok {
-		activeOrg = org
-		selectedActiveOrgFromState = true
+	// Default to the first org; overridden by the priority chain below.
+	activeOrgID := userInfo.Organizations[0].ID
+	activeOrgSelected := false
+
+	// Priority 1: admin override header — look up org from DB since
+	// the admin may not be a member of the target org.
+	if userInfo.Admin {
+		if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
+			orgMeta, err := s.orgRepo.GetOrganizationMetadataBySlug(ctx, adminOverride)
+			if err == nil {
+				activeOrgID = orgMeta.ID
+				activeOrgSelected = true
+			}
+		}
 	}
 
-	// For admins we allow you to override the active organization returned by header if present.
-	if !selectedActiveOrgFromState && userInfo.Admin {
-		if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
-			for _, org := range userInfo.Organizations {
-				if org.Slug == adminOverride {
-					activeOrg = org
-					break
+	// Priority 2: org slug from the state param (explicit destination URL).
+	// First try the user's own orgs; for admins, fall back to a DB lookup
+	// since they may access orgs they aren't a member of.
+	if !activeOrgSelected {
+		if org, ok := activeOrganizationFromState(payload, userInfo.Organizations); ok {
+			activeOrgID = org.ID
+			activeOrgSelected = true
+		} else if userInfo.Admin {
+			if slug := organizationSlugFromState(payload); slug != "" {
+				if orgMeta, err := s.orgRepo.GetOrganizationMetadataBySlug(ctx, slug); err == nil {
+					activeOrgID = orgMeta.ID
+					activeOrgSelected = true
 				}
 			}
 		}
 	}
 
-	orgMetadata, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:          activeOrg.ID,
-		Name:        activeOrg.Name,
-		Slug:        activeOrg.Slug,
-		WorkosID:    conv.PtrToPGText(activeOrg.WorkosID),
-		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
-	})
+	// Priority 3: org the user selected in the IDP auth flow (WorkOS AuthKit).
+	if !activeOrgSelected && idpUser.OrganizationID != "" {
+		if org, ok := activeOrganizationFromWorkOSID(idpUser.OrganizationID, userInfo.Organizations); ok {
+			activeOrgID = org.ID
+		}
+	}
+
+	orgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, activeOrgID)
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}
@@ -228,7 +355,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrInit, errors.New("this organization is disabled, please reach out to support@speakeasy.com for more information"))
 	}
 
-	session.ActiveOrganizationID = activeOrg.ID
+	session.ActiveOrganizationID = activeOrgID
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		return redirectWithError(authErrInit, err)
 	}
@@ -241,47 +368,69 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 }
 
 func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *gen.LoginResult, err error) {
-	// In local dev, use the site URL so the mock IDP redirects back through
-	// the Vite proxy (which forwards /rpc to the server). In production, use
-	// the server URL directly since the site may not proxy /rpc paths.
-	returnAddress := strings.TrimRight(s.cfg.GramServerURL, "/")
-	if s.cfg.Environment == "local" {
-		returnAddress = strings.TrimRight(s.cfg.SignInRedirectURL, "/")
+	callbackURL := s.buildCallbackURL(ctx)
+
+	nonce, err := generateNonce()
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error generating login nonce").Log(ctx, s.logger)
+	}
+	// Store the nonce binding (cookie value set by middleware) so the
+	// callback can verify the same browser that started login finishes it.
+	binding := nonceBindingFromContext(ctx)
+	if err := s.nonceStore.Set(ctx, nonceKey(nonce), binding, nonceTTL); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error storing login nonce").Log(ctx, s.logger)
 	}
 
-	// Get the request context to access the Host
-	requestCtx, ok := contextvalues.GetRequestContext(ctx)
-	if ok && requestCtx != nil && strings.Contains(requestCtx.Host, "speakeasyapi.vercel.app") && s.cfg.Environment == "dev" {
-		// For preview builds, use the request host with https protocol
-		returnAddress = "https://" + requestCtx.Host
+	state := encodeStateParam(payload, nonce)
+
+	authURL, err := s.identity.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
+		CallbackURL:     callbackURL,
+		State:           state,
+		Scope:           "",
+		ClientID:        "",
+		ScopesSupported: nil,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error building authorization URL").Log(ctx, s.logger)
 	}
-
-	values := url.Values{}
-	values.Add("return_url", returnAddress+"/rpc/auth.callback")
-	values.Add("state", encodeStateParam(payload))
-
-	location := s.cfg.SpeakeasyServerAddress + "/v1/speakeasy_provider/login?" + values.Encode()
 
 	return &gen.LoginResult{
-		Location: location,
+		Location: authURL.String(),
 	}, nil
+}
+
+// organizationSlugFromState extracts the org slug from the state param's
+// final destination URL. Returns "" if the state is missing or has no org slug.
+func organizationSlugFromState(payload *gen.CallbackPayload) string {
+	state := decodeStateParam(payload)
+	if state == nil {
+		return ""
+	}
+	return organizationSlugFromDestinationURL(state.FinalDestinationURL)
 }
 
 func activeOrganizationFromState(payload *gen.CallbackPayload, organizations []sessions.Organization) (sessions.Organization, bool) {
 	var empty sessions.Organization
 
-	state := decodeStateParam(payload)
-	if state == nil {
-		return empty, false
-	}
-
-	orgSlug := organizationSlugFromDestinationURL(state.FinalDestinationURL)
+	orgSlug := organizationSlugFromState(payload)
 	if orgSlug == "" {
 		return empty, false
 	}
 
 	for _, org := range organizations {
 		if org.Slug == orgSlug {
+			return org, true
+		}
+	}
+
+	return empty, false
+}
+
+func activeOrganizationFromWorkOSID(workosOrgID string, organizations []sessions.Organization) (sessions.Organization, bool) {
+	var empty sessions.Organization
+
+	for _, org := range organizations {
+		if org.WorkosID != nil && *org.WorkosID == workosOrgID {
 			return org, true
 		}
 	}
@@ -315,7 +464,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
 	}
@@ -349,11 +498,12 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
 	}
 
-	if err := s.sessions.StoreSession(ctx, sessions.Session{
-		SessionID:            *authCtx.SessionID,
-		ActiveOrganizationID: authCtx.ActiveOrganizationID,
-		UserID:               authCtx.UserID,
-	}); err != nil {
+	existingSession, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error loading existing session").Log(ctx, s.logger)
+	}
+	existingSession.ActiveOrganizationID = authCtx.ActiveOrganizationID
+	if err := s.sessions.UpdateSession(ctx, existingSession); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating auth session").Log(ctx, s.logger)
 	}
 
@@ -374,14 +524,11 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 		return nil, oops.E(oops.CodeUnexpected, err, "error invalidating user").Log(ctx, s.logger)
 	}
 
-	if err := s.sessions.RevokeTokenFromSpeakeasy(ctx, *authCtx.SessionID); err != nil {
-		s.logger.ErrorContext(ctx, "error revoking token", attr.SlogError(err))
-	}
-
 	if err := s.sessions.ClearSession(ctx, sessions.Session{
 		SessionID:            *authCtx.SessionID,
 		ActiveOrganizationID: authCtx.ActiveOrganizationID,
 		UserID:               authCtx.UserID,
+		WorkOSSessionID:      "",
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error clearing session").Log(ctx, s.logger)
 	}
@@ -394,38 +541,34 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
 	}
 
-	// For admins we only return the active organization to avoid overloaded returns
+	// For admins we only return the active organization to avoid overloaded returns.
+	// The active org may not be in the admin's membership list (admin override),
+	// so fall back to a DB lookup.
 	if userInfo.Admin {
+		found := false
 		for _, org := range userInfo.Organizations {
 			if org.ID == authCtx.ActiveOrganizationID {
 				userInfo.Organizations = []sessions.Organization{org}
+				found = true
+				break
 			}
 		}
-	}
-
-	// Write through the user-org relationship as a backfill mechanism.
-	// For admins, only upsert when the active org is one they actually belong to.
-	// Admins can override their active org to visit customer orgs via the admin
-	// override feature, and we must not insert a relationship row in those cases.
-	belongsToActiveOrg := !userInfo.Admin
-	for _, org := range userInfo.Organizations {
-		if org.ID == authCtx.ActiveOrganizationID {
-			belongsToActiveOrg = true
-			break
-		}
-	}
-
-	if belongsToActiveOrg {
-		if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			UserID:         authCtx.UserID,
-		}); err != nil {
-			s.logger.ErrorContext(ctx, "error upserting organization user relationship", attr.SlogError(err))
+		if !found {
+			orgMeta, err := s.orgRepo.GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
+			if err == nil {
+				userInfo.Organizations = []sessions.Organization{{
+					ID:                 orgMeta.ID,
+					Name:               orgMeta.Name,
+					Slug:               orgMeta.Slug,
+					WorkosID:           conv.FromPGText[string](orgMeta.WorkosID),
+					UserWorkspaceSlugs: nil,
+				}}
+			}
 		}
 	}
 
@@ -514,73 +657,93 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeInvalid, errors.New("org name is required"), "org name is required")
 	}
 
-	// Only allow alphanumeric characters, spaces, hyphens, and underscores
-	validOrgNameRegex := regexp.MustCompile(`^[a-zA-Z0-9\s-_]+$`)
 	if !validOrgNameRegex.MatchString(payload.OrgName) {
 		return oops.E(oops.CodeInvalid, errors.New("organization name contains invalid characters"), "organization name contains invalid characters")
 	}
 
-	info, err := s.sessions.CreateOrgFromSpeakeasy(ctx, *authCtx.SessionID, payload.OrgName)
-	// invalid to insure we pull in the new org info on the next auth.info call
-	if invalidationErr := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); invalidationErr != nil {
-		return oops.E(oops.CodeUnexpected, invalidationErr, "error invalidating user").Log(ctx, s.logger)
-	}
-
+	slug, err := orgslug.FindUnique(ctx, s.orgRepo, orgslug.Slugify(payload.OrgName))
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error creating org").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error finding unique slug").Log(ctx, s.logger)
 	}
 
-	if len(info.Organizations) == 0 {
-		return oops.E(oops.CodeUnexpected, errors.New("no organizations returned from speakeasy"), "no organizations returned from speakeasy")
+	gramOrgID := "org_" + uuid.New().String()
+
+	// Provision the WorkOS org first so it exists before we create the Gram org.
+	workosOrgID, err := s.identity.ProvisionOrgInWorkOS(ctx, gramOrgID, payload.OrgName, authCtx.UserID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error provisioning organization in WorkOS").Log(ctx, s.logger)
 	}
 
-	session := sessions.Session{
-		SessionID:            *authCtx.SessionID,
-		UserID:               authCtx.UserID,
-		ActiveOrganizationID: info.Organizations[0].ID,
+	org, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          gramOrgID,
+		Name:        payload.OrgName,
+		Slug:        slug,
+		WorkosID:    pgtype.Text{String: workosOrgID, Valid: workosOrgID != ""},
+		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error creating organization").Log(ctx, s.logger)
 	}
 
-	if err := s.sessions.StoreSession(ctx, session); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error storing session").Log(ctx, s.logger)
-	}
-
-	whitelisted := false
-	if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:          info.Organizations[0].ID,
-		Name:        info.Organizations[0].Name,
-		Slug:        info.Organizations[0].Slug,
-		WorkosID:    conv.PtrToPGText(info.Organizations[0].WorkosID),
-		Whitelisted: conv.PtrToPGBool(&whitelisted),
+	if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: org.ID,
+		UserID:         conv.ToPGText(authCtx.UserID),
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error creating organization user relationship").Log(ctx, s.logger)
+	}
+
+	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error invalidating user info cache").Log(ctx, s.logger)
+	}
+
+	existingSession, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error loading existing session").Log(ctx, s.logger)
+	}
+	existingSession.ActiveOrganizationID = org.ID
+	if err := s.sessions.UpdateSession(ctx, existingSession); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error storing session").Log(ctx, s.logger)
 	}
 
 	return nil
 }
 
-func (s *Service) autoProvisionForAssistants(ctx context.Context, idToken string, userInfo *sessions.CachedUserInfo, session *sessions.Session) (string, error) {
-	info, err := s.sessions.CreateOrgFromSpeakeasy(ctx, idToken, generateLegibleOrgName())
+func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sessions.CachedUserInfo, session *sessions.Session) (string, error) {
+	orgName := generateLegibleOrgName()
+
+	slug, err := orgslug.FindUnique(ctx, s.orgRepo, orgslug.Slugify(orgName))
 	if err != nil {
-		return "", fmt.Errorf("create org via speakeasy: %w", err)
+		return "", fmt.Errorf("find unique slug: %w", err)
 	}
+
+	gramOrgID := "org_" + uuid.New().String()
+
+	// Provision the WorkOS org first so it exists before we create the Gram org.
+	workosOrgID, err := s.identity.ProvisionOrgInWorkOS(ctx, gramOrgID, orgName, userInfo.UserID)
+	if err != nil {
+		return "", fmt.Errorf("provision org in WorkOS: %w", err)
+	}
+
+	org, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          gramOrgID,
+		Name:        orgName,
+		Slug:        slug,
+		WorkosID:    pgtype.Text{String: workosOrgID, Valid: workosOrgID != ""},
+		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+	})
+	if err != nil {
+		return "", fmt.Errorf("create organization: %w", err)
+	}
+
+	if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: org.ID,
+		UserID:         conv.ToPGText(userInfo.UserID),
+	}); err != nil {
+		return "", fmt.Errorf("create org-user relationship: %w", err)
+	}
+
 	if invalidationErr := s.sessions.InvalidateUserInfoCache(ctx, userInfo.UserID); invalidationErr != nil {
 		return "", fmt.Errorf("invalidate user info cache: %w", invalidationErr)
-	}
-	if len(info.Organizations) == 0 {
-		return "", errors.New("speakeasy returned no organizations after register")
-	}
-
-	org := info.Organizations[0]
-
-	whitelisted := true
-	if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:          org.ID,
-		Name:        org.Name,
-		Slug:        org.Slug,
-		WorkosID:    conv.PtrToPGText(org.WorkosID),
-		Whitelisted: conv.PtrToPGBool(&whitelisted),
-	}); err != nil {
-		return "", fmt.Errorf("upsert organization metadata: %w", err)
 	}
 
 	projects, err := s.getProjectsOrSetupDefaults(ctx, org.ID)
@@ -685,11 +848,13 @@ func (s *Service) createDefaultProject(ctx context.Context, organizationID strin
 
 type loginState struct {
 	FinalDestinationURL string `json:"final_destination_url"`
+	Nonce               string `json:"nonce,omitempty"`
 }
 
-func encodeStateParam(payload *gen.LoginPayload) string {
+func encodeStateParam(payload *gen.LoginPayload, nonce string) string {
 	state := loginState{
 		FinalDestinationURL: conv.PtrValOr(payload.Redirect, ""),
+		Nonce:               nonce,
 	}
 
 	jsonBytes, err := json.Marshal(state)
@@ -723,6 +888,72 @@ func decodeStateParam(payload *gen.CallbackPayload) *loginState {
 
 	return state
 }
+
+// generateNonce produces a cryptographically random 16-byte hex string for use
+// as the OAuth state nonce.
+func generateNonce() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate nonce: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
+func nonceKey(nonce string) string {
+	return "auth:login_nonce:" + nonce
+}
+
+// validateAuthNonce validates that the OAuth callback was initiated by a Login call
+// that Gram controls, preventing CSRF attacks where an attacker crafts a
+// callback URL with a stolen authorization code. Without this, the state param
+// is caller-controlled base64 JSON with no server-side binding — an attacker
+// can forge it freely.
+//
+// The nonce is stored in Redis during Login with a short TTL and consumed
+// (deleted) here atomically so each nonce is single-use. The stored value is
+// the nonce-binding cookie that was set on the browser during Login — this
+// ties the nonce to the specific browser session, preventing login CSRF.
+func (s *Service) validateAuthNonce(ctx context.Context, payload *gen.CallbackPayload) error {
+	state := decodeStateParam(payload)
+	if state == nil || state.Nonce == "" {
+		return errors.New("missing or invalid state parameter")
+	}
+
+	key := nonceKey(state.Nonce)
+	var storedBinding string
+	if err := s.nonceStore.GetAndDelete(ctx, key, &storedBinding); err != nil {
+		return errors.New("invalid or expired login nonce")
+	}
+
+	// Verify the cookie binding matches what was stored during Login.
+	// This ensures the same browser that started the login flow is
+	// completing it, preventing login CSRF attacks.
+	cookieBinding := nonceBindingFromContext(ctx)
+	if cookieBinding == "" || subtle.ConstantTimeCompare([]byte(storedBinding), []byte(cookieBinding)) != 1 {
+		return errors.New("login session mismatch: nonce not bound to this browser")
+	}
+
+	return nil
+}
+
+// buildCallbackURL constructs the OIDC redirect_uri that the IDP will send the
+// user back to after authentication. Must match what Login passes to
+// BuildAuthorizationURL.
+func (s *Service) buildCallbackURL(ctx context.Context) string {
+	returnAddress := strings.TrimRight(s.cfg.GramServerURL, "/")
+	if s.cfg.Environment == "local" {
+		returnAddress = strings.TrimRight(s.cfg.SignInRedirectURL, "/")
+	}
+
+	if requestCtx, ok := contextvalues.GetRequestContext(ctx); ok && requestCtx != nil && strings.Contains(requestCtx.Host, "speakeasyapi.vercel.app") && s.cfg.Environment == "dev" {
+		returnAddress = "https://" + requestCtx.Host
+	}
+
+	return returnAddress + "/rpc/auth.callback"
+}
+
+// validOrgNameRegex allows alphanumeric characters, spaces, hyphens, and underscores.
+var validOrgNameRegex = regexp.MustCompile(`^[a-zA-Z0-9\s-_]+$`)
 
 // callbackRedirectURL determines the redirect location after authentication. It
 // only allows relative URLs to prevent open redirect attacks (see relativeURL).

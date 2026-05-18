@@ -3,5 +3,5 @@
   "recall_floor": null,
   "last_updated": "2026-05-07",
   "last_updated_by": "vishal@speakeasy.com",
-  "notes": "Floor stays at 0 after removing pi.jailbreak-persona entirely. The remaining heuristics produce zero false positives on this corpus (539 benigns). Any new FP fails CI. recall_floor stays null/soft."
+  "notes": "Floor stays at 0 after tightening encoded-payload around operational log noise. The remaining heuristics produce zero false positives on this corpus (549 benigns). Any new FP fails CI. recall_floor stays null/soft."
 }

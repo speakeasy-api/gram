@@ -24,7 +24,7 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 	{
 		err = json.Unmarshal([]byte(riskCreateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"enabled\": false,\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"enabled\": false,\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -64,6 +64,12 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 			v.PresidioEntities[i] = val
 		}
 	}
+	if body.PromptInjectionRules != nil {
+		v.PromptInjectionRules = make([]string, len(body.PromptInjectionRules))
+		for i, val := range body.PromptInjectionRules {
+			v.PromptInjectionRules[i] = val
+		}
+	}
 	{
 		var zero string
 		if v.Action == zero {
@@ -99,6 +105,35 @@ func BuildListRiskPoliciesPayload(riskListRiskPoliciesApikeyToken string, riskLi
 		}
 	}
 	v := &risk.ListRiskPoliciesPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetRiskCapabilitiesPayload builds the payload for the risk
+// getRiskCapabilities endpoint from CLI flags.
+func BuildGetRiskCapabilitiesPayload(riskGetRiskCapabilitiesApikeyToken string, riskGetRiskCapabilitiesSessionToken string, riskGetRiskCapabilitiesProjectSlugInput string) (*risk.GetRiskCapabilitiesPayload, error) {
+	var apikeyToken *string
+	{
+		if riskGetRiskCapabilitiesApikeyToken != "" {
+			apikeyToken = &riskGetRiskCapabilitiesApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetRiskCapabilitiesSessionToken != "" {
+			sessionToken = &riskGetRiskCapabilitiesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskGetRiskCapabilitiesProjectSlugInput != "" {
+			projectSlugInput = &riskGetRiskCapabilitiesProjectSlugInput
+		}
+	}
+	v := &risk.GetRiskCapabilitiesPayload{}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -153,7 +188,7 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 	{
 		err = json.Unmarshal([]byte(riskUpdateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.Action != nil {
@@ -201,6 +236,12 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 		v.PresidioEntities = make([]string, len(body.PresidioEntities))
 		for i, val := range body.PresidioEntities {
 			v.PresidioEntities[i] = val
+		}
+	}
+	if body.PromptInjectionRules != nil {
+		v.PromptInjectionRules = make([]string, len(body.PromptInjectionRules))
+		for i, val := range body.PromptInjectionRules {
+			v.PromptInjectionRules[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -421,6 +462,134 @@ func BuildGetRiskPolicyStatusPayload(riskGetRiskPolicyStatusID string, riskGetRi
 	}
 	v := &risk.GetRiskPolicyStatusPayload{}
 	v.ID = id
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListShadowMCPApprovalsPayload builds the payload for the risk
+// listShadowMCPApprovals endpoint from CLI flags.
+func BuildListShadowMCPApprovalsPayload(riskListShadowMCPApprovalsPolicyID string, riskListShadowMCPApprovalsApikeyToken string, riskListShadowMCPApprovalsSessionToken string, riskListShadowMCPApprovalsProjectSlugInput string) (*risk.ListShadowMCPApprovalsPayload, error) {
+	var err error
+	var policyID string
+	{
+		policyID = riskListShadowMCPApprovalsPolicyID
+		err = goa.MergeErrors(err, goa.ValidateFormat("policy_id", policyID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskListShadowMCPApprovalsApikeyToken != "" {
+			apikeyToken = &riskListShadowMCPApprovalsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListShadowMCPApprovalsSessionToken != "" {
+			sessionToken = &riskListShadowMCPApprovalsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListShadowMCPApprovalsProjectSlugInput != "" {
+			projectSlugInput = &riskListShadowMCPApprovalsProjectSlugInput
+		}
+	}
+	v := &risk.ListShadowMCPApprovalsPayload{}
+	v.PolicyID = policyID
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildApproveShadowMCPPayload builds the payload for the risk
+// approveShadowMCP endpoint from CLI flags.
+func BuildApproveShadowMCPPayload(riskApproveShadowMCPBody string, riskApproveShadowMCPApikeyToken string, riskApproveShadowMCPSessionToken string, riskApproveShadowMCPProjectSlugInput string) (*risk.ApproveShadowMCPPayload, error) {
+	var err error
+	var body ApproveShadowMCPRequestBody
+	{
+		err = json.Unmarshal([]byte(riskApproveShadowMCPBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"match\": \"abc123\",\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_name\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", body.PolicyID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskApproveShadowMCPApikeyToken != "" {
+			apikeyToken = &riskApproveShadowMCPApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskApproveShadowMCPSessionToken != "" {
+			sessionToken = &riskApproveShadowMCPSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskApproveShadowMCPProjectSlugInput != "" {
+			projectSlugInput = &riskApproveShadowMCPProjectSlugInput
+		}
+	}
+	v := &risk.ApproveShadowMCPPayload{
+		PolicyID:   body.PolicyID,
+		Match:      body.Match,
+		ServerName: body.ServerName,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildRevokeShadowMCPApprovalPayload builds the payload for the risk
+// revokeShadowMCPApproval endpoint from CLI flags.
+func BuildRevokeShadowMCPApprovalPayload(riskRevokeShadowMCPApprovalPolicyID string, riskRevokeShadowMCPApprovalMatch string, riskRevokeShadowMCPApprovalApikeyToken string, riskRevokeShadowMCPApprovalSessionToken string, riskRevokeShadowMCPApprovalProjectSlugInput string) (*risk.RevokeShadowMCPApprovalPayload, error) {
+	var err error
+	var policyID string
+	{
+		policyID = riskRevokeShadowMCPApprovalPolicyID
+		err = goa.MergeErrors(err, goa.ValidateFormat("policy_id", policyID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var match string
+	{
+		match = riskRevokeShadowMCPApprovalMatch
+	}
+	var apikeyToken *string
+	{
+		if riskRevokeShadowMCPApprovalApikeyToken != "" {
+			apikeyToken = &riskRevokeShadowMCPApprovalApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskRevokeShadowMCPApprovalSessionToken != "" {
+			sessionToken = &riskRevokeShadowMCPApprovalSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskRevokeShadowMCPApprovalProjectSlugInput != "" {
+			projectSlugInput = &riskRevokeShadowMCPApprovalProjectSlugInput
+		}
+	}
+	v := &risk.RevokeShadowMCPApprovalPayload{}
+	v.PolicyID = policyID
+	v.Match = match
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

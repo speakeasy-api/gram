@@ -53,15 +53,31 @@ type GenerateConfig struct {
 	// ProjectSlug is the publishing project's slug. The Cursor hooks endpoint
 	// requires it via the Gram-Project header (Claude's does not).
 	ProjectSlug string
+	// Version is stamped into every plugin.json. Callers should bump this on
+	// every publish so platform marketplaces (Claude Code, Cursor, Codex) treat
+	// the manifest as new and refresh installed copies. Empty falls back to
+	// the static default, preserving test ergonomics.
+	Version string
+}
+
+// pluginManifestVersion returns the version to stamp into generated
+// plugin.json files. Callers set cfg.Version to a per-publish value; the
+// "0.1.0" fallback exists so package tests don't need to construct a version
+// just to exercise unrelated assertions.
+func pluginManifestVersion(cfg GenerateConfig) string {
+	return conv.Default(cfg.Version, "0.1.0")
 }
 
 // claudeHookAsyncFlag returns the async flag for a Claude hook event.
-// Blocking events (PreToolUse, UserPromptSubmit) return false so Claude
-// waits for the deny/allow decision. All others return true for
-// fire-and-forget telemetry so Claude is not held up.
+// PreToolUse and UserPromptSubmit are blocking so Claude waits for the
+// deny/allow decision. Stop must also be blocking: when async=true,
+// Cowork (Claude Code) appears to skip dispatching the Stop hook entirely
+// — an apparent bug on the client side. Marking it synchronous is the
+// only reliable way to get Stop events to fire. All other events return
+// true for fire-and-forget telemetry so Claude is not held up.
 func claudeHookAsyncFlag(event string) *bool {
 	switch event {
-	case "UserPromptSubmit", "PreToolUse":
+	case "UserPromptSubmit", "PreToolUse", "Stop":
 		f := false
 		return &f
 	default:
@@ -369,7 +385,7 @@ func codexAuthPolicy(p PluginInfo, cfg GenerateConfig) string {
 func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p PluginInfo, cfg GenerateConfig) error {
 	pluginJSON, err := marshalJSON(codexPluginMeta{
 		Name:        name,
-		Version:     "0.1.0",
+		Version:     pluginManifestVersion(cfg),
 		Description: p.Description,
 		MCPServers:  "./.mcp.json",
 		Hooks:       "",
@@ -458,7 +474,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	pluginJSON, err := marshalJSON(claudePluginMeta{
 		Name:        name,
 		Description: "Gram observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Gram dashboard.",
-		Version:     "0.1.0",
+		Version:     pluginManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
 		UserConfig:  nil,
@@ -472,10 +488,20 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	// requires hooks at hooks/hooks.json, not at the plugin root. With the
 	// flat layout (hooks.json + hook.sh at root) Claude registers the plugin
 	// silently but never wires the hooks up.
+	//
+	// SessionStart is routed to a separate script (session_start.sh) that
+	// enriches the payload with an MCP server inventory before forwarding to
+	// Gram. The inventory is sourced from cmux's per-run local_<rid>.json in
+	// cowork environments, falling back to `claude mcp list` output when run
+	// under stock Claude Code. All other events use the standard hook.sh.
 	hookEvents := make(map[string][]claudeHookMatcher, len(ClaudeObservabilityHookEvents))
 	for _, event := range ClaudeObservabilityHookEvents {
+		script := "hook.sh"
+		if event == "SessionStart" {
+			script = "session_start.sh"
+		}
 		hookEvents[event] = []claudeHookMatcher{
-			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/hook.sh"`, Async: claudeHookAsyncFlag(event)}}},
+			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/` + script + `"`, Async: claudeHookAsyncFlag(event)}}},
 		}
 	}
 	hooksJSON, err := marshalJSON(claudeHooksConfig{Hooks: hookEvents})
@@ -485,6 +511,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "claude")
+	files[path.Join(subdir, "hooks/session_start.sh")] = renderClaudeSessionStartScript(cfg)
 
 	return nil
 }
@@ -511,7 +538,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir stri
 		Name:        name,
 		DisplayName: "Observability (Cursor)",
 		Description: "Gram observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Gram dashboard.",
-		Version:     "0.1.0",
+		Version:     pluginManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
 	})
@@ -594,7 +621,7 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	}
 	pluginJSON, err := marshalJSON(codexPluginMeta{
 		Name:        name,
-		Version:     "0.1.0",
+		Version:     pluginManifestVersion(cfg),
 		Description: "Gram observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Gram dashboard.",
 		MCPServers:  "",
 		Hooks:       "./hooks/hooks.json",
@@ -774,6 +801,150 @@ fi
 echo "${reason:-Gram hook returned HTTP ${http_code}}" >&2
 exit 2
 `, keyPrefix, cfg.ServerURL, authHeaders, platform)
+}
+
+// renderClaudeSessionStartScript produces the SessionStart-specific Claude
+// hook script. It enriches the payload with an MCP server inventory before
+// forwarding to Gram, picking the source by what the sandbox can see:
+//
+//   - cowork: when cmux's per-run config file (local_<rid>.json) is reachable
+//     via CLAUDE_PROJECT_DIR/.., we ship its remoteMcpServersConfig array
+//     verbatim as `additional_data.mcp_inventory_cowork`. This is the only
+//     host-side spot where the connector UUID is paired with the MCP URL.
+//   - Claude Code (default): shell out to `claude mcp list` and ship its raw
+//     output as `additional_data.mcp_inventory_claude_code`.
+//
+// The script is fire-and-forget (async=true in hooks.json): SessionStart has
+// no allow/deny decision to honor, so we always exit 0 and discard the
+// response body to keep latency invisible to Claude.
+//
+// Auth headers match renderHookScript so server-side attribution works:
+// Gram-Key always, Gram-Project when ProjectSlug is set.
+func renderClaudeSessionStartScript(cfg GenerateConfig) []byte {
+	keyPrefix := cfg.HooksAPIKey
+	if len(keyPrefix) > 12 {
+		keyPrefix = keyPrefix[:12]
+	}
+
+	authHeaders := fmt.Sprintf("  -H \"Gram-Key: %s\" \\\n", cfg.HooksAPIKey)
+	if cfg.ProjectSlug != "" {
+		authHeaders += fmt.Sprintf("  -H \"Gram-Project: %s\" \\\n", cfg.ProjectSlug)
+	}
+
+	return fmt.Appendf(nil, `#!/usr/bin/env bash
+# Generated by Gram. Do not edit — overwritten on every publish.
+# Key prefix: %s (correlate with the dashboard's API Keys page).
+#
+# SessionStart-specific hook: enriches the payload with the active MCP
+# server list and forwards it to Gram. Runs async, so we fire-and-forget —
+# SessionStart has no allow/deny decision to honor.
+#
+# Two execution environments are supported:
+#   - cowork: detected by the presence of cmux's per-run local_<rid>.json
+#     config file. We extract its remoteMcpServersConfig (connector UUID +
+#     URL pairs) and ship them as mcp_inventory_cowork.
+#   - Claude Code (default): shell out to ` + "`claude mcp list`" + ` and forward
+#     the human-readable output as mcp_inventory_claude_code.
+
+set -u
+
+server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
+
+payload=$(cat)
+
+mcp_inventory_claude_code=""
+mcp_inventory_cowork="null"
+
+# Locate cmux's per-run config file. CLAUDE_PROJECT_DIR is
+# .../local_<rid>/outputs; the config sits one directory up as
+# .../local_<rid>.json and lists the remote MCP connectors with their
+# connector UUIDs. That's the only spot on the host filesystem where the
+# UUID <-> URL pairing exists, so when we find it we ship it verbatim.
+local_run_json=""
+
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+  candidate_local_dir=$(dirname "$CLAUDE_PROJECT_DIR")
+  candidate_local_json="${candidate_local_dir}.json"
+  if [ -f "$candidate_local_json" ]; then
+    local_run_json="$candidate_local_json"
+  else
+    # SessionStart often fires before cmux writes the per-run config
+    # file. Fall back to the most-recent sibling local_*.json — the
+    # remoteMcpServersConfig block is account/org-scoped and identical
+    # across runs in the same subid directory, so any sibling is good
+    # enough for the UUID <-> URL mapping we care about.
+    parent_dir=$(dirname "$candidate_local_dir")
+    if [ -d "$parent_dir" ]; then
+      sibling=$(ls -t "$parent_dir"/local_*.json 2>/dev/null | head -1)
+      if [ -n "$sibling" ] && [ -f "$sibling" ]; then
+        local_run_json="$sibling"
+      fi
+    fi
+  fi
+fi
+
+if [ -n "$local_run_json" ] && command -v jq >/dev/null 2>&1; then
+  # Extract the connector UUID + URL pairs we actually care about.
+  # ` + "`tools`" + ` is dropped — it can be huge and we don't need it here.
+  inv=$(jq -c '
+    [
+      (.remoteMcpServersConfig // [])[]
+      | {
+          connector_uuid: .uuid,
+          name:           .name,
+          url:            .url,
+          source:         "claude.ai"
+        }
+    ]
+  ' "$local_run_json" 2>/dev/null)
+  [ -n "$inv" ] && mcp_inventory_cowork="$inv"
+elif command -v claude >/dev/null 2>&1; then
+  # Claude Code: ` + "`claude mcp list`" + ` health-checks every server, which can
+  # take seconds for stdio servers. Hard-cap wall time so a misbehaving
+  # server can't keep this hook alive forever; since the hook is async
+  # the latency is invisible to Claude anyway. macOS doesn't ship GNU
+  # ` + "`timeout`" + ` — prefer it, fall back to coreutils' ` + "`gtimeout`" + `, then to
+  # no timeout at all rather than failing.
+  if command -v timeout >/dev/null 2>&1; then
+    mcp_inventory_claude_code=$(timeout 15 claude mcp list 2>&1 || true)
+  elif command -v gtimeout >/dev/null 2>&1; then
+    mcp_inventory_claude_code=$(gtimeout 15 claude mcp list 2>&1 || true)
+  else
+    mcp_inventory_claude_code=$(claude mcp list 2>&1 || true)
+  fi
+fi
+
+enriched=$(MCP_CC="$mcp_inventory_claude_code" \
+           MCP_CW="$mcp_inventory_cowork" \
+           PAYLOAD="$payload" \
+           python3 -c '
+import json, os, sys
+try:
+    p = json.loads(os.environ["PAYLOAD"])
+except Exception:
+    sys.exit(1)
+ad = p.get("additional_data") or {}
+cc = os.environ.get("MCP_CC", "")
+if cc:
+    ad["mcp_inventory_claude_code"] = cc
+try:
+    cw = json.loads(os.environ.get("MCP_CW", "null"))
+except Exception:
+    cw = None
+if cw is not None:
+    ad["mcp_inventory_cowork"] = cw
+p["additional_data"] = ad
+print(json.dumps(p))
+') || enriched="$payload"
+
+curl -s -o /dev/null -X POST \
+%s  -H "Content-Type: application/json" \
+  -d "$enriched" \
+  --max-time 30 \
+  "${server_url}/rpc/hooks.claude" >/dev/null 2>&1 || true
+
+exit 0
+`, keyPrefix, cfg.ServerURL, authHeaders)
 }
 
 // codexHookApproval is a single [hooks.state] entry that pre-approves a Codex
@@ -1026,7 +1197,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	pluginJSON, err := marshalJSON(claudePluginMeta{
 		Name:        p.Slug,
 		Description: p.Description,
-		Version:     "0.1.0",
+		Version:     pluginManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
 		UserConfig:  userConfigPtr,
@@ -1078,7 +1249,7 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		Name:        name,
 		DisplayName: displayName,
 		Description: p.Description,
-		Version:     "0.1.0",
+		Version:     pluginManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
 	})

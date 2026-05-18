@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Outlet, useParams } from "react-router";
+import { InsightsAgentsContent } from "@/components/observe/InsightsAgents";
 import { InsightsEmployeeDetailContent } from "@/components/observe/InsightsEmployeeDetail";
 import { InsightsEmployeesContent } from "@/components/observe/InsightsEmployees";
 import { InsightsToolsContent } from "@/components/observe/InsightsTools";
@@ -69,6 +70,14 @@ export function InsightsEmployeeDetailPage() {
   return (
     <RequireScope scope="project:read" level="page">
       <InsightsEmployeeDetailContent />
+    </RequireScope>
+  );
+}
+
+export function InsightsAgentsPage() {
+  return (
+    <RequireScope scope="project:read" level="page">
+      <InsightsAgentsContent />
     </RequireScope>
   );
 }

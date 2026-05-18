@@ -242,6 +242,8 @@ SELECT
   pd.project_id,
   t.id,
   t.tool_urn,
+  t.type,
+  t.name,
   e.slug,
   t.read_only_hint,
   t.destructive_hint,
@@ -258,6 +260,8 @@ type FindExternalMCPToolEntriesForProjectsRow struct {
 	ProjectID       uuid.UUID
 	ID              uuid.UUID
 	ToolUrn         string
+	Type            string
+	Name            pgtype.Text
 	Slug            string
 	ReadOnlyHint    pgtype.Bool
 	DestructiveHint pgtype.Bool
@@ -279,6 +283,8 @@ func (q *Queries) FindExternalMCPToolEntriesForProjects(ctx context.Context, pro
 			&i.ProjectID,
 			&i.ID,
 			&i.ToolUrn,
+			&i.Type,
+			&i.Name,
 			&i.Slug,
 			&i.ReadOnlyHint,
 			&i.DestructiveHint,
@@ -623,6 +629,149 @@ func (q *Queries) GetMCPRegistryByID(ctx context.Context, id uuid.UUID) (GetMCPR
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listDirectExternalMCPToolDefinitions = `-- name: ListDirectExternalMCPToolDefinitions :many
+WITH latest_deployment AS (
+   SELECT d.id
+   FROM deployments d
+   JOIN deployment_statuses ds ON d.id = ds.deployment_id
+   WHERE d.project_id = $2
+     AND ds.status = 'completed'
+   ORDER BY d.seq DESC
+   LIMIT 1
+),
+target_deployment AS (
+   SELECT CASE
+            WHEN $3::uuid IS NULL
+              THEN (SELECT id FROM latest_deployment)
+            ELSE $3::uuid
+          END AS id
+)
+SELECT
+   t.id,
+   t.external_mcp_attachment_id,
+   t.tool_urn,
+   t.type,
+   t.name,
+   t.description,
+   t.schema,
+   t.remote_url,
+   t.transport_type,
+   t.requires_oauth,
+   t.oauth_version,
+   t.oauth_authorization_endpoint,
+   t.oauth_token_endpoint,
+   t.oauth_registration_endpoint,
+   t.oauth_scopes_supported,
+   t.header_definitions,
+   t.title,
+   t.read_only_hint,
+   t.destructive_hint,
+   t.idempotent_hint,
+   t.open_world_hint,
+   t.created_at,
+   t.updated_at,
+   e.deployment_id,
+   e.registry_id,
+   e.name AS registry_server_name,
+   e.slug,
+   e.registry_server_specifier
+FROM external_mcp_tool_definitions t
+JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
+WHERE e.deployment_id = (SELECT id FROM target_deployment)
+ AND t.type = 'direct'
+ AND ($1::text IS NULL
+      OR t.tool_urn LIKE $1 || '%' ESCAPE '\')
+ AND t.deleted IS FALSE
+ AND e.deleted IS FALSE
+ORDER BY t.id DESC
+`
+
+type ListDirectExternalMCPToolDefinitionsParams struct {
+	UrnPrefix    pgtype.Text
+	ProjectID    uuid.UUID
+	DeploymentID uuid.NullUUID
+}
+
+type ListDirectExternalMCPToolDefinitionsRow struct {
+	ID                         uuid.UUID
+	ExternalMcpAttachmentID    uuid.UUID
+	ToolUrn                    string
+	Type                       string
+	Name                       pgtype.Text
+	Description                pgtype.Text
+	Schema                     []byte
+	RemoteUrl                  string
+	TransportType              types.TransportType
+	RequiresOauth              bool
+	OauthVersion               string
+	OauthAuthorizationEndpoint pgtype.Text
+	OauthTokenEndpoint         pgtype.Text
+	OauthRegistrationEndpoint  pgtype.Text
+	OauthScopesSupported       []string
+	HeaderDefinitions          []byte
+	Title                      pgtype.Text
+	ReadOnlyHint               pgtype.Bool
+	DestructiveHint            pgtype.Bool
+	IdempotentHint             pgtype.Bool
+	OpenWorldHint              pgtype.Bool
+	CreatedAt                  pgtype.Timestamptz
+	UpdatedAt                  pgtype.Timestamptz
+	DeploymentID               uuid.UUID
+	RegistryID                 uuid.NullUUID
+	RegistryServerName         string
+	Slug                       string
+	RegistryServerSpecifier    string
+}
+
+func (q *Queries) ListDirectExternalMCPToolDefinitions(ctx context.Context, arg ListDirectExternalMCPToolDefinitionsParams) ([]ListDirectExternalMCPToolDefinitionsRow, error) {
+	rows, err := q.db.Query(ctx, listDirectExternalMCPToolDefinitions, arg.UrnPrefix, arg.ProjectID, arg.DeploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirectExternalMCPToolDefinitionsRow
+	for rows.Next() {
+		var i ListDirectExternalMCPToolDefinitionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ExternalMcpAttachmentID,
+			&i.ToolUrn,
+			&i.Type,
+			&i.Name,
+			&i.Description,
+			&i.Schema,
+			&i.RemoteUrl,
+			&i.TransportType,
+			&i.RequiresOauth,
+			&i.OauthVersion,
+			&i.OauthAuthorizationEndpoint,
+			&i.OauthTokenEndpoint,
+			&i.OauthRegistrationEndpoint,
+			&i.OauthScopesSupported,
+			&i.HeaderDefinitions,
+			&i.Title,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeploymentID,
+			&i.RegistryID,
+			&i.RegistryServerName,
+			&i.Slug,
+			&i.RegistryServerSpecifier,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listExternalMCPAttachments = `-- name: ListExternalMCPAttachments :many

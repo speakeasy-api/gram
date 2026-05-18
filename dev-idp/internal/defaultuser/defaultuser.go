@@ -3,9 +3,9 @@
 // called /rpc/devIdp.setCurrentUser, the dev-idp falls back to a user
 // derived from the local git committer config.
 //
-// Local modes (local-speakeasy / oauth2-1 / oauth2) synthesize a row in
+// Local modes (mock-workos / oauth2-1 / oauth2) synthesize a row in
 // the dev-idp's users table with the committer email + name and place it
-// in a "Speakeasy" organization. Each mode's currentUser is then upserted
+// in a default organization. Each mode's currentUser is then upserted
 // to point at that user, so the bootstrap fires at most once per mode
 // per dev-idp database.
 //
@@ -31,6 +31,11 @@ import (
 const (
 	DefaultOrgName = "Speakeasy"
 	DefaultOrgSlug = "speakeasy"
+
+	// DefaultOrgWorkosID is a stable WorkOS-style org ID assigned to the
+	// default "Speakeasy" org. Matches production format so Gram-side's
+	// organization_metadata.workos_id looks realistic in local dev.
+	DefaultOrgWorkosID = "org_devidp_speakeasy"
 )
 
 // userIDNamespace is a fixed UUID v5 namespace used to derive deterministic
@@ -104,8 +109,21 @@ func BootstrapLocalUser(ctx context.Context, db *sql.DB, mode string) (uuid.UUID
 		return uuid.Nil, fmt.Errorf("upsert default organization: %w", err)
 	}
 
+	// Stamp a WorkOS-style org ID so the Gram-side identity resolver
+	// sees a production-shaped workos_id in organization_metadata.
+	if !org.WorkosID.Valid {
+		org, err = queries.UpdateOrganization(ctx, repo.UpdateOrganizationParams{
+			ID:       org.ID,
+			WorkosID: sql.NullString{String: DefaultOrgWorkosID, Valid: true},
+			Ts:       now,
+		})
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("stamp workos_id on default org: %w", err)
+		}
+	}
+
 	// Seed the two default roles WorkOS provisions on every org so the
-	// local-speakeasy WorkOS-emulation endpoints have something to return
+	// mock-workos WorkOS-emulation endpoints have something to return
 	// from /authorization/organizations/{id}/roles even before any test
 	// calls CreateRole.
 	for _, r := range []struct {

@@ -21,6 +21,8 @@ type Service interface {
 	CreateRiskPolicy(context.Context, *CreateRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// List all risk analysis policies for the current project.
 	ListRiskPolicies(context.Context, *ListRiskPoliciesPayload) (res *ListRiskPoliciesResult, err error)
+	// Get server-side risk analysis capabilities for the current project.
+	GetRiskCapabilities(context.Context, *GetRiskCapabilitiesPayload) (res *RiskCapabilitiesResult, err error)
 	// Get a risk analysis policy by ID.
 	GetRiskPolicy(context.Context, *GetRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// Update a risk analysis policy.
@@ -34,6 +36,16 @@ type Service interface {
 	// Get the analysis status of a risk policy including progress and workflow
 	// state.
 	GetRiskPolicyStatus(context.Context, *GetRiskPolicyStatusPayload) (res *types.RiskPolicyStatus, err error)
+	// List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary
+	// Redis-backed storage; will move to a dedicated table once the feature
+	// graduates.
+	ListShadowMCPApprovals(context.Context, *ListShadowMCPApprovalsPayload) (res *ListShadowMCPApprovalsResult, err error)
+	// Approve a shadow-MCP server so the named policy stops blocking calls to it.
+	// `match` is the same opaque server identifier surfaced in `RiskResult.match`
+	// — typically a server URL, stdio command, or `mcp__<server>__` prefix.
+	ApproveShadowMCP(context.Context, *ApproveShadowMCPPayload) (res *types.ShadowMCPApproval, err error)
+	// Remove a previously-approved shadow-MCP server for a policy.
+	RevokeShadowMCPApproval(context.Context, *RevokeShadowMCPApprovalPayload) (err error)
 	// Manually trigger risk analysis for a policy, starting or signaling the drain
 	// workflow.
 	TriggerRiskAnalysis(context.Context, *TriggerRiskAnalysisPayload) (err error)
@@ -59,7 +71,21 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskPolicyStatus", "triggerRiskAnalysis"}
+var MethodNames = [13]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis"}
+
+// ApproveShadowMCPPayload is the payload type of the risk service
+// approveShadowMCP method.
+type ApproveShadowMCPPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The risk policy ID.
+	PolicyID string
+	// The MCP server identifier to approve.
+	Match string
+	// Display name of the MCP server (optional, for UI).
+	ServerName *string
+}
 
 // CreateRiskPolicyPayload is the payload type of the risk service
 // createRiskPolicy method.
@@ -73,6 +99,9 @@ type CreateRiskPolicyPayload struct {
 	Sources []string
 	// Presidio entity types to detect.
 	PresidioEntities []string
+	// Prompt-injection detection rule ids to enable in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier').
+	PromptInjectionRules []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.
@@ -92,6 +121,14 @@ type DeleteRiskPolicyPayload struct {
 	ProjectSlugInput *string
 	// The policy ID.
 	ID string
+}
+
+// GetRiskCapabilitiesPayload is the payload type of the risk service
+// getRiskCapabilities method.
+type GetRiskCapabilitiesPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
 }
 
 // GetRiskPolicyPayload is the payload type of the risk service getRiskPolicy
@@ -177,6 +214,42 @@ type ListRiskResultsResult struct {
 	NextCursor *string
 }
 
+// ListShadowMCPApprovalsPayload is the payload type of the risk service
+// listShadowMCPApprovals method.
+type ListShadowMCPApprovalsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The risk policy ID.
+	PolicyID string
+}
+
+// ListShadowMCPApprovalsResult is the result type of the risk service
+// listShadowMCPApprovals method.
+type ListShadowMCPApprovalsResult struct {
+	// The approved shadow-MCP servers for the policy (URL- or command-keyed).
+	Approvals []*types.ShadowMCPApproval
+}
+
+// RevokeShadowMCPApprovalPayload is the payload type of the risk service
+// revokeShadowMCPApproval method.
+type RevokeShadowMCPApprovalPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The risk policy ID.
+	PolicyID string
+	// The MCP server identifier to revoke — exactly the value used to approve.
+	Match string
+}
+
+// RiskCapabilitiesResult is the result type of the risk service
+// getRiskCapabilities method.
+type RiskCapabilitiesResult struct {
+	// Whether the prompt-injection ML classifier is configured on this server.
+	PiClassifierEnabled bool
+}
+
 // TriggerRiskAnalysisPayload is the payload type of the risk service
 // triggerRiskAnalysis method.
 type TriggerRiskAnalysisPayload struct {
@@ -201,6 +274,9 @@ type UpdateRiskPolicyPayload struct {
 	Sources []string
 	// Presidio entity types to detect.
 	PresidioEntities []string
+	// Prompt-injection detection rule ids to enable in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier').
+	PromptInjectionRules []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.

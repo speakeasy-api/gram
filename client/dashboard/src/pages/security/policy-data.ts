@@ -1380,7 +1380,13 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
       source: "presidio",
     },
   ],
-  prompt_injection: [],
+  prompt_injection: [
+    {
+      id: "deberta-v3-classifier",
+      title: "ML classifier (deberta-v3)",
+      source: "prompt_injection",
+    },
+  ],
   off_policy: [
     {
       id: "harmful-content-request",

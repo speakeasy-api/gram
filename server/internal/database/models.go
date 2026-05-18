@@ -25,6 +25,27 @@ type AgentExecution struct {
 	Deleted      bool
 }
 
+type AiIntegrationConfig struct {
+	CreatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	OrganizationID  string
+	Provider        string
+	ProjectID       uuid.UUID
+	ApiKeyEncrypted string
+	Enabled         bool
+	ID              uuid.UUID
+	Deleted         bool
+}
+
+type AiIntegrationSync struct {
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	AiIntegrationConfigID uuid.UUID
+	LastPolledAt          pgtype.Timestamptz
+	ID                    uuid.UUID
+}
+
 type ApiKey struct {
 	ID              uuid.UUID
 	OrganizationID  string
@@ -105,6 +126,7 @@ type AssistantRuntime struct {
 	LastHeartbeatAt     pgtype.Timestamptz
 	BackendMetadataJson []byte
 	EndedAt             pgtype.Timestamptz
+	RuntimeVersion      int16
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
@@ -756,6 +778,21 @@ type OrganizationFeature struct {
 	Deleted        bool
 }
 
+type OrganizationInvitation struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Email          string
+	TokenHash      string
+	InviterUserID  pgtype.Text
+	RoleSlug       pgtype.Text
+	State          string
+	ExpiresAt      pgtype.Timestamptz
+	AcceptedAt     pgtype.Timestamptz
+	RevokedAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type OrganizationMcpCollection struct {
 	ID             uuid.UUID
 	OrganizationID string
@@ -838,12 +875,13 @@ type OrganizationRoleAssignment struct {
 	WorkosLastEventID  pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
 }
 
 type OrganizationUserRelationship struct {
 	ID                 int64
 	OrganizationID     string
-	UserID             string
+	UserID             pgtype.Text
 	WorkosUserID       pgtype.Text
 	WorkosMembershipID pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz
@@ -1068,7 +1106,7 @@ type RemoteMcpServerHeader struct {
 
 type RemoteSession struct {
 	ID                    uuid.UUID
-	SubjectUrn            string
+	SubjectUrn            urn.SessionSubject
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionClientID uuid.UUID
 	AccessTokenEncrypted  string
