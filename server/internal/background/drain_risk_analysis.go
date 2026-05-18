@@ -21,20 +21,23 @@ import (
 const (
 	SignalRiskAnalysisRequested = "risk-analysis-requested"
 
-	drainFetchLimit          int32 = 20_000
-	drainBatchSize                 = 100
-	perDrainBatchConcurrency       = 1
+	drainBatchSize           = 100
+	perDrainBatchConcurrency = 1
+
+	// Presidio serializes per-call (~30 s worst-case) so a drainBatchSize
+	// batch can take up to ~50 min. On cancellation Temporal retries the
+	// whole activity per RetryPolicy below.
+	analyzeBatchStartToCloseTimeout = 50 * time.Minute
+)
+
+const (
+	drainFetchLimit int32 = 20_000
 
 	// DefaultRecentMessagesBudget caps the per-cycle drain triggered by
 	// new-message ingest and policy edits. Explicit user backfill
 	// (TriggerRiskAnalysis) can override this with a higher cap or 0
 	// (unbounded).
 	DefaultRecentMessagesBudget int32 = 100
-
-	// Presidio serializes per-call (~30 s worst-case) so a drainBatchSize
-	// batch can take up to ~50 min. On cancellation Temporal retries the
-	// whole activity per RetryPolicy below.
-	analyzeBatchStartToCloseTimeout = 50 * time.Minute
 )
 
 // DrainRiskAnalysisParams identifies the policy this workflow drains.

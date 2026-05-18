@@ -3,7 +3,6 @@ package background
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -85,12 +84,14 @@ func TestDrainWorkflow_SignalDuringDrainContinuesAsNew(t *testing.T) {
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
-	// Fetch is async: it lets a signal land before returning. This
+	// Signal from inside the fetch activity so it lands after the
+	// start-of-workflow drain but before the end-of-cycle drain. This
 	// models a real signal arriving mid-cycle (e.g. a backfill click
 	// while ingest-triggered drain is in flight). The workflow should
 	// pick up that signal at the end-of-cycle drain and ContinueAsNew.
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, _ risk_analysis.FetchUnanalyzedArgs) (*risk_analysis.FetchUnanalyzedResult, error) {
+			env.SignalWorkflow(SignalRiskAnalysisRequested, SignalNewMessagesPayload{MaxMessages: 0})
 			return &risk_analysis.FetchUnanalyzedResult{MessageIDs: nil}, nil
 		},
 		activity.RegisterOptions{Name: "FetchUnanalyzedMessages"},
@@ -103,13 +104,6 @@ func TestDrainWorkflow_SignalDuringDrainContinuesAsNew(t *testing.T) {
 		},
 		activity.RegisterOptions{Name: "AnalyzeBatch"},
 	)
-
-	// Delay > 0 so the signal arrives after the workflow's start-time
-	// signal drain. Otherwise it would be absorbed at the top and the
-	// run would simply complete.
-	env.RegisterDelayedCallback(func() {
-		env.SignalWorkflow(SignalRiskAnalysisRequested, SignalNewMessagesPayload{MaxMessages: 0})
-	}, time.Millisecond)
 
 	env.ExecuteWorkflow(DrainRiskAnalysisWorkflow, DrainRiskAnalysisParams{
 		ProjectID:    uuid.New(),
