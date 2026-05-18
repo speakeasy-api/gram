@@ -132,7 +132,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 item={routes.riskOverview}
                 scope="project:read"
               />
-              <ScopeGatedNavItem item={routes.riskActivity} scope="org:admin" />
               <ScopeGatedNavItem
                 item={routes.policyCenter}
                 scope={["project:read", "project:write"]}
