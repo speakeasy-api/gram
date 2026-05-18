@@ -13,6 +13,7 @@ export interface LogWorkbenchProps {
   detail?: React.ReactNode;
   onScroll?: React.UIEventHandler<HTMLDivElement>;
   scrollRef?: React.Ref<HTMLDivElement>;
+  surfaceClassName?: string;
   contentClassName?: string;
   className?: string;
 }
@@ -29,6 +30,7 @@ export function LogWorkbench({
   detail,
   onScroll,
   scrollRef,
+  surfaceClassName,
   contentClassName,
   className,
 }: LogWorkbenchProps) {
@@ -53,7 +55,12 @@ export function LogWorkbench({
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden border-t">
-          <div className="bg-background flex h-full flex-col">
+          <div
+            className={cn(
+              "bg-background flex h-full flex-col",
+              surfaceClassName,
+            )}
+          >
             {status}
             {header}
             <div
