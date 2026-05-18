@@ -1,4 +1,4 @@
-h1:Z7GOSH4i9Wn6RjlZAmvQbQjLmOgvYHk+kTY55F42nmU=
+h1:bTzVi5bpYZJIK4q4ANMKnWZaCy3KMqaAxfXKSqnpmTE=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -181,3 +181,4 @@ h1:Z7GOSH4i9Wn6RjlZAmvQbQjLmOgvYHk+kTY55F42nmU=
 20260515094400_add_workos_role_assignments_deleted_at.sql h1:peR1HLGXocOJyh1WwnuLyDKzP+R47IMEB5Kho7lNuXg=
 20260515120000_ai-integration-configs.sql h1:bR1UTZ9lHjJUsJL1LY0ByUTkWefnmPOhovosRGRSJc0=
 20260515203441_ai-integration-syncs-add-lease-columns.sql h1:/6NR2l6J+DUIuk3wKhWhDdss2JK+QMXTaAGXHaBSTBY=
+20260518114737_add_effect_to_principal_grants.sql h1:qKtmsvcjIlLLVW++G7crFFuqVy3Fxz2v2o0HyOJAE5Q=

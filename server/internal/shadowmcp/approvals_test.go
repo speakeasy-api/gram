@@ -97,7 +97,7 @@ func TestAddShadowMCPApproval_IsIdempotent(t *testing.T) {
 	projectID := uuid.NewString()
 	policyID := uuid.NewString()
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		require.NoError(t, shadowmcp.AddShadowMCPApproval(t.Context(), c, projectID, policyID, shadowmcp.ShadowMCPApproval{
 			Match:      "https://mcp.example.com/server",
 			ServerName: "Example",

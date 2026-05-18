@@ -82,7 +82,8 @@ function EnvironmentsInner() {
         <Page.Section.Title>Environments</Page.Section.Title>
         <Page.Section.Description>
           Create re-usable environment configurations and share amongst multiple
-          MCP servers
+          MCP servers and Assistants. Commonly used to securely store sensitive
+          secrets used to access various sources.
         </Page.Section.Description>
         <Page.Section.CTA>
           {environments.length > 0 && (

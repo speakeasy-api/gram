@@ -40,6 +40,7 @@ function ScopeGatedNavItem({
           href={item.href()}
           active={item.active}
           Icon={item.Icon}
+          stage={item.stage}
         />
       </SidebarMenuItem>
     </RequireScope>
@@ -81,6 +82,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 item={routes.playground}
                 scope={["mcp:read", "mcp:write", "mcp:connect"]}
               />
+              <ScopeGatedNavItem
+                item={routes.deployments}
+                scope={["project:read", "project:write"]}
+              />
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -103,7 +108,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 item={routes.plugins}
                 scope={["project:read", "project:write"]}
               />
-              <ScopeGatedNavItem item={routes.elements} scope="project:read" />
               <ScopeGatedNavItem
                 item={routes.environments}
                 scope={["project:read", "project:write"]}

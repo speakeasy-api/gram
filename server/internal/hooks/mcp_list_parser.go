@@ -9,13 +9,13 @@ import (
 // format drifts we still log enough context to recover the original text.
 type MCPServerEntry struct {
 	RawLine       string `json:"raw_line"`
-	Source        string `json:"source"`                   // "claude.ai", "plugin", "local"
-	PluginName    string `json:"plugin_name,omitempty"`    // populated when Source == "plugin"
-	Name          string `json:"name"`                     // server name as displayed
-	URL           string `json:"url,omitempty"`            // populated for HTTP/SSE servers
-	Command       string `json:"command,omitempty"`        // populated for stdio servers
-	Transport     string `json:"transport,omitempty"`      // "HTTP", "SSE", "STDIO"
-	Status        string `json:"status"`                   // "connected", "needs_auth", "failed", "unknown"
+	Source        string `json:"source"`                // "claude.ai", "plugin", "local"
+	PluginName    string `json:"plugin_name,omitempty"` // populated when Source == "plugin"
+	Name          string `json:"name"`                  // server name as displayed
+	URL           string `json:"url,omitempty"`         // populated for HTTP/SSE servers
+	Command       string `json:"command,omitempty"`     // populated for stdio servers
+	Transport     string `json:"transport,omitempty"`   // "HTTP", "SSE", "STDIO"
+	Status        string `json:"status"`                // "connected", "needs_auth", "failed", "unknown"
 	StatusRaw     string `json:"status_raw"`
 	ConnectorUUID string `json:"connector_uuid,omitempty"` // populated for entries shipped by the cowork branch
 }
@@ -25,7 +25,7 @@ type MCPServerEntry struct {
 // (e.g. the leading "Checking MCP server health…" preamble, blank lines).
 func ParseClaudeMCPList(out string) []MCPServerEntry {
 	var entries []MCPServerEntry
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -104,11 +104,11 @@ func parseClaudeMCPListLine(line string) (MCPServerEntry, bool) {
 }
 
 func classifyMCPName(raw string) (source, plugin, name string) {
-	if strings.HasPrefix(raw, "claude.ai ") {
-		return "claude.ai", "", strings.TrimPrefix(raw, "claude.ai ")
+	if after, ok := strings.CutPrefix(raw, "claude.ai "); ok {
+		return "claude.ai", "", after
 	}
-	if strings.HasPrefix(raw, "plugin:") {
-		rest := strings.TrimPrefix(raw, "plugin:")
+	if after, ok := strings.CutPrefix(raw, "plugin:"); ok {
+		rest := after
 		if i := strings.Index(rest, ":"); i > 0 {
 			return "plugin", rest[:i], rest[i+1:]
 		}

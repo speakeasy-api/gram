@@ -111,8 +111,9 @@ export function OrgLogsInner() {
         Logs
       </Heading>
       <Type muted small className="mb-6">
-        Configure logging and telemetry settings for your MCP servers. When
+        Configure logging and telemetry settings for all your tool capture. When
         enabled, tool calls and traces are recorded for debugging and analytics.
+        These power the insights and logs page on the platform.
       </Type>
       <div className="border-border bg-card rounded-lg border p-4">
         <Stack gap={4}>

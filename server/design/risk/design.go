@@ -386,7 +386,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("triggerRiskAnalysis", func() {
-		Description("Manually trigger risk analysis for a policy, starting or signaling the drain workflow.")
+		Description("Manually trigger risk analysis for a policy, starting or signaling the drain workflow. Defaults to the most recent 100 unanalyzed messages; pass `limit=0` to backfill every unanalyzed message.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -394,6 +394,10 @@ var _ = Service("risk", func() {
 			security.ProjectPayload()
 			Attribute("id", String, "The policy ID.", func() {
 				Format(FormatUUID)
+			})
+			Attribute("limit", Int32, "Cap the backfill at the most recent N unanalyzed messages. Defaults to 100 (the recent-N drain budget). Pass 0 to request a full backfill of every unanalyzed message.", func() {
+				Minimum(0)
+				Default(100)
 			})
 			Required("id")
 		})

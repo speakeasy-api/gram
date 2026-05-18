@@ -68,6 +68,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
@@ -452,6 +453,16 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	if issuerGated {
 		newCtx, subject, ok := s.validateUserSessionToken(ctx, authToken, toolset)
 		if !ok {
+			// Accept an assistant-runtime JWT, but only when the assistant
+			// belongs to the toolset's project — otherwise a token minted
+			// in project A could resolve a remote_session linked under
+			// the same user in project B.
+			if assistCtx, claims, aerr := s.assistantTokens.Authorize(ctx, authToken); aerr == nil && claims.ProjectID == toolset.ProjectID.String() {
+				ssubj := urn.NewUserSubject(claims.UserID)
+				newCtx, subject, ok = assistCtx, &ssubj, true
+			}
+		}
+		if !ok {
 			return WriteAuthenticateChallenge(w, baseURL, mcpSlug, "expired or invalid access token")
 		}
 		ctx = newCtx
@@ -480,12 +491,12 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		}
 	}
 
-	var oauthProtectedResourceURL string
+	oauthProtectedResourceURL, err := url.JoinPath(baseURL, wellknown.OAuthProtectedResourcePath, mcpRouteBase, mcpSlug)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to build OAuth protected resource URL").Log(ctx, s.logger)
+	}
+
 	if !issuerGated {
-		oauthProtectedResourceURL, err = url.JoinPath(baseURL, wellknown.OAuthProtectedResourcePath, mcpRouteBase, mcpSlug)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to build OAuth protected resource URL").Log(ctx, s.logger)
-		}
 		switch {
 		case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
 			// External OAuth server flow — collect token if present
@@ -930,29 +941,6 @@ func parseMcpSessionID(headers http.Header) string {
 		session = uuid.New().String()
 	}
 	return session
-}
-
-// ResolveOAuthProxyUpstreamToken validates the caller's Gram-issued
-// Bearer for the supplied OAuth proxy server, refreshing stored upstream
-// credentials when needed, and returns the upstream Bearer that should
-// replace the caller's on the outgoing request to the remote MCP server.
-//
-// Returns ("", nil) when no upstream token is available — the caller
-// supplied no Bearer, the lookup found no stored upstream credentials,
-// or token validation failed in a non-fatal way. Callers should fall
-// through to "forward with no Authorization." A non-nil error is fatal
-// and the caller should reject the request.
-//
-// TODO: this method is currently a stub that always returns ("", nil).
-// The supporting oauth machinery (oauthService.ValidateAccessToken,
-// RefreshProxyToken, and the underlying ExternalSecret storage) is keyed
-// by toolset_id today; generalising the resource model so it can be
-// keyed by mcp_servers.id is a prerequisite to wiring this up. Until
-// that lands, OAuth-proxy-backed mcp_servers behave like a public
-// no-token flow at this layer (the upstream remote MCP returns 401 if
-// it requires auth).
-func (s *Service) ResolveOAuthProxyUpstreamToken(_ context.Context, _, _ uuid.UUID, _ string) (string, error) {
-	return "", nil
 }
 
 // RequirePrivateIdentityAuth runs identity authentication for a non-public

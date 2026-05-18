@@ -20,12 +20,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/memory/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -243,9 +241,6 @@ const (
 	forgetOutcomeForgotten = "forgotten"
 	forgetOutcomeNoMatch   = "no_match"
 	forgetOutcomeAmbiguous = "ambiguous"
-
-	forgetReasonToolForget       = "tool_forget"
-	forgetReasonManualUUIDDelete = "manual_uuid_delete"
 )
 
 func (s *MemoryService) Remember(
@@ -389,25 +384,6 @@ func (s *MemoryService) Remember(
 	})
 	if err != nil {
 		return zero, oops.E(oops.CodeUnexpected, err, "insert memory").Log(ctx, s.logger)
-	}
-
-	threadID := uuid.Nil
-	if originThread.Valid {
-		threadID = originThread.UUID
-	}
-
-	if err := s.audit.LogAssistantMemoryCreate(ctx, tx, audit.LogAssistantMemoryCreateEvent{
-		OrganizationID:   organizationID,
-		ProjectID:        projectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		MemoryID:         inserted.ID,
-		AssistantID:      assistantID,
-		ThreadID:         threadID,
-		ContentPreview:   conv.TruncateString(content, contentPreviewMaxRunes),
-	}); err != nil {
-		return zero, oops.E(oops.CodeUnexpected, err, "log memory create audit").Log(ctx, s.logger)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -684,25 +660,6 @@ func (s *MemoryService) Forget(
 		return zero, oops.E(oops.CodeUnexpected, err, "soft delete memory").Log(ctx, s.logger)
 	}
 
-	threadID := uuid.Nil
-	if principal, hasPrincipal := contextvalues.GetAssistantPrincipal(ctx); hasPrincipal {
-		threadID = principal.ThreadID
-	}
-
-	if err := s.audit.LogAssistantMemoryDelete(ctx, tx, audit.LogAssistantMemoryDeleteEvent{
-		OrganizationID:   organizationID,
-		ProjectID:        projectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		MemoryID:         target.ID,
-		AssistantID:      assistantID,
-		ThreadID:         threadID,
-		Reason:           forgetReasonToolForget,
-	}); err != nil {
-		return zero, oops.E(oops.CodeUnexpected, err, "log memory delete audit").Log(ctx, s.logger)
-	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return zero, oops.E(oops.CodeUnexpected, err, "commit forget transaction").Log(ctx, s.logger)
 	}
@@ -777,7 +734,7 @@ func (s *MemoryService) DeleteByID(ctx context.Context, projectID uuid.UUID, id 
 
 	txq := repo.New(tx)
 
-	deleted, err := txq.SoftDeleteAssistantMemoryByProject(ctx, repo.SoftDeleteAssistantMemoryByProjectParams{
+	_, err = txq.SoftDeleteAssistantMemoryByProject(ctx, repo.SoftDeleteAssistantMemoryByProjectParams{
 		ID:        id,
 		ProjectID: projectID,
 	})
@@ -786,20 +743,6 @@ func (s *MemoryService) DeleteByID(ctx context.Context, projectID uuid.UUID, id 
 			return oops.E(oops.CodeNotFound, nil, "memory not found")
 		}
 		return oops.E(oops.CodeUnexpected, err, "soft delete memory").Log(ctx, s.logger)
-	}
-
-	if err := s.audit.LogAssistantMemoryDelete(ctx, tx, audit.LogAssistantMemoryDeleteEvent{
-		OrganizationID:   deleted.OrganizationID,
-		ProjectID:        deleted.ProjectID.UUID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		MemoryID:         deleted.ID,
-		AssistantID:      deleted.AssistantID.UUID,
-		ThreadID:         uuid.Nil,
-		Reason:           forgetReasonManualUUIDDelete,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log memory delete audit").Log(ctx, s.logger)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

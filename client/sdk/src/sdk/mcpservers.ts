@@ -93,7 +93,7 @@ export class McpServers extends ClientSDK {
    * updateMcpServer mcpServers
    *
    * @remarks
-   * Update an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.
+   * Update an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.
    */
   async update(
     request: operations.UpdateMcpServerRequest,

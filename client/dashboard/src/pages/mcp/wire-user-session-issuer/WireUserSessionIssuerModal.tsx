@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
+import { useIsAdmin } from "@/contexts/Auth";
 import { Toolset } from "@/lib/toolTypes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components";
 import { Button, Stack } from "@speakeasy-api/moonshine";
@@ -520,9 +521,17 @@ function ClientStrategyChooser({
   onPick: (s: ClientStrategy) => void;
   canRegister: boolean;
 }) {
+  // Clone lifts the upstream client_id/client_secret out of an existing
+  // oauth_proxy_provider and re-persists them server-side. That credential
+  // motion is admin-only — non-admins are restricted to Register (DCR) or
+  // Manual paste.
+  const isAdmin = useIsAdmin();
+  const visibleOptions = isAdmin
+    ? STRATEGY_OPTIONS
+    : STRATEGY_OPTIONS.filter((opt) => opt.key !== "clone");
   return (
     <Stack gap={2}>
-      {STRATEGY_OPTIONS.map((opt) => {
+      {visibleOptions.map((opt) => {
         const disabled = opt.key === "register" && !canRegister;
         return (
           <button

@@ -77,6 +77,10 @@ type ApproveShadowMCPRequestBody struct {
 type TriggerRiskAnalysisRequestBody struct {
 	// The policy ID.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Cap the backfill at the most recent N unanalyzed messages. Defaults to 100
+	// (the recent-N drain budget). Pass 0 to request a full backfill of every
+	// unanalyzed message.
+	Limit int32 `form:"limit" json:"limit" xml:"limit"`
 }
 
 // CreateRiskPolicyResponseBody is the type of the "risk" service
@@ -2854,7 +2858,14 @@ func NewApproveShadowMCPRequestBody(p *risk.ApproveShadowMCPPayload) *ApproveSha
 // payload of the "triggerRiskAnalysis" endpoint of the "risk" service.
 func NewTriggerRiskAnalysisRequestBody(p *risk.TriggerRiskAnalysisPayload) *TriggerRiskAnalysisRequestBody {
 	body := &TriggerRiskAnalysisRequestBody{
-		ID: p.ID,
+		ID:    p.ID,
+		Limit: p.Limit,
+	}
+	{
+		var zero int32
+		if body.Limit == zero {
+			body.Limit = 100
+		}
 	}
 	return body
 }

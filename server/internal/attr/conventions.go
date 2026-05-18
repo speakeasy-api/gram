@@ -197,8 +197,12 @@ const (
 	OpenAPIPathKey                  = attribute.Key("gram.openapi.path")
 	OpenAPIVersionKey               = attribute.Key("gram.openapi.version")
 	OpenRouterKeyLimitKey           = attribute.Key("gram.openrouter.key.limit")
+	OpenRouterKeyPreviousLimitKey   = attribute.Key("gram.openrouter.key.previous_limit")
 	OrganizationAccountTypeKey      = attribute.Key("gram.org.account_type")
 	OrganizationInviteIDKey         = attribute.Key("gram.org.invite.id")
+	OrganizationInviteEmailKey      = attribute.Key("gram.org.invite.email")
+	OrganizationInviteStateKey      = attribute.Key("gram.org.invite.state")
+	OrganizationInviteRoleSlugKey   = attribute.Key("gram.org.invite.role_slug")
 	OutboxIDKey                     = attribute.Key("gram.outbox.id")
 	OutboxPublicIDKey               = attribute.Key("gram.outbox.public_id")
 	OutboxBatchSizeKey              = attribute.Key("gram.outbox.batch_size")
@@ -224,6 +228,7 @@ const (
 	RiskPolicyIDKey                 = attribute.Key("gram.risk.policy_id")
 	RiskPolicyNameKey               = attribute.Key("gram.risk.policy_name")
 	RiskRuleIDKey                   = attribute.Key("gram.risk.rule_id")
+	RiskSourceKey                   = attribute.Key("gram.risk.source")
 	RiskScanAttemptKey              = attribute.Key("gram.risk.scan.attempt")
 	RiskScanMaxAttemptsKey          = attribute.Key("gram.risk.scan.max_attempts")
 	RiskScanBatchIndexKey           = attribute.Key("gram.risk.scan.batch_index")
@@ -252,6 +257,7 @@ const (
 	ToolsetIDKey                    = attribute.Key("gram.toolset.id")
 	ToolsetSlugKey                  = attribute.Key("gram.toolset.slug")
 	ToolsetMCPSlugKey               = attribute.Key("gram.toolset.mcp_slug")
+	ToolsetMCPEnabledKey            = attribute.Key("gram.toolset.mcp_enabled")
 	VisibilityKey                   = attribute.Key("gram.visibility")
 
 	// Hooks
@@ -889,6 +895,13 @@ func SlogOpenAPIVersion(v string) slog.Attr      { return slog.String(string(Ope
 func OpenRouterKeyLimit(v int) attribute.KeyValue { return OpenRouterKeyLimitKey.Int(v) }
 func SlogOpenRouterKeyLimit(v int) slog.Attr      { return slog.Int(string(OpenRouterKeyLimitKey), v) }
 
+func OpenRouterKeyPreviousLimit(v int) attribute.KeyValue {
+	return OpenRouterKeyPreviousLimitKey.Int(v)
+}
+func SlogOpenRouterKeyPreviousLimit(v int) slog.Attr {
+	return slog.Int(string(OpenRouterKeyPreviousLimitKey), v)
+}
+
 func AccessMemberID(v string) attribute.KeyValue { return AccessMemberIDKey.String(v) }
 func SlogAccessMemberID(v string) slog.Attr      { return slog.String(string(AccessMemberIDKey), v) }
 
@@ -946,6 +959,18 @@ func SlogOrganizationAccountType(v string) slog.Attr {
 func OrganizationInviteID(v string) attribute.KeyValue { return OrganizationInviteIDKey.String(v) }
 func SlogOrganizationInviteID(v string) slog.Attr {
 	return slog.String(string(OrganizationInviteIDKey), v)
+}
+
+func OrganizationInviteEmail(v string) attribute.KeyValue {
+	return OrganizationInviteEmailKey.String(v)
+}
+
+func OrganizationInviteState(v string) attribute.KeyValue {
+	return OrganizationInviteStateKey.String(v)
+}
+
+func OrganizationInviteRoleSlug(v string) attribute.KeyValue {
+	return OrganizationInviteRoleSlugKey.String(v)
 }
 
 func Outcome[V ~string](v V) attribute.KeyValue { return OutcomeKey.String(string(v)) }
@@ -1016,6 +1041,9 @@ func SlogRiskPolicyName(v string) slog.Attr      { return slog.String(string(Ris
 
 func RiskRuleID(v string) attribute.KeyValue { return RiskRuleIDKey.String(v) }
 func SlogRiskRuleID(v string) slog.Attr      { return slog.String(string(RiskRuleIDKey), v) }
+
+func RiskSource(v string) attribute.KeyValue { return RiskSourceKey.String(v) }
+func SlogRiskSource(v string) slog.Attr      { return slog.String(string(RiskSourceKey), v) }
 
 func RiskScanAttempt(v int) attribute.KeyValue { return RiskScanAttemptKey.Int(v) }
 func SlogRiskScanAttempt(v int) slog.Attr      { return slog.Int(string(RiskScanAttemptKey), v) }
@@ -1109,6 +1137,9 @@ func SlogToolsetSlug(v string) slog.Attr      { return slog.String(string(Toolse
 
 func ToolsetMCPSlug(v string) attribute.KeyValue { return ToolsetMCPSlugKey.String(v) }
 func SlogToolsetMCPSlug(v string) slog.Attr      { return slog.String(string(ToolsetMCPSlugKey), v) }
+
+func ToolsetMCPEnabled(v bool) attribute.KeyValue { return ToolsetMCPEnabledKey.Bool(v) }
+func SlogToolsetMCPEnabled(v bool) slog.Attr      { return slog.Bool(string(ToolsetMCPEnabledKey), v) }
 
 func McpURL(v string) attribute.KeyValue { return McpURLKey.String(v) }
 func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey), v) }

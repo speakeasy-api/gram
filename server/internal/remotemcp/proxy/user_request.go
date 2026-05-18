@@ -19,6 +19,16 @@ type UserRequest struct {
 	// body caches the raw request body so it can be parsed and later replayed
 	// to the upstream forwarder without re-reading the original stream.
 	body []byte
+
+	// dirty is true when a typed request-side setter (e.g.
+	// [ToolsCallRequest.SetArguments]) has mutated the underlying
+	// JSON-RPC message. [refreshBody] re-marshals JSONRPCMessages back
+	// onto body so the forwarder sees the mutated payload.
+	//
+	// Direct mutation of JSONRPCMessages without a setter does not flip
+	// this flag and is a silent no-op against the wire — the framework
+	// can't know whether a raw mutation was intentional or accidental.
+	dirty bool
 }
 
 // BodyReader returns an io.Reader over the raw user request body so callers
@@ -66,4 +76,30 @@ func (r *UserRequest) ParseJSONRPCMessages(maxBytes int64) error {
 	r.JSONRPCMessages = []jsonrpc.Message{msg}
 
 	return nil
+}
+
+// refreshBody re-marshals JSONRPCMessages back to wire bytes and replaces
+// body if a typed setter flipped the dirty flag. Returns (true, nil) when a
+// refresh happened so callers can update headers (Content-Length is
+// auto-derived by net/http from the *bytes.Reader BodyReader returns) and
+// log the mutation. A no-op call returns (false, nil).
+//
+// Only the first JSONRPCMessages entry is materialized today because MCP
+// Streamable HTTP POST bodies carry a single message; the slice is sized
+// for future batch handling and the helper preserves that shape by
+// asserting len == 1.
+func (r *UserRequest) refreshBody() (bool, error) {
+	if !r.dirty {
+		return false, nil
+	}
+	if len(r.JSONRPCMessages) != 1 {
+		return false, fmt.Errorf("refresh body: expected 1 JSON-RPC message, got %d", len(r.JSONRPCMessages))
+	}
+	encoded, err := jsonrpc.EncodeMessage(r.JSONRPCMessages[0])
+	if err != nil {
+		return false, fmt.Errorf("encode mutated jsonrpc message: %w", err)
+	}
+	r.body = encoded
+	r.dirty = false
+	return true, nil
 }

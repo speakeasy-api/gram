@@ -6,6 +6,7 @@ import {
   InsightsProvider,
 } from "@/components/insights-sidebar";
 import { Page } from "@/components/page-layout";
+import { Heading } from "@/components/ui/heading";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -1106,10 +1107,12 @@ export function OrgAuditLogsInner() {
     <div className="flex w-full flex-col gap-4">
       <InsightsConfig contextInfo={insightsContext} />
       <div>
-        <Type className="font-medium">Recent activity across Gram</Type>
+        <Heading variant="h4" className="mb-2">
+          Recent activity across your organization
+        </Heading>
         <Type muted small className="mt-1">
           Review organization-wide and project-level actions in chronological
-          order.
+          order. Search by project, actions, or actor.
         </Type>
       </div>
 

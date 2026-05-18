@@ -1,6 +1,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { formatChartLabel, smoothData } from "@/components/chart/chartUtils";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
@@ -460,7 +461,10 @@ export function InsightsAgentsContent() {
             )}
           >
             <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="text-xl font-semibold">AI Agent Costs</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-semibold">AI Agent Costs</h1>
+                <ReleaseStageBadge stage="preview" />
+              </div>
               <p className="text-muted-foreground text-sm">
                 Track token consumption and costs across users, clients, and
                 models over {rangeLabel}.

@@ -301,7 +301,7 @@ export function InsightsToolsContent() {
           <div className="flex min-w-0 flex-col gap-1">
             <h1 className="text-xl font-semibold">Tools</h1>
             <p className="text-muted-foreground text-sm">
-              Monitor tool events and executions across all servers
+              Monitor tool events across all users and agents in your project
             </p>
           </div>
           <div className="relative flex-1">
@@ -417,7 +417,7 @@ function HooksInnerContent({
             <div className="flex min-w-0 flex-col gap-1">
               <h1 className="text-xl font-semibold">Tools</h1>
               <p className="text-muted-foreground text-sm">
-                Monitor tool events and executions across all servers
+                Monitor tool events across all users and agents in your project
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -462,7 +462,10 @@ function HooksInnerContent({
                   <span>Loading hook events...</span>
                 </div>
               ) : groupedTraces.length === 0 && activeFilters.length === 0 ? (
-                <HooksEmptyState />
+                <HooksEmptyState
+                  title="No Insights Generated"
+                  subtitle="Install Observability plugin in your AI agent to start generating tool insights"
+                />
               ) : groupedTraces.length === 0 ? (
                 <div className="py-12 text-center">
                   <div className="flex flex-col items-center gap-3">
