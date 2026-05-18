@@ -56,8 +56,6 @@ const (
 type OrganizationProvider interface {
 	DeleteOrganizationMembership(ctx context.Context, workosMembershipID string) error
 	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
-	CreatePasswordlessSession(ctx context.Context, opts workos.CreatePasswordlessSessionOpts) (*workos.PasswordlessSession, error)
-	AuthenticateWithInviteLink(ctx context.Context, code string) (*workos.InviteLinkProfile, error)
 	ListRoles(ctx context.Context, workosOrgID string) ([]workos.Role, error)
 }
 
@@ -66,6 +64,8 @@ var _ OrganizationProvider = (*workos.Client)(nil)
 // UserProvisioner handles user upsert logic shared between the normal auth
 // callback and the invite acceptance flow.
 type UserProvisioner interface {
+	BuildAuthorizationURL(ctx context.Context, params sessions.AuthURLParams) (*url.URL, error)
+	ExchangeCodeForTokens(ctx context.Context, code string) (*identity.IDPUserInfo, error)
 	UpsertUserFromIDP(ctx context.Context, idpUser *identity.IDPUserInfo) (string, error)
 }
 
@@ -126,8 +126,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
 
-	// Raw HTTP handler for the passwordless magic-link invite callback.
-	// WorkOS redirects here after the invitee clicks the magic link.
+	// Raw HTTP handler for Gram invite-token acceptance and the AuthKit
+	// callback used to authenticate the invitee.
 	mux.Handle("GET", inviteCallbackPath, service.handleInviteCallback)
 }
 
@@ -255,21 +255,17 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		attr.OrganizationInviteEmail(normalizedEmail),
 	))
 
-	// Create the WorkOS passwordless magic-link session BEFORE committing
-	// the invite. If this fails the transaction rolls back, avoiding an
-	// orphaned invite row with no magic link.
-	redirectURI := s.serverURL + inviteCallbackPath
-	pwlSess, pwlErr := s.orgs.CreatePasswordlessSession(ctx, workos.CreatePasswordlessSessionOpts{
-		Email:       row.Email,
-		RedirectURI: redirectURI,
-		ExpiresIn:   defaultInviteExpiryDays * 24 * 60 * 60,
-		State:       fmt.Sprintf("invite_token=%s", rawToken),
-	})
-	if pwlErr != nil {
-		span.RecordError(pwlErr)
-		return nil, oops.E(oops.CodeUnexpected, pwlErr, "failed to create invite link").Log(ctx, logger)
+	inviteLink := ""
+	if s.email != nil {
+		inviteURL, err := url.Parse(s.serverURL + inviteCallbackPath)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build invite link").Log(ctx, logger)
+		}
+		q := inviteURL.Query()
+		q.Set("invite_token", rawToken)
+		inviteURL.RawQuery = q.Encode()
+		inviteLink = inviteURL.String()
 	}
-	span.AddEvent("invite.workos_session_created")
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit invitation").Log(ctx, logger)
@@ -288,7 +284,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		}
 
 		if err := s.email.Send(ctx, row.Email, email.TeamInvite{
-			InviteLink:       pwlSess.Link,
+			InviteLink:       inviteLink,
 			OrganizationName: orgName,
 			InviterName:      inviterName,
 			InviterEmail:     inviterEmail,
@@ -296,7 +292,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 			span.RecordError(err)
 			span.AddEvent("invite.email_failed")
 			// Revoke the invite so the user can retry — the invitee never
-			// received the magic link so the invite is useless.
+			// received the invite link so the invite is useless.
 			_ = orgrepo.New(s.db).RevokeInvitation(ctx, row.ID)
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to send invite email").Log(ctx, logger)
 		}
@@ -774,11 +770,10 @@ func dbInvitationToGen(row *orgrepo.OrganizationInvitation, inviterUserID *strin
 	}
 }
 
-// handleInviteCallback processes the WorkOS passwordless magic-link redirect.
-// Flow: invitee clicks magic link → WorkOS authenticates → redirects here with
-// code + state. We exchange the code to verify the invitee's email, validate the
-// invite token, accept the invite, add the user to the org, then redirect to the
-// dashboard where the normal login flow will create a session for the invitee.
+// handleInviteCallback processes Gram invite-token links and the AuthKit
+// callback. Flow: invitee clicks the Gram invite link, we validate the invite
+// token, redirect to AuthKit, exchange the returned code, verify the email,
+// accept the invite, add the user to the org, then create a Gram session.
 func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	ctx, span := s.tracer.Start(r.Context(), "organizations.handleInviteCallback")
 	defer span.End()
@@ -788,29 +783,72 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, s.siteURL+"?signin_error="+url.QueryEscape(msg), http.StatusTemporaryRedirect)
 	}
 
-	code := r.URL.Query().Get("code")
-	if code == "" {
-		s.logger.ErrorContext(ctx, "invite callback: missing code parameter")
-		redirectError("invite link expired or already used")
-		return
+	repo := orgrepo.New(s.db)
+	loadInvite := func(rawToken string) (orgrepo.OrganizationInvitation, bool) {
+		var empty orgrepo.OrganizationInvitation
+		if rawToken == "" {
+			s.logger.ErrorContext(ctx, "invite callback: missing invite_token")
+			redirectError("invalid invite link")
+			return empty, false
+		}
+
+		invite, err := repo.GetInvitationByTokenHash(ctx, hashToken(rawToken))
+		if err != nil {
+			s.logger.ErrorContext(ctx, "invite callback: invite not found", attr.SlogError(err))
+			redirectError("invite not found")
+			return empty, false
+		}
+		span.SetAttributes(
+			attr.OrganizationInviteID(invite.ID.String()),
+			attr.OrganizationInviteEmail(invite.Email),
+			attr.OrganizationInviteState(invite.State),
+			attr.OrganizationID(invite.OrganizationID),
+		)
+		if invite.State != "pending" {
+			span.AddEvent("invite.callback.rejected", trace.WithAttributes(attr.OrganizationInviteState(invite.State)))
+			redirectError("invite already used or revoked")
+			return empty, false
+		}
+		if invite.ExpiresAt.Valid && invite.ExpiresAt.Time.Before(time.Now()) {
+			span.AddEvent("invite.callback.rejected", trace.WithAttributes(attr.OrganizationInviteState("expired")))
+			redirectError("invite expired")
+			return empty, false
+		}
+		span.AddEvent("invite.callback.token_validated")
+
+		return invite, true
 	}
 
-	// Exchange the WorkOS SSO code for the authenticated user's profile.
-	profile, err := s.orgs.AuthenticateWithInviteLink(ctx, code)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "invite callback: code exchange failed", attr.SlogError(err))
-		span.RecordError(err)
-		redirectError("invite link expired or already used")
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		rawToken := r.URL.Query().Get("invite_token")
+		invite, ok := loadInvite(rawToken)
+		if !ok {
+			return
+		}
+
+		state := url.Values{}
+		state.Set("invite_token", rawToken)
+		authURL, err := s.userProvision.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
+			CallbackURL:     s.serverURL + inviteCallbackPath,
+			Scope:           "",
+			State:           state.Encode(),
+			ClientID:        "",
+			ScopesSupported: nil,
+		})
+		if err != nil {
+			s.logger.ErrorContext(ctx, "invite callback: failed to build AuthKit authorization URL", attr.SlogError(err))
+			span.RecordError(err)
+			redirectError("failed to start invite login")
+			return
+		}
+		span.AddEvent("invite.callback.authkit_redirect", trace.WithAttributes(
+			attr.OrganizationInviteID(invite.ID.String()),
+			attr.OrganizationInviteEmail(invite.Email),
+		))
+		http.Redirect(w, r, authURL.String(), http.StatusTemporaryRedirect)
 		return
 	}
-	span.SetAttributes(
-		attr.WorkOSUserID(profile.ID),
-		attr.AuthUserEmail(profile.Email),
-	)
-	span.AddEvent("invite.callback.code_exchanged", trace.WithAttributes(
-		attr.WorkOSUserID(profile.ID),
-		attr.AuthUserEmail(profile.Email),
-	))
 
 	// Extract invite_token from the state parameter.
 	stateParam := r.URL.Query().Get("state")
@@ -820,35 +858,36 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		redirectError("invalid invite link")
 		return
 	}
-	tokenHash := hashToken(stateValues.Get("invite_token"))
 
-	// Look up and validate the invite.
-	invite, err := orgrepo.New(s.db).GetInvitationByTokenHash(ctx, tokenHash)
+	invite, ok := loadInvite(stateValues.Get("invite_token"))
+	if !ok {
+		return
+	}
+
+	// Exchange the AuthKit code through the same User Management path as normal login.
+	idpUser, err := s.userProvision.ExchangeCodeForTokens(ctx, code)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "invite callback: invite not found", attr.SlogError(err))
-		redirectError("invite not found")
+		s.logger.ErrorContext(ctx, "invite callback: code exchange failed", attr.SlogError(err))
+		span.RecordError(err)
+		redirectError("invite authentication failed")
+		return
+	}
+	if idpUser == nil {
+		s.logger.ErrorContext(ctx, "invite callback: empty identity from code exchange")
+		redirectError("invite authentication failed")
 		return
 	}
 	span.SetAttributes(
-		attr.OrganizationInviteID(invite.ID.String()),
-		attr.OrganizationInviteEmail(invite.Email),
-		attr.OrganizationInviteState(invite.State),
-		attr.OrganizationID(invite.OrganizationID),
+		attr.WorkOSUserID(idpUser.Sub),
+		attr.AuthUserEmail(idpUser.Email),
 	)
-	if invite.State != "pending" {
-		span.AddEvent("invite.callback.rejected", trace.WithAttributes(attr.OrganizationInviteState(invite.State)))
-		redirectError("invite already used or revoked")
-		return
-	}
-	if invite.ExpiresAt.Valid && invite.ExpiresAt.Time.Before(time.Now()) {
-		span.AddEvent("invite.callback.rejected", trace.WithAttributes(attr.OrganizationInviteState("expired")))
-		redirectError("invite expired")
-		return
-	}
-	span.AddEvent("invite.callback.token_validated")
+	span.AddEvent("invite.callback.code_exchanged", trace.WithAttributes(
+		attr.WorkOSUserID(idpUser.Sub),
+		attr.AuthUserEmail(idpUser.Email),
+	))
 
 	// Verify the authenticated email matches the invite.
-	inviteeEmail := strings.ToLower(profile.Email)
+	inviteeEmail := strings.ToLower(strings.TrimSpace(idpUser.Email))
 	if invite.Email != inviteeEmail {
 		s.logger.WarnContext(ctx, fmt.Sprintf("invite callback: email mismatch (invite=%s, authenticated=%s)", invite.Email, inviteeEmail))
 		span.AddEvent("invite.callback.email_mismatch", trace.WithAttributes(
@@ -858,25 +897,15 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		redirectError("email does not match invitation")
 		return
 	}
-
-	repo := orgrepo.New(s.db)
+	idpUser.Email = inviteeEmail
+	if strings.TrimSpace(idpUser.Name) == "" {
+		idpUser.Name = inviteeEmail
+	}
 
 	// Provision the user via the shared identity upsert path. This handles
 	// user creation, workos_id stamping, external_id sync, and PostHog events
-	// — the same logic the normal auth callback uses.
-	displayName := strings.TrimSpace(profile.FirstName + " " + profile.LastName)
-	if displayName == "" {
-		displayName = inviteeEmail
-	}
-	gramUserID, err := s.userProvision.UpsertUserFromIDP(ctx, &identity.IDPUserInfo{
-		Sub:             profile.ID,
-		Email:           inviteeEmail,
-		Name:            displayName,
-		Picture:         nil,
-		ExternalID:      "",
-		WorkOSSessionID: "",
-		OrganizationID:  "",
-	})
+	// using the same logic the normal auth callback uses.
+	gramUserID, err := s.userProvision.UpsertUserFromIDP(ctx, idpUser)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: failed to provision user", attr.SlogError(err))
 		span.RecordError(err)
@@ -908,7 +937,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			s.logger.WarnContext(ctx, "invite callback: failed to get org metadata for WorkOS membership", attr.SlogError(err))
 		} else if org.WorkosID.Valid && org.WorkosID.String != "" {
-			mid, err := s.orgs.CreateOrganizationMembership(ctx, profile.ID, org.WorkosID.String, invite.RoleSlug.String)
+			mid, err := s.orgs.CreateOrganizationMembership(ctx, idpUser.Sub, org.WorkosID.String, invite.RoleSlug.String)
 			if err != nil {
 				s.logger.WarnContext(ctx, "invite callback: failed to create WorkOS membership", attr.SlogError(err))
 				span.RecordError(err)
@@ -925,7 +954,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	if invite.RoleSlug.Valid {
 		if err := repo.SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
 			OrganizationID:     invite.OrganizationID,
-			WorkosUserID:       profile.ID,
+			WorkosUserID:       idpUser.Sub,
 			WorkosRoleSlugs:    []string{invite.RoleSlug.String},
 			UserID:             conv.ToPGText(gramUserID),
 			WorkosMembershipID: conv.ToPGText(workosMembershipID),
@@ -959,14 +988,14 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	span.AddEvent("invite.callback.invitation_accepted")
 
-	// Create a Gram session directly — no need to bounce through an external
-	// OIDC login. The invitee is already authenticated via the magic link.
+	// Create a Gram session directly. The invitee is already authenticated
+	// by AuthKit, and the WorkOS session ID is stored for logout revocation.
 	sessionID := uuid.New().String()
 	session := sessions.Session{
 		SessionID:            sessionID,
 		UserID:               gramUserID,
 		ActiveOrganizationID: invite.OrganizationID,
-		WorkOSSessionID:      "",
+		WorkOSSessionID:      idpUser.WorkOSSessionID,
 	}
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: failed to store session", attr.SlogError(err))

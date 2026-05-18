@@ -24,11 +24,6 @@ func TestService_SendInvite(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ti.orgs.On("CreatePasswordlessSession", mock.Anything, mock.Anything).Return(&thirdpartyworkos.PasswordlessSession{
-		ID:   "pwl_123",
-		Link: "https://stub.workos.com/passwordless/123",
-	}, nil).Once()
-
 	invite, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{
 		Email: "test@example.com",
 	})
@@ -53,11 +48,6 @@ func TestService_SendInvite_WithRoleID(t *testing.T) {
 		{ID: "test-role", Slug: "member", Name: "Member"},
 	}, nil).Once()
 
-	ti.orgs.On("CreatePasswordlessSession", mock.Anything, mock.Anything).Return(&thirdpartyworkos.PasswordlessSession{
-		ID:   "pwl_456",
-		Link: "https://stub.workos.com/passwordless/456",
-	}, nil).Once()
-
 	invite, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{
 		Email:  "test@example.com",
 		RoleID: &roleID,
@@ -76,11 +66,6 @@ func TestService_SendInvite_AllowsOrgAdminGrant(t *testing.T) {
 	require.NotNil(t, authCtx)
 
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
-
-	ti.orgs.On("CreatePasswordlessSession", mock.Anything, mock.Anything).Return(&thirdpartyworkos.PasswordlessSession{
-		ID:   "pwl_789",
-		Link: "https://stub.workos.com/passwordless/789",
-	}, nil).Once()
 
 	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "x@example.com"})
 	require.NoError(t, err)
@@ -102,10 +87,6 @@ func TestService_SendInvite_DuplicatePendingEmail(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-
-	ti.orgs.On("CreatePasswordlessSession", mock.Anything, mock.Anything).Return(&thirdpartyworkos.PasswordlessSession{
-		ID: "pwl_dup", Link: "https://stub.workos.com/passwordless/dup",
-	}, nil).Once()
 
 	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "dup@example.com"})
 	require.NoError(t, err)
@@ -135,32 +116,10 @@ func TestService_SendInvite_UnknownRoleID(t *testing.T) {
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code, "unknown role should return bad request")
 }
 
-func TestService_SendInvite_FailsWhenPasswordlessSessionFails(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestOrganizationsService(t)
-
-	ti.orgs.On("CreatePasswordlessSession", mock.Anything, mock.Anything).Return(
-		(*thirdpartyworkos.PasswordlessSession)(nil), fmt.Errorf("workos unavailable"),
-	).Once()
-
-	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{
-		Email: "nobody@example.com",
-	})
-	require.Error(t, err, "should fail when passwordless session creation fails")
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
-}
-
 func TestService_SendInvite_EmailFailureRevokesInvite(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceWithEmail(t)
-
-	ti.orgs.On("CreatePasswordlessSession", mock.Anything, mock.Anything).Return(&thirdpartyworkos.PasswordlessSession{
-		ID: "pwl_email_fail", Link: "https://stub.workos.com/passwordless/email_fail",
-	}, nil).Once()
 
 	ti.loops.On("SendTransactional", mock.Anything, mock.Anything).Return(
 		fmt.Errorf("loops API unavailable"),
@@ -179,10 +138,6 @@ func TestService_SendInvite_EmailSuccessReturnsInvite(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceWithEmail(t)
-
-	ti.orgs.On("CreatePasswordlessSession", mock.Anything, mock.Anything).Return(&thirdpartyworkos.PasswordlessSession{
-		ID: "pwl_email_ok", Link: "https://stub.workos.com/passwordless/email_ok",
-	}, nil).Once()
 
 	ti.loops.On("SendTransactional", mock.Anything, mock.Anything).Return(nil).Once()
 
@@ -211,11 +166,6 @@ func TestService_SendInvite_ExpiredInviteAllowsReinvite(t *testing.T) {
 	require.NoError(t, err)
 	err = orgrepo.New(ti.conn).ExpireInvitationForTest(ctx, row.ID)
 	require.NoError(t, err)
-
-	// SendInvite should auto-expire the stale invite and create a new one.
-	ti.orgs.On("CreatePasswordlessSession", mock.Anything, mock.Anything).Return(&thirdpartyworkos.PasswordlessSession{
-		ID: "pwl_reinvite", Link: "https://stub.workos.com/passwordless/reinvite",
-	}, nil).Once()
 
 	invite, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "reinvite@example.com"})
 	require.NoError(t, err)
