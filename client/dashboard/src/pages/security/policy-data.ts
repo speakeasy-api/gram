@@ -1386,7 +1386,7 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
   ],
   // prompt_injection is enabled at the category level; the detection
   // engine (deberta classifier vs L0 regex/keyword heuristics) is selected
-  // per-org via the prompt-injection-use-regex feature flag, not by the
+  // per-org via the prompt-injection-use-classifier feature flag, not by the
   // policy author.
   prompt_injection: [],
   off_policy: [

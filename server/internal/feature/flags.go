@@ -11,6 +11,6 @@ const (
 	// (the default), the scanner uses the L0 heuristic regex/keyword
 	// engine. The engine choice is an implementation detail kept out of
 	// the policy schema; the resulting finding rule_id is always
-	// `prompt-injection` regardless of engine.
+	// `prompt_injection` regardless of engine.
 	FlagPromptInjectionUseClassifier Flag = "prompt-injection-use-classifier"
 )
