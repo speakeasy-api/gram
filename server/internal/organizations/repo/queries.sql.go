@@ -30,6 +30,30 @@ func (q *Queries) AcceptInvitation(ctx context.Context, id uuid.UUID) (int64, er
 	return result.RowsAffected(), nil
 }
 
+const acceptPendingInvitationForMember = `-- name: AcceptPendingInvitationForMember :execrows
+UPDATE organization_invitations
+SET state = 'accepted',
+    accepted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND email = $2
+  AND state = 'pending'
+  AND expires_at > clock_timestamp()
+`
+
+type AcceptPendingInvitationForMemberParams struct {
+	OrganizationID string
+	Email          string
+}
+
+func (q *Queries) AcceptPendingInvitationForMember(ctx context.Context, arg AcceptPendingInvitationForMemberParams) (int64, error) {
+	result, err := q.db.Exec(ctx, acceptPendingInvitationForMember, arg.OrganizationID, arg.Email)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const attachWorkOSUserToOrg = `-- name: AttachWorkOSUserToOrg :exec
 INSERT INTO organization_user_relationships (
     organization_id,

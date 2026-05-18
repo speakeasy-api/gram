@@ -359,6 +359,18 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		return redirectWithError(authErrInit, err)
 	}
+	if inviteeEmail := strings.ToLower(strings.TrimSpace(userInfo.Email)); inviteeEmail != "" {
+		if _, err := s.orgRepo.AcceptPendingInvitationForMember(ctx, orgRepo.AcceptPendingInvitationForMemberParams{
+			OrganizationID: activeOrgID,
+			Email:          inviteeEmail,
+		}); err != nil {
+			s.logger.WarnContext(ctx, "failed to accept pending invite after login",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(activeOrgID),
+				attr.SlogAuthUserEmail(inviteeEmail),
+			)
+		}
+	}
 
 	return &gen.CallbackResult{
 		Location:      s.callbackRedirectURL(ctx, payload),

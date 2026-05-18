@@ -217,6 +217,16 @@ WHERE id = @id
   AND state = 'pending'
   AND expires_at > clock_timestamp();
 
+-- name: AcceptPendingInvitationForMember :execrows
+UPDATE organization_invitations
+SET state = 'accepted',
+    accepted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND email = @email
+  AND state = 'pending'
+  AND expires_at > clock_timestamp();
+
 -- name: ExpireInvitationForTest :exec
 UPDATE organization_invitations
 SET expires_at = clock_timestamp() - interval '1 hour'
