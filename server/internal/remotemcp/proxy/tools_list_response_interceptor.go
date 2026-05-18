@@ -16,10 +16,15 @@ import "context"
 // the JSON-RPC error code, message, and data; returning a plain error
 // falls back to a generic mapping (see [RejectErrorFromCause]).
 //
-// Payload mutation is not yet supported — changes to list.Request,
-// list.Result, or list.Error are silent no-ops and the response body is
-// relayed verbatim. Typed setters for payload modification will be
-// introduced when modification becomes a requirement.
+// Payload mutation is available via [ToolsListResponse.SetTools], which
+// rewrites the tools array before the response is relayed to the user.
+// Mutations are observed by every subsequent interceptor in the same
+// chain through the shared *Result pointer. Direct mutation of
+// list.Result fields without going through the setter is a silent no-op
+// against the wire — the framework only re-marshals the response when a
+// typed setter flips the dirty flag. If a downstream interceptor
+// rejects, prior mutations in the chain are discarded; the rejection
+// envelope wins.
 //
 // Responses to non-"tools/list" requests are not routed to this interface;
 // implement [RemoteMessageInterceptor] for RPC-agnostic hooks.

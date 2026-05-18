@@ -81,13 +81,14 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *xmcp.Service
-	mcpService     *mcp.Service
-	conn           *pgxpool.Pool
-	sessionManager *sessions.Manager
-	logger         *slog.Logger
-	enc            *encryption.Client
-	authzEngine    *authz.Engine
+	service         *xmcp.Service
+	mcpService      *mcp.Service
+	conn            *pgxpool.Pool
+	sessionManager  *sessions.Manager
+	logger          *slog.Logger
+	enc             *encryption.Client
+	authzEngine     *authz.Engine
+	shadowMCPClient *shadowmcp.Client
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -145,16 +146,17 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, conn, enc, guardianPolicy, cacheAdapter, serverURL)
 	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr)
 
-	svc := xmcp.NewService(logger, tracerProvider, meterProvider, conn, enc, authzEngine, guardianPolicy, posthogClient, billingClient, billingClient, mcpService, serverURL)
+	svc := xmcp.NewService(logger, tracerProvider, meterProvider, conn, enc, authzEngine, shadowMCPClient, guardianPolicy, posthogClient, billingClient, billingClient, mcpService, serverURL)
 
 	return ctx, &testInstance{
-		service:        svc,
-		mcpService:     mcpService,
-		conn:           conn,
-		sessionManager: sessionManager,
-		logger:         logger,
-		enc:            enc,
-		authzEngine:    authzEngine,
+		service:         svc,
+		mcpService:      mcpService,
+		conn:            conn,
+		sessionManager:  sessionManager,
+		logger:          logger,
+		enc:             enc,
+		authzEngine:     authzEngine,
+		shadowMCPClient: shadowMCPClient,
 	}
 }
 

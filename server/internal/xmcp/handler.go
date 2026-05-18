@@ -310,19 +310,48 @@ func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMc
 	// RecordMCPToolCall fires before the per-tool RBAC check in
 	// rpc_tools_call.go.
 	//
-	// The per-tool authz interceptor is only attached for private-visibility
-	// servers. Public servers bypass server-level RBAC by design (see
-	// serveRemoteBackend), so per-tool RBAC is also skipped — otherwise an
-	// unauthenticated public caller would be unable to invoke any tool.
+	// Per-tool RBAC interceptors (ToolsCallAuthzInterceptor on the
+	// request side; ToolsListMCPConnectFilterInterceptor on the response
+	// side) are only attached for private-visibility servers. Public
+	// servers bypass server-level RBAC by design (see
+	// serveRemoteBackend), so per-tool RBAC is also skipped — otherwise
+	// an unauthenticated public caller would be unable to invoke any
+	// tool, and the tools/list filter would have no grants to consult.
+	//
+	// The shadow-MCP interceptors are attached unconditionally — public
+	// AND private — because they enforce a project-scoped risk policy,
+	// not an identity-scoped grant. A project that enables tool-identity
+	// capture wants the property injected and validated on every call
+	// the proxy serves, regardless of whether the underlying transport
+	// authenticated the caller. The pair self-gates via
+	// shadowmcp.Client.IsEnabledForProject at intercept time; the lookup
+	// is Redis-cached (15-minute TTL) so the hot-path cost when the
+	// policy is disabled is a single cache GET.
 	toolsCallReqInterceptors := []proxy.ToolsCallRequestInterceptor{
 		NewToolsCallOTELCounterInterceptor(s.xmcpMetrics, serverID, logger),
 		s.toolsCallUsageLimitsInterceptor,
+		NewToolsCallShadowMCPValidateAndStripInterceptor(s.shadowmcpClient, serverID, projectID, logger),
 	}
 	if visibility == visibilityPrivate {
 		toolsCallReqInterceptors = append(toolsCallReqInterceptors,
 			NewToolsCallAuthzInterceptor(s.authz, serverID, projectID, logger),
 		)
 	}
+
+	// ToolsList response chain ordering: filter first (drop tools the
+	// caller can't see), then inject (only mutate schemas of tools that
+	// survive the filter — saves work and prevents leaking the
+	// proxy-only x-gram-toolset-id property on tools the caller couldn't
+	// invoke anyway).
+	toolsListRespInterceptors := []proxy.ToolsListResponseInterceptor{}
+	if visibility == visibilityPrivate {
+		toolsListRespInterceptors = append(toolsListRespInterceptors,
+			NewToolsListMCPConnectFilterInterceptor(s.authz, serverID, projectID, logger),
+		)
+	}
+	toolsListRespInterceptors = append(toolsListRespInterceptors,
+		NewToolsListShadowMCPInjectInterceptor(s.shadowmcpClient, serverID, projectID, logger),
+	)
 
 	return &proxy.Proxy{
 		GuardianPolicy:          s.guardianPolicy,
@@ -348,6 +377,6 @@ func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMc
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
 			NewToolsListPostHogEventInterceptor(s.posthog, serverID, logger),
 		},
-		ToolsListResponseInterceptors: nil,
+		ToolsListResponseInterceptors: toolsListRespInterceptors,
 	}
 }

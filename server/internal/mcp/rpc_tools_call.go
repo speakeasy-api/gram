@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -111,10 +112,11 @@ func handleToolsCall(
 	}
 
 	// Strip the x-gram-toolset-id property the agent echoed back from the
-	// tool's input schema (see injectToolsetIDConstant in rpc_tools_list.go).
-	// It is not part of the underlying tool's real schema, so passing it
-	// through would cause the executor to reject the call.
-	stripped, err := stripGramToolsetIDProperty(params.Arguments)
+	// tool's input schema (see shadowmcp.InjectToolsetIDConstant in
+	// rpc_tools_list.go). It is not part of the underlying tool's real
+	// schema, so passing it through would cause the executor to reject the
+	// call.
+	stripped, err := shadowmcp.StripToolsetIDProperty(params.Arguments)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool arguments").Log(ctx, logger)
 	}
