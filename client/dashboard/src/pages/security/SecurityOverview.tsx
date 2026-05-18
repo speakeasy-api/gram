@@ -90,7 +90,7 @@ function CategoryLabel({
 // Renders a rule id with a tooltip-quality fallback when the dashboard
 // hasn't seen this rule before. The backend may roll out new gitleaks,
 // presidio, or prompt_injection rules independently of the dashboard, so
-// every kebab id needs to display legibly without a code change.
+// every snake_case id needs to display legibly without a code change.
 function RuleLabel({ ruleId }: { source?: string; ruleId?: string }) {
   if (!ruleId) return <span className="font-mono text-xs">-</span>;
   const title = getRuleTitleFallback(ruleId);

@@ -40,10 +40,10 @@ func TestPresidio_DetectsEmail(t *testing.T) {
 
 	findings := results[0]
 	ruleIDs := findingRuleIDs(findings)
-	assert.Contains(t, ruleIDs, "pii.email-address", "expected EMAIL_ADDRESS entity")
+	assert.Contains(t, ruleIDs, "pii.email_address", "expected EMAIL_ADDRESS entity")
 
 	for _, f := range findings {
-		if f.RuleID == "pii.email-address" {
+		if f.RuleID == "pii.email_address" {
 			assert.Equal(t, "john.smith@acmecorp.com", f.Match)
 			assert.InDelta(t, 1.0, f.Confidence, 0.1)
 			assert.Equal(t, "presidio", f.Source)
@@ -69,7 +69,7 @@ func TestPresidio_BatchResultsMapBackToInputIndexes(t *testing.T) {
 	for i, findings := range results {
 		var got string
 		for _, f := range findings {
-			if f.RuleID == "pii.email-address" {
+			if f.RuleID == "pii.email_address" {
 				got = f.Match
 				break
 			}
@@ -91,7 +91,7 @@ func TestPresidio_DetectsCreditCard(t *testing.T) {
 
 	for i, findings := range results {
 		ruleIDs := findingRuleIDs(findings)
-		assert.Contains(t, ruleIDs, "pii.credit-card", "expected CREDIT_CARD for message %d", i)
+		assert.Contains(t, ruleIDs, "pii.credit_card", "expected CREDIT_CARD for message %d", i)
 	}
 }
 
@@ -110,7 +110,7 @@ func TestPresidio_DetectsPhoneNumber(t *testing.T) {
 	for _, findings := range results {
 		ruleIDs := findingRuleIDs(findings)
 		for _, id := range ruleIDs {
-			if id == "pii.phone-number" {
+			if id == "pii.phone_number" {
 				anyDetected = true
 			}
 		}
@@ -130,8 +130,8 @@ func TestPresidio_DetectsMultiplePIIInSingleMessage(t *testing.T) {
 	findings := results[0]
 	ruleIDs := findingRuleIDs(findings)
 	assert.Contains(t, ruleIDs, "pii.person")
-	assert.Contains(t, ruleIDs, "pii.email-address")
-	assert.Contains(t, ruleIDs, "pii.credit-card")
+	assert.Contains(t, ruleIDs, "pii.email_address")
+	assert.Contains(t, ruleIDs, "pii.credit_card")
 }
 
 // --- False positives: text that should NOT be flagged ---
@@ -267,7 +267,7 @@ func TestPresidio_StressBatch(t *testing.T) {
 	t.Logf("Stress test completed in %s. Finding counts: %v", elapsed, counts)
 
 	// Messages with emails should have findings
-	assert.Positive(t, counts["pii.email-address"], "expected some EMAIL_ADDRESS detections")
+	assert.Positive(t, counts["pii.email_address"], "expected some EMAIL_ADDRESS detections")
 }
 
 // --- Helpers ---

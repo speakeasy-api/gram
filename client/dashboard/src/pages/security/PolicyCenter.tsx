@@ -94,7 +94,7 @@ const ALL_CATEGORIES: RuleCategory[] = [
 
 /** Derive selected categories from a policy's sources + presidioEntities.
  *
- * DETECTION_RULES.id is the canonical `pii.<kebab>` form; the wire format
+ * DETECTION_RULES.id is the canonical `pii.<snake_case>` form; the wire format
  * stored on the policy is the UPPER_SNAKE entity name Presidio speaks. We
  * translate at this boundary so callers never see the wire format. */
 function policyToCategories(

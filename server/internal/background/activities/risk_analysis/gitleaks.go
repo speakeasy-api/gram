@@ -149,7 +149,7 @@ func ScanWithGitleaks(content string) ([]Finding, error) {
 
 // ConvertFindings converts raw gitleaks findings to the internal Finding type.
 // Rule ids are canonicalized through Normalize so they share the same
-// kebab-case shape as findings from other scanners. Gitleaks already ships
+// snake_case shape as findings from other scanners. Gitleaks already ships
 // human-readable descriptions, so they pass through as the fallback when the
 // catalog has no override.
 func ConvertFindings(content string, raw []report.Finding) []Finding {

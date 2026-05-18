@@ -23,7 +23,7 @@ func DescribePromptInjection() (string, string) {
 }
 
 // PromptInjectionScanner combines two detection engines that emit the
-// same canonical rule_id (`prompt-injection`):
+// same canonical rule_id (`prompt_injection`):
 //
 //   - L0 heuristic regex/keyword rules — always run, cheap, in-process.
 //   - L1 ML classifier (deberta-v3) — opt-in per org via the
