@@ -95,18 +95,18 @@ async function saveConfigs(values: Record<string, string>): Promise<void> {
   }
 }
 
-async function fallbackToLocal() {
+async function fallbackToMockFlyio() {
   await saveConfigs({
     GRAM_FUNCTIONS_PROVIDER: "local",
     GRAM_ASSISTANT_RUNTIME_PROVIDER: "flyio",
-    GRAM_ASSISTANT_RUNTIME_FLYIO_ORG: "unset",
-    GRAM_ASSISTANT_RUNTIME_FLYIO_API_TOKEN: "unset",
+    GRAM_ASSISTANT_RUNTIME_FLYIO_ORG: "TODO",
+    GRAM_ASSISTANT_RUNTIME_FLYIO_API_TOKEN: "TODO",
     GRAM_ASSISTANT_RUNTIME_FLYIO_REGION: "us",
     GRAM_ASSISTANT_RUNTIME_OCI_IMAGE: "gram-assistant-runtime",
     GRAM_ASSISTANT_RUNTIME_IMAGE_VERSION: "dev",
   });
   outro(
-    "Defaulted Gram Functions to the local provider and wrote boot-safe assistant runtime placeholders. To configure Fly.io later, run `mise run zero:fly --restart`.",
+    "Defaulted Gram Functions to the local provider and wrote TODO assistant runtime Fly.io placeholders. To configure real Fly.io credentials later, run `mise run zero:fly --restart`.",
   );
   process.exit(0);
 }
@@ -487,7 +487,7 @@ To deploy Gram Functions and assistant runtimes to Fly.io, you'll need:
     process.exit(0);
   }
   if (!proceed) {
-    await fallbackToLocal();
+    await fallbackToMockFlyio();
   }
 
   const s = spinner();
