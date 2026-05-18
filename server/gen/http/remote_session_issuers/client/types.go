@@ -169,8 +169,11 @@ type RegisterRemoteSessionIssuerResponseBody struct {
 	ClientIDIssuedAt *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
-	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	CreatedAt               *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt               *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateRemoteSessionIssuerResponseBody is the type of the
@@ -2114,15 +2117,16 @@ func NewCreateRemoteSessionIssuerGatewayError(body *CreateRemoteSessionIssuerGat
 // from a HTTP "OK" response.
 func NewRegisterRemoteSessionIssuerRemoteSessionClientOK(body *RegisterRemoteSessionIssuerResponseBody) *types.RemoteSessionClient {
 	v := &types.RemoteSessionClient{
-		ID:                    *body.ID,
-		ProjectID:             *body.ProjectID,
-		RemoteSessionIssuerID: *body.RemoteSessionIssuerID,
-		UserSessionIssuerID:   *body.UserSessionIssuerID,
-		ClientID:              *body.ClientID,
-		ClientIDIssuedAt:      *body.ClientIDIssuedAt,
-		ClientSecretExpiresAt: body.ClientSecretExpiresAt,
-		CreatedAt:             *body.CreatedAt,
-		UpdatedAt:             *body.UpdatedAt,
+		ID:                      *body.ID,
+		ProjectID:               *body.ProjectID,
+		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
+		UserSessionIssuerID:     *body.UserSessionIssuerID,
+		ClientID:                *body.ClientID,
+		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		CreatedAt:               *body.CreatedAt,
+		UpdatedAt:               *body.UpdatedAt,
 	}
 
 	return v
@@ -3093,6 +3097,11 @@ func ValidateRegisterRemoteSessionIssuerResponseBody(body *RegisterRemoteSession
 	}
 	if body.ClientSecretExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

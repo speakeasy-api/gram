@@ -169,8 +169,11 @@ type RegisterRemoteSessionIssuerResponseBody struct {
 	ClientIDIssuedAt string `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
-	CreatedAt             string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt             string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	CreatedAt               string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt               string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateRemoteSessionIssuerResponseBody is the type of the
@@ -1704,15 +1707,16 @@ func NewCreateRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *C
 // "remoteSessionIssuers" service.
 func NewRegisterRemoteSessionIssuerResponseBody(res *types.RemoteSessionClient) *RegisterRemoteSessionIssuerResponseBody {
 	body := &RegisterRemoteSessionIssuerResponseBody{
-		ID:                    res.ID,
-		ProjectID:             res.ProjectID,
-		RemoteSessionIssuerID: res.RemoteSessionIssuerID,
-		UserSessionIssuerID:   res.UserSessionIssuerID,
-		ClientID:              res.ClientID,
-		ClientIDIssuedAt:      res.ClientIDIssuedAt,
-		ClientSecretExpiresAt: res.ClientSecretExpiresAt,
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+		ID:                      res.ID,
+		ProjectID:               res.ProjectID,
+		RemoteSessionIssuerID:   res.RemoteSessionIssuerID,
+		UserSessionIssuerID:     res.UserSessionIssuerID,
+		ClientID:                res.ClientID,
+		ClientIDIssuedAt:        res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
+		CreatedAt:               res.CreatedAt,
+		UpdatedAt:               res.UpdatedAt,
 	}
 	return body
 }

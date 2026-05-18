@@ -247,13 +247,14 @@ func (s *Service) RegisterRemoteSessionIssuer(ctx context.Context, payload *gen.
 	}
 
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
-		ProjectID:             *authCtx.ProjectID,
-		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
-		ClientID:              dcrResp.ClientID,
-		ClientSecretEncrypted: secretCiphertext,
-		ClientIDIssuedAt:      issuedAt,
-		ClientSecretExpiresAt: expiresAt,
+		ProjectID:               *authCtx.ProjectID,
+		RemoteSessionIssuerID:   issuerID,
+		UserSessionIssuerID:     userIssuerID,
+		ClientID:                dcrResp.ClientID,
+		ClientSecretEncrypted:   secretCiphertext,
+		ClientIDIssuedAt:        issuedAt,
+		ClientSecretExpiresAt:   expiresAt,
+		TokenEndpointAuthMethod: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").Log(ctx, logger)

@@ -27532,6 +27532,12 @@ components:
                     type: string
                     description: The remote_session_issuer the new client is registered with.
                     format: uuid
+                token_endpoint_auth_method:
+                    type: string
+                    description: How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
+                    enum:
+                        - client_secret_basic
+                        - client_secret_post
                 user_session_issuer_id:
                     type: string
                     description: The user_session_issuer the new client is paired with.
@@ -28040,6 +28046,12 @@ components:
                     type: string
                     description: The owning remote_session_issuer id.
                     format: uuid
+                token_endpoint_auth_method:
+                    type: string
+                    description: How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
+                    enum:
+                        - client_secret_basic
+                        - client_secret_post
                 user_session_issuer_id:
                     type: string
                     description: The user_session_issuer this client is paired with.
@@ -33559,6 +33571,12 @@ components:
                     type: string
                     description: The owning remote_session_issuer id.
                     format: uuid
+                token_endpoint_auth_method:
+                    type: string
+                    description: How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
+                    enum:
+                        - client_secret_basic
+                        - client_secret_post
                 updated_at:
                     type: string
                     format: date-time
@@ -36355,6 +36373,12 @@ components:
                     type: string
                     description: The remote_session_client id.
                     format: uuid
+                token_endpoint_auth_method:
+                    type: string
+                    description: Change how the client authenticates at the issuer's token endpoint.
+                    enum:
+                        - client_secret_basic
+                        - client_secret_post
                 user_session_issuer_id:
                     type: string
                     description: Re-pair with a different user_session_issuer.

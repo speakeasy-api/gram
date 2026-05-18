@@ -77,6 +77,9 @@ type CloneClientFromOAuthProxyProviderPayload struct {
 	RemoteSessionIssuerID string
 	// The user_session_issuer the new client is paired with.
 	UserSessionIssuerID string
+	// How the cloned client authenticates at the issuer's token endpoint. Omit to
+	// default to client_secret_basic.
+	TokenEndpointAuthMethod *string
 }
 
 // CreateRemoteSessionClientPayload is the payload type of the
@@ -96,6 +99,9 @@ type CreateRemoteSessionClientPayload struct {
 	// When true, Gram fires an outbound RFC 7591 DCR call against the issuer's
 	// registration_endpoint and ignores client_id and client_secret.
 	AutoRegister *bool
+	// How the client authenticates at the issuer's token endpoint. Omit to default
+	// to client_secret_basic.
+	TokenEndpointAuthMethod *string
 }
 
 // DeleteRemoteSessionClientPayload is the payload type of the
@@ -154,6 +160,8 @@ type UpdateRemoteSessionClientPayload struct {
 	ClientSecret *string
 	// Re-pair with a different user_session_issuer.
 	UserSessionIssuerID *string
+	// Change how the client authenticates at the issuer's token endpoint.
+	TokenEndpointAuthMethod *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

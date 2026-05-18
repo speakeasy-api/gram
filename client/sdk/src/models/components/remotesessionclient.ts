@@ -5,8 +5,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
+ */
+export const RemoteSessionClientTokenEndpointAuthMethod = {
+  ClientSecretBasic: "client_secret_basic",
+  ClientSecretPost: "client_secret_post",
+} as const;
+/**
+ * How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
+ */
+export type RemoteSessionClientTokenEndpointAuthMethod = ClosedEnum<
+  typeof RemoteSessionClientTokenEndpointAuthMethod
+>;
 
 /**
  * A remote_session_client record. client_secret_encrypted is never returned.
@@ -34,12 +49,24 @@ export type RemoteSessionClient = {
    * The owning remote_session_issuer id.
    */
   remoteSessionIssuerId: string;
+  /**
+   * How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
+   */
+  tokenEndpointAuthMethod?:
+    | RemoteSessionClientTokenEndpointAuthMethod
+    | undefined;
   updatedAt: Date;
   /**
    * The user_session_issuer this client is paired with.
    */
   userSessionIssuerId: string;
 };
+
+/** @internal */
+export const RemoteSessionClientTokenEndpointAuthMethod$inboundSchema:
+  z.ZodMiniEnum<typeof RemoteSessionClientTokenEndpointAuthMethod> = z.enum(
+    RemoteSessionClientTokenEndpointAuthMethod,
+  );
 
 /** @internal */
 export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
@@ -62,6 +89,9 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
     id: z.string(),
     project_id: z.string(),
     remote_session_issuer_id: z.string(),
+    token_endpoint_auth_method: z.optional(
+      RemoteSessionClientTokenEndpointAuthMethod$inboundSchema,
+    ),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -76,6 +106,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       "created_at": "createdAt",
       "project_id": "projectId",
       "remote_session_issuer_id": "remoteSessionIssuerId",
+      "token_endpoint_auth_method": "tokenEndpointAuthMethod",
       "updated_at": "updatedAt",
       "user_session_issuer_id": "userSessionIssuerId",
     });
