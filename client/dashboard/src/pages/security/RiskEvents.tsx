@@ -1,6 +1,4 @@
 import { LogWorkbench } from "@/components/log-workbench";
-import { Page } from "@/components/page-layout";
-import { RequireScope } from "@/components/require-scope";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import {
   Select,
@@ -26,25 +24,10 @@ import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { CategoryLabel, MaskedMatch, RuleLabel } from "./risk-ui";
 
-const RISK_ACTIVITY_GRID =
+const RISK_EVENTS_GRID =
   "grid grid-cols-[172px_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_110px] gap-3";
 
-export default function RiskActivity() {
-  return (
-    <RequireScope scope="org:admin" level="page">
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body fullWidth fullHeight overflowHidden noPadding>
-          <RiskActivityContent />
-        </Page.Body>
-      </Page>
-    </RequireScope>
-  );
-}
-
-function RiskActivityContent() {
+export default function RiskEvents() {
   const client = useSdkClient();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -173,7 +156,7 @@ function RiskActivityContent() {
 
   return (
     <LogWorkbench
-      title="Risk Activity"
+      title="Risk Events"
       description="Review policy findings across recent analyzed chats."
       actions={
         <Button
@@ -181,7 +164,7 @@ function RiskActivityContent() {
           size="sm"
           onClick={() => resultsQuery.refetch()}
           disabled={resultsQuery.isFetching}
-          aria-label="Refresh risk activity"
+          aria-label="Refresh risk events"
         >
           <RefreshCw
             className={cn("h-4 w-4", resultsQuery.isFetching && "animate-spin")}
@@ -216,10 +199,10 @@ function RiskActivityContent() {
           </div>
         ) : null
       }
-      header={<RiskActivityHeader />}
+      header={<RiskEventsHeader />}
       footer={
         results.length > 0 ? (
-          <RiskActivityFooter
+          <RiskEventsFooter
             count={results.length}
             totalCount={totalCount}
             hasNextPage={resultsQuery.hasNextPage}
@@ -250,7 +233,7 @@ function RiskActivityContent() {
       scrollRef={containerRef}
       onScroll={handleScroll}
     >
-      <RiskActivityRows
+      <RiskEventsRows
         error={resultsQuery.error}
         isLoading={isInitialLoading}
         results={results}
@@ -263,11 +246,11 @@ function RiskActivityContent() {
   );
 }
 
-function RiskActivityHeader() {
+function RiskEventsHeader() {
   return (
     <div
       className={cn(
-        RISK_ACTIVITY_GRID,
+        RISK_EVENTS_GRID,
         "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-8 py-2.5 text-xs font-medium tracking-wide",
       )}
     >
@@ -283,7 +266,7 @@ function RiskActivityHeader() {
   );
 }
 
-function RiskActivityRows({
+function RiskEventsRows({
   error,
   isLoading,
   results,
@@ -307,7 +290,7 @@ function RiskActivityRows({
           <Icon name="circle-alert" className="text-destructive size-6" />
         </div>
         <span className="text-foreground font-medium">
-          Error loading risk activity
+          Error loading risk events
         </span>
         <span className="text-muted-foreground max-w-sm text-center text-sm">
           {error.message}
@@ -320,7 +303,7 @@ function RiskActivityRows({
     return (
       <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
         <Icon name="loader-circle" className="size-5 animate-spin" />
-        <span>Loading risk activity...</span>
+        <span>Loading risk events...</span>
       </div>
     );
   }
@@ -332,7 +315,7 @@ function RiskActivityRows({
           <Icon name="inbox" className="text-muted-foreground size-6" />
         </div>
         <span className="text-foreground font-medium">
-          No risk activity found
+          No risk events found
         </span>
         <span className="text-muted-foreground max-w-sm text-sm">
           Findings will appear here as messages are analyzed.
@@ -344,7 +327,7 @@ function RiskActivityRows({
   return (
     <>
       {results.map((result) => (
-        <RiskActivityRow
+        <RiskEventsRow
           key={result.id}
           result={result}
           policyNote={policyMessageById.get(result.policyId)}
@@ -357,7 +340,7 @@ function RiskActivityRows({
   );
 }
 
-function RiskActivityRow({
+function RiskEventsRow({
   result,
   policyNote,
   isExcluding,
@@ -377,7 +360,7 @@ function RiskActivityRow({
       role={result.chatId ? "button" : undefined}
       tabIndex={result.chatId ? 0 : undefined}
       className={cn(
-        RISK_ACTIVITY_GRID,
+        RISK_EVENTS_GRID,
         "hover:bg-muted/30 w-full items-center border-b px-8 py-3 text-left text-sm transition-colors",
         !result.chatId && "cursor-default",
       )}
@@ -438,7 +421,7 @@ function RiskActivityRow({
   );
 }
 
-function RiskActivityFooter({
+function RiskEventsFooter({
   count,
   totalCount,
   hasNextPage,

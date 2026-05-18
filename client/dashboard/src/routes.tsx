@@ -30,7 +30,12 @@ import Home from "./pages/home/Home";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
-import { LogsRoot, LogsMCPPage, LogsToolsPage } from "./pages/logs/Logs";
+import {
+  LogsRoot,
+  LogsMCPPage,
+  LogsRiskEventsPage,
+  LogsToolsPage,
+} from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
@@ -71,7 +76,6 @@ import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import SecurityOverview from "./pages/security/SecurityOverview";
-import RiskActivity from "./pages/security/RiskActivity";
 import PolicyCenter from "./pages/security/PolicyCenter";
 import Team from "./pages/team/Team";
 import SourceDetails from "./pages/sources/SourceDetails";
@@ -422,6 +426,11 @@ const ROUTE_STRUCTURE = {
         url: "mcp",
         component: LogsMCPPage,
       },
+      riskEvents: {
+        title: "Risk Events",
+        url: "risk-events",
+        component: LogsRiskEventsPage,
+      },
       agents: {
         title: "Agent Sessions",
         url: "agents",
@@ -441,12 +450,6 @@ const ROUTE_STRUCTURE = {
     icon: "shield",
     stage: "beta",
     component: SecurityOverview,
-  },
-  riskActivity: {
-    title: "Risk Activity",
-    url: "risk-activity",
-    icon: "shield",
-    component: RiskActivity,
   },
   policyCenter: {
     title: "Risk Policies",
