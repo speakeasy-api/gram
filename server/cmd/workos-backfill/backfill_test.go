@@ -373,6 +373,83 @@ func TestBackfillWorkOSOrganization_LinksExistingLocalUserByExternalID(t *testin
 	require.Equal(t, workosUserID, relationship.WorkosUserID.String)
 }
 
+func TestBackfillWorkOSOrganization_ValidationSkipsUnresolvableAssignmentRole(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newBackfillTestConn(t, "workos_backfill_unresolvable_assignment_role")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_backfill_unresolvable_role"
+	const workosOrgID = "org_01JBACKFILLUNRESOLVABLEROLE"
+	const workosUserID = "user_01JBACKFILLUNRESOLVABLEROLE"
+	const gramUserID = "gram_user_01JBACKFILLUNRESOLVABLEROLE"
+	const membershipID = "om_01JBACKFILLUNRESOLVABLEROLE"
+
+	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+
+	workosClient := workos.NewStubClient()
+	workosClient.UpsertOrganization(workos.Organization{
+		ID:         workosOrgID,
+		Name:       "Backfill Unresolvable Role",
+		ExternalID: "",
+		CreatedAt:  "2026-05-07T11:00:00Z",
+		UpdatedAt:  "2026-05-07T11:00:00Z",
+	})
+	user := workos.User{
+		ID:                workosUserID,
+		FirstName:         "Missing",
+		LastName:          "Role",
+		Email:             "missing-role@example.com",
+		ProfilePictureURL: "",
+		ExternalID:        gramUserID,
+		CreatedAt:         "2026-05-07T11:05:00Z",
+		UpdatedAt:         "2026-05-07T11:05:00Z",
+	}
+	member := workos.Member{
+		ID:             membershipID,
+		UserID:         workosUserID,
+		OrganizationID: workosOrgID,
+		Organization:   "Backfill Unresolvable Role",
+		RoleSlug:       "member",
+		Status:         "active",
+		CreatedAt:      "2026-05-07T11:05:00Z",
+		UpdatedAt:      "2026-05-07T11:05:00Z",
+	}
+	workosClient.UpsertUser(workosOrgID, user)
+	workosClient.UpsertOrganizationMembership(member)
+
+	activity := NewBackfillWorkOSOrganization(logger, conn, workosClient)
+	err := activity.Do(ctx, BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+
+	assignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, assignments)
+
+	err = validateOrganization(ctx, conn, orgExpectation{
+		workosOrgID: workosOrgID,
+		gramOrgID:   organizationID,
+		name:        "Backfill Unresolvable Role",
+		skipped:     false,
+		roles:       nil,
+		users: map[string]workos.User{
+			workosUserID: user,
+		},
+		members:           []workos.Member{member},
+		orgChanges:        changeCounts{Create: 0, Update: 0, Noop: 0, Delete: 0, StaleSkip: 0},
+		roleChanges:       changeCounts{Create: 0, Update: 0, Noop: 0, Delete: 0, StaleSkip: 0},
+		userChanges:       changeCounts{Create: 0, Update: 0, Noop: 0, Delete: 0, StaleSkip: 0},
+		membershipChanges: changeCounts{Create: 0, Update: 0, Noop: 0, Delete: 0, StaleSkip: 0},
+		assignmentChanges: changeCounts{Create: 0, Update: 0, Noop: 0, Delete: 0, StaleSkip: 1},
+		changeDetails:     nil,
+	})
+	require.NoError(t, err)
+}
+
 func TestBackfillWorkOSOrganization_MembershipWithNewerEventSkipsRoleSnapshot(t *testing.T) {
 	t.Parallel()
 

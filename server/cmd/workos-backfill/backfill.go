@@ -318,6 +318,13 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 
 	roleSlugs := []string{}
 	if member.RoleSlug != "" {
+		roleExists, err := activeAssignmentRoleExists(ctx, dbtx, organizationID, member.RoleSlug)
+		if err != nil {
+			return err
+		}
+		if !roleExists {
+			return nil
+		}
 		roleSlugs = []string{member.RoleSlug}
 	}
 	if err := orgQueries.SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{

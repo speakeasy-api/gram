@@ -487,7 +487,7 @@ func buildOrganizationPlan(ctx context.Context, db *pgxpool.Pool, workosClient *
 		if err != nil {
 			return nil, err
 		}
-		assignmentChanges, err := classifyAssignmentChanges(ctx, db, gramOrgID, skipped, users, members)
+		assignmentChanges, err := classifyAssignmentChanges(ctx, db, gramOrgID, skipped, roles, users, members)
 		if err != nil {
 			return nil, err
 		}
@@ -890,7 +890,7 @@ LIMIT 1`, organizationID, member.ID).Scan(&userID, &workosUserID, &rowUpdatedAt,
 	return "noop", nil
 }
 
-func classifyAssignmentChanges(ctx context.Context, db *pgxpool.Pool, organizationID string, skipped bool, users map[string]workos.User, members []workos.Member) (changeCounts, error) {
+func classifyAssignmentChanges(ctx context.Context, db *pgxpool.Pool, organizationID string, skipped bool, roles []workos.Role, users map[string]workos.User, members []workos.Member) (changeCounts, error) {
 	counts := changeCounts{Create: 0, Update: 0, Noop: 0, Delete: 0, StaleSkip: 0}
 	if skipped {
 		return counts, nil
@@ -903,6 +903,16 @@ func classifyAssignmentChanges(ctx context.Context, db *pgxpool.Pool, organizati
 		if !resolved {
 			counts.StaleSkip++
 			continue
+		}
+		if member.RoleSlug != "" {
+			available, err := plannedAssignmentRoleAvailable(ctx, db, organizationID, roles, member.RoleSlug)
+			if err != nil {
+				return changeCounts{}, err
+			}
+			if !available {
+				counts.StaleSkip++
+				continue
+			}
 		}
 		activeAssignments, missingUserAssignments, err := countActiveAssignments(ctx, db, organizationID, member.ID, gramUserID)
 		if err != nil {
@@ -949,6 +959,67 @@ WHERE organization_id = $1
 		return 0, 0, fmt.Errorf("count role assignments missing user for membership %q: %w", membershipID, err)
 	}
 	return count, missingUserCount, nil
+}
+
+func plannedAssignmentRoleAvailable(ctx context.Context, db *pgxpool.Pool, organizationID string, roles []workos.Role, roleSlug string) (bool, error) {
+	for _, role := range roles {
+		if role.Slug != roleSlug || role.Type != "OrganizationRole" {
+			continue
+		}
+		updatedAt, err := parseWorkOSTime(role.UpdatedAt)
+		if err != nil {
+			return false, fmt.Errorf("parse organization role %q updated_at: %w", role.Slug, err)
+		}
+		change, err := classifyRoleRow(ctx, db, "organization_roles", "organization_id = $1", []any{organizationID}, role, updatedAt)
+		if err != nil {
+			return false, fmt.Errorf("classify organization role %q: %w", role.Slug, err)
+		}
+		if change == "create" || change == "update" || change == "noop" {
+			return true, nil
+		}
+		return activeAssignmentRoleExists(ctx, db, organizationID, roleSlug)
+	}
+
+	return activeGlobalRoleExists(ctx, db, roleSlug)
+}
+
+func activeAssignmentRoleExists(ctx context.Context, db queryRower, organizationID string, roleSlug string) (bool, error) {
+	var exists bool
+	err := db.QueryRow(ctx, `
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_roles
+  WHERE organization_id = $1
+    AND workos_slug = $2
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+) OR EXISTS (
+  SELECT 1
+  FROM global_roles
+  WHERE workos_slug = $2
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+)`, organizationID, roleSlug).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check active role for assignment slug %q: %w", roleSlug, err)
+	}
+	return exists, nil
+}
+
+func activeGlobalRoleExists(ctx context.Context, db queryRower, roleSlug string) (bool, error) {
+	var exists bool
+	err := db.QueryRow(ctx, `
+SELECT EXISTS (
+  SELECT 1
+  FROM global_roles
+  WHERE workos_slug = $1
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+)`, roleSlug).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check active global role slug %q: %w", roleSlug, err)
+	}
+	return exists, nil
 }
 
 func addChange(counts changeCounts, change string) changeCounts {
@@ -1118,7 +1189,7 @@ func collectOrganizationChangeDetails(ctx context.Context, db *pgxpool.Pool, org
 	}
 	details = append(details, membershipDetails...)
 
-	assignmentDetails, err := collectAssignmentChangeDetails(ctx, db, gramOrgID, users, members)
+	assignmentDetails, err := collectAssignmentChangeDetails(ctx, db, gramOrgID, roles, users, members)
 	if err != nil {
 		return nil, err
 	}
@@ -1413,7 +1484,7 @@ LIMIT 1`, organizationID, member.ID).Scan(&userID, &workosUserID, &rowUpdatedAt,
 	return changeDetail{Entity: "membership", ID: member.ID, Action: "update", Fields: fields}, true, nil
 }
 
-func collectAssignmentChangeDetails(ctx context.Context, db *pgxpool.Pool, organizationID string, users map[string]workos.User, members []workos.Member) ([]changeDetail, error) {
+func collectAssignmentChangeDetails(ctx context.Context, db *pgxpool.Pool, organizationID string, roles []workos.Role, users map[string]workos.User, members []workos.Member) ([]changeDetail, error) {
 	details := make([]changeDetail, 0)
 	for _, member := range members {
 		gramUserID, resolved, err := expectedGramUserID(ctx, db, users[member.UserID])
@@ -1422,6 +1493,16 @@ func collectAssignmentChangeDetails(ctx context.Context, db *pgxpool.Pool, organ
 		}
 		if !resolved {
 			continue
+		}
+		roleAvailable := false
+		if member.RoleSlug != "" {
+			roleAvailable, err = plannedAssignmentRoleAvailable(ctx, db, organizationID, roles, member.RoleSlug)
+			if err != nil {
+				return nil, err
+			}
+			if !roleAvailable {
+				continue
+			}
 		}
 		rows, err := db.Query(ctx, `
 SELECT id, user_id
@@ -1472,7 +1553,7 @@ WHERE organization_id = $1
 			return nil, fmt.Errorf("iterate role assignments for membership %q: %w", member.ID, err)
 		}
 		rows.Close()
-		if activeAssignments == 0 && member.RoleSlug != "" {
+		if activeAssignments == 0 && member.RoleSlug != "" && roleAvailable {
 			details = append(details, roleAssignmentCreateDetail(organizationID, member, gramUserID))
 		}
 	}
@@ -1606,7 +1687,13 @@ func validateOrganization(ctx context.Context, db *pgxpool.Pool, org orgExpectat
 		}
 		membershipIDs = append(membershipIDs, member.ID)
 		if member.RoleSlug != "" {
-			roleMembershipIDs = append(roleMembershipIDs, member.ID)
+			roleExists, err := activeAssignmentRoleExists(ctx, db, gramOrgID, member.RoleSlug)
+			if err != nil {
+				return err
+			}
+			if roleExists {
+				roleMembershipIDs = append(roleMembershipIDs, member.ID)
+			}
 		}
 	}
 	if err := requireMemberships(ctx, db, gramOrgID, membershipIDs); err != nil {
