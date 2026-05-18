@@ -128,10 +128,10 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	toolURN := "tools:externalmcp:" + i.serverID + ":" + toolName
 
 	logAttrs := tm.HTTPLogAttributes{
-		attr.EventSourceKey:               string(tm.EventSourceToolCall),
-		attr.RemoteMCPServerIDKey:         i.serverID,
-		attr.HTTPServerRequestDurationKey: durationSec,
+		attr.EventSourceKey:       string(tm.EventSourceToolCall),
+		attr.RemoteMCPServerIDKey: i.serverID,
 	}
+	logAttrs.RecordDuration(durationSec)
 	logAttrs.RecordStatusCode(statusCode)
 	logAttrs.RecordRequestBody(requestBytes)
 	logAttrs.RecordResponseBody(outputBytes)

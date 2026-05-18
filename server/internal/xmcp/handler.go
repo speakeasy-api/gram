@@ -305,11 +305,11 @@ func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMc
 
 	serverID := server.ID.String()
 
-	// Per-call instance: the interceptor's start-time map is keyed by
-	// *proxy.ToolsCallRequest pointers, which are unique per call. A fresh
-	// instance per buildProxy means the map's natural lifetime matches the
-	// proxy's, so any leaked entries from failure paths (request fires,
-	// response doesn't) get reclaimed when the proxy is dropped.
+	// Per-request instance: the interceptor holds a single nilable start
+	// timestamp set by the request side and consumed by the response side.
+	// A fresh instance per buildProxy makes that field's lifetime match the
+	// proxy's, so a stale timestamp from a failure path (request fires,
+	// response doesn't) is reclaimed when the proxy is dropped.
 	clickHouseLogInterceptor := NewToolsCallClickHouseLogInterceptor(s.telemLogger, serverID, logger)
 
 	// Counter records every attempted tools/call, including those later
