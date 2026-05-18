@@ -67,7 +67,8 @@ func TestIsGramHostedMCPURL(t *testing.T) {
 		{"https://app.getgram.ai/mcp/team-foo", true},
 		{"https://APP.GETGRAM.AI/mcp/team-foo", true}, // case-insensitive
 		{"http://app.getgram.ai/mcp/team-foo", true},  // http allowed (rare but valid)
-		{"https://chat.speakeasy.com/mcp/linear", false},
+		{"https://chat.speakeasy.com/mcp/linear", true},
+		{"https://CHAT.SPEAKEASY.COM/mcp/linear", true}, // case-insensitive
 		{"https://evil.getgram.ai/mcp/x", false}, // subdomain squat must NOT pass
 		{"https://mcp.slack.com/mcp", false},
 		{"http://localhost:8080/mcp/x", false},

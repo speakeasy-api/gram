@@ -9,12 +9,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
-// gramHostedMCPHost is the canonical host for Gram-managed MCP servers.
+// gramHostedMCPHosts lists the canonical hosts for Gram-managed MCP servers.
 // The shadow-MCP guard allows a tool call only when the cached server
-// entry's URL exactly matches this host (case-insensitive). We avoid a
-// suffix-match on ".getgram.ai" because a third party squatting on a
+// entry's URL exactly matches one of these hosts (case-insensitive). We avoid
+// a suffix-match on ".getgram.ai" because a third party squatting on a
 // subdomain (e.g. via a CNAME mistake) could bypass the guard otherwise.
-const gramHostedMCPHost = "app.getgram.ai"
+var gramHostedMCPHosts = []string{
+	"app.getgram.ai",
+	"chat.speakeasy.com",
+}
 
 // parsedClaudeToolName is the result of splitting a Claude Code tool name
 // into its MCP "<server>" and "<tool>" parts. IsMCP is false for native
@@ -114,7 +117,7 @@ func resolvedMCPMatch(matched *MCPServerEntry, serverPrefix string) string {
 }
 
 // isGramHostedMCPURL reports whether rawURL points at a Gram-managed MCP
-// server. Exact host match, case-insensitive.
+// server. Exact host match against any host in gramHostedMCPHosts, case-insensitive.
 func isGramHostedMCPURL(rawURL string) bool {
 	if rawURL == "" {
 		return false
@@ -123,7 +126,13 @@ func isGramHostedMCPURL(rawURL string) bool {
 	if err != nil {
 		return false
 	}
-	return strings.EqualFold(u.Hostname(), gramHostedMCPHost)
+	hostname := u.Hostname()
+	for _, h := range gramHostedMCPHosts {
+		if strings.EqualFold(hostname, h) {
+			return true
+		}
+	}
+	return false
 }
 
 // isMatchedMCPApproved returns whether the call has been allowlisted
