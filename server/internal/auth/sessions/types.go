@@ -74,11 +74,3 @@ func (c CachedUserInfo) AdditionalCacheKeys() []string {
 func (c CachedUserInfo) TTL() time.Duration {
 	return userInfoCacheExpiry
 }
-
-type AuthURLParams struct {
-	CallbackURL     string
-	Scope           string
-	State           string
-	ClientID        string
-	ScopesSupported []string
-}

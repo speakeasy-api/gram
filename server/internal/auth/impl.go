@@ -383,11 +383,10 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 
 	state := encodeStateParam(payload, nonce)
 
-	authURL, err := s.identity.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
+	authURL, err := s.identity.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
 		CallbackURL:     callbackURL,
 		State:           state,
 		Scope:           "",
-		ClientID:        "",
 		ScopesSupported: nil,
 	})
 	if err != nil {

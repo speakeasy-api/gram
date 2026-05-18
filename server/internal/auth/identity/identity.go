@@ -34,6 +34,16 @@ import (
 // browser-flow fields (CodeVerifier, IPAddress, UserAgent).
 type IDPClient interface {
 	AuthenticateWithCode(ctx context.Context, clientID, code string) (*AuthenticateResult, error)
+	CreateMagicAuth(ctx context.Context, email string) (*MagicAuthChallenge, error)
+	AuthenticateWithMagicAuth(ctx context.Context, clientID, email, code string) (*AuthenticateResult, error)
+	SetEmailVerified(ctx context.Context, userID string) error
+}
+
+type AuthorizationURLParams struct {
+	CallbackURL     string
+	Scope           string
+	State           string
+	ScopesSupported []string
 }
 
 // AuthenticateResult holds the fields Gram uses from the IDP code exchange.
@@ -43,12 +53,18 @@ type AuthenticateResult struct {
 	User           AuthenticatedUser
 }
 
+type MagicAuthChallenge struct {
+	Email string
+	Code  string
+}
+
 // AuthenticatedUser holds the user fields Gram reads after IDP authentication.
 type AuthenticatedUser struct {
 	ID                string
 	FirstName         string
 	LastName          string
 	Email             string
+	EmailVerified     bool
 	ProfilePictureURL string
 	ExternalID        string
 }
@@ -135,7 +151,47 @@ func (r *Resolver) ExchangeCodeForTokens(ctx context.Context, code string) (_ *I
 	if err != nil {
 		return nil, fmt.Errorf("workos authenticate with code: %w", err)
 	}
+	if resp == nil {
+		return nil, errors.New("workos authenticate with code: empty response")
+	}
 
+	return idpUserInfoFromAuthenticateResult(resp), nil
+}
+
+func (r *Resolver) AuthenticateWithMagicAuth(ctx context.Context, email string) (_ *IDPUserInfo, err error) {
+	ctx, span := r.tracer.Start(ctx, "identity.authenticateWithMagicAuth")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
+	challenge, err := r.idpClient.CreateMagicAuth(ctx, email)
+	if err != nil {
+		return nil, fmt.Errorf("workos create magic auth: %w", err)
+	}
+	if challenge == nil || challenge.Code == "" {
+		return nil, errors.New("workos create magic auth: empty code")
+	}
+
+	resp, err := r.idpClient.AuthenticateWithMagicAuth(ctx, r.idpClientID, challenge.Email, challenge.Code)
+	if err != nil {
+		return nil, fmt.Errorf("workos authenticate with magic auth: %w", err)
+	}
+	if resp == nil {
+		return nil, errors.New("workos authenticate with magic auth: empty response")
+	}
+	if !resp.User.EmailVerified {
+		if err := r.idpClient.SetEmailVerified(ctx, resp.User.ID); err != nil {
+			return nil, fmt.Errorf("workos mark email verified: %w", err)
+		}
+	}
+
+	return idpUserInfoFromAuthenticateResult(resp), nil
+}
+
+func idpUserInfoFromAuthenticateResult(resp *AuthenticateResult) *IDPUserInfo {
 	name := strings.TrimSpace(resp.User.FirstName + " " + resp.User.LastName)
 	var picture *string
 	if resp.User.ProfilePictureURL != "" {
@@ -150,7 +206,7 @@ func (r *Resolver) ExchangeCodeForTokens(ctx context.Context, code string) (_ *I
 		ExternalID:      resp.User.ExternalID,
 		WorkOSSessionID: extractSessionIDFromJWT(resp.AccessToken),
 		OrganizationID:  resp.OrganizationID,
-	}, nil
+	}
 }
 
 func extractSessionIDFromJWT(token string) string {
@@ -482,7 +538,7 @@ const workosAuthorizeEndpoint = "https://api.workos.com/user_management/authoriz
 
 // BuildAuthorizationURL constructs the OIDC authorization URL that the
 // browser should be redirected to.
-func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params sessions.AuthURLParams) (*url.URL, error) {
+func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params AuthorizationURLParams) (*url.URL, error) {
 	q := url.Values{}
 	q.Set("response_type", "code")
 	q.Set("client_id", r.idpClientID)

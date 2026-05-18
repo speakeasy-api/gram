@@ -43,10 +43,65 @@ func (a *WorkOSAdapter) AuthenticateWithCode(ctx context.Context, clientID, code
 			FirstName:         resp.User.FirstName,
 			LastName:          resp.User.LastName,
 			Email:             resp.User.Email,
+			EmailVerified:     resp.User.EmailVerified,
 			ProfilePictureURL: resp.User.ProfilePictureURL,
 			ExternalID:        resp.User.ExternalID,
 		},
 	}, nil
+}
+
+func (a *WorkOSAdapter) CreateMagicAuth(ctx context.Context, email string) (*MagicAuthChallenge, error) {
+	challenge, err := a.client.CreateMagicAuth(ctx, usermanagement.CreateMagicAuthOpts{
+		Email:           email,
+		InvitationToken: "",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("workos create magic auth: %w", err)
+	}
+
+	return &MagicAuthChallenge{
+		Email: challenge.Email,
+		Code:  challenge.Code,
+	}, nil
+}
+
+func (a *WorkOSAdapter) AuthenticateWithMagicAuth(ctx context.Context, clientID, email, code string) (*AuthenticateResult, error) {
+	resp, err := a.client.AuthenticateWithMagicAuth(ctx, usermanagement.AuthenticateWithMagicAuthOpts{
+		ClientID:              clientID,
+		Email:                 email,
+		Code:                  code,
+		LinkAuthorizationCode: "",
+		IPAddress:             "",
+		UserAgent:             "",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("workos authenticate with magic auth: %w", err)
+	}
+
+	return &AuthenticateResult{
+		AccessToken:    resp.AccessToken,
+		OrganizationID: resp.OrganizationID,
+		User: AuthenticatedUser{
+			ID:                resp.User.ID,
+			FirstName:         resp.User.FirstName,
+			LastName:          resp.User.LastName,
+			Email:             resp.User.Email,
+			EmailVerified:     resp.User.EmailVerified,
+			ProfilePictureURL: resp.User.ProfilePictureURL,
+			ExternalID:        resp.User.ExternalID,
+		},
+	}, nil
+}
+
+func (a *WorkOSAdapter) SetEmailVerified(ctx context.Context, userID string) error {
+	var opts usermanagement.UpdateUserOpts
+	opts.User = userID
+	opts.EmailVerified = true
+
+	if _, err := a.client.UpdateUser(ctx, opts); err != nil {
+		return fmt.Errorf("workos set email verified: %w", err)
+	}
+	return nil
 }
 
 func (a *WorkOSAdapter) RevokeSession(ctx context.Context, sessionID string) error {

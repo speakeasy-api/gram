@@ -61,11 +61,10 @@ type OrganizationProvider interface {
 
 var _ OrganizationProvider = (*workos.Client)(nil)
 
-// UserProvisioner handles user upsert logic shared between the normal auth
-// callback and the invite acceptance flow.
-type UserProvisioner interface {
-	BuildAuthorizationURL(ctx context.Context, params sessions.AuthURLParams) (*url.URL, error)
-	ExchangeCodeForTokens(ctx context.Context, code string) (*identity.IDPUserInfo, error)
+// InviteIdentityProvider handles invitee identity verification and user upsert
+// through the same resolver used by the normal auth flow.
+type InviteIdentityProvider interface {
+	AuthenticateWithMagicAuth(ctx context.Context, email string) (*identity.IDPUserInfo, error)
 	UpsertUserFromIDP(ctx context.Context, idpUser *identity.IDPUserInfo) (string, error)
 }
 
@@ -74,44 +73,44 @@ type orgFeatureChecker interface {
 }
 
 type Service struct {
-	logger        *slog.Logger
-	tracer        trace.Tracer
-	db            *pgxpool.Pool
-	auth          *auth.Auth
-	authz         *authz.Engine
-	sessions      *sessions.Manager
-	orgs          OrganizationProvider
-	userProvision UserProvisioner
-	features      orgFeatureChecker
-	email         *email.Service
-	serverURL     string // API server URL; used as WorkOS invite callback RedirectURI
-	siteURL       string // frontend URL; used for post-callback browser redirects
-	audit         *audit.Logger
-	svix          *svix.Svix
+	logger         *slog.Logger
+	tracer         trace.Tracer
+	db             *pgxpool.Pool
+	auth           *auth.Auth
+	authz          *authz.Engine
+	sessions       *sessions.Manager
+	orgs           OrganizationProvider
+	inviteIdentity InviteIdentityProvider
+	features       orgFeatureChecker
+	email          *email.Service
+	serverURL      string // API server URL; used to build invite links
+	siteURL        string // frontend URL; used for post-callback browser redirects
+	audit          *audit.Logger
+	svix           *svix.Svix
 }
 
 var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, userProvision UserProvisioner, features orgFeatureChecker, authzEngine *authz.Engine, emailService *email.Service, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, inviteIdentity InviteIdentityProvider, features orgFeatureChecker, authzEngine *authz.Engine, emailService *email.Service, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 
 	return &Service{
-		logger:        logger,
-		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/organizations"),
-		db:            db,
-		auth:          auth.New(logger, db, sessionMgr, authzEngine),
-		authz:         authzEngine,
-		sessions:      sessionMgr,
-		orgs:          orgs,
-		userProvision: userProvision,
-		features:      features,
-		email:         emailService,
-		serverURL:     serverURL,
-		siteURL:       siteURL,
-		audit:         auditLogger,
-		svix:          svix,
+		logger:         logger,
+		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/organizations"),
+		db:             db,
+		auth:           auth.New(logger, db, sessionMgr, authzEngine),
+		authz:          authzEngine,
+		sessions:       sessionMgr,
+		orgs:           orgs,
+		inviteIdentity: inviteIdentity,
+		features:       features,
+		email:          emailService,
+		serverURL:      serverURL,
+		siteURL:        siteURL,
+		audit:          auditLogger,
+		svix:           svix,
 	}
 }
 
@@ -126,8 +125,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
 
-	// Raw HTTP handler for Gram invite-token acceptance and the AuthKit
-	// callback used to authenticate the invitee.
+	// Raw HTTP handler for Gram invite-token acceptance.
 	mux.Handle("GET", inviteCallbackPath, service.handleInviteCallback)
 }
 
@@ -770,10 +768,10 @@ func dbInvitationToGen(row *orgrepo.OrganizationInvitation, inviterUserID *strin
 	}
 }
 
-// handleInviteCallback processes Gram invite-token links and the AuthKit
-// callback. Flow: invitee clicks the Gram invite link, we validate the invite
-// token, redirect to AuthKit, exchange the returned code, verify the email,
-// accept the invite, add the user to the org, then create a Gram session.
+// handleInviteCallback processes Gram invite-token links. Flow: invitee clicks
+// the Gram invite link, we validate the invite token, authenticate the invitee
+// with a server-created WorkOS Magic Auth code, verify the email, accept the
+// invite, add the user to the org, then create a Gram session.
 func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	ctx, span := s.tracer.Start(r.Context(), "organizations.handleInviteCallback")
 	defer span.End()
@@ -819,61 +817,20 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		return invite, true
 	}
 
-	code := r.URL.Query().Get("code")
-	if code == "" {
-		rawToken := r.URL.Query().Get("invite_token")
-		invite, ok := loadInvite(rawToken)
-		if !ok {
-			return
-		}
-
-		state := url.Values{}
-		state.Set("invite_token", rawToken)
-		authURL, err := s.userProvision.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
-			CallbackURL:     s.serverURL + inviteCallbackPath,
-			Scope:           "",
-			State:           state.Encode(),
-			ClientID:        "",
-			ScopesSupported: nil,
-		})
-		if err != nil {
-			s.logger.ErrorContext(ctx, "invite callback: failed to build AuthKit authorization URL", attr.SlogError(err))
-			span.RecordError(err)
-			redirectError("failed to start invite login")
-			return
-		}
-		span.AddEvent("invite.callback.authkit_redirect", trace.WithAttributes(
-			attr.OrganizationInviteID(invite.ID.String()),
-			attr.OrganizationInviteEmail(invite.Email),
-		))
-		http.Redirect(w, r, authURL.String(), http.StatusTemporaryRedirect)
-		return
-	}
-
-	// Extract invite_token from the state parameter.
-	stateParam := r.URL.Query().Get("state")
-	stateValues, err := url.ParseQuery(stateParam)
-	if err != nil || stateValues.Get("invite_token") == "" {
-		s.logger.ErrorContext(ctx, "invite callback: missing invite_token in state")
-		redirectError("invalid invite link")
-		return
-	}
-
-	invite, ok := loadInvite(stateValues.Get("invite_token"))
+	invite, ok := loadInvite(r.URL.Query().Get("invite_token"))
 	if !ok {
 		return
 	}
 
-	// Exchange the AuthKit code through the same User Management path as normal login.
-	idpUser, err := s.userProvision.ExchangeCodeForTokens(ctx, code)
+	idpUser, err := s.inviteIdentity.AuthenticateWithMagicAuth(ctx, invite.Email)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "invite callback: code exchange failed", attr.SlogError(err))
+		s.logger.ErrorContext(ctx, "invite callback: magic auth failed", attr.SlogError(err))
 		span.RecordError(err)
 		redirectError("invite authentication failed")
 		return
 	}
 	if idpUser == nil {
-		s.logger.ErrorContext(ctx, "invite callback: empty identity from code exchange")
+		s.logger.ErrorContext(ctx, "invite callback: empty identity from magic auth")
 		redirectError("invite authentication failed")
 		return
 	}
@@ -881,7 +838,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		attr.WorkOSUserID(idpUser.Sub),
 		attr.AuthUserEmail(idpUser.Email),
 	)
-	span.AddEvent("invite.callback.code_exchanged", trace.WithAttributes(
+	span.AddEvent("invite.callback.magic_auth_succeeded", trace.WithAttributes(
 		attr.WorkOSUserID(idpUser.Sub),
 		attr.AuthUserEmail(idpUser.Email),
 	))
@@ -905,7 +862,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	// Provision the user via the shared identity upsert path. This handles
 	// user creation, workos_id stamping, external_id sync, and PostHog events
 	// using the same logic the normal auth callback uses.
-	gramUserID, err := s.userProvision.UpsertUserFromIDP(ctx, idpUser)
+	gramUserID, err := s.inviteIdentity.UpsertUserFromIDP(ctx, idpUser)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: failed to provision user", attr.SlogError(err))
 		span.RecordError(err)
@@ -989,7 +946,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	span.AddEvent("invite.callback.invitation_accepted")
 
 	// Create a Gram session directly. The invitee is already authenticated
-	// by AuthKit, and the WorkOS session ID is stored for logout revocation.
+	// by Magic Auth, and the WorkOS session ID is stored for logout revocation.
 	sessionID := uuid.New().String()
 	session := sessions.Session{
 		SessionID:            sessionID,

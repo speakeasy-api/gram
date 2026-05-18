@@ -3,14 +3,12 @@ package organizations_test
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
-	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -64,22 +62,10 @@ func (m *MockOrganizationProvider) DeleteOrganizationMembership(ctx context.Cont
 // that don't exercise the invite callback HTTP handler.
 type stubUserProvisioner struct{}
 
-func (stubUserProvisioner) BuildAuthorizationURL(_ context.Context, params sessions.AuthURLParams) (*url.URL, error) {
-	authURL, err := url.Parse("https://stub.workos.com/user_management/authorize")
-	if err != nil {
-		return nil, fmt.Errorf("parse stub authorization URL: %w", err)
-	}
-	q := authURL.Query()
-	q.Set("redirect_uri", params.CallbackURL)
-	q.Set("state", params.State)
-	authURL.RawQuery = q.Encode()
-	return authURL, nil
-}
-
-func (stubUserProvisioner) ExchangeCodeForTokens(_ context.Context, _ string) (*identity.IDPUserInfo, error) {
+func (stubUserProvisioner) AuthenticateWithMagicAuth(_ context.Context, email string) (*identity.IDPUserInfo, error) {
 	return &identity.IDPUserInfo{
 		Sub:             "user_01INVITEE",
-		Email:           "invitee@example.com",
+		Email:           email,
 		Name:            "Invitee",
 		Picture:         nil,
 		ExternalID:      "",
