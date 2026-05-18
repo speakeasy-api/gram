@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -38,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -53,6 +55,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
@@ -89,6 +92,7 @@ type testInstance struct {
 	enc             *encryption.Client
 	authzEngine     *authz.Engine
 	shadowMCPClient *shadowmcp.Client
+	cacheAdapter    cache.Cache
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -157,6 +161,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		enc:             enc,
 		authzEngine:     authzEngine,
 		shadowMCPClient: shadowMCPClient,
+		cacheAdapter:    cacheAdapter,
 	}
 }
 
@@ -358,4 +363,137 @@ func runHandler(t *testing.T, ctx context.Context, ti *testInstance, method, slu
 // bearer builds an Authorization header value for the given raw key.
 func bearer(key string) string {
 	return fmt.Sprintf("Bearer %s", key)
+}
+
+// seedUserSessionIssuer inserts a user_session_issuers row in the given
+// project, returning the row's id. Mirrors the seed pattern used by the
+// mcpservers tests so the resulting issuer is structurally identical to
+// what the management API would produce.
+func seedUserSessionIssuer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID) uuid.UUID {
+	t.Helper()
+	issuer, err := usersessionsrepo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          projectID,
+		Slug:               "issuer-" + uuid.NewString(),
+		AuthnChallengeMode: "chain",
+		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
+// seedIssuerGatedToolsetMCPEndpoint wires up a full /x/mcp/{slug}
+// resolution chain for a toolset-backed mcp_server with
+// user_session_issuer_id set on the mcp_servers row. Mirrors
+// seedIssuerGatedRemoteMCPEndpoint for the toolset branch of
+// ServeMCP. Returns the endpoint slug, the resulting mcp_server row,
+// and the issuer id that gates it.
+func seedIssuerGatedToolsetMCPEndpoint(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	organizationID string,
+	projectID uuid.UUID,
+	visibility string,
+) (slug string, mcpServer mcpserversrepo.McpServer, issuerID uuid.UUID) {
+	t.Helper()
+
+	issuerID = seedUserSessionIssuer(t, ctx, ti, projectID)
+
+	toolsetSlug := "tsl-" + uuid.NewString()
+	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID:         organizationID,
+		ProjectID:              projectID,
+		Name:                   "issuer-gated " + toolsetSlug[:20],
+		Slug:                   toolsetSlug,
+		Description:            pgtype.Text{String: "issuer-gated /x/mcp test", Valid: true},
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                pgtype.Text{String: toolsetSlug, Valid: true},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	// Align toolset.mcp_is_public with the mcp_server visibility so the
+	// toolset-backed branch inside ServeToolsetResolved evaluates against
+	// the same public/private intent the /x/mcp caller observed.
+	if visibility == mcpservers.VisibilityPublic {
+		_, err = toolsetsrepo.New(ti.conn).UpdateToolset(ctx, toolsetsrepo.UpdateToolsetParams{
+			Name:                   toolset.Name,
+			Description:            toolset.Description,
+			DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
+			McpSlug:                toolset.McpSlug,
+			McpIsPublic:            true,
+			McpEnabled:             toolset.McpEnabled,
+			Slug:                   toolset.Slug,
+			ProjectID:              toolset.ProjectID,
+		})
+		require.NoError(t, err)
+	}
+
+	mcpServerID, err := uuid.NewV7()
+	require.NoError(t, err)
+	mcpServer, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                  mcpServerID,
+		ProjectID:           projectID,
+		Name:                conv.ToPGText("issuer-gated toolset"),
+		Slug:                conv.ToPGText("issuer-gated-toolset-" + mcpServerID.String()[len(mcpServerID.String())-4:]),
+		EnvironmentID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:           uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		Visibility:          visibility,
+	})
+	require.NoError(t, err)
+
+	slug = randomSlug()
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:      projectID,
+		CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:    mcpServer.ID,
+		Slug:           slug,
+	})
+	require.NoError(t, err)
+	return slug, mcpServer, issuerID
+}
+
+// seedIssuerGatedRemoteMCPEndpoint wires up a full /x/mcp/{slug}
+// resolution chain for a remote-backed mcp_server with
+// user_session_issuer_id set, simulating an /x/mcp endpoint configured
+// for issuer-gated OAuth. Returns the slug, the resulting mcp_server row,
+// and the issuer id that gates it.
+func seedIssuerGatedRemoteMCPEndpoint(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	projectID uuid.UUID,
+	upstreamURL, visibility string,
+) (slug string, mcpServer mcpserversrepo.McpServer, issuerID uuid.UUID) {
+	t.Helper()
+
+	issuerID = seedUserSessionIssuer(t, ctx, ti, projectID)
+	remoteServer := seedRemoteMCPServer(t, ctx, ti, projectID, upstreamURL)
+
+	mcpServerID, err := uuid.NewV7()
+	require.NoError(t, err)
+	mcpServer, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                  mcpServerID,
+		ProjectID:           projectID,
+		Name:                conv.ToPGText("issuer-gated remote"),
+		Slug:                conv.ToPGText("issuer-gated-remote-" + mcpServerID.String()[len(mcpServerID.String())-4:]),
+		EnvironmentID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          visibility,
+	})
+	require.NoError(t, err)
+
+	slug = randomSlug()
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:      projectID,
+		CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:    mcpServer.ID,
+		Slug:           slug,
+	})
+	require.NoError(t, err)
+	return slug, mcpServer, issuerID
 }

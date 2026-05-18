@@ -42,6 +42,10 @@ export type CreateMcpServerForm = {
    */
   toolsetId?: string | undefined;
   /**
+   * The ID of the user session issuer that gates OAuth-based MCP client authentication. When set, MCP clients are required to authenticate against this issuer before connecting.
+   */
+  userSessionIssuerId?: string | undefined;
+  /**
    * The visibility of an MCP server
    */
   visibility: CreateMcpServerFormVisibility;
@@ -58,6 +62,7 @@ export type CreateMcpServerForm$Outbound = {
   name: string;
   remote_mcp_server_id?: string | undefined;
   toolset_id?: string | undefined;
+  user_session_issuer_id?: string | undefined;
   visibility: string;
 };
 
@@ -71,6 +76,7 @@ export const CreateMcpServerForm$outboundSchema: z.ZodMiniType<
     name: z.string(),
     remoteMcpServerId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),
+    userSessionIssuerId: z.optional(z.string()),
     visibility: CreateMcpServerFormVisibility$outboundSchema,
   }),
   z.transform((v) => {
@@ -78,6 +84,7 @@ export const CreateMcpServerForm$outboundSchema: z.ZodMiniType<
       environmentId: "environment_id",
       remoteMcpServerId: "remote_mcp_server_id",
       toolsetId: "toolset_id",
+      userSessionIssuerId: "user_session_issuer_id",
     });
   }),
 );

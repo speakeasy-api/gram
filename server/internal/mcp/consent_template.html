@@ -336,7 +336,7 @@
         {{end}}
 
         <div class="actions">
-          <form method="POST" action="/mcp/{{.MCPSlug}}/connect">
+          <form method="POST" action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect">
             <input type="hidden" name="state" value="{{.State}}" />
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
             <button
@@ -349,7 +349,7 @@
               Give Access
             </button>
           </form>
-          <form method="POST" action="/mcp/{{.MCPSlug}}/connect">
+          <form method="POST" action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect">
             <input type="hidden" name="state" value="{{.State}}" />
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
             <button

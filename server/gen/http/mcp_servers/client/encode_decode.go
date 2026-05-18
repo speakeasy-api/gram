@@ -1227,16 +1227,17 @@ func DecodeDeleteMcpServerResponse(decoder func(*http.Response) goahttp.Decoder,
 // *types.McpServer from a value of type *McpServerResponseBody.
 func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *types.McpServer {
 	res := &types.McpServer{
-		ID:                *v.ID,
-		ProjectID:         *v.ProjectID,
-		Name:              v.Name,
-		Slug:              v.Slug,
-		EnvironmentID:     v.EnvironmentID,
-		RemoteMcpServerID: v.RemoteMcpServerID,
-		ToolsetID:         v.ToolsetID,
-		Visibility:        types.McpServerVisibility(*v.Visibility),
-		CreatedAt:         *v.CreatedAt,
-		UpdatedAt:         *v.UpdatedAt,
+		ID:                  *v.ID,
+		ProjectID:           *v.ProjectID,
+		Name:                v.Name,
+		Slug:                v.Slug,
+		EnvironmentID:       v.EnvironmentID,
+		UserSessionIssuerID: v.UserSessionIssuerID,
+		RemoteMcpServerID:   v.RemoteMcpServerID,
+		ToolsetID:           v.ToolsetID,
+		Visibility:          types.McpServerVisibility(*v.Visibility),
+		CreatedAt:           *v.CreatedAt,
+		UpdatedAt:           *v.UpdatedAt,
 	}
 
 	return res

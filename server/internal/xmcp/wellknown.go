@@ -64,12 +64,26 @@ func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *h
 		return err
 	}
 
+	// Issuer-gated mcp_servers (regardless of backend) get the Gram-hosted
+	// authorization-server metadata pointing at the /x/mcp/{slug}/...
+	// OAuth handler family. The toolset-backed branch below remains as a
+	// fallback for legacy oauth_proxy / external-oauth configurations
+	// surfaced through the toolsets row.
+	if mcpServer.UserSessionIssuerID.Valid {
+		resolvedEndpoint, err := s.buildResolvedMcpEndpoint(ctx, logger, endpoint, mcpServer)
+		if err != nil {
+			return err
+		}
+		if err := s.mcpService.ServeGetAuthorizationServer(w, r, resolvedEndpoint); err != nil {
+			return fmt.Errorf("serve oauth authorization server metadata: %w", err)
+		}
+		return nil
+	}
+
 	switch {
 	case mcpServer.RemoteMcpServerID.Valid:
-		// The upcoming OAuth migration (separate from AGE-1902) will
-		// surface OAuth metadata from mcp_servers / oauth_proxy_servers
-		// directly. Until then there is no Gram-hosted authorization
-		// server for remote-backed mcp_servers — the upstream remote MCP
+		// Remote-backed mcp_servers without issuer gating have no
+		// Gram-hosted authorization server — the upstream remote MCP
 		// server publishes its own .well-known.
 		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
 	case mcpServer.ToolsetID.Valid:
@@ -138,11 +152,25 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 		return err
 	}
 
+	// Issuer-gated mcp_servers (regardless of backend) get the Gram-hosted
+	// protected-resource metadata pointing at the matching Gram AS. The
+	// toolset-backed branch below remains as a fallback for legacy
+	// oauth_proxy / external-oauth configurations.
+	if mcpServer.UserSessionIssuerID.Valid {
+		resolvedEndpoint, err := s.buildResolvedMcpEndpoint(ctx, logger, endpoint, mcpServer)
+		if err != nil {
+			return err
+		}
+		if err := s.mcpService.ServeGetProtectedResource(w, r, resolvedEndpoint); err != nil {
+			return fmt.Errorf("serve oauth protected resource metadata: %w", err)
+		}
+		return nil
+	}
+
 	switch {
 	case mcpServer.RemoteMcpServerID.Valid:
-		// See HandleWellKnownOAuthServerMetadata for the rationale —
-		// remote-backed Gram-hosted OAuth metadata is gated on the
-		// upcoming OAuth migration.
+		// Remote-backed mcp_servers without issuer gating have no
+		// Gram-hosted protected-resource metadata.
 		return oops.E(oops.CodeNotFound, nil, "not found")
 	case mcpServer.ToolsetID.Valid:
 		toolset, err := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{

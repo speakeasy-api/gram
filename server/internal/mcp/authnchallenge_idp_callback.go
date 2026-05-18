@@ -1,5 +1,5 @@
 // IDP callback handler for the issuer-gated authn-challenge surface.
-// Pairs with the to-be-implemented remote_login_callback — the other
+// Pairs with remote_login_callback (in remotesessions/) — the other
 // callback on this surface, used for upstream OAuth resource providers
 // (Linear, Notion, etc.). Reading the two side-by-side: IDP returns user
 // identity; remote returns resource-access tokens.
@@ -7,16 +7,11 @@
 package mcp
 
 import (
-	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
-	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -63,24 +58,12 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this MCP server").Log(ctx, logger)
 	}
 
-	toolset, err := s.resolveMcp(ctx, challengeState.Endpoint)
-	switch {
-	case errors.Is(err, errToolsetNotFound):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, logger)
-	}
-	if !toolset.UserSessionIssuerID.Valid {
-		return oops.E(oops.CodeNotFound, nil, "not found")
-	}
-	if err := s.requireUserSessionIssuer(ctx, toolset); err != nil {
+	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, challengeState.Endpoint)
+	if err != nil {
 		return err
 	}
 
-	logger = s.logger.With(
-		attr.SlogToolsetID(toolset.ID.String()),
-		attr.SlogProjectID(toolset.ProjectID.String()),
-	)
+	logger = endpoint.LogWith(s.logger)
 
 	// If the IDP returned an error (user cancelled at the IDP, IDP refused
 	// to authenticate, etc.) per OAuth 2.0, forward it back to the MCP
@@ -113,10 +96,10 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeUnexpected, err, "failed to bootstrap user").Log(ctx, logger)
 	}
 
-	// Validate the user belongs to the toolset's organization before
+	// Validate the user belongs to the endpoint's organization before
 	// issuing a token. The mcp:connect RBAC policy operates at org level;
 	// this is the first gate.
-	if _, _, ok := s.identityResolver.HasAccessToOrganization(ctx, toolset.OrganizationID, gramUserID); !ok {
+	if _, _, ok := s.identityResolver.HasAccessToOrganization(ctx, endpoint.OrganizationID, gramUserID); !ok {
 		return oops.E(oops.CodeForbidden, nil, "user is not a member of this MCP server's organization").Log(ctx, logger)
 	}
 
@@ -130,20 +113,18 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeUnexpected, err, "failed to update authn challenge state").Log(ctx, logger)
 	}
 
-	baseURL := s.serverURL.String()
-	if challengeState.Endpoint.CustomDomainID.Valid {
-		domain, derr := customdomains_repo.New(s.db).GetCustomDomainByIDAndOrganization(ctx, customdomains_repo.GetCustomDomainByIDAndOrganizationParams{
-			ID:             challengeState.Endpoint.CustomDomainID.UUID,
-			OrganizationID: toolset.OrganizationID,
-		})
-		switch {
-		case derr == nil:
-			baseURL = fmt.Sprintf("https://%s", domain.Domain)
-		case !errors.Is(derr, pgx.ErrNoRows):
-			return oops.E(oops.CodeUnexpected, derr, "failed to load custom domain").Log(ctx, logger)
-		}
+	// challengeState.Endpoint.BaseURL was stamped at mint time. New
+	// mints always populate it; the IDP callback can rebuild the
+	// consent redirect from cache alone without a fresh custom_domains
+	// lookup (the callback is registered at a global URL and loses the
+	// request's customdomains.Context). Empty value falls back to the
+	// server default for in-flight states minted before this field
+	// landed.
+	baseURL := challengeState.Endpoint.BaseURL
+	if baseURL == "" {
+		baseURL = s.serverURL.String()
 	}
-	consentURL, err := buildConsentURL(baseURL, mcpSlug, challengeState.ID)
+	consentURL, err := endpoint.ConsentURL(baseURL, challengeState.ID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").Log(ctx, logger)
 	}
