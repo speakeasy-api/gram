@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 	"golang.org/x/term"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -978,7 +979,11 @@ ORDER BY updated_at DESC
 LIMIT 1`, organizationID, member.ID).Scan(&userID, &workosUserID, &rowUpdatedAt, &lastEventID, &deletedAt)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return "create", nil
+		missingIDChange, err := classifyMissingMembershipIDRepair(ctx, db, organizationID, member, gramUserID, updatedAt)
+		if err != nil {
+			return "", err
+		}
+		return missingIDChange, nil
 	case err != nil:
 		return "", fmt.Errorf("query local membership %q: %w", member.ID, err)
 	}
@@ -991,6 +996,43 @@ LIMIT 1`, organizationID, member.ID).Scan(&userID, &workosUserID, &rowUpdatedAt,
 	if deletedAt.Valid ||
 		!userID.Valid ||
 		userID.String != gramUserID ||
+		!workosUserID.Valid ||
+		workosUserID.String != member.UserID ||
+		!pgTimeEqual(rowUpdatedAt, updatedAt) {
+		return "update", nil
+	}
+	return "noop", nil
+}
+
+func classifyMissingMembershipIDRepair(ctx context.Context, db *pgxpool.Pool, organizationID string, member workos.Member, gramUserID string, updatedAt time.Time) (string, error) {
+	var workosMembershipID pgtype.Text
+	var workosUserID pgtype.Text
+	var rowUpdatedAt pgtype.Timestamptz
+	var lastEventID pgtype.Text
+	var deletedAt pgtype.Timestamptz
+	err := db.QueryRow(ctx, `
+SELECT workos_membership_id, workos_user_id, workos_updated_at, workos_last_event_id, deleted_at
+FROM organization_user_relationships
+WHERE organization_id = $1
+  AND user_id = $2
+ORDER BY updated_at DESC
+LIMIT 1`, organizationID, conv.ToPGText(gramUserID)).Scan(&workosMembershipID, &workosUserID, &rowUpdatedAt, &lastEventID, &deletedAt)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return "create", nil
+	case err != nil:
+		return "", fmt.Errorf("query local membership by user %q: %w", member.ID, err)
+	}
+	if deletedAt.Valid {
+		return "update", nil
+	}
+	if !workosMembershipID.Valid {
+		return "update", nil
+	}
+	if !shouldProcessEvent(textPtr(lastEventID), timePtr(rowUpdatedAt), "", updatedAt) {
+		return "stale_skip", nil
+	}
+	if workosMembershipID.String != member.ID ||
 		!workosUserID.Valid ||
 		workosUserID.String != member.UserID ||
 		!pgTimeEqual(rowUpdatedAt, updatedAt) {
@@ -1572,7 +1614,7 @@ ORDER BY updated_at DESC
 LIMIT 1`, organizationID, member.ID).Scan(&userID, &workosUserID, &rowUpdatedAt, &lastEventID, &deletedAt)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return changeDetail{Entity: "", ID: "", Action: "", Fields: nil}, false, nil
+		return collectMissingMembershipIDRepairDetail(ctx, db, organizationID, member, gramUserID, updatedAt)
 	case err != nil:
 		return changeDetail{Entity: "", ID: "", Action: "", Fields: nil}, false, fmt.Errorf("query local membership %q: %w", member.ID, err)
 	}
@@ -1590,6 +1632,48 @@ LIMIT 1`, organizationID, member.ID).Scan(&userID, &workosUserID, &rowUpdatedAt,
 	fields = appendFieldChange(fields, "workos_updated_at", pgTimeDisplay(rowUpdatedAt), timeDisplay(updatedAt))
 	if deletedAt.Valid {
 		fields = appendFieldChange(fields, "deleted_at", pgTimeDisplay(deletedAt), "<null>")
+	}
+	if len(fields) == 0 {
+		return changeDetail{Entity: "", ID: "", Action: "", Fields: nil}, false, nil
+	}
+	return changeDetail{Entity: "membership", ID: member.ID, Action: "update", Fields: fields}, true, nil
+}
+
+func collectMissingMembershipIDRepairDetail(ctx context.Context, db *pgxpool.Pool, organizationID string, member workos.Member, gramUserID string, updatedAt time.Time) (changeDetail, bool, error) {
+	var workosMembershipID pgtype.Text
+	var workosUserID pgtype.Text
+	var rowUpdatedAt pgtype.Timestamptz
+	var lastEventID pgtype.Text
+	var deletedAt pgtype.Timestamptz
+	err := db.QueryRow(ctx, `
+SELECT workos_membership_id, workos_user_id, workos_updated_at, workos_last_event_id, deleted_at
+FROM organization_user_relationships
+WHERE organization_id = $1
+  AND user_id = $2
+ORDER BY updated_at DESC
+LIMIT 1`, organizationID, conv.ToPGText(gramUserID)).Scan(&workosMembershipID, &workosUserID, &rowUpdatedAt, &lastEventID, &deletedAt)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return changeDetail{Entity: "", ID: "", Action: "", Fields: nil}, false, nil
+	case err != nil:
+		return changeDetail{Entity: "", ID: "", Action: "", Fields: nil}, false, fmt.Errorf("query local membership by user %q: %w", member.ID, err)
+	}
+	if deletedAt.Valid {
+		return changeDetail{Entity: "", ID: "", Action: "", Fields: nil}, false, nil
+	}
+	if workosMembershipID.Valid && !shouldProcessEvent(textPtr(lastEventID), timePtr(rowUpdatedAt), "", updatedAt) {
+		return changeDetail{Entity: "", ID: "", Action: "", Fields: nil}, false, nil
+	}
+
+	fields := make([]fieldChange, 0)
+	if !workosMembershipID.Valid {
+		fields = appendFieldChange(fields, "workos_membership_id", pgTextDisplay(workosMembershipID), member.ID)
+	}
+	if !workosUserID.Valid && member.UserID != "" {
+		fields = appendFieldChange(fields, "workos_user_id", pgTextDisplay(workosUserID), member.UserID)
+	}
+	if !rowUpdatedAt.Valid {
+		fields = appendFieldChange(fields, "workos_updated_at", pgTimeDisplay(rowUpdatedAt), timeDisplay(updatedAt))
 	}
 	if len(fields) == 0 {
 		return changeDetail{Entity: "", ID: "", Action: "", Fields: nil}, false, nil

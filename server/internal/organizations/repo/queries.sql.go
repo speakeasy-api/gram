@@ -752,6 +752,32 @@ func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) 
 	return i, err
 }
 
+const setOrganizationRelationshipWorkOSCursor = `-- name: SetOrganizationRelationshipWorkOSCursor :exec
+UPDATE organization_user_relationships
+SET workos_updated_at = $1,
+    workos_last_event_id = $2,
+    updated_at = clock_timestamp()
+WHERE organization_id = $3
+  AND user_id = $4
+`
+
+type SetOrganizationRelationshipWorkOSCursorParams struct {
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+	OrganizationID    string
+	UserID            pgtype.Text
+}
+
+func (q *Queries) SetOrganizationRelationshipWorkOSCursor(ctx context.Context, arg SetOrganizationRelationshipWorkOSCursorParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationRelationshipWorkOSCursor,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+		arg.OrganizationID,
+		arg.UserID,
+	)
+	return err
+}
+
 const setUserWorkOSMemberships = `-- name: SetUserWorkOSMemberships :exec
 WITH input_memberships AS (
     SELECT unnest($2::text[]) AS workos_org_id,

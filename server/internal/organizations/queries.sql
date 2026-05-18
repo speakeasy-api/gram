@@ -172,6 +172,14 @@ FROM organization_user_relationships
 WHERE organization_id = @organization_id
   AND user_id = @user_id;
 
+-- name: SetOrganizationRelationshipWorkOSCursor :exec
+UPDATE organization_user_relationships
+SET workos_updated_at = @workos_updated_at,
+    workos_last_event_id = @workos_last_event_id,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND user_id = @user_id;
+
 -- name: GetRelationshipByMembershipID :one
 SELECT *
 FROM organization_user_relationships

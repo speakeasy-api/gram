@@ -361,6 +361,10 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 }
 
 func repairMissingWorkOSMembershipFields(ctx context.Context, dbtx pgx.Tx, organizationID, gramUserID string, member workos.Member, updatedAt time.Time) error {
+	if gramUserID == "" {
+		return nil
+	}
+
 	_, err := dbtx.Exec(ctx, `
 UPDATE organization_user_relationships
 SET user_id = COALESCE(user_id, $2),
@@ -389,6 +393,32 @@ WHERE organization_id = $1
 	)
 	if err != nil {
 		return fmt.Errorf("repair missing WorkOS membership fields %q: %w", member.ID, err)
+	}
+
+	_, err = dbtx.Exec(ctx, `
+UPDATE organization_user_relationships
+SET workos_membership_id = $4,
+    workos_user_id = COALESCE(workos_user_id, $3),
+    workos_updated_at = COALESCE(workos_updated_at, $5),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND user_id = $2
+  AND deleted IS FALSE
+  AND workos_membership_id IS NULL
+  AND NOT EXISTS (
+      SELECT 1
+      FROM organization_user_relationships owner
+      WHERE owner.workos_membership_id = $4
+        AND owner.deleted IS FALSE
+  )`,
+		organizationID,
+		conv.ToPGText(gramUserID),
+		conv.ToPGText(member.UserID),
+		conv.ToPGText(member.ID),
+		conv.ToPGTimestamptz(updatedAt),
+	)
+	if err != nil {
+		return fmt.Errorf("repair missing WorkOS membership id %q: %w", member.ID, err)
 	}
 	return nil
 }
