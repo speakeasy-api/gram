@@ -42,31 +42,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// applyTokenEndpointAuth attaches client credentials to req per RFC 6749
-// §2.3 using the supplied method. Both exchangeCode (initial login) and
-// refreshAccessToken (silent refresh) call into here so the basic-vs-post
-// branch lives in exactly one place.
-//
-//   - client_secret_post: appends client_secret to form and re-encodes the
-//     request body. RFC 6749 §2.3.1 prohibits sending the secret in the
-//     Authorization header in this mode.
-//   - client_secret_basic (default): leaves form alone and sets
-//     Authorization: Basic <id:secret>.
-//   - Empty secret: public client (PKCE-only). No credentials sent either
-//     way; PKCE provides per-flow integrity.
-func applyTokenEndpointAuth(req *http.Request, form url.Values, method TokenEndpointAuthMethod, clientID, clientSecret string) {
-	if clientSecret == "" {
-		return
-	}
-	switch method {
-	case TokenEndpointAuthMethodPost:
+// newTokenEndpointRequest assembles a request and handles encoding
+// credentials based on the configuration set by the client.
+func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Values, method TokenEndpointAuthMethod, clientID, clientSecret string) (*http.Request, error) {
+	if clientSecret != "" && method == TokenEndpointAuthMethodPost {
 		form.Set("client_secret", clientSecret)
-		encoded := form.Encode()
-		req.Body = io.NopCloser(strings.NewReader(encoded))
-		req.ContentLength = int64(len(encoded))
-	default:
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("build token endpoint request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	if clientSecret != "" && method == TokenEndpointAuthMethodBasic {
 		req.SetBasicAuth(clientID, clientSecret)
 	}
+	return req, nil
 }
 
 // ErrNoValidToken signals "there is a remote-session requirement for
@@ -219,13 +210,10 @@ func (m *ChallengeManager) refreshAccessToken(
 	form.Set("refresh_token", refreshToken)
 	form.Set("client_id", client.ExternalClientID)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, client.TokenEndpoint.String, strings.NewReader(form.Encode()))
+	req, err := newTokenEndpointRequest(ctx, client.TokenEndpoint.String, form, authMethod, client.ExternalClientID, clientSecret)
 	if err != nil {
 		return "", fmt.Errorf("new refresh request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
-	applyTokenEndpointAuth(req, form, authMethod, client.ExternalClientID, clientSecret)
 
 	resp, err := m.policy.PooledClient().Do(req)
 	if err != nil {
