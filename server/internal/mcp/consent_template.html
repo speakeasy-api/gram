@@ -273,6 +273,13 @@
         background: var(--fill-neutral-highlight);
       }
 
+      .btn-primary:disabled,
+      .btn-primary:disabled:hover {
+        background: var(--color-neutral-200);
+        color: var(--text-default);
+        cursor: not-allowed;
+      }
+
       .btn-secondary {
         background: var(--bg-surface-primary-default);
         color: var(--fill-neutral-default);
@@ -337,6 +344,7 @@
               name="action"
               value="approve"
               class="btn btn-primary"
+              {{if not .ConsentEnabled}}disabled{{end}}
             >
               Give Access
             </button>
