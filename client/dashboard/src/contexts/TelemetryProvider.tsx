@@ -21,9 +21,7 @@ export const TelemetryProvider = (props: { children: ReactNode }) => {
       ? "phc_hiYSF5Axu49I1xs4Z5BG8KCI3PGNLM8ERRs7eocmfX9"
       : "phc_5S3YhOs1lONwM2yKa0ytVSAyWOR2GhVhwAebkyi022l",
     {
-      api_host: isProd
-        ? "https://metrics.speakeasy.com"
-        : "https://metrics.dev.speakeasy.com",
+      api_host: "https://metrics.speakeasy.com",
       feature_flag_request_timeout_ms: 1000,
     },
     "speakeasy",
