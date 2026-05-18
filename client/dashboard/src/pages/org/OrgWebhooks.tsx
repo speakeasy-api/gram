@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { Switch } from "@/components/ui/switch";
@@ -10,7 +11,11 @@ import {
   useOrganization,
   useProductFeatures,
 } from "@gram/client/react-query";
-import { Stack, useMoonshineConfig } from "@speakeasy-api/moonshine";
+import {
+  Button as MoonshineButton,
+  Stack,
+  useMoonshineConfig,
+} from "@speakeasy-api/moonshine";
 import { Webhook } from "lucide-react";
 import { AppPortal } from "svix-react";
 import React, { JSX } from "react";
@@ -18,8 +23,6 @@ import React, { JSX } from "react";
 import "svix-react/style.css";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useSessionData } from "@/contexts/Auth";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 
 export default function OrgWebhooks() {
   const { data: features, isLoading } = useProductFeatures();
@@ -63,11 +66,12 @@ function OrgWebhooksInner() {
 
   return (
     <>
-      <Heading variant="h3" className="mb-4">
-        Webhooks
-      </Heading>
+      <Stack direction="horizontal" gap={2} align="center" className="mb-4">
+        <Heading variant="h3">Webhooks</Heading>
+        <ReleaseStageBadge stage="preview" />
+      </Stack>
       <Type muted small className="mb-6">
-        Configure webhook delivery for various system events.
+        Configure webhook delivery for various platform events.
       </Type>
       <div className="border-border bg-card rounded-lg border p-4">
         <Stack gap={4}>
@@ -120,29 +124,28 @@ function WebhooksDisabled() {
         <Webhook className="text-muted-foreground h-10 w-10" />
         <div>
           <Heading variant="h4" className="text-center font-medium">
-            Webhooks are currently experimental.
+            Webhooks are currently in preview
           </Heading>
-          <Type variant="body" className="text-muted-foreground text-center">
-            Please contact us if you're interested in being a design partner.
-          </Type>
         </div>
 
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            telemetry.capture("webhooks_interest", {
-              action: "webhook_design_partner_clicked",
-              email: session?.user.email ?? "",
-              organization_id: session?.organization?.id ?? "",
-              organization_name: session?.organization?.name ?? "",
-              organization_slug: session?.organization?.slug ?? "",
-            });
-            toast.success("Our team has been contacted to enable webhooks.");
-          }}
-        >
-          Request access
-        </Button>
+        <MoonshineButton variant="brand" asChild>
+          <a
+            href="https://www.speakeasy.com/book-demo"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => {
+              telemetry.capture("webhooks_interest", {
+                action: "webhook_design_partner_clicked",
+                email: session?.user.email ?? "",
+                organization_id: session?.organization?.id ?? "",
+                organization_name: session?.organization?.name ?? "",
+                organization_slug: session?.organization?.slug ?? "",
+              });
+            }}
+          >
+            Talk to our team
+          </a>
+        </MoonshineButton>
       </Stack>
     </div>
   );

@@ -1108,11 +1108,11 @@ export function OrgAuditLogsInner() {
       <InsightsConfig contextInfo={insightsContext} />
       <div>
         <Heading variant="h4" className="mb-2">
-          Audit Logs
+          Recent activity across your organization
         </Heading>
         <Type muted small className="mt-1">
           Review organization-wide and project-level actions in chronological
-          order.
+          order. Search by project, actions, or actor.
         </Type>
       </div>
 

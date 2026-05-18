@@ -90,7 +90,7 @@ export function AccessInner() {
         </Heading>
         <Type variant="body" className="text-muted-foreground mb-2">
           Manage access control for your team by defining roles and assigning
-          permissions.
+          permissions. View past authorization challenges.
         </Type>
       </div>
 

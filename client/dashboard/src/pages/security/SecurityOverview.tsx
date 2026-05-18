@@ -294,7 +294,8 @@ function SecurityOverviewContent() {
       <Page.Section>
         <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
         <Page.Section.Description className="max-w-2xl">
-          Recent findings from risk analysis scans across your project.
+          Recent findings from risk analysis scans across agent sessions in your
+          project
         </Page.Section.Description>
         <Page.Section.Body>
           <div className="flex items-center justify-center py-20">
@@ -310,7 +311,8 @@ function SecurityOverviewContent() {
       <Page.Section>
         <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
         <Page.Section.Description className="max-w-2xl">
-          Recent findings from risk analysis scans across your project.
+          Recent findings from risk analysis scans across agent sessions in your
+          project
         </Page.Section.Description>
         <Page.Section.CTA>
           <MoonshineButton
@@ -356,7 +358,8 @@ function SecurityOverviewContent() {
         <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
 
         <Page.Section.Description>
-          Recent findings from risk analysis scans across your project.
+          Recent findings from risk analysis scans across agent sessions in your
+          project
         </Page.Section.Description>
 
         <Page.Section.CTA>

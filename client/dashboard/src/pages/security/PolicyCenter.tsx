@@ -370,7 +370,7 @@ function PolicyCenterContent() {
             <h2 className="text-lg font-semibold">Risk Policies</h2>
             <p className="text-muted-foreground text-sm">
               Configure risk analysis rules to detect secrets and sensitive
-              information in chat messages.
+              information in agent session interactions.
             </p>
           </div>
           <Button onClick={handleCreate}>

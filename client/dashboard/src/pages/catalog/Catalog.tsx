@@ -158,8 +158,17 @@ function CatalogInner() {
         <Page.Section>
           <Page.Section.Title>MCP Catalog</Page.Section.Title>
           <Page.Section.Description>
-            Discover and import MCP servers to your project. Powered by the
-            official MCP registry.
+            Discover and import official third-party MCP servers to your
+            project. Powered by the official{" "}
+            <a
+              href="https://www.speakeasy.com/product/mcp-gateway/catalog"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-foreground underline underline-offset-2"
+            >
+              MCP Registry
+            </a>
+            .
           </Page.Section.Description>
           <Page.Section.Body>
             <Stack direction="vertical" gap={6}>

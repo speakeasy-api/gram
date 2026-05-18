@@ -39,8 +39,8 @@ function CollectionsInner() {
     <Page.Section>
       <Page.Section.Title>Collections</Page.Section.Title>
       <Page.Section.Description>
-        Collections allow you to create reusable configurations of multiple MCP
-        servers to install into multiple projects in one go.
+        Collections allow you to create reusable groups of MCP servers and
+        skills to install into multiple projects in one go.
       </Page.Section.Description>
       <Page.Section.Body>
         <Stack direction="vertical" gap={4}>
