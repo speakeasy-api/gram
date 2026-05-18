@@ -56,7 +56,7 @@ func (i *ToolsListMCPConnectFilterInterceptor) Name() string {
 
 // InterceptToolsListResponse implements [proxy.ToolsListResponseInterceptor].
 // It builds one [authz.MCPToolCallCheck] per tool, hands the batch to
-// [authz.Engine.FilterMatched] for per-tool match indicators (one
+// [authz.Engine.FindMatched] for per-tool match indicators (one
 // challenge-log entry for the batch, not N), and rebuilds the tool
 // slice in input order keeping only authorized entries.
 //
@@ -82,7 +82,7 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 		})
 	}
 
-	matched, err := i.authz.FilterMatched(ctx, checks)
+	matched, err := i.authz.FindMatched(ctx, checks)
 	if err != nil {
 		return fmt.Errorf("filter mcp:connect tools: %w", err)
 	}

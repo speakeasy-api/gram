@@ -539,7 +539,7 @@ func TestEngineFilter_skipsForNonEnterpriseAccount(t *testing.T) {
 	require.Equal(t, []string{"proj_123", "proj_456"}, resourceIDs)
 }
 
-func TestEngineFilterMatched_returnsParallelBools(t *testing.T) {
+func TestEngineFindMatched_returnsParallelBools(t *testing.T) {
 	t.Parallel()
 
 	chConn, err := newClickhouseClient(t)
@@ -547,7 +547,7 @@ func TestEngineFilterMatched_returnsParallelBools(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, "proj_123")})
 
-	matched, err := engine.FilterMatched(ctx, []Check{
+	matched, err := engine.FindMatched(ctx, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_123"},
 		{Scope: ScopeProjectRead, ResourceID: "proj_456"},
 	})
@@ -555,7 +555,7 @@ func TestEngineFilterMatched_returnsParallelBools(t *testing.T) {
 	require.Equal(t, []bool{true, false}, matched, "result must align with input order")
 }
 
-func TestEngineFilterMatched_preservesOrderAcrossMixedMatches(t *testing.T) {
+func TestEngineFindMatched_preservesOrderAcrossMixedMatches(t *testing.T) {
 	t.Parallel()
 
 	// Grants allow proj_b and proj_d. Input ordering puts allowed entries
@@ -569,7 +569,7 @@ func TestEngineFilterMatched_preservesOrderAcrossMixedMatches(t *testing.T) {
 		NewGrant(ScopeProjectRead, "proj_d"),
 	})
 
-	matched, err := engine.FilterMatched(ctx, []Check{
+	matched, err := engine.FindMatched(ctx, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_a"},
 		{Scope: ScopeProjectRead, ResourceID: "proj_b"},
 		{Scope: ScopeProjectRead, ResourceID: "proj_c"},
@@ -579,7 +579,7 @@ func TestEngineFilterMatched_preservesOrderAcrossMixedMatches(t *testing.T) {
 	require.Equal(t, []bool{false, true, false, true}, matched)
 }
 
-func TestEngineFilterMatched_returnsAllTrueWhenEnforcementDisabled(t *testing.T) {
+func TestEngineFindMatched_returnsAllTrueWhenEnforcementDisabled(t *testing.T) {
 	t.Parallel()
 
 	chConn, err := newClickhouseClient(t)
@@ -602,7 +602,7 @@ func TestEngineFilterMatched_returnsAllTrueWhenEnforcementDisabled(t *testing.T)
 		APIKeyScopes:          nil,
 	})
 
-	matched, err := engine.FilterMatched(ctx, []Check{
+	matched, err := engine.FindMatched(ctx, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_123"},
 		{Scope: ScopeProjectRead, ResourceID: "proj_456"},
 	})
@@ -610,7 +610,7 @@ func TestEngineFilterMatched_returnsAllTrueWhenEnforcementDisabled(t *testing.T)
 	require.Equal(t, []bool{true, true}, matched, "non-enforcing mode mirrors Filter's permissive behavior — every check passes")
 }
 
-func TestEngineFilterMatched_emptyInputReturnsEmptySlice(t *testing.T) {
+func TestEngineFindMatched_emptyInputReturnsEmptySlice(t *testing.T) {
 	t.Parallel()
 
 	orgID := "org_" + uuid.NewString()
@@ -619,7 +619,7 @@ func TestEngineFilterMatched_emptyInputReturnsEmptySlice(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
 	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
-	matched, err := engine.FilterMatched(ctx, nil)
+	matched, err := engine.FindMatched(ctx, nil)
 	require.NoError(t, err)
 	require.Empty(t, matched)
 
@@ -636,14 +636,14 @@ func TestEngineFilterMatched_emptyInputReturnsEmptySlice(t *testing.T) {
 	require.Zero(t, count, "empty input must skip challenge logging")
 }
 
-func TestEngineFilterMatched_missingGrantsReturnsError(t *testing.T) {
+func TestEngineFindMatched_missingGrantsReturnsError(t *testing.T) {
 	t.Parallel()
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
 
-	_, err = engine.FilterMatched(enterpriseSessionCtx(t), []Check{
+	_, err = engine.FindMatched(enterpriseSessionCtx(t), []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_123"},
 	})
 	var oopsErr *oops.ShareableError
@@ -652,7 +652,7 @@ func TestEngineFilterMatched_missingGrantsReturnsError(t *testing.T) {
 	require.ErrorIs(t, err, ErrMissingGrants)
 }
 
-func TestEngineFilterMatched_rejectsInvalidCheck(t *testing.T) {
+func TestEngineFindMatched_rejectsInvalidCheck(t *testing.T) {
 	t.Parallel()
 
 	chConn, err := newClickhouseClient(t)
@@ -660,14 +660,14 @@ func TestEngineFilterMatched_rejectsInvalidCheck(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
-	_, err = engine.FilterMatched(ctx, []Check{{Scope: ScopeProjectRead, ResourceID: ""}})
+	_, err = engine.FindMatched(ctx, []Check{{Scope: ScopeProjectRead, ResourceID: ""}})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 	require.ErrorIs(t, err, ErrInvalidCheck)
 }
 
-func TestEngineFilterMatched_logsSingleAggregateChallenge(t *testing.T) {
+func TestEngineFindMatched_logsSingleAggregateChallenge(t *testing.T) {
 	t.Parallel()
 
 	orgID := "org_" + uuid.NewString()
@@ -676,7 +676,7 @@ func TestEngineFilterMatched_logsSingleAggregateChallenge(t *testing.T) {
 	require.NoError(t, err)
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
 
-	matched, err := engine.FilterMatched(ctx, []Check{
+	matched, err := engine.FindMatched(ctx, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_allowed"},
 		{Scope: ScopeProjectRead, ResourceID: "proj_denied"},
 		{Scope: ScopeProjectRead, ResourceID: "proj_other"},
@@ -684,7 +684,7 @@ func TestEngineFilterMatched_logsSingleAggregateChallenge(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []bool{true, false, false}, matched)
 
-	// A batched FilterMatched must emit exactly one challenge log entry for
+	// A batched FindMatched must emit exactly one challenge log entry for
 	// the whole input, not N per check — the per-check granularity lives in
 	// the returned slice, not in the log table.
 	require.Eventually(t, func() bool {

@@ -464,7 +464,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	return allowed, nil
 }
 
-// FilterMatched evaluates each check and returns a parallel slice of match
+// FindMatched evaluates each check and returns a parallel slice of match
 // indicators aligned with the input order — matched[i] is true when checks[i]
 // is authorized for the caller. It exists alongside [Filter] for cases where
 // the caller needs per-check granularity that the ResourceID-keyed Filter
@@ -476,7 +476,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 // empty slice, no log. A single challenge-log entry is emitted for the batch
 // (same as [Filter]); per-check logs are intentionally avoided so callers can
 // safely use this with large input sets like a full tools/list.
-func (e *Engine) FilterMatched(ctx context.Context, checks []Check) ([]bool, error) {
+func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error) {
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return nil, err
