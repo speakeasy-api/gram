@@ -28,6 +28,7 @@ export type NamedAsset =
       name: string;
       slug: string;
       type: "externalmcp";
+      organizationMcpCollectionRegistryId?: string;
       registryId?: string;
       iconUrl?: string;
     }
@@ -74,6 +75,10 @@ export function SourceCard({
   const { hasScope } = useRBAC();
   const canWrite = hasScope("project:write");
   const config = sourceTypeConfig[asset.type];
+  const sourceTypeLabel =
+    asset.type === "externalmcp" && asset.organizationMcpCollectionRegistryId
+      ? "Collection"
+      : config.label;
 
   const sourceKind = sourceTypeToUrnKind(asset.type);
 
@@ -166,7 +171,7 @@ export function SourceCard({
 
         {/* Footer row with type badge and open link */}
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          <Badge variant="neutral">{config.label}</Badge>
+          <Badge variant="neutral">{sourceTypeLabel}</Badge>
           <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
             <span>Open</span>
             <ArrowRight className="h-3.5 w-3.5" />
