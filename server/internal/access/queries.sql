@@ -150,6 +150,7 @@ RETURNING
 )
 SELECT
   upserted.id,
+  ('role:organization:' || upserted.id::text)::text AS role_urn,
   upserted.workos_slug,
   upserted.workos_name,
   upserted.workos_description,
@@ -197,6 +198,7 @@ WITH active_roles AS (
 )
 SELECT
   active_roles.id,
+  ('role:' || active_roles.role_kind || ':' || active_roles.id::text)::text AS role_urn,
   active_roles.workos_slug,
   active_roles.workos_name,
   active_roles.workos_description,
@@ -208,7 +210,7 @@ LEFT JOIN organization_role_assignments AS ora
   ON ora.organization_id = @organization_id
   AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
   AND ora.user_id IS NOT NULL
-GROUP BY active_roles.id, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
+GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
 ORDER BY active_roles.workos_slug;
 
 -- name: GetActiveOrganizationRoleBySlug :one
@@ -228,6 +230,7 @@ WITH active_roles AS (
 )
 SELECT
   active_roles.id,
+  ('role:' || active_roles.role_kind || ':' || active_roles.id::text)::text AS role_urn,
   active_roles.workos_slug,
   active_roles.workos_name,
   active_roles.workos_description,
@@ -239,7 +242,7 @@ LEFT JOIN organization_role_assignments AS ora
   ON ora.organization_id = @organization_id
   AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
   AND ora.user_id IS NOT NULL
-GROUP BY active_roles.id, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
+GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
 LIMIT 1;
 
 -- name: GetOrganizationRoleByID :one
@@ -259,6 +262,7 @@ UNION ALL
 )
 SELECT
   active_roles.id,
+  ('role:' || active_roles.role_kind || ':' || active_roles.id::text)::text AS role_urn,
   active_roles.workos_slug,
   active_roles.workos_name,
   active_roles.workos_description,
@@ -270,7 +274,7 @@ LEFT JOIN organization_role_assignments AS ora
   ON ora.organization_id = @organization_id
   AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
   AND ora.user_id IS NOT NULL
-GROUP BY active_roles.id, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
+GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
 LIMIT 1;
 
 -- name: ListOrganizationRoleAssignmentsForOrg :many
@@ -291,6 +295,73 @@ LEFT JOIN global_roles
   AND global_roles.deleted IS FALSE
   AND global_roles.workos_deleted IS FALSE
 WHERE ora.organization_id = @organization_id
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+ORDER BY ora.workos_user_id, role_slug;
+
+-- name: ListOrganizationRoleAssignmentsBySlug :many
+SELECT
+  ora.user_id,
+  ora.workos_user_id,
+  ora.workos_membership_id,
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+  ora.created_at
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) = @workos_role_slug
+ORDER BY ora.workos_user_id;
+
+-- name: GetOrganizationRoleAssignmentByWorkosUser :one
+SELECT
+  ora.user_id,
+  ora.workos_user_id,
+  ora.workos_membership_id,
+  COALESCE(organization_roles.id, global_roles.id)::uuid AS role_id,
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+  ora.created_at
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND ora.workos_user_id = @workos_user_id
+  AND COALESCE(organization_roles.id, global_roles.id) IS NOT NULL
+ORDER BY ora.created_at
+LIMIT 1;
+
+-- name: ListOrganizationRoleAssignmentsByWorkosUsers :many
+SELECT
+  ora.user_id,
+  ora.workos_user_id,
+  ora.workos_membership_id,
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+  ora.created_at
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND ora.workos_user_id = ANY(@workos_user_ids::text[])
   AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
 ORDER BY ora.workos_user_id, role_slug;
 
@@ -318,8 +389,10 @@ WHERE ora.organization_id = @organization_id
   AND COALESCE(organization_roles.id, global_roles.id) IS NOT NULL
 ORDER BY users.email, users.id;
 
--- name: ListMemberRoleSlugsByWorkosUser :many
-SELECT DISTINCT COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug
+-- name: ListMemberRolePrincipalsByWorkosUser :many
+SELECT
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+  ora.role_urn::text AS principal_urn
 FROM organization_role_assignments AS ora
 LEFT JOIN organization_roles
   ON ora.role_urn = 'role:organization:' || organization_roles.id::text

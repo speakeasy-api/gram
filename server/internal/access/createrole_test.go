@@ -84,7 +84,7 @@ func TestService_CreateRole(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, role.ID, roundtrip.ID)
 
-	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder"))
+	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+role.ID))
 	require.Len(t, grants, 3)
 }
 

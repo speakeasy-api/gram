@@ -85,7 +85,7 @@ func TestService_UpdateRole(t *testing.T) {
 	require.NotEqual(t, mockRoleTimestamp, role.UpdatedAt)
 	require.Len(t, role.Grants, 2)
 
-	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
+	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID))
 	require.Len(t, grants, 3)
 }
 

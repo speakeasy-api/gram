@@ -74,8 +74,12 @@ func TestRoleManager_MembersAndCounts(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, members.Members, 2)
 
-	slugs, err := manager.MemberRoleSlugs(ctx, authCtx.ActiveOrganizationID, "user_2")
+	rolePrincipals, err := manager.MemberRolePrincipals(ctx, authCtx.ActiveOrganizationID, "user_2")
 	require.NoError(t, err)
+	slugs := make([]string, 0, len(rolePrincipals))
+	for _, role := range rolePrincipals {
+		slugs = append(slugs, role.RoleSlug)
+	}
 	require.Equal(t, []string{"custom-builder"}, slugs)
 
 	roles, err := manager.ListRoles(ctx, authCtx.ActiveOrganizationID)

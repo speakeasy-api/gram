@@ -116,17 +116,17 @@ func TestResolveRoleSlugs_readsLocalAssignmentsOnly(t *testing.T) {
 	require.NoError(t, err)
 	engine := NewEngine(testenv.NewLogger(t), conn, chConn, staticRBAC(true), staticChallengeLogging(true), membership)
 
-	roleSlugs, err := engine.resolveRoleSlugs(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	rolePrincipals, err := engine.resolveRolePrincipals(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
-	require.Empty(t, roleSlugs)
+	require.Empty(t, rolePrincipals)
 
-	roleSlugs, err = engine.resolveRoleSlugs(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	rolePrincipals, err = engine.resolveRolePrincipals(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
-	require.Empty(t, roleSlugs)
+	require.Empty(t, rolePrincipals)
 	require.Equal(t, 0, membership.calls)
 }
 
-func TestResolveRoleSlugs_returnsAllLocalAssignments(t *testing.T) {
+func TestResolveRolePrincipals_returnsAllLocalAssignments(t *testing.T) {
 	t.Parallel()
 
 	ctx := enterpriseTestCtx(t.Context())
@@ -146,9 +146,19 @@ func TestResolveRoleSlugs_returnsAllLocalAssignments(t *testing.T) {
 	require.NoError(t, err)
 	engine := NewEngine(testenv.NewLogger(t), conn, chConn, staticRBAC(true), staticChallengeLogging(true), &countingMembershipFetcher{})
 
-	roleSlugs, err := engine.resolveRoleSlugs(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	rolePrincipals, err := engine.resolveRolePrincipals(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
+	roleSlugs := make([]string, 0, len(rolePrincipals))
+	principalURNs := make([]string, 0, len(rolePrincipals))
+	for _, role := range rolePrincipals {
+		roleSlugs = append(roleSlugs, role.RoleSlug)
+		principalURNs = append(principalURNs, role.PrincipalUrn)
+	}
 	require.ElementsMatch(t, []string{"custom-alpha", "custom-beta"}, roleSlugs)
+	require.Len(t, principalURNs, 2)
+	for _, principalURN := range principalURNs {
+		require.Contains(t, principalURN, "role:organization:")
+	}
 }
 
 func TestEngineRequireAny_mapsDeniedToForbidden(t *testing.T) {

@@ -122,7 +122,7 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 
 	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)}
 
-	roleSlugs, err := e.resolveRoleSlugs(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	rolePrincipals, err := e.resolveRolePrincipals(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
 	if err != nil {
 		e.logger.ErrorContext(
 			ctx,
@@ -133,8 +133,12 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		)
 		return ctx, fmt.Errorf("resolve role slugs: %w", err)
 	}
-	for _, roleSlug := range roleSlugs {
-		principals = append(principals, urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug))
+	for _, role := range rolePrincipals {
+		rolePrincipalURNs, err := RolePrincipals(role.RoleSlug, role.PrincipalUrn)
+		if err != nil {
+			return ctx, fmt.Errorf("build role principals: %w", err)
+		}
+		principals = append(principals, rolePrincipalURNs...)
 	}
 
 	grants, err := LoadGrants(ctx, e.db, authCtx.ActiveOrganizationID, principals)
@@ -152,7 +156,7 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	return GrantsToContext(ctx, grants), nil
 }
 
-func (e *Engine) resolveRoleSlugs(ctx context.Context, userID, orgID string) ([]string, error) {
+func (e *Engine) resolveRolePrincipals(ctx context.Context, userID, orgID string) ([]accessrepo.ListMemberRolePrincipalsByWorkosUserRow, error) {
 	user, err := usersrepo.New(e.db).GetUser(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("get user: %w", err)
@@ -164,7 +168,7 @@ func (e *Engine) resolveRoleSlugs(ctx context.Context, userID, orgID string) ([]
 	// Role assignments are local source-of-truth records. They are written by
 	// the access write path and by WorkOS sync, so invitation/admin-console
 	// changes can lag until the sync job catches up.
-	roleSlugs, err := accessrepo.New(e.db).ListMemberRoleSlugsByWorkosUser(ctx, accessrepo.ListMemberRoleSlugsByWorkosUserParams{
+	rolePrincipals, err := accessrepo.New(e.db).ListMemberRolePrincipalsByWorkosUser(ctx, accessrepo.ListMemberRolePrincipalsByWorkosUserParams{
 		OrganizationID: orgID,
 		WorkosUserID:   user.WorkosID.String,
 	})
@@ -172,7 +176,7 @@ func (e *Engine) resolveRoleSlugs(ctx context.Context, userID, orgID string) ([]
 		return nil, fmt.Errorf("list member role slugs: %w", err)
 	}
 
-	return roleSlugs, nil
+	return rolePrincipals, nil
 }
 
 func (e *Engine) Require(ctx context.Context, checks ...Check) error {

@@ -316,12 +316,18 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	}
 
 	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID)}
-	roleSlugs, err := s.roleMgr.MemberRoleSlugs(ctx, ac.ActiveOrganizationID, connectedUser.WorkosID.String)
+	rolePrincipals, err := s.roleMgr.MemberRolePrincipals(ctx, ac.ActiveOrganizationID, connectedUser.WorkosID.String)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list member roles").Log(ctx, logger)
 	}
-	for _, roleSlug := range roleSlugs {
-		principals = append(principals, urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug))
+	roleSlugs := make([]string, 0, len(rolePrincipals))
+	for _, role := range rolePrincipals {
+		rolePrincipalURNs, err := authz.RolePrincipals(role.RoleSlug, role.PrincipalUrn)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build role principals").Log(ctx, logger)
+		}
+		principals = append(principals, rolePrincipalURNs...)
+		roleSlugs = append(roleSlugs, role.RoleSlug)
 	}
 	if len(roleSlugs) == 1 {
 		logger = logger.With(attr.SlogAccessRoleSlug(roleSlugs[0]))

@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -58,4 +59,24 @@ func seedInternalGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, or
 		Selectors:      selectors,
 	})
 	require.NoError(t, err)
+}
+
+func seedInternalRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, roleSlug string) urn.Principal {
+	t.Helper()
+
+	now := time.Now().UTC()
+	row, err := accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+		OrganizationID:    organizationID,
+		WorkosSlug:        roleSlug,
+		WorkosName:        roleSlug,
+		WorkosDescription: conv.ToPGTextEmpty(""),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(now),
+		WorkosLastEventID: conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	principal, err := urn.ParsePrincipal(row.RoleUrn)
+	require.NoError(t, err)
+	return principal
 }
