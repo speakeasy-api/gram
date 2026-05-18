@@ -74,44 +74,44 @@ type orgFeatureChecker interface {
 }
 
 type Service struct {
-	logger         *slog.Logger
-	tracer         trace.Tracer
-	db             *pgxpool.Pool
-	auth           *auth.Auth
-	authz          *authz.Engine
-	sessions       *sessions.Manager
-	orgs           OrganizationProvider
-	inviteIdentity InviteIdentityProvider
-	features       orgFeatureChecker
-	email          *email.Service
-	serverURL      string // API server URL; used to build invite links
-	siteURL        string // frontend URL; used for post-callback browser redirects
-	audit          *audit.Logger
-	svix           *svix.Svix
+	logger    *slog.Logger
+	tracer    trace.Tracer
+	db        *pgxpool.Pool
+	auth      *auth.Auth
+	authz     *authz.Engine
+	sessions  *sessions.Manager
+	orgs      OrganizationProvider
+	invite    InviteIdentityProvider
+	features  orgFeatureChecker
+	email     *email.Service
+	serverURL string // API server URL; used to build invite links
+	siteURL   string // frontend URL; used for post-callback browser redirects
+	audit     *audit.Logger
+	svix      *svix.Svix
 }
 
 var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, inviteIdentity InviteIdentityProvider, features orgFeatureChecker, authzEngine *authz.Engine, emailService *email.Service, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, authzEngine *authz.Engine, emailService *email.Service, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 
 	return &Service{
-		logger:         logger,
-		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/organizations"),
-		db:             db,
-		auth:           auth.New(logger, db, sessionMgr, authzEngine),
-		authz:          authzEngine,
-		sessions:       sessionMgr,
-		orgs:           orgs,
-		inviteIdentity: inviteIdentity,
-		features:       features,
-		email:          emailService,
-		serverURL:      serverURL,
-		siteURL:        siteURL,
-		audit:          auditLogger,
-		svix:           svix,
+		logger:    logger,
+		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/organizations"),
+		db:        db,
+		auth:      auth.New(logger, db, sessionMgr, authzEngine),
+		authz:     authzEngine,
+		sessions:  sessionMgr,
+		orgs:      orgs,
+		invite:    invite,
+		features:  features,
+		email:     emailService,
+		serverURL: serverURL,
+		siteURL:   siteURL,
+		audit:     auditLogger,
+		svix:      svix,
 	}
 }
 
@@ -823,7 +823,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idpUser, err := s.inviteIdentity.AuthenticateWithMagicAuth(ctx, invite.Email)
+	idpUser, err := s.invite.AuthenticateWithMagicAuth(ctx, invite.Email)
 	if err != nil {
 		if inviteRequiresNormalLogin(err) {
 			span.AddEvent("invite.callback.normal_login_redirect")
@@ -868,7 +868,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	// Provision the user via the shared identity upsert path. This handles
 	// user creation, workos_id stamping, external_id sync, and PostHog events
 	// using the same logic the normal auth callback uses.
-	gramUserID, err := s.inviteIdentity.UpsertUserFromIDP(ctx, idpUser)
+	gramUserID, err := s.invite.UpsertUserFromIDP(ctx, idpUser)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: failed to provision user", attr.SlogError(err))
 		span.RecordError(err)
