@@ -19,6 +19,44 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+// TestConvertPresidioFindings_FiltersIPv6Unspecified verifies that the
+// IPv6 unspecified address (`::` and its all-zero variants) — which
+// Presidio aggressively flags wherever it appears — is dropped before
+// becoming a finding. Real IPv6 addresses still flow through.
+func TestConvertPresidioFindings_FiltersIPv6Unspecified(t *testing.T) {
+	t.Parallel()
+
+	text := ":: and ::0 and 2001:db8::1"
+	results := []presidioResult{
+		{EntityType: "IP_ADDRESS", Start: 0, End: 2, Score: 0.9},   // "::"
+		{EntityType: "IP_ADDRESS", Start: 7, End: 10, Score: 0.9},  // "::0"
+		{EntityType: "IP_ADDRESS", Start: 15, End: 26, Score: 0.9}, // "2001:db8::1"
+	}
+
+	findings := convertPresidioFindings(text, results)
+	require.Len(t, findings, 1, "only the real IPv6 address should survive the filter")
+	assert.Equal(t, "2001:db8::1", findings[0].Match)
+}
+
+func TestIsPresidioFalsePositive_OnlyIPAddressUnspecified(t *testing.T) {
+	t.Parallel()
+
+	// Unspecified IPv6 variants are filtered.
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "::"))
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "::0"))
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "0::0"))
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "0:0:0:0:0:0:0:0"))
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "  ::  "), "trimmed")
+
+	// Real addresses are not filtered.
+	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "127.0.0.1"))
+	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "2001:db8::1"))
+	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "::1"), "loopback is a real address")
+
+	// Other entity types are never filtered by this rule.
+	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "::"))
+}
+
 func TestStubPIIScannerReturnsEmptyResults(t *testing.T) {
 	t.Parallel()
 

@@ -183,7 +183,7 @@ export function ProjectDashboard() {
                     title="Active Servers"
                     value={overview?.summary.activeServersCount ?? 0}
                     icon="server"
-                    tooltip="Unique MCP servers that received at least one tool call via hook telemetry in the selected period. Servers with no activity in the window are not counted."
+                    tooltip="Unique MCP servers used by project members that received at least one tool call in the selected period. Servers with no activity in the window are not counted."
                   />
                 )}
                 {isOverviewPending ? (
@@ -193,7 +193,7 @@ export function ProjectDashboard() {
                     title="Tool Calls"
                     value={overview?.summary.totalToolCalls ?? 0}
                     icon="wrench"
-                    tooltip="Total tool invocations recorded across all servers and sources (Elements, MCP, hooks, and the Gram SDK) in the selected period."
+                    tooltip="Total tool invocations recorded across all servers and sources in the selected period."
                   />
                 )}
                 {isOverviewPending ? (
@@ -203,7 +203,7 @@ export function ProjectDashboard() {
                     title="End Users"
                     value={overview?.summary.activeUsersCount ?? 0}
                     icon="users"
-                    tooltip="Unique end users identified during the selected period. When chat sessions exist they are counted from chat messages; otherwise they are counted from tool-call hook events."
+                    tooltip="Unique end users identified during the selected period. If agent sessions are captured they are counted from chat messages; otherwise they are counted from tool-call events."
                   />
                 )}
                 {isOverviewPending ? (
@@ -213,7 +213,7 @@ export function ProjectDashboard() {
                     title="Sessions"
                     value={overview?.summary.totalChats ?? 0}
                     icon="message-circle"
-                    tooltip="Chat sessions started in the selected period across Elements, MCP clients, hooks, and any other source that opens a Gram chat."
+                    tooltip="Agent sessions started in the selected period."
                   />
                 )}
               </div>
@@ -265,7 +265,7 @@ export function ProjectDashboard() {
 
                 <DashboardCard
                   title="Top Servers"
-                  tooltip="Servers ranked by the number of tool calls they served in the selected period, based on logs captured in hook telemetry in addition to MCP servers hosted on Gram."
+                  tooltip="Servers ranked by the number of tool calls they served in the selected period, based on logs captured from user sessions in addition to MCP servers hosted in your project."
                   action={
                     <CardActions>
                       <ExploreWithAIButton
@@ -311,7 +311,7 @@ export function ProjectDashboard() {
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <DashboardCard
                   title="Most Agent Sessions by User"
-                  tooltip="End users ranked by agent activity in the selected period. When chat sessions exist, activity counts chat messages; otherwise it counts tool calls from hook events."
+                  tooltip="End users ranked by agent activity in the selected period. When agent sessions exist, activity counts chat messages; otherwise it counts tool calls from tool events."
                   action={
                     <CardActions>
                       <ExploreWithAIButton
@@ -384,8 +384,8 @@ export function ProjectDashboard() {
                 </DashboardCard>
 
                 <DashboardCard
-                  title="Most Used LLM Clients"
-                  tooltip="LLM clients (e.g. Claude, Cursor, Windsurf) ranked by activity volume in the selected period, identified from client metadata sent with each call."
+                  title="Most Used Agents"
+                  tooltip="Agents (e.g. Claude, Cursor, Codex) ranked by activity volume in the selected period, identified from client metadata sent with each call."
                   action={
                     <CardActions>
                       <ExploreWithAIButton

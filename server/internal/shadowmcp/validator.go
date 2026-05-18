@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	tsr "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -41,9 +42,9 @@ type ResolvedToolCall struct {
 // ValidateToolsetCall enforces that a Gram-hosted tool call carries the
 // required x-gram-toolset-id property, that the referenced toolset exists in
 // the calling organization, and that the toolset contains a tool whose
-// post-variation name matches toolName. Returns (reason, true) when the call
-// fails validation; the reason is suitable for surfacing alongside a policy
-// name in deny / flag messages.
+// post-variation name matches toolName. Returns (detail, true) when the call
+// fails validation; the detail is suitable for surfacing alongside a policy
+// name in deny / flag messages on the hook path.
 //
 // Toolset lookups go through the Client's bundled toolset cache so callers
 // on hot paths (tools/list hooks, batch scanner) share a single Redis-backed
@@ -140,4 +141,69 @@ func (c *Client) resolveToolsetCall(
 
 	detail, failed := fail(fmt.Sprintf("tool %q is not part of toolset %s", toolName, toolsetID))
 	return nil, detail, failed
+}
+
+// ValidateRemoteMCPServerCall is the `/x/mcp` analogue of
+// [Client.ValidateToolsetCall]. It enforces that a tool call against a
+// remote MCP server proxied by Gram carries the required
+// [XGramToolsetIDField] property and that the echoed UUID resolves to a
+// remote_mcp_server in the calling project. Returns (reason, true) when
+// the call fails validation; the reason is suitable for surfacing
+// alongside a policy name in deny / flag messages.
+//
+// The property name [XGramToolsetIDField] is shared with the toolset
+// path for parity with downstream client-side hooks (Cursor, Claude
+// Code), which validate the same property regardless of whether the
+// backing scope is a Gram toolset or a remote MCP server.
+//
+// Tool name presence is required but is not cross-checked against a
+// curated catalog: remote MCP servers expose their tool catalog
+// dynamically and Gram does not mirror it. Risk policies that target
+// specific (server, tool) combinations enforce that constraint
+// separately at the policy-evaluation layer.
+//
+// A Resolve-shaped helper is intentionally not exposed for this path —
+// remote MCP servers carry no Gram-side BaseToolAttributes for
+// downstream policy evaluation to consume. Add one when a concrete
+// consumer needs the resolved view.
+func (c *Client) ValidateRemoteMCPServerCall(
+	ctx context.Context,
+	toolInput any,
+	toolName string,
+	projectID string,
+) (string, bool) {
+	fail := func(detail string) (string, bool) {
+		return detail, true
+	}
+
+	inputMap, ok := toolInput.(map[string]any)
+	if !ok {
+		return fail(fmt.Sprintf("missing required %q property in tool input", XGramToolsetIDField))
+	}
+	rawID, ok := inputMap[XGramToolsetIDField].(string)
+	if !ok || rawID == "" {
+		return fail(fmt.Sprintf("missing required %q property in tool input", XGramToolsetIDField))
+	}
+	serverID, err := uuid.Parse(rawID)
+	if err != nil {
+		return fail(fmt.Sprintf("invalid %q value: not a UUID", XGramToolsetIDField))
+	}
+
+	projectUUID, err := uuid.Parse(projectID)
+	if err != nil {
+		return fail(fmt.Sprintf("invalid project id %q", projectID))
+	}
+
+	if _, err := remotemcprepo.New(c.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{
+		ID:        serverID,
+		ProjectID: projectUUID,
+	}); err != nil {
+		return fail(fmt.Sprintf("remote mcp server %s not found in this project", serverID))
+	}
+
+	if toolName == "" {
+		return fail("tool call missing tool name")
+	}
+
+	return "", false
 }

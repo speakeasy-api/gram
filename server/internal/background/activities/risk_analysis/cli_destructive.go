@@ -1,10 +1,54 @@
 package risk_analysis
 
 import (
+	"fmt"
 	"regexp"
 	"sort"
 	"strings"
 )
+
+// DescribeCLIDestructive returns the canonical (rule_id, description) for
+// a cli_destructive pattern match. The pattern's FullName() is the
+// canonical rule id directly.
+func DescribeCLIDestructive(pattern cliDestructivePattern, toolName string) (string, string) {
+	ruleID := pattern.FullName()
+	cmd := cliCommandHumanForm[ruleID]
+	if cmd == "" {
+		if toolName == "" {
+			return guard(ruleID), "Detected a destructive command pattern in tool arguments."
+		}
+		return guard(ruleID), fmt.Sprintf("Detected a destructive command pattern in the arguments of tool %q.", toolName)
+	}
+	if toolName == "" {
+		return guard(ruleID), fmt.Sprintf("Detected a %q invocation in tool arguments.", cmd)
+	}
+	return guard(ruleID), fmt.Sprintf("Detected a %q invocation in the arguments of tool %q.", cmd, toolName)
+}
+
+// cliCommandHumanForm maps a cli_destructive canonical rule id to the
+// human form of the matched command, embedded in the description sentence.
+var cliCommandHumanForm = map[string]string{
+	"destructive.shell.rm_rf":                    "rm -rf",
+	"destructive.shell.dd":                       "dd",
+	"destructive.shell.mkfs":                     "mkfs",
+	"destructive.shell.fork_bomb":                "fork bomb",
+	"destructive.shell.chmod_recursive":          "chmod -R",
+	"destructive.shell.chown_recursive":          "chown -R",
+	"destructive.shell.sudo":                     "sudo",
+	"destructive.git.push_force":                 "git push --force",
+	"destructive.git.reset_hard":                 "git reset --hard",
+	"destructive.git.clean_force":                "git clean -f",
+	"destructive.git.branch_delete_force":        "git branch -D",
+	"destructive.database.drop":                  "DROP TABLE",
+	"destructive.database.truncate":              "TRUNCATE",
+	"destructive.database.delete_without_where":  "DELETE without WHERE",
+	"destructive.database.dropdb":                "dropdb",
+	"destructive.cloud.aws_ec2_terminate":        "aws ec2 terminate-instances",
+	"destructive.cloud.aws_s3_rb":                "aws s3 rb",
+	"destructive.cloud.gcloud_projects_delete":   "gcloud projects delete",
+	"destructive.cloud.kubectl_delete_namespace": "kubectl delete namespace",
+	"destructive.cloud.kubectl_delete_workload":  "kubectl delete workload",
+}
 
 // SourceCLIDestructive is the policy source value that flags tool calls whose
 // arguments contain a curated destructive CLI command pattern (rm -rf, git
@@ -32,14 +76,18 @@ type cliDestructivePattern struct {
 	Guard    *regexp.Regexp
 }
 
-// FullName returns "category/name" for use in rule_ids and finding metadata.
+// FullName returns the canonical rule id for this pattern, in
+// `destructive.<category>.<name>` form (e.g. `destructive.shell.rm_rf`).
+// The pattern is a peer of `destructive.tool` under the `destructive.`
+// category, with shell/git/database/cloud as a second-layer grouping.
 func (p cliDestructivePattern) FullName() string {
 	if p.Category == "" && p.Name == "" {
 		return ""
 	}
 	var b strings.Builder
+	b.WriteString("destructive.")
 	b.WriteString(p.Category)
-	b.WriteByte('/')
+	b.WriteByte('.')
 	b.WriteString(p.Name)
 	return b.String()
 }
@@ -59,29 +107,29 @@ type cliDestructiveSpec struct {
 //
 // Order matters: matchCLIDestructiveString returns the first match, so
 // **specific** patterns must come before broader catch-alls in the same
-// category. Within "shell", e.g., chmod-recursive precedes the bare-`sudo`
-// catch-all so `sudo chmod -R 777 /` reports as shell/chmod-recursive
+// category. Within "shell", e.g., chmod_recursive precedes the bare-`sudo`
+// catch-all so `sudo chmod -R 777 /` reports as shell/chmod_recursive
 // rather than shell/sudo.
 var cliDestructivePatterns = compileCLIDestructivePatterns([]cliDestructiveSpec{
 	// Shell.
-	{Category: "shell", Name: "rm-rf", Pattern: `(?i)\brm\s+(?:-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r|--recursive\s+--force|--force\s+--recursive)\b`, Guard: ""},
+	{Category: "shell", Name: "rm_rf", Pattern: `(?i)\brm\s+(?:-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r|--recursive\s+--force|--force\s+--recursive)\b`, Guard: ""},
 	{Category: "shell", Name: "dd", Pattern: `(?i)\bdd\b\s+(?:[a-z]+=)`, Guard: ""},
 	{Category: "shell", Name: "mkfs", Pattern: `(?i)\bmkfs(?:\.\w+)?\b`, Guard: ""},
-	{Category: "shell", Name: "fork-bomb", Pattern: `:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:`, Guard: ""},
-	{Category: "shell", Name: "chmod-recursive", Pattern: `(?i)\bchmod\s+(?:-[a-z]*R[a-z]*|--recursive)\b`, Guard: ""},
-	{Category: "shell", Name: "chown-recursive", Pattern: `(?i)\bchown\s+(?:-[a-z]*R[a-z]*|--recursive)\b`, Guard: ""},
+	{Category: "shell", Name: "fork_bomb", Pattern: `:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:`, Guard: ""},
+	{Category: "shell", Name: "chmod_recursive", Pattern: `(?i)\bchmod\s+(?:-[a-z]*R[a-z]*|--recursive)\b`, Guard: ""},
+	{Category: "shell", Name: "chown_recursive", Pattern: `(?i)\bchown\s+(?:-[a-z]*R[a-z]*|--recursive)\b`, Guard: ""},
 	// `sudo` requires a following token, so a bare-`sudo` mention won't trip
 	// — but prose like "sudo grants" will. Acceptable because we only scan
 	// tool-call argument values, not free chat text. Declared after the more
 	// specific shell patterns above so `sudo chmod -R 777 /` reports as
-	// chmod-recursive, not as sudo.
+	// chmod_recursive, not as sudo.
 	{Category: "shell", Name: "sudo", Pattern: `(?i)\bsudo\s+\S+`, Guard: ""},
 
 	// Git.
-	{Category: "git", Name: "push-force", Pattern: `(?i)\bgit\s+push\b[^\n]*(?:--force\b|--force-with-lease\b|\s-f\b)`, Guard: ""},
-	{Category: "git", Name: "reset-hard", Pattern: `(?i)\bgit\s+reset\s+--hard\b`, Guard: ""},
-	{Category: "git", Name: "clean-force", Pattern: `(?i)\bgit\s+clean\s+(?:-[a-z]*f[a-z]*|--force)\b`, Guard: ""},
-	{Category: "git", Name: "branch-delete-force", Pattern: `(?i)\bgit\s+branch\s+-D\b`, Guard: ""},
+	{Category: "git", Name: "push_force", Pattern: `(?i)\bgit\s+push\b[^\n]*(?:--force\b|--force-with-lease\b|\s-f\b)`, Guard: ""},
+	{Category: "git", Name: "reset_hard", Pattern: `(?i)\bgit\s+reset\s+--hard\b`, Guard: ""},
+	{Category: "git", Name: "clean_force", Pattern: `(?i)\bgit\s+clean\s+(?:-[a-z]*f[a-z]*|--force)\b`, Guard: ""},
+	{Category: "git", Name: "branch_delete_force", Pattern: `(?i)\bgit\s+branch\s+-D\b`, Guard: ""},
 
 	// Database.
 	{Category: "database", Name: "drop", Pattern: `(?i)\bDROP\s+(?:TABLE|DATABASE|SCHEMA|INDEX)\b`, Guard: ""},
@@ -91,15 +139,15 @@ var cliDestructivePatterns = compileCLIDestructivePatterns([]cliDestructiveSpec{
 	// is expressed via Guard. Note: the guard is whole-string, so a
 	// concatenation like "DELETE FROM a; DELETE FROM b WHERE id=1" suppresses
 	// the unguarded first statement. Acceptable for v1.
-	{Category: "database", Name: "delete-without-where", Pattern: `(?i)\bDELETE\s+FROM\b`, Guard: `(?i)\bWHERE\b`},
+	{Category: "database", Name: "delete_without_where", Pattern: `(?i)\bDELETE\s+FROM\b`, Guard: `(?i)\bWHERE\b`},
 	{Category: "database", Name: "dropdb", Pattern: `(?i)\bdropdb\b`, Guard: ""},
 
 	// Cloud.
-	{Category: "cloud", Name: "aws-ec2-terminate", Pattern: `(?i)\baws\s+ec2\s+terminate-instances\b`, Guard: ""},
-	{Category: "cloud", Name: "aws-s3-rb", Pattern: `(?i)\baws\s+s3\s+rb\b`, Guard: ""},
-	{Category: "cloud", Name: "gcloud-projects-delete", Pattern: `(?i)\bgcloud\s+projects\s+delete\b`, Guard: ""},
-	{Category: "cloud", Name: "kubectl-delete-namespace", Pattern: `(?i)\bkubectl\s+delete\s+(?:ns|namespace)\b`, Guard: ""},
-	{Category: "cloud", Name: "kubectl-delete-workload", Pattern: `(?i)\bkubectl\s+delete\s+(?:deployment|sts|statefulset|daemonset|pv|pvc)\b`, Guard: ""},
+	{Category: "cloud", Name: "aws_ec2_terminate", Pattern: `(?i)\baws\s+ec2\s+terminate-instances\b`, Guard: ""},
+	{Category: "cloud", Name: "aws_s3_rb", Pattern: `(?i)\baws\s+s3\s+rb\b`, Guard: ""},
+	{Category: "cloud", Name: "gcloud_projects_delete", Pattern: `(?i)\bgcloud\s+projects\s+delete\b`, Guard: ""},
+	{Category: "cloud", Name: "kubectl_delete_namespace", Pattern: `(?i)\bkubectl\s+delete\s+(?:ns|namespace)\b`, Guard: ""},
+	{Category: "cloud", Name: "kubectl_delete_workload", Pattern: `(?i)\bkubectl\s+delete\s+(?:deployment|sts|statefulset|daemonset|pv|pvc)\b`, Guard: ""},
 })
 
 func compileCLIDestructivePatterns(specs []cliDestructiveSpec) []cliDestructivePattern {
@@ -127,7 +175,7 @@ func compileCLIDestructivePatterns(specs []cliDestructiveSpec) []cliDestructiveP
 // Map iteration is keyed-sorted so the first-match-wins ordering downstream
 // produces the same rule_id every run. Otherwise an input like
 // {"shell": "rm -rf *", "query": "DROP TABLE"} would flap between
-// shell/rm-rf and database/drop on alert dashboards.
+// shell/rm_rf and database/drop on alert dashboards.
 func flattenCLIStrings(input any) []string {
 	if input == nil {
 		return nil

@@ -190,9 +190,9 @@ export function OrgApiKeysInner() {
         API Keys
       </Heading>
       <Type muted small className="mb-6">
-        Create and manage API keys to authenticate programmatic access to Gram
-        services, including deployments, toolset management, and MCP server
-        connections.
+        Create and manage API keys to authenticate programmatic access to
+        platform services, including MCP service deployments, tool management,
+        and other connections.
       </Type>
       <Stack
         direction="horizontal"

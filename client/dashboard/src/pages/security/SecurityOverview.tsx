@@ -1,5 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Type } from "@/components/ui/type";
 import {
   Table,
   TableBody,
@@ -33,15 +34,20 @@ import {
   RULE_CATEGORY_META,
   type RuleCategory,
 } from "./policy-data";
+import { humanizeRuleId } from "./rule-ids";
 import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { Button as MoonshineButton, Icon } from "@speakeasy-api/moonshine";
 
+// DETECTION_RULES.id is the canonical rule_id the backend writes to
+// risk_results, so lookup maps key by it directly.
 const RULE_ID_TO_CATEGORY = new Map<string, RuleCategory>();
+const RULE_ID_TO_TITLE = new Map<string, string>();
 for (const [category, rules] of Object.entries(DETECTION_RULES)) {
   for (const rule of rules) {
     RULE_ID_TO_CATEGORY.set(rule.id, category as RuleCategory);
+    RULE_ID_TO_TITLE.set(rule.id, rule.title);
   }
 }
 
@@ -49,16 +55,26 @@ const SOURCE_TO_CATEGORY = new Map<string, RuleCategory>([
   ["destructive_tool", "destructive_tool"],
   ["shadow_mcp", "shadow_mcp"],
   ["prompt_injection", "prompt_injection"],
+  ["cli_destructive", "cli_destructive"],
 ]);
 
 function getCategoryForFinding(
   source: string | undefined,
   ruleId: string | undefined,
 ): RuleCategory | null {
-  const sourceCategory = source ? SOURCE_TO_CATEGORY.get(source) : null;
-  if (sourceCategory) return sourceCategory;
-  if (!ruleId) return null;
-  return RULE_ID_TO_CATEGORY.get(ruleId) ?? null;
+  if (ruleId) {
+    const byRule = RULE_ID_TO_CATEGORY.get(ruleId);
+    if (byRule) return byRule;
+  }
+  if (source) {
+    return SOURCE_TO_CATEGORY.get(source) ?? null;
+  }
+  return null;
+}
+
+function getRuleTitleFallback(ruleId: string | undefined): string {
+  if (!ruleId) return "-";
+  return RULE_ID_TO_TITLE.get(ruleId) ?? humanizeRuleId(ruleId);
 }
 
 function CategoryLabel({
@@ -69,8 +85,34 @@ function CategoryLabel({
   ruleId?: string;
 }) {
   const category = getCategoryForFinding(source, ruleId);
-  const label = category ? RULE_CATEGORY_META[category].label : null;
-  return <span className="font-mono text-xs">{label}</span>;
+  if (category) {
+    return (
+      <span className="font-mono text-xs">
+        {RULE_CATEGORY_META[category].label}
+      </span>
+    );
+  }
+  // Unknown source: title-case it so the table cell still reads cleanly
+  // (e.g. a future "presidio_pro" source renders as "Presidio Pro").
+  return (
+    <span className="font-mono text-xs">
+      {source ? humanizeRuleId(source.replace(/_/g, "-")) : "-"}
+    </span>
+  );
+}
+
+// Renders a rule id with a tooltip-quality fallback when the dashboard
+// hasn't seen this rule before. The backend may roll out new gitleaks,
+// presidio, or prompt_injection rules independently of the dashboard, so
+// every snake_case id needs to display legibly without a code change.
+function RuleLabel({ ruleId }: { source?: string; ruleId?: string }) {
+  if (!ruleId) return <span className="font-mono text-xs">-</span>;
+  const title = getRuleTitleFallback(ruleId);
+  return (
+    <span className="font-mono text-xs" title={ruleId}>
+      {title}
+    </span>
+  );
 }
 
 export default function SecurityOverview() {
@@ -249,18 +291,28 @@ function SecurityOverviewContent() {
 
   if (isInitialLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <p className="text-muted-foreground text-sm">Loading...</p>
-      </div>
+      <Page.Section>
+        <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
+        <Page.Section.Description className="max-w-2xl">
+          Recent findings from risk analysis scans across agent sessions in your
+          project
+        </Page.Section.Description>
+        <Page.Section.Body>
+          <div className="flex items-center justify-center py-20">
+            <p className="text-muted-foreground text-sm">Loading...</p>
+          </div>
+        </Page.Section.Body>
+      </Page.Section>
     );
   }
 
   if (policies.length === 0) {
     return (
       <Page.Section>
-        <Page.Section.Title>Risk Overview</Page.Section.Title>
+        <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
         <Page.Section.Description className="max-w-2xl">
-          Recent findings from risk analysis scans across your project.
+          Recent findings from risk analysis scans across agent sessions in your
+          project
         </Page.Section.Description>
         <Page.Section.CTA>
           <MoonshineButton
@@ -274,13 +326,17 @@ function SecurityOverviewContent() {
           </MoonshineButton>
         </Page.Section.CTA>
         <Page.Section.Body>
-          <div className="flex flex-col items-center justify-center gap-4 py-20">
-            <Shield className="text-muted-foreground h-12 w-12" />
-            <h2 className="text-lg font-semibold">Risk Analysis</h2>
-            <p className="text-muted-foreground max-w-md text-center text-sm">
+          <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+            <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+              <Shield className="text-muted-foreground h-6 w-6" />
+            </div>
+            <Type variant="subheading" className="mb-1">
+              Risk Analysis
+            </Type>
+            <Type small muted className="mb-4 max-w-md text-center">
               Monitor your chat messages for leaked secrets and sensitive data.
               Set up a risk policy to get started.
-            </p>
+            </Type>
           </div>
         </Page.Section.Body>
       </Page.Section>
@@ -299,10 +355,11 @@ function SecurityOverviewContent() {
   return (
     <>
       <Page.Section>
-        <Page.Section.Title>Risk Overview</Page.Section.Title>
+        <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
 
         <Page.Section.Description>
-          Recent findings from risk analysis scans across your project.
+          Recent findings from risk analysis scans across agent sessions in your
+          project
         </Page.Section.Description>
 
         <Page.Section.CTA>
@@ -458,9 +515,10 @@ function SecurityOverviewContent() {
                               />
                             </TableCell>
                             <TableCell>
-                              <span className="font-mono text-xs">
-                                {result.ruleId ? result.ruleId : "-"}
-                              </span>
+                              <RuleLabel
+                                source={result.source}
+                                ruleId={result.ruleId}
+                              />
                             </TableCell>
                             <TableCell className="text-muted-foreground truncate">
                               {result.chatTitle ?? "Untitled"}

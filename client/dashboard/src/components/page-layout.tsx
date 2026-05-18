@@ -7,6 +7,7 @@ import { Button, Stack } from "@speakeasy-api/moonshine";
 import React, { ReactElement } from "react";
 import { ContentErrorBoundary } from "./content-error-boundary.tsx";
 import { PageHeader } from "./page-header.tsx";
+import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "./ui/heading.tsx";
 import { MoreActions } from "./ui/more-actions.tsx";
 import { Type } from "./ui/type.tsx";
@@ -134,10 +135,23 @@ function PageSectionComponent({ children }: { children: PageSectionChild[] }) {
 function PageSectionTitle({
   children,
   className,
+  stage,
 }: {
   children: React.ReactNode;
   className?: string;
+  stage?: ReleaseStage;
 }) {
+  if (stage) {
+    return (
+      <Stack direction="horizontal" align="center" gap={2}>
+        <Heading variant="h3" className={className}>
+          {children}
+        </Heading>
+        <ReleaseStageBadge stage={stage} />
+      </Stack>
+    );
+  }
+
   return (
     <Heading variant="h3" className={className}>
       {children}

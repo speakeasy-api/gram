@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -112,10 +113,8 @@ func IsShadowMCPApproved(ctx context.Context, c cache.Cache, projectID, policyID
 		if am == "" {
 			continue
 		}
-		for _, c := range canon {
-			if am == c {
-				return true, nil
-			}
+		if slices.Contains(canon, am) {
+			return true, nil
 		}
 	}
 	return false, nil

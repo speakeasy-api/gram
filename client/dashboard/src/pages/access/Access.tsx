@@ -1,5 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Heading } from "@/components/ui/heading";
 import {
   PageTabsTrigger,
   Tabs,
@@ -84,9 +85,12 @@ export function AccessInner() {
   return (
     <>
       <div className="-mt-4">
+        <Heading variant="h4" className="mb-2">
+          Roles &amp; Permissions
+        </Heading>
         <Type variant="body" className="text-muted-foreground mb-2">
           Manage access control for your team by defining roles and assigning
-          permissions.
+          permissions. View past authorization challenges.
         </Type>
       </div>
 

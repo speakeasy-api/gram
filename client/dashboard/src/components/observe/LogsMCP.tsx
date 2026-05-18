@@ -525,7 +525,7 @@ function LogsInnerContent({
     <div className="flex min-w-0 flex-col gap-1">
       <h1 className="text-xl font-semibold">MCP Server Logs</h1>
       <p className="text-muted-foreground text-sm">
-        Browse raw tool call traces and telemetry data
+        Browse raw tool call traces and telemetry data for MCP servers
       </p>
     </div>
   );

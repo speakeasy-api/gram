@@ -162,9 +162,9 @@ export function MCPOverview() {
         </Page.Section.CTA>
         <Page.Section.CTA>{newMcpServerButton}</Page.Section.CTA>
         <Page.Section.Description className="max-w-2xl">
-          Each source is exposed as an MCP server. First-party sources like
-          functions and OpenAPI specs are private by default, while catalog
-          servers are public.
+          Sources exposed as MCP servers. These include all types of sources
+          such as OpenAPI, functions, third-party servers from the catalog, and
+          custom remote MCPs imported by URL.
         </Page.Section.Description>
         <Page.Section.Body>
           {showSearch && (
