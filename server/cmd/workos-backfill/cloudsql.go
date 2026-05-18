@@ -67,9 +67,7 @@ func startCloudSQLProxy(ctx context.Context, opts options) (string, func(), erro
 			if cmd.Process == nil {
 				return
 			}
-			if err := cmd.Process.Signal(os.Interrupt); err != nil {
-				_ = cmd.Process.Kill()
-			}
+			_ = cmd.Process.Kill()
 			select {
 			case <-errCh:
 			case <-time.After(5 * time.Second):
@@ -205,4 +203,21 @@ func cloudSQLDatabaseURL(host string, port int, dbName, user string) string {
 
 func cloudSQLProxyHint() string {
 	return "; cloud sql proxy is enabled, so check that your IAM database user exists and has the required READ or ALL grants from gram-infra"
+}
+
+func cloudSQLRunHint(err error, opts options) string {
+	if !opts.cloudSQLProxy {
+		return ""
+	}
+	message := err.Error()
+	if !strings.Contains(message, "SQLSTATE 42501") && !strings.Contains(message, "permission denied") {
+		return ""
+	}
+	return fmt.Sprintf(`
+
+Cloud SQL permission hint:
+  Your IAM database user can connect, but it does not have table privileges.
+  From ~/github.com/speakeasy-api/gram-infra, run:
+    mise gcp:db:master %s
+  Choose READ for preflight/validate and ALL before write phases.`, opts.environment)
 }

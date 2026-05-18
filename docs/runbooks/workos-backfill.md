@@ -277,3 +277,11 @@ When stopped before an organization write, inspect:
 5. Run writes in phases when possible: `global-roles`, then `organizations`.
 6. Run `validate` after writes.
 7. For prod, capture the preflight output before writing.
+
+## Troubleshooting
+
+If the command fails with `SQLSTATE 42501` or `permission denied for table ...`,
+the Cloud SQL proxy connected successfully, but your IAM database user does not
+have enough table privileges. Go to `~/github.com/speakeasy-api/gram-infra`,
+run `mise gcp:db:master dev` or `mise gcp:db:master prod`, and choose `READ`
+for preflight/validate or `ALL` before write phases.

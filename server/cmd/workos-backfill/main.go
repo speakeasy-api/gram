@@ -147,8 +147,9 @@ func (s *stringList) Set(value string) error {
 
 func main() {
 	ctx := context.Background()
-	if err := run(ctx, parseFlags()); err != nil {
-		fmt.Fprintf(os.Stderr, "workos-backfill: %v\n", err)
+	opts := parseFlags()
+	if err := run(ctx, opts); err != nil {
+		fmt.Fprintf(os.Stderr, "workos-backfill: %v%s\n", err, cloudSQLRunHint(err, opts))
 		os.Exit(1)
 	}
 }
