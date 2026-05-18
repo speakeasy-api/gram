@@ -39,7 +39,6 @@ import (
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
-	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
@@ -238,13 +237,11 @@ func seedRemoteMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 
 	remoteServer = seedRemoteMCPServer(t, ctx, ti, projectID, upstreamURL, headers...)
 	mcpServer, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ProjectID:             projectID,
-		EnvironmentID:         uuid.NullUUID{},
-		ExternalOauthServerID: uuid.NullUUID{},
-		OauthProxyServerID:    uuid.NullUUID{},
-		RemoteMcpServerID:     uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
-		ToolsetID:             uuid.NullUUID{},
-		Visibility:            visibility,
+		ProjectID:         projectID,
+		EnvironmentID:     uuid.NullUUID{},
+		RemoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		ToolsetID:         uuid.NullUUID{},
+		Visibility:        visibility,
 	})
 	require.NoError(t, err)
 
@@ -258,105 +255,6 @@ func seedRemoteMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 	require.NoError(t, err)
 
 	return slug, mcpServer, remoteServer
-}
-
-// seedExternalOAuthServer inserts a minimal external_oauth_server_metadata
-// row in the given project so that an mcp_server can reference it via
-// external_oauth_server_id.
-func seedExternalOAuthServer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID) uuid.UUID {
-	t.Helper()
-
-	row, err := oauthrepo.New(ti.conn).CreateExternalOAuthServerMetadata(ctx, oauthrepo.CreateExternalOAuthServerMetadataParams{
-		ProjectID: projectID,
-		Slug:      "ext-" + uuid.NewString()[:8],
-		Metadata:  []byte(`{}`),
-	})
-	require.NoError(t, err)
-	return row.ID
-}
-
-// seedRemoteMCPEndpointWithExternalOAuth wires up the same chain as
-// seedRemoteMCPEndpoint but additionally attaches an
-// external_oauth_server_id to the mcp_server, exercising the public +
-// external-OAuth runtime path where the caller's Authorization header is
-// expected to be forwarded to the upstream MCP server.
-func seedRemoteMCPEndpointWithExternalOAuth(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, upstreamURL string) (slug string) {
-	t.Helper()
-
-	remoteServer := seedRemoteMCPServer(t, ctx, ti, projectID, upstreamURL)
-	externalOAuthID := seedExternalOAuthServer(t, ctx, ti, projectID)
-
-	mcpServer, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ProjectID:             projectID,
-		EnvironmentID:         uuid.NullUUID{},
-		ExternalOauthServerID: uuid.NullUUID{UUID: externalOAuthID, Valid: true},
-		OauthProxyServerID:    uuid.NullUUID{},
-		RemoteMcpServerID:     uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
-		ToolsetID:             uuid.NullUUID{},
-		Visibility:            "public",
-	})
-	require.NoError(t, err)
-
-	slug = randomSlug()
-	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
-		ProjectID:      projectID,
-		CustomDomainID: uuid.NullUUID{},
-		McpServerID:    mcpServer.ID,
-		Slug:           slug,
-	})
-	require.NoError(t, err)
-
-	return slug
-}
-
-// seedOAuthProxyServer inserts a minimal oauth_proxy_servers row in the
-// given project so that an mcp_server can reference it via
-// oauth_proxy_server_id.
-func seedOAuthProxyServer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID) uuid.UUID {
-	t.Helper()
-
-	row, err := oauthrepo.New(ti.conn).UpsertOAuthProxyServer(ctx, oauthrepo.UpsertOAuthProxyServerParams{
-		ProjectID: projectID,
-		Slug:      "proxy-" + uuid.NewString()[:8],
-		Audience:  pgtype.Text{String: "https://example.invalid", Valid: true},
-	})
-	require.NoError(t, err)
-	return row.ID
-}
-
-// seedRemoteMCPEndpointWithOAuthProxy wires up a remote-backed mcp_server
-// configured for the OAuth-proxy token-swap flow. The proxy resolution
-// is currently stubbed in mcp.Service.ResolveOAuthProxyUpstreamToken
-// (returns "", nil), so this seeding is enough to drive the auth-switch
-// branch in xmcp; once the resolver is implemented it will exercise the
-// full token-swap path.
-func seedRemoteMCPEndpointWithOAuthProxy(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, upstreamURL string) (slug string) {
-	t.Helper()
-
-	remoteServer := seedRemoteMCPServer(t, ctx, ti, projectID, upstreamURL)
-	oauthProxyServerID := seedOAuthProxyServer(t, ctx, ti, projectID)
-
-	mcpServer, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ProjectID:             projectID,
-		EnvironmentID:         uuid.NullUUID{},
-		ExternalOauthServerID: uuid.NullUUID{},
-		OauthProxyServerID:    uuid.NullUUID{UUID: oauthProxyServerID, Valid: true},
-		RemoteMcpServerID:     uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
-		ToolsetID:             uuid.NullUUID{},
-		Visibility:            "public",
-	})
-	require.NoError(t, err)
-
-	slug = randomSlug()
-	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
-		ProjectID:      projectID,
-		CustomDomainID: uuid.NullUUID{},
-		McpServerID:    mcpServer.ID,
-		Slug:           slug,
-	})
-	require.NoError(t, err)
-
-	return slug
 }
 
 // seedToolsetMCPEndpoint wires up a full /x/mcp/{slug} resolution chain for
@@ -378,13 +276,11 @@ func seedToolsetMCPEndpointOnDomain(t *testing.T, ctx context.Context, ti *testI
 	t.Helper()
 
 	mcpServer, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ProjectID:             projectID,
-		EnvironmentID:         uuid.NullUUID{},
-		ExternalOauthServerID: uuid.NullUUID{},
-		OauthProxyServerID:    uuid.NullUUID{},
-		RemoteMcpServerID:     uuid.NullUUID{},
-		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		Visibility:            visibility,
+		ProjectID:         projectID,
+		EnvironmentID:     uuid.NullUUID{},
+		RemoteMcpServerID: uuid.NullUUID{},
+		ToolsetID:         uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		Visibility:        visibility,
 	})
 	require.NoError(t, err)
 
