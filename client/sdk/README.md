@@ -199,6 +199,7 @@ run();
 * [delete](docs/sdks/chat/README.md#delete) - deleteChat chat
 * [generateTitle](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 * [list](docs/sdks/chat/README.md#list) - listChats chat
+* [listChatSources](docs/sdks/chat/README.md#listchatsources) - listChatSources chat
 * [listChatsWithResolutions](docs/sdks/chat/README.md#listchatswithresolutions) - listChatsWithResolutions chat
 * [load](docs/sdks/chat/README.md#load) - loadChat chat
 * [submitFeedback](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
@@ -602,6 +603,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`chatDelete`](docs/sdks/chat/README.md#delete) - deleteChat chat
 - [`chatGenerateTitle`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 - [`chatList`](docs/sdks/chat/README.md#list) - listChats chat
+- [`chatListChatSources`](docs/sdks/chat/README.md#listchatsources) - listChatSources chat
 - [`chatListChatsWithResolutions`](docs/sdks/chat/README.md#listchatswithresolutions) - listChatsWithResolutions chat
 - [`chatLoad`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`chatSessionsCreate`](docs/sdks/chatsessions/README.md#create) - create chatSessions
@@ -957,6 +959,7 @@ To learn about this feature and how to get started, check
 - [`useListAssistantMemories`](docs/sdks/assistantmemories/README.md#list) - listAssistantMemories assistantMemories
 - [`useListAttributeKeys`](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 - [`useListChats`](docs/sdks/chat/README.md#list) - listChats chat
+- [`useListChatSources`](docs/sdks/chat/README.md#listchatsources) - listChatSources chat
 - [`useListChatsWithResolutions`](docs/sdks/chat/README.md#listchatswithresolutions) - listChatsWithResolutions chat
 - [`useListCollections`](docs/sdks/collections/README.md#list) - list collections
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments

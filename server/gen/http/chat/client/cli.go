@@ -135,7 +135,7 @@ func BuildCreditUsagePayload(chatCreditUsageSessionToken string) (*chat.CreditUs
 
 // BuildListChatsWithResolutionsPayload builds the payload for the chat
 // listChatsWithResolutions endpoint from CLI flags.
-func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch string, chatListChatsWithResolutionsExternalUserID string, chatListChatsWithResolutionsResolutionStatus string, chatListChatsWithResolutionsFrom string, chatListChatsWithResolutionsTo string, chatListChatsWithResolutionsLimit string, chatListChatsWithResolutionsOffset string, chatListChatsWithResolutionsSortBy string, chatListChatsWithResolutionsSortOrder string, chatListChatsWithResolutionsSessionToken string, chatListChatsWithResolutionsProjectSlugInput string, chatListChatsWithResolutionsChatSessionsToken string) (*chat.ListChatsWithResolutionsPayload, error) {
+func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch string, chatListChatsWithResolutionsExternalUserID string, chatListChatsWithResolutionsResolutionStatus string, chatListChatsWithResolutionsSource string, chatListChatsWithResolutionsFrom string, chatListChatsWithResolutionsTo string, chatListChatsWithResolutionsLimit string, chatListChatsWithResolutionsOffset string, chatListChatsWithResolutionsSortBy string, chatListChatsWithResolutionsSortOrder string, chatListChatsWithResolutionsSessionToken string, chatListChatsWithResolutionsProjectSlugInput string, chatListChatsWithResolutionsChatSessionsToken string) (*chat.ListChatsWithResolutionsPayload, error) {
 	var err error
 	var search *string
 	{
@@ -153,6 +153,12 @@ func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch str
 	{
 		if chatListChatsWithResolutionsResolutionStatus != "" {
 			resolutionStatus = &chatListChatsWithResolutionsResolutionStatus
+		}
+	}
+	var source *string
+	{
+		if chatListChatsWithResolutionsSource != "" {
+			source = &chatListChatsWithResolutionsSource
 		}
 	}
 	var from *string
@@ -258,12 +264,42 @@ func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch str
 	v.Search = search
 	v.ExternalUserID = externalUserID
 	v.ResolutionStatus = resolutionStatus
+	v.Source = source
 	v.From = from
 	v.To = to
 	v.Limit = limit
 	v.Offset = offset
 	v.SortBy = sortBy
 	v.SortOrder = sortOrder
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v, nil
+}
+
+// BuildListChatSourcesPayload builds the payload for the chat listChatSources
+// endpoint from CLI flags.
+func BuildListChatSourcesPayload(chatListChatSourcesSessionToken string, chatListChatSourcesProjectSlugInput string, chatListChatSourcesChatSessionsToken string) (*chat.ListChatSourcesPayload, error) {
+	var sessionToken *string
+	{
+		if chatListChatSourcesSessionToken != "" {
+			sessionToken = &chatListChatSourcesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatListChatSourcesProjectSlugInput != "" {
+			projectSlugInput = &chatListChatSourcesProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if chatListChatSourcesChatSessionsToken != "" {
+			chatSessionsToken = &chatListChatSourcesChatSessionsToken
+		}
+	}
+	v := &chat.ListChatSourcesPayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

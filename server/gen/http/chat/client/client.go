@@ -37,6 +37,10 @@ type Client struct {
 	// the listChatsWithResolutions endpoint.
 	ListChatsWithResolutionsDoer goahttp.Doer
 
+	// ListChatSources Doer is the HTTP client used to make requests to the
+	// listChatSources endpoint.
+	ListChatSourcesDoer goahttp.Doer
+
 	// DeleteChat Doer is the HTTP client used to make requests to the deleteChat
 	// endpoint.
 	DeleteChatDoer goahttp.Doer
@@ -70,6 +74,7 @@ func NewClient(
 		GenerateTitleDoer:            doer,
 		CreditUsageDoer:              doer,
 		ListChatsWithResolutionsDoer: doer,
+		ListChatSourcesDoer:          doer,
 		DeleteChatDoer:               doer,
 		SubmitFeedbackDoer:           doer,
 		RestoreResponseBody:          restoreBody,
@@ -195,6 +200,30 @@ func (c *Client) ListChatsWithResolutions() goa.Endpoint {
 		resp, err := c.ListChatsWithResolutionsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "listChatsWithResolutions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListChatSources returns an endpoint that makes HTTP requests to the chat
+// service listChatSources server.
+func (c *Client) ListChatSources() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListChatSourcesRequest(c.encoder)
+		decodeResponse = DecodeListChatSourcesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListChatSourcesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListChatSourcesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "listChatSources", err)
 		}
 		return decodeResponse(resp)
 	}

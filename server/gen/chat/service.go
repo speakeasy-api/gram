@@ -27,6 +27,9 @@ type Service interface {
 	CreditUsage(context.Context, *CreditUsagePayload) (res *CreditUsageResult, err error)
 	// List all chats for a project with their resolutions
 	ListChatsWithResolutions(context.Context, *ListChatsWithResolutionsPayload) (res *ListChatsWithResolutionsResult, err error)
+	// List the distinct chat source values observed for the project so the
+	// dashboard can populate the source filter dropdown.
+	ListChatSources(context.Context, *ListChatSourcesPayload) (res *ListChatSourcesResult, err error)
 	// Soft-delete a chat by its ID
 	DeleteChat(context.Context, *DeleteChatPayload) (err error)
 	// Submit user feedback for a chat (success/failure)
@@ -55,7 +58,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"listChats", "loadChat", "generateTitle", "creditUsage", "listChatsWithResolutions", "deleteChat", "submitFeedback"}
+var MethodNames = [8]string{"listChats", "loadChat", "generateTitle", "creditUsage", "listChatsWithResolutions", "listChatSources", "deleteChat", "submitFeedback"}
 
 // Chat is the result type of the chat service loadChat method.
 type Chat struct {
@@ -237,6 +240,22 @@ type GenerateTitleResult struct {
 	Title string
 }
 
+// ListChatSourcesPayload is the payload type of the chat service
+// listChatSources method.
+type ListChatSourcesPayload struct {
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+}
+
+// ListChatSourcesResult is the result type of the chat service listChatSources
+// method.
+type ListChatSourcesResult struct {
+	// Distinct non-empty source values seen on chat messages, sorted
+	// alphabetically.
+	Sources []string
+}
+
 // ListChatsPayload is the payload type of the chat service listChats method.
 type ListChatsPayload struct {
 	SessionToken      *string
@@ -262,6 +281,9 @@ type ListChatsWithResolutionsPayload struct {
 	ExternalUserID *string
 	// Filter by resolution status
 	ResolutionStatus *string
+	// Filter by chat source (e.g. claude-code, dashboard-ai-insights, playground,
+	// elements)
+	Source *string
 	// Filter chats created after this timestamp (ISO 8601)
 	From *string
 	// Filter chats created before this timestamp (ISO 8601)

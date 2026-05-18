@@ -148,6 +148,7 @@ export * from "./listauditlogsresult.js";
 export * from "./listcatalogresponsebody.js";
 export * from "./listchallengebucketsresult.js";
 export * from "./listchallengesresult.js";
+export * from "./listchatsourcesresponsebody.js";
 export * from "./listchatsresult.js";
 export * from "./listchatswithresolutionsresult.js";
 export * from "./listdeploymentresult.js";

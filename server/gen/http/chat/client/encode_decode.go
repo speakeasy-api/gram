@@ -1016,6 +1016,9 @@ func EncodeListChatsWithResolutionsRequest(encoder func(*http.Request) goahttp.E
 		if p.ResolutionStatus != nil {
 			values.Add("resolution_status", *p.ResolutionStatus)
 		}
+		if p.Source != nil {
+			values.Add("source", *p.Source)
+		}
 		if p.From != nil {
 			values.Add("from", *p.From)
 		}
@@ -1226,6 +1229,244 @@ func DecodeListChatsWithResolutionsResponse(decoder func(*http.Response) goahttp
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("chat", "listChatsWithResolutions", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListChatSourcesRequest instantiates a HTTP request object with method
+// and path set to call the "chat" service "listChatSources" endpoint
+func (c *Client) BuildListChatSourcesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListChatSourcesChatPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("chat", "listChatSources", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListChatSourcesRequest returns an encoder for requests sent to the
+// chat listChatSources server.
+func EncodeListChatSourcesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*chat.ListChatSourcesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("chat", "listChatSources", "*chat.ListChatSourcesPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		if p.ChatSessionsToken != nil {
+			head := *p.ChatSessionsToken
+			req.Header.Set("Gram-Chat-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListChatSourcesResponse returns a decoder for responses returned by
+// the chat listChatSources endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeListChatSourcesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListChatSourcesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListChatSourcesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "listChatSources", err)
+			}
+			err = ValidateListChatSourcesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "listChatSources", err)
+			}
+			res := NewListChatSourcesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListChatSourcesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "listChatSources", err)
+			}
+			err = ValidateListChatSourcesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "listChatSources", err)
+			}
+			return nil, NewListChatSourcesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListChatSourcesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "listChatSources", err)
+			}
+			err = ValidateListChatSourcesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "listChatSources", err)
+			}
+			return nil, NewListChatSourcesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListChatSourcesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "listChatSources", err)
+			}
+			err = ValidateListChatSourcesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "listChatSources", err)
+			}
+			return nil, NewListChatSourcesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListChatSourcesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "listChatSources", err)
+			}
+			err = ValidateListChatSourcesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "listChatSources", err)
+			}
+			return nil, NewListChatSourcesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListChatSourcesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "listChatSources", err)
+			}
+			err = ValidateListChatSourcesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "listChatSources", err)
+			}
+			return nil, NewListChatSourcesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListChatSourcesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "listChatSources", err)
+			}
+			err = ValidateListChatSourcesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "listChatSources", err)
+			}
+			return nil, NewListChatSourcesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListChatSourcesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "listChatSources", err)
+			}
+			err = ValidateListChatSourcesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "listChatSources", err)
+			}
+			return nil, NewListChatSourcesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListChatSourcesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "listChatSources", err)
+				}
+				err = ValidateListChatSourcesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "listChatSources", err)
+				}
+				return nil, NewListChatSourcesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListChatSourcesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "listChatSources", err)
+				}
+				err = ValidateListChatSourcesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "listChatSources", err)
+				}
+				return nil, NewListChatSourcesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("chat", "listChatSources", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListChatSourcesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "listChatSources", err)
+			}
+			err = ValidateListChatSourcesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "listChatSources", err)
+			}
+			return nil, NewListChatSourcesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("chat", "listChatSources", resp.StatusCode, string(body))
 		}
 	}
 }

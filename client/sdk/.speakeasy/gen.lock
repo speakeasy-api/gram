@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: e3d92ee1b99d5355f9c5224a472bc1a3
+  docChecksum: dbe77adef2192b760756cbb0e600f859
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -420,6 +420,8 @@ trackedFiles:
     last_write_checksum: sha1:93c858675bf6d05181da9214a8366fbbc744cb58
   docs/models/components/listchallengesresult.md:
     last_write_checksum: sha1:ccb60abaf74490f8f8b4b30f36892eaced6f2bc6
+  docs/models/components/listchatsourcesresponsebody.md:
+    last_write_checksum: sha1:c64ebfd8c9ecc3997a86c0a3240531df7792251f
   docs/models/components/listchatsresult.md:
     last_write_checksum: sha1:3b302bfbd5a1a3a56e02091da748dcf7d5b90522
   docs/models/components/listchatswithresolutionsresult.md:
@@ -1822,6 +1824,14 @@ trackedFiles:
     last_write_checksum: sha1:e194d6a2f3a62a5abfa5afc2b09420d1b3c88374
   docs/models/operations/listchallengessecurity.md:
     last_write_checksum: sha1:612e100b48e95978d1923e12137035d03b5d6e35
+  docs/models/operations/listchatsourcesrequest.md:
+    last_write_checksum: sha1:acbee83960eccaf990397131130009b277a3a9d9
+  docs/models/operations/listchatsourcessecurity.md:
+    last_write_checksum: sha1:594349a9921adbb2c1ee034bfe42f2cadb0fe086
+  docs/models/operations/listchatsourcessecurityoption1.md:
+    last_write_checksum: sha1:e59125d09cf92b0ef9d8479487533c8e2890f98f
+  docs/models/operations/listchatsourcessecurityoption2.md:
+    last_write_checksum: sha1:de70815ce61cb488f14b81dc7767c51d5e12fa95
   docs/models/operations/listchatsrequest.md:
     last_write_checksum: sha1:4c8d7af6a071f65fc9c902b1905422edcac95fe9
   docs/models/operations/listchatssecurity.md:
@@ -1831,7 +1841,7 @@ trackedFiles:
   docs/models/operations/listchatssecurityoption2.md:
     last_write_checksum: sha1:ac4329bd5c3d3cd40d37cbce5ac96671d710c3cc
   docs/models/operations/listchatswithresolutionsrequest.md:
-    last_write_checksum: sha1:56204d35c89b8e6d9c95a1dc1cede3c30e426181
+    last_write_checksum: sha1:94c15db74304fc97c4c256b162711cf84de61b9c
   docs/models/operations/listchatswithresolutionssecurity.md:
     last_write_checksum: sha1:7e130e49b8de4408cc9f7dc45f57459f9789ef64
   docs/models/operations/listchatswithresolutionssecurityoption1.md:
@@ -2649,7 +2659,7 @@ trackedFiles:
   docs/sdks/capabilities/README.md:
     last_write_checksum: sha1:5712626a022779074db281c031f7d655aeaebc60
   docs/sdks/chat/README.md:
-    last_write_checksum: sha1:ba31f10b9d2c97033ce9aa2c0bc5abab9658e474
+    last_write_checksum: sha1:47dff744946aa6074e7d4baa027ee0173e80a0be
   docs/sdks/chatsessions/README.md:
     last_write_checksum: sha1:5931e949f459441faaa30e05840cbaf1fab82836
   docs/sdks/collections/README.md:
@@ -2896,8 +2906,10 @@ trackedFiles:
     id: 8b6b78f0ea19
     last_write_checksum: sha1:52c467e5b7457addcc83ab385f7511f89195e165
     pristine_git_object: 814ef1470b3208dac27bc0c097002de03dbda395
+  src/funcs/chatListChatSources.ts:
+    last_write_checksum: sha1:bf2f18a3bf7f781514a9169073542e0c978b4e99
   src/funcs/chatListChatsWithResolutions.ts:
-    last_write_checksum: sha1:b9ecda1c1c2329654d44c165c71582a43ae8b02d
+    last_write_checksum: sha1:5d1b0fa33fc191f6aeaddfd267164695d8c7e60c
   src/funcs/chatLoad.ts:
     id: 79e579c74f00
     last_write_checksum: sha1:9f8e1b2b8dbcffa33bbf2a8d46a5acc4a0964512
@@ -3942,7 +3954,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:cfbd433cebfc8d4f4e2a092d2590a643b2c2fb0a
+    last_write_checksum: sha1:1e16fcd7978c12fe1f3decb0d111784d1692000c
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -3994,6 +4006,8 @@ trackedFiles:
     last_write_checksum: sha1:ed3993965dd9c76a8667153ad2c6d8d85700f4cc
   src/models/components/listchallengesresult.ts:
     last_write_checksum: sha1:6f5036807ceaa6ea160b0a74cf76902090b47387
+  src/models/components/listchatsourcesresponsebody.ts:
+    last_write_checksum: sha1:bfde2480108818f2e7eba33fc4f3beeeb4659e01
   src/models/components/listchatsresult.ts:
     id: ebb1711bf3ec
     last_write_checksum: sha1:354e8e622a119d7c65527382b436d30a07d3802c
@@ -4994,7 +5008,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:30538a90bff6c930cb923060bf984ffa5eb1bba2
+    last_write_checksum: sha1:c4916d992e22acccbeb3b7faeb233c10a017cd8a
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -5030,8 +5044,10 @@ trackedFiles:
     id: fcaf6c1044c0
     last_write_checksum: sha1:a25bdedbea7ff4479e003a0939eb5488cc3a8526
     pristine_git_object: ae806c76bc527b24fab19883a174e5a94f065fe2
+  src/models/operations/listchatsources.ts:
+    last_write_checksum: sha1:e9731885c98a9689b1c7f8540ed07bebc7fbd755
   src/models/operations/listchatswithresolutions.ts:
-    last_write_checksum: sha1:b55329f39189ee33dd2f18c4b24edd83f85f582c
+    last_write_checksum: sha1:d80e02ebabc4d6ac04348f924bb15395a5a6c2bb
   src/models/operations/listcollections.ts:
     last_write_checksum: sha1:7008055d09d615b4fe08ec3e801dc289b8cc34f3
   src/models/operations/listcollectionservers.ts:
@@ -5760,7 +5776,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:128ad7892881e24c77a29166741bd74cfb617ad6
+    last_write_checksum: sha1:bcbfe98961f6c8207e7812c642d524d612c7a054
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -5818,6 +5834,10 @@ trackedFiles:
     last_write_checksum: sha1:ef73bd3a060ae12659db898766287a9b6707cf14
   src/react-query/listAttributeKeys.ts:
     last_write_checksum: sha1:2f45a816099a6dab33e836b234b9d1489a6d6bd4
+  src/react-query/listChatSources.core.ts:
+    last_write_checksum: sha1:340cd78b99d86e2cd6693950960e18617887b635
+  src/react-query/listChatSources.ts:
+    last_write_checksum: sha1:0e08fdb28d196672a85ab4e29db2936dc94f2ecd
   src/react-query/listChats.core.ts:
     id: 9a62d78ceac3
     last_write_checksum: sha1:727e1aeb78e0173839fdb0c21c896c152a66e51f
@@ -5827,9 +5847,9 @@ trackedFiles:
     last_write_checksum: sha1:4296c9e2d9e0e658743349149c61fe6d88cee251
     pristine_git_object: bea716c86a525c16fb766cc3d523b64bcd0e67b6
   src/react-query/listChatsWithResolutions.core.ts:
-    last_write_checksum: sha1:44b0b122e433a1b328c1462d24f99df7b015831b
+    last_write_checksum: sha1:56be304526aa33dd6f44cf396038014e08c74d8f
   src/react-query/listChatsWithResolutions.ts:
-    last_write_checksum: sha1:e16d86c7364818e44f0d22913e10425c68a69bad
+    last_write_checksum: sha1:2ed7e320e838d95c9e8546158e5ebd5025a4a0a9
   src/react-query/listCollections.core.ts:
     last_write_checksum: sha1:ffbfa28d9a9edac27a4609e5e61f8c5241af6bf0
   src/react-query/listCollections.ts:
@@ -6416,7 +6436,7 @@ trackedFiles:
     last_write_checksum: sha1:7f7fb88196d0ba03d563f0d42fd681a561aceec5
   src/sdk/chat.ts:
     id: c56babc22a20
-    last_write_checksum: sha1:29b8a3c7b5b59220b96a685e18e0eb3ef2402ca5
+    last_write_checksum: sha1:f0d2710b7563632e19658fe8b4453d4c00572335
     pristine_git_object: cf43d8a78da06d7e74a857165809b0f43d02fadf
   src/sdk/chatsessions.ts:
     id: 35b6de66e2dc
@@ -9378,7 +9398,28 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  receiveWorkOSWebhook: {}
+  listChatSources:
+    speakeasy-default-list-chat-sources:
+      responses:
+        "200":
+          application/json: {"sources": ["<value 1>", "<value 2>", "<value 3>"]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listChallengeBuckets:
+    speakeasy-default-list-challenge-buckets:
+      parameters:
+        query:
+          limit: 50
+          offset: 0
+      responses:
+        "200":
+          application/json: {"buckets": [], "total": 676209}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   deleteAssistantMemory:
     speakeasy-default-delete-assistant-memory:
       parameters:
@@ -9415,19 +9456,7 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  listChallengeBuckets:
-    speakeasy-default-list-challenge-buckets:
-      parameters:
-        query:
-          limit: 50
-          offset: 0
-      responses:
-        "200":
-          application/json: {"buckets": [], "total": 676209}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  receiveWorkOSWebhook: {}
   hooks#codex:
     speakeasy-default-hooks#codex:
       requestBody:
@@ -9439,51 +9468,6 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  downloadCodexInstallScript:
-    speakeasy-default-download-codex-install-script:
-      responses:
-        "200":
-          text/x-shellscript: "x-file: example.file"
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  deleteOtelForwardingConfig:
-    speakeasy-default-delete-otel-forwarding-config:
-      responses:
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  getOtelForwardingConfig:
-    speakeasy-default-get-otel-forwarding-config:
-      responses:
-        "200":
-          application/json: {"enabled": true, "endpoint_url": "https://unknown-injunction.name/", "headers": [{"has_value": false, "name": "<value>"}], "organization_id": "<id>"}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  upsertOtelForwardingConfig:
-    speakeasy-default-upsert-otel-forwarding-config:
-      requestBody:
-        application/json: {"enabled": true, "endpoint_url": "https://damp-armchair.name/"}
-      responses:
-        "200":
-          application/json: {"enabled": true, "endpoint_url": "https://tempting-traffic.com", "headers": [{"has_value": false, "name": "<value>"}], "organization_id": "<id>"}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  getRiskCapabilities:
-    speakeasy-default-get-risk-capabilities:
-      responses:
-        "200":
-          application/json: {"pi_classifier_enabled": true}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   createPortalSession:
     speakeasy-default-create-portal-session:
       responses:
@@ -9516,6 +9500,53 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  deleteOtelForwardingConfig:
+    speakeasy-default-delete-otel-forwarding-config:
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getOtelForwardingConfig:
+    speakeasy-default-get-otel-forwarding-config:
+      responses:
+        "200":
+          application/json: {"enabled": true, "endpoint_url": "https://unknown-injunction.name/", "headers": [{"has_value": false, "name": "<value>"}], "organization_id": "<id>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  upsertOtelForwardingConfig:
+    speakeasy-default-upsert-otel-forwarding-config:
+      requestBody:
+        application/json: {"enabled": true, "endpoint_url": "https://damp-armchair.name/"}
+      responses:
+        "200":
+          application/json: {"enabled": true, "endpoint_url": "https://tempting-traffic.com", "headers": [{"has_value": false, "name": "<value>"}], "organization_id": "<id>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  downloadCodexInstallScript:
+    speakeasy-default-download-codex-install-script:
+      responses:
+        "200":
+          text/x-shellscript: "x-file: example.file"
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  cloneClientFromOAuthProxyProvider:
+    speakeasy-default-clone-client-from-O-auth-proxy-provider:
+      requestBody:
+        application/json: {"oauth_proxy_provider_id": "4a856623-2d21-4b55-b070-a5607b54b87a", "remote_session_issuer_id": "3895728d-43a4-4b97-8f00-c03a994bce37", "user_session_issuer_id": "b0f7056a-e9d9-4356-a167-cc7cd78aaddc"}
+      responses:
+        "200":
+          application/json: {"client_id": "<id>", "client_id_issued_at": "2024-06-09T04:24:29.173Z", "created_at": "2025-02-18T14:09:42.387Z", "id": "f3fc5b5a-e998-4c89-a8f2-8cf8a8b51f4a", "project_id": "25d93e75-99b2-46ab-b933-b11be662a0e4", "remote_session_issuer_id": "a828f763-fcd9-422a-8e23-e0c7f1bdc3de", "updated_at": "2025-10-11T07:26:15.440Z", "user_session_issuer_id": "dd99072f-e0be-47b3-b497-023cf5c0ab85"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   createRemoteSessionClient:
     speakeasy-default-create-remote-session-client:
       requestBody:
@@ -9660,28 +9691,49 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  cloneOAuthProxyProvider:
-    speakeasy-default-clone-O-auth-proxy-provider:
+  approveShadowMCP:
+    speakeasy-default-approve-shadow-MCP:
       requestBody:
-        application/json: {"oauth_proxy_provider_id": "635fd5d5-dd94-4b68-ac14-9e43e62bfc3f", "remote_session_issuer_id": "dd7f0b47-9e44-4a03-b85d-24403425a4e0", "user_session_issuer_id": "b31ad3a5-1392-4428-9621-7177c0c344f8"}
+        application/json: {"match": "<value>", "policy_id": "49c3eb36-bd65-4005-bec3-5441067be406"}
       responses:
         "200":
-          application/json: {"client_id": "<id>", "client_id_issued_at": "2024-09-09T16:12:40.803Z", "created_at": "2025-07-06T02:09:41.503Z", "id": "63084392-ab6b-4697-8d3a-46fd0cc18030", "project_id": "34f7ba33-10e4-4b1e-9f2c-2a4ca017638a", "remote_session_issuer_id": "2748ecb5-b9e4-4425-8df8-217b37f116f3", "updated_at": "2026-04-19T21:27:43.099Z", "user_session_issuer_id": "28f9e9ae-b982-4233-965f-405edc1ac0ec"}
+          application/json: {"approved_at": "2024-12-29T22:04:22.639Z", "match": "<value>", "policy_id": "2ed04c29-c92c-4fc8-95bf-bf4c4c6971d1"}
         "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  cloneClientFromOAuthProxyProvider:
-    speakeasy-default-clone-client-from-O-auth-proxy-provider:
-      requestBody:
-        application/json: {"oauth_proxy_provider_id": "4a856623-2d21-4b55-b070-a5607b54b87a", "remote_session_issuer_id": "3895728d-43a4-4b97-8f00-c03a994bce37", "user_session_issuer_id": "b0f7056a-e9d9-4356-a167-cc7cd78aaddc"}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  revokeShadowMCPApproval:
+    speakeasy-default-revoke-shadow-MCP-approval:
+      parameters:
+        query:
+          policy_id: "e0b73b9a-e478-4a4c-adc5-8a14f45770cd"
+          match: "<value>"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listShadowMCPApprovals:
+    speakeasy-default-list-shadow-MCP-approvals:
+      parameters:
+        query:
+          policy_id: "55963dea-075a-4573-8b4f-f1a1f30cdc72"
       responses:
         "200":
-          application/json: {"client_id": "<id>", "client_id_issued_at": "2024-06-09T04:24:29.173Z", "created_at": "2025-02-18T14:09:42.387Z", "id": "f3fc5b5a-e998-4c89-a8f2-8cf8a8b51f4a", "project_id": "25d93e75-99b2-46ab-b933-b11be662a0e4", "remote_session_issuer_id": "a828f763-fcd9-422a-8e23-e0c7f1bdc3de", "updated_at": "2025-10-11T07:26:15.440Z", "user_session_issuer_id": "dd99072f-e0be-47b3-b497-023cf5c0ab85"}
+          application/json: {"approvals": [{"approved_at": "2024-06-15T04:53:03.774Z", "match": "<value>", "policy_id": "c3fddd7e-7900-4b79-ab2c-6f0cd3dc56f5"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getRiskCapabilities:
+    speakeasy-default-get-risk-capabilities:
+      responses:
+        "200":
+          application/json: {"pi_classifier_enabled": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   setToolsetUserSessionIssuer:
     speakeasy-default-set-toolset-user-session-issuer:
       parameters:
@@ -9692,41 +9744,6 @@ examples:
       responses:
         "200":
           application/json: {"account_type": "<value>", "created_at": "2026-09-08T18:44:39.379Z", "id": "<id>", "name": "<value>", "oauth_enablement_metadata": {"oauth2_security_count": 16455}, "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>", "<value 3>"], "resources": [{}], "slug": "<value>", "tool_selection_mode": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [], "toolset_version": 503506, "updated_at": "2024-09-22T05:20:40.508Z"}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  approveShadowMCP:
-    speakeasy-default-approve-shadow-MCP:
-      requestBody:
-        application/json: {"match": "<value>", "policy_id": "49c3eb36-bd65-4005-bec3-5441067be406"}
-      responses:
-        "200":
-          application/json: {"approved_at": "2024-02-20T21:31:07.843Z", "match": "<value>", "policy_id": "4c29c92c-fc85-4bfb-8f4c-4c6971d17241"}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  revokeShadowMCPApproval:
-    speakeasy-default-revoke-shadow-MCP-approval:
-      parameters:
-        query:
-          policy_id: "e0b73b9a-e478-4a4c-adc5-8a14f45770cd"
-          url: "https://drab-editor.net/"
-          match: "<value>"
-      responses:
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  listShadowMCPApprovals:
-    speakeasy-default-list-shadow-MCP-approvals:
-      parameters:
-        query:
-          policy_id: "55963dea-075a-4573-8b4f-f1a1f30cdc72"
-      responses:
-        "200":
-          application/json: {"approvals": [{"approved_at": "2024-06-15T04:53:03.774Z", "match": "<value>", "policy_id": "c3fddd7e-7900-4b79-ab2c-6f0cd3dc56f5"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

@@ -75,6 +75,10 @@ WHERE c.project_id = $1
       )
     )
   )
+  AND (
+    $7 = ''
+    OR (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) = $7
+  )
 `
 
 type CountChatsWithResolutionsParams struct {
@@ -84,6 +88,7 @@ type CountChatsWithResolutionsParams struct {
 	ToTime           pgtype.Timestamptz
 	Search           interface{}
 	ResolutionStatus interface{}
+	Source           interface{}
 }
 
 func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsWithResolutionsParams) (int64, error) {
@@ -94,6 +99,7 @@ func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsW
 		arg.ToTime,
 		arg.Search,
 		arg.ResolutionStatus,
+		arg.Source,
 	)
 	var total int64
 	err := row.Scan(&total)
@@ -980,6 +986,37 @@ func (q *Queries) ListChatResolutions(ctx context.Context, chatID uuid.UUID) ([]
 	return items, nil
 }
 
+const listChatSources = `-- name: ListChatSources :many
+SELECT DISTINCT m.source AS source
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id
+WHERE c.project_id = $1
+  AND c.deleted IS FALSE
+  AND m.source IS NOT NULL
+  AND m.source <> ''
+ORDER BY m.source ASC
+`
+
+func (q *Queries) ListChatSources(ctx context.Context, projectID uuid.UUID) ([]pgtype.Text, error) {
+	rows, err := q.db.Query(ctx, listChatSources, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.Text
+	for rows.Next() {
+		var source pgtype.Text
+		if err := rows.Scan(&source); err != nil {
+			return nil, err
+		}
+		items = append(items, source)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatsForExternalUser = `-- name: ListChatsForExternalUser :many
 SELECT
     c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,
@@ -1181,6 +1218,10 @@ WITH limited_chats AS (
         )
       )
     )
+    AND (
+      $9 = ''
+      OR (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) = $9
+    )
   ORDER BY
     CASE WHEN $1 = 'created_at' AND $2 = 'desc' THEN c.created_at END DESC NULLS LAST,
     CASE WHEN $1 = 'created_at' AND $2 = 'asc' THEN c.created_at END ASC NULLS LAST,
@@ -1189,8 +1230,8 @@ WITH limited_chats AS (
     CASE WHEN $1 = 'score' AND $2 = 'desc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END DESC NULLS LAST,
     CASE WHEN $1 = 'score' AND $2 = 'asc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END ASC NULLS LAST,
     c.created_at DESC
-  LIMIT $10
-  OFFSET $9
+  LIMIT $11
+  OFFSET $10
 )
 SELECT
     lc.id as chat_id,
@@ -1239,6 +1280,7 @@ type ListChatsWithResolutionsParams struct {
 	ToTime           pgtype.Timestamptz
 	Search           interface{}
 	ResolutionStatus interface{}
+	Source           interface{}
 	PageOffset       int32
 	PageLimit        int32
 }
@@ -1273,6 +1315,7 @@ func (q *Queries) ListChatsWithResolutions(ctx context.Context, arg ListChatsWit
 		arg.ToTime,
 		arg.Search,
 		arg.ResolutionStatus,
+		arg.Source,
 		arg.PageOffset,
 		arg.PageLimit,
 	)

@@ -251,6 +251,16 @@ SELECT * FROM chat_resolutions
 WHERE chat_id = @chat_id
 ORDER BY created_at DESC;
 
+-- name: ListChatSources :many
+SELECT DISTINCT m.source AS source
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id
+WHERE c.project_id = @project_id
+  AND c.deleted IS FALSE
+  AND m.source IS NOT NULL
+  AND m.source <> ''
+ORDER BY m.source ASC;
+
 -- name: CountChatsWithResolutions :one
 SELECT COUNT(DISTINCT c.id) as total
 FROM chats c
@@ -277,6 +287,10 @@ WHERE c.project_id = @project_id
         SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = @resolution_status
       )
     )
+  )
+  AND (
+    @source = ''
+    OR (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) = @source
   );
 
 -- name: ListChatsWithResolutions :many
@@ -319,6 +333,10 @@ WITH limited_chats AS (
           SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = @resolution_status
         )
       )
+    )
+    AND (
+      @source = ''
+      OR (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) = @source
     )
   ORDER BY
     CASE WHEN @sort_by = 'created_at' AND @sort_order = 'desc' THEN c.created_at END DESC NULLS LAST,
