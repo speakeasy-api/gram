@@ -30,7 +30,7 @@ func (q *Queries) AcceptInvitation(ctx context.Context, id uuid.UUID) (int64, er
 	return result.RowsAffected(), nil
 }
 
-const acceptPendingInvitationForMember = `-- name: AcceptPendingInvitationForMember :execrows
+const acceptPendingInvitationForMember = `-- name: AcceptPendingInvitationForMember :one
 UPDATE organization_invitations
 SET state = 'accepted',
     accepted_at = clock_timestamp(),
@@ -39,6 +39,7 @@ WHERE organization_id = $1
   AND email = $2
   AND state = 'pending'
   AND expires_at > clock_timestamp()
+RETURNING id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
 `
 
 type AcceptPendingInvitationForMemberParams struct {
@@ -46,12 +47,24 @@ type AcceptPendingInvitationForMemberParams struct {
 	Email          string
 }
 
-func (q *Queries) AcceptPendingInvitationForMember(ctx context.Context, arg AcceptPendingInvitationForMemberParams) (int64, error) {
-	result, err := q.db.Exec(ctx, acceptPendingInvitationForMember, arg.OrganizationID, arg.Email)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+func (q *Queries) AcceptPendingInvitationForMember(ctx context.Context, arg AcceptPendingInvitationForMemberParams) (OrganizationInvitation, error) {
+	row := q.db.QueryRow(ctx, acceptPendingInvitationForMember, arg.OrganizationID, arg.Email)
+	var i OrganizationInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.TokenHash,
+		&i.InviterUserID,
+		&i.RoleSlug,
+		&i.State,
+		&i.ExpiresAt,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const attachWorkOSUserToOrg = `-- name: AttachWorkOSUserToOrg :exec

@@ -78,6 +78,8 @@ type WorkOSClient interface {
 	EnsureOrgExternalID(ctx context.Context, workosOrgID, gramOrgID string) error
 	CreateOrganization(ctx context.Context, name, gramOrgID string) (string, error)
 	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
+	GetOrgMembership(ctx context.Context, workosUserID, workosOrgID string) (*workos.Member, error)
+	UpdateMemberRole(ctx context.Context, membershipID, roleSlug string) (*workos.Member, error)
 }
 
 // IDPUserInfo represents the user identity returned by the IDP after code exchange.
@@ -376,6 +378,32 @@ func (r *Resolver) SyncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 		return fmt.Errorf("invalidate user info cache: %w", err)
 	}
 	return nil
+}
+
+func (r *Resolver) UpdateOrganizationMembershipRole(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error) {
+	if r.workosClient == nil || workosUserID == "" || workosOrgID == "" || roleSlug == "" {
+		return "", nil
+	}
+
+	membership, err := r.workosClient.GetOrgMembership(ctx, workosUserID, workosOrgID)
+	if err != nil {
+		return "", fmt.Errorf("get WorkOS organization membership: %w", err)
+	}
+	if membership == nil || membership.ID == "" {
+		return "", errors.New("WorkOS organization membership not found")
+	}
+	if membership.RoleSlug == roleSlug {
+		return membership.ID, nil
+	}
+
+	updated, err := r.workosClient.UpdateMemberRole(ctx, membership.ID, roleSlug)
+	if err != nil {
+		return "", fmt.Errorf("update WorkOS organization membership role: %w", err)
+	}
+	if updated != nil && updated.ID != "" {
+		return updated.ID, nil
+	}
+	return membership.ID, nil
 }
 
 func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, workosUserID string) ([]orgRepo.ListOrganizationsForUserRow, error) {
