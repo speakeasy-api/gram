@@ -18,6 +18,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 var infra *testenv.Environment
@@ -91,6 +92,7 @@ func TestRunOrganizationBackfill_SkipsNoopOrganization(t *testing.T) {
 			userChanges:       changeCounts{Create: 0, Update: 0, Noop: 0, Delete: 0, StaleSkip: 0},
 			membershipChanges: changeCounts{Create: 0, Update: 0, Noop: 0, Delete: 0, StaleSkip: 0},
 			assignmentChanges: changeCounts{Create: 0, Update: 0, Noop: 0, Delete: 0, StaleSkip: 0},
+			changeDetails:     nil,
 		}},
 	)
 
@@ -294,6 +296,75 @@ func TestBackfillWorkOSOrganization_BackfillsUserAndSyncsSingleRoleAssignment(t 
 	require.Equal(t, gramUserID, assignments[0].UserID.String)
 	require.Equal(t, membershipID, assignments[0].WorkosMembershipID.String)
 	require.Empty(t, assignments[0].WorkosLastEventID.String)
+
+	relationship, err := orgrepo.New(conn).GetRelationshipByMembershipID(ctx, conv.ToPGText(membershipID))
+	require.NoError(t, err)
+	require.True(t, relationship.UserID.Valid)
+	require.Equal(t, gramUserID, relationship.UserID.String)
+	require.Equal(t, workosUserID, relationship.WorkosUserID.String)
+}
+
+func TestBackfillWorkOSOrganization_LinksExistingLocalUserByExternalID(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newBackfillTestConn(t, "workos_backfill_existing_user_external_id")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_backfill_existing_user"
+	const workosOrgID = "org_01JBACKFILLEXISTINGUSER"
+	const workosUserID = "user_01JBACKFILLEXISTINGUSER"
+	const gramUserID = "gram_user_01JBACKFILLEXISTINGUSER"
+	const membershipID = "mem_01JBACKFILLEXISTINGUSER"
+
+	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	_, err := usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          gramUserID,
+		Email:       "old@example.com",
+		DisplayName: "Old Name",
+		PhotoUrl:    conv.ToPGTextEmpty(""),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+
+	workosClient := workos.NewStubClient()
+	workosClient.UpsertOrganization(workos.Organization{
+		ID:         workosOrgID,
+		Name:       "Backfill Existing User",
+		ExternalID: "",
+		CreatedAt:  "2026-05-07T11:00:00Z",
+		UpdatedAt:  "2026-05-07T11:00:00Z",
+	})
+	workosClient.UpsertUser(workosOrgID, workos.User{
+		ID:                workosUserID,
+		FirstName:         "Existing",
+		LastName:          "User",
+		Email:             "existing@example.com",
+		ProfilePictureURL: "",
+		ExternalID:        gramUserID,
+		CreatedAt:         "2026-05-07T11:05:00Z",
+		UpdatedAt:         "2026-05-07T11:05:00Z",
+	})
+	workosClient.UpsertOrganizationMembership(workos.Member{
+		ID:             membershipID,
+		UserID:         workosUserID,
+		OrganizationID: workosOrgID,
+		Organization:   "Backfill Existing User",
+		RoleSlug:       "",
+		Status:         "active",
+		CreatedAt:      "2026-05-07T11:05:00Z",
+		UpdatedAt:      "2026-05-07T11:05:00Z",
+	})
+
+	activity := NewBackfillWorkOSOrganization(logger, conn, workosClient)
+	err = activity.Do(ctx, BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+
+	user, err := usersrepo.New(conn).GetUser(ctx, gramUserID)
+	require.NoError(t, err)
+	require.Equal(t, "existing@example.com", user.Email)
+	require.Equal(t, "Existing User", user.DisplayName)
+	require.Equal(t, workosUserID, user.WorkosID.String)
 
 	relationship, err := orgrepo.New(conn).GetRelationshipByMembershipID(ctx, conv.ToPGText(membershipID))
 	require.NoError(t, err)

@@ -387,7 +387,7 @@ func run(ctx context.Context, opts options) error {
 	}
 
 	if !success {
-		return errors.New("backfill completed with validation failures")
+		return errors.New("backfill completed with failures")
 	}
 	return nil
 }
@@ -802,7 +802,16 @@ func classifyUserRow(ctx context.Context, db *pgxpool.Pool, user workos.User, up
 		if user.ExternalID == "" {
 			return "stale_skip", nil
 		}
-		return "create", nil
+		existing, found, err = findUserByID(ctx, db, user.ExternalID)
+		if err != nil {
+			return "", err
+		}
+		if !found {
+			return "create", nil
+		}
+		if existing.WorkosID.Valid && existing.WorkosID.String != user.ID {
+			return "", fmt.Errorf("local user %q is already linked to different WorkOS user %q", existing.ID, existing.WorkosID.String)
+		}
 	}
 	if existing.WorkosUpdatedAt.Valid && !shouldProcessEvent(nil, &existing.WorkosUpdatedAt.Time, "", updatedAt) {
 		return "stale_skip", nil
@@ -974,6 +983,14 @@ func collectGlobalRoleChangeDetails(ctx context.Context, db *pgxpool.Pool, roles
 		}
 		if ok {
 			details = append(details, detail)
+			continue
+		}
+		change, err := classifyRoleRow(ctx, db, "global_roles", "TRUE", nil, role, updatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("classify global role %q: %w", role.Slug, err)
+		}
+		if change == "create" {
+			details = append(details, roleCreateDetail("global_role", role, updatedAt))
 		}
 	}
 
@@ -1073,6 +1090,14 @@ func collectOrganizationChangeDetails(ctx context.Context, db *pgxpool.Pool, org
 	}
 	if ok {
 		details = append(details, orgDetail)
+	} else {
+		orgChanges, err := classifyOrganizationMetadataChange(ctx, db, org, gramOrgID, skipped)
+		if err != nil {
+			return nil, err
+		}
+		if orgChanges.Create > 0 {
+			details = append(details, organizationCreateDetail(org, gramOrgID))
+		}
 	}
 
 	roleDetails, err := collectOrganizationRoleChangeDetails(ctx, db, gramOrgID, roles)
@@ -1166,6 +1191,14 @@ func collectOrganizationRoleChangeDetails(ctx context.Context, db *pgxpool.Pool,
 		}
 		if ok {
 			details = append(details, detail)
+			continue
+		}
+		change, err := classifyRoleRow(ctx, db, "organization_roles", "organization_id = $1", []any{organizationID}, role, updatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("classify organization role %q: %w", role.Slug, err)
+		}
+		if change == "create" {
+			details = append(details, roleCreateDetail("organization_role", role, updatedAt))
 		}
 	}
 	deleteDetails, err := collectMissingOrganizationRoleDeleteDetails(ctx, db, organizationID, snapshotSlugs)
@@ -1261,11 +1294,30 @@ func collectUserChangeDetails(ctx context.Context, db *pgxpool.Pool, users map[s
 		if err != nil {
 			continue
 		}
+		createdAt, err := parseWorkOSTime(user.CreatedAt)
+		if err != nil {
+			continue
+		}
 		existing, found, err := findUserByWorkOSID(ctx, db, user.ID)
 		if err != nil {
 			return nil, err
 		}
-		if !found || existing.WorkosUpdatedAt.Valid && !shouldProcessEvent(nil, &existing.WorkosUpdatedAt.Time, "", updatedAt) {
+		if !found && user.ExternalID != "" {
+			existing, found, err = findUserByID(ctx, db, user.ExternalID)
+			if err != nil {
+				return nil, err
+			}
+			if found && existing.WorkosID.Valid && existing.WorkosID.String != user.ID {
+				return nil, fmt.Errorf("local user %q is already linked to different WorkOS user %q", existing.ID, existing.WorkosID.String)
+			}
+		}
+		if !found {
+			if user.ExternalID != "" {
+				details = append(details, userCreateDetail(user, user.ExternalID, createdAt, updatedAt))
+			}
+			continue
+		}
+		if existing.WorkosUpdatedAt.Valid && !shouldProcessEvent(nil, &existing.WorkosUpdatedAt.Time, "", updatedAt) {
 			continue
 		}
 		fields := make([]fieldChange, 0)
@@ -1273,6 +1325,10 @@ func collectUserChangeDetails(ctx context.Context, db *pgxpool.Pool, users map[s
 		fields = appendFieldChange(fields, "display_name", existing.DisplayName, displayNameFromWorkOSUser(user))
 		if !pgTextEmptyEqual(existing.PhotoUrl, user.ProfilePictureURL) {
 			fields = appendFieldChange(fields, "photo_url", pgTextDisplay(existing.PhotoUrl), user.ProfilePictureURL)
+		}
+		fields = appendFieldChange(fields, "workos_id", pgTextDisplay(existing.WorkosID), user.ID)
+		if !existing.WorkosCreatedAt.Valid {
+			fields = appendFieldChange(fields, "workos_created_at", pgTimeDisplay(existing.WorkosCreatedAt), timeDisplay(createdAt))
 		}
 		fields = appendFieldChange(fields, "workos_updated_at", pgTimeDisplay(existing.WorkosUpdatedAt), timeDisplay(updatedAt))
 		if existing.DeletedAt.Valid {
@@ -1308,6 +1364,14 @@ func collectMembershipChangeDetails(ctx context.Context, db *pgxpool.Pool, organ
 		}
 		if ok {
 			details = append(details, detail)
+			continue
+		}
+		change, err := classifyMembershipRow(ctx, db, organizationID, member, gramUserID, updatedAt)
+		if err != nil {
+			return nil, err
+		}
+		if change == "create" {
+			details = append(details, membershipCreateDetail(organizationID, member, gramUserID, updatedAt))
 		}
 	}
 	return details, nil
@@ -1368,6 +1432,7 @@ WHERE organization_id = $1
 		if err != nil {
 			return nil, fmt.Errorf("query active role assignments for membership %q: %w", member.ID, err)
 		}
+		activeAssignments := 0
 		for rows.Next() {
 			var id pgtype.UUID
 			var userID pgtype.Text
@@ -1375,6 +1440,7 @@ WHERE organization_id = $1
 				rows.Close()
 				return nil, fmt.Errorf("scan role assignment for membership %q: %w", member.ID, err)
 			}
+			activeAssignments++
 			if member.RoleSlug == "" {
 				details = append(details, changeDetail{
 					Entity: "role_assignment",
@@ -1406,6 +1472,9 @@ WHERE organization_id = $1
 			return nil, fmt.Errorf("iterate role assignments for membership %q: %w", member.ID, err)
 		}
 		rows.Close()
+		if activeAssignments == 0 && member.RoleSlug != "" {
+			details = append(details, roleAssignmentCreateDetail(organizationID, member, gramUserID))
+		}
 	}
 	return details, nil
 }
@@ -2016,6 +2085,78 @@ func printChangeDetails(label string, details []changeDetail) {
 	}
 	if len(details) > limit {
 		fmt.Printf("    ... and %d more changed records\n", len(details)-limit)
+	}
+}
+
+func organizationCreateDetail(org workos.Organization, gramOrgID string) changeDetail {
+	fields := []fieldChange{
+		{Name: "id", Before: "<missing>", After: gramOrgID},
+		{Name: "name", Before: "<missing>", After: org.Name},
+		{Name: "slug", Before: "<missing>", After: "generated unique slug"},
+		{Name: "workos_id", Before: "<missing>", After: org.ID},
+	}
+	if updatedAt, err := parseWorkOSTime(org.UpdatedAt); err == nil {
+		fields = append(fields, fieldChange{Name: "workos_updated_at", Before: "<missing>", After: timeDisplay(updatedAt)})
+	}
+	return changeDetail{Entity: "organization", ID: org.ID, Action: "create", Fields: fields}
+}
+
+func roleCreateDetail(entity string, role workos.Role, updatedAt time.Time) changeDetail {
+	fields := []fieldChange{
+		{Name: "workos_slug", Before: "<missing>", After: role.Slug},
+		{Name: "workos_name", Before: "<missing>", After: role.Name},
+		{Name: "workos_description", Before: "<missing>", After: role.Description},
+	}
+	if createdAt, err := parseWorkOSTime(role.CreatedAt); err == nil {
+		fields = append(fields, fieldChange{Name: "workos_created_at", Before: "<missing>", After: timeDisplay(createdAt)})
+	}
+	fields = append(fields, fieldChange{Name: "workos_updated_at", Before: "<missing>", After: timeDisplay(updatedAt)})
+	return changeDetail{Entity: entity, ID: role.Slug, Action: "create", Fields: fields}
+}
+
+func userCreateDetail(user workos.User, gramUserID string, createdAt, updatedAt time.Time) changeDetail {
+	return changeDetail{
+		Entity: "user",
+		ID:     user.ID,
+		Action: "create",
+		Fields: []fieldChange{
+			{Name: "id", Before: "<missing>", After: gramUserID},
+			{Name: "email", Before: "<missing>", After: user.Email},
+			{Name: "display_name", Before: "<missing>", After: displayNameFromWorkOSUser(user)},
+			{Name: "photo_url", Before: "<missing>", After: user.ProfilePictureURL},
+			{Name: "workos_id", Before: "<missing>", After: user.ID},
+			{Name: "workos_created_at", Before: "<missing>", After: timeDisplay(createdAt)},
+			{Name: "workos_updated_at", Before: "<missing>", After: timeDisplay(updatedAt)},
+		},
+	}
+}
+
+func membershipCreateDetail(organizationID string, member workos.Member, gramUserID string, updatedAt time.Time) changeDetail {
+	return changeDetail{
+		Entity: "membership",
+		ID:     member.ID,
+		Action: "create",
+		Fields: []fieldChange{
+			{Name: "organization_id", Before: "<missing>", After: organizationID},
+			{Name: "user_id", Before: "<missing>", After: gramUserID},
+			{Name: "workos_user_id", Before: "<missing>", After: member.UserID},
+			{Name: "workos_membership_id", Before: "<missing>", After: member.ID},
+			{Name: "workos_updated_at", Before: "<missing>", After: timeDisplay(updatedAt)},
+		},
+	}
+}
+
+func roleAssignmentCreateDetail(organizationID string, member workos.Member, gramUserID string) changeDetail {
+	return changeDetail{
+		Entity: "role_assignment",
+		ID:     member.ID,
+		Action: "create",
+		Fields: []fieldChange{
+			{Name: "organization_id", Before: "<missing>", After: organizationID},
+			{Name: "user_id", Before: "<missing>", After: gramUserID},
+			{Name: "workos_membership_id", Before: "<missing>", After: member.ID},
+			{Name: "workos_slug", Before: "<missing>", After: member.RoleSlug},
+		},
 	}
 }
 
