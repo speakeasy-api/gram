@@ -18,6 +18,10 @@ import (
 type CreateMcpServerRequestBody struct {
 	// The ID of the environment to associate with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication. When set, MCP clients are required to authenticate against
+	// this issuer before connecting.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the toolset to use as the backend
@@ -33,6 +37,9 @@ type UpdateMcpServerRequestBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The ID of the environment to associate with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication. Omit to disable issuer-gated OAuth.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the toolset to use as the backend
@@ -50,6 +57,9 @@ type CreateMcpServerResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication for this server, if any.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
@@ -71,6 +81,9 @@ type GetMcpServerResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication for this server, if any.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
@@ -98,6 +111,9 @@ type UpdateMcpServerResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication for this server, if any.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
@@ -1042,6 +1058,9 @@ type McpServerResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication for this server, if any.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
@@ -1058,10 +1077,11 @@ type McpServerResponseBody struct {
 // of the "createMcpServer" endpoint of the "mcpServers" service.
 func NewCreateMcpServerRequestBody(p *mcpservers.CreateMcpServerPayload) *CreateMcpServerRequestBody {
 	body := &CreateMcpServerRequestBody{
-		EnvironmentID:     p.EnvironmentID,
-		RemoteMcpServerID: p.RemoteMcpServerID,
-		ToolsetID:         p.ToolsetID,
-		Visibility:        string(p.Visibility),
+		EnvironmentID:       p.EnvironmentID,
+		UserSessionIssuerID: p.UserSessionIssuerID,
+		RemoteMcpServerID:   p.RemoteMcpServerID,
+		ToolsetID:           p.ToolsetID,
+		Visibility:          string(p.Visibility),
 	}
 	return body
 }
@@ -1070,11 +1090,12 @@ func NewCreateMcpServerRequestBody(p *mcpservers.CreateMcpServerPayload) *Create
 // of the "updateMcpServer" endpoint of the "mcpServers" service.
 func NewUpdateMcpServerRequestBody(p *mcpservers.UpdateMcpServerPayload) *UpdateMcpServerRequestBody {
 	body := &UpdateMcpServerRequestBody{
-		ID:                p.ID,
-		EnvironmentID:     p.EnvironmentID,
-		RemoteMcpServerID: p.RemoteMcpServerID,
-		ToolsetID:         p.ToolsetID,
-		Visibility:        string(p.Visibility),
+		ID:                  p.ID,
+		EnvironmentID:       p.EnvironmentID,
+		UserSessionIssuerID: p.UserSessionIssuerID,
+		RemoteMcpServerID:   p.RemoteMcpServerID,
+		ToolsetID:           p.ToolsetID,
+		Visibility:          string(p.Visibility),
 	}
 	return body
 }
@@ -1083,14 +1104,15 @@ func NewUpdateMcpServerRequestBody(p *mcpservers.UpdateMcpServerPayload) *Update
 // "createMcpServer" endpoint result from a HTTP "OK" response.
 func NewCreateMcpServerMcpServerOK(body *CreateMcpServerResponseBody) *types.McpServer {
 	v := &types.McpServer{
-		ID:                *body.ID,
-		ProjectID:         *body.ProjectID,
-		EnvironmentID:     body.EnvironmentID,
-		RemoteMcpServerID: body.RemoteMcpServerID,
-		ToolsetID:         body.ToolsetID,
-		Visibility:        types.McpServerVisibility(*body.Visibility),
-		CreatedAt:         *body.CreatedAt,
-		UpdatedAt:         *body.UpdatedAt,
+		ID:                  *body.ID,
+		ProjectID:           *body.ProjectID,
+		EnvironmentID:       body.EnvironmentID,
+		UserSessionIssuerID: body.UserSessionIssuerID,
+		RemoteMcpServerID:   body.RemoteMcpServerID,
+		ToolsetID:           body.ToolsetID,
+		Visibility:          types.McpServerVisibility(*body.Visibility),
+		CreatedAt:           *body.CreatedAt,
+		UpdatedAt:           *body.UpdatedAt,
 	}
 
 	return v
@@ -1250,14 +1272,15 @@ func NewCreateMcpServerGatewayError(body *CreateMcpServerGatewayErrorResponseBod
 // endpoint result from a HTTP "OK" response.
 func NewGetMcpServerMcpServerOK(body *GetMcpServerResponseBody) *types.McpServer {
 	v := &types.McpServer{
-		ID:                *body.ID,
-		ProjectID:         *body.ProjectID,
-		EnvironmentID:     body.EnvironmentID,
-		RemoteMcpServerID: body.RemoteMcpServerID,
-		ToolsetID:         body.ToolsetID,
-		Visibility:        types.McpServerVisibility(*body.Visibility),
-		CreatedAt:         *body.CreatedAt,
-		UpdatedAt:         *body.UpdatedAt,
+		ID:                  *body.ID,
+		ProjectID:           *body.ProjectID,
+		EnvironmentID:       body.EnvironmentID,
+		UserSessionIssuerID: body.UserSessionIssuerID,
+		RemoteMcpServerID:   body.RemoteMcpServerID,
+		ToolsetID:           body.ToolsetID,
+		Visibility:          types.McpServerVisibility(*body.Visibility),
+		CreatedAt:           *body.CreatedAt,
+		UpdatedAt:           *body.UpdatedAt,
 	}
 
 	return v
@@ -1583,14 +1606,15 @@ func NewListMcpServersGatewayError(body *ListMcpServersGatewayErrorResponseBody)
 // "updateMcpServer" endpoint result from a HTTP "OK" response.
 func NewUpdateMcpServerMcpServerOK(body *UpdateMcpServerResponseBody) *types.McpServer {
 	v := &types.McpServer{
-		ID:                *body.ID,
-		ProjectID:         *body.ProjectID,
-		EnvironmentID:     body.EnvironmentID,
-		RemoteMcpServerID: body.RemoteMcpServerID,
-		ToolsetID:         body.ToolsetID,
-		Visibility:        types.McpServerVisibility(*body.Visibility),
-		CreatedAt:         *body.CreatedAt,
-		UpdatedAt:         *body.UpdatedAt,
+		ID:                  *body.ID,
+		ProjectID:           *body.ProjectID,
+		EnvironmentID:       body.EnvironmentID,
+		UserSessionIssuerID: body.UserSessionIssuerID,
+		RemoteMcpServerID:   body.RemoteMcpServerID,
+		ToolsetID:           body.ToolsetID,
+		Visibility:          types.McpServerVisibility(*body.Visibility),
+		CreatedAt:           *body.CreatedAt,
+		UpdatedAt:           *body.UpdatedAt,
 	}
 
 	return v
@@ -1923,6 +1947,9 @@ func ValidateCreateMcpServerResponseBody(body *CreateMcpServerResponseBody) (err
 	if body.EnvironmentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
 	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
 	if body.RemoteMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
 	}
@@ -1969,6 +1996,9 @@ func ValidateGetMcpServerResponseBody(body *GetMcpServerResponseBody) (err error
 	}
 	if body.EnvironmentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 	}
 	if body.RemoteMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
@@ -2032,6 +2062,9 @@ func ValidateUpdateMcpServerResponseBody(body *UpdateMcpServerResponseBody) (err
 	}
 	if body.EnvironmentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 	}
 	if body.RemoteMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
@@ -3279,6 +3312,9 @@ func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
 	}
 	if body.EnvironmentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 	}
 	if body.RemoteMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))

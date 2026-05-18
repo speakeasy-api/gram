@@ -58,13 +58,22 @@ import (
 // FinalRedirectURI is set by callers that own their own redirect surface
 // (e.g. the dashboard's issuer-connect endpoint, which bypasses the consent
 // UI). When non-empty, HandleRemoteLoginCallback redirects there after the
-// upstream token exchange instead of bouncing back to /mcp/{slug}/connect.
+// upstream token exchange instead of bouncing back to
+// /<RouteBase>/{slug}/connect.
+//
+// RouteBase is "mcp" or "x/mcp" — the surface the parent challenge was
+// minted under. Drives both the upstream provider's redirect_uri
+// (/<RouteBase>/remote_login_callback) and the post-callback bounce to
+// /<RouteBase>/{slug}/connect. Empty values fall back to "mcp" so
+// in-flight states minted before this field landed still resume on the
+// original surface.
 type ParentChallenge struct {
 	ID                  string
 	ProjectID           uuid.UUID
 	UserSessionIssuerID uuid.UUID
 	Subject             *urn.SessionSubject
 	McpSlug             string
+	RouteBase           string
 	FinalRedirectURI    string
 }
 
@@ -82,10 +91,14 @@ type RemoteLoginState struct {
 	CodeVerifier          string              `json:"code_verifier"`
 	Subject               *urn.SessionSubject `json:"subject,omitempty"`
 	McpSlug               string              `json:"mcp_slug"`
+	// RouteBase is "mcp" or "x/mcp" — drives the post-callback redirect
+	// to /<RouteBase>/{slug}/connect. Empty values fall back to "mcp"
+	// for in-flight states minted before this field landed.
+	RouteBase string `json:"route_base,omitempty"`
 	// FinalRedirectURI overrides the default post-callback redirect to
-	// /mcp/{slug}/connect. Set by dashboard-driven flows that own their
-	// own popup-close surface (validated against an allow-list before
-	// it lands here).
+	// /<RouteBase>/{slug}/connect. Set by dashboard-driven flows that
+	// own their own popup-close surface (validated against an allow-list
+	// before it lands here).
 	FinalRedirectURI string    `json:"final_redirect_uri,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 }
@@ -229,7 +242,7 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		return "", fmt.Errorf("generate code verifier: %w", err)
 	}
 	codeChallenge := s256Challenge(verifier)
-	redirectURI := m.callbackURL()
+	redirectURI := m.callbackURL(parent.RouteBase)
 
 	// Parse the upstream authorize URL before the cache write so a malformed
 	// endpoint can't leave an orphaned RemoteLoginState in Redis (its key is
@@ -251,6 +264,7 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		CodeVerifier:          verifier,
 		Subject:               parent.Subject,
 		McpSlug:               parent.McpSlug,
+		RouteBase:             parent.RouteBase,
 		FinalRedirectURI:      parent.FinalRedirectURI,
 		CreatedAt:             time.Now(),
 	}
@@ -402,7 +416,11 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		return oops.E(oops.CodeUnexpected, err, "store remote session").Log(ctx, logger)
 	}
 
-	redirect := fmt.Sprintf("%s/mcp/%s/connect?state=%s", strings.TrimRight(m.serverURL.String(), "/"), mcpSlug, url.QueryEscape(state.ParentChallengeID))
+	routeBase := state.RouteBase
+	if routeBase == "" {
+		routeBase = "mcp"
+	}
+	redirect := fmt.Sprintf("%s/%s/%s/connect?state=%s", strings.TrimRight(m.serverURL.String(), "/"), routeBase, mcpSlug, url.QueryEscape(state.ParentChallengeID))
 	if state.FinalRedirectURI != "" {
 		redirect = state.FinalRedirectURI
 	}
@@ -410,8 +428,15 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	return nil
 }
 
-func (m *ChallengeManager) callbackURL() string {
-	return strings.TrimRight(m.serverURL.String(), "/") + "/mcp/remote_login_callback"
+// callbackURL is the route-base-scoped path the upstream provider redirects
+// back to after the user authenticates. Empty routeBase falls back to "mcp"
+// for back-compat with callers that haven't been threaded with a RouteBase
+// yet (and for in-flight states minted before this parameter landed).
+func (m *ChallengeManager) callbackURL(routeBase string) string {
+	if routeBase == "" {
+		routeBase = "mcp"
+	}
+	return strings.TrimRight(m.serverURL.String(), "/") + "/" + routeBase + "/remote_login_callback"
 }
 
 // tokenResponse is the slice of the upstream /token reply we care about.

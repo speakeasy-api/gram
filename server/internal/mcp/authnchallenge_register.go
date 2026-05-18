@@ -52,39 +52,33 @@ type dcrRegistrationResponse struct {
 	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
 }
 
-// HandleRegister implements RFC 7591 Dynamic Client Registration for issuer-
-// gated MCP servers. Mounted at `POST /mcp/{mcpSlug}/register`. Public endpoint
-// (no caller auth); the issuer's metadata document advertises this URL via
-// `registration_endpoint`.
-//
-// Generated client_secret is returned plaintext exactly once; only its bcrypt
-// hash is persisted in user_session_clients.client_secret_hash.
+// HandleRegister is the chi handler at `POST /mcp/{mcpSlug}/register`.
+// Resolves the slug to an issuer-gated ResolvedMcpEndpoint and dispatches
+// to ServeRegister.
 func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
 	}
-
-	toolset, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
-	switch {
-	case errors.Is(err, errToolsetNotFound):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
-	}
-
-	if !toolset.UserSessionIssuerID.Valid {
-		return oops.E(oops.CodeNotFound, nil, "not found")
-	}
-	if err := s.requireUserSessionIssuer(ctx, toolset); err != nil {
+	endpoint, err := s.loadResolvedMcpEndpointByToolsetSlug(ctx, mcpSlug)
+	if err != nil {
 		return err
 	}
+	return s.ServeRegister(w, r, endpoint)
+}
 
-	logger := s.logger.With(
-		attr.SlogToolsetID(toolset.ID.String()),
-		attr.SlogProjectID(toolset.ProjectID.String()),
-	)
+// ServeRegister implements RFC 7591 Dynamic Client Registration for
+// issuer-gated MCP servers. Post-resolution entry point shared by
+// /mcp's HandleRegister (toolset-keyed) and /x/mcp's mcp_endpoint-keyed
+// route registration. Public endpoint (no caller auth); the issuer's
+// metadata document advertises this URL via `registration_endpoint`.
+//
+// Generated client_secret is returned plaintext exactly once; only its
+// bcrypt hash is persisted in user_session_clients.client_secret_hash.
+func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+	ctx := r.Context()
+	logger := endpoint.LogWith(s.logger)
 
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		mediaType, _, err := mime.ParseMediaType(ct)
@@ -134,7 +128,7 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	row, err := usersessions_repo.New(s.db).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		ClientID:            clientID,
 		ClientSecretHash:    clientSecretHash,
 		ClientName:          req.ClientName,

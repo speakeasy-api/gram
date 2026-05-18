@@ -2,6 +2,7 @@
 INSERT INTO mcp_servers (
     project_id,
     environment_id,
+    user_session_issuer_id,
     remote_mcp_server_id,
     toolset_id,
     visibility
@@ -9,6 +10,7 @@ INSERT INTO mcp_servers (
 VALUES (
     @project_id,
     @environment_id,
+    @user_session_issuer_id,
     @remote_mcp_server_id,
     @toolset_id,
     @visibility
@@ -33,6 +35,7 @@ ORDER BY created_at DESC;
 UPDATE mcp_servers
 SET
     environment_id = @environment_id,
+    user_session_issuer_id = @user_session_issuer_id,
     remote_mcp_server_id = @remote_mcp_server_id,
     toolset_id = @toolset_id,
     visibility = @visibility,

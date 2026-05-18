@@ -55,6 +55,10 @@ export type McpServer = {
    */
   updatedAt: Date;
   /**
+   * The ID of the user session issuer that gates OAuth-based MCP client authentication for this server, if any.
+   */
+  userSessionIssuerId?: string | undefined;
+  /**
    * The visibility of an MCP server
    */
   visibility: McpServerVisibility;
@@ -82,6 +86,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      user_session_issuer_id: z.optional(z.string()),
       visibility: McpServerVisibility$inboundSchema,
     }),
     z.transform((v) => {
@@ -92,6 +97,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
         "remote_mcp_server_id": "remoteMcpServerId",
         "toolset_id": "toolsetId",
         "updated_at": "updatedAt",
+        "user_session_issuer_id": "userSessionIssuerId",
       });
     }),
   );
