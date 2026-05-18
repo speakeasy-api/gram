@@ -24,7 +24,7 @@ import { RefreshCw, ShieldOff } from "lucide-react";
 import { useCallback, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { CategoryLabel, MaskedMatch } from "./risk-ui";
+import { CategoryLabel, MaskedMatch, RuleLabel } from "./risk-ui";
 
 const RISK_ACTIVITY_GRID =
   "grid grid-cols-[172px_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_110px] gap-3";
@@ -397,11 +397,11 @@ function RiskActivityRow({
       <div className="text-muted-foreground min-w-0 font-mono text-xs">
         {result.createdAt ? new Date(result.createdAt).toLocaleString() : "-"}
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 truncate">
         <CategoryLabel source={result.source} ruleId={result.ruleId} />
       </div>
       <div className="min-w-0 truncate">
-        <span className="font-mono text-xs">{result.ruleId ?? "-"}</span>
+        <RuleLabel source={result.source} ruleId={result.ruleId} />
       </div>
       <div className="min-w-0 truncate">{result.chatTitle ?? "Untitled"}</div>
       <div className="min-w-0 truncate">{result.userId ?? "-"}</div>
@@ -420,7 +420,7 @@ function RiskActivityRow({
       <div className="flex min-w-0 justify-center">
         {isShadowMCP && result.match ? (
           <Button
-            variant="secondary"
+            variant="tertiary"
             size="sm"
             disabled={isExcluding}
             onClick={(e) => {
