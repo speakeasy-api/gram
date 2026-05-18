@@ -19,6 +19,7 @@ type Endpoints struct {
 	Get                 goa.Endpoint
 	SendInvite          goa.Endpoint
 	RevokeInvite        goa.Endpoint
+	UpdateInviteRole    goa.Endpoint
 	ListInvites         goa.Endpoint
 	ListUsers           goa.Endpoint
 	RemoveUser          goa.Endpoint
@@ -35,6 +36,7 @@ func NewEndpoints(s Service) *Endpoints {
 		Get:                 NewGetEndpoint(s, a.APIKeyAuth),
 		SendInvite:          NewSendInviteEndpoint(s, a.APIKeyAuth),
 		RevokeInvite:        NewRevokeInviteEndpoint(s, a.APIKeyAuth),
+		UpdateInviteRole:    NewUpdateInviteRoleEndpoint(s, a.APIKeyAuth),
 		ListInvites:         NewListInvitesEndpoint(s, a.APIKeyAuth),
 		ListUsers:           NewListUsersEndpoint(s, a.APIKeyAuth),
 		RemoveUser:          NewRemoveUserEndpoint(s, a.APIKeyAuth),
@@ -50,6 +52,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Get = m(e.Get)
 	e.SendInvite = m(e.SendInvite)
 	e.RevokeInvite = m(e.RevokeInvite)
+	e.UpdateInviteRole = m(e.UpdateInviteRole)
 	e.ListInvites = m(e.ListInvites)
 	e.ListUsers = m(e.ListUsers)
 	e.RemoveUser = m(e.RemoveUser)
@@ -124,6 +127,29 @@ func NewRevokeInviteEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return nil, s.RevokeInvite(ctx, p)
+	}
+}
+
+// NewUpdateInviteRoleEndpoint returns an endpoint function that calls the
+// method "updateInviteRole" of service "organizations".
+func NewUpdateInviteRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateInviteRolePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateInviteRole(ctx, p)
 	}
 }
 

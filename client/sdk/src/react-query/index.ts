@@ -229,6 +229,7 @@ export * from "./trigger.js";
 export * from "./triggerDefinitions.js";
 export * from "./triggers.js";
 export * from "./updateEnvironment.js";
+export * from "./updateInviteRole.js";
 export * from "./updateMcpEndpoint.js";
 export * from "./updateMcpServer.js";
 export * from "./updateMemberRole.js";

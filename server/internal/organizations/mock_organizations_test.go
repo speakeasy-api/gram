@@ -50,6 +50,25 @@ func (m *MockOrganizationProvider) ListRoles(ctx context.Context, workosOrgID st
 	return nil, nil
 }
 
+func (m *MockOrganizationProvider) GetOrganizationDomainPolicy(ctx context.Context, workosOrgID string) (*thirdpartyworkos.OrganizationDomainPolicy, error) {
+	for _, call := range m.ExpectedCalls {
+		if call.Method == "GetOrganizationDomainPolicy" {
+			args := m.Called(ctx, workosOrgID)
+			if err := args.Error(1); err != nil {
+				return nil, fmt.Errorf("mock GetOrganizationDomainPolicy: %w", err)
+			}
+			if policy, ok := args.Get(0).(*thirdpartyworkos.OrganizationDomainPolicy); ok {
+				return policy, nil
+			}
+			return nil, nil
+		}
+	}
+
+	return &thirdpartyworkos.OrganizationDomainPolicy{
+		Domains: nil,
+	}, nil
+}
+
 func (m *MockOrganizationProvider) DeleteOrganizationMembership(ctx context.Context, workosMembershipID string) error {
 	args := m.Called(ctx, workosMembershipID)
 	if err := args.Error(0); err != nil {

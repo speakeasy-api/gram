@@ -38,6 +38,32 @@ func TestService_ListInvites(t *testing.T) {
 	require.Equal(t, authCtx.UserID, *inv.InviterUserID)
 }
 
+func TestService_ListInvites_IncludesRoleSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	row, err := orgrepo.New(ti.conn).CreateInvitation(ctx, orgrepo.CreateInvitationParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Email:          "role@example.com",
+		TokenHash:      "rolehash",
+		InviterUserID:  conv.ToPGText(authCtx.UserID),
+		RoleSlug:       conv.ToPGText("member"),
+		ExpiresInDays:  7,
+	})
+	require.NoError(t, err)
+
+	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Invitations, 1)
+	require.Equal(t, row.ID.String(), res.Invitations[0].ID)
+	require.NotNil(t, res.Invitations[0].RoleSlug)
+	require.Equal(t, "member", *res.Invitations[0].RoleSlug)
+}
+
 func TestService_ListInvites_ExcludesAccepted(t *testing.T) {
 	t.Parallel()
 

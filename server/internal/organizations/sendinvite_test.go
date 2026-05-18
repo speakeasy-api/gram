@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -37,6 +39,51 @@ func TestService_SendInvite(t *testing.T) {
 	require.NotEmpty(t, invite.CreatedAt)
 }
 
+func TestService_SendInvite_AllowsTrustedDomainEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+
+	ti.orgs.On("GetOrganizationDomainPolicy", mock.Anything, mock.Anything).Return(&thirdpartyworkos.OrganizationDomainPolicy{
+		Domains: []thirdpartyworkos.OrganizationDomain{
+			{Domain: "example.com", State: thirdpartyworkos.OrganizationDomainStateVerified},
+			{Domain: "Example.org.", State: thirdpartyworkos.OrganizationDomainStateVerified},
+		},
+	}, nil).Once()
+
+	invite, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{
+		Email: "Test@Example.com",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, invite)
+	require.Equal(t, "test@example.com", invite.Email)
+}
+
+func TestService_SendInvite_RejectsEmailOutsideTrustedDomains(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+
+	ti.orgs.On("GetOrganizationDomainPolicy", mock.Anything, mock.Anything).Return(&thirdpartyworkos.OrganizationDomainPolicy{
+		Domains: []thirdpartyworkos.OrganizationDomain{
+			{Domain: "example.com", State: thirdpartyworkos.OrganizationDomainStateVerified},
+			{Domain: "Example.org.", State: thirdpartyworkos.OrganizationDomainStateVerified},
+		},
+	}, nil).Once()
+
+	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{
+		Email: "test@other.com",
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Equal(t, "invite email must use one of this organization's trusted domains: example.com, example.org", oopsErr.Error())
+
+	invites, listErr := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
+	require.NoError(t, listErr)
+	require.Empty(t, invites.Invitations)
+}
+
 func TestService_SendInvite_WithRoleID(t *testing.T) {
 	t.Parallel()
 
@@ -55,6 +102,43 @@ func TestService_SendInvite_WithRoleID(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, invite)
 	require.Equal(t, "test@example.com", invite.Email)
+	require.NotNil(t, invite.RoleSlug)
+	require.Equal(t, "member", *invite.RoleSlug)
+}
+
+func TestService_SendInvite_AuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+
+	roleID := "role-member"
+	ti.orgs.On("ListRoles", mock.Anything, mock.Anything).Return([]thirdpartyworkos.Role{
+		{ID: "role-member", Slug: "member", Name: "Member"},
+	}, nil).Once()
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationInviteCreate)
+	require.NoError(t, err)
+
+	invite, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{
+		Email:  "audit@example.com",
+		RoleID: &roleID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, invite)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationInviteCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionOrganizationInviteCreate)
+	require.NoError(t, err)
+	require.Equal(t, "organization_invitation", record.SubjectType)
+	require.Equal(t, "audit@example.com", record.SubjectDisplay)
+	require.Equal(t, "audit@example.com", record.SubjectSlug)
+
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, "member", metadata["role_slug"])
 }
 
 func TestService_SendInvite_AllowsOrgAdminGrant(t *testing.T) {

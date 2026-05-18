@@ -35,6 +35,10 @@ export type Role = {
    * Display name of the role.
    */
   name: string;
+  /**
+   * Stable WorkOS role slug.
+   */
+  slug: string;
   updatedAt: Date;
 };
 
@@ -51,6 +55,7 @@ export const Role$inboundSchema: z.ZodMiniType<Role, unknown> = z.pipe(
     is_system: z.boolean(),
     member_count: z.int(),
     name: z.string(),
+    slug: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

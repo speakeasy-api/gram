@@ -57,6 +57,7 @@ const (
 type OrganizationProvider interface {
 	DeleteOrganizationMembership(ctx context.Context, workosMembershipID string) error
 	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
+	GetOrganizationDomainPolicy(ctx context.Context, workosOrgID string) (*workos.OrganizationDomainPolicy, error)
 	ListRoles(ctx context.Context, workosOrgID string) ([]workos.Role, error)
 }
 
@@ -175,47 +176,42 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		return nil, err
 	}
 
+	normalizedEmail := strings.ToLower(strings.TrimSpace(payload.Email))
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
 		attr.UserID(ac.UserID),
-		attr.OrganizationInviteEmail(strings.ToLower(strings.TrimSpace(payload.Email))),
+		attr.OrganizationInviteEmail(normalizedEmail),
 	)
+
+	emailDomain, ok := inviteEmailDomain(normalizedEmail)
+	if !ok {
+		return nil, oops.E(oops.CodeBadRequest, nil, "email must be a valid email address").Log(ctx, logger)
+	}
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, logger)
+	}
+	if workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID); workosOrgID != "" {
+		if err := s.ensureInviteEmailDomainAllowed(ctx, logger, workosOrgID, emailDomain); err != nil {
+			return nil, err
+		}
+	}
 
 	rawToken, tokenHash, err := generateInviteToken()
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate invite token").Log(ctx, logger)
 	}
 
-	// Resolve the WorkOS role ID sent by the dashboard into a WorkOS role slug
-	// so the invite stores the slug (needed by CreateOrganizationMembership and
-	// SyncUserOrganizationRoleAssignments at acceptance time).
 	roleSlug := pgtype.Text{String: "", Valid: false}
 	if payload.RoleID != nil && *payload.RoleID != "" {
-		org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+		roleSlug, err = s.resolveInviteRoleSlug(ctx, ac.ActiveOrganizationID, *payload.RoleID, logger)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, logger)
-		}
-		if !org.WorkosID.Valid || org.WorkosID.String == "" {
-			return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, logger)
-		}
-		roles, err := s.orgs.ListRoles(ctx, org.WorkosID.String)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "list roles for invite").Log(ctx, logger)
-		}
-		for _, r := range roles {
-			if r.ID == *payload.RoleID {
-				roleSlug = conv.ToPGText(r.Slug)
-				break
-			}
-		}
-		if !roleSlug.Valid {
-			return nil, oops.E(oops.CodeBadRequest, nil, "role not found").Log(ctx, logger)
+			return nil, err
 		}
 		span.AddEvent("invite.role_resolved", trace.WithAttributes(attr.OrganizationInviteRoleSlug(roleSlug.String)))
 	}
-
-	normalizedEmail := strings.ToLower(strings.TrimSpace(payload.Email))
 
 	// Expire stale invites and create the new one in a single transaction so
 	// a concurrent request cannot slip in between and claim the unique index.
@@ -253,6 +249,18 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		attr.OrganizationInviteID(row.ID.String()),
 		attr.OrganizationInviteEmail(normalizedEmail),
 	))
+
+	if err := s.audit.LogOrganizationInviteCreate(ctx, tx, audit.LogOrganizationInviteCreateEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		InvitationURN:    urn.NewOrganizationInvitation(row.ID),
+		InviteeEmail:     row.Email,
+		RoleSlug:         conv.FromPGText[string](row.RoleSlug),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log organization invitation creation").Log(ctx, logger)
+	}
 
 	inviteLink := ""
 	if s.email != nil {
@@ -299,6 +307,62 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 	}
 
 	return dbInvitationToGen(&row, &ac.UserID), nil
+}
+
+func (s *Service) ensureInviteEmailDomainAllowed(ctx context.Context, logger *slog.Logger, workosOrgID string, emailDomain string) error {
+	policy, err := s.orgs.GetOrganizationDomainPolicy(ctx, workosOrgID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "get organization trusted domains").Log(ctx, logger)
+	}
+	if policy == nil {
+		return nil
+	}
+
+	hasTrustedDomains := false
+	trustedDomains := make([]string, 0, len(policy.Domains))
+	for _, domain := range policy.Domains {
+		trustedDomain := normalizeInviteDomain(domain.Domain)
+		if trustedDomain == "" {
+			continue
+		}
+		hasTrustedDomains = true
+		trustedDomains = append(trustedDomains, trustedDomain)
+		if trustedDomain == emailDomain {
+			return nil
+		}
+	}
+	if !hasTrustedDomains {
+		return nil
+	}
+
+	return oops.E(oops.CodeBadRequest, nil, "invite email must use one of this organization's trusted domains: %s", strings.Join(trustedDomains, ", ")).Log(ctx, logger)
+}
+
+func (s *Service) resolveInviteRoleSlug(ctx context.Context, organizationID string, roleID string, logger *slog.Logger) (pgtype.Text, error) {
+	if strings.TrimSpace(roleID) == "" {
+		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeBadRequest, nil, "role id is required").Log(ctx, logger)
+	}
+
+	// Resolve the WorkOS role ID sent by the dashboard into a WorkOS role slug
+	// so the invite stores the slug needed at acceptance time.
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, logger)
+	}
+	if !org.WorkosID.Valid || org.WorkosID.String == "" {
+		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, logger)
+	}
+	roles, err := s.orgs.ListRoles(ctx, org.WorkosID.String)
+	if err != nil {
+		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeUnexpected, err, "list roles for invite").Log(ctx, logger)
+	}
+	for _, r := range roles {
+		if r.ID == roleID {
+			return conv.ToPGText(r.Slug), nil
+		}
+	}
+
+	return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeBadRequest, nil, "role not found").Log(ctx, logger)
 }
 
 func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePayload) error {
@@ -350,6 +414,100 @@ func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePay
 
 	span.AddEvent("invite.revoked")
 	return nil
+}
+
+func (s *Service) UpdateInviteRole(ctx context.Context, payload *gen.UpdateInviteRolePayload) (*gen.OrganizationInvitation, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogUserID(ac.UserID),
+		attr.SlogOrganizationInviteID(payload.InvitationID),
+		attr.SlogAccessRoleID(payload.RoleID),
+	)
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+		attr.OrganizationInviteID(payload.InvitationID),
+		attr.AccessRoleID(payload.RoleID),
+	)
+
+	inviteID, err := uuid.Parse(payload.InvitationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid invitation id").Log(ctx, logger)
+	}
+
+	repo := orgrepo.New(s.db)
+	invite, err := repo.GetInvitationByID(ctx, inviteID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound).Log(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "get invitation").Log(ctx, logger)
+	}
+	if invite.OrganizationID != ac.ActiveOrganizationID {
+		return nil, oops.E(oops.CodeForbidden, nil, "invitation does not belong to this organization").Log(ctx, logger)
+	}
+	if invite.State != "pending" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invitation is not pending").Log(ctx, logger)
+	}
+	if invite.ExpiresAt.Valid && !invite.ExpiresAt.Time.After(time.Now()) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invitation is expired").Log(ctx, logger)
+	}
+
+	roleSlug, err := s.resolveInviteRoleSlug(ctx, ac.ActiveOrganizationID, payload.RoleID, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	txRepo := orgrepo.New(tx)
+	beforeSnapshot := dbInvitationToGen(&invite, conv.FromPGText[string](invite.InviterUserID))
+	row, err := txRepo.UpdateInvitationRole(ctx, orgrepo.UpdateInvitationRoleParams{
+		ID:             inviteID,
+		OrganizationID: ac.ActiveOrganizationID,
+		RoleSlug:       roleSlug,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound).Log(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "update invitation role").Log(ctx, logger)
+	}
+
+	afterSnapshot := dbInvitationToGen(&row, conv.FromPGText[string](row.InviterUserID))
+	if err := s.audit.LogOrganizationInviteRoleUpdate(ctx, tx, audit.LogOrganizationInviteRoleUpdateEvent{
+		OrganizationID:           ac.ActiveOrganizationID,
+		Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName:         ac.Email,
+		ActorSlug:                nil,
+		InvitationURN:            urn.NewOrganizationInvitation(row.ID),
+		InviteeEmail:             row.Email,
+		InvitationSnapshotBefore: beforeSnapshot,
+		InvitationSnapshotAfter:  afterSnapshot,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log organization invitation role update").Log(ctx, logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit invitation role update").Log(ctx, logger)
+	}
+
+	span.AddEvent("invite.role_updated", trace.WithAttributes(attr.OrganizationInviteRoleSlug(roleSlug.String)))
+	return afterSnapshot, nil
 }
 
 func (s *Service) ListInvites(ctx context.Context, _ *gen.ListInvitesPayload) (*gen.ListInvitesResult, error) {
@@ -731,6 +889,23 @@ func hashToken(raw string) string {
 	return hex.EncodeToString(h[:])
 }
 
+func inviteEmailDomain(email string) (string, bool) {
+	local, domain, ok := strings.Cut(email, "@")
+	if !ok || strings.TrimSpace(local) == "" {
+		return "", false
+	}
+	domain = normalizeInviteDomain(domain)
+	if domain == "" || strings.Contains(domain, "@") {
+		return "", false
+	}
+
+	return domain, true
+}
+
+func normalizeInviteDomain(domain string) string {
+	return strings.TrimSuffix(strings.ToLower(strings.TrimSpace(domain)), ".")
+}
+
 // dbInvitationToGen maps a DB invitation row into the public API shape.
 func dbInvitationToGen(row *orgrepo.OrganizationInvitation, inviterUserID *string) *gen.OrganizationInvitation {
 	if row == nil {
@@ -763,6 +938,7 @@ func dbInvitationToGen(row *orgrepo.OrganizationInvitation, inviterUserID *strin
 		AcceptedAt:    conv.PtrEmpty(acceptedAt),
 		RevokedAt:     conv.PtrEmpty(revokedAt),
 		InviterUserID: inviterUserID,
+		RoleSlug:      conv.FromPGText[string](row.RoleSlug),
 		ExpiresAt:     conv.PtrEmpty(expiresAt),
 		CreatedAt:     createdAt,
 		UpdatedAt:     updatedAt,
