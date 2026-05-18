@@ -22,6 +22,7 @@ import {
   useListInvitesSuspense,
   useSendInviteMutation,
   useRevokeInviteMutation,
+  useUpdateInviteRoleMutation,
   useRemoveOrganizationUserMutation,
 } from "@gram/client/react-query";
 import { useMembers } from "@gram/client/react-query/members.js";
@@ -37,6 +38,7 @@ import { RefreshCw, Trash2, UserPlus, Users, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { RequireScope } from "@/components/require-scope";
+import { useRBAC } from "@/hooks/useRBAC";
 
 function getMemberColors(id: string) {
   let hash = 2166136261;
@@ -75,6 +77,7 @@ export default function Team() {
 export function TeamInner() {
   const organization = useOrganization();
   const user = useUser();
+  const { isRbacEnabled } = useRBAC();
   const queryClient = useQueryClient();
 
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
@@ -99,15 +102,24 @@ export function TeamInner() {
   const invites = invitesData?.invitations ?? [];
   const roles = rolesData?.roles ?? [];
   const accessMembers = accessMembersData?.members ?? [];
-  const defaultRoleId = roles.find(
-    (r) => r.name.toLowerCase() === "member",
-  )?.id;
-  const effectiveInviteRoleId = inviteRoleId ?? defaultRoleId;
+  const memberRole = roles.find(
+    (r) => r.slug === "member" || r.name.toLowerCase() === "member",
+  );
+  const memberRoleId = memberRole?.id;
+  const defaultRoleId = memberRoleId;
+  const effectiveInviteRoleId = isRbacEnabled
+    ? (inviteRoleId ?? defaultRoleId)
+    : memberRoleId;
 
   // Cross-reference AccessMember (has roleId) by user ID
   const roleByUserId = new Map(accessMembers.map((m) => [m.id, m.roleId]));
+  const roleBySlug = new Map(roles.map((role) => [role.slug, role]));
   const getRoleName = (roleId: string) =>
     roles.find((r) => r.id === roleId)?.name ?? "Unknown";
+  const getInviteRole = (invite: OrganizationInvitation) =>
+    invite.roleSlug ? roleBySlug.get(invite.roleSlug) : undefined;
+  const getInviteRoleId = (invite: OrganizationInvitation) =>
+    getInviteRole(invite)?.id;
 
   // Identify admin role and count admins for last-admin protection
   const adminRoleId = roles.find((r) => r.name.toLowerCase() === "admin")?.id;
@@ -131,8 +143,10 @@ export function TeamInner() {
       : undefined;
 
   const inviteMutation = useSendInviteMutation({
-    onError: () => {
-      toast.error("Failed to send invite");
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to send invite",
+      );
     },
   });
 
@@ -145,6 +159,12 @@ export function TeamInner() {
   const revokeInviteMutation = useRevokeInviteMutation({
     onError: () => {
       toast.error("Failed to cancel invite");
+    },
+  });
+
+  const updateInviteRoleMutation = useUpdateInviteRoleMutation({
+    onError: () => {
+      toast.error("Failed to update invite role");
     },
   });
 
@@ -216,10 +236,39 @@ export function TeamInner() {
     );
   };
 
+  const handleUpdateInviteRole = (
+    invite: OrganizationInvitation,
+    roleId: string,
+  ) => {
+    if (!isRbacEnabled) return;
+    if (!roleId || roleId === getInviteRoleId(invite)) return;
+
+    updateInviteRoleMutation.mutate(
+      {
+        request: {
+          updateInviteRoleRequestBody: {
+            invitationId: invite.id,
+            roleId,
+          },
+        },
+      },
+      {
+        onSuccess: async () => {
+          await invalidateAllListInvites(queryClient);
+          toast.success(`Invite role changed to ${getRoleName(roleId)}`);
+        },
+      },
+    );
+  };
+
   const handleResendInvite = (invite: OrganizationInvitation) => {
+    const inviteRoleId = isRbacEnabled
+      ? (getInviteRoleId(invite) ?? effectiveInviteRoleId)
+      : memberRoleId;
+
     // Must revoke first — the unique partial index (org_id, email) WHERE
     // state = 'pending' blocks a second pending invite for the same email.
-    // Pass the effective role ID so the resent invite preserves the role.
+    // Pass this invite's role ID so the resent invite preserves the role.
     revokeInviteMutation.mutate(
       { request: { invitationId: invite.id } },
       {
@@ -229,7 +278,7 @@ export function TeamInner() {
               request: {
                 sendInviteRequestBody: {
                   email: invite.email,
-                  roleId: effectiveInviteRoleId,
+                  roleId: inviteRoleId,
                 },
               },
             },
@@ -409,6 +458,48 @@ export function TeamInner() {
         );
       },
     },
+    ...(isRbacEnabled
+      ? [
+          {
+            key: "role",
+            header: "Role",
+            width: "180px",
+            render: (invite) => {
+              const inviteRole = getInviteRole(invite);
+              if (roles.length === 0) {
+                return (
+                  <Type variant="body" className="text-muted-foreground">
+                    {invite.roleSlug ?? "—"}
+                  </Type>
+                );
+              }
+
+              return (
+                <Select
+                  value={inviteRole?.id}
+                  onValueChange={(roleId) =>
+                    handleUpdateInviteRole(invite, roleId)
+                  }
+                  disabled={updateInviteRoleMutation.isPending}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={invite.roleSlug ?? "Select role"}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roles.map((role) => (
+                      <SelectItem key={role.id} value={role.id}>
+                        {role.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              );
+            },
+          } satisfies Column<OrganizationInvitation>,
+        ]
+      : []),
     {
       key: "invitedBy",
       header: "Invited by",
@@ -624,7 +715,7 @@ export function TeamInner() {
               data-lpignore="true"
               data-bwignore
             />
-            {roles.length > 0 && (
+            {isRbacEnabled && roles.length > 0 && (
               <AnyField
                 label="Role"
                 optionality="hidden"

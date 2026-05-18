@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -359,12 +360,71 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		return redirectWithError(authErrInit, err)
 	}
+	if inviteeEmail := strings.ToLower(strings.TrimSpace(userInfo.Email)); inviteeEmail != "" {
+		if err := s.acceptPendingInvitationForMember(ctx, activeOrgID, inviteeEmail, userID, idpUser.Sub); err != nil {
+			s.logger.WarnContext(ctx, "failed to accept pending invite after login",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(activeOrgID),
+				attr.SlogAuthUserEmail(inviteeEmail),
+			)
+		}
+	}
 
 	return &gen.CallbackResult{
 		Location:      s.callbackRedirectURL(ctx, payload),
 		SessionToken:  session.SessionID,
 		SessionCookie: session.SessionID,
 	}, nil
+}
+
+func (s *Service) acceptPendingInvitationForMember(ctx context.Context, organizationID, inviteeEmail, gramUserID, workosUserID string) error {
+	invite, err := s.orgRepo.AcceptPendingInvitationForMember(ctx, orgRepo.AcceptPendingInvitationForMemberParams{
+		OrganizationID: organizationID,
+		Email:          inviteeEmail,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return fmt.Errorf("accept pending invitation: %w", err)
+	}
+
+	if invite.RoleSlug.Valid {
+		if workosUserID == "" {
+			return errors.New("cannot sync invite role without WorkOS user id")
+		}
+
+		orgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, invite.OrganizationID)
+		if err != nil {
+			return fmt.Errorf("get invite organization metadata: %w", err)
+		}
+		var workosMembershipID string
+		if orgMetadata.WorkosID.Valid && orgMetadata.WorkosID.String != "" {
+			membershipID, err := s.identity.UpdateOrganizationMembershipRole(ctx, workosUserID, orgMetadata.WorkosID.String, invite.RoleSlug.String)
+			if err != nil {
+				return fmt.Errorf("update WorkOS membership role: %w", err)
+			}
+			workosMembershipID = membershipID
+		}
+
+		if err := s.orgRepo.SyncUserOrganizationRoleAssignments(ctx, orgRepo.SyncUserOrganizationRoleAssignmentsParams{
+			OrganizationID:     invite.OrganizationID,
+			WorkosUserID:       workosUserID,
+			WorkosRoleSlugs:    []string{invite.RoleSlug.String},
+			UserID:             conv.ToPGText(gramUserID),
+			WorkosMembershipID: conv.ToPGText(workosMembershipID),
+			WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
+			WorkosLastEventID:  pgtype.Text{String: "", Valid: false},
+		}); err != nil {
+			return fmt.Errorf("sync invite role assignments: %w", err)
+		}
+		s.authz.InvalidateRoleCache(ctx, gramUserID, invite.OrganizationID)
+	}
+
+	if err := s.sessions.InvalidateUserInfoCache(ctx, gramUserID); err != nil {
+		return fmt.Errorf("invalidate user info cache: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *gen.LoginResult, err error) {
@@ -383,11 +443,10 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 
 	state := encodeStateParam(payload, nonce)
 
-	authURL, err := s.identity.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
+	authURL, err := s.identity.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
 		CallbackURL:     callbackURL,
 		State:           state,
 		Scope:           "",
-		ClientID:        "",
 		ScopesSupported: nil,
 	})
 	if err != nil {

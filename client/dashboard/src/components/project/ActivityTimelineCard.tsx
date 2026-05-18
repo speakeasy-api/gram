@@ -65,7 +65,7 @@ export function ActivityTimelineCard({ logs, isPending, viewAllHref }: Props) {
                   const meta = getActionMeta(log.action);
                   const actor =
                     log.actorDisplayName ?? log.actorSlug ?? "Unknown";
-                  const actionLabel = getActionLabel(log.action);
+                  const actionLabel = getActionLabel(log);
                   return (
                     <li
                       key={log.id}
@@ -144,7 +144,8 @@ function getActionMeta(action: string): ActionMeta {
   }
   if (
     action.startsWith("access_role:") ||
-    action.startsWith("access_member:")
+    action.startsWith("access_member:") ||
+    action.startsWith("organization_invitation:")
   ) {
     return {
       icon: Shield,
@@ -228,6 +229,8 @@ const ACTION_LABELS: Record<string, string> = {
   "access_role:update": "updated role",
   "access_role:delete": "deleted role",
   "access_member:update_role": "updated member role",
+  "organization_invitation:create": "sent invite to",
+  "organization_invitation:update_role": "changed invite role for",
   "project:create": "created project",
   "project:update": "updated project",
   "project:delete": "deleted project",
@@ -260,8 +263,42 @@ const ACTION_LABELS: Record<string, string> = {
   "plugin:publish": "published plugins",
 };
 
-function getActionLabel(action: string): string {
-  return ACTION_LABELS[action] ?? action;
+function recordString(value: unknown, key: string): string | undefined {
+  if (value == null || typeof value !== "object") return undefined;
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "string" && field !== "" ? field : undefined;
+}
+
+function formatRoleSlug(roleSlug: string) {
+  return roleSlug.replace(/[-_]/g, " ");
+}
+
+function getInviteActionLabel(log: AuditLog): string | undefined {
+  if (log.action === "organization_invitation:create") {
+    const role = recordString(log.metadata, "role_slug");
+    return role ? `sent ${formatRoleSlug(role)} invite to` : undefined;
+  }
+
+  if (log.action === "organization_invitation:update_role") {
+    const before =
+      recordString(log.beforeSnapshot, "RoleSlug") ??
+      recordString(log.beforeSnapshot, "role_slug");
+    const after =
+      recordString(log.afterSnapshot, "RoleSlug") ??
+      recordString(log.afterSnapshot, "role_slug");
+    if (before && after && before !== after) {
+      return `changed invite role from ${formatRoleSlug(before)} to ${formatRoleSlug(after)} for`;
+    }
+    if (after) {
+      return `changed invite role to ${formatRoleSlug(after)} for`;
+    }
+  }
+
+  return undefined;
+}
+
+function getActionLabel(log: AuditLog): string {
+  return getInviteActionLabel(log) ?? ACTION_LABELS[log.action] ?? log.action;
 }
 
 type LogGroup = { label: string; logs: AuditLog[] };

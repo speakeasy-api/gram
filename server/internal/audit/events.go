@@ -19,6 +19,7 @@ const (
 	subjectTypeMcpEndpoint         subjectType = "mcp_endpoint"
 	subjectTypeMcpServer           subjectType = "mcp_server"
 	subjectTypeOtelForwarding      subjectType = "otel_forwarding_config"
+	subjectTypeOrganizationInvite  subjectType = "organization_invitation"
 	subjectTypePlugin              subjectType = "plugin"
 	subjectTypeProject             subjectType = "project"
 	subjectTypeTemplate            subjectType = "template"

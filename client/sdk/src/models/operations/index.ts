@@ -232,6 +232,7 @@ export * from "./triggerriskanalysis.js";
 export * from "./updateassistant.js";
 export * from "./updatecollection.js";
 export * from "./updateenvironment.js";
+export * from "./updateinviterole.js";
 export * from "./updatemcpendpoint.js";
 export * from "./updatemcpserver.js";
 export * from "./updatememberrole.js";

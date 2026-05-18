@@ -75,6 +75,32 @@ func BuildRevokeInvitePayload(organizationsRevokeInviteInvitationID string, orga
 	return v, nil
 }
 
+// BuildUpdateInviteRolePayload builds the payload for the organizations
+// updateInviteRole endpoint from CLI flags.
+func BuildUpdateInviteRolePayload(organizationsUpdateInviteRoleBody string, organizationsUpdateInviteRoleSessionToken string) (*organizations.UpdateInviteRolePayload, error) {
+	var err error
+	var body UpdateInviteRoleRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationsUpdateInviteRoleBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"invitation_id\": \"abc123\",\n      \"role_id\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationsUpdateInviteRoleSessionToken != "" {
+			sessionToken = &organizationsUpdateInviteRoleSessionToken
+		}
+	}
+	v := &organizations.UpdateInviteRolePayload{
+		InvitationID: body.InvitationID,
+		RoleID:       body.RoleID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListInvitesPayload builds the payload for the organizations listInvites
 // endpoint from CLI flags.
 func BuildListInvitesPayload(organizationsListInvitesSessionToken string) (*organizations.ListInvitesPayload, error) {

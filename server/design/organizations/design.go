@@ -75,6 +75,29 @@ var _ = Service("organizations", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeInvite"}`)
 	})
 
+	Method("updateInviteRole", func() {
+		Description("Change the role assigned to a pending WorkOS invitation.")
+
+		Payload(func() {
+			Attribute("invitation_id", String, "WorkOS invitation ID.")
+			Attribute("role_id", String, "Role ID to assign to the invitee.")
+			Required("invitation_id", "role_id")
+			security.SessionPayload()
+		})
+
+		Result(OrganizationInvitation)
+
+		HTTP(func() {
+			PUT("/rpc/organizations.updateInviteRole")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateInviteRole")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateInviteRole")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateInviteRole"}`)
+	})
+
 	Method("listInvites", func() {
 		Description("List pending WorkOS invitations for the active organization.")
 
@@ -207,6 +230,7 @@ var OrganizationInvitation = Type("OrganizationInvitation", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("inviter_user_id", String, "Gram user ID of the inviter, when known.")
+	Attribute("role_slug", String, "WorkOS role slug assigned when the invite is accepted.")
 	Attribute("expires_at", String, "When the invitation expires.", func() {
 		Format(FormatDateTime)
 	})

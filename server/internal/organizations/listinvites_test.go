@@ -10,8 +10,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,11 +20,6 @@ func TestService_ListInvites(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-
-	// Seed a pending invitation in the DB.
-	ti.orgs.On("CreatePasswordlessSession", mock.Anything, mock.Anything).Return(&thirdpartyworkos.PasswordlessSession{
-		ID: "pwl_1", Link: "https://stub.workos.com/passwordless/1",
-	}, nil).Once()
 
 	invite, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "invitee@example.com"})
 	require.NoError(t, err)
@@ -43,6 +36,32 @@ func TestService_ListInvites(t *testing.T) {
 	require.Equal(t, "pending", inv.State)
 	require.NotNil(t, inv.InviterUserID)
 	require.Equal(t, authCtx.UserID, *inv.InviterUserID)
+}
+
+func TestService_ListInvites_IncludesRoleSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	row, err := orgrepo.New(ti.conn).CreateInvitation(ctx, orgrepo.CreateInvitationParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Email:          "role@example.com",
+		TokenHash:      "rolehash",
+		InviterUserID:  conv.ToPGText(authCtx.UserID),
+		RoleSlug:       conv.ToPGText("member"),
+		ExpiresInDays:  7,
+	})
+	require.NoError(t, err)
+
+	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Invitations, 1)
+	require.Equal(t, row.ID.String(), res.Invitations[0].ID)
+	require.NotNil(t, res.Invitations[0].RoleSlug)
+	require.Equal(t, "member", *res.Invitations[0].RoleSlug)
 }
 
 func TestService_ListInvites_ExcludesAccepted(t *testing.T) {
