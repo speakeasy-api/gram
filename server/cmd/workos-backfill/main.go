@@ -982,6 +982,9 @@ LIMIT 1`, organizationID, member.ID).Scan(&userID, &workosUserID, &rowUpdatedAt,
 	case err != nil:
 		return "", fmt.Errorf("query local membership %q: %w", member.ID, err)
 	}
+	if membershipNeedsMissingFieldRepair(userID, workosUserID, rowUpdatedAt, deletedAt, gramUserID, member) {
+		return "update", nil
+	}
 	if !shouldProcessEvent(textPtr(lastEventID), timePtr(rowUpdatedAt), "", updatedAt) {
 		return "stale_skip", nil
 	}
@@ -1573,6 +1576,10 @@ LIMIT 1`, organizationID, member.ID).Scan(&userID, &workosUserID, &rowUpdatedAt,
 	case err != nil:
 		return changeDetail{Entity: "", ID: "", Action: "", Fields: nil}, false, fmt.Errorf("query local membership %q: %w", member.ID, err)
 	}
+	if membershipNeedsMissingFieldRepair(userID, workosUserID, rowUpdatedAt, deletedAt, gramUserID, member) {
+		fields := missingMembershipFieldRepairs(userID, workosUserID, rowUpdatedAt, gramUserID, member, updatedAt)
+		return changeDetail{Entity: "membership", ID: member.ID, Action: "update", Fields: fields}, true, nil
+	}
 	if !shouldProcessEvent(textPtr(lastEventID), timePtr(rowUpdatedAt), "", updatedAt) {
 		return changeDetail{Entity: "", ID: "", Action: "", Fields: nil}, false, nil
 	}
@@ -1588,6 +1595,29 @@ LIMIT 1`, organizationID, member.ID).Scan(&userID, &workosUserID, &rowUpdatedAt,
 		return changeDetail{Entity: "", ID: "", Action: "", Fields: nil}, false, nil
 	}
 	return changeDetail{Entity: "membership", ID: member.ID, Action: "update", Fields: fields}, true, nil
+}
+
+func membershipNeedsMissingFieldRepair(userID pgtype.Text, workosUserID pgtype.Text, rowUpdatedAt pgtype.Timestamptz, deletedAt pgtype.Timestamptz, gramUserID string, member workos.Member) bool {
+	if deletedAt.Valid {
+		return false
+	}
+	return !userID.Valid && gramUserID != "" ||
+		!workosUserID.Valid && member.UserID != "" ||
+		!rowUpdatedAt.Valid
+}
+
+func missingMembershipFieldRepairs(userID pgtype.Text, workosUserID pgtype.Text, rowUpdatedAt pgtype.Timestamptz, gramUserID string, member workos.Member, updatedAt time.Time) []fieldChange {
+	fields := make([]fieldChange, 0)
+	if !userID.Valid && gramUserID != "" {
+		fields = appendFieldChange(fields, "user_id", pgTextDisplay(userID), gramUserID)
+	}
+	if !workosUserID.Valid && member.UserID != "" {
+		fields = appendFieldChange(fields, "workos_user_id", pgTextDisplay(workosUserID), member.UserID)
+	}
+	if !rowUpdatedAt.Valid {
+		fields = appendFieldChange(fields, "workos_updated_at", pgTimeDisplay(rowUpdatedAt), timeDisplay(updatedAt))
+	}
+	return fields
 }
 
 func collectAssignmentChangeDetails(ctx context.Context, db *pgxpool.Pool, organizationID string, roles []workos.Role, users map[string]workos.User, members []workos.Member) ([]changeDetail, error) {

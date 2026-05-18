@@ -521,7 +521,7 @@ func TestBackfillWorkOSOrganization_UpdatesExistingMembershipWorkOSFields(t *tes
 		WorkosUserID:       conv.ToPGTextEmpty(""),
 		WorkosMembershipID: conv.ToPGText(membershipID),
 		WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Time{}, Valid: false},
-		WorkosLastEventID:  conv.ToPGText(""),
+		WorkosLastEventID:  conv.ToPGText("event_01JNEWER"),
 	})
 	require.NoError(t, err)
 
@@ -564,7 +564,7 @@ func TestBackfillWorkOSOrganization_UpdatesExistingMembershipWorkOSFields(t *tes
 	require.Equal(t, gramUserID, relationship.UserID.String)
 	require.Equal(t, workosUserID, relationship.WorkosUserID.String)
 	require.True(t, relationship.WorkosUpdatedAt.Valid)
-	require.Empty(t, relationship.WorkosLastEventID.String)
+	require.Equal(t, "event_01JNEWER", relationship.WorkosLastEventID.String)
 	require.False(t, relationship.Deleted)
 }
 

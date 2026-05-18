@@ -297,6 +297,10 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 	member := parsed.member
 	orgQueries := orgrepo.New(dbtx)
 
+	if err := repairMissingWorkOSMembershipFields(ctx, dbtx, organizationID, gramUserID, member, parsed.updatedAt); err != nil {
+		return err
+	}
+
 	relationshipCursor, err := latestRelationshipCursor(ctx, orgQueries, organizationID, gramUserID)
 	if err != nil {
 		return err
@@ -353,6 +357,39 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 		return fmt.Errorf("sync organization role assignments for membership %q: %w", member.ID, err)
 	}
 
+	return nil
+}
+
+func repairMissingWorkOSMembershipFields(ctx context.Context, dbtx pgx.Tx, organizationID, gramUserID string, member workos.Member, updatedAt time.Time) error {
+	_, err := dbtx.Exec(ctx, `
+UPDATE organization_user_relationships
+SET user_id = COALESCE(user_id, $2),
+    workos_user_id = COALESCE(workos_user_id, $3),
+    workos_updated_at = COALESCE(workos_updated_at, $5),
+    updated_at = CASE
+      WHEN user_id IS NULL OR workos_user_id IS NULL OR workos_updated_at IS NULL THEN clock_timestamp()
+      ELSE updated_at
+    END
+WHERE organization_id = $1
+  AND workos_membership_id = $4
+  AND deleted IS FALSE
+  AND (user_id IS NULL OR workos_user_id IS NULL OR workos_updated_at IS NULL)
+  AND NOT EXISTS (
+      SELECT 1
+      FROM organization_user_relationships target
+      WHERE target.organization_id = $1
+        AND target.user_id = $2
+        AND target.id <> organization_user_relationships.id
+  )`,
+		organizationID,
+		conv.ToPGText(gramUserID),
+		conv.ToPGText(member.UserID),
+		conv.ToPGText(member.ID),
+		conv.ToPGTimestamptz(updatedAt),
+	)
+	if err != nil {
+		return fmt.Errorf("repair missing WorkOS membership fields %q: %w", member.ID, err)
+	}
 	return nil
 }
 
