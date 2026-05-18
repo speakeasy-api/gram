@@ -115,7 +115,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 	}
 }
 
-const inviteCallbackPath = "/v1/auth/invite/callback"
+const inviteCallbackPath = "/rpc/organizations.inviteCallback"
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
