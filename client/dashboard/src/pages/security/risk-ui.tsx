@@ -1,7 +1,7 @@
 import { Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { RULE_CATEGORY_META } from "./policy-data";
-import { getCategoryForFinding, getRuleTitleFallback} from "./risk-utils";
+import { getCategoryForFinding, getRuleTitleFallback } from "./risk-utils";
 import { Badge } from "@speakeasy-api/moonshine";
 
 export function CategoryLabel({
@@ -12,20 +12,15 @@ export function CategoryLabel({
   ruleId?: string;
 }) {
   const category = getCategoryForFinding(source, ruleId);
-  const label = category ? RULE_CATEGORY_META[category].label : null;
-  const shortLabel = category === "pii" ? "PII" : null;
+  const meta = category ? RULE_CATEGORY_META[category] : null;
   return (
-    <span className="@container block min-w-0 truncate">
-      <Badge variant="neutral" title={label ?? undefined}>
-        <Badge.Text>
-          {shortLabel ? (
-            <>
-              <span className="@max-[220px]:hidden">{label}</span>
-              <span className="hidden @max-[220px]:inline">{shortLabel}</span>
-            </>
-          ) : (
-            label
-          )}
+    <span
+      className="block min-w-0 truncate"
+      title={meta ? `${meta.label}: ${meta.description}` : undefined}
+    >
+      <Badge variant="neutral" className="max-w-full">
+        <Badge.Text className="min-w-0 truncate">
+          {meta?.label ?? "Unknown"}
         </Badge.Text>
       </Badge>
     </span>
