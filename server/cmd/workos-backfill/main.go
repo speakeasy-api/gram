@@ -439,25 +439,31 @@ func buildOrganizationPlan(ctx context.Context, db *pgxpool.Pool, workosClient *
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("Planning organization backfill for %d WorkOS organizations\n", len(workosOrgs))
 
 	out := make([]orgExpectation, 0, len(workosOrgs))
-	for _, org := range workosOrgs {
+	for i, org := range workosOrgs {
+		fmt.Printf("[%d/%d] plan %s name=%q\n", i+1, len(workosOrgs), org.ID, org.Name)
 		gramOrgID, skipped, err := expectedGramOrgID(ctx, db, org)
 		if err != nil {
 			return nil, err
 		}
+		fmt.Printf("  [%d/%d] list roles for %s\n", i+1, len(workosOrgs), org.ID)
 		roles, err := workosClient.ListRoles(ctx, org.ID)
 		if err != nil {
 			return nil, fmt.Errorf("list roles for %s: %w", org.ID, err)
 		}
+		fmt.Printf("  [%d/%d] list users for %s\n", i+1, len(workosOrgs), org.ID)
 		users, err := workosClient.ListOrgUsers(ctx, org.ID)
 		if err != nil {
 			return nil, fmt.Errorf("list users for %s: %w", org.ID, err)
 		}
+		fmt.Printf("  [%d/%d] list memberships for %s\n", i+1, len(workosOrgs), org.ID)
 		members, err := workosClient.ListOrgMemberships(ctx, org.ID)
 		if err != nil {
 			return nil, fmt.Errorf("list memberships for %s: %w", org.ID, err)
 		}
+		fmt.Printf("  [%d/%d] classify local rows for %s\n", i+1, len(workosOrgs), org.ID)
 
 		orgChanges, err := classifyOrganizationMetadataChange(ctx, db, org, gramOrgID, skipped)
 		if err != nil {
@@ -506,8 +512,10 @@ func buildOrganizationPlan(ctx context.Context, db *pgxpool.Pool, workosClient *
 
 func selectedOrganizations(ctx context.Context, workosClient *workos.Client, opts options) ([]workos.Organization, error) {
 	if len(opts.workosOrgIDs) > 0 {
+		fmt.Printf("Loading %d selected WorkOS organizations\n", len(opts.workosOrgIDs))
 		out := make([]workos.Organization, 0, len(opts.workosOrgIDs))
-		for _, orgID := range opts.workosOrgIDs {
+		for i, orgID := range opts.workosOrgIDs {
+			fmt.Printf("[%d/%d] get WorkOS organization %s\n", i+1, len(opts.workosOrgIDs), orgID)
 			org, err := workosClient.GetOrganization(ctx, orgID)
 			if err != nil {
 				return nil, fmt.Errorf("get WorkOS organization %s: %w", orgID, err)
@@ -517,12 +525,15 @@ func selectedOrganizations(ctx context.Context, workosClient *workos.Client, opt
 		return out, nil
 	}
 
+	fmt.Println("Listing WorkOS organizations")
 	orgs, err := workosClient.ListOrganizations(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list WorkOS organizations: %w", err)
 	}
+	fmt.Printf("Listed %d WorkOS organizations\n", len(orgs))
 	sort.Slice(orgs, func(i, j int) bool { return orgs[i].ID < orgs[j].ID })
 	if opts.limit > 0 && len(orgs) > opts.limit {
+		fmt.Printf("Applying organization limit: %d of %d\n", opts.limit, len(orgs))
 		orgs = orgs[:opts.limit]
 	}
 	return orgs, nil
