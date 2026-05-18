@@ -32,11 +32,10 @@ export function CategoryLabel({
 // presidio, or prompt_injection rules independently of the dashboard, so
 // every snake_case id needs to display legibly without a code change.
 export function RuleLabel({ ruleId }: { source?: string; ruleId?: string }) {
-  if (!ruleId) return <span className="font-mono text-xs">-</span>;
-  const title = getRuleTitleFallback(ruleId);
+  const label = ruleId ? getRuleTitleFallback(ruleId) : "-";
   return (
     <span className="font-mono text-xs" title={ruleId}>
-      {title}
+      {label}
     </span>
   );
 }
