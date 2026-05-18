@@ -152,6 +152,9 @@ export default function PluginDetail() {
 
   const servers = plugin.servers ?? [];
 
+  const addedToolsetIds = new Set(servers.map((s) => s.toolsetId));
+  const availableToolsets = toolsets.filter((t) => !addedToolsetIds.has(t.id));
+
   return (
     <Page>
       <Page.Header>
@@ -318,19 +321,24 @@ export default function PluginDetail() {
                 <label className="text-sm font-medium">MCP Server</label>
                 {isLoadingToolsets ? (
                   <Skeleton className="h-9 w-full" />
-                ) : toolsets.length > 0 ? (
+                ) : availableToolsets.length > 0 ? (
                   <select
                     name="toolsetId"
                     className="bg-background rounded-md border px-3 py-2 text-sm"
                     required
                   >
                     <option value="">Select an MCP server</option>
-                    {toolsets.map((t) => (
+                    {availableToolsets.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.name}
                       </option>
                     ))}
                   </select>
+                ) : toolsets.length > 0 ? (
+                  <Type muted small>
+                    All available MCP servers have already been added to this
+                    plugin.
+                  </Type>
                 ) : (
                   <Type muted small>
                     No MCP servers available. Create an MCP server in this
@@ -351,7 +359,7 @@ export default function PluginDetail() {
                   disabled={
                     addServerMutation.isPending ||
                     isLoadingToolsets ||
-                    toolsets.length === 0
+                    availableToolsets.length === 0
                   }
                 >
                   Add
