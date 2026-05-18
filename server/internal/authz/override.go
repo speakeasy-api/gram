@@ -53,7 +53,7 @@ func parseOverrideHeader(value string) []RoleGrant {
 			continue
 		}
 
-		override := RoleGrant{Scope: scope, Selectors: nil}
+		override := RoleGrant{Scope: scope, Effect: PolicyEffectAllow, Selectors: nil}
 		if hasResources && resourcesStr != "" {
 			for r := range strings.SplitSeq(resourcesStr, "|") {
 				r = strings.TrimSpace(r)

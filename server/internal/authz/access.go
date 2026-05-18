@@ -39,7 +39,7 @@ func (c Check) expand() []Check {
 		// ScopeRoot is expanded — only allows should match it, not denies.
 		{Scope: ScopeRoot, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, expanded: true},
 		// The original scope is not expanded — both allows and denies match it.
-		{Scope: c.Scope, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions},
+		{Scope: c.Scope, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, expanded: false},
 	}
 	// Higher-privilege parent scopes that also satisfy this check (for allow matching only).
 	// TODO: consider splitting into separate AllowCheck/DenyCheck structs so

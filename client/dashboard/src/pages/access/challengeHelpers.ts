@@ -15,6 +15,8 @@ export function reasonLabel(reason: Reason): string {
       return "No permissions configured for this identity.";
     case "scope_unsatisfied":
       return "The identity's roles don't include this permission.";
+    case "deny_grant":
+      return "Access denied — a deny grant explicitly blocks this permission.";
     case "invalid_check":
       return "The authorization check was malformed or invalid.";
     case "rbac_skipped_apikey":

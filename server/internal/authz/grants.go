@@ -220,7 +220,7 @@ func effectOrDefault(e PolicyEffect) PolicyEffect {
 func effectToPgtype(e PolicyEffect) pgtype.Text {
 	effect := conv.Default(e, PolicyEffectAllow)
 	if effect == PolicyEffectAllow {
-		return pgtype.Text{Valid: false}
+		return pgtype.Text{String: "", Valid: false}
 	}
 	return pgtype.Text{String: string(effect), Valid: true}
 }

@@ -698,7 +698,7 @@ var ChallengeBucketModel = Type("ChallengeBucket", func() {
 		Enum("allow", "deny", "error")
 	})
 	Attribute("reason", String, func() {
-		Enum("grant_matched", "no_grants", "scope_unsatisfied", "invalid_check", "rbac_skipped_apikey", "dev_override")
+		Enum("grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override")
 	})
 	Attribute("scope", String, "Scope that was checked.")
 	Attribute("resource_kind", String, "Resource kind of the check.")

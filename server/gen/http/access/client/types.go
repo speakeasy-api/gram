@@ -9917,8 +9917,8 @@ func ValidateChallengeBucketResponseBody(body *ChallengeBucketResponseBody) (err
 		}
 	}
 	if body.Reason != nil {
-		if !(*body.Reason == "grant_matched" || *body.Reason == "no_grants" || *body.Reason == "scope_unsatisfied" || *body.Reason == "invalid_check" || *body.Reason == "rbac_skipped_apikey" || *body.Reason == "dev_override") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reason", *body.Reason, []any{"grant_matched", "no_grants", "scope_unsatisfied", "invalid_check", "rbac_skipped_apikey", "dev_override"}))
+		if !(*body.Reason == "grant_matched" || *body.Reason == "no_grants" || *body.Reason == "scope_unsatisfied" || *body.Reason == "deny_grant" || *body.Reason == "invalid_check" || *body.Reason == "rbac_skipped_apikey" || *body.Reason == "dev_override") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reason", *body.Reason, []any{"grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override"}))
 		}
 	}
 	if body.ResolvedAt != nil {
