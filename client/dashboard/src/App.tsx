@@ -31,6 +31,7 @@ import { usePageTitle } from "./hooks/use-page-title";
 import CliCallback from "./pages/cli/CliCallback";
 import SlackRegister from "./pages/slackapp/SlackRegister";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
+import SetupPage from "./pages/setup/Setup";
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -257,6 +258,7 @@ const RouteProvider = () => {
             />
             {routesWithSubroutes(authenticatedRoutes)}
           </Route>
+          <Route path=":orgSlug/setup" element={<SetupPage />} />
           <Route path=":orgSlug" element={<OrgLayout />}>
             {orgHomeRoute?.component && (
               <Route index element={<orgHomeRoute.component />} />
