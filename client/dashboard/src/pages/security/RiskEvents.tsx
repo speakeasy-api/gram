@@ -169,10 +169,15 @@ export default function RiskEvents() {
           disabled={resultsQuery.isFetching}
           aria-label="Refresh risk events"
         >
-          <RefreshCw
-            className={cn("h-4 w-4", resultsQuery.isFetching && "animate-spin")}
-          />
-          Refresh
+          <Button.LeftIcon>
+            <RefreshCw
+              className={cn(
+                "h-4 w-4",
+                resultsQuery.isFetching && "animate-spin",
+              )}
+            />
+          </Button.LeftIcon>
+          <Button.Text>Refresh</Button.Text>
         </Button>
       }
       filters={
@@ -446,8 +451,10 @@ function RiskEventsRow({
             }}
             title="Exclude this MCP server from the policy"
           >
-            <ShieldOff className="h-3 w-3" />
-            <span className="text-xs">Exclude</span>
+            <Button.LeftIcon>
+              <ShieldOff className="h-3 w-3" />
+            </Button.LeftIcon>
+            <Button.Text>Exclude</Button.Text>
           </Button>
         ) : null}
       </div>
