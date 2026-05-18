@@ -302,18 +302,24 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 		return err
 	}
 	if shouldProcessEvent(relationshipCursor.lastEventID, relationshipCursor.updatedAt, "", parsed.updatedAt) {
-		if err := mergeConflictingWorkOSMembership(ctx, dbtx, organizationID, gramUserID, member.ID); err != nil {
+		updatedExisting, err := updateExistingWorkOSMembership(ctx, dbtx, organizationID, gramUserID, member, parsed.updatedAt)
+		if err != nil {
 			return err
 		}
-		if err := orgQueries.UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
-			OrganizationID:     organizationID,
-			UserID:             conv.ToPGText(gramUserID),
-			WorkosUserID:       conv.ToPGText(member.UserID),
-			WorkosMembershipID: conv.ToPGText(member.ID),
-			WorkosUpdatedAt:    conv.ToPGTimestamptz(parsed.updatedAt),
-			WorkosLastEventID:  conv.ToPGText(""),
-		}); err != nil {
-			return fmt.Errorf("upsert organization membership %q: %w", member.ID, err)
+		if !updatedExisting {
+			if err := mergeConflictingWorkOSMembership(ctx, dbtx, organizationID, gramUserID, member.ID); err != nil {
+				return err
+			}
+			if err := orgQueries.UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
+				OrganizationID:     organizationID,
+				UserID:             conv.ToPGText(gramUserID),
+				WorkosUserID:       conv.ToPGText(member.UserID),
+				WorkosMembershipID: conv.ToPGText(member.ID),
+				WorkosUpdatedAt:    conv.ToPGTimestamptz(parsed.updatedAt),
+				WorkosLastEventID:  conv.ToPGText(""),
+			}); err != nil {
+				return fmt.Errorf("upsert organization membership %q: %w", member.ID, err)
+			}
 		}
 	}
 
@@ -348,6 +354,38 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 	}
 
 	return nil
+}
+
+func updateExistingWorkOSMembership(ctx context.Context, dbtx pgx.Tx, organizationID string, gramUserID string, member workos.Member, updatedAt time.Time) (bool, error) {
+	tag, err := dbtx.Exec(ctx, `
+UPDATE organization_user_relationships
+SET user_id = COALESCE($2, user_id),
+    workos_user_id = $3,
+    workos_updated_at = $5,
+    workos_last_event_id = $6,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND workos_membership_id = $4
+  AND deleted IS FALSE
+  AND NOT EXISTS (
+      SELECT 1
+      FROM organization_user_relationships target
+      WHERE target.organization_id = $1
+        AND target.user_id = $2
+        AND target.id <> organization_user_relationships.id
+  )`,
+		organizationID,
+		conv.ToPGText(gramUserID),
+		conv.ToPGText(member.UserID),
+		conv.ToPGText(member.ID),
+		conv.ToPGTimestamptz(updatedAt),
+		conv.ToPGText(""),
+	)
+	if err != nil {
+		return false, fmt.Errorf("update existing WorkOS membership %q: %w", member.ID, err)
+	}
+	return tag.RowsAffected() > 0, nil
 }
 
 func mergeConflictingWorkOSMembership(ctx context.Context, dbtx pgx.Tx, organizationID, gramUserID, workosMembershipID string) error {
