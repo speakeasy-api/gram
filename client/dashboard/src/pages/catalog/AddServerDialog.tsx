@@ -190,7 +190,22 @@ export interface AddServerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onServersAdded?: () => void;
+  onInstallFinished?: (result: {
+    projectSlug?: string;
+    status: "succeeded" | "failed";
+    succeededCount: number;
+    failedCount: number;
+    firstCompletedToolsetSlug?: string;
+    firstCompletedMcpSlug?: string;
+    error?: string;
+  }) => void;
   projectSlug?: string;
+  /** When true, shows a summary view instead of individual name inputs in the configure phase. */
+  bulk?: boolean;
+  /** When true, starts deployment as soon as the default configuration is ready. */
+  autoStartDeployment?: boolean;
+  /** When true, runs the workflow without rendering the dialog UI. */
+  headless?: boolean;
 }
 
 function filterToHttpRemotes(server: PulseMCPServer): PulseMCPServer {
@@ -297,7 +312,11 @@ export function AddServerDialog({
   open,
   onOpenChange,
   onServersAdded,
+  onInstallFinished,
   projectSlug,
+  bulk,
+  autoStartDeployment,
+  headless,
 }: AddServerDialogProps) {
   const telemetry = useTelemetry();
   // Fetch server details (including remotes) when dialog opens
@@ -315,14 +334,40 @@ export function AddServerDialog({
       telemetry.isFeatureEnabled(ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG) ??
       false,
   });
+  const serversKey = servers.map((s) => s.registrySpecifier).join(",");
+  const autoDeployStartedRef = useRef(false);
+  const finishedRef = useRef(false);
 
   // Reset when dialog closes
   useEffect(() => {
     if (!open) {
       releaseState.reset();
+      autoDeployStartedRef.current = false;
+      finishedRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset when dialog open/close state changes, not on every releaseState update
   }, [open]);
+
+  useEffect(() => {
+    autoDeployStartedRef.current = false;
+    finishedRef.current = false;
+  }, [projectSlug, serversKey]);
+
+  useEffect(() => {
+    if (
+      !open ||
+      !autoStartDeployment ||
+      autoDeployStartedRef.current ||
+      releaseState.phase !== "configure" ||
+      releaseState.isInstallStateLoading ||
+      !releaseState.canDeploy
+    ) {
+      return;
+    }
+
+    autoDeployStartedRef.current = true;
+    void releaseState.startDeployment();
+  }, [autoStartDeployment, open, releaseState]);
 
   // Clean up Radix body scroll-lock on unmount (e.g. when navigating away mid-dialog)
   useEffect(() => {
@@ -349,7 +394,74 @@ export function AddServerDialog({
     }
   }, [allToolsetsDone, onServersAdded]);
 
+  useEffect(() => {
+    if (!open || !onInstallFinished || finishedRef.current) return;
+
+    if (detailsError) {
+      finishedRef.current = true;
+      onInstallFinished({
+        projectSlug,
+        status: "failed",
+        succeededCount: 0,
+        failedCount: servers.length,
+        error: detailsError,
+      });
+      return;
+    }
+
+    if (releaseState.phase === "error") {
+      finishedRef.current = true;
+      onInstallFinished({
+        projectSlug,
+        status: "failed",
+        succeededCount: 0,
+        failedCount: servers.length,
+        error: releaseState.error,
+      });
+      return;
+    }
+
+    if (releaseState.phase !== "complete") return;
+
+    const statuses = releaseState.toolsetStatuses;
+    const allDone =
+      statuses.length > 0 &&
+      statuses.every((s) => s.status === "completed" || s.status === "failed");
+    if (!allDone) return;
+
+    const succeededCount = statuses.filter(
+      (s) => s.status === "completed",
+    ).length;
+    const failedCount = statuses.filter((s) => s.status === "failed").length;
+    const firstCompleted = statuses.find(
+      (s) => s.status === "completed" && s.toolsetSlug && s.mcpSlug,
+    );
+
+    finishedRef.current = true;
+    onInstallFinished({
+      projectSlug,
+      status: failedCount === 0 ? "succeeded" : "failed",
+      succeededCount,
+      failedCount,
+      firstCompletedToolsetSlug: firstCompleted?.toolsetSlug,
+      firstCompletedMcpSlug: firstCompleted?.mcpSlug,
+      error: statuses
+        .filter((s) => s.status === "failed" && s.error)
+        .map((s) => `${s.name}: ${s.error}`)
+        .join("\n"),
+    });
+  }, [
+    detailsError,
+    onInstallFinished,
+    open,
+    projectSlug,
+    releaseState,
+    servers.length,
+  ]);
+
   if (servers.length === 0) return null;
+
+  if (headless) return null;
 
   // Show loading state while fetching server details
   if (isLoadingDetails) {
@@ -453,6 +565,7 @@ export function AddServerDialog({
         <PhaseContent
           releaseState={releaseState}
           isSingle={isSingle}
+          bulk={bulk}
           onClose={() => onOpenChange(false)}
         />
       </Dialog.Content>
@@ -523,10 +636,12 @@ function PhaseDescription({
 function PhaseContent({
   releaseState,
   isSingle,
+  bulk,
   onClose,
 }: {
   releaseState: ExternalMcpReleaseWorkflow;
   isSingle: boolean;
+  bulk?: boolean;
   onClose: () => void;
 }) {
   switch (releaseState.phase) {
@@ -539,7 +654,11 @@ function PhaseContent({
       );
     case "configure":
       return (
-        <ConfigurePhaseContent releaseState={releaseState} onClose={onClose} />
+        <ConfigurePhaseContent
+          releaseState={releaseState}
+          bulk={bulk}
+          onClose={onClose}
+        />
       );
     case "deploying":
       return <DeployingPhaseContent releaseState={releaseState} />;
@@ -740,9 +859,11 @@ function SelectRemotesPhaseContent({
 
 function ConfigurePhaseContent({
   releaseState,
+  bulk,
   onClose,
 }: {
   releaseState: ConfigurePhase;
+  bulk?: boolean;
   onClose: () => void;
 }) {
   // Filter out multi-remote servers that were already configured in selectRemotes phase
@@ -794,7 +915,9 @@ function ConfigurePhaseContent({
   return (
     <div onKeyDown={handleKeyDown}>
       <Stack gap={4} className="py-2">
-        {effectiveIsSingle ? (
+        {bulk ? (
+          <BulkInstallSummary releaseState={releaseState} />
+        ) : effectiveIsSingle ? (
           <SingleServerConfig
             releaseState={releaseState}
             singleRemoteConfigs={singleRemoteConfigs}
@@ -924,6 +1047,43 @@ function BatchServerConfig({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function BulkInstallSummary({
+  releaseState,
+}: {
+  releaseState: ConfigurePhase;
+}) {
+  const totalServers = releaseState.serverConfigs.length;
+  const alreadyInstalledCount = releaseState.serverConfigs.filter((c) =>
+    releaseState.isServerAlreadyInstalled(c.server),
+  ).length;
+  const newCount = totalServers - alreadyInstalledCount;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3 rounded-lg border p-4">
+        <div className="bg-primary/10 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
+          <ServerIcon className="text-muted-foreground h-5 w-5" />
+        </div>
+        <div>
+          <Type className="font-medium">
+            Installing {totalServers}{" "}
+            {totalServers === 1 ? "server" : "servers"}
+          </Type>
+          <Type small muted>
+            All servers will use their default names.
+          </Type>
+        </div>
+      </div>
+      {alreadyInstalledCount > 0 && (
+        <Type small muted>
+          {alreadyInstalledCount} already installed (will be forked)
+          {newCount > 0 && `, ${newCount} new`}.
+        </Type>
+      )}
     </div>
   );
 }
