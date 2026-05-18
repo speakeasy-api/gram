@@ -458,22 +458,18 @@ func buildOrganizationPlan(ctx context.Context, db *pgxpool.Pool, workosClient *
 		if err != nil {
 			return nil, err
 		}
-		fmt.Printf("  [%d/%d] list roles for %s\n", i+1, len(workosOrgs), org.ID)
 		roles, err := workosClient.ListRoles(ctx, org.ID)
 		if err != nil {
 			return nil, fmt.Errorf("list roles for %s: %w", org.ID, err)
 		}
-		fmt.Printf("  [%d/%d] list users for %s\n", i+1, len(workosOrgs), org.ID)
 		users, err := workosClient.ListOrgUsers(ctx, org.ID)
 		if err != nil {
 			return nil, fmt.Errorf("list users for %s: %w", org.ID, err)
 		}
-		fmt.Printf("  [%d/%d] list memberships for %s\n", i+1, len(workosOrgs), org.ID)
 		members, err := workosClient.ListOrgMemberships(ctx, org.ID)
 		if err != nil {
 			return nil, fmt.Errorf("list memberships for %s: %w", org.ID, err)
 		}
-		fmt.Printf("  [%d/%d] classify local rows for %s\n", i+1, len(workosOrgs), org.ID)
 
 		orgChanges, err := classifyOrganizationMetadataChange(ctx, db, org, gramOrgID, skipped)
 		if err != nil {
