@@ -47,6 +47,7 @@ type Service struct {
 	toolsets  *toolsetsRepo.Queries
 	orgRepo   *orgRepo.Queries
 	auth      *auth.Auth
+	authz     *authz.Engine
 	sessions  *sessions.Manager
 	serverURL *url.URL
 }
@@ -67,6 +68,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		toolsets:  toolsetsRepo.New(db),
 		orgRepo:   orgRepo.New(db),
 		auth:      auth.New(logger, db, sessions, authzEngine),
+		authz:     authzEngine,
 		sessions:  sessions,
 		serverURL: serverURL,
 	}
@@ -90,6 +92,10 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*type
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -150,6 +156,10 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
 	orgSlug := authCtx.OrganizationSlug
 	if orgSlug == "" {
 		orgMeta, err := s.orgRepo.GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
@@ -192,6 +202,10 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
 	collectionID, err := uuid.Parse(payload.CollectionID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid collection_id").Log(ctx, s.logger)
@@ -226,6 +240,10 @@ func (s *Service) Delete(ctx context.Context, payload *gen.DeletePayload) error 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return err
 	}
 
 	collectionID, err := uuid.Parse(payload.CollectionID)
@@ -288,6 +306,10 @@ func (s *Service) AttachServer(ctx context.Context, payload *gen.AttachServerPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
 	collectionID, err := uuid.Parse(payload.CollectionID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid collection_id").Log(ctx, s.logger)
@@ -330,6 +352,10 @@ func (s *Service) DetachServer(ctx context.Context, payload *gen.DetachServerPay
 		return oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return err
+	}
+
 	collectionID, err := uuid.Parse(payload.CollectionID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid collection_id").Log(ctx, s.logger)
@@ -366,6 +392,10 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
 	}
 
 	collection, err := s.repo.GetOrganizationMcpCollectionBySlugAndOrg(ctx, repo.GetOrganizationMcpCollectionBySlugAndOrgParams{

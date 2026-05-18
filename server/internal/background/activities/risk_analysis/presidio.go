@@ -463,6 +463,7 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 		Tags:             nil,
 		Confidence:       0,
 		DeadLetterReason: lastErr.Error(),
+		toolCallID:       "",
 	}}, true
 }
 
@@ -606,6 +607,7 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 			Source:           SourcePresidio,
 			Confidence:       r.Score,
 			DeadLetterReason: "",
+			toolCallID:       "",
 		})
 	}
 	return findings

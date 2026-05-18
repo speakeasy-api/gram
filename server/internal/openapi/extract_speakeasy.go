@@ -763,6 +763,9 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, doc *open
 	}
 
 	toolURN := urn.NewTool(urn.ToolKindHTTP, string(docInfo.Slug), descriptor.name)
+	if err := toolURN.Validate(); err != nil {
+		return empty, deploymentEvents, fmt.Errorf("invalid tool urn: %w", err)
+	}
 
 	return repo.CreateOpenAPIv3ToolDefinitionParams{
 		ProjectID:           projectID,

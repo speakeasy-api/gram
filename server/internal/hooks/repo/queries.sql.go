@@ -27,6 +27,93 @@ func (q *Queries) DeleteHooksServerNameOverride(ctx context.Context, arg DeleteH
 	return err
 }
 
+const findAssistantToolCallMessageID = `-- name: FindAssistantToolCallMessageID :one
+SELECT id
+FROM chat_messages
+WHERE project_id = $1
+  AND chat_id = $2
+  AND role = 'assistant'
+  AND tool_calls IS NOT NULL
+  AND EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(tool_calls) tc
+    WHERE tc->>'id' = $3::text
+  )
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type FindAssistantToolCallMessageIDParams struct {
+	ProjectID  uuid.NullUUID
+	ChatID     uuid.UUID
+	ToolCallID string
+}
+
+func (q *Queries) FindAssistantToolCallMessageID(ctx context.Context, arg FindAssistantToolCallMessageIDParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, findAssistantToolCallMessageID, arg.ProjectID, arg.ChatID, arg.ToolCallID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertShadowMCPBlockResult = `-- name: InsertShadowMCPBlockResult :exec
+INSERT INTO risk_results (
+    id
+  , project_id
+  , organization_id
+  , risk_policy_id
+  , risk_policy_version
+  , chat_message_id
+  , source
+  , found
+  , rule_id
+  , description
+  , match
+  , confidence
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , 'shadow_mcp'
+  , TRUE
+  , 'shadow_mcp.unverified_call'
+  , $7
+  , $8
+  , $9
+)
+`
+
+type InsertShadowMCPBlockResultParams struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	ChatMessageID     uuid.UUID
+	Description       pgtype.Text
+	Match             pgtype.Text
+	Confidence        pgtype.Float8
+}
+
+func (q *Queries) InsertShadowMCPBlockResult(ctx context.Context, arg InsertShadowMCPBlockResultParams) error {
+	_, err := q.db.Exec(ctx, insertShadowMCPBlockResult,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RiskPolicyID,
+		arg.RiskPolicyVersion,
+		arg.ChatMessageID,
+		arg.Description,
+		arg.Match,
+		arg.Confidence,
+	)
+	return err
+}
+
 const listHooksServerNameOverrides = `-- name: ListHooksServerNameOverrides :many
 SELECT id, raw_server_name, display_name, created_at, updated_at
 FROM hooks_server_name_overrides

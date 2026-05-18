@@ -1,33 +1,45 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use tokio::net::TcpListener;
 use tokio::sync::{Mutex, Notify};
 
-use crate::idempotency;
-use crate::runtime::{AppState, RuntimeHost, build_runtime};
-use crate::wire::{RunnerConfig, RunnerRequest, RunnerResponse, RunnerStateResponse};
+use crate::runtime::{
+    AppState, DEFAULT_THREAD_IDLE_TTL, build_host, ensure_thread, snapshot_threads,
+};
 
-pub async fn serve(addr: SocketAddr) -> Result<(), std::io::Error> {
+const IDEMPOTENCY_HEADER: &str = "x-idempotency-key";
+use crate::wire::{RunnerStateResponse, ThreadStateView, ThreadTurnRequest, ThreadTurnResponse};
+
+pub struct ServeConfig {
+    pub addr: SocketAddr,
+    pub assistant_id: String,
+    pub server_url: String,
+    pub initial_token: String,
+}
+
+pub async fn serve(config: ServeConfig) -> Result<(), std::io::Error> {
     let shutdown = Arc::new(Notify::new());
-    let state: AppState = Arc::new(Mutex::new(RuntimeHost {
-        runtime: None,
-        seen: Default::default(),
-        shutdown: Arc::clone(&shutdown),
-    }));
+    let host = build_host(
+        config.assistant_id,
+        config.server_url,
+        config.initial_token,
+        DEFAULT_THREAD_IDLE_TTL,
+    )
+    .await
+    .map_err(std::io::Error::other)?;
 
     let app = Router::new()
         .route("/healthz", get(healthz))
         .route("/state", get(state_handler))
-        .route("/configure", post(configure))
-        .route("/turn", post(turn))
-        .with_state(state);
+        .route("/threads/{thread_id}/turn", post(thread_turn))
+        .with_state(host);
 
-    let listener = TcpListener::bind(addr).await?;
+    let listener = TcpListener::bind(config.addr).await?;
     let shutdown_wait = shutdown.clone();
     axum::serve(listener, app)
         .with_graceful_shutdown(async move {
@@ -42,107 +54,76 @@ async fn healthz() -> &'static str {
     "ok"
 }
 
-async fn state_handler(State(state): State<AppState>) -> Json<RunnerStateResponse> {
-    let guard = state.lock().await;
+async fn state_handler(State(host): State<AppState>) -> Json<RunnerStateResponse> {
+    let snapshot = snapshot_threads(&host);
     Json(RunnerStateResponse {
-        configured: guard.runtime.is_some(),
-        idle_seconds: guard
-            .runtime
-            .as_ref()
-            .and_then(|rt| rt.idle_for())
-            .map(|d| d.as_secs()),
+        assistant_id: host.assistant_id.clone(),
+        uptime_seconds: host.started_at.elapsed().as_secs(),
+        threads: snapshot
+            .into_iter()
+            .map(|(thread_id, chat_id, idle)| ThreadStateView {
+                thread_id,
+                chat_id,
+                idle_seconds: idle.as_secs(),
+            })
+            .collect(),
     })
 }
 
-async fn configure(
-    State(state): State<AppState>,
-    Json(config): Json<RunnerConfig>,
-) -> Result<StatusCode, (StatusCode, String)> {
-    let mut guard = state.lock().await;
-
-    // Idempotent re-entry: a matching config (ignoring auth_token) rotates the
-    // token and returns 204, mirroring /turn's token-rotate behavior so callers
-    // retrying after a refresh aren't stuck on the stale one. Different config
-    // on the same runtime is a real conflict — 409.
-    if let Some(ref runtime) = guard.runtime {
-        if !runtime.matches(&config) {
-            return Err((
-                StatusCode::CONFLICT,
-                "runner is already configured with a different config".to_string(),
-            ));
-        }
-        runtime
-            .rotate_token(&config.auth_token)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-        return Ok(StatusCode::NO_CONTENT);
-    }
-
-    let runtime = build_runtime(&config, Arc::clone(&guard.shutdown))
-        .await
-        .map_err(|e| (e.configure_status_code(), e.to_string()))?;
-
-    guard.runtime = Some(runtime);
-    Ok(StatusCode::NO_CONTENT)
-}
-
-async fn turn(
-    State(state): State<AppState>,
+async fn thread_turn(
+    State(host): State<AppState>,
+    Path(thread_id): Path<String>,
     headers: HeaderMap,
-    Json(request): Json<RunnerRequest>,
-) -> Result<Json<RunnerResponse>, (StatusCode, String)> {
+    Json(request): Json<ThreadTurnRequest>,
+) -> Result<Json<ThreadTurnResponse>, (StatusCode, String)> {
+    if thread_id.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "missing thread_id".to_string()));
+    }
+
+    // Idempotency key is namespaced by thread so two threads sharing an
+    // event_id namespace can't collide.
     let idempotency_key = headers
-        .get(idempotency::HEADER)
+        .get(IDEMPOTENCY_HEADER)
         .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
+        .map(|s| format!("{thread_id}:{s}"));
 
-    let mut guard = state.lock().await;
-
-    if let Some(ref key) = idempotency_key
-        && guard.seen.contains(key)
+    // Per-key admission lock: serialize concurrent retries with the same
+    // key across the bootstrap + enqueue window so we can't enqueue twice.
+    // A failed admission drops the guard with `*done == false`, leaving
+    // the slot available for a fresh retry.
+    let admission = idempotency_key.as_ref().map(|key| {
+        host.seen
+            .entry(key.clone())
+            .or_insert_with(|| Arc::new(Mutex::new(false)))
+            .clone()
+    });
+    let mut admission_guard = if let Some(ref slot) = admission {
+        Some(slot.lock().await)
+    } else {
+        None
+    };
+    if let Some(ref guard) = admission_guard
+        && **guard
     {
-        tracing::info!(key = %key, "dedup: skipping already-queued turn");
-        return Ok(Json(RunnerResponse::deduped()));
+        tracing::info!(key = ?idempotency_key, "dedup: skipping already-queued turn");
+        return Ok(Json(ThreadTurnResponse::deduped()));
     }
 
-    let runtime = guard
-        .runtime
-        .as_ref()
-        .ok_or_else(|| (StatusCode::CONFLICT, "runner is not configured".to_string()))?;
-
-    if let Some(token) = request.auth_token.as_deref()
-        && !token.is_empty()
-    {
-        runtime
-            .rotate_token(token)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    }
-
-    runtime
-        .enqueue(request)
+    let thread = ensure_thread(&host, &thread_id, request.auth_token)
+        .await
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
 
-    if let Some(key) = idempotency_key {
-        guard.seen.insert(key);
+    thread
+        .enqueue(request.input)
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+
+    if let Some(ref mut guard) = admission_guard {
+        **guard = true;
     }
 
-    Ok(Json(RunnerResponse::accepted()))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn state_reports_unconfigured_before_configure() {
-        let state_value: AppState = Arc::new(Mutex::new(RuntimeHost {
-            runtime: None,
-            seen: Default::default(),
-            shutdown: Arc::new(Notify::new()),
-        }));
-
-        let Json(response) = state_handler(State(state_value)).await;
-
-        assert!(!response.configured);
-        assert!(response.idle_seconds.is_none());
-    }
+    // The model's response goes out via /chat/completions on the
+    // per-thread task; the HTTP response here is just an ack so the
+    // backend's RunTurn activity can mark the event processed without
+    // blocking on the turn.
+    Ok(Json(ThreadTurnResponse::accepted()))
 }

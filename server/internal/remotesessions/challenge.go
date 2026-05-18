@@ -54,12 +54,18 @@ import (
 // ParentChallenge projects the in-flight user-session AuthnChallengeState
 // into the fields the remote leg needs. mcp/ builds this from its
 // AuthnChallengeState; remotesessions/ never imports mcp/.
+//
+// FinalRedirectURI is set by callers that own their own redirect surface
+// (e.g. the dashboard's issuer-connect endpoint, which bypasses the consent
+// UI). When non-empty, HandleRemoteLoginCallback redirects there after the
+// upstream token exchange instead of bouncing back to /mcp/{slug}/connect.
 type ParentChallenge struct {
 	ID                  string
 	ProjectID           uuid.UUID
 	UserSessionIssuerID uuid.UUID
 	Subject             *urn.SessionSubject
 	McpSlug             string
+	FinalRedirectURI    string
 }
 
 // RemoteLoginState is the per-remote-leg Redis state, keyed by the opaque
@@ -76,7 +82,12 @@ type RemoteLoginState struct {
 	CodeVerifier          string              `json:"code_verifier"`
 	Subject               *urn.SessionSubject `json:"subject,omitempty"`
 	McpSlug               string              `json:"mcp_slug"`
-	CreatedAt             time.Time           `json:"created_at"`
+	// FinalRedirectURI overrides the default post-callback redirect to
+	// /mcp/{slug}/connect. Set by dashboard-driven flows that own their
+	// own popup-close surface (validated against an allow-list before
+	// it lands here).
+	FinalRedirectURI string    `json:"final_redirect_uri,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 var _ cache.CacheableObject[RemoteLoginState] = (*RemoteLoginState)(nil)
@@ -240,6 +251,7 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		CodeVerifier:          verifier,
 		Subject:               parent.Subject,
 		McpSlug:               parent.McpSlug,
+		FinalRedirectURI:      parent.FinalRedirectURI,
 		CreatedAt:             time.Now(),
 	}
 	if err := m.cache.Store(ctx, state); err != nil {
@@ -391,6 +403,9 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	}
 
 	redirect := fmt.Sprintf("%s/mcp/%s/connect?state=%s", strings.TrimRight(m.serverURL.String(), "/"), mcpSlug, url.QueryEscape(state.ParentChallengeID))
+	if state.FinalRedirectURI != "" {
+		redirect = state.FinalRedirectURI
+	}
 	http.Redirect(w, r, redirect, http.StatusSeeOther)
 	return nil
 }

@@ -469,6 +469,134 @@ func BuildGetRiskPolicyStatusPayload(riskGetRiskPolicyStatusID string, riskGetRi
 	return v, nil
 }
 
+// BuildListShadowMCPApprovalsPayload builds the payload for the risk
+// listShadowMCPApprovals endpoint from CLI flags.
+func BuildListShadowMCPApprovalsPayload(riskListShadowMCPApprovalsPolicyID string, riskListShadowMCPApprovalsApikeyToken string, riskListShadowMCPApprovalsSessionToken string, riskListShadowMCPApprovalsProjectSlugInput string) (*risk.ListShadowMCPApprovalsPayload, error) {
+	var err error
+	var policyID string
+	{
+		policyID = riskListShadowMCPApprovalsPolicyID
+		err = goa.MergeErrors(err, goa.ValidateFormat("policy_id", policyID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskListShadowMCPApprovalsApikeyToken != "" {
+			apikeyToken = &riskListShadowMCPApprovalsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListShadowMCPApprovalsSessionToken != "" {
+			sessionToken = &riskListShadowMCPApprovalsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListShadowMCPApprovalsProjectSlugInput != "" {
+			projectSlugInput = &riskListShadowMCPApprovalsProjectSlugInput
+		}
+	}
+	v := &risk.ListShadowMCPApprovalsPayload{}
+	v.PolicyID = policyID
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildApproveShadowMCPPayload builds the payload for the risk
+// approveShadowMCP endpoint from CLI flags.
+func BuildApproveShadowMCPPayload(riskApproveShadowMCPBody string, riskApproveShadowMCPApikeyToken string, riskApproveShadowMCPSessionToken string, riskApproveShadowMCPProjectSlugInput string) (*risk.ApproveShadowMCPPayload, error) {
+	var err error
+	var body ApproveShadowMCPRequestBody
+	{
+		err = json.Unmarshal([]byte(riskApproveShadowMCPBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"match\": \"abc123\",\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_name\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", body.PolicyID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskApproveShadowMCPApikeyToken != "" {
+			apikeyToken = &riskApproveShadowMCPApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskApproveShadowMCPSessionToken != "" {
+			sessionToken = &riskApproveShadowMCPSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskApproveShadowMCPProjectSlugInput != "" {
+			projectSlugInput = &riskApproveShadowMCPProjectSlugInput
+		}
+	}
+	v := &risk.ApproveShadowMCPPayload{
+		PolicyID:   body.PolicyID,
+		Match:      body.Match,
+		ServerName: body.ServerName,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildRevokeShadowMCPApprovalPayload builds the payload for the risk
+// revokeShadowMCPApproval endpoint from CLI flags.
+func BuildRevokeShadowMCPApprovalPayload(riskRevokeShadowMCPApprovalPolicyID string, riskRevokeShadowMCPApprovalMatch string, riskRevokeShadowMCPApprovalApikeyToken string, riskRevokeShadowMCPApprovalSessionToken string, riskRevokeShadowMCPApprovalProjectSlugInput string) (*risk.RevokeShadowMCPApprovalPayload, error) {
+	var err error
+	var policyID string
+	{
+		policyID = riskRevokeShadowMCPApprovalPolicyID
+		err = goa.MergeErrors(err, goa.ValidateFormat("policy_id", policyID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var match string
+	{
+		match = riskRevokeShadowMCPApprovalMatch
+	}
+	var apikeyToken *string
+	{
+		if riskRevokeShadowMCPApprovalApikeyToken != "" {
+			apikeyToken = &riskRevokeShadowMCPApprovalApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskRevokeShadowMCPApprovalSessionToken != "" {
+			sessionToken = &riskRevokeShadowMCPApprovalSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskRevokeShadowMCPApprovalProjectSlugInput != "" {
+			projectSlugInput = &riskRevokeShadowMCPApprovalProjectSlugInput
+		}
+	}
+	v := &risk.RevokeShadowMCPApprovalPayload{}
+	v.PolicyID = policyID
+	v.Match = match
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildTriggerRiskAnalysisPayload builds the payload for the risk
 // triggerRiskAnalysis endpoint from CLI flags.
 func BuildTriggerRiskAnalysisPayload(riskTriggerRiskAnalysisBody string, riskTriggerRiskAnalysisApikeyToken string, riskTriggerRiskAnalysisSessionToken string, riskTriggerRiskAnalysisProjectSlugInput string) (*risk.TriggerRiskAnalysisPayload, error) {
@@ -477,9 +605,12 @@ func BuildTriggerRiskAnalysisPayload(riskTriggerRiskAnalysisBody string, riskTri
 	{
 		err = json.Unmarshal([]byte(riskTriggerRiskAnalysisBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"limit\": 1\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.Limit < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 0, true))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -503,7 +634,14 @@ func BuildTriggerRiskAnalysisPayload(riskTriggerRiskAnalysisBody string, riskTri
 		}
 	}
 	v := &risk.TriggerRiskAnalysisPayload{
-		ID: body.ID,
+		ID:    body.ID,
+		Limit: body.Limit,
+	}
+	{
+		var zero int32
+		if v.Limit == zero {
+			v.Limit = 100
+		}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

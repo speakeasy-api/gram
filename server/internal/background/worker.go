@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	svix "github.com/svix/svix-webhooks/go"
@@ -65,6 +66,7 @@ type WorkerOptions struct {
 	RagService          *rag.ToolsetVectorStore
 	MCPRegistryClient   *externalmcp.RegistryClient
 	TelemetryLogger     *telemetry.Logger
+	ClickhouseConn      clickhouse.Conn
 	TriggersApp         *bgtriggers.App
 	AssistantsCore      *assistants.ServiceCore
 	TemporalEnv         *tenv.Environment
@@ -118,6 +120,7 @@ func ForDeploymentProcessing(
 		WorkOSClient:        workos.NewStubClient(),
 		SvixClient:          nil,
 		ProductFeatures:     nil,
+		ClickhouseConn:      nil,
 	}
 }
 
@@ -159,6 +162,7 @@ func NewTemporalWorker(
 		WorkOSClient:        workos.NewStubClient(),
 		SvixClient:          nil,
 		ProductFeatures:     nil,
+		ClickhouseConn:      nil,
 	}
 
 	for _, o := range options {
@@ -193,6 +197,7 @@ func NewTemporalWorker(
 			WorkOSClient:        conv.Default(o.WorkOSClient, opts.WorkOSClient),
 			SvixClient:          conv.Default(o.SvixClient, opts.SvixClient),
 			ProductFeatures:     conv.Default(o.ProductFeatures, opts.ProductFeatures),
+			ClickhouseConn:      conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
 		}
 	}
 
@@ -234,6 +239,7 @@ func NewTemporalWorker(
 		opts.MCPRegistryClient,
 		opts.TemporalEnv,
 		opts.TelemetryLogger,
+		opts.ClickhouseConn,
 		opts.TriggersApp,
 		opts.CacheAdapter,
 		opts.AssistantsCore,
@@ -257,6 +263,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RefreshOpenRouterKey)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
+	temporalWorker.RegisterActivity(activities.CollectOpenRouterCreditsMetrics)
+	temporalWorker.RegisterActivity(activities.FireOpenRouterCreditsMetrics)
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FreeTierReportingUsageMetrics)
@@ -306,6 +314,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OpenrouterKeyRefreshWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
+	temporalWorker.RegisterWorkflow(CollectOpenRouterCreditsMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
@@ -341,6 +350,12 @@ func NewTemporalWorker(
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add platform usage metrics schedule", attr.SlogError(err))
+		}
+	}
+
+	if err := AddOpenRouterCreditsMetricsSchedule(context.Background(), env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add openrouter credits metrics schedule", attr.SlogError(err))
 		}
 	}
 

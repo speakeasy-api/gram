@@ -288,69 +288,73 @@
   <body>
     <main class="main">
       <div class="consent-container">
-      <div class="header">
-        <h1>Authorize {{.ClientName}}</h1>
-        <p>
-          <strong>{{.ClientName}}</strong> is requesting access to the MCP
-          server <strong>{{.MCPSlug}}</strong>
-        </p>
-      </div>
+        <div class="header">
+          <h1>Authorize {{.ClientName}}</h1>
+          <p>
+            <strong>{{.ClientName}}</strong> is requesting access to the MCP
+            server <strong>{{.MCPSlug}}</strong>
+          </p>
+        </div>
 
-      <dl class="info">
-        <dt>Signing in as</dt>
-        <dd>{{.SubjectDisplay}}</dd>
-        {{if .RedirectURI}}
-        <dt>Will redirect to</dt>
-        <dd>{{.RedirectURI}}</dd>
-        {{end}}
-      </dl>
+        <dl class="info">
+          <dt>Signing in as</dt>
+          <dd>{{.SubjectDisplay}}</dd>
+          {{if .RedirectURI}}
+          <dt>Will redirect to</dt>
+          <dd>{{.RedirectURI}}</dd>
+          {{end}}
+        </dl>
 
-      {{if .RemoteSessionCards}}
-      <div class="remotes">
-        <h3>Connect required services</h3>
-        {{range .RemoteSessionCards}}
-        <div class="remote-card">
-          <div class="meta">
-            <div class="issuer">{{.IssuerSlug}}</div>
-            {{if .Connected}}
-            <div class="state connected">✓ Connected</div>
-            {{else}}
-            <div class="state disconnected">Not connected</div>
-            {{end}}
+        {{if .RemoteSessionCards}}
+        <div class="remotes">
+          <h3>Connect required services</h3>
+          {{range .RemoteSessionCards}}
+          <div class="remote-card">
+            <div class="meta">
+              <div class="issuer">{{.IssuerSlug}}</div>
+              {{if .Connected}}
+              <div class="state connected">✓ Connected</div>
+              {{else}}
+              <div class="state disconnected">Not connected</div>
+              {{end}}
+            </div>
+            <a
+              class="btn-link {{if .Connected}}connected{{end}}"
+              href="{{.ChallengeURL}}"
+              >{{if .Connected}}Reconnect{{else}}Connect{{end}}</a
+            >
           </div>
-          <a class="btn-link {{if .Connected}}connected{{end}}" href="{{.ChallengeURL}}">{{if .Connected}}Reconnect{{else}}Connect{{end}}</a>
+          {{end}}
         </div>
         {{end}}
-      </div>
-      {{end}}
 
-      <div class="actions">
-        <form method="POST" action="/mcp/{{.MCPSlug}}/connect">
-          <input type="hidden" name="state" value="{{.State}}" />
-          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
-          <button
-            type="submit"
-            name="action"
-            value="approve"
-            class="btn btn-primary"
-          >
-            Give Access
-          </button>
-        </form>
-        <form method="POST" action="/mcp/{{.MCPSlug}}/connect">
-          <input type="hidden" name="state" value="{{.State}}" />
-          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
-          <button
-            type="submit"
-            name="action"
-            value="deny"
-            class="btn btn-secondary"
-          >
-            Cancel
-          </button>
-        </form>
+        <div class="actions">
+          <form method="POST" action="/mcp/{{.MCPSlug}}/connect">
+            <input type="hidden" name="state" value="{{.State}}" />
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+            <button
+              type="submit"
+              name="action"
+              value="approve"
+              class="btn btn-primary"
+            >
+              Give Access
+            </button>
+          </form>
+          <form method="POST" action="/mcp/{{.MCPSlug}}/connect">
+            <input type="hidden" name="state" value="{{.State}}" />
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+            <button
+              type="submit"
+              name="action"
+              value="deny"
+              class="btn btn-secondary"
+            >
+              Cancel
+            </button>
+          </form>
+        </div>
       </div>
-    </div>
     </main>
   </body>
 </html>

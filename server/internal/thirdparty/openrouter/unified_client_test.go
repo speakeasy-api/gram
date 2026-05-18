@@ -30,6 +30,8 @@ type mockProvisioner struct {
 	err    error
 }
 
+var _ Provisioner = (*mockProvisioner)(nil)
+
 func (m *mockProvisioner) ProvisionAPIKey(ctx context.Context, orgID string) (string, error) {
 	if m.err != nil {
 		return "", m.err
@@ -43,6 +45,14 @@ func (m *mockProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, 
 
 func (m *mockProvisioner) GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error) {
 	return 0, 0, nil
+}
+
+func (m *mockProvisioner) GetKeyUsage(ctx context.Context, apiKey string) (float64, *int64, error) {
+	return 0, nil, nil
+}
+
+func (m *mockProvisioner) ReconcileMonthlyCredits(ctx context.Context, orgID string, currentLimit int64, upstreamLimit *int64) (int64, error) {
+	return currentLimit, nil
 }
 
 func (m *mockProvisioner) GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error) {

@@ -46,27 +46,36 @@ export default function Integrations() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        {isAdmin && (
-          <div className="mb-4 flex justify-end">
-            <AddButton onClick={() => setCreateIntegrationDialogOpen(true)} />
-          </div>
-        )}
-        <Cards>
-          {integrations?.integrations?.map((integration) => (
-            <IntegrationCard
-              key={integration.packageName}
-              integration={integration}
-              newVersionCallback={() => {
-                setCreateIntegrationDialogOpen(true);
-              }}
-            />
-          ))}
-          <CreateThingCard
-            onClick={() => setRequestIntegrationDialogOpen(true)}
-          >
-            Request an Integration
-          </CreateThingCard>
-        </Cards>
+        <Page.Section>
+          <Page.Section.Title>Integrations</Page.Section.Title>
+          <Page.Section.Description>
+            Distribute Gram toolsets as installable packages your customers can
+            pull from npm.
+          </Page.Section.Description>
+          {isAdmin ? (
+            <Page.Section.CTA>
+              <AddButton onClick={() => setCreateIntegrationDialogOpen(true)} />
+            </Page.Section.CTA>
+          ) : null}
+          <Page.Section.Body>
+            <Cards>
+              {integrations?.integrations?.map((integration) => (
+                <IntegrationCard
+                  key={integration.packageName}
+                  integration={integration}
+                  newVersionCallback={() => {
+                    setCreateIntegrationDialogOpen(true);
+                  }}
+                />
+              ))}
+              <CreateThingCard
+                onClick={() => setRequestIntegrationDialogOpen(true)}
+              >
+                Request an Integration
+              </CreateThingCard>
+            </Cards>
+          </Page.Section.Body>
+        </Page.Section>
         <CreateIntegrationDialog
           open={createIntegrationDialogOpen}
           onOpenChange={setCreateIntegrationDialogOpen}

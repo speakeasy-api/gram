@@ -158,6 +158,7 @@ func (s *PromptInjectionScanner) findingFromResult(text string, r ClassifierResu
 		Source:           SourcePromptInjection,
 		Confidence:       r.Score,
 		DeadLetterReason: "",
+		toolCallID:       "",
 	}
 }
 

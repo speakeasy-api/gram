@@ -68,6 +68,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
@@ -452,6 +453,16 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	if issuerGated {
 		newCtx, subject, ok := s.validateUserSessionToken(ctx, authToken, toolset)
 		if !ok {
+			// Accept an assistant-runtime JWT, but only when the assistant
+			// belongs to the toolset's project — otherwise a token minted
+			// in project A could resolve a remote_session linked under
+			// the same user in project B.
+			if assistCtx, claims, aerr := s.assistantTokens.Authorize(ctx, authToken); aerr == nil && claims.ProjectID == toolset.ProjectID.String() {
+				ssubj := urn.NewUserSubject(claims.UserID)
+				newCtx, subject, ok = assistCtx, &ssubj, true
+			}
+		}
+		if !ok {
 			return WriteAuthenticateChallenge(w, baseURL, mcpSlug, "expired or invalid access token")
 		}
 		ctx = newCtx
@@ -480,12 +491,12 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		}
 	}
 
-	var oauthProtectedResourceURL string
+	oauthProtectedResourceURL, err := url.JoinPath(baseURL, wellknown.OAuthProtectedResourcePath, mcpRouteBase, mcpSlug)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to build OAuth protected resource URL").Log(ctx, s.logger)
+	}
+
 	if !issuerGated {
-		oauthProtectedResourceURL, err = url.JoinPath(baseURL, wellknown.OAuthProtectedResourcePath, mcpRouteBase, mcpSlug)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to build OAuth protected resource URL").Log(ctx, s.logger)
-		}
 		switch {
 		case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
 			// External OAuth server flow — collect token if present

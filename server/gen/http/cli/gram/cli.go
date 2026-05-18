@@ -107,7 +107,7 @@ func UsageCommands() []string {
 		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|register-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-by-chat|get-risk-policy-status|trigger-risk-analysis)",
+		"risk (create-risk-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-by-chat|get-risk-policy-status|list-shadow-mcp-approvals|approve-shadow-mcp|revoke-shadow-mcp-approval|trigger-risk-analysis)",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -1235,6 +1235,25 @@ func ParseEndpoint(
 		riskGetRiskPolicyStatusSessionTokenFlag     = riskGetRiskPolicyStatusFlags.String("session-token", "", "")
 		riskGetRiskPolicyStatusProjectSlugInputFlag = riskGetRiskPolicyStatusFlags.String("project-slug-input", "", "")
 
+		riskListShadowMCPApprovalsFlags                = flag.NewFlagSet("list-shadow-mcp-approvals", flag.ExitOnError)
+		riskListShadowMCPApprovalsPolicyIDFlag         = riskListShadowMCPApprovalsFlags.String("policy-id", "REQUIRED", "")
+		riskListShadowMCPApprovalsApikeyTokenFlag      = riskListShadowMCPApprovalsFlags.String("apikey-token", "", "")
+		riskListShadowMCPApprovalsSessionTokenFlag     = riskListShadowMCPApprovalsFlags.String("session-token", "", "")
+		riskListShadowMCPApprovalsProjectSlugInputFlag = riskListShadowMCPApprovalsFlags.String("project-slug-input", "", "")
+
+		riskApproveShadowMCPFlags                = flag.NewFlagSet("approve-shadow-mcp", flag.ExitOnError)
+		riskApproveShadowMCPBodyFlag             = riskApproveShadowMCPFlags.String("body", "REQUIRED", "")
+		riskApproveShadowMCPApikeyTokenFlag      = riskApproveShadowMCPFlags.String("apikey-token", "", "")
+		riskApproveShadowMCPSessionTokenFlag     = riskApproveShadowMCPFlags.String("session-token", "", "")
+		riskApproveShadowMCPProjectSlugInputFlag = riskApproveShadowMCPFlags.String("project-slug-input", "", "")
+
+		riskRevokeShadowMCPApprovalFlags                = flag.NewFlagSet("revoke-shadow-mcp-approval", flag.ExitOnError)
+		riskRevokeShadowMCPApprovalPolicyIDFlag         = riskRevokeShadowMCPApprovalFlags.String("policy-id", "REQUIRED", "")
+		riskRevokeShadowMCPApprovalMatchFlag            = riskRevokeShadowMCPApprovalFlags.String("match", "REQUIRED", "")
+		riskRevokeShadowMCPApprovalApikeyTokenFlag      = riskRevokeShadowMCPApprovalFlags.String("apikey-token", "", "")
+		riskRevokeShadowMCPApprovalSessionTokenFlag     = riskRevokeShadowMCPApprovalFlags.String("session-token", "", "")
+		riskRevokeShadowMCPApprovalProjectSlugInputFlag = riskRevokeShadowMCPApprovalFlags.String("project-slug-input", "", "")
+
 		riskTriggerRiskAnalysisFlags                = flag.NewFlagSet("trigger-risk-analysis", flag.ExitOnError)
 		riskTriggerRiskAnalysisBodyFlag             = riskTriggerRiskAnalysisFlags.String("body", "REQUIRED", "")
 		riskTriggerRiskAnalysisApikeyTokenFlag      = riskTriggerRiskAnalysisFlags.String("apikey-token", "", "")
@@ -1920,6 +1939,9 @@ func ParseEndpoint(
 	riskListRiskResultsFlags.Usage = riskListRiskResultsUsage
 	riskListRiskResultsByChatFlags.Usage = riskListRiskResultsByChatUsage
 	riskGetRiskPolicyStatusFlags.Usage = riskGetRiskPolicyStatusUsage
+	riskListShadowMCPApprovalsFlags.Usage = riskListShadowMCPApprovalsUsage
+	riskApproveShadowMCPFlags.Usage = riskApproveShadowMCPUsage
+	riskRevokeShadowMCPApprovalFlags.Usage = riskRevokeShadowMCPApprovalUsage
 	riskTriggerRiskAnalysisFlags.Usage = riskTriggerRiskAnalysisUsage
 
 	slackFlags.Usage = slackUsage
@@ -2854,6 +2876,15 @@ func ParseEndpoint(
 
 			case "get-risk-policy-status":
 				epf = riskGetRiskPolicyStatusFlags
+
+			case "list-shadow-mcp-approvals":
+				epf = riskListShadowMCPApprovalsFlags
+
+			case "approve-shadow-mcp":
+				epf = riskApproveShadowMCPFlags
+
+			case "revoke-shadow-mcp-approval":
+				epf = riskRevokeShadowMCPApprovalFlags
 
 			case "trigger-risk-analysis":
 				epf = riskTriggerRiskAnalysisFlags
@@ -3859,6 +3890,15 @@ func ParseEndpoint(
 			case "get-risk-policy-status":
 				endpoint = c.GetRiskPolicyStatus()
 				data, err = riskc.BuildGetRiskPolicyStatusPayload(*riskGetRiskPolicyStatusIDFlag, *riskGetRiskPolicyStatusApikeyTokenFlag, *riskGetRiskPolicyStatusSessionTokenFlag, *riskGetRiskPolicyStatusProjectSlugInputFlag)
+			case "list-shadow-mcp-approvals":
+				endpoint = c.ListShadowMCPApprovals()
+				data, err = riskc.BuildListShadowMCPApprovalsPayload(*riskListShadowMCPApprovalsPolicyIDFlag, *riskListShadowMCPApprovalsApikeyTokenFlag, *riskListShadowMCPApprovalsSessionTokenFlag, *riskListShadowMCPApprovalsProjectSlugInputFlag)
+			case "approve-shadow-mcp":
+				endpoint = c.ApproveShadowMCP()
+				data, err = riskc.BuildApproveShadowMCPPayload(*riskApproveShadowMCPBodyFlag, *riskApproveShadowMCPApikeyTokenFlag, *riskApproveShadowMCPSessionTokenFlag, *riskApproveShadowMCPProjectSlugInputFlag)
+			case "revoke-shadow-mcp-approval":
+				endpoint = c.RevokeShadowMCPApproval()
+				data, err = riskc.BuildRevokeShadowMCPApprovalPayload(*riskRevokeShadowMCPApprovalPolicyIDFlag, *riskRevokeShadowMCPApprovalMatchFlag, *riskRevokeShadowMCPApprovalApikeyTokenFlag, *riskRevokeShadowMCPApprovalSessionTokenFlag, *riskRevokeShadowMCPApprovalProjectSlugInputFlag)
 			case "trigger-risk-analysis":
 				endpoint = c.TriggerRiskAnalysis()
 				data, err = riskc.BuildTriggerRiskAnalysisPayload(*riskTriggerRiskAnalysisBodyFlag, *riskTriggerRiskAnalysisApikeyTokenFlag, *riskTriggerRiskAnalysisSessionTokenFlag, *riskTriggerRiskAnalysisProjectSlugInputFlag)
@@ -8747,7 +8787,10 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    list-risk-results: List risk analysis results for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-by-chat: List risk results grouped by chat session for the current project.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-policy-status: Get the analysis status of a risk policy including progress and workflow state.`)
-	fmt.Fprintln(os.Stderr, `    trigger-risk-analysis: Manually trigger risk analysis for a policy, starting or signaling the drain workflow.`)
+	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-approvals: List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.`)
+	fmt.Fprintln(os.Stderr, `    approve-shadow-mcp: Approve a shadow-MCP server so the named policy stops blocking calls to it. `+"`"+`match`+"`"+` is the same opaque server identifier surfaced in `+"`"+`RiskResult.match`+"`"+` — typically a server URL, stdio command, or `+"`"+`mcp__<server>__`+"`"+` prefix.`)
+	fmt.Fprintln(os.Stderr, `    revoke-shadow-mcp-approval: Remove a previously-approved shadow-MCP server for a policy.`)
+	fmt.Fprintln(os.Stderr, `    trigger-risk-analysis: Manually trigger risk analysis for a policy, starting or signaling the drain workflow. Defaults to the most recent 100 unanalyzed messages; pass `+"`"+`limit=0`+"`"+` to backfill every unanalyzed message.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s risk COMMAND --help\n", os.Args[0])
@@ -8972,6 +9015,80 @@ func riskGetRiskPolicyStatusUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk get-risk-policy-status --id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+func riskListShadowMCPApprovalsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk list-shadow-mcp-approvals", os.Args[0])
+	fmt.Fprint(os.Stderr, " -policy-id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-shadow-mcp-approvals --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskApproveShadowMCPUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk approve-shadow-mcp", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Approve a shadow-MCP server so the named policy stops blocking calls to it. `+"`"+`match`+"`"+` is the same opaque server identifier surfaced in `+"`"+`RiskResult.match`+"`"+` — typically a server URL, stdio command, or `+"`"+`mcp__<server>__`+"`"+` prefix.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk approve-shadow-mcp --body '{\n      \"match\": \"abc123\",\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_name\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskRevokeShadowMCPApprovalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk revoke-shadow-mcp-approval", os.Args[0])
+	fmt.Fprint(os.Stderr, " -policy-id STRING")
+	fmt.Fprint(os.Stderr, " -match STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Remove a previously-approved shadow-MCP server for a policy.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -match STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk revoke-shadow-mcp-approval --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --match \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func riskTriggerRiskAnalysisUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] risk trigger-risk-analysis", os.Args[0])
@@ -8983,7 +9100,7 @@ func riskTriggerRiskAnalysisUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Manually trigger risk analysis for a policy, starting or signaling the drain workflow.`)
+	fmt.Fprintln(os.Stderr, `Manually trigger risk analysis for a policy, starting or signaling the drain workflow. Defaults to the most recent 100 unanalyzed messages; pass `+"`"+`limit=0`+"`"+` to backfill every unanalyzed message.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -8993,7 +9110,7 @@ func riskTriggerRiskAnalysisUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk trigger-risk-analysis --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk trigger-risk-analysis --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"limit\": 1\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // slackUsage displays the usage of the slack command and its subcommands.

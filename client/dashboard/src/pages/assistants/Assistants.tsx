@@ -77,7 +77,7 @@ export default function AssistantsIndex() {
       />
     ) : (
       <Page.Section>
-        <Page.Section.Title>Assistants</Page.Section.Title>
+        <Page.Section.Title stage="preview">Assistants</Page.Section.Title>
         <Page.Section.Description>
           Configure model, instructions, and MCP servers for each assistant.
         </Page.Section.Description>

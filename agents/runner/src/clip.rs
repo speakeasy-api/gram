@@ -139,15 +139,7 @@ async fn cap_output(
         return output;
     }
     let (body, ext) = consume_for_spill(output);
-    let spill = match write_spill(
-        spill_root,
-        tool_name,
-        call_id,
-        &body,
-        ext,
-        MAX_SPILL_BYTES,
-    )
-    .await
+    let spill = match write_spill(spill_root, tool_name, call_id, &body, ext, MAX_SPILL_BYTES).await
     {
         Ok(info) => Some(info),
         Err(error) => {
@@ -289,16 +281,14 @@ fn compose_envelope(
     env.insert("preview_bytes".into(), Value::from(cut));
     env.insert("preview".into(), Value::String(body[..cut].into()));
     if let Some((path, saved_bytes)) = spill {
-        env.insert(
-            "saved_to".into(),
-            Value::String(path.display().to_string()),
-        );
+        env.insert("saved_to".into(), Value::String(path.display().to_string()));
         env.insert("saved_bytes".into(), Value::from(*saved_bytes));
     }
     ToolOutput::Structured(Value::Object(env))
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
     use agentkit_core::{Part, TextPart};
@@ -498,10 +488,16 @@ mod tests {
     async fn write_spill_truncates_body_to_max_spill_bytes() {
         let dir = tempdir();
         let body = "a".repeat(1000);
-        let (path, saved) =
-            write_spill(dir.path(), &tool_name("t"), &call_id("c"), &body, "txt", 200)
-                .await
-                .expect("write");
+        let (path, saved) = write_spill(
+            dir.path(),
+            &tool_name("t"),
+            &call_id("c"),
+            &body,
+            "txt",
+            200,
+        )
+        .await
+        .expect("write");
         assert_eq!(saved, 200);
         assert_eq!(std::fs::read(&path).unwrap().len(), 200);
     }

@@ -53,6 +53,18 @@ type Client struct {
 	// getRiskPolicyStatus endpoint.
 	GetRiskPolicyStatusDoer goahttp.Doer
 
+	// ListShadowMCPApprovals Doer is the HTTP client used to make requests to the
+	// listShadowMCPApprovals endpoint.
+	ListShadowMCPApprovalsDoer goahttp.Doer
+
+	// ApproveShadowMCP Doer is the HTTP client used to make requests to the
+	// approveShadowMCP endpoint.
+	ApproveShadowMCPDoer goahttp.Doer
+
+	// RevokeShadowMCPApproval Doer is the HTTP client used to make requests to the
+	// revokeShadowMCPApproval endpoint.
+	RevokeShadowMCPApprovalDoer goahttp.Doer
+
 	// TriggerRiskAnalysis Doer is the HTTP client used to make requests to the
 	// triggerRiskAnalysis endpoint.
 	TriggerRiskAnalysisDoer goahttp.Doer
@@ -77,21 +89,24 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateRiskPolicyDoer:      doer,
-		ListRiskPoliciesDoer:      doer,
-		GetRiskCapabilitiesDoer:   doer,
-		GetRiskPolicyDoer:         doer,
-		UpdateRiskPolicyDoer:      doer,
-		DeleteRiskPolicyDoer:      doer,
-		ListRiskResultsDoer:       doer,
-		ListRiskResultsByChatDoer: doer,
-		GetRiskPolicyStatusDoer:   doer,
-		TriggerRiskAnalysisDoer:   doer,
-		RestoreResponseBody:       restoreBody,
-		scheme:                    scheme,
-		host:                      host,
-		decoder:                   dec,
-		encoder:                   enc,
+		CreateRiskPolicyDoer:        doer,
+		ListRiskPoliciesDoer:        doer,
+		GetRiskCapabilitiesDoer:     doer,
+		GetRiskPolicyDoer:           doer,
+		UpdateRiskPolicyDoer:        doer,
+		DeleteRiskPolicyDoer:        doer,
+		ListRiskResultsDoer:         doer,
+		ListRiskResultsByChatDoer:   doer,
+		GetRiskPolicyStatusDoer:     doer,
+		ListShadowMCPApprovalsDoer:  doer,
+		ApproveShadowMCPDoer:        doer,
+		RevokeShadowMCPApprovalDoer: doer,
+		TriggerRiskAnalysisDoer:     doer,
+		RestoreResponseBody:         restoreBody,
+		scheme:                      scheme,
+		host:                        host,
+		decoder:                     dec,
+		encoder:                     enc,
 	}
 }
 
@@ -306,6 +321,78 @@ func (c *Client) GetRiskPolicyStatus() goa.Endpoint {
 		resp, err := c.GetRiskPolicyStatusDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "getRiskPolicyStatus", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListShadowMCPApprovals returns an endpoint that makes HTTP requests to the
+// risk service listShadowMCPApprovals server.
+func (c *Client) ListShadowMCPApprovals() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListShadowMCPApprovalsRequest(c.encoder)
+		decodeResponse = DecodeListShadowMCPApprovalsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListShadowMCPApprovalsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListShadowMCPApprovalsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "listShadowMCPApprovals", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ApproveShadowMCP returns an endpoint that makes HTTP requests to the risk
+// service approveShadowMCP server.
+func (c *Client) ApproveShadowMCP() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeApproveShadowMCPRequest(c.encoder)
+		decodeResponse = DecodeApproveShadowMCPResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildApproveShadowMCPRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ApproveShadowMCPDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "approveShadowMCP", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RevokeShadowMCPApproval returns an endpoint that makes HTTP requests to the
+// risk service revokeShadowMCPApproval server.
+func (c *Client) RevokeShadowMCPApproval() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRevokeShadowMCPApprovalRequest(c.encoder)
+		decodeResponse = DecodeRevokeShadowMCPApprovalResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRevokeShadowMCPApprovalRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RevokeShadowMCPApprovalDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "revokeShadowMCPApproval", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -44,6 +44,7 @@ type RiskScanner interface {
 type ShadowMCPPolicy struct {
 	ID          string
 	Name        string
+	Version     int64
 	UserMessage *string // nil/empty means "render the default message"
 }
 
@@ -212,6 +213,7 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, projectID u
 			return &ShadowMCPPolicy{
 				ID:          p.ID.String(),
 				Name:        p.Name,
+				Version:     p.Version,
 				UserMessage: conv.FromPGText[string](p.UserMessage),
 			}, nil
 		}

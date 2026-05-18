@@ -359,10 +359,15 @@ func processManifestToolV0(
 		}
 	}
 
+	toolURN := urn.NewTool(urn.ToolKindFunction, string(attachementSlug), name)
+	if err := toolURN.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid tool urn: %w", err)
+	}
+
 	t, err := tx.CreateFunctionsTool(ctx, repo.CreateFunctionsToolParams{
 		DeploymentID:    deploymentID,
 		FunctionID:      attachementID,
-		ToolUrn:         urn.NewTool(urn.ToolKindFunction, string(attachementSlug), name),
+		ToolUrn:         toolURN,
 		ProjectID:       projectID,
 		Runtime:         runtime,
 		Name:            name,

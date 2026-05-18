@@ -15,7 +15,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -26,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -110,7 +110,11 @@ type assistantThreadRecord struct {
 }
 
 type assistantRuntimeRecord struct {
-	ID                  uuid.UUID
+	ID uuid.UUID
+	// AssistantThreadID is uuid.Nil on v2 runtime rows — one VM serves
+	// every thread under the assistant, so the binding is via AssistantID
+	// and the foreign key to assistant_threads is dropped on this column
+	// (so the sentinel does not have to back to a real row).
 	AssistantThreadID   uuid.UUID
 	AssistantID         uuid.UUID
 	ProjectID           uuid.UUID
@@ -256,6 +260,13 @@ type ProcessThreadEventsResult struct {
 	RuntimeActive     bool
 	RetryAdmission    bool
 	ProcessedAnyEvent bool
+	// BootstrappedRuntime signals that this call transitioned the v2 runtime
+	// row from `starting` to `active`. v2 admit only fans out the first
+	// pending thread when reserving a fresh row (Ensure has no per-row CAS,
+	// so concurrent ensures would race the Fly machine launch). The
+	// workflow signals the coordinator on this flag so the remaining
+	// pending threads get admitted against the now-active row.
+	BootstrappedRuntime bool
 }
 
 // ExpireThreadRuntimeResult reports the outcome of an expire attempt.
@@ -493,48 +504,14 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	return out, nil
 }
 
-// NewUnexpectedRuntimeExitHandler returns an OnUnexpectedExit callback that
-// reconciles the DB runtime row when a VM dies without a Stop() call. Without
-// this the partial unique index on (assistant_thread_id) WHERE deleted IS
-// FALSE AND ended IS FALSE blocks admit's ON CONFLICT DO NOTHING insert and
-// the thread wedges.
-func NewUnexpectedRuntimeExitHandler(logger *slog.Logger, db *pgxpool.Pool) func(threadID uuid.UUID) {
-	return func(threadID uuid.UUID) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		projectID, err := assistantrepo.New(db).ResolveThreadProjectID(ctx, threadID)
-		if err != nil {
-			logger.ErrorContext(ctx, "resolve assistant thread project after unexpected exit failed",
-				attr.SlogAssistantThreadID(threadID.String()),
-				attr.SlogError(err),
-			)
-			return
-		}
-		err = assistantrepo.New(db).StopAssistantRuntime(ctx, assistantrepo.StopAssistantRuntimeParams{
-			State:         runtimeStateStopped,
-			ProjectID:     projectID,
-			ThreadID:      threadID,
-			StartingState: runtimeStateStarting,
-			ActiveState:   runtimeStateActive,
-			ExpiringState: runtimeStateExpiring,
-		})
-		if err != nil {
-			logger.ErrorContext(ctx, "reconcile assistant runtime after unexpected exit failed",
-				attr.SlogAssistantThreadID(threadID.String()),
-				attr.SlogError(err),
-			)
-		}
-	}
-}
-
 func warmRemainingSeconds(idleSeconds *uint64, ttlSeconds int) int {
 	if ttlSeconds <= 0 {
 		return 0
 	}
-	if idleSeconds == nil {
-		return ttlSeconds
-	}
-	if *idleSeconds >= uint64(ttlSeconds) {
+	// nil signals the runner reported no live threads — VM is fully idle, so
+	// no warm window remains. A non-nil min-idle bigger than the TTL also
+	// returns 0, matching the "expired" boundary.
+	if idleSeconds == nil || *idleSeconds >= uint64(ttlSeconds) {
 		return 0
 	}
 	return ttlSeconds - int(*idleSeconds) //nolint:gosec // bounded above by ttlSeconds (int)
@@ -1032,8 +1009,6 @@ type ReapInactiveAssistantRuntimesParams struct {
 // ReapInactiveAssistantRuntimes drives the long-inactivity janitor. It picks
 // runtime rows whose owning assistant has had no recorded activity within
 // InactivityThreshold and tears down the corresponding backend resources.
-// Active and starting rows are filtered out at the SQL layer so an in-flight
-// admit is never collected mid-flight.
 func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params ReapInactiveAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
 	if params.InactivityThreshold <= 0 {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("inactivity threshold must be positive")
@@ -1043,8 +1018,6 @@ func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params 
 	}
 
 	rows, err := assistantrepo.New(s.db).ListInactiveAssistantRuntimesForReap(ctx, assistantrepo.ListInactiveAssistantRuntimesForReapParams{
-		StartingState:  runtimeStateStarting,
-		ActiveState:    runtimeStateActive,
 		InactiveBefore: conv.ToPGTimestamptz(time.Now().UTC().Add(-params.InactivityThreshold)),
 		LimitCount:     params.BatchSize,
 	})
@@ -1289,74 +1262,123 @@ func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.
 		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
 	}
 
+	return s.admitPendingThreadsV2(ctx, assistant)
+}
+
+// admitPendingThreadsV2 reserves the assistant's single v2 runtime under
+// pg_advisory_xact_lock (which auto-releases at commit) and admits pending
+// threads up to the assistant's MaxConcurrency. "Active" — for cap
+// accounting — is any thread whose last_event_at falls inside the
+// assistant's WarmTTLSeconds window (the same TTL that drives the warm-
+// wait workflow expiry); the count is taken inside the advisory tx so it
+// is consistent with the admit decision.
+func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assistantRecord) (AdmitPendingThreadsResult, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return AdmitPendingThreadsResult{}, fmt.Errorf("begin assistant admit tx: %w", err)
+		return AdmitPendingThreadsResult{}, fmt.Errorf("begin assistant admit tx (v2): %w", err)
 	}
 	defer func() {
 		_ = tx.Rollback(ctx)
 	}()
 
 	queries := assistantrepo.New(tx)
-	warmThreadIDs, err := queries.ListWarmPendingThreads(ctx, assistantrepo.ListWarmPendingThreadsParams{
+	if err := queries.AcquireAssistantAdvisoryLock(ctx, assistant.ID.String()); err != nil {
+		return AdmitPendingThreadsResult{}, fmt.Errorf("acquire assistant advisory lock: %w", err)
+	}
+
+	threads, err := queries.ListAssistantPendingThreads(ctx, assistantrepo.ListAssistantPendingThreadsParams{
 		ProjectID:     assistant.ProjectID,
-		AssistantID:   assistantID,
-		ActiveState:   runtimeStateActive,
+		AssistantID:   assistant.ID,
 		PendingStatus: eventStatusPending,
 	})
 	if err != nil {
-		return AdmitPendingThreadsResult{}, fmt.Errorf("query warm assistant threads: %w", err)
+		return AdmitPendingThreadsResult{}, fmt.Errorf("list assistant pending threads: %w", err)
+	}
+	if len(threads) == 0 {
+		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
 	}
 
-	admitted := append([]uuid.UUID{}, warmThreadIDs...)
+	row, err := queries.LookupActiveAssistantRuntimeV2(ctx, assistantrepo.LookupActiveAssistantRuntimeV2Params{
+		ProjectID:   assistant.ProjectID,
+		AssistantID: assistant.ID,
+	})
+	// When the runtime row is freshly reserved here, only admit the first
+	// thread. The Fly Ensure path has no CAS or lock around machine launch:
+	// fanning out all pending threads against a `starting` row lets two
+	// thread workflows race their Ensure activities and launch separate
+	// machines, with only one app/machine recorded in
+	// backend_metadata_json. The first admitted thread brings the runtime
+	// to `active`; subsequent admits fall through the lookup with row in
+	// active state and admit the rest.
+	firstThreadOnly := false
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		if err := queries.ReserveAssistantRuntimeV2(ctx, assistantrepo.ReserveAssistantRuntimeV2Params{
+			AssistantThreadID: threads[0].ID,
+			AssistantID:       assistant.ID,
+			ProjectID:         assistant.ProjectID,
+			Backend:           s.runtime.Backend(),
+			State:             runtimeStateStarting,
+		}); err != nil {
+			return AdmitPendingThreadsResult{}, fmt.Errorf("reserve v2 assistant runtime: %w", err)
+		}
+		firstThreadOnly = true
+	case err != nil:
+		return AdmitPendingThreadsResult{}, fmt.Errorf("lookup v2 runtime: %w", err)
+	case row.State == runtimeStateStarting:
+		// Another worker reserved the row but its admitted thread hasn't
+		// finished Ensure yet. Same race condition — don't fan out until
+		// the runtime is active.
+		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
+	case row.State == runtimeStateExpiring:
+		// The warm-timer workflow has CASed the row to expiring and is
+		// driving Stop. Signalling threads now would race with that path:
+		// LoadThreadContextV2 only accepts starting/active and the partial
+		// unique index forbids inserting a replacement row until the
+		// current one is soft-deleted. Bail out — the thread workflow
+		// signals the coordinator after Stop completes, which retriggers
+		// admit under a clean slot.
+		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
+	}
 
-	activeCount, err := queries.CountActiveAssistantRuntimes(ctx, assistantrepo.CountActiveAssistantRuntimesParams{
+	active, err := queries.CountActiveAssistantThreads(ctx, assistantrepo.CountActiveAssistantThreadsParams{
 		ProjectID:     assistant.ProjectID,
-		AssistantID:   assistantID,
-		StartingState: runtimeStateStarting,
-		ActiveState:   runtimeStateActive,
+		AssistantID:   assistant.ID,
+		ActiveSince:   conv.ToPGTimestamptz(time.Now().UTC().Add(-time.Duration(assistant.WarmTTLSeconds) * time.Second)),
+		PendingStatus: eventStatusPending,
 	})
 	if err != nil {
-		return AdmitPendingThreadsResult{}, fmt.Errorf("count active assistant runtimes: %w", err)
-	}
-
-	available := max(assistant.MaxConcurrency-conv.SafeInt(activeCount), 0)
-	if available > 0 {
-		coldThreads, err := queries.ListColdPendingThreadsForAdmit(ctx, assistantrepo.ListColdPendingThreadsForAdmitParams{
-			ProjectID:                 assistant.ProjectID,
-			AssistantID:               assistantID,
-			PendingStatus:             eventStatusPending,
-			StartingState:             runtimeStateStarting,
-			ActiveState:               runtimeStateActive,
-			FailedState:               runtimeStateFailed,
-			AdmitFailureBackoffCutoff: conv.ToPGTimestamptz(time.Now().UTC().Add(-admitFailureBackoff)),
-			LimitCount:                conv.SafeInt32(available),
-		})
-		if err != nil {
-			return AdmitPendingThreadsResult{}, fmt.Errorf("select cold assistant threads: %w", err)
-		}
-
-		for _, coldThread := range coldThreads {
-			if err := queries.ReserveAssistantRuntime(ctx, assistantrepo.ReserveAssistantRuntimeParams{
-				AssistantThreadID: coldThread.ID,
-				AssistantID:       assistantID,
-				ProjectID:         coldThread.ProjectID,
-				Backend:           s.runtime.Backend(),
-				State:             runtimeStateStarting,
-			}); err != nil {
-				return AdmitPendingThreadsResult{}, fmt.Errorf("reserve assistant runtime: %w", err)
-			}
-			admitted = append(admitted, coldThread.ID)
-		}
+		return AdmitPendingThreadsResult{}, fmt.Errorf("count active assistant threads: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return AdmitPendingThreadsResult{}, fmt.Errorf("commit assistant admit tx: %w", err)
+		return AdmitPendingThreadsResult{}, fmt.Errorf("commit assistant admit tx (v2): %w", err)
+	}
+
+	if firstThreadOnly {
+		// We just reserved the runtime row; the starter must be admitted
+		// even when active siblings already saturate MaxConcurrency, or
+		// nothing drives Ensure and the row stays starting until reaped.
+		threads = threads[:1]
+	} else {
+		headroom := assistant.MaxConcurrency - int(active)
+		if headroom <= 0 {
+			return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
+		}
+		if len(threads) > headroom {
+			threads = threads[:headroom]
+		}
+	}
+
+	admitted := make([]uuid.UUID, 0, len(threads))
+	for _, t := range threads {
+		admitted = append(admitted, t.ID)
 	}
 	return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: admitted}, nil
 }
 
 func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, threadID uuid.UUID) (ProcessThreadEventsResult, error) {
+	bootstrappedRuntime := false
 	thread, assistant, runtimeRecord, err := s.loadThreadContext(ctx, projectID, threadID)
 	if err != nil {
 		return ProcessThreadEventsResult{}, err
@@ -1385,52 +1407,26 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		// retries against a now-soft-deleted runtime row (loadThreadContext
 		// would return no rows) and burn the workflow's retry budget.
 		s.logger.ErrorContext(ctx, "ensure assistant runtime failed", attr.SlogAssistantThreadID(thread.ID.String()), attr.SlogError(err))
-		_ = s.stopRuntimeRecord(ctx, thread.ProjectID, thread.ID, runtimeStateFailed)
+		_ = s.stopRuntimeRecord(ctx, thread.ProjectID, runtimeRecord.ID, runtimeStateFailed)
 		return ProcessThreadEventsResult{
-			AssistantID:       assistant.ID,
-			WarmUntil:         time.Time{},
-			WarmTTLSeconds:    assistant.WarmTTLSeconds,
-			RuntimeActive:     false,
-			RetryAdmission:    true,
-			ProcessedAnyEvent: false,
+			AssistantID:         assistant.ID,
+			WarmUntil:           time.Time{},
+			WarmTTLSeconds:      assistant.WarmTTLSeconds,
+			RuntimeActive:       false,
+			RetryAdmission:      true,
+			ProcessedAnyEvent:   false,
+			BootstrappedRuntime: bootstrappedRuntime,
 		}, nil
 	}
 	if err := s.updateRuntimeEnsureResult(ctx, &runtimeRecord, ensureResult); err != nil {
 		return ProcessThreadEventsResult{}, err
 	}
 
-	if ensureResult.NeedsConfigure {
-		startupConfig, err := s.tracedBuildStartupConfig(ctx, thread, runtimeRecord, assistant, ensureResult.ColdStart)
-		if err != nil {
-			s.logger.ErrorContext(ctx, "build runtime startup config failed", attr.SlogAssistantThreadID(thread.ID.String()), attr.SlogError(err))
-			_ = s.stopRuntimeRecord(ctx, thread.ProjectID, thread.ID, runtimeStateFailed)
-			return ProcessThreadEventsResult{
-				AssistantID:       assistant.ID,
-				WarmUntil:         time.Time{},
-				WarmTTLSeconds:    assistant.WarmTTLSeconds,
-				RuntimeActive:     false,
-				RetryAdmission:    true,
-				ProcessedAnyEvent: false,
-			}, nil
-		}
-		if err := s.tracedConfigure(ctx, runtimeRecord, startupConfig, ensureResult.ColdStart); err != nil {
-			s.logger.ErrorContext(ctx, "configure assistant runtime failed", attr.SlogAssistantThreadID(thread.ID.String()), attr.SlogError(err))
-			_ = s.stopRuntimeRecord(ctx, thread.ProjectID, thread.ID, runtimeStateFailed)
-			return ProcessThreadEventsResult{
-				AssistantID:       assistant.ID,
-				WarmUntil:         time.Time{},
-				WarmTTLSeconds:    assistant.WarmTTLSeconds,
-				RuntimeActive:     false,
-				RetryAdmission:    true,
-				ProcessedAnyEvent: false,
-			}, nil
-		}
-	}
-
 	if runtimeRecord.State == runtimeStateStarting {
 		if err := s.setRuntimeActive(ctx, thread.ProjectID, runtimeRecord.ID, time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds)*time.Second)); err != nil {
 			return ProcessThreadEventsResult{}, err
 		}
+		bootstrappedRuntime = true
 	}
 
 	processedAny := false
@@ -1466,14 +1462,15 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			// window so they flow through cleanly under a fresh VM.
 			if errors.Is(runErr, ErrRuntimeUnhealthy) {
 				_ = s.runtime.Stop(ctx, runtimeRecord)
-				_ = s.stopRuntimeRecord(ctx, thread.ProjectID, thread.ID, runtimeStateFailed)
+				_ = s.stopRuntimeRecord(ctx, thread.ProjectID, runtimeRecord.ID, runtimeStateFailed)
 				return ProcessThreadEventsResult{
-					AssistantID:       assistant.ID,
-					WarmUntil:         time.Time{},
-					WarmTTLSeconds:    assistant.WarmTTLSeconds,
-					RuntimeActive:     false,
-					RetryAdmission:    true,
-					ProcessedAnyEvent: processedAny,
+					AssistantID:         assistant.ID,
+					WarmUntil:           time.Time{},
+					WarmTTLSeconds:      assistant.WarmTTLSeconds,
+					RuntimeActive:       false,
+					RetryAdmission:      true,
+					ProcessedAnyEvent:   processedAny,
+					BootstrappedRuntime: bootstrappedRuntime,
 				}, nil
 			}
 
@@ -1497,27 +1494,29 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 						return ProcessThreadEventsResult{}, err
 					}
 					return ProcessThreadEventsResult{
-						AssistantID:       assistant.ID,
-						WarmUntil:         warmUntil,
-						WarmTTLSeconds:    assistant.WarmTTLSeconds,
-						RuntimeActive:     true,
-						RetryAdmission:    false,
-						ProcessedAnyEvent: processedAny,
+						AssistantID:         assistant.ID,
+						WarmUntil:           warmUntil,
+						WarmTTLSeconds:      assistant.WarmTTLSeconds,
+						RuntimeActive:       true,
+						RetryAdmission:      false,
+						ProcessedAnyEvent:   processedAny,
+						BootstrappedRuntime: bootstrappedRuntime,
 					}, nil
 				}
 				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_self_heal", "assistant history self-heal applied", "WARN", runErr)
 				_ = s.runtime.Stop(ctx, runtimeRecord)
-				_ = s.stopRuntimeRecord(ctx, thread.ProjectID, thread.ID, runtimeStateStopped)
+				_ = s.stopRuntimeRecord(ctx, thread.ProjectID, runtimeRecord.ID, runtimeStateStopped)
 				if err := s.resetEventToPending(ctx, thread.ProjectID, event.ID, runErr); err != nil {
 					return ProcessThreadEventsResult{}, err
 				}
 				return ProcessThreadEventsResult{
-					AssistantID:       assistant.ID,
-					WarmUntil:         time.Time{},
-					WarmTTLSeconds:    assistant.WarmTTLSeconds,
-					RuntimeActive:     false,
-					RetryAdmission:    true,
-					ProcessedAnyEvent: processedAny,
+					AssistantID:         assistant.ID,
+					WarmUntil:           time.Time{},
+					WarmTTLSeconds:      assistant.WarmTTLSeconds,
+					RuntimeActive:       false,
+					RetryAdmission:      true,
+					ProcessedAnyEvent:   processedAny,
+					BootstrappedRuntime: bootstrappedRuntime,
 				}, nil
 			}
 
@@ -1536,12 +1535,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 					return ProcessThreadEventsResult{}, err
 				}
 				return ProcessThreadEventsResult{
-					AssistantID:       assistant.ID,
-					WarmUntil:         warmUntil,
-					WarmTTLSeconds:    assistant.WarmTTLSeconds,
-					RuntimeActive:     true,
-					RetryAdmission:    false,
-					ProcessedAnyEvent: processedAny,
+					AssistantID:         assistant.ID,
+					WarmUntil:           warmUntil,
+					WarmTTLSeconds:      assistant.WarmTTLSeconds,
+					RuntimeActive:       true,
+					RetryAdmission:      false,
+					ProcessedAnyEvent:   processedAny,
+					BootstrappedRuntime: bootstrappedRuntime,
 				}, nil
 			}
 
@@ -1557,12 +1557,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 					return ProcessThreadEventsResult{}, err
 				}
 				return ProcessThreadEventsResult{
-					AssistantID:       assistant.ID,
-					WarmUntil:         warmUntil,
-					WarmTTLSeconds:    assistant.WarmTTLSeconds,
-					RuntimeActive:     true,
-					RetryAdmission:    false,
-					ProcessedAnyEvent: processedAny,
+					AssistantID:         assistant.ID,
+					WarmUntil:           warmUntil,
+					WarmTTLSeconds:      assistant.WarmTTLSeconds,
+					RuntimeActive:       true,
+					RetryAdmission:      false,
+					ProcessedAnyEvent:   processedAny,
+					BootstrappedRuntime: bootstrappedRuntime,
 				}, nil
 			}
 			// Transient turn-level failure (LLM 5xx, MCP blip) — reset event,
@@ -1577,12 +1578,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				return ProcessThreadEventsResult{}, err
 			}
 			return ProcessThreadEventsResult{
-				AssistantID:       assistant.ID,
-				WarmUntil:         warmUntil,
-				WarmTTLSeconds:    assistant.WarmTTLSeconds,
-				RuntimeActive:     true,
-				RetryAdmission:    true,
-				ProcessedAnyEvent: processedAny,
+				AssistantID:         assistant.ID,
+				WarmUntil:           warmUntil,
+				WarmTTLSeconds:      assistant.WarmTTLSeconds,
+				RuntimeActive:       true,
+				RetryAdmission:      true,
+				ProcessedAnyEvent:   processedAny,
+				BootstrappedRuntime: bootstrappedRuntime,
 			}, nil
 		}
 
@@ -1598,12 +1600,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		return ProcessThreadEventsResult{}, err
 	}
 	return ProcessThreadEventsResult{
-		AssistantID:       assistant.ID,
-		WarmUntil:         warmUntil,
-		WarmTTLSeconds:    assistant.WarmTTLSeconds,
-		RuntimeActive:     true,
-		RetryAdmission:    false,
-		ProcessedAnyEvent: processedAny,
+		AssistantID:         assistant.ID,
+		WarmUntil:           warmUntil,
+		WarmTTLSeconds:      assistant.WarmTTLSeconds,
+		RuntimeActive:       true,
+		RetryAdmission:      false,
+		ProcessedAnyEvent:   processedAny,
+		BootstrappedRuntime: bootstrappedRuntime,
 	}, nil
 }
 
@@ -1622,11 +1625,11 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return fmt.Errorf("decode assistant turn: %w", err)
 	}
-	turnToken, err := s.mintAssistantRuntimeToken(assistant, thread)
+	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID)
 	if err != nil {
 		return err
 	}
-	if err := s.runtime.RunTurn(ctx, runtime, event.ID.String(), turnToken, prompt); err != nil {
+	if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt); err != nil {
 		return fmt.Errorf("run assistant turn: %w", err)
 	}
 	return nil
@@ -1677,125 +1680,119 @@ func (s *ServiceCore) touchProcessingLease(ctx context.Context, projectID, runti
 	return nil
 }
 
-// tracedBuildStartupConfig spans buildRuntimeStartupConfig so its latency
-// joins the rest of the runtime configure pipeline in Datadog APM. Cold
-// start is set as a span attribute since it's the dimension on-call needs
-// to filter setup latency by.
-func (s *ServiceCore) tracedBuildStartupConfig(
-	ctx context.Context,
-	thread assistantThreadRecord,
-	runtime assistantRuntimeRecord,
-	assistant assistantRecord,
-	coldStart bool,
-) (cfg runtimeStartupConfig, err error) {
-	ctx, span := s.tracer.Start(ctx, "assistants.runtime.buildStartupConfig",
-		trace.WithAttributes(attr.AssistantColdStart(coldStart)),
-	)
-	defer func() {
-		if err != nil {
-			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
-			span.SetStatus(codes.Error, err.Error())
-		}
-		span.End()
-	}()
-	return s.buildRuntimeStartupConfig(ctx, thread, runtime, assistant)
-}
-
-// tracedConfigure wraps the runtime Configure call so its latency joins the
-// rest of the setup pipeline in Datadog APM with the cold-start attribute
-// attached. The Fly backend's Configure no longer opens its own span —
-// this is the only span covering the configure HTTP roundtrip.
-func (s *ServiceCore) tracedConfigure(
-	ctx context.Context,
-	runtime assistantRuntimeRecord,
-	config runtimeStartupConfig,
-	coldStart bool,
-) (err error) {
-	ctx, span := s.tracer.Start(ctx, "assistants.runtime.configure",
-		trace.WithAttributes(attr.AssistantColdStart(coldStart)),
-	)
-	defer func() {
-		if err != nil {
-			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
-			span.SetStatus(codes.Error, err.Error())
-		}
-		span.End()
-	}()
-	if err := s.runtime.Configure(ctx, runtime, config); err != nil {
-		return fmt.Errorf("configure runtime: %w", err)
-	}
-	return nil
-}
-
-func (s *ServiceCore) buildRuntimeStartupConfig(
-	ctx context.Context,
-	thread assistantThreadRecord,
-	runtime assistantRuntimeRecord,
-	assistant assistantRecord,
-) (runtimeStartupConfig, error) {
-	token, err := s.mintAssistantRuntimeToken(assistant, thread)
-	if err != nil {
-		return runtimeStartupConfig{}, err
-	}
-
-	runtimeServerURL, err := s.runtime.ServerURL(ctx, runtime, s.serverURL)
-	if err != nil {
-		return runtimeStartupConfig{}, fmt.Errorf("resolve assistant runtime server URL: %w", err)
-	}
-
-	mcpServers, err := resolveAssistantMCPServers(runtimeServerURL, assistant.Toolsets)
-	if err != nil {
-		return runtimeStartupConfig{}, err
-	}
-
-	instructions, err := composeInstructions(assistant.Instructions, thread)
-	if err != nil {
-		return runtimeStartupConfig{}, fmt.Errorf("compose assistant instructions: %w", err)
-	}
-
-	history, err := s.loadChatHistory(ctx, thread.ChatID, thread.ProjectID)
-	if err != nil {
-		return runtimeStartupConfig{}, err
-	}
-
-	completionsEndpoint := runtimeServerURL.JoinPath("chat", "completions")
-	completionsQuery := completionsEndpoint.Query()
-	completionsQuery.Set("unstable_normalizeOutboundMessages", "1")
-	completionsEndpoint.RawQuery = completionsQuery.Encode()
-	completionsURL := completionsEndpoint.String()
-
-	contextWindow := s.resolveAssistantContextWindow(ctx, assistant.Model)
-
-	return runtimeStartupConfig{
-		Model:          assistant.Model,
-		Instructions:   conv.PtrEmpty(instructions),
-		AuthToken:      token,
-		CompletionsURL: &completionsURL,
-		ChatID:         thread.ChatID.String(),
-		MCPServers:     mcpServers,
-		History:        history,
-		ContextWindow:  contextWindow,
-	}, nil
-}
-
-// mintAssistantRuntimeToken issues the per-thread JWT the runner uses for
-// both completions bearer auth and as the dynamic Authorization header stamped
-// on every MCP request via its token registry. Scope is tight (thread +
-// assistant) and server-side Authorize revokes instantly when the thread or
-// assistant is deleted/paused.
-func (s *ServiceCore) mintAssistantRuntimeToken(assistant assistantRecord, thread assistantThreadRecord) (string, error) {
+// MintThreadScopedRuntimeToken issues the JWT the runner uses for every
+// outbound call originating from a specific thread (chat completions, MCP,
+// platform tools). The ThreadID claim populates principal.ThreadID
+// downstream, so platform tools that key on the calling thread (wake,
+// memory, telemetry) keep working under the v2 single-VM-per-assistant
+// runtime — the VM is shared but the auth identity is per-thread.
+func (s *ServiceCore) MintThreadScopedRuntimeToken(assistant assistantRecord, threadID uuid.UUID) (string, error) {
 	token, err := s.assistantTokens.Generate(assistanttokens.GenerateInput{
 		OrgID:       assistant.OrganizationID,
 		ProjectID:   assistant.ProjectID,
 		UserID:      assistant.CreatedByUserID,
 		AssistantID: assistant.ID,
-		ThreadID:    thread.ID,
+		ThreadID:    threadID,
 		TTL:         assistantRuntimeTokenTTL,
 	})
 	if err != nil {
 		return "", fmt.Errorf("generate assistant execution token: %w", err)
 	}
 	return token, nil
+}
+
+// BuildThreadBootstrap composes the response the v2 runner pulls from
+// /rpc/assistants.getThreadBootstrap when it first sees a thread. The
+// caller is responsible for confirming the requesting principal is
+// scoped to the thread's assistant before invoking this method.
+func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threadID, principalAssistantID uuid.UUID) (threadBootstrap, error) {
+	logAttrs := []slog.Attr{
+		attr.SlogProjectID(projectID.String()),
+		attr.SlogAssistantID(principalAssistantID.String()),
+		attr.SlogAssistantThreadID(threadID.String()),
+	}
+	row, err := assistantrepo.New(s.db).LoadAssistantThreadForBootstrap(ctx, assistantrepo.LoadAssistantThreadForBootstrapParams{
+		ThreadID:  threadID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return threadBootstrap{}, oops.E(oops.CodeNotFound, nil, "assistant thread not found").Log(ctx, s.logger, logAttrs...)
+		}
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant thread").Log(ctx, s.logger, logAttrs...)
+	}
+	if row.AssistantID != principalAssistantID {
+		return threadBootstrap{}, oops.E(oops.CodeForbidden, nil, "thread does not belong to assistant").Log(ctx, s.logger, logAttrs...)
+	}
+
+	thread := assistantThreadRecord{
+		ID:            row.ID,
+		AssistantID:   row.AssistantID,
+		ProjectID:     row.ProjectID,
+		CorrelationID: row.CorrelationID,
+		ChatID:        row.ChatID,
+		SourceKind:    row.SourceKind,
+		SourceRefJSON: row.SourceRefJson,
+		LastEventAt:   time.Time{},
+	}
+	assistant := assistantRecord{
+		ID:              row.AssistantID,
+		ProjectID:       row.ProjectID,
+		OrganizationID:  row.OrganizationID,
+		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:            row.Name,
+		Model:           row.Model,
+		Instructions:    row.Instructions,
+		Toolsets:        nil,
+		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		Status:          row.Status,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+		DeletedAt:       row.DeletedAt,
+	}
+	toolsets, err := s.loadAssistantToolsets(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
+	if err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant toolsets").Log(ctx, s.logger, logAttrs...)
+	}
+	assistant.Toolsets = toolsets[assistant.ID]
+
+	runtimeServerURL := s.runtime.ServerURL()
+	if runtimeServerURL == nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, nil, "assistant runtime server url not configured").Log(ctx, s.logger, logAttrs...)
+	}
+
+	// Misconfigured toolsets (no MCP slug, MCP disabled) are surfaced as
+	// best-effort URLs rather than aborting the whole bootstrap. The runner
+	// will discover the failure when it tries to list tools and the
+	// assistant can tell the user which integration is broken.
+	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.Toolsets)
+
+	instructions, err := composeInstructions(assistant.Instructions, thread)
+	if err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").Log(ctx, s.logger, logAttrs...)
+	}
+
+	history, err := s.loadChatHistory(ctx, thread.ChatID, thread.ProjectID)
+	if err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant chat history").Log(ctx, s.logger, logAttrs...)
+	}
+
+	completionsEndpoint := runtimeServerURL.JoinPath("chat", "completions")
+	completionsQuery := completionsEndpoint.Query()
+	completionsQuery.Set("unstable_normalizeOutboundMessages", "1")
+	completionsEndpoint.RawQuery = completionsQuery.Encode()
+
+	return threadBootstrap{
+		Model:          assistant.Model,
+		Instructions:   instructions,
+		CompletionsURL: completionsEndpoint.String(),
+		ChatID:         thread.ChatID.String(),
+		MCPServers:     mcpServers,
+		History:        history,
+		ContextWindow:  s.resolveAssistantContextWindow(ctx, assistant.Model),
+		SourceRefJSON:  thread.SourceRefJSON,
+	}, nil
 }
 
 // assistantRuntimeTokenTTL bounds the lifetime of tokens handed to runners.
@@ -1829,15 +1826,22 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 	return strings.Join(parts, "\n\n"), nil
 }
 
-func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetRow) ([]runtimeMCPServer, error) {
+func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, serverURL *url.URL, toolsets []assistantToolsetRow) []runtimeMCPServer {
 	platformToolsets := []string{platformtools.AssistantsPlatformToolsetSlug}
 	servers := make([]runtimeMCPServer, 0, len(toolsets)+len(platformToolsets))
 	for _, t := range toolsets {
-		if !t.McpEnabled {
-			return nil, fmt.Errorf("toolset %q does not have MCP enabled", t.ToolsetSlug)
-		}
-		if !t.McpSlug.Valid || t.McpSlug.String == "" {
-			return nil, fmt.Errorf("toolset %q has no MCP slug", t.ToolsetSlug)
+		// Misconfiguration (no MCP slug, MCP disabled) is a tenant-side
+		// problem, not a server fault. Skip the broken toolset and let
+		// the rest of the thread admit — the assistant just won't see
+		// these tools.
+		if !t.McpEnabled || !t.McpSlug.Valid || t.McpSlug.String == "" {
+			logger.WarnContext(ctx, "skipping assistant toolset that is not MCP-reachable",
+				attr.SlogToolsetID(t.ToolsetID.String()),
+				attr.SlogToolsetSlug(t.ToolsetSlug),
+				attr.SlogToolsetMCPSlug(t.McpSlug.String),
+				attr.SlogToolsetMCPEnabled(t.McpEnabled),
+			)
+			continue
 		}
 
 		headers := map[string]string{}
@@ -1871,7 +1875,7 @@ func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetR
 		})
 	}
 
-	return servers, nil
+	return servers
 }
 
 func (s *ServiceCore) ProcessThreadEventsByThreadID(ctx context.Context, projectID, threadID uuid.UUID) (ProcessThreadEventsResult, error) {
@@ -1941,14 +1945,19 @@ func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, thread
 	if err := s.runtime.Stop(ctx, runtimeRecord); err != nil {
 		return ExpireThreadRuntimeResult{}, fmt.Errorf("stop assistant runtime backend: %w", err)
 	}
-	if err := s.stopRuntimeRecord(ctx, projectID, threadID, runtimeStateStopped); err != nil {
+	if err := s.stopRuntimeRecord(ctx, projectID, runtimeRecord.ID, runtimeStateStopped); err != nil {
 		return ExpireThreadRuntimeResult{}, err
 	}
 	return ExpireThreadRuntimeResult{Stopped: true, RemainingSeconds: 0}, nil
 }
 
+// loadThreadContext joins assistant_thread → assistant → v2 assistant_runtime
+// and hydrates the records ProcessThreadEvents needs. The runtime row is
+// keyed on (project_id, assistant_id) and serves every thread under the
+// assistant; AssistantThreadID on the returned record is uuid.Nil so the
+// Fly backend dispatches to /threads/{id}/turn.
 func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID uuid.UUID) (assistantThreadRecord, assistantRecord, assistantRuntimeRecord, error) {
-	row, err := assistantrepo.New(s.db).LoadThreadContext(ctx, assistantrepo.LoadThreadContextParams{
+	row, err := assistantrepo.New(s.db).LoadThreadContextV2(ctx, assistantrepo.LoadThreadContextV2Params{
 		ThreadID:      threadID,
 		ProjectID:     projectID,
 		StartingState: runtimeStateStarting,
@@ -1985,7 +1994,7 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 	}
 	runtime := assistantRuntimeRecord{
 		ID:                  row.RuntimeID,
-		AssistantThreadID:   row.AssistantThreadID,
+		AssistantThreadID:   uuid.Nil,
 		AssistantID:         row.RuntimeAssistantID,
 		ProjectID:           row.RuntimeProjectID,
 		Backend:             row.Backend,
@@ -2278,11 +2287,11 @@ func (s *ServiceCore) updateRuntimeEnsureResult(
 	return nil
 }
 
-func (s *ServiceCore) stopRuntimeRecord(ctx context.Context, projectID, threadID uuid.UUID, state string) error {
+func (s *ServiceCore) stopRuntimeRecord(ctx context.Context, projectID, runtimeID uuid.UUID, state string) error {
 	err := assistantrepo.New(s.db).StopAssistantRuntime(ctx, assistantrepo.StopAssistantRuntimeParams{
 		State:         state,
 		ProjectID:     projectID,
-		ThreadID:      threadID,
+		RuntimeID:     runtimeID,
 		StartingState: runtimeStateStarting,
 		ActiveState:   runtimeStateActive,
 		ExpiringState: runtimeStateExpiring,

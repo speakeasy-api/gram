@@ -130,3 +130,92 @@ Use `<Tooltip>`, `<TooltipTrigger>`, and `<TooltipContent>` directly — they in
 - **ALWAYS use Moonshine design system utilities** from `@speakeasy-api/moonshine` instead of hardcoded Tailwind color values
 - **NEVER use hardcoded Tailwind colors** like `bg-neutral-100`, `border-gray-200`, `text-gray-500`, etc.
 - `@tailwindcss/typography` must remain in `devDependencies` — the dashboard uses `prose` and `not-prose` classes directly (e.g. `CatalogDetail.tsx`, `tool.tsx`) which are provided by this plugin.
+
+### Release Stage Badges (Preview / Beta)
+
+Pre-GA features get a `Preview` or `Beta` badge wherever the user would otherwise mistake the feature for being GA. The same `ReleaseStageBadge` component renders on every surface, so labels never drift.
+
+**Source of truth:** `client/dashboard/src/components/release-stage-badge.tsx` — exports `ReleaseStageBadge` and the `ReleaseStage = "preview" | "beta"` type.
+
+**Underlying primitive:** Moonshine's `<Badge>` component (`@speakeasy-api/moonshine`). `ReleaseStageBadge` composes Moonshine's Badge with `background` enabled — this is the source of truth for shape (mono, uppercase, tracked, bordered, `rounded-xs`, `h-5`, `text-[12px]`). Do **not** override these classes; the design system owns them. The wrapper just picks a semantic variant and adds a tooltip.
+
+**Variant → stage mapping** (variant names are hooks, not literal semantics):
+
+- `preview` → Moonshine `warning` variant (amber).
+- `beta` → Moonshine `information` variant (Speakeasy brand blue).
+
+> Moonshine's badge variants (`neutral | destructive | information | success | warning`) are tuned for alert/feedback contexts, but the names are just hooks — `warning` here means "experimental, use with caution," not "alert." That's the intended way to reuse the palettes; don't invent new variants without design buy-in.
+
+**Never hardcode Tailwind colors** (no `bg-violet-500`, no raw `bg-warning-softest` spans). If you find yourself reaching for raw classes for a new badge use case, that's a signal to either pick an existing Moonshine variant or add one upstream.
+
+#### Surface 1 — sidebar nav (route-driven)
+
+Set `stage` on the route declaration. `app-sidebar.tsx` forwards `item.stage` through `ScopeGatedNavItem → NavButton`, which renders the badge with a hover tooltip explaining what the stage means. The badge auto-hides in collapsed-icon mode.
+
+```tsx
+// client/dashboard/src/routes.tsx
+assistants: {
+  title: "Assistants",
+  url: "assistants",
+  icon: "bot",
+  stage: "preview", // ← sidebar pill appears automatically
+  component: AssistantsRoot,
+},
+```
+
+> **Gotcha**: if you ever introduce another sidebar wrapper that calls `NavButton` directly (instead of going through `NavMenuButton`), you must forward `stage={item.stage}` explicitly. `app-sidebar.tsx`'s `ScopeGatedNavItem` does this — copy that pattern.
+
+#### Surface 2 — page section title
+
+Pass `stage` on the **primary** `Page.Section.Title` for the page (usually the first `Page.Section` under `Page.Body`). Don't put it on secondary section titles like "Recent Chats" — the badge labels the whole feature, not individual sections.
+
+```tsx
+<Page.Section>
+  <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
+  <Page.Section.Description>…</Page.Section.Description>
+</Page.Section>
+```
+
+> **Gotcha**: pages with multiple render branches (loading / empty / populated) must include the title — and therefore the `stage` — in **every** branch. `PolicyCenter.tsx` and `SecurityOverview.tsx` are the reference for this pattern.
+
+#### Surface 3 — tab nav (sub-route tabs)
+
+For `ObserveTabNav`-style tab strips, add `stage` to the local tab descriptor and render `<ReleaseStageBadge size="xs" noTooltip>` inline. Use `inline-flex items-center gap-2` on the tab `<Link>` so the badge tracks the label without disrupting the active-tab underline.
+
+```tsx
+// client/dashboard/src/components/observe/ObserveTabNav.tsx
+type Tab = { label: string; href: string; stage?: ReleaseStage };
+const tabs: Tab[] = [
+  { label: "Employees", href: `${baseSlug}/employees`, stage: "preview" },
+];
+```
+
+#### Surface 4 — raw `<h1>` headings (pages that don't use Page.Section.Title)
+
+A handful of pages render their own `<h1 className="text-xl font-semibold">…</h1>` instead of `Page.Section.Title` (e.g., `InsightsEmployees`, `InsightsAgents`). Wrap the heading and the badge in a `flex items-center gap-2` div:
+
+```tsx
+<div className="flex items-center gap-2">
+  <h1 className="text-xl font-semibold">AI Agent Costs</h1>
+  <ReleaseStageBadge stage="preview" />
+</div>
+```
+
+> Consider migrating these pages to `Page.Section.Title` in a follow-up — but don't bundle that refactor with the badge addition.
+
+#### Which surfaces does a given feature need?
+
+- **Default**: every surface where the user encounters the feature's name. If it has a sidebar entry **and** a page heading, badge both.
+- **Tab-only feature**: badge the tab. The parent route's nav entry stays clean since the parent isn't itself pre-GA.
+- **Hidden behind a feature flag**: still badge the visible surfaces. The flag controls visibility; the badge communicates stage to users who can see it.
+
+#### Removing a badge (feature ships GA)
+
+Grep `stage="preview"` and `stage="beta"` and delete every match:
+
+- `routes.tsx` — remove the `stage:` field on the route entry
+- `Page.Section.Title stage="…"` — drop the prop
+- `ObserveTabNav` (or similar) tab descriptors — drop the `stage` field
+- Inline `<ReleaseStageBadge>` usages — delete the element and unwrap the `flex items-center gap-2` div
+
+There's no other cleanup. The component itself stays in place for the next pre-GA feature.
