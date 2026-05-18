@@ -1,5 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { ProjectAvatar } from "@/components/project-menu";
+import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
@@ -48,6 +49,14 @@ export function CollectionDetailRoot() {
 }
 
 export default function CollectionDetail() {
+  return (
+    <RequireScope scope={["org:read", "org:admin"]} level="page">
+      <CollectionDetailInner />
+    </RequireScope>
+  );
+}
+
+function CollectionDetailInner() {
   const { collectionSlug } = useParams<{ collectionSlug: string }>();
   const { data: collections } = useCollections();
   const orgRoutes = useOrgRoutes();
@@ -281,22 +290,24 @@ export default function CollectionDetail() {
                   </p>
                 )}
                 <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => {
-                      setEditName(collection.name);
-                      setEditDescription(collection.description);
-                      setEditVisibility(collection.visibility);
-                      setEditSelectedToolsetIds(new Set(attachedToolsetIds));
-                      setEditing(true);
-                    }}
-                  >
-                    <Button.Icon>
-                      <Pencil />
-                    </Button.Icon>
-                    <Button.Text>Edit</Button.Text>
-                  </Button>
+                  <RequireScope scope="org:admin" level="component">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        setEditName(collection.name);
+                        setEditDescription(collection.description);
+                        setEditVisibility(collection.visibility);
+                        setEditSelectedToolsetIds(new Set(attachedToolsetIds));
+                        setEditing(true);
+                      }}
+                    >
+                      <Button.Icon>
+                        <Pencil />
+                      </Button.Icon>
+                      <Button.Text>Edit</Button.Text>
+                    </Button>
+                  </RequireScope>
                   <Button
                     size="sm"
                     disabled={
@@ -329,200 +340,208 @@ export default function CollectionDetail() {
 
             {/* Edit Form */}
             {editing && (
-              <div className="mb-4 space-y-4 rounded-lg border p-5">
-                <h2 className="text-base font-semibold">Edit Collection</h2>
-                <div>
-                  <label className="mb-1 block text-sm font-medium">Name</label>
-                  <Input
-                    value={editName}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setEditName(e.target.value)
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium">
-                    Description
-                  </label>
-                  <Textarea
-                    value={editDescription}
-                    onChange={(e) => setEditDescription(e.target.value)}
-                    rows={3}
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    Visibility
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      className={cn(
-                        "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
-                        editVisibility === "public"
-                          ? "border-foreground/30 bg-accent"
-                          : "border-border hover:bg-accent/50",
-                      )}
-                      onClick={() => setEditVisibility("public")}
-                    >
-                      <Globe className="h-3.5 w-3.5" />
-                      Public
-                    </button>
-                    <button
-                      type="button"
-                      className={cn(
-                        "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
-                        editVisibility === "private"
-                          ? "border-foreground/30 bg-accent"
-                          : "border-border hover:bg-accent/50",
-                      )}
-                      onClick={() => setEditVisibility("private")}
-                    >
-                      <Lock className="h-3.5 w-3.5" />
-                      Private
-                    </button>
+              <RequireScope scope="org:admin" level="section">
+                <div className="mb-4 space-y-4 rounded-lg border p-5">
+                  <h2 className="text-base font-semibold">Edit Collection</h2>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">
+                      Name
+                    </label>
+                    <Input
+                      value={editName}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setEditName(e.target.value)
+                      }
+                    />
                   </div>
-                </div>
-
-                {/* Server picker (edit mode only) */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    MCP Servers ({editSelectedToolsetIds.size} selected)
-                  </label>
-                  <div className="rounded-md border">
-                    <div className="relative border-b">
-                      <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        placeholder="Search servers..."
-                        value={serverSearch}
-                        onChange={(e) => setServerSearch(e.target.value)}
-                        className="placeholder:text-muted-foreground w-full bg-transparent py-2.5 pr-3 pl-9 text-sm outline-none"
-                      />
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">
+                      Description
+                    </label>
+                    <Textarea
+                      value={editDescription}
+                      onChange={(e) => setEditDescription(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">
+                      Visibility
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
+                          editVisibility === "public"
+                            ? "border-foreground/30 bg-accent"
+                            : "border-border hover:bg-accent/50",
+                        )}
+                        onClick={() => setEditVisibility("public")}
+                      >
+                        <Globe className="h-3.5 w-3.5" />
+                        Public
+                      </button>
+                      <button
+                        type="button"
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
+                          editVisibility === "private"
+                            ? "border-foreground/30 bg-accent"
+                            : "border-border hover:bg-accent/50",
+                        )}
+                        onClick={() => setEditVisibility("private")}
+                      >
+                        <Lock className="h-3.5 w-3.5" />
+                        Private
+                      </button>
                     </div>
-                    <div className="max-h-64 overflow-y-auto">
-                      {toolsetsLoading ? (
-                        <div className="flex items-center justify-center p-4">
-                          <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-                        </div>
-                      ) : filteredToolsets.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center p-4 text-center">
-                          <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
-                          <Type small muted>
-                            {serverSearch
-                              ? "No servers match your search."
-                              : "No MCP servers available."}
-                          </Type>
-                        </div>
-                      ) : (
-                        filteredToolsets.map((toolset) => (
-                          <label
-                            key={toolset.id}
-                            className="hover:bg-accent/50 flex cursor-pointer items-start gap-3 border-b px-3 py-2.5 last:border-b-0"
-                          >
-                            <Checkbox
-                              checked={editSelectedToolsetIds.has(toolset.id)}
-                              disabled={isSaving}
-                              onCheckedChange={() => toggleToolset(toolset.id)}
-                              className="mt-0.5"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="truncate text-sm font-medium">
-                                  {toolset.name}
-                                </span>
-                                <Badge
-                                  variant="secondary"
-                                  className="shrink-0 text-xs"
-                                >
-                                  {toolset.projectName}
-                                </Badge>
-                              </div>
-                              {toolset.description && (
-                                <div className="text-muted-foreground mt-0.5 truncate text-xs">
-                                  {toolset.description}
+                  </div>
+
+                  {/* Server picker (edit mode only) */}
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">
+                      MCP Servers ({editSelectedToolsetIds.size} selected)
+                    </label>
+                    <div className="rounded-md border">
+                      <div className="relative border-b">
+                        <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="Search servers..."
+                          value={serverSearch}
+                          onChange={(e) => setServerSearch(e.target.value)}
+                          className="placeholder:text-muted-foreground w-full bg-transparent py-2.5 pr-3 pl-9 text-sm outline-none"
+                        />
+                      </div>
+                      <div className="max-h-64 overflow-y-auto">
+                        {toolsetsLoading ? (
+                          <div className="flex items-center justify-center p-4">
+                            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+                          </div>
+                        ) : filteredToolsets.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center p-4 text-center">
+                            <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
+                            <Type small muted>
+                              {serverSearch
+                                ? "No servers match your search."
+                                : "No MCP servers available."}
+                            </Type>
+                          </div>
+                        ) : (
+                          filteredToolsets.map((toolset) => (
+                            <label
+                              key={toolset.id}
+                              className="hover:bg-accent/50 flex cursor-pointer items-start gap-3 border-b px-3 py-2.5 last:border-b-0"
+                            >
+                              <Checkbox
+                                checked={editSelectedToolsetIds.has(toolset.id)}
+                                disabled={isSaving}
+                                onCheckedChange={() =>
+                                  toggleToolset(toolset.id)
+                                }
+                                className="mt-0.5"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="truncate text-sm font-medium">
+                                    {toolset.name}
+                                  </span>
+                                  <Badge
+                                    variant="secondary"
+                                    className="shrink-0 text-xs"
+                                  >
+                                    {toolset.projectName}
+                                  </Badge>
                                 </div>
-                              )}
-                            </div>
-                          </label>
-                        ))
-                      )}
+                                {toolset.description && (
+                                  <div className="text-muted-foreground mt-0.5 truncate text-xs">
+                                    {toolset.description}
+                                  </div>
+                                )}
+                              </div>
+                            </label>
+                          ))
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    disabled={isSaving || !editName}
-                    onClick={async () => {
-                      setIsSaving(true);
-                      try {
-                        // Update collection metadata
-                        await updateCollection.mutateAsync({
-                          request: {
-                            updateRequestBody: {
-                              collectionId: collection.id,
-                              name: editName,
-                              description: editDescription,
-                              visibility: editVisibility,
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      disabled={isSaving || !editName}
+                      onClick={async () => {
+                        setIsSaving(true);
+                        try {
+                          // Update collection metadata
+                          await updateCollection.mutateAsync({
+                            request: {
+                              updateRequestBody: {
+                                collectionId: collection.id,
+                                name: editName,
+                                description: editDescription,
+                                visibility: editVisibility,
+                              },
                             },
-                          },
-                        });
+                          });
 
-                        // Diff server changes: attach new, detach removed
-                        const toAttach = [...editSelectedToolsetIds].filter(
-                          (id) => !attachedToolsetIds.has(id),
-                        );
-                        const toDetach = [...attachedToolsetIds].filter(
-                          (id) => !editSelectedToolsetIds.has(id),
-                        );
+                          // Diff server changes: attach new, detach removed
+                          const toAttach = [...editSelectedToolsetIds].filter(
+                            (id) => !attachedToolsetIds.has(id),
+                          );
+                          const toDetach = [...attachedToolsetIds].filter(
+                            (id) => !editSelectedToolsetIds.has(id),
+                          );
 
-                        await Promise.all([
-                          ...toAttach.map((toolsetId) =>
-                            attachServer.mutateAsync({
-                              request: {
-                                attachServerRequestBody: {
-                                  collectionId: collection.id,
-                                  toolsetId,
+                          await Promise.all([
+                            ...toAttach.map((toolsetId) =>
+                              attachServer.mutateAsync({
+                                request: {
+                                  attachServerRequestBody: {
+                                    collectionId: collection.id,
+                                    toolsetId,
+                                  },
                                 },
-                              },
-                            }),
-                          ),
-                          ...toDetach.map((toolsetId) =>
-                            detachServer.mutateAsync({
-                              request: {
-                                attachServerRequestBody: {
-                                  collectionId: collection.id,
-                                  toolsetId,
+                              }),
+                            ),
+                            ...toDetach.map((toolsetId) =>
+                              detachServer.mutateAsync({
+                                request: {
+                                  attachServerRequestBody: {
+                                    collectionId: collection.id,
+                                    toolsetId,
+                                  },
                                 },
-                              },
-                            }),
-                          ),
-                        ]);
+                              }),
+                            ),
+                          ]);
 
+                          setEditing(false);
+                          setServerSearch("");
+                        } finally {
+                          setIsSaving(false);
+                        }
+                      }}
+                    >
+                      <Button.Text>
+                        {isSaving ? "Saving..." : "Save"}
+                      </Button.Text>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={isSaving}
+                      onClick={() => {
                         setEditing(false);
                         setServerSearch("");
-                      } finally {
-                        setIsSaving(false);
-                      }
-                    }}
-                  >
-                    <Button.Text>{isSaving ? "Saving..." : "Save"}</Button.Text>
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={isSaving}
-                    onClick={() => {
-                      setEditing(false);
-                      setServerSearch("");
-                    }}
-                  >
-                    <Button.Text>Cancel</Button.Text>
-                  </Button>
+                      }}
+                    >
+                      <Button.Text>Cancel</Button.Text>
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              </RequireScope>
             )}
 
             {/* About */}
@@ -585,23 +604,25 @@ export default function CollectionDetail() {
                               </p>
                             )}
                           </div>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            disabled={
-                              !installableServer || projects.length === 0
-                            }
-                            onClick={() => {
-                              if (installableServer) {
-                                openInstallDialog(installableServer);
+                          <RequireScope scope="project:write" level="component">
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={
+                                !installableServer || projects.length === 0
                               }
-                            }}
-                          >
-                            <Button.Icon>
-                              <Download />
-                            </Button.Icon>
-                            <Button.Text>Install</Button.Text>
-                          </Button>
+                              onClick={() => {
+                                if (installableServer) {
+                                  openInstallDialog(installableServer);
+                                }
+                              }}
+                            >
+                              <Button.Icon>
+                                <Download />
+                              </Button.Icon>
+                              <Button.Text>Install</Button.Text>
+                            </Button>
+                          </RequireScope>
                         </div>
                       );
                     })}
@@ -611,53 +632,55 @@ export default function CollectionDetail() {
             )}
 
             {/* Danger Zone */}
-            <div className="border-destructive/30 mt-4 rounded-lg border p-5">
-              <h2 className="text-destructive mb-2 text-base font-semibold">
-                Danger Zone
-              </h2>
-              <p className="text-muted-foreground mb-3 text-sm">
-                Permanently delete this collection. This action cannot be
-                undone.
-              </p>
-              {confirmDelete ? (
-                <div className="flex items-center gap-2">
+            <RequireScope scope="org:admin" level="section">
+              <div className="border-destructive/30 mt-4 rounded-lg border p-5">
+                <h2 className="text-destructive mb-2 text-base font-semibold">
+                  Danger Zone
+                </h2>
+                <p className="text-muted-foreground mb-3 text-sm">
+                  Permanently delete this collection. This action cannot be
+                  undone.
+                </p>
+                {confirmDelete ? (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="destructive-primary"
+                      size="sm"
+                      disabled={deleteCollection.isPending}
+                      onClick={async () => {
+                        await deleteCollection.mutateAsync({
+                          request: {
+                            collectionId: collection.id,
+                          },
+                        });
+                        orgRoutes.collections.goTo();
+                      }}
+                    >
+                      <Button.Text>
+                        {deleteCollection.isPending
+                          ? "Deleting..."
+                          : "Confirm Delete"}
+                      </Button.Text>
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setConfirmDelete(false)}
+                    >
+                      <Button.Text>Cancel</Button.Text>
+                    </Button>
+                  </div>
+                ) : (
                   <Button
                     variant="destructive-primary"
                     size="sm"
-                    disabled={deleteCollection.isPending}
-                    onClick={async () => {
-                      await deleteCollection.mutateAsync({
-                        request: {
-                          collectionId: collection.id,
-                        },
-                      });
-                      orgRoutes.collections.goTo();
-                    }}
+                    onClick={() => setConfirmDelete(true)}
                   >
-                    <Button.Text>
-                      {deleteCollection.isPending
-                        ? "Deleting..."
-                        : "Confirm Delete"}
-                    </Button.Text>
+                    <Button.Text>Delete Collection</Button.Text>
                   </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setConfirmDelete(false)}
-                  >
-                    <Button.Text>Cancel</Button.Text>
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  variant="destructive-primary"
-                  size="sm"
-                  onClick={() => setConfirmDelete(true)}
-                >
-                  <Button.Text>Delete Collection</Button.Text>
-                </Button>
-              )}
-            </div>
+                )}
+              </div>
+            </RequireScope>
           </div>
 
           {/* Sidebar */}
