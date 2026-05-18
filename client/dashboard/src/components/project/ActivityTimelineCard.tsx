@@ -34,7 +34,7 @@ export function ActivityTimelineCard({ logs, isPending, viewAllHref }: Props) {
   return (
     <DashboardCard
       title="Activity Timeline"
-      tooltip="Recent administrative activity in this project — deployments, MCP server changes, API key rotations, environment edits, and access role updates. Grouped by day, most recent first."
+      tooltip="Recent administrative activity in this project — changes to sources, MCP server changes, API key rotations, environment edits, and access role updates. Grouped by day, most recent first."
       action={
         <Link
           to={viewAllHref}

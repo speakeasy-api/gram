@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: e3d92ee1b99d5355f9c5224a472bc1a3
+  docChecksum: 56c8b59140fa36b4a10f99c9ec97a640
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -187,7 +187,7 @@ trackedFiles:
   docs/models/components/createmcpendpointform.md:
     last_write_checksum: sha1:ec1eb9804dd7a98d81f5dc06d0a657f02548a128
   docs/models/components/createmcpserverform.md:
-    last_write_checksum: sha1:fbb2523c65d1aa7140bbbc82dc716dbdd0ceb4b3
+    last_write_checksum: sha1:4eddc1753ba55ebee921af09854a8b225e51b69b
   docs/models/components/createmcpserverformvisibility.md:
     last_write_checksum: sha1:a75c05e8b8f0d0bd19a21755e3425a63cd4788fb
   docs/models/components/createpackageform.md:
@@ -543,7 +543,7 @@ trackedFiles:
   docs/models/components/mcpregistry.md:
     last_write_checksum: sha1:fb0e91780ba5dfb14024c1c29f06167a3d6da339
   docs/models/components/mcpserver.md:
-    last_write_checksum: sha1:7e516a3b041aa772d6e3b7c5e8d71f120f35e5b9
+    last_write_checksum: sha1:94cb9eff3b9a7255cfc958ccb3ba2fad70830ecc
   docs/models/components/mcpservervisibility.md:
     last_write_checksum: sha1:5b92f014430fc0fd3cc9d90c3f5e007e0edc5e10
   docs/models/components/metricsmode.md:
@@ -887,7 +887,7 @@ trackedFiles:
   docs/models/components/triggerinstancestatus.md:
     last_write_checksum: sha1:7315b78cbccc915a21a8c1ec4ee7155d40a41b80
   docs/models/components/triggerriskanalysisrequestbody.md:
-    last_write_checksum: sha1:3eb61971c8af9840b56ea23ae779b828af9afc0d
+    last_write_checksum: sha1:e1730432575c14fc1c66fbfa5e20e951bb04669b
   docs/models/components/type.md:
     last_write_checksum: sha1:f3606d62bd77e8ac3c11011316949e80d0803890
   docs/models/components/typestoinclude.md:
@@ -901,7 +901,7 @@ trackedFiles:
   docs/models/components/updatemcpendpointform.md:
     last_write_checksum: sha1:7d4267078a8a386af4b78120b307357baddac459
   docs/models/components/updatemcpserverform.md:
-    last_write_checksum: sha1:719656c40bef00eabc0d8815f7e19f26371836f9
+    last_write_checksum: sha1:363093fc0bf9b9cc2fac2c26a669a2985cf1da65
   docs/models/components/updatemcpserverformvisibility.md:
     last_write_checksum: sha1:c533d738ab4fc273f9930d0c2c696a622af7ad79
   docs/models/components/updatememberroleform.md:
@@ -2681,7 +2681,7 @@ trackedFiles:
   docs/sdks/mcpregistries/README.md:
     last_write_checksum: sha1:6e0e53ab4f9d91a9685bc9bfd5517dc99fc47f4c
   docs/sdks/mcpservers/README.md:
-    last_write_checksum: sha1:6bc047a1c9d65f74458c6470ad024de4cf743307
+    last_write_checksum: sha1:59e92b317c497feff42fea8925280b21ff213d42
   docs/sdks/organizations/README.md:
     last_write_checksum: sha1:6b7ecd25efd629719a834ee29f303b21385746de
   docs/sdks/otelforwarding/README.md:
@@ -2691,7 +2691,7 @@ trackedFiles:
   docs/sdks/plugins/README.md:
     last_write_checksum: sha1:1db1ff15e99af9efc38c654bdff23180d91827d8
   docs/sdks/policies/README.md:
-    last_write_checksum: sha1:d611fbfbc8f551d796c65b23ce4fecd2cce69aa1
+    last_write_checksum: sha1:cdd3f7dc142798bd13cfe0fb5c109301a47c5e16
   docs/sdks/projects/README.md:
     last_write_checksum: sha1:69eaa9d9ecba768b0e979a00aa5e77ebe1a4e23b
   docs/sdks/remotemcp/README.md:
@@ -3103,7 +3103,7 @@ trackedFiles:
   src/funcs/mcpServersList.ts:
     last_write_checksum: sha1:fb63dfc3f2d22cf77128555c9e3777b4421d0ada
   src/funcs/mcpServersUpdate.ts:
-    last_write_checksum: sha1:a211c75fba6033df07effcd1b9787565fb52b8b1
+    last_write_checksum: sha1:e2b7fd6087a47857cf34f0be94b616c3b5f90243
   src/funcs/organizationsCreatePortalSession.ts:
     last_write_checksum: sha1:67367ee8153b1e408726fef9e02695465ffbb564
   src/funcs/organizationsDisableWebhooks.ts:
@@ -3271,7 +3271,7 @@ trackedFiles:
   src/funcs/riskPoliciesStatus.ts:
     last_write_checksum: sha1:cff2198821aa462a441354ca7bc5779bd8bd2e03
   src/funcs/riskPoliciesTrigger.ts:
-    last_write_checksum: sha1:32fdeface151d897e3315d5d2e5a4dd65728c881
+    last_write_checksum: sha1:899e5f614e8968b44a6793a0603de89eb5449b19
   src/funcs/riskPoliciesUpdate.ts:
     last_write_checksum: sha1:a837a34d87bcdc48af1ae9b78862c425fedf3bc2
   src/funcs/riskResultsByChat.ts:
@@ -3679,7 +3679,7 @@ trackedFiles:
   src/models/components/createmcpendpointform.ts:
     last_write_checksum: sha1:ea00ac9a2ec7800f2da800b94d7b30f4cad1993b
   src/models/components/createmcpserverform.ts:
-    last_write_checksum: sha1:3495cc72333cf26d43917841a0158e4f73296328
+    last_write_checksum: sha1:a9a6d9fb271e7e1cb6095c8825c5a3b6be4edd74
   src/models/components/createpackageform.ts:
     id: dd89d7ed01c5
     last_write_checksum: sha1:7388e08e207a0244cd85e7152b8dd171e8023fc1
@@ -4141,7 +4141,7 @@ trackedFiles:
   src/models/components/mcpregistry.ts:
     last_write_checksum: sha1:78224741968880f86a10b5ed9aeecac079504722
   src/models/components/mcpserver.ts:
-    last_write_checksum: sha1:882bfaebd853037ccdcdd7a123c4ce63bc37229a
+    last_write_checksum: sha1:607933399c4c1fe55bae04a9532453bba5b71b68
   src/models/components/modelusage.ts:
     last_write_checksum: sha1:7b01fb688a987bbb0683cf595f3e7ab1d25ce9cb
   src/models/components/notmodified.ts:
@@ -4507,7 +4507,7 @@ trackedFiles:
   src/models/components/triggerinstance.ts:
     last_write_checksum: sha1:dceaf672ef4d6872f103f0339ec0849ffb8fbb9a
   src/models/components/triggerriskanalysisrequestbody.ts:
-    last_write_checksum: sha1:eb170c788b7b869a0d10d69b79de686e25de4616
+    last_write_checksum: sha1:8a63ff3fe0087235a73b982cd99161a2aeed8376
   src/models/components/updateassistantform.ts:
     last_write_checksum: sha1:283f390810d1857e8c3c90505812e490b7c0e665
   src/models/components/updateenvironmentrequestbody.ts:
@@ -4517,7 +4517,7 @@ trackedFiles:
   src/models/components/updatemcpendpointform.ts:
     last_write_checksum: sha1:2051b085948e4af650466d7dedc524979979e7d1
   src/models/components/updatemcpserverform.ts:
-    last_write_checksum: sha1:841b6d33f471866c0c57f918a5fe0a0fc9655442
+    last_write_checksum: sha1:a936389fcd82c61caa3de593c9a3abce021347cc
   src/models/components/updatememberroleform.ts:
     last_write_checksum: sha1:51b48e1eae3b41468a844cd4bc9c761d42afa0db
   src/models/components/updateoauthproxyserverrequestbody.ts:
@@ -6155,7 +6155,7 @@ trackedFiles:
   src/react-query/riskPoliciesStatus.ts:
     last_write_checksum: sha1:db08364ccd265be6fe641f0433f79dace59b714b
   src/react-query/riskPoliciesTrigger.ts:
-    last_write_checksum: sha1:0ffe5380301808fa0c998a5cbcb51d1623bcf1a1
+    last_write_checksum: sha1:9fdb2d7fa8da575cb7647eea732f40b657ad21e6
   src/react-query/riskPoliciesUpdate.ts:
     last_write_checksum: sha1:3a389d4b7dd4e40a405a444fec22905fa633bca1
   src/react-query/role.core.ts:
@@ -6299,7 +6299,7 @@ trackedFiles:
   src/react-query/updateMcpEndpoint.ts:
     last_write_checksum: sha1:a76a7bdb241bc50dcb08db286be135e6e64436ec
   src/react-query/updateMcpServer.ts:
-    last_write_checksum: sha1:78fe732e3c42be2f445b8b79facf41c3f5e828a5
+    last_write_checksum: sha1:a4f3640e700f9ac21aaf82ebdf94ee773ba6d773
   src/react-query/updateMemberRole.ts:
     last_write_checksum: sha1:77757f9e2c0f7a2ba89cbf34eb08435146bfd663
   src/react-query/updateOAuthProxyServer.ts:
@@ -6473,7 +6473,7 @@ trackedFiles:
     last_write_checksum: sha1:3f43cbc58c4fda6b886ab4f80f73b4993de92d3f
     pristine_git_object: dfebfc79f3a9812d656d81002e00f583178b86dd
   src/sdk/mcpservers.ts:
-    last_write_checksum: sha1:b5e43f23c4b80274012c8394b507ba6f187ecb81
+    last_write_checksum: sha1:0f52b098395cd0179483688afac01a284e682933
   src/sdk/organizations.ts:
     last_write_checksum: sha1:adb37c689b7ce5bbde9a9d36190cb8eff4e872d9
   src/sdk/otelforwarding.ts:
@@ -6485,7 +6485,7 @@ trackedFiles:
   src/sdk/plugins.ts:
     last_write_checksum: sha1:7028ca7dfba43671e325dd5f14920e007e88e378
   src/sdk/policies.ts:
-    last_write_checksum: sha1:bf3c4e4a212f66d947d76cf149b309aa94397d00
+    last_write_checksum: sha1:7df5f8ff60b6ce77f41555f75e34a2364f53e9cf
   src/sdk/projects.ts:
     id: 28088373a118
     last_write_checksum: sha1:a80e20f3e6686ec35437d4054d5f1ff74b78c346
@@ -8851,7 +8851,7 @@ examples:
   triggerRiskAnalysis:
     speakeasy-default-trigger-risk-analysis:
       requestBody:
-        application/json: {"id": "627f5b17-9f75-4837-81cc-2f7a2510ed27"}
+        application/json: {"id": "627f5b17-9f75-4837-81cc-2f7a2510ed27", "limit": 100}
       responses:
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}

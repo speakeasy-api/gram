@@ -128,7 +128,7 @@ func handleToolsList(
 		logger.WarnContext(ctx, "invalid toolset project id; skipping shadow_mcp schema injection", attr.SlogError(err))
 	} else if shadowMCPClient.IsEnabledForProject(ctx, toolsetProjectID) {
 		for _, t := range tools {
-			injected, err := injectToolsetIDConstant(t.InputSchema, toolset.ID)
+			injected, err := shadowmcp.InjectToolsetIDConstant(t.InputSchema, toolset.ID)
 			if err != nil {
 				logger.WarnContext(ctx, "failed to inject toolset id constant into tool input schema", attr.SlogError(err), attr.SlogToolName(t.Name))
 				continue

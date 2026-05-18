@@ -204,7 +204,8 @@ export function LogsTools() {
           <div className="flex min-w-0 flex-col gap-1">
             <h1 className="text-xl font-semibold">Tool Logs</h1>
             <p className="text-muted-foreground text-sm">
-              Monitor tool traces across all servers
+              Dive into tool traces across all tools (MCPs, skills and local
+              tools) used by organization members in this project
             </p>
           </div>
           <div className="relative flex-1">
@@ -330,7 +331,8 @@ function HooksInnerContent({
             <div className="flex min-w-0 flex-col gap-1">
               <h1 className="text-xl font-semibold">Tool Logs</h1>
               <p className="text-muted-foreground text-sm">
-                Monitor tool traces across all servers
+                Dive into tool traces across all tools (MCPs, skills and local
+                tools) used by organization members in this project
               </p>
             </div>
             <div className="flex items-center gap-2">

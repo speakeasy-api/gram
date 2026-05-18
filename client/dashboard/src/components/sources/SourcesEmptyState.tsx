@@ -100,7 +100,7 @@ export function SourcesEmptyState() {
                         <Server className="h-5 w-5 text-violet-600 dark:text-violet-400" />
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="font-medium">Registry server</span>
+                        <span className="font-medium">3rd-party server</span>
                         <span className="text-muted-foreground text-xs">
                           Add pre-built servers from the catalog
                         </span>

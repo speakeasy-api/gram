@@ -24,16 +24,10 @@ func BuildCreateMcpServerPayload(mcpServersCreateMcpServerBody string, mcpServer
 	{
 		err = json.Unmarshal([]byte(mcpServersCreateMcpServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"external_oauth_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"oauth_proxy_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
 		}
 		if body.EnvironmentID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
-		}
-		if body.ExternalOauthServerID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.external_oauth_server_id", *body.ExternalOauthServerID, goa.FormatUUID))
-		}
-		if body.OauthProxyServerID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.oauth_proxy_server_id", *body.OauthProxyServerID, goa.FormatUUID))
 		}
 		if body.RemoteMcpServerID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
@@ -67,12 +61,10 @@ func BuildCreateMcpServerPayload(mcpServersCreateMcpServerBody string, mcpServer
 		}
 	}
 	v := &mcpservers.CreateMcpServerPayload{
-		EnvironmentID:         body.EnvironmentID,
-		ExternalOauthServerID: body.ExternalOauthServerID,
-		OauthProxyServerID:    body.OauthProxyServerID,
-		RemoteMcpServerID:     body.RemoteMcpServerID,
-		ToolsetID:             body.ToolsetID,
-		Visibility:            types.McpServerVisibility(body.Visibility),
+		EnvironmentID:     body.EnvironmentID,
+		RemoteMcpServerID: body.RemoteMcpServerID,
+		ToolsetID:         body.ToolsetID,
+		Visibility:        types.McpServerVisibility(body.Visibility),
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -180,17 +172,11 @@ func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServer
 	{
 		err = json.Unmarshal([]byte(mcpServersUpdateMcpServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"external_oauth_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"oauth_proxy_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.EnvironmentID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
-		}
-		if body.ExternalOauthServerID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.external_oauth_server_id", *body.ExternalOauthServerID, goa.FormatUUID))
-		}
-		if body.OauthProxyServerID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.oauth_proxy_server_id", *body.OauthProxyServerID, goa.FormatUUID))
 		}
 		if body.RemoteMcpServerID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
@@ -224,13 +210,11 @@ func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServer
 		}
 	}
 	v := &mcpservers.UpdateMcpServerPayload{
-		ID:                    body.ID,
-		EnvironmentID:         body.EnvironmentID,
-		ExternalOauthServerID: body.ExternalOauthServerID,
-		OauthProxyServerID:    body.OauthProxyServerID,
-		RemoteMcpServerID:     body.RemoteMcpServerID,
-		ToolsetID:             body.ToolsetID,
-		Visibility:            types.McpServerVisibility(body.Visibility),
+		ID:                body.ID,
+		EnvironmentID:     body.EnvironmentID,
+		RemoteMcpServerID: body.RemoteMcpServerID,
+		ToolsetID:         body.ToolsetID,
+		Visibility:        types.McpServerVisibility(body.Visibility),
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

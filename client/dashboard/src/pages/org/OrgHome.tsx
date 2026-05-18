@@ -81,9 +81,9 @@ export function OrgHomeInner() {
         Projects
       </Heading>
       <Type small muted className="mb-4">
-        Projects organize your MCP servers, tools, deployments, and integrations
-        into separate workspaces. Use them to isolate different products or
-        environments within your organization.
+        Projects organize your MCP servers, skills, assistants, and other tools
+        into separate workspaces. Use them to permission and scope access to
+        different products, teams or environments within your organization.
       </Type>
       <SearchBar
         value={search}

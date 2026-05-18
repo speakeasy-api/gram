@@ -11369,7 +11369,7 @@ paths:
         name: McpServers
   /rpc/mcpServers.update:
     post:
-      description: 'Update an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.'
+      description: 'Update an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.'
       operationId: updateMcpServer
       parameters:
         - allowEmptyValue: true
@@ -18690,7 +18690,7 @@ paths:
       x-speakeasy-name-override: status
   /rpc/risk.policies.trigger:
     post:
-      description: Manually trigger risk analysis for a policy, starting or signaling the drain workflow.
+      description: Manually trigger risk analysis for a policy, starting or signaling the drain workflow. Defaults to the most recent 100 unanalyzed messages; pass `limit=0` to backfill every unanalyzed message.
       operationId: triggerRiskAnalysis
       parameters:
         - allowEmptyValue: true
@@ -27961,14 +27961,6 @@ components:
           type: string
           description: The ID of the environment to associate with the server
           format: uuid
-        external_oauth_server_id:
-          type: string
-          description: The ID of the external OAuth server to associate with the server
-          format: uuid
-        oauth_proxy_server_id:
-          type: string
-          description: The ID of the OAuth proxy server to associate with the server
-          format: uuid
         remote_mcp_server_id:
           type: string
           description: The ID of the remote MCP server to use as the backend
@@ -27984,7 +27976,7 @@ components:
             - disabled
             - private
             - public
-      description: Form for creating a new MCP server. Exactly one of remote_mcp_server_id or toolset_id must be provided. At most one of external_oauth_server_id or oauth_proxy_server_id may be provided.
+      description: Form for creating a new MCP server. Exactly one of remote_mcp_server_id or toolset_id must be provided.
       required:
         - visibility
     CreatePackageForm:
@@ -31941,17 +31933,9 @@ components:
           type: string
           description: The ID of the environment associated with the server
           format: uuid
-        external_oauth_server_id:
-          type: string
-          description: The ID of the external OAuth server associated with the server
-          format: uuid
         id:
           type: string
           description: The ID of the MCP server
-          format: uuid
-        oauth_proxy_server_id:
-          type: string
-          description: The ID of the OAuth proxy server associated with the server
           format: uuid
         project_id:
           type: string
@@ -36123,6 +36107,12 @@ components:
           type: string
           description: The policy ID.
           format: uuid
+        limit:
+          type: integer
+          description: Cap the backfill at the most recent N unanalyzed messages. Defaults to 100 (the recent-N drain budget). Pass 0 to request a full backfill of every unanalyzed message.
+          default: 100
+          format: int32
+          minimum: 0
       required:
         - id
     UpdateAssistantForm:
@@ -36245,17 +36235,9 @@ components:
           type: string
           description: The ID of the environment to associate with the server
           format: uuid
-        external_oauth_server_id:
-          type: string
-          description: The ID of the external OAuth server to associate with the server
-          format: uuid
         id:
           type: string
           description: The ID of the MCP server to update
-          format: uuid
-        oauth_proxy_server_id:
-          type: string
-          description: The ID of the OAuth proxy server to associate with the server
           format: uuid
         remote_mcp_server_id:
           type: string
@@ -36272,7 +36254,7 @@ components:
             - disabled
             - private
             - public
-      description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.'
+      description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided.'
       required:
         - id
         - visibility

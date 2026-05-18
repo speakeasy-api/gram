@@ -39,7 +39,8 @@ type DBTX interface {
 type EventType string
 
 const (
-	EventTypeAuditLogCreated EventType = "audit_log.created"
+	EventTypeAuditLogCreated    EventType = "audit_log.created"
+	EventTypeRiskFindingCreated EventType = "risk_finding.created"
 )
 
 // AppendParams is the producer-facing payload for queuing an event.

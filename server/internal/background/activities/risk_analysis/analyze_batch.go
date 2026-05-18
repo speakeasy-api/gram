@@ -25,9 +25,31 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
+
+// DescribeShadowMCP returns the canonical (rule_id, description) for an
+// unverified MCP tool call. Lives here because the writer
+// (scanMessageToolCalls) is the only caller.
+func DescribeShadowMCP(toolName string) (string, string) {
+	if toolName == "" {
+		return guard(RuleShadowMCP), "Detected an unverified MCP tool call."
+	}
+	return guard(RuleShadowMCP), fmt.Sprintf("Detected an unverified MCP tool call to %q.", toolName)
+}
+
+// DescribeDestructiveTool returns the canonical (rule_id, description) for
+// an MCP tool call whose resolved tool definition carries a destructive
+// annotation. Lives here because the writer
+// (scanMessageDestructiveToolCalls) is the only caller.
+func DescribeDestructiveTool(toolName string) (string, string) {
+	if toolName == "" {
+		return guard(RuleDestructiveTool), "Detected a call to a tool annotated as destructive by its MCP server."
+	}
+	return guard(RuleDestructiveTool), fmt.Sprintf("Detected a call to %q, which its MCP server annotates as destructive.", toolName)
+}
 
 // AnalyzeBatch scans a batch of messages against enabled detection sources
 // and writes the results back to the database.
@@ -48,7 +70,7 @@ func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, m
 		piiScanner = &StubPIIScanner{}
 	}
 	if piScanner == nil {
-		piScanner = NewPromptInjectionScanner(logger, StubClassifier{})
+		piScanner = NewPromptInjectionScanner(logger, StubClassifier{}, nil)
 	}
 	return &AnalyzeBatch{
 		logger:          logger,
@@ -77,6 +99,20 @@ type AnalyzeBatchArgs struct {
 type AnalyzeBatchResult struct {
 	Processed int
 	Findings  int
+}
+
+type riskFindingOutboxEntry struct {
+	ID                uuid.UUID `json:"id"`
+	ProjectID         uuid.UUID `json:"project_id"`
+	OrganizationID    string    `json:"organization_id"`
+	RiskPolicyID      uuid.UUID `json:"risk_policy_id"`
+	RiskPolicyVersion int64     `json:"risk_policy_version"`
+	ChatMessageID     uuid.UUID `json:"chat_message_id"`
+	RuleID            string    `json:"rule_id"`
+	Description       string    `json:"description"`
+	Confidence        float64   `json:"confidence"`
+	Tags              []string  `json:"tags"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *AnalyzeBatchResult, err error) {
@@ -240,7 +276,7 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	if slices.Contains(args.Sources, SourcePromptInjection) {
 		wg.Go(func() {
-			results, err := a.piScanner.ScanBatch(ctx, contents, args.PromptInjectionRules)
+			results, err := a.piScanner.ScanBatch(ctx, contents, args.OrganizationID)
 			if err != nil {
 				a.logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
 				return
@@ -417,7 +453,7 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 		if a.shadowMCPClient == nil {
 			continue
 		}
-		detail, denied := a.shadowMCPClient.ValidateToolsetCall(ctx, toolInput, bareName, orgID)
+		_, denied := a.shadowMCPClient.ValidateToolsetCall(ctx, toolInput, bareName, orgID)
 		if !denied {
 			continue
 		}
@@ -431,10 +467,11 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 		if match == "" {
 			match = toolName
 		}
+		ruleID, description := DescribeShadowMCP(toolName)
 		findings = append(findings, Finding{
 			Source:           shadowmcp.SourceShadowMCP,
-			RuleID:           "shadow_mcp.unverified_call",
-			Description:      detail,
+			RuleID:           ruleID,
+			Description:      description,
 			Match:            match,
 			StartPos:         0,
 			EndPos:           0,
@@ -490,10 +527,11 @@ func (a *AnalyzeBatch) scanMessageDestructiveToolCalls(ctx context.Context, orgI
 			continue
 		}
 
+		ruleID, description := DescribeDestructiveTool(resolved.ToolName)
 		findings = append(findings, Finding{
 			Source:           shadowmcp.SourceDestructiveTool,
-			RuleID:           "destructive_tool.annotation",
-			Description:      "Tool is annotated as destructive",
+			RuleID:           ruleID,
+			Description:      description,
 			Match:            resolved.ToolName,
 			StartPos:         0,
 			EndPos:           0,
@@ -547,10 +585,11 @@ func (a *AnalyzeBatch) scanMessageDestructiveCLICalls(ctx context.Context, raw [
 			continue
 		}
 
+		ruleID, description := DescribeCLIDestructive(matched, toolName)
 		findings = append(findings, Finding{
 			Source:           SourceCLIDestructive,
-			RuleID:           "cli_destructive." + matched.FullName(),
-			Description:      "Tool input matched a destructive CLI pattern",
+			RuleID:           ruleID,
+			Description:      description,
 			Match:            toolName,
 			StartPos:         0,
 			EndPos:           0,
@@ -703,6 +742,8 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 	ctx, writeSpan := a.tracer.Start(ctx, "risk.writeResults")
 	defer writeSpan.End()
 
+	rows = a.guardRuleIDs(ctx, rows)
+
 	tx, err := a.db.Begin(ctx)
 	if err != nil {
 		writeSpan.SetStatus(codes.Error, err.Error())
@@ -728,11 +769,67 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 		}
 	}
 
+	now := time.Now()
+	var outboxParams []outbox.AppendParams
+	for _, row := range rows {
+		if !row.Found || !row.RuleID.Valid {
+			continue
+		}
+		outboxParams = append(outboxParams, outbox.AppendParams{
+			OrganizationID: row.OrganizationID,
+			EventType:      outbox.EventTypeRiskFindingCreated,
+			Payload: riskFindingOutboxEntry{
+				ID:                row.ID,
+				ProjectID:         row.ProjectID,
+				OrganizationID:    row.OrganizationID,
+				RiskPolicyID:      row.RiskPolicyID,
+				RiskPolicyVersion: row.RiskPolicyVersion,
+				ChatMessageID:     row.ChatMessageID,
+				RuleID:            row.RuleID.String,
+				Description:       row.Description.String,
+				Confidence:        row.Confidence.Float64,
+				Tags:              row.Tags,
+				CreatedAt:         now,
+			},
+		})
+	}
+	if len(outboxParams) > 0 {
+		if _, err := outbox.AppendBatch(ctx, tx, outboxParams); err != nil {
+			writeSpan.SetStatus(codes.Error, err.Error())
+			return fmt.Errorf("append risk findings to outbox: %w", err)
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		writeSpan.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("commit results: %w", err)
 	}
 	return nil
+}
+
+// guardRuleIDs is the dev/test-only barrier before risk_results writes:
+// every row with a non-null rule_id must pass ValidateRuleID, otherwise
+// the batch panics so writer drift fails CI immediately. Production
+// passes rows through unchanged — dropping a row here would orphan the
+// message in the "no risk_results row = unanalyzed" semantics that
+// FetchUnanalyzedMessageIDs relies on (the message would be re-scanned
+// on every subsequent batch).
+//
+// Empty/null rule_ids are allowed; they represent the "analyzed, no
+// findings" sentinel row buildRows emits per message.
+func (a *AnalyzeBatch) guardRuleIDs(_ context.Context, rows []repo.InsertRiskResultsParams) []repo.InsertRiskResultsParams {
+	if !enforceRuleIDFormat {
+		return rows
+	}
+	for _, row := range rows {
+		if !row.RuleID.Valid || row.RuleID.String == "" {
+			continue
+		}
+		if err := ValidateRuleID(row.RuleID.String); err != nil {
+			panic(fmt.Sprintf("risk_analysis.writeResults: malformed rule_id %q from source %q: %v", row.RuleID.String, row.Source, err))
+		}
+	}
+	return rows
 }
 
 func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID) repo.InsertRiskResultsParams {
