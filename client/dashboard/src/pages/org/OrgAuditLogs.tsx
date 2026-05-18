@@ -467,6 +467,8 @@ function renderVerb(log: AuditLog): string {
       return "disabled webhooks delivery";
     case "organization_invitation:create":
       return "invited";
+    case "organization_invitation:revoke":
+      return "revoked invite for";
     case "organization_invitation:update_role":
       return "changed invite role for";
     default: {
