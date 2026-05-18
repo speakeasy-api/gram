@@ -28,9 +28,7 @@ type Service interface {
 	ListMcpServers(context.Context, *ListMcpServersPayload) (res *ListMcpServersResult, err error)
 	// Update an MCP server. This is a full-record replace: fields omitted from the
 	// request become null on the stored record. The id and visibility fields are
-	// required; exactly one of remote_mcp_server_id or toolset_id must be
-	// provided; at most one of external_oauth_server_id or oauth_proxy_server_id
-	// may be provided.
+	// required; exactly one of remote_mcp_server_id or toolset_id must be provided.
 	UpdateMcpServer(context.Context, *UpdateMcpServerPayload) (res *types.McpServer, err error)
 	// Delete an MCP server
 	DeleteMcpServer(context.Context, *DeleteMcpServerPayload) (err error)
@@ -66,10 +64,6 @@ type CreateMcpServerPayload struct {
 	ProjectSlugInput *string
 	// The ID of the environment to associate with the server
 	EnvironmentID *string
-	// The ID of the external OAuth server to associate with the server
-	ExternalOauthServerID *string
-	// The ID of the OAuth proxy server to associate with the server
-	OauthProxyServerID *string
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string
 	// The ID of the toolset to use as the backend
@@ -126,10 +120,6 @@ type UpdateMcpServerPayload struct {
 	ID string
 	// The ID of the environment to associate with the server
 	EnvironmentID *string
-	// The ID of the external OAuth server to associate with the server
-	ExternalOauthServerID *string
-	// The ID of the OAuth proxy server to associate with the server
-	OauthProxyServerID *string
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string
 	// The ID of the toolset to use as the backend

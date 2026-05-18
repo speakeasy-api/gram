@@ -26,15 +26,13 @@ func TestUpdateMcpServer_FullReplace(t *testing.T) {
 	serverB := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-		EnvironmentID:         nil,
-		ExternalOauthServerID: nil,
-		OauthProxyServerID:    nil,
-		RemoteMcpServerID:     &serverA,
-		ToolsetID:             nil,
-		Visibility:            types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &serverA,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 
@@ -44,16 +42,14 @@ func TestUpdateMcpServer_FullReplace(t *testing.T) {
 	// Full-record replace: swap backend to serverB, flip visibility, drop
 	// any optional fields.
 	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-		ID:                    created.ID,
-		EnvironmentID:         nil,
-		ExternalOauthServerID: nil,
-		OauthProxyServerID:    nil,
-		RemoteMcpServerID:     &serverB,
-		ToolsetID:             nil,
-		Visibility:            types.McpServerVisibility("public"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                created.ID,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &serverB,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("public"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, created.ID, updated.ID)
@@ -82,30 +78,26 @@ func TestUpdateMcpServer_InvalidBackend(t *testing.T) {
 	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-		EnvironmentID:         nil,
-		ExternalOauthServerID: nil,
-		OauthProxyServerID:    nil,
-		RemoteMcpServerID:     &serverID,
-		ToolsetID:             nil,
-		Visibility:            types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &serverID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 
 	// Update with neither backend — should fail validation.
 	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-		ID:                    created.ID,
-		EnvironmentID:         nil,
-		ExternalOauthServerID: nil,
-		OauthProxyServerID:    nil,
-		RemoteMcpServerID:     nil,
-		ToolsetID:             nil,
-		Visibility:            types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                created.ID,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: nil,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
@@ -121,16 +113,14 @@ func TestUpdateMcpServer_NotFound(t *testing.T) {
 	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	_, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-		ID:                    uuid.NewString(),
-		EnvironmentID:         nil,
-		ExternalOauthServerID: nil,
-		OauthProxyServerID:    nil,
-		RemoteMcpServerID:     &serverID,
-		ToolsetID:             nil,
-		Visibility:            types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                uuid.NewString(),
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &serverID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
@@ -143,16 +133,14 @@ func TestUpdateMcpServer_RBACForbidden(t *testing.T) {
 	ctx = withExactAuthzGrants(t, ctx, ti.conn)
 
 	_, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-		ID:                    uuid.NewString(),
-		EnvironmentID:         nil,
-		ExternalOauthServerID: nil,
-		OauthProxyServerID:    nil,
-		RemoteMcpServerID:     nil,
-		ToolsetID:             nil,
-		Visibility:            types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                uuid.NewString(),
+		EnvironmentID:     nil,
+		RemoteMcpServerID: nil,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }

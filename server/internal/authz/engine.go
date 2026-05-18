@@ -493,6 +493,90 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	return allowed, nil
 }
 
+// FindMatched evaluates each check and returns a parallel slice of match
+// indicators aligned with the input order — matched[i] is true when checks[i]
+// is authorized for the caller. It exists alongside [Filter] for cases where
+// the caller needs per-check granularity that the ResourceID-keyed Filter
+// return can't express — for example, filtering an MCP tools/list response
+// where every check carries the same toolset/server ResourceID and per-tool
+// granularity lives in the Tool dimension.
+//
+// When RBAC is not enforced every entry is true. An empty input returns an
+// empty slice, no log. A single challenge-log entry is emitted for the batch
+// (same as [Filter]); per-check logs are intentionally avoided so callers can
+// safely use this with large input sets like a full tools/list.
+func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error) {
+	enforce, err := e.ShouldEnforce(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if !enforce {
+		out := make([]bool, len(checks))
+		for i := range out {
+			out[i] = true
+		}
+		return out, nil
+	}
+
+	grants, ok := GrantsFromContext(ctx)
+	if !ok {
+		return nil, e.mapError(ctx, ErrMissingGrants)
+	}
+
+	matched := make([]bool, len(checks))
+	matches := make([]grantMatch, 0, len(checks))
+	allowedCount := 0
+	for i, c := range checks {
+		if err := validateInput(c); err != nil {
+			focus := c
+			challengeLogger{
+				Operation:            authzrepo.OperationFilter,
+				Outcome:              authzrepo.OutcomeError,
+				Reason:               authzrepo.ReasonInvalidCheck,
+				Checks:               checks,
+				Focus:                &focus,
+				Matches:              nil,
+				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
+				FilterAllowedCount:   0,
+			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			return nil, e.mapError(ctx, err)
+		}
+
+		if matchedGrant, matchedCheck := findMatchingGrant(grants, c.expand()); matchedGrant != nil {
+			matched[i] = true
+			matches = append(matches, grantMatch{Grant: *matchedGrant, ViaCheck: *matchedCheck})
+			allowedCount++
+		}
+	}
+
+	if len(checks) > 0 {
+		outcome := authzrepo.OutcomeDeny
+		reason := authzrepo.ReasonScopeUnsatisfied
+		switch {
+		case allowedCount > 0:
+			outcome = authzrepo.OutcomeAllow
+			reason = authzrepo.ReasonGrantMatched
+		case len(grants) == 0:
+			reason = authzrepo.ReasonNoGrants
+		}
+		challengeLogger{
+			Operation:            authzrepo.OperationFilter,
+			Outcome:              outcome,
+			Reason:               reason,
+			Checks:               checks,
+			Focus:                nil,
+			Matches:              matches,
+			EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+			FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
+			FilterAllowedCount:   uint32(allowedCount),
+		}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+	}
+
+	return matched, nil
+}
+
 func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {

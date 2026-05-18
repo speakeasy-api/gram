@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
@@ -58,4 +59,33 @@ type RemoteMessage struct {
 	// includes the terminal tools/call response in an SSE stream), or a
 	// notification (a *jsonrpc.Request without an ID).
 	Message jsonrpc.Message
+
+	// dirty is true when a typed response-side setter (e.g.
+	// [ToolsListResponse.SetTools]) has mutated the underlying JSON-RPC
+	// message. [materializedBytes] returns fresh wire bytes that the
+	// proxy substitutes for the upstream's original payload before
+	// writing to the client.
+	//
+	// Direct mutation of Message without a setter does not flip this
+	// flag and is a silent no-op against the wire — the framework can't
+	// know whether a raw mutation was intentional or accidental.
+	dirty bool
+}
+
+// materializedBytes re-marshals Message to wire bytes and returns them when
+// a typed setter has flipped the dirty flag, alongside ok=true. A no-op
+// call (no mutation since the message was constructed) returns (nil, false,
+// nil). Callers use this to swap the upstream payload for the mutated one
+// before writing to the client — JSON path overwrites the response body,
+// SSE path re-emits the event via [formatSSEEventWithData].
+func (r *RemoteMessage) materializedBytes() ([]byte, bool, error) {
+	if !r.dirty {
+		return nil, false, nil
+	}
+	encoded, err := jsonrpc.EncodeMessage(r.Message)
+	if err != nil {
+		return nil, false, fmt.Errorf("encode mutated jsonrpc message: %w", err)
+	}
+	r.dirty = false
+	return encoded, true, nil
 }

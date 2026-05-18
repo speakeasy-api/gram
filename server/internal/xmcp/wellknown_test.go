@@ -122,12 +122,10 @@ func TestHandleWellKnownOAuthServerMetadata_RemoteBackend(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	// Even a remote-backed mcp_server with an oauth_proxy attached returns
-	// 404 today. Sourcing OAuth metadata from mcp_servers / oauth_proxy_servers
-	// directly is gated on a separate upcoming OAuth migration (independent
-	// of AGE-1902); until that lands, the upstream remote MCP server
-	// publishes its own .well-known and Gram doesn't act as the AS.
-	slug := seedRemoteMCPEndpointWithOAuthProxy(t, ctx, ti, *authCtx.ProjectID, "https://upstream.invalid/mcp")
+	// Remote-backed mcp_servers return 404 from .well-known today — the
+	// upstream remote MCP server publishes its own metadata and Gram
+	// doesn't act as the AS for these.
+	slug, _, _ := seedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, "https://upstream.invalid/mcp", "public")
 
 	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthServerMetadata, "/.well-known/oauth-authorization-server/x/mcp/"+slug, slug)
 	require.Error(t, err)
@@ -309,7 +307,7 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_RemoteBackend(t *testing.
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	slug := seedRemoteMCPEndpointWithExternalOAuth(t, ctx, ti, *authCtx.ProjectID, "https://upstream.invalid/mcp")
+	slug, _, _ := seedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, "https://upstream.invalid/mcp", "public")
 
 	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthProtectedResourceMetadata, "/.well-known/oauth-protected-resource/x/mcp/"+slug, slug)
 	require.Error(t, err)

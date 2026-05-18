@@ -35,17 +35,9 @@ export type McpServer = {
    */
   environmentId?: string | undefined;
   /**
-   * The ID of the external OAuth server associated with the server
-   */
-  externalOauthServerId?: string | undefined;
-  /**
    * The ID of the MCP server
    */
   id: string;
-  /**
-   * The ID of the OAuth proxy server associated with the server
-   */
-  oauthProxyServerId?: string | undefined;
   /**
    * The project ID this MCP server belongs to
    */
@@ -82,9 +74,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
         z.transform(v => new Date(v)),
       ),
       environment_id: z.optional(z.string()),
-      external_oauth_server_id: z.optional(z.string()),
       id: z.string(),
-      oauth_proxy_server_id: z.optional(z.string()),
       project_id: z.string(),
       remote_mcp_server_id: z.optional(z.string()),
       toolset_id: z.optional(z.string()),
@@ -98,8 +88,6 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       return remap$(v, {
         "created_at": "createdAt",
         "environment_id": "environmentId",
-        "external_oauth_server_id": "externalOauthServerId",
-        "oauth_proxy_server_id": "oauthProxyServerId",
         "project_id": "projectId",
         "remote_mcp_server_id": "remoteMcpServerId",
         "toolset_id": "toolsetId",

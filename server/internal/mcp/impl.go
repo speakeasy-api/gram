@@ -943,29 +943,6 @@ func parseMcpSessionID(headers http.Header) string {
 	return session
 }
 
-// ResolveOAuthProxyUpstreamToken validates the caller's Gram-issued
-// Bearer for the supplied OAuth proxy server, refreshing stored upstream
-// credentials when needed, and returns the upstream Bearer that should
-// replace the caller's on the outgoing request to the remote MCP server.
-//
-// Returns ("", nil) when no upstream token is available — the caller
-// supplied no Bearer, the lookup found no stored upstream credentials,
-// or token validation failed in a non-fatal way. Callers should fall
-// through to "forward with no Authorization." A non-nil error is fatal
-// and the caller should reject the request.
-//
-// TODO: this method is currently a stub that always returns ("", nil).
-// The supporting oauth machinery (oauthService.ValidateAccessToken,
-// RefreshProxyToken, and the underlying ExternalSecret storage) is keyed
-// by toolset_id today; generalising the resource model so it can be
-// keyed by mcp_servers.id is a prerequisite to wiring this up. Until
-// that lands, OAuth-proxy-backed mcp_servers behave like a public
-// no-token flow at this layer (the upstream remote MCP returns 401 if
-// it requires auth).
-func (s *Service) ResolveOAuthProxyUpstreamToken(_ context.Context, _, _ uuid.UUID, _ string) (string, error) {
-	return "", nil
-}
-
 // RequirePrivateIdentityAuth runs identity authentication for a non-public
 // MCP. It tries the Authorization header first, then the
 // Gram-Chat-Session header, returning the authenticated context on success.
