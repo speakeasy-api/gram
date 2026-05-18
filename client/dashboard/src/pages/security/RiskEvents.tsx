@@ -19,8 +19,9 @@ import {
 } from "@gram/client/react-query/index.js";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { RefreshCw, ShieldOff } from "lucide-react";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, type RefObject } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { CategoryLabel, MaskedMatch, RuleLabel } from "./risk-ui";
@@ -241,6 +242,7 @@ export default function RiskEvents() {
         results={results}
         policyMessageById={policyMessageById}
         isExcluding={approveMutation.isPending}
+        scrollRef={containerRef}
         onSelectChat={setSelectedChatId}
         onExclude={handleExclude}
       />
@@ -274,6 +276,7 @@ function RiskEventsRows({
   results,
   policyMessageById,
   isExcluding,
+  scrollRef,
   onSelectChat,
   onExclude,
 }: {
@@ -282,9 +285,17 @@ function RiskEventsRows({
   results: RiskResult[];
   policyMessageById: Map<string, string>;
   isExcluding: boolean;
+  scrollRef: RefObject<HTMLDivElement | null>;
   onSelectChat: (chatId: string | null) => void;
   onExclude: (policyId: string, match: string, serverName?: string) => void;
 }) {
+  const rowVirtualizer = useVirtualizer({
+    count: results.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 52,
+    overscan: 12,
+  });
+
   if (error) {
     return (
       <div className="flex flex-col items-center gap-3 py-12">
@@ -327,18 +338,33 @@ function RiskEventsRows({
   }
 
   return (
-    <>
-      {results.map((result) => (
-        <RiskEventsRow
-          key={result.id}
-          result={result}
-          policyNote={policyMessageById.get(result.policyId)}
-          isExcluding={isExcluding}
-          onSelectChat={onSelectChat}
-          onExclude={onExclude}
-        />
-      ))}
-    </>
+    <div
+      className="relative w-full"
+      style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+    >
+      {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+        const result = results[virtualRow.index];
+        if (!result) return null;
+
+        return (
+          <div
+            key={result.id}
+            ref={rowVirtualizer.measureElement}
+            data-index={virtualRow.index}
+            className="absolute top-0 left-0 w-full"
+            style={{ transform: `translateY(${virtualRow.start}px)` }}
+          >
+            <RiskEventsRow
+              result={result}
+              policyNote={policyMessageById.get(result.policyId)}
+              isExcluding={isExcluding}
+              onSelectChat={onSelectChat}
+              onExclude={onExclude}
+            />
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
