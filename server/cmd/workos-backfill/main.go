@@ -26,6 +26,7 @@ import (
 
 const sampleSize = 5
 const updateDetailLimit = 20
+const changeSummarySampleLimit = 3
 
 type phase string
 
@@ -90,6 +91,15 @@ type fieldChange struct {
 	Name   string
 	Before string
 	After  string
+}
+
+type changeSummaryGroup struct {
+	Entity  string
+	Action  string
+	Risk    string
+	Fields  []string
+	Count   int
+	Samples []changeDetail
 }
 
 type report struct {
@@ -1758,6 +1768,7 @@ func printOrganizationPlan(orgs []orgExpectation) {
 	printChangeCounts("  membership_rows", membershipChanges)
 	printChangeCounts("  assignment_rows", assignmentChanges)
 	printSamples(orgs)
+	printChangeSummary("  planned_change_summary", changeDetails)
 	printChangeDetails("  planned_change_details", changeDetails)
 }
 
@@ -1768,6 +1779,7 @@ func printGlobalRolePlan(roles []workos.Role, changes changeCounts, details []ch
 	for _, role := range sampleRoles(roles) {
 		fmt.Printf("    %s (%s)\n", role.Slug, role.Name)
 	}
+	printChangeSummary("  planned_change_summary", details)
 	printChangeDetails("  planned_change_details", details)
 }
 
@@ -1836,6 +1848,162 @@ func printChangeCounts(label string, counts changeCounts) {
 		counts.Noop,
 		counts.StaleSkip,
 	)
+}
+
+func printChangeSummary(label string, details []changeDetail) {
+	if len(details) == 0 {
+		return
+	}
+	groups := summarizeChangeDetails(details)
+	fmt.Printf("%s: groups=%d changed_records=%d\n", label, len(groups), len(details))
+	for _, group := range groups {
+		fmt.Printf("    %s %s risk=%s fields=%s count=%d\n",
+			group.Action,
+			group.Entity,
+			group.Risk,
+			strings.Join(group.Fields, ","),
+			group.Count,
+		)
+		for _, sample := range group.Samples {
+			fmt.Printf("      sample %s\n", sample.ID)
+			for _, field := range sampleSummaryFields(sample.Fields) {
+				fmt.Printf("        %s: %q -> %q\n", field.Name, field.Before, field.After)
+			}
+		}
+		if group.Count > len(group.Samples) {
+			fmt.Printf("      ... and %d more\n", group.Count-len(group.Samples))
+		}
+	}
+}
+
+func summarizeChangeDetails(details []changeDetail) []changeSummaryGroup {
+	groupsByKey := make(map[string]*changeSummaryGroup)
+	for _, detail := range details {
+		fields := changeFieldNames(detail.Fields)
+		risk := changeRisk(detail.Action, fields)
+		key := strings.Join([]string{risk, detail.Entity, detail.Action, strings.Join(fields, ",")}, "|")
+		group, ok := groupsByKey[key]
+		if !ok {
+			group = &changeSummaryGroup{
+				Entity:  detail.Entity,
+				Action:  detail.Action,
+				Risk:    risk,
+				Fields:  fields,
+				Count:   0,
+				Samples: nil,
+			}
+			groupsByKey[key] = group
+		}
+		group.Count++
+		if len(group.Samples) < changeSummarySampleLimit {
+			group.Samples = append(group.Samples, detail)
+		}
+	}
+
+	groups := make([]changeSummaryGroup, 0, len(groupsByKey))
+	for _, group := range groupsByKey {
+		groups = append(groups, *group)
+	}
+	sort.Slice(groups, func(i, j int) bool {
+		leftRisk := changeRiskRank(groups[i].Risk)
+		rightRisk := changeRiskRank(groups[j].Risk)
+		if leftRisk != rightRisk {
+			return leftRisk < rightRisk
+		}
+		if groups[i].Count != groups[j].Count {
+			return groups[i].Count > groups[j].Count
+		}
+		if groups[i].Entity != groups[j].Entity {
+			return groups[i].Entity < groups[j].Entity
+		}
+		if groups[i].Action != groups[j].Action {
+			return groups[i].Action < groups[j].Action
+		}
+		return strings.Join(groups[i].Fields, ",") < strings.Join(groups[j].Fields, ",")
+	})
+	return groups
+}
+
+func changeFieldNames(fields []fieldChange) []string {
+	names := make([]string, 0, len(fields))
+	seen := make(map[string]struct{}, len(fields))
+	for _, field := range fields {
+		if _, ok := seen[field.Name]; ok {
+			continue
+		}
+		seen[field.Name] = struct{}{}
+		names = append(names, field.Name)
+	}
+	sort.Strings(names)
+	if len(names) == 0 {
+		return []string{"<none>"}
+	}
+	return names
+}
+
+func sampleSummaryFields(fields []fieldChange) []fieldChange {
+	if len(fields) <= changeSummarySampleLimit {
+		return fields
+	}
+	ranked := append([]fieldChange(nil), fields...)
+	sort.SliceStable(ranked, func(i, j int) bool {
+		return changeFieldRiskRank(ranked[i].Name) < changeFieldRiskRank(ranked[j].Name)
+	})
+	return ranked[:changeSummarySampleLimit]
+}
+
+func changeRisk(action string, fields []string) string {
+	if action == "delete" {
+		return "critical"
+	}
+	risk := "metadata_only"
+	for _, field := range fields {
+		fieldRisk := changeFieldRisk(field)
+		if changeRiskRank(fieldRisk) < changeRiskRank(risk) {
+			risk = fieldRisk
+		}
+	}
+	return risk
+}
+
+func changeFieldRisk(field string) string {
+	switch field {
+	case "deleted", "deleted_at", "disabled_at", "workos_deleted", "workos_deleted_at":
+		return "critical"
+	case "organization_id", "role_id", "user_id", "workos_id", "workos_membership_id", "workos_slug", "workos_user_id":
+		return "identity"
+	case "email", "id", "name", "slug", "workos_description", "workos_name":
+		return "display"
+	case "display_name", "photo_url":
+		return "profile"
+	case "workos_created_at", "workos_last_event_id", "workos_updated_at":
+		return "metadata_only"
+	default:
+		return "normal"
+	}
+}
+
+func changeFieldRiskRank(field string) int {
+	return changeRiskRank(changeFieldRisk(field))
+}
+
+func changeRiskRank(risk string) int {
+	switch risk {
+	case "critical":
+		return 0
+	case "identity":
+		return 1
+	case "display":
+		return 2
+	case "profile":
+		return 3
+	case "normal":
+		return 4
+	case "metadata_only":
+		return 5
+	default:
+		return 6
+	}
 }
 
 func printChangeDetails(label string, details []changeDetail) {
