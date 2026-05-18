@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 56c8b59140fa36b4a10f99c9ec97a640
+  docChecksum: 8c088c420df92950313e750651c7be32
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -125,7 +125,7 @@ trackedFiles:
   docs/models/components/authzchallengeprincipaltype.md:
     last_write_checksum: sha1:2a05ff0cf2f950f8b7e706e090dd8e8148b8c00e
   docs/models/components/authzchallengereason.md:
-    last_write_checksum: sha1:01c61ff22a4e3bbc84ff77b417d52753997bee53
+    last_write_checksum: sha1:cebee8f2db8d520f15affad12a2e08fc74448d1b
   docs/models/components/authzchallengeresolutiontype.md:
     last_write_checksum: sha1:6d87d2f8619aea1db3cc7934d8f24237b6576023
   docs/models/components/canonicaltoolattributes.md:
@@ -272,6 +272,8 @@ trackedFiles:
     last_write_checksum: sha1:855425544cda46eb247637c4536ddebf66b2a8b7
   docs/models/components/disposition.md:
     last_write_checksum: sha1:d51c0ffed16ab9b7706cd9c7d439d66379aac4e7
+  docs/models/components/effect.md:
+    last_write_checksum: sha1:2ea3ae7c67eda161f0cf83077be58faa0c550f98
   docs/models/components/engine.md:
     last_write_checksum: sha1:011590e0a0948b257fe56e89b478e1576fdb488b
   docs/models/components/environment.md:
@@ -477,7 +479,9 @@ trackedFiles:
   docs/models/components/listriskresultsresult.md:
     last_write_checksum: sha1:b9598d5d1bcbb33c95b7f7b15e7e2c4310bdb3b3
   docs/models/components/listrolegrant.md:
-    last_write_checksum: sha1:f75b13247be2ea6208563bc63a331c3f39a6b92a
+    last_write_checksum: sha1:65a5d6183a99f3e7984b90f6ef3bb9e223bb0878
+  docs/models/components/listrolegranteffect.md:
+    last_write_checksum: sha1:1f23bbd574c32c9ddadc7924f6b7e88c064b7d51
   docs/models/components/listrolegrantscope.md:
     last_write_checksum: sha1:3304778c1d65e8ad74f4e12200e5e2159660d8a8
   docs/models/components/listrolesresult.md:
@@ -735,7 +739,7 @@ trackedFiles:
   docs/models/components/role.md:
     last_write_checksum: sha1:809bed93dac0663775bca80b214937f21a60184a
   docs/models/components/rolegrant.md:
-    last_write_checksum: sha1:0e55c143e91dfe83dec0ee60050ca7b0ffe42218
+    last_write_checksum: sha1:d8fb7d9018f5491a1df67ca32b4cd594827e1a5d
   docs/models/components/scope.md:
     last_write_checksum: sha1:18e20f25619d17dd879be5fd900115967511eebe
   docs/models/components/scopedefinition.md:
@@ -3605,7 +3609,7 @@ trackedFiles:
   src/models/components/auditlogfacetoption.ts:
     last_write_checksum: sha1:b135dfcb735db7c9c4d1791c6fb46fb925292969
   src/models/components/authzchallenge.ts:
-    last_write_checksum: sha1:045f04d7103195919a18723860c272c08887d86c
+    last_write_checksum: sha1:89a3ccb4c7649dc17b67802487ff8836a8e956aa
   src/models/components/canonicaltoolattributes.ts:
     id: a6b329b1f87b
     last_write_checksum: sha1:86d90b89fca842c7e25ac436cdb9ee79c7786cc8
@@ -4067,7 +4071,7 @@ trackedFiles:
   src/models/components/listriskresultsresult.ts:
     last_write_checksum: sha1:d16223e7b7bc4d6f6ee25b9876b4746553baff8c
   src/models/components/listrolegrant.ts:
-    last_write_checksum: sha1:4c55cc42bd70382afbbca4d1e032c250009bdb5b
+    last_write_checksum: sha1:fbd6f7f99c8c9b39bdce4137bf2d9573bafb97b1
   src/models/components/listrolesresult.ts:
     last_write_checksum: sha1:c6334302437232f7d088e953ea4b0360f1e6c8c2
   src/models/components/listscopesresult.ts:
@@ -4343,7 +4347,7 @@ trackedFiles:
   src/models/components/role.ts:
     last_write_checksum: sha1:0471a9177cc9f7a8494dfa8d834808500d1b05a7
   src/models/components/rolegrant.ts:
-    last_write_checksum: sha1:ae1432effc5ffeeb9113c6d143bfe44240ee71e4
+    last_write_checksum: sha1:5e856c69083e8adb947ee336c5d1db72c7b4af9d
   src/models/components/scopedefinition.ts:
     last_write_checksum: sha1:d4fee06648f12ec4dfe9540f1768aa455d396b0b
   src/models/components/searchchatsfilter.ts:
@@ -8159,7 +8163,7 @@ examples:
     speakeasy-default-list-grants:
       responses:
         "200":
-          application/json: {"grants": [{"scope": "mcp:write"}]}
+          application/json: {"grants": [{"effect": "allow", "scope": "mcp:write"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8225,7 +8229,7 @@ examples:
   createRole:
     speakeasy-default-create-role:
       requestBody:
-        application/json: {"description": "swerve hm receptor how", "grants": [{"scope": "mcp:connect"}], "name": "<value>"}
+        application/json: {"description": "swerve hm receptor how", "grants": [{"effect": "allow", "scope": "mcp:connect"}], "name": "<value>"}
       responses:
         "201":
           application/json: {"created_at": "2024-08-15T08:14:35.208Z", "description": "mmm co-producer instead achieve through decision carefully ah", "grants": [], "id": "<id>", "is_system": false, "member_count": 747343, "name": "<value>", "updated_at": "2024-02-02T13:39:51.749Z"}

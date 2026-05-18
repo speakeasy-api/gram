@@ -271,6 +271,26 @@ func TestGrantsToScopedGrants_separatesAllowAndDeny(t *testing.T) {
 	require.Len(t, denyGrant.Selectors, 1)
 }
 
+func TestGrantsToScopedGrants_wildcardDenyCollapsesToNilSelectors(t *testing.T) {
+	t.Parallel()
+
+	rows := []Grant{
+		NewDenyGrant(ScopeMCPConnect, WildcardResource),
+		NewDenyGrant(ScopeMCPConnect, "server_a"), // should be collapsed by wildcard
+	}
+
+	scoped := GrantsToScopedGrants(rows)
+
+	var denyGrant *ScopedGrant
+	for _, sg := range scoped {
+		if sg.Effect == PolicyEffectDeny {
+			denyGrant = sg
+		}
+	}
+	require.NotNil(t, denyGrant, "expected a deny grant")
+	require.Nil(t, denyGrant.Selectors, "wildcard deny should have nil selectors (unrestricted)")
+}
+
 // --- Deny scope isolation tests ---
 // RFC: "Deny applies to the denied scope and any explicitly defined deny
 // sub-scopes." Deny must never leak into unrelated scope families.
