@@ -152,6 +152,17 @@ export function ScopePickerPopover({
   const [expanded, setExpanded] = useState(false);
   // Override for when user clicks a mode but selectors are still empty
   const [panelOverride, setPanelOverride] = useState<ActivePanel | null>(null);
+  const [resourceSearch, setResourceSearch] = useState("");
+
+  // Explicit wheel handler for the resource list — the Popover portal renders
+  // outside the Sheet's scroll-lock region, so native CSS overflow scrolling
+  // is blocked. Directly setting scrollTop bypasses react-remove-scroll.
+  const resourceListRef = useRef<HTMLDivElement>(null);
+  const handleResourceWheel = useCallback((e: React.WheelEvent) => {
+    if (resourceListRef.current) {
+      resourceListRef.current.scrollTop += e.deltaY;
+    }
+  }, []);
 
   const isMcpConnect = scope === "mcp:connect";
   const collectionGroups = useCollectionGroups(mcpServers, isMcpConnect);
@@ -233,13 +244,6 @@ export function ScopePickerPopover({
     );
   }
 
-  const projectList = organization.projects.map((p) => ({
-    id: p.id,
-    name: p.name,
-  }));
-
-  const resourceKind = resourceType === "project" ? "project" : "mcp";
-
   const toggleResource = (id: string) => {
     if (selectors === null) return;
     const has = selectors.some(
@@ -277,6 +281,7 @@ export function ScopePickerPopover({
 
   const switchPanel = (panel: ActivePanel) => {
     setPanelOverride(panel);
+    setResourceSearch("");
     if (panel === "all") {
       onChangeSelectors(null);
     } else {
@@ -331,10 +336,42 @@ export function ScopePickerPopover({
 
   const resourceList = activePanel === "servers" && (
     <>
-      <div className="bg-border my-1 h-px" />
-      <div className="max-h-[250px] overflow-y-auto">
-        {resourceType === "project"
-          ? projectList.map((resource) => (
+      <div className="bg-border mt-1 h-px" />
+      <div className="flex items-center gap-2 px-3 py-2">
+        <input
+          type="text"
+          placeholder={
+            resourceType === "project" ? "Search projects…" : "Search servers…"
+          }
+          value={resourceSearch}
+          onChange={(e) => setResourceSearch(e.target.value)}
+          className="placeholder:text-muted-foreground flex-1 bg-transparent text-sm outline-none"
+        />
+        {resourceSearch && (
+          <button
+            type="button"
+            onClick={() => setResourceSearch("")}
+            className="text-muted-foreground hover:text-foreground shrink-0"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+      <div className="bg-border h-px" />
+      <div
+        ref={resourceListRef}
+        onWheel={handleResourceWheel}
+        className="h-[250px] overflow-y-auto"
+      >
+        {resourceType === "project" ? (
+          filteredProjectList.length === 0 ? (
+            <div className="text-muted-foreground px-3 py-3 text-sm">
+              {projectList.length === 0
+                ? "No projects found"
+                : "No matching projects"}
+            </div>
+          ) : (
+            filteredProjectList.map((resource) => (
               <ResourceCheckbox
                 key={resource.id}
                 id={resource.id}
@@ -343,26 +380,35 @@ export function ScopePickerPopover({
                 onToggle={toggleResource}
               />
             ))
-          : mcpServers.map((group) => (
-              <div key={group.projectId}>
-                {group.servers.map((server) => (
-                  <ResourceCheckbox
-                    key={server.id}
-                    id={server.id}
-                    name={
-                      <>
-                        <span className="text-muted-foreground/60">
-                          {group.projectName.toLowerCase()}/
-                        </span>
-                        {server.name}
-                      </>
-                    }
-                    checked={isResourceSelected(server.id)}
-                    onToggle={toggleResource}
-                  />
-                ))}
-              </div>
-            ))}
+          )
+        ) : filteredMcpServers.length === 0 ? (
+          <div className="text-muted-foreground px-3 py-3 text-sm">
+            {mcpServers.length === 0
+              ? "No servers found"
+              : "No matching servers"}
+          </div>
+        ) : (
+          filteredMcpServers.map((group) => (
+            <div key={group.projectId}>
+              {group.servers.map((server) => (
+                <ResourceCheckbox
+                  key={server.id}
+                  id={server.id}
+                  name={
+                    <>
+                      <span className="text-muted-foreground/60">
+                        {group.projectName.toLowerCase()}/
+                      </span>
+                      {server.name}
+                    </>
+                  }
+                  checked={isResourceSelected(server.id)}
+                  onToggle={toggleResource}
+                />
+              ))}
+            </div>
+          ))
+        )}
       </div>
     </>
   );
