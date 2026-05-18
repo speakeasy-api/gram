@@ -952,6 +952,42 @@ func (q *Queries) RevokeInvitation(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const revokeInvitationForOrganization = `-- name: RevokeInvitationForOrganization :one
+UPDATE organization_invitations
+SET state = 'revoked',
+    revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND state = 'pending'
+RETURNING id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
+`
+
+type RevokeInvitationForOrganizationParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) RevokeInvitationForOrganization(ctx context.Context, arg RevokeInvitationForOrganizationParams) (OrganizationInvitation, error) {
+	row := q.db.QueryRow(ctx, revokeInvitationForOrganization, arg.ID, arg.OrganizationID)
+	var i OrganizationInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.TokenHash,
+		&i.InviterUserID,
+		&i.RoleSlug,
+		&i.State,
+		&i.ExpiresAt,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const setAccountType = `-- name: SetAccountType :exec
 UPDATE organization_metadata
 SET gram_account_type = $1,

@@ -230,6 +230,7 @@ const ACTION_LABELS: Record<string, string> = {
   "access_role:delete": "deleted role",
   "access_member:update_role": "updated member role",
   "organization_invitation:create": "sent invite to",
+  "organization_invitation:revoke": "revoked invite for",
   "organization_invitation:update_role": "changed invite role for",
   "project:create": "created project",
   "project:update": "updated project",

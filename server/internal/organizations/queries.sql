@@ -208,6 +208,16 @@ SET state = 'revoked',
 WHERE id = @id
   AND state = 'pending';
 
+-- name: RevokeInvitationForOrganization :one
+UPDATE organization_invitations
+SET state = 'revoked',
+    revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND state = 'pending'
+RETURNING *;
+
 -- name: UpdateInvitationRole :one
 UPDATE organization_invitations
 SET role_slug = @role_slug,
