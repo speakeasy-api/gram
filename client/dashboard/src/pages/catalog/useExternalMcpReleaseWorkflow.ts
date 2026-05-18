@@ -57,6 +57,7 @@ export interface ServerToolsetStatus {
 
 interface WorkflowBase {
   projectSlug?: string;
+  isInstallStateLoading: boolean;
   isServerAlreadyInstalled: (server: PulseMCPServer) => boolean;
   reset: () => void;
 }
@@ -166,12 +167,11 @@ export function useExternalMcpReleaseWorkflow({
   onboardExternalMcpToUserSessions = false,
 }: UseExternalMcpReleaseWorkflowOptions): ExternalMcpReleaseWorkflow {
   const client = useSdkClient();
-  const { data: toolsetsResult } = useListToolsets(
+  const { data: toolsetsResult, isLoading: toolsetsLoading } = useListToolsets(
     projectSlug ? { gramProject: projectSlug } : undefined,
   );
-  const { data: latestDeploymentResult } = useLatestDeployment(
-    projectSlug ? { gramProject: projectSlug } : undefined,
-  );
+  const { data: latestDeploymentResult, isLoading: latestDeploymentLoading } =
+    useLatestDeployment(projectSlug ? { gramProject: projectSlug } : undefined);
   const latestDeployment = latestDeploymentResult?.deployment;
 
   const existingSpecifiers = useMemo(
@@ -666,6 +666,7 @@ export function useExternalMcpReleaseWorkflow({
 
   const base: WorkflowBase = {
     projectSlug,
+    isInstallStateLoading: toolsetsLoading || latestDeploymentLoading,
     isServerAlreadyInstalled,
     reset,
   };

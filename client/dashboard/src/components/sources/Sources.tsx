@@ -158,6 +158,8 @@ export default function Sources() {
         name: externalMcp.name,
         slug: externalMcp.slug,
         type: "externalmcp" as const,
+        organizationMcpCollectionRegistryId:
+          externalMcp.organizationMcpCollectionRegistryId,
         registryId: externalMcp.registryId,
         iconUrl: catalogIconMap.get(externalMcp.registryServerSpecifier),
       }),

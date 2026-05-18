@@ -1,19 +1,77 @@
 import { DotCard } from "@/components/ui/dot-card";
 import { Type } from "@/components/ui/type";
 import { Badge } from "@/components/ui/badge";
+import { useOrganization } from "@/contexts/Auth";
+import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
+import { buildCollectionMcpJson } from "@/lib/mcp-json";
 import { useOrgRoutes } from "@/routes";
 import { Button, Stack } from "@speakeasy-api/moonshine";
-import { ArrowRight, Eye, LayoutGrid, Lock, Server } from "lucide-react";
+import {
+  ArrowRight,
+  Download,
+  Eye,
+  LayoutGrid,
+  Lock,
+  Server,
+} from "lucide-react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { toast } from "sonner";
 import { useCollectionServers } from "./hooks";
 import type { Collection } from "./types";
+import { CollectionInstallDialog } from "./CollectionInstallDialog";
 
 export function CollectionCard({ collection }: { collection: Collection }) {
   const orgRoutes = useOrgRoutes();
   const navigate = useNavigate();
-  const { servers } = useCollectionServers(collection.slug);
+  const organization = useOrganization();
+  const { servers, rawServers, isLoading } = useCollectionServers(
+    collection.slug,
+  );
+  const [showInstallDialog, setShowInstallDialog] = useState(false);
   const serverCount = servers.length;
   const detailHref = orgRoutes.collections.detail.href(collection.slug ?? "");
+
+  const installableServers: CatalogServer[] = useMemo(
+    () =>
+      rawServers.map((server) => ({
+        ...server,
+        meta: {},
+      })),
+    [rawServers],
+  );
+  const collectionMcpJson = useMemo(
+    () => buildCollectionMcpJson(rawServers),
+    [rawServers],
+  );
+  const installableServersWithEndpoint = useMemo(() => {
+    const excludedSpecifiers = new Set(
+      collectionMcpJson.excludedServers.map(
+        (server) => server.registrySpecifier,
+      ),
+    );
+    return installableServers.filter(
+      (server) => !excludedSpecifiers.has(server.registrySpecifier),
+    );
+  }, [installableServers, collectionMcpJson.excludedServers]);
+
+  const projects = useMemo(
+    () => organization.projects ?? [],
+    [organization.projects],
+  );
+  const handleInstallClick = (event: React.MouseEvent) => {
+    event.stopPropagation();
+
+    if (installableServersWithEndpoint.length === 0) return;
+
+    if (collectionMcpJson.excludedCount > 0) {
+      toast.info(
+        `Installing ${installableServersWithEndpoint.length} of ${rawServers.length} servers (${collectionMcpJson.excludedCount} ${collectionMcpJson.excludedCount === 1 ? "has" : "have"} no active endpoint).`,
+      );
+    }
+
+    setShowInstallDialog(true);
+  };
 
   return (
     <DotCard
@@ -82,6 +140,30 @@ export function CollectionCard({ collection }: { collection: Collection }) {
             </Button.RightIcon>
           </Button>
         </Link>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={
+            isLoading ||
+            installableServersWithEndpoint.length === 0 ||
+            projects.length === 0
+          }
+          onClick={handleInstallClick}
+        >
+          <Button.LeftIcon>
+            <Download />
+          </Button.LeftIcon>
+          <Button.Text>Install</Button.Text>
+        </Button>
+      </div>
+      <div onClick={(e) => e.stopPropagation()}>
+        <CollectionInstallDialog
+          open={showInstallDialog}
+          onOpenChange={setShowInstallDialog}
+          collectionName={collection.name}
+          servers={installableServersWithEndpoint}
+          projects={projects}
+        />
       </div>
     </DotCard>
   );
