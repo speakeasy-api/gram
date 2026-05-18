@@ -263,6 +263,7 @@ linters:
         - '^github\.com/aws/aws-sdk-go-v2/service/s3\..+Input$'
         - '^github\.com/aws/aws-sdk-go-v2/service/s3\..+Options$'
         - '^cloud\.google\.com/go/storage\.SignedURLOptions$'
+        - '^github.com/google/jsonschema-go/jsonschema\.Schema$'
     exhaustive:
       check:
         - switch
