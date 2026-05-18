@@ -8,6 +8,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { CodeBlock } from "@/components/ui/code-block";
+import { ruleIdCategoryLabel } from "@/pages/security/rule-ids";
 import type {
   ChatMessage,
   ChatResolution,
@@ -733,7 +734,7 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
               <div key={r.id} className="py-2 first:pt-0 last:pb-0">
                 <div className="flex items-center gap-2">
                   <Badge variant="destructive" className="shrink-0 text-[10px]">
-                    {r.source}
+                    {ruleIdCategoryLabel(r.ruleId) || r.source.toUpperCase()}
                   </Badge>
                   {r.ruleId && (
                     <span className="text-muted-foreground truncate font-mono text-xs">

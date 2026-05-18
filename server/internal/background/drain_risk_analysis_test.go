@@ -78,15 +78,20 @@ func TestDrainWorkflow_DrainsAndSleeps(t *testing.T) {
 	require.Equal(t, 1, analyzeCallCount)
 }
 
-func TestDrainWorkflow_EmptyDrainWaitsForSignal(t *testing.T) {
+func TestDrainWorkflow_SignalDuringDrainContinuesAsNew(t *testing.T) {
 	t.Parallel()
 
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
-	// Always returns empty.
+	// Signal from inside the fetch activity so it lands after the
+	// start-of-workflow drain but before the end-of-cycle drain. This
+	// models a real signal arriving mid-cycle (e.g. a backfill click
+	// while ingest-triggered drain is in flight). The workflow should
+	// pick up that signal at the end-of-cycle drain and ContinueAsNew.
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, _ risk_analysis.FetchUnanalyzedArgs) (*risk_analysis.FetchUnanalyzedResult, error) {
+			env.SignalWorkflow(SignalRiskAnalysisRequested, SignalNewMessagesPayload{MaxMessages: 0})
 			return &risk_analysis.FetchUnanalyzedResult{MessageIDs: nil}, nil
 		},
 		activity.RegisterOptions{Name: "FetchUnanalyzedMessages"},
@@ -100,23 +105,49 @@ func TestDrainWorkflow_EmptyDrainWaitsForSignal(t *testing.T) {
 		activity.RegisterOptions{Name: "AnalyzeBatch"},
 	)
 
-	// Workflow drains (nothing to do), then blocks on signalCh.Receive().
-	// Send a signal so it ContinueAsNew.
-	env.RegisterDelayedCallback(func() {
-		env.SignalWorkflow(SignalRiskAnalysisRequested, nil)
-	}, 0)
-
 	env.ExecuteWorkflow(DrainRiskAnalysisWorkflow, DrainRiskAnalysisParams{
 		ProjectID:    uuid.New(),
 		RiskPolicyID: uuid.New(),
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
-	// Workflow ContinueAsNew after receiving the signal.
 	err := env.GetWorkflowError()
 	require.Error(t, err)
 	var continueAsNewErr *workflow.ContinueAsNewError
 	require.ErrorAs(t, err, &continueAsNewErr)
+}
+
+func TestDrainWorkflow_StartSignalDoesNotSelfLoop(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	// SignalWithStart leaves the triggering signal in the channel. The
+	// workflow must absorb it at the top of the run; otherwise the
+	// end-of-cycle drain sees it as "new signal arrived" and
+	// ContinueAsNews forever with the same bounded budget.
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ risk_analysis.FetchUnanalyzedArgs) (*risk_analysis.FetchUnanalyzedResult, error) {
+			return &risk_analysis.FetchUnanalyzedResult{MessageIDs: nil}, nil
+		},
+		activity.RegisterOptions{Name: "FetchUnanalyzedMessages"},
+	)
+
+	// Simulate the SignalWithStart-delivered signal: queued at virtual
+	// time 0, before any workflow code runs.
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(SignalRiskAnalysisRequested, SignalNewMessagesPayload{MaxMessages: 100})
+	}, 0)
+
+	env.ExecuteWorkflow(DrainRiskAnalysisWorkflow, DrainRiskAnalysisParams{
+		ProjectID:    uuid.New(),
+		RiskPolicyID: uuid.New(),
+		MaxMessages:  100,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError(), "expected clean completion, not ContinueAsNew")
 }
 
 func TestDrainWorkflow_ActivityFailureContinues(t *testing.T) {

@@ -200,6 +200,9 @@ const (
 	OpenRouterKeyPreviousLimitKey   = attribute.Key("gram.openrouter.key.previous_limit")
 	OrganizationAccountTypeKey      = attribute.Key("gram.org.account_type")
 	OrganizationInviteIDKey         = attribute.Key("gram.org.invite.id")
+	OrganizationInviteEmailKey      = attribute.Key("gram.org.invite.email")
+	OrganizationInviteStateKey      = attribute.Key("gram.org.invite.state")
+	OrganizationInviteRoleSlugKey   = attribute.Key("gram.org.invite.role_slug")
 	OutboxIDKey                     = attribute.Key("gram.outbox.id")
 	OutboxPublicIDKey               = attribute.Key("gram.outbox.public_id")
 	OutboxBatchSizeKey              = attribute.Key("gram.outbox.batch_size")
@@ -225,6 +228,7 @@ const (
 	RiskPolicyIDKey                 = attribute.Key("gram.risk.policy_id")
 	RiskPolicyNameKey               = attribute.Key("gram.risk.policy_name")
 	RiskRuleIDKey                   = attribute.Key("gram.risk.rule_id")
+	RiskSourceKey                   = attribute.Key("gram.risk.source")
 	RiskScanAttemptKey              = attribute.Key("gram.risk.scan.attempt")
 	RiskScanMaxAttemptsKey          = attribute.Key("gram.risk.scan.max_attempts")
 	RiskScanBatchIndexKey           = attribute.Key("gram.risk.scan.batch_index")
@@ -957,6 +961,18 @@ func SlogOrganizationInviteID(v string) slog.Attr {
 	return slog.String(string(OrganizationInviteIDKey), v)
 }
 
+func OrganizationInviteEmail(v string) attribute.KeyValue {
+	return OrganizationInviteEmailKey.String(v)
+}
+
+func OrganizationInviteState(v string) attribute.KeyValue {
+	return OrganizationInviteStateKey.String(v)
+}
+
+func OrganizationInviteRoleSlug(v string) attribute.KeyValue {
+	return OrganizationInviteRoleSlugKey.String(v)
+}
+
 func Outcome[V ~string](v V) attribute.KeyValue { return OutcomeKey.String(string(v)) }
 func SlogOutcome(v string) slog.Attr            { return slog.String(string(OutcomeKey), v) }
 
@@ -1025,6 +1041,9 @@ func SlogRiskPolicyName(v string) slog.Attr      { return slog.String(string(Ris
 
 func RiskRuleID(v string) attribute.KeyValue { return RiskRuleIDKey.String(v) }
 func SlogRiskRuleID(v string) slog.Attr      { return slog.String(string(RiskRuleIDKey), v) }
+
+func RiskSource(v string) attribute.KeyValue { return RiskSourceKey.String(v) }
+func SlogRiskSource(v string) slog.Attr      { return slog.String(string(RiskSourceKey), v) }
 
 func RiskScanAttempt(v int) attribute.KeyValue { return RiskScanAttemptKey.Int(v) }
 func SlogRiskScanAttempt(v int) slog.Attr      { return slog.Int(string(RiskScanAttemptKey), v) }

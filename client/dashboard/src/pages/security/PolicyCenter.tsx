@@ -26,7 +26,6 @@ import {
 } from "@/components/ui/table";
 import { Type } from "@/components/ui/type";
 import {
-  Button as MoonshineButton,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -41,7 +40,6 @@ import {
   Loader2,
   ChevronRight,
   RefreshCw,
-  X,
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -51,13 +49,8 @@ import {
   useRiskPoliciesUpdateMutation,
   useRiskPoliciesDeleteMutation,
   useRiskPoliciesTriggerMutation,
-  useRiskCapabilities,
-  useRiskListShadowMCPApprovals,
-  useRiskApprovalsDeleteMutation,
   invalidateAllRiskListPolicies,
-  invalidateAllRiskListShadowMCPApprovals,
 } from "@gram/client/react-query/index.js";
-import { toast } from "sonner";
 import {
   useRiskPoliciesStatus,
   invalidateAllRiskPoliciesStatus,
@@ -70,6 +63,7 @@ import {
   type PolicyAction,
 } from "./policy-data";
 import { cn } from "@/lib/utils";
+import { ruleIdToPresidioEntity } from "./rule-ids";
 
 /** Presidio-backed categories */
 const PRESIDIO_CATEGORIES: RuleCategory[] = [
@@ -94,12 +88,15 @@ const ALL_CATEGORIES: RuleCategory[] = [
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
   "destructive_tool",
-  "prompt_attacks",
   "prompt_injection",
   "off_policy",
 ];
 
-/** Derive selected categories from a policy's sources + presidioEntities. */
+/** Derive selected categories from a policy's sources + presidioEntities.
+ *
+ * DETECTION_RULES.id is the canonical `pii.<snake_case>` form; the wire format
+ * stored on the policy is the UPPER_SNAKE entity name Presidio speaks. We
+ * translate at this boundary so callers never see the wire format. */
 function policyToCategories(
   sources: string[],
   presidioEntities?: string[],
@@ -110,8 +107,10 @@ function policyToCategories(
   if (sources.includes("destructive_tool")) cats.add("destructive_tool");
   if (sources.includes("prompt_injection")) cats.add("prompt_injection");
   for (const cat of PRESIDIO_CATEGORIES) {
-    const catEntityIds = DETECTION_RULES[cat].map((r) => r.id);
-    if (catEntityIds.some((id) => presidioEntities?.includes(id))) {
+    const wireEntities = DETECTION_RULES[cat].map((r) =>
+      ruleIdToPresidioEntity(r.id),
+    );
+    if (wireEntities.some((id) => presidioEntities?.includes(id))) {
       cats.add(cat);
     }
   }
@@ -119,32 +118,24 @@ function policyToCategories(
 }
 
 /** Derive sources, presidioEntities, and promptInjectionRules from selected
- * categories and per-category rule selections. promptInjectionRules is the
- * subset of rule ids the user has ticked under the prompt_injection category;
- * the source itself is enabled by the category-level checkbox (heuristics are
- * the always-on baseline). */
-function categoriesToPayload(
-  cats: Set<RuleCategory>,
-  promptInjectionRuleSelection: Set<string>,
-) {
+ * categories. Prompt-injection is a single category-level toggle; the
+ * detection engine (deberta classifier vs L0 regex) is chosen per-org via
+ * a feature flag, not by the policy author. promptInjectionRules is left
+ * empty here for backward compatibility with the policy schema.
+ *
+ * `presidioEntities` is translated to UPPER_SNAKE for Presidio's HTTP API. */
+function categoriesToPayload(cats: Set<RuleCategory>) {
   const sources: string[] = [];
   const presidioEntities: string[] = [];
   const promptInjectionRules: string[] = [];
   if (cats.has("secrets")) sources.push("gitleaks");
   if (cats.has("shadow_mcp")) sources.push("shadow_mcp");
   if (cats.has("destructive_tool")) sources.push("destructive_tool");
-  if (cats.has("prompt_injection")) {
-    sources.push("prompt_injection");
-    for (const rule of DETECTION_RULES.prompt_injection) {
-      if (promptInjectionRuleSelection.has(rule.id)) {
-        promptInjectionRules.push(rule.id);
-      }
-    }
-  }
+  if (cats.has("prompt_injection")) sources.push("prompt_injection");
   for (const cat of PRESIDIO_CATEGORIES) {
     if (cats.has(cat)) {
       for (const rule of DETECTION_RULES[cat]) {
-        presidioEntities.push(rule.id);
+        presidioEntities.push(ruleIdToPresidioEntity(rule.id));
       }
     }
   }
@@ -171,10 +162,7 @@ export default function PolicyCenter() {
 function PolicyCenterContent() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useRiskListPolicies();
-  const { data: riskCapabilities, isLoading: isCapabilitiesLoading } =
-    useRiskCapabilities();
   const policies = data?.policies ?? [];
-  const piClassifierEnabled = riskCapabilities?.piClassifierEnabled === true;
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<RiskPolicy | null>(null);
@@ -186,9 +174,6 @@ function PolicyCenterContent() {
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
   const [formAutoName, setFormAutoName] = useState(true);
   const [formUserMessage, setFormUserMessage] = useState("");
-  const [formPromptInjectionRules, setFormPromptInjectionRules] = useState<
-    Set<string>
-  >(new Set<string>());
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
@@ -227,7 +212,6 @@ function PolicyCenterContent() {
     setFormAction("flag");
     setFormAutoName(true);
     setFormUserMessage("");
-    setFormPromptInjectionRules(new Set<string>());
     setSheetOpen(true);
   };
 
@@ -241,15 +225,12 @@ function PolicyCenterContent() {
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
     setFormUserMessage(policy.userMessage ?? "");
-    setFormPromptInjectionRules(
-      new Set<string>(policy.promptInjectionRules ?? []),
-    );
     setSheetOpen(true);
   };
 
   const handleSave = () => {
     const { sources, presidioEntities, promptInjectionRules } =
-      categoriesToPayload(selectedCategories, formPromptInjectionRules);
+      categoriesToPayload(selectedCategories);
     const action =
       sources.includes("destructive_tool") && formAction === "block"
         ? "flag"
@@ -310,25 +291,16 @@ function PolicyCenterContent() {
     });
   };
 
-  if (isLoading || isCapabilitiesLoading) {
+  if (isLoading) {
     return (
       <Page>
         <Page.Header>
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <Page.Section>
-            <Page.Section.Title stage="beta">Risk Policies</Page.Section.Title>
-            <Page.Section.Description className="max-w-2xl">
-              Configure risk analysis rules to detect secrets and sensitive
-              information in agent session interactions.
-            </Page.Section.Description>
-            <Page.Section.Body>
-              <div className="flex items-center justify-center py-20">
-                <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-              </div>
-            </Page.Section.Body>
-          </Page.Section>
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+          </div>
         </Page.Body>
       </Page>
     );
@@ -341,13 +313,6 @@ function PolicyCenterContent() {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <Page.Section>
-            <Page.Section.Title stage="beta">Risk Policies</Page.Section.Title>
-            <Page.Section.Description className="max-w-2xl">
-              Configure risk analysis rules to detect secrets and sensitive
-              information in agent session interactions.
-            </Page.Section.Description>
-          </Page.Section>
           <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
             <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
               <Shield className="text-muted-foreground h-6 w-6" />
@@ -364,7 +329,6 @@ function PolicyCenterContent() {
                 const { sources, presidioEntities, promptInjectionRules } =
                   categoriesToPayload(
                     new Set<RuleCategory>(["secrets", "pii"]),
-                    new Set<string>(),
                   );
                 createMutation.mutate({
                   request: {
@@ -401,115 +365,110 @@ function PolicyCenterContent() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Page.Section>
-          <Page.Section.Title stage="beta">Risk Policies</Page.Section.Title>
-          <Page.Section.Description className="max-w-2xl">
-            Configure risk analysis rules to detect secrets and sensitive
-            information in agent session interactions.
-          </Page.Section.Description>
-          <Page.Section.CTA>
-            <MoonshineButton onClick={handleCreate}>
-              <MoonshineButton.LeftIcon>
-                <Plus className="h-4 w-4" />
-              </MoonshineButton.LeftIcon>
-              <MoonshineButton.Text>New Policy</MoonshineButton.Text>
-            </MoonshineButton>
-          </Page.Section.CTA>
-          <Page.Section.Body>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Categories</TableHead>
-                  <TableHead>Progress</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-[60px]" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {policies.map((policy) => {
-                  const categories = sourcesToCategories(
-                    policy.sources,
-                    policy.presidioEntities,
-                  );
-                  return (
-                    <TableRow
-                      key={policy.id}
-                      className="cursor-pointer"
-                      onClick={() => handleEdit(policy)}
-                    >
-                      <TableCell className="font-medium">
-                        {policy.name}
-                      </TableCell>
-                      <TableCell>
-                        <ActionBadge
-                          action={(policy.action as PolicyAction) ?? "flag"}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          {categories.map((cat) => (
-                            <Badge key={cat} variant="secondary">
-                              {RULE_CATEGORY_META[cat].label}
-                            </Badge>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {policy.pendingMessages > 0 ? (
-                          <span className="text-muted-foreground text-xs">
-                            {policy.totalMessages - policy.pendingMessages}/
-                            {policy.totalMessages} analyzed
-                          </span>
-                        ) : (
-                          <Badge variant="secondary">Complete</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <Switch
-                          checked={policy.enabled}
-                          onCheckedChange={(checked) =>
-                            handleToggle(policy, checked)
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">Risk Policies</h2>
+            <p className="text-muted-foreground text-sm">
+              Configure risk analysis rules to detect secrets and sensitive
+              information in agent session interactions.
+            </p>
+          </div>
+          <Button onClick={handleCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Policy
+          </Button>
+        </div>
+
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Action</TableHead>
+              <TableHead>Categories</TableHead>
+              <TableHead>Progress</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="w-[60px]" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {policies.map((policy) => {
+              const categories = sourcesToCategories(
+                policy.sources,
+                policy.presidioEntities,
+              );
+              return (
+                <TableRow
+                  key={policy.id}
+                  className="cursor-pointer"
+                  onClick={() => handleEdit(policy)}
+                >
+                  <TableCell className="font-medium">{policy.name}</TableCell>
+                  <TableCell>
+                    <ActionBadge
+                      action={(policy.action as PolicyAction) ?? "flag"}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      {categories.map((cat) => (
+                        <Badge key={cat} variant="secondary">
+                          {RULE_CATEGORY_META[cat].label}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {policy.pendingMessages > 0 ? (
+                      <span className="text-muted-foreground text-xs">
+                        {policy.totalMessages - policy.pendingMessages}/
+                        {policy.totalMessages} analyzed
+                      </span>
+                    ) : (
+                      <Badge variant="secondary">Complete</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Switch
+                      checked={policy.enabled}
+                      onCheckedChange={(checked) =>
+                        handleToggle(policy, checked)
+                      }
+                    />
+                  </TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Ellipsis className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          className="cursor-pointer"
+                          onSelect={() =>
+                            setTimeout(() => setRunPanelPolicy(policy), 0)
                           }
-                        />
-                      </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Ellipsis className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              className="cursor-pointer"
-                              onSelect={() =>
-                                setTimeout(() => setRunPanelPolicy(policy), 0)
-                              }
-                            >
-                              View Progress
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive cursor-pointer"
-                              onSelect={() => handleDelete(policy.id)}
-                            >
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </Page.Section.Body>
-        </Page.Section>
+                        >
+                          View Progress
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive cursor-pointer"
+                          onSelect={() => handleDelete(policy.id)}
+                        >
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
 
         {/* Edit/Create Sheet */}
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -538,10 +497,6 @@ function PolicyCenterContent() {
                 setFormAutoName={setFormAutoName}
                 formUserMessage={formUserMessage}
                 setFormUserMessage={setFormUserMessage}
-                formPromptInjectionRules={formPromptInjectionRules}
-                setFormPromptInjectionRules={setFormPromptInjectionRules}
-                piClassifierEnabled={piClassifierEnabled}
-                editingPolicyId={editingPolicy?.id ?? null}
               />
             </div>
             <SheetFooter className="px-6 pb-6">
@@ -607,10 +562,6 @@ function PolicySheetBody({
   setFormAutoName,
   formUserMessage,
   setFormUserMessage,
-  formPromptInjectionRules,
-  setFormPromptInjectionRules,
-  piClassifierEnabled,
-  editingPolicyId,
 }: {
   formName: string;
   setFormName: (v: string) => void;
@@ -624,10 +575,6 @@ function PolicySheetBody({
   setFormAutoName: (v: boolean) => void;
   formUserMessage: string;
   setFormUserMessage: (v: string) => void;
-  formPromptInjectionRules: Set<string>;
-  setFormPromptInjectionRules: (v: Set<string>) => void;
-  piClassifierEnabled: boolean;
-  editingPolicyId: string | null;
 }) {
   const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
     null,
@@ -743,71 +690,29 @@ function PolicySheetBody({
                   />
                 </div>
 
-                {/* Expanded rules list */}
+                {/* Expanded rules list — category-level toggle is the only
+                    user-facing control; sub-rules ride along with it. */}
                 {isAvailable && isExpanded && rules.length > 0 && (
                   <div className="bg-muted/30 border-border border-t px-4 py-2">
                     <div className="space-y-2 py-1">
-                      {rules.map((rule) => {
-                        // Only the prompt_injection category supports per-rule
-                        // selection today; heuristics are the always-on
-                        // baseline and the listed rules are opt-in augments.
-                        // Other categories continue to bundle all rules under
-                        // the category-level checkbox.
-                        const interactive = cat === "prompt_injection";
-                        const checked = interactive
-                          ? selectedCategories.has(cat) &&
-                            formPromptInjectionRules.has(rule.id)
-                          : selectedCategories.has(cat);
-                        const isClassifierRule =
-                          rule.id === "deberta-v3-classifier";
-                        const isRuleAvailable =
-                          !isClassifierRule || piClassifierEnabled;
-                        return (
-                          <div
-                            key={rule.id}
-                            className="flex items-center gap-3 py-1 pl-8"
+                      {rules.map((rule) => (
+                        <div
+                          key={rule.id}
+                          className="flex items-center gap-3 py-1 pl-8"
+                        >
+                          <Checkbox
+                            id={rule.id}
+                            checked={selectedCategories.has(cat)}
+                            disabled
+                          />
+                          <label
+                            htmlFor={rule.id}
+                            className="text-muted-foreground text-xs"
                           >
-                            <Checkbox
-                              id={rule.id}
-                              checked={checked}
-                              disabled={
-                                !interactive ||
-                                !selectedCategories.has(cat) ||
-                                !isRuleAvailable
-                              }
-                              onCheckedChange={
-                                interactive
-                                  ? (next) => {
-                                      const updated = new Set(
-                                        formPromptInjectionRules,
-                                      );
-                                      if (next) {
-                                        updated.add(rule.id);
-                                      } else {
-                                        updated.delete(rule.id);
-                                      }
-                                      setFormPromptInjectionRules(updated);
-                                    }
-                                  : undefined
-                              }
-                            />
-                            <label
-                              htmlFor={rule.id}
-                              className={cn(
-                                "text-muted-foreground text-xs",
-                                !isRuleAvailable && "cursor-not-allowed",
-                              )}
-                            >
-                              {rule.title}
-                            </label>
-                            {!isRuleAvailable && (
-                              <Badge variant="outline" className="text-[10px]">
-                                Unavailable
-                              </Badge>
-                            )}
-                          </div>
-                        );
-                      })}
+                            {rule.title}
+                          </label>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -871,21 +776,24 @@ function PolicySheetBody({
         </RadioGroup>
       </div>
 
-      {/* Custom message */}
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">Custom Message</Label>
-        <p className="text-muted-foreground text-xs">
-          {formAction === "block"
-            ? "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message."
-            : "Shown alongside flagged findings in the dashboard. Leave blank to use the default message."}
-        </p>
-        <TextArea
-          value={formUserMessage}
-          onChange={setFormUserMessage}
-          placeholder="e.g. This action was blocked by your organization's security policy. Contact your admin for help."
-          rows={3}
-        />
-      </div>
+      {/* Custom message — only relevant for block-action policies that
+          surface a user-facing reason at deny time. Flag-action policies
+          record findings silently, so no message is needed. */}
+      {formAction === "block" && (
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Custom Message</Label>
+          <p className="text-muted-foreground text-xs">
+            Shown to the user when this policy blocks a tool call or prompt.
+            Leave blank to use the default message.
+          </p>
+          <TextArea
+            value={formUserMessage}
+            onChange={setFormUserMessage}
+            placeholder="e.g. This action was blocked by your organization's security policy. Contact your admin for help."
+            rows={3}
+          />
+        </div>
+      )}
 
       {/* Enabled toggle */}
       <div className="flex items-center justify-between">
@@ -896,87 +804,6 @@ function PolicySheetBody({
           </p>
         </div>
         <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
-      </div>
-
-      {/* Shadow MCP exclusions — only when editing a policy that includes shadow_mcp. */}
-      {editingPolicyId && selectedCategories.has("shadow_mcp") && (
-        <ShadowMCPExclusionsSection policyId={editingPolicyId} />
-      )}
-    </div>
-  );
-}
-
-function ShadowMCPExclusionsSection({ policyId }: { policyId: string }) {
-  const queryClient = useQueryClient();
-  const { data, isLoading } = useRiskListShadowMCPApprovals({ policyId });
-  const revoke = useRiskApprovalsDeleteMutation();
-
-  const approvals = data?.approvals ?? [];
-
-  const handleRevoke = useCallback(
-    (match: string) => {
-      revoke.mutate(
-        { request: { policyId, match } },
-        {
-          onSuccess: () => {
-            toast.success("Exclusion removed");
-            invalidateAllRiskListShadowMCPApprovals(queryClient);
-            queryClient.invalidateQueries({
-              queryKey: ["risk", "results", "list"],
-            });
-          },
-          onError: (err) =>
-            toast.error(`Failed to remove: ${err.message ?? "unknown error"}`),
-        },
-      );
-    },
-    [revoke, policyId, queryClient],
-  );
-
-  return (
-    <div className="space-y-2">
-      <Label className="text-sm font-medium">Excluded MCP Servers</Label>
-      <p className="text-muted-foreground text-xs">
-        Shadow-MCP servers approved for this policy. Calls to these servers are
-        allowed even when the policy would otherwise block them.
-      </p>
-      <div className="border-border divide-border divide-y rounded-lg border">
-        {isLoading ? (
-          <div className="text-muted-foreground p-3 text-xs">Loading…</div>
-        ) : approvals.length === 0 ? (
-          <div className="text-muted-foreground p-3 text-xs">
-            No exclusions yet. Use the "Exclude" action on a finding in the Risk
-            Overview to add one.
-          </div>
-        ) : (
-          approvals.map((a) => (
-            <div
-              key={a.match}
-              className="flex items-center justify-between gap-2 p-3"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="truncate font-mono text-xs" title={a.match}>
-                  {a.match}
-                </div>
-                {(a.serverName || a.approvedBy) && (
-                  <div className="text-muted-foreground mt-0.5 truncate text-[11px]">
-                    {a.serverName ?? "Unknown server"}
-                    {a.approvedBy ? ` · ${a.approvedBy}` : ""}
-                  </div>
-                )}
-              </div>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                disabled={revoke.isPending}
-                onClick={() => handleRevoke(a.match)}
-                title="Remove exclusion"
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
-          ))
-        )}
       </div>
     </div>
   );

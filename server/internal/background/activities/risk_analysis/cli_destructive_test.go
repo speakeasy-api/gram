@@ -17,29 +17,29 @@ func TestMatchCLIDestructiveString_CuratedPatterns(t *testing.T) {
 		input    string
 		fullName string
 	}{
-		{name: "shell/rm-rf", input: "rm -rf /tmp/work", fullName: "shell/rm-rf"},
-		{name: "shell/rm-rf-glob", input: "sudo rm -rf *", fullName: "shell/rm-rf"}, // rm-rf precedes sudo in declaration order
-		{name: "shell/dd", input: "dd if=/dev/zero of=/dev/sda bs=1M", fullName: "shell/dd"},
-		{name: "shell/mkfs", input: "mkfs.ext4 /dev/sdb1", fullName: "shell/mkfs"},
-		{name: "shell/fork-bomb", input: ":(){ :|: & };:", fullName: "shell/fork-bomb"},
-		{name: "shell/chmod-recursive", input: "chmod -R 777 /etc", fullName: "shell/chmod-recursive"},
-		{name: "shell/chown-recursive", input: "chown --recursive root:root /home", fullName: "shell/chown-recursive"},
-		{name: "shell/sudo", input: "sudo cat /etc/shadow", fullName: "shell/sudo"},
-		{name: "git/push-force", input: "git push --force origin main", fullName: "git/push-force"},
-		{name: "git/push-force-shorthand", input: "git push -f origin main", fullName: "git/push-force"},
-		{name: "git/push-force-with-lease", input: "git push --force-with-lease origin main", fullName: "git/push-force"},
-		{name: "git/reset-hard", input: "git reset --hard HEAD~3", fullName: "git/reset-hard"},
-		{name: "git/clean-force", input: "git clean -fd", fullName: "git/clean-force"},
-		{name: "git/branch-delete-force", input: "git branch -D feature/x", fullName: "git/branch-delete-force"},
-		{name: "database/drop-table", input: "DROP TABLE users", fullName: "database/drop"},
-		{name: "database/drop-database", input: "DROP DATABASE prod", fullName: "database/drop"},
-		{name: "database/truncate", input: "TRUNCATE accounts", fullName: "database/truncate"},
-		{name: "database/dropdb", input: "dropdb prod", fullName: "database/dropdb"},
-		{name: "cloud/aws-ec2-terminate", input: "aws ec2 terminate-instances --instance-ids i-1234", fullName: "cloud/aws-ec2-terminate"},
-		{name: "cloud/aws-s3-rb", input: "aws s3 rb s3://my-bucket --force", fullName: "cloud/aws-s3-rb"},
-		{name: "cloud/gcloud-projects-delete", input: "gcloud projects delete my-project", fullName: "cloud/gcloud-projects-delete"},
-		{name: "cloud/kubectl-delete-namespace", input: "kubectl delete ns production", fullName: "cloud/kubectl-delete-namespace"},
-		{name: "cloud/kubectl-delete-deployment", input: "kubectl delete deployment api", fullName: "cloud/kubectl-delete-workload"},
+		{name: "destructive.shell.rm_rf", input: "rm -rf /tmp/work", fullName: "destructive.shell.rm_rf"},
+		{name: "destructive.shell.rm_rf-glob", input: "sudo rm -rf *", fullName: "destructive.shell.rm_rf"}, // rm_rf precedes sudo in declaration order
+		{name: "destructive.shell.dd", input: "dd if=/dev/zero of=/dev/sda bs=1M", fullName: "destructive.shell.dd"},
+		{name: "destructive.shell.mkfs", input: "mkfs.ext4 /dev/sdb1", fullName: "destructive.shell.mkfs"},
+		{name: "destructive.shell.fork_bomb", input: ":(){ :|: & };:", fullName: "destructive.shell.fork_bomb"},
+		{name: "destructive.shell.chmod_recursive", input: "chmod -R 777 /etc", fullName: "destructive.shell.chmod_recursive"},
+		{name: "destructive.shell.chown_recursive", input: "chown --recursive root:root /home", fullName: "destructive.shell.chown_recursive"},
+		{name: "destructive.shell.sudo", input: "sudo cat /etc/shadow", fullName: "destructive.shell.sudo"},
+		{name: "destructive.git.push_force", input: "git push --force origin main", fullName: "destructive.git.push_force"},
+		{name: "destructive.git.push_force-shorthand", input: "git push -f origin main", fullName: "destructive.git.push_force"},
+		{name: "destructive.git.push_force-with-lease", input: "git push --force-with-lease origin main", fullName: "destructive.git.push_force"},
+		{name: "destructive.git.reset_hard", input: "git reset --hard HEAD~3", fullName: "destructive.git.reset_hard"},
+		{name: "destructive.git.clean_force", input: "git clean -fd", fullName: "destructive.git.clean_force"},
+		{name: "destructive.git.branch_delete_force", input: "git branch -D feature/x", fullName: "destructive.git.branch_delete_force"},
+		{name: "destructive.database.drop-table", input: "DROP TABLE users", fullName: "destructive.database.drop"},
+		{name: "destructive.database.drop-database", input: "DROP DATABASE prod", fullName: "destructive.database.drop"},
+		{name: "destructive.database.truncate", input: "TRUNCATE accounts", fullName: "destructive.database.truncate"},
+		{name: "destructive.database.dropdb", input: "dropdb prod", fullName: "destructive.database.dropdb"},
+		{name: "destructive.cloud.aws_ec2_terminate", input: "aws ec2 terminate-instances --instance-ids i-1234", fullName: "destructive.cloud.aws_ec2_terminate"},
+		{name: "destructive.cloud.aws_s3_rb", input: "aws s3 rb s3://my-bucket --force", fullName: "destructive.cloud.aws_s3_rb"},
+		{name: "destructive.cloud.gcloud_projects_delete", input: "gcloud projects delete my-project", fullName: "destructive.cloud.gcloud_projects_delete"},
+		{name: "destructive.cloud.kubectl_delete_namespace", input: "kubectl delete ns production", fullName: "destructive.cloud.kubectl_delete_namespace"},
+		{name: "destructive.cloud.kubectl_delete-deployment", input: "kubectl delete deployment api", fullName: "destructive.cloud.kubectl_delete_workload"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -62,7 +62,7 @@ func TestMatchCLIDestructiveString_DeleteWhereGuard(t *testing.T) {
 
 	unguarded, ok := matchCLIDestructiveString("DELETE FROM users")
 	if assert.True(t, ok, "DELETE without WHERE must flag") {
-		assert.Equal(t, "database/delete-without-where", unguarded.FullName())
+		assert.Equal(t, "destructive.database.delete_without_where", unguarded.FullName())
 	}
 }
 
@@ -99,7 +99,7 @@ func TestScanForCLIDestructive_NestedStructures(t *testing.T) {
 		input := map[string]any{"command": "rm -rf /tmp/x"}
 		matched, ok := scanForCLIDestructive(input)
 		if assert.True(t, ok) {
-			assert.Equal(t, "shell/rm-rf", matched.FullName())
+			assert.Equal(t, "destructive.shell.rm_rf", matched.FullName())
 		}
 	})
 
@@ -112,7 +112,7 @@ func TestScanForCLIDestructive_NestedStructures(t *testing.T) {
 		}
 		matched, ok := scanForCLIDestructive(input)
 		if assert.True(t, ok) {
-			assert.Equal(t, "database/drop", matched.FullName())
+			assert.Equal(t, "destructive.database.drop", matched.FullName())
 		}
 	})
 
@@ -122,7 +122,7 @@ func TestScanForCLIDestructive_NestedStructures(t *testing.T) {
 			"command": []any{"git", "push", "--force"},
 		}
 		// Each slice element is scanned individually — "git push --force" only
-		// matches when assembled. So this doesn't trip git/push-force, which
+		// matches when assembled. So this doesn't trip destructive.git.push_force, which
 		// is the documented behavior (we don't reconstruct shell argv).
 		_, ok := scanForCLIDestructive(input)
 		assert.False(t, ok, "argv slice elements are scanned individually")

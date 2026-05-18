@@ -279,7 +279,7 @@ func newWorkerCommand() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:    "idp-client-secret",
-			Usage:   "WorkOS API key scoped to the IDP application (falls back to workos-api-key if unset)",
+			Usage:   "WorkOS API key for user management and identity lookups",
 			EnvVars: []string{"GRAM_IDP_CLIENT_SECRET"},
 		},
 		&cli.StringFlag{
@@ -292,12 +292,6 @@ func newWorkerCommand() *cli.Command {
 			Name:     "config-file",
 			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
 			EnvVars:  []string{"GRAM_CONFIG_FILE"},
-			Required: false,
-		},
-		&cli.StringFlag{
-			Name:     "workos-api-key",
-			Usage:    "WorkOS API key for WorkOS API calls",
-			EnvVars:  []string{"WORKOS_API_KEY"},
 			Required: false,
 		},
 		&cli.StringFlag{
@@ -343,6 +337,10 @@ func newWorkerCommand() *cli.Command {
 			tracerProvider := otel.GetTracerProvider()
 			meterProvider := otel.GetMeterProvider()
 			slog.SetDefault(logger)
+
+			if serviceEnv == "local" {
+				risk_analysis.EnableRuleIDFormatEnforcement()
+			}
 
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
@@ -577,13 +575,10 @@ func newWorkerCommand() *cli.Command {
 			}
 
 			idpClientSecret := c.String("idp-client-secret")
-			if idpClientSecret == "" {
-				idpClientSecret = c.String("workos-api-key")
-			}
 
 			umClient := newIDPUserManagementClient(guardianPolicy, idpClientSecret, c)
 			if umClient == nil {
-				return fmt.Errorf("failed to create IDP user management client: idp-client-secret (or workos-api-key) is required")
+				return fmt.Errorf("failed to create IDP user management client: idp-client-secret is required")
 			}
 
 			idpClient := identity.NewWorkOSAdapter(umClient)
@@ -702,7 +697,7 @@ func newWorkerCommand() *cli.Command {
 				promptInjectionClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
 				logger.InfoContext(ctx, "pi_classifier L1 prompt-injection scanner enabled", attr.SlogURL(piURL))
 			}
-			piScanner := risk_analysis.NewPromptInjectionScanner(logger, promptInjectionClassifier)
+			piScanner := risk_analysis.NewPromptInjectionScanner(logger, promptInjectionClassifier, featureFlags)
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:      guardianPolicy,

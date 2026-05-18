@@ -605,9 +605,12 @@ func BuildTriggerRiskAnalysisPayload(riskTriggerRiskAnalysisBody string, riskTri
 	{
 		err = json.Unmarshal([]byte(riskTriggerRiskAnalysisBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"limit\": 1\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.Limit < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 0, true))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -631,7 +634,14 @@ func BuildTriggerRiskAnalysisPayload(riskTriggerRiskAnalysisBody string, riskTri
 		}
 	}
 	v := &risk.TriggerRiskAnalysisPayload{
-		ID: body.ID,
+		ID:    body.ID,
+		Limit: body.Limit,
+	}
+	{
+		var zero int32
+		if v.Limit == zero {
+			v.Limit = 100
+		}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
