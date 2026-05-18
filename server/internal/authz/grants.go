@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -210,29 +211,27 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 // effectOrDefault returns the effect, defaulting to allow for backward
 // compatibility with existing grants that have no explicit effect.
 func effectOrDefault(e PolicyEffect) PolicyEffect {
-	if e == "" || e == PolicyEffectAllow {
-		return PolicyEffectAllow
-	}
-	return e
+	return conv.Default(e, PolicyEffectAllow)
 }
 
 // effectToPgtype converts a PolicyEffect to pgtype.Text for DB storage.
 // Allow maps to NULL (backward compatible with existing rows).
 // Deny maps to 'deny'.
 func effectToPgtype(e PolicyEffect) pgtype.Text {
-	if e == "" || e == PolicyEffectAllow {
+	effect := conv.Default(e, PolicyEffectAllow)
+	if effect == PolicyEffectAllow {
 		return pgtype.Text{Valid: false}
 	}
-	return pgtype.Text{String: string(e), Valid: true}
+	return pgtype.Text{String: string(effect), Valid: true}
 }
 
 // effectFromNullable converts a nullable DB string to PolicyEffect.
 // NULL or empty → allow.
 func effectFromNullable(s pgtype.Text) PolicyEffect {
-	if !s.Valid || s.String == "" || s.String == string(PolicyEffectAllow) {
+	if !s.Valid {
 		return PolicyEffectAllow
 	}
-	return PolicyEffect(s.String)
+	return conv.Default(PolicyEffect(s.String), PolicyEffectAllow)
 }
 
 // scopeEffectKey groups grants by scope+effect for GrantsToScopedGrants.
@@ -247,6 +246,8 @@ type scopeAgg struct {
 }
 
 // GrantsToScopedGrants groups raw grants by scope+effect, collapsing wildcards.
+// TODO: simplify — this method is getting complex; consider breaking into
+// smaller steps (grouping, wildcard collapsing, output building).
 func GrantsToScopedGrants(rows []Grant) []*ScopedGrant {
 	byKey := make(map[scopeEffectKey]*scopeAgg)
 	for _, row := range rows {

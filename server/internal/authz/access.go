@@ -42,6 +42,9 @@ func (c Check) expand() []Check {
 		{Scope: c.Scope, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions},
 	}
 	// Higher-privilege parent scopes that also satisfy this check (for allow matching only).
+	// TODO: consider splitting into separate AllowCheck/DenyCheck structs so
+	// the `expanded` flag isn't needed and allow vs deny semantics are
+	// enforced at the type level.
 	for _, s := range scopeExpansions[c.Scope] {
 		checks = append(checks, Check{Scope: s, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, expanded: true})
 	}

@@ -12,11 +12,11 @@ func TestCheckExpand_orgRead(t *testing.T) {
 
 	checks := Check{Scope: ScopeOrgRead, ResourceID: "org_123"}.expand()
 
-	require.Contains(t, checks, Check{Scope: ScopeRoot, ResourceID: "org_123"})
-	require.Contains(t, checks, Check{Scope: ScopeOrgAdmin, ResourceID: "org_123"})
+	require.Contains(t, checks, Check{Scope: ScopeRoot, ResourceID: "org_123", expanded: true})
+	require.Contains(t, checks, Check{Scope: ScopeOrgAdmin, ResourceID: "org_123", expanded: true})
 	require.Contains(t, checks, Check{Scope: ScopeOrgRead, ResourceID: "org_123"})
 	// No wildcard resource variants — selector matching handles that natively.
-	require.NotContains(t, checks, Check{Scope: ScopeOrgAdmin, ResourceID: WildcardResource})
+	require.NotContains(t, checks, Check{Scope: ScopeOrgAdmin, ResourceID: WildcardResource, expanded: true})
 }
 
 func TestCheckExpand_mcpConnect(t *testing.T) {
@@ -24,10 +24,10 @@ func TestCheckExpand_mcpConnect(t *testing.T) {
 
 	checks := Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand()
 
-	require.Contains(t, checks, Check{Scope: ScopeRoot, ResourceID: "tool_a"})
+	require.Contains(t, checks, Check{Scope: ScopeRoot, ResourceID: "tool_a", expanded: true})
 	require.Contains(t, checks, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"})
-	require.Contains(t, checks, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"})
-	require.Contains(t, checks, Check{Scope: ScopeMCPWrite, ResourceID: "tool_a"})
+	require.Contains(t, checks, Check{Scope: ScopeMCPRead, ResourceID: "tool_a", expanded: true})
+	require.Contains(t, checks, Check{Scope: ScopeMCPWrite, ResourceID: "tool_a", expanded: true})
 	require.NotContains(t, checks, Check{Scope: ScopeMCPConnect, ResourceID: WildcardResource})
 }
 
