@@ -191,6 +191,8 @@ export interface AddServerDialogProps {
   onOpenChange: (open: boolean) => void;
   onServersAdded?: () => void;
   projectSlug?: string;
+  /** When true, shows a summary view instead of individual name inputs in the configure phase. */
+  bulk?: boolean;
 }
 
 function filterToHttpRemotes(server: PulseMCPServer): PulseMCPServer {
@@ -298,6 +300,7 @@ export function AddServerDialog({
   onOpenChange,
   onServersAdded,
   projectSlug,
+  bulk,
 }: AddServerDialogProps) {
   const telemetry = useTelemetry();
   // Fetch server details (including remotes) when dialog opens
@@ -453,6 +456,7 @@ export function AddServerDialog({
         <PhaseContent
           releaseState={releaseState}
           isSingle={isSingle}
+          bulk={bulk}
           onClose={() => onOpenChange(false)}
         />
       </Dialog.Content>
@@ -523,10 +527,12 @@ function PhaseDescription({
 function PhaseContent({
   releaseState,
   isSingle,
+  bulk,
   onClose,
 }: {
   releaseState: ExternalMcpReleaseWorkflow;
   isSingle: boolean;
+  bulk?: boolean;
   onClose: () => void;
 }) {
   switch (releaseState.phase) {
@@ -539,7 +545,11 @@ function PhaseContent({
       );
     case "configure":
       return (
-        <ConfigurePhaseContent releaseState={releaseState} onClose={onClose} />
+        <ConfigurePhaseContent
+          releaseState={releaseState}
+          bulk={bulk}
+          onClose={onClose}
+        />
       );
     case "deploying":
       return <DeployingPhaseContent releaseState={releaseState} />;
@@ -740,9 +750,11 @@ function SelectRemotesPhaseContent({
 
 function ConfigurePhaseContent({
   releaseState,
+  bulk,
   onClose,
 }: {
   releaseState: ConfigurePhase;
+  bulk?: boolean;
   onClose: () => void;
 }) {
   // Filter out multi-remote servers that were already configured in selectRemotes phase
@@ -794,7 +806,9 @@ function ConfigurePhaseContent({
   return (
     <div onKeyDown={handleKeyDown}>
       <Stack gap={4} className="py-2">
-        {effectiveIsSingle ? (
+        {bulk ? (
+          <BulkInstallSummary releaseState={releaseState} />
+        ) : effectiveIsSingle ? (
           <SingleServerConfig
             releaseState={releaseState}
             singleRemoteConfigs={singleRemoteConfigs}
@@ -924,6 +938,43 @@ function BatchServerConfig({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function BulkInstallSummary({
+  releaseState,
+}: {
+  releaseState: ConfigurePhase;
+}) {
+  const totalServers = releaseState.serverConfigs.length;
+  const alreadyInstalledCount = releaseState.serverConfigs.filter((c) =>
+    releaseState.isServerAlreadyInstalled(c.server),
+  ).length;
+  const newCount = totalServers - alreadyInstalledCount;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3 rounded-lg border p-4">
+        <div className="bg-primary/10 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
+          <ServerIcon className="text-muted-foreground h-5 w-5" />
+        </div>
+        <div>
+          <Type className="font-medium">
+            Installing {totalServers}{" "}
+            {totalServers === 1 ? "server" : "servers"}
+          </Type>
+          <Type small muted>
+            All servers will use their default names.
+          </Type>
+        </div>
+      </div>
+      {alreadyInstalledCount > 0 && (
+        <Type small muted>
+          {alreadyInstalledCount} already installed (will be forked)
+          {newCount > 0 && `, ${newCount} new`}.
+        </Type>
+      )}
     </div>
   );
 }

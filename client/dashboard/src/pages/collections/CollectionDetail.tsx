@@ -64,6 +64,10 @@ export default function CollectionDetail() {
     useState<CatalogServer | null>(null);
   const [activeInstallServer, setActiveInstallServer] =
     useState<CatalogServer | null>(null);
+  const [pendingBulkInstall, setPendingBulkInstall] = useState(false);
+  const [bulkInstallServers, setBulkInstallServers] = useState<
+    CatalogServer[] | null
+  >(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -173,6 +177,16 @@ export default function CollectionDetail() {
     [rawServers],
   );
 
+  // Servers that have an active endpoint and can be installed
+  const installableServersWithEndpoint = useMemo(() => {
+    const excludedSpecifiers = new Set(
+      collectionMcpJson.excludedServers.map((s) => s.registrySpecifier),
+    );
+    return installableServers.filter(
+      (s) => !excludedSpecifiers.has(s.registrySpecifier),
+    );
+  }, [installableServers, collectionMcpJson.excludedServers]);
+
   const excludedServersNotice =
     collectionMcpJson.excludedCount === 1
       ? "1 server was excluded because it has no active endpoint."
@@ -199,6 +213,20 @@ export default function CollectionDetail() {
 
   const openInstallDialog = (server: CatalogServer) => {
     setPendingInstallServer(server);
+    setSelectedProjectSlug((current) => current ?? defaultProjectSlug);
+  };
+
+  const openBulkInstallDialog = () => {
+    const servers = installableServersWithEndpoint;
+    if (servers.length === 0) return;
+
+    if (collectionMcpJson.excludedCount > 0) {
+      toast.info(
+        `Installing ${servers.length} of ${rawServers.length} servers (${collectionMcpJson.excludedCount} ${collectionMcpJson.excludedCount === 1 ? "has" : "have"} no active endpoint).`,
+      );
+    }
+
+    setPendingBulkInstall(true);
     setSelectedProjectSlug((current) => current ?? defaultProjectSlug);
   };
 
@@ -299,6 +327,7 @@ export default function CollectionDetail() {
                   </Button>
                   <Button
                     size="sm"
+                    variant="secondary"
                     disabled={
                       isLoading || collectionMcpJson.includedCount === 0
                     }
@@ -308,6 +337,20 @@ export default function CollectionDetail() {
                       <Download />
                     </Button.Icon>
                     <Button.Text>Generate mcp.json</Button.Text>
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={
+                      isLoading ||
+                      installableServersWithEndpoint.length === 0 ||
+                      projects.length === 0
+                    }
+                    onClick={openBulkInstallDialog}
+                  >
+                    <Button.Icon>
+                      <Download />
+                    </Button.Icon>
+                    <Button.Text>Install All</Button.Text>
                   </Button>
                 </div>
               </div>
@@ -701,10 +744,11 @@ export default function CollectionDetail() {
           </div>
         </div>
         <Dialog
-          open={pendingInstallServer !== null}
+          open={pendingInstallServer !== null || pendingBulkInstall}
           onOpenChange={(open) => {
             if (!open) {
               setPendingInstallServer(null);
+              setPendingBulkInstall(false);
             }
           }}
         >
@@ -712,16 +756,28 @@ export default function CollectionDetail() {
             <Dialog.Header>
               <Dialog.Title>Select Project</Dialog.Title>
               <Dialog.Description>
-                Choose where to install{" "}
-                <span className="font-medium">
-                  {pendingInstallServer?.title ??
-                    pendingInstallServer?.registrySpecifier}
-                </span>
-                .
+                {pendingBulkInstall ? (
+                  <>
+                    Choose where to install{" "}
+                    <span className="font-medium">
+                      {installableServersWithEndpoint.length} servers
+                    </span>
+                    .
+                  </>
+                ) : (
+                  <>
+                    Choose where to install{" "}
+                    <span className="font-medium">
+                      {pendingInstallServer?.title ??
+                        pendingInstallServer?.registrySpecifier}
+                    </span>
+                    .
+                  </>
+                )}
               </Dialog.Description>
             </Dialog.Header>
             <div className="space-y-4 py-2">
-              {pendingInstallServer && (
+              {pendingInstallServer && !pendingBulkInstall && (
                 <div className="rounded-lg border p-3">
                   <div className="text-sm font-medium">
                     {pendingInstallServer.title ??
@@ -732,6 +788,15 @@ export default function CollectionDetail() {
                       {pendingInstallServer.description}
                     </p>
                   )}
+                </div>
+              )}
+              {pendingBulkInstall && (
+                <div className="rounded-lg border p-3">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Server className="h-4 w-4" />
+                    {installableServersWithEndpoint.length} servers from{" "}
+                    {collection.name}
+                  </div>
                 </div>
               )}
               {projectOptions.length === 0 ? (
@@ -772,21 +837,32 @@ export default function CollectionDetail() {
             <Dialog.Footer>
               <Button
                 variant="secondary"
-                onClick={() => setPendingInstallServer(null)}
+                onClick={() => {
+                  setPendingInstallServer(null);
+                  setPendingBulkInstall(false);
+                }}
               >
                 Cancel
               </Button>
               <Button
-                disabled={!pendingInstallServer || !selectedProjectOption}
+                disabled={
+                  (!pendingInstallServer && !pendingBulkInstall) ||
+                  !selectedProjectOption
+                }
                 onClick={() => {
-                  if (!pendingInstallServer || !selectedProjectOption) {
-                    return;
-                  }
+                  if (!selectedProjectOption) return;
 
                   setSelectedProjectSlug(selectedProjectOption.value);
-                  setActiveInstallServer(pendingInstallServer);
-                  setPendingInstallServer(null);
-                  setShowAddDialog(true);
+
+                  if (pendingBulkInstall) {
+                    setBulkInstallServers(installableServersWithEndpoint);
+                    setPendingBulkInstall(false);
+                    setShowAddDialog(true);
+                  } else if (pendingInstallServer) {
+                    setActiveInstallServer(pendingInstallServer);
+                    setPendingInstallServer(null);
+                    setShowAddDialog(true);
+                  }
                 }}
               >
                 Continue
@@ -803,6 +879,20 @@ export default function CollectionDetail() {
               setShowAddDialog(open);
               if (!open) {
                 setTimeout(() => setActiveInstallServer(null), 300);
+              }
+            }}
+          />
+        )}
+        {bulkInstallServers && selectedProjectSlug && (
+          <AddServerDialog
+            servers={bulkInstallServers}
+            projectSlug={selectedProjectSlug}
+            open={showAddDialog}
+            bulk
+            onOpenChange={(open) => {
+              setShowAddDialog(open);
+              if (!open) {
+                setTimeout(() => setBulkInstallServers(null), 300);
               }
             }}
           />
