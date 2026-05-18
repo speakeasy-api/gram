@@ -1,5 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { Textarea } from "@/components/moon/textarea";
+import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Type } from "@/components/ui/type";
@@ -27,6 +28,21 @@ function slugify(name: string): string {
 }
 
 export default function CreateCollection() {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <RequireScope scope="org:admin" level="page">
+          <CreateCollectionForm />
+        </RequireScope>
+      </Page.Body>
+    </Page>
+  );
+}
+
+function CreateCollectionForm() {
   const orgRoutes = useOrgRoutes();
   const client = useSdkClient();
   const organization = useOrganization();
@@ -144,222 +160,209 @@ export default function CreateCollection() {
   };
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>Create Collection</Page.Section.Title>
-          <Page.Section.Description>
-            Create a curated collection of MCP servers that can be installed
-            together
-          </Page.Section.Description>
-          <Page.Section.Body>
-            <form onSubmit={handleSubmit} className="max-w-lg">
-              <Stack direction="vertical" gap={4}>
-                <div>
-                  <label
-                    htmlFor="name"
-                    className="mb-1 block text-sm font-medium"
-                  >
-                    Name
-                  </label>
-                  <Input
-                    id="name"
-                    placeholder="e.g. Developer Productivity Suite"
-                    value={name}
-                    onChange={handleNameChange}
-                    required
+    <Page.Section>
+      <Page.Section.Title>Create Collection</Page.Section.Title>
+      <Page.Section.Description>
+        Create a curated collection of MCP servers that can be installed
+        together
+      </Page.Section.Description>
+      <Page.Section.Body>
+        <form onSubmit={handleSubmit} className="max-w-lg">
+          <Stack direction="vertical" gap={4}>
+            <div>
+              <label htmlFor="name" className="mb-1 block text-sm font-medium">
+                Name
+              </label>
+              <Input
+                id="name"
+                placeholder="e.g. Developer Productivity Suite"
+                value={name}
+                onChange={handleNameChange}
+                required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="slug" className="mb-1 block text-sm font-medium">
+                Slug
+              </label>
+              <Input
+                id="slug"
+                placeholder="e.g. developer-productivity-suite"
+                value={slug}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  setSlug(e.target.value);
+                  setSlugTouched(true);
+                }}
+                required
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="namespace"
+                className="mb-1 block text-sm font-medium"
+              >
+                Registry Namespace
+              </label>
+              <Input
+                id="namespace"
+                placeholder={`${baseNamespace}.my-collection`}
+                value={namespace}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  setNamespace(e.target.value);
+                  setNamespaceTouched(true);
+                }}
+                required
+              />
+              <p className="text-muted-foreground mt-1 text-xs">
+                Unique identifier used to address this collection in the
+                registry
+              </p>
+            </div>
+
+            <div>
+              <label
+                htmlFor="description"
+                className="mb-1 block text-sm font-medium"
+              >
+                Description
+              </label>
+              <Textarea
+                id="description"
+                placeholder="Describe what this collection is for and what servers it includes..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                Visibility
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
+                    visibility === "public"
+                      ? "border-foreground/30 bg-accent"
+                      : "border-border hover:bg-accent/50",
+                  )}
+                  onClick={() => setVisibility("public")}
+                >
+                  <Globe className="h-3.5 w-3.5" />
+                  Public
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
+                    visibility === "private"
+                      ? "border-foreground/30 bg-accent"
+                      : "border-border hover:bg-accent/50",
+                  )}
+                  onClick={() => setVisibility("private")}
+                >
+                  <Lock className="h-3.5 w-3.5" />
+                  Private
+                </button>
+              </div>
+              <p className="text-muted-foreground mt-1.5 text-xs">
+                {visibility === "private"
+                  ? "Private collections are only visible to your organization."
+                  : "Public collections are visible to everyone."}
+              </p>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                MCP Servers ({selectedToolsetIds.size} selected)
+              </label>
+              <div className="rounded-md border">
+                <div className="relative border-b">
+                  <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search servers..."
+                    value={serverSearch}
+                    onChange={(e) => setServerSearch(e.target.value)}
+                    className="placeholder:text-muted-foreground w-full bg-transparent py-2.5 pr-3 pl-9 text-sm outline-none"
                   />
                 </div>
-
-                <div>
-                  <label
-                    htmlFor="slug"
-                    className="mb-1 block text-sm font-medium"
-                  >
-                    Slug
-                  </label>
-                  <Input
-                    id="slug"
-                    placeholder="e.g. developer-productivity-suite"
-                    value={slug}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                      setSlug(e.target.value);
-                      setSlugTouched(true);
-                    }}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="namespace"
-                    className="mb-1 block text-sm font-medium"
-                  >
-                    Registry Namespace
-                  </label>
-                  <Input
-                    id="namespace"
-                    placeholder={`${baseNamespace}.my-collection`}
-                    value={namespace}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                      setNamespace(e.target.value);
-                      setNamespaceTouched(true);
-                    }}
-                    required
-                  />
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    Unique identifier used to address this collection in the
-                    registry
-                  </p>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="description"
-                    className="mb-1 block text-sm font-medium"
-                  >
-                    Description
-                  </label>
-                  <Textarea
-                    id="description"
-                    placeholder="Describe what this collection is for and what servers it includes..."
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    rows={3}
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    Visibility
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      className={cn(
-                        "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
-                        visibility === "public"
-                          ? "border-foreground/30 bg-accent"
-                          : "border-border hover:bg-accent/50",
-                      )}
-                      onClick={() => setVisibility("public")}
-                    >
-                      <Globe className="h-3.5 w-3.5" />
-                      Public
-                    </button>
-                    <button
-                      type="button"
-                      className={cn(
-                        "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
-                        visibility === "private"
-                          ? "border-foreground/30 bg-accent"
-                          : "border-border hover:bg-accent/50",
-                      )}
-                      onClick={() => setVisibility("private")}
-                    >
-                      <Lock className="h-3.5 w-3.5" />
-                      Private
-                    </button>
-                  </div>
-                  <p className="text-muted-foreground mt-1.5 text-xs">
-                    {visibility === "private"
-                      ? "Private collections are only visible to your organization."
-                      : "Public collections are visible to everyone."}
-                  </p>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    MCP Servers ({selectedToolsetIds.size} selected)
-                  </label>
-                  <div className="rounded-md border">
-                    <div className="relative border-b">
-                      <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        placeholder="Search servers..."
-                        value={serverSearch}
-                        onChange={(e) => setServerSearch(e.target.value)}
-                        className="placeholder:text-muted-foreground w-full bg-transparent py-2.5 pr-3 pl-9 text-sm outline-none"
-                      />
+                <div className="max-h-64 overflow-y-auto">
+                  {toolsetsLoading ? (
+                    <div className="flex items-center justify-center p-4">
+                      <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
                     </div>
-                    <div className="max-h-64 overflow-y-auto">
-                      {toolsetsLoading ? (
-                        <div className="flex items-center justify-center p-4">
-                          <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-                        </div>
-                      ) : filteredToolsets.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center p-4 text-center">
-                          <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
-                          <Type small muted>
-                            {serverSearch
-                              ? "No servers match your search."
-                              : "No MCP servers available."}
-                          </Type>
-                        </div>
-                      ) : (
-                        filteredToolsets.map((toolset) => (
-                          <label
-                            key={toolset.id}
-                            className="hover:bg-accent/50 flex cursor-pointer items-start gap-3 border-b px-3 py-2.5 last:border-b-0"
-                          >
-                            <Checkbox
-                              checked={selectedToolsetIds.has(toolset.id)}
-                              onCheckedChange={() => toggleToolset(toolset.id)}
-                              className="mt-0.5"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="truncate text-sm font-medium">
-                                  {toolset.name}
-                                </span>
-                                <Badge
-                                  variant="secondary"
-                                  className="shrink-0 text-xs"
-                                >
-                                  {toolset.projectName}
-                                </Badge>
-                              </div>
-                              {toolset.description && (
-                                <div className="text-muted-foreground mt-0.5 truncate text-xs">
-                                  {toolset.description}
-                                </div>
-                              )}
+                  ) : filteredToolsets.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center p-4 text-center">
+                      <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
+                      <Type small muted>
+                        {serverSearch
+                          ? "No servers match your search."
+                          : "No MCP servers available."}
+                      </Type>
+                    </div>
+                  ) : (
+                    filteredToolsets.map((toolset) => (
+                      <label
+                        key={toolset.id}
+                        className="hover:bg-accent/50 flex cursor-pointer items-start gap-3 border-b px-3 py-2.5 last:border-b-0"
+                      >
+                        <Checkbox
+                          checked={selectedToolsetIds.has(toolset.id)}
+                          onCheckedChange={() => toggleToolset(toolset.id)}
+                          className="mt-0.5"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate text-sm font-medium">
+                              {toolset.name}
+                            </span>
+                            <Badge
+                              variant="secondary"
+                              className="shrink-0 text-xs"
+                            >
+                              {toolset.projectName}
+                            </Badge>
+                          </div>
+                          {toolset.description && (
+                            <div className="text-muted-foreground mt-0.5 truncate text-xs">
+                              {toolset.description}
                             </div>
-                          </label>
-                        ))
-                      )}
-                    </div>
-                  </div>
+                          )}
+                        </div>
+                      </label>
+                    ))
+                  )}
                 </div>
+              </div>
+            </div>
 
-                <Stack direction="horizontal" gap={2}>
-                  <Button
-                    type="submit"
-                    disabled={!name || !slug || createCollection.isPending}
-                  >
-                    <Button.Text>
-                      {createCollection.isPending
-                        ? "Creating..."
-                        : "Create Collection"}
-                    </Button.Text>
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    type="button"
-                    onClick={() => orgRoutes.collections.goTo()}
-                  >
-                    <Button.Text>Cancel</Button.Text>
-                  </Button>
-                </Stack>
-              </Stack>
-            </form>
-          </Page.Section.Body>
-        </Page.Section>
-      </Page.Body>
-    </Page>
+            <Stack direction="horizontal" gap={2}>
+              <Button
+                type="submit"
+                disabled={!name || !slug || createCollection.isPending}
+              >
+                <Button.Text>
+                  {createCollection.isPending
+                    ? "Creating..."
+                    : "Create Collection"}
+                </Button.Text>
+              </Button>
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => orgRoutes.collections.goTo()}
+              >
+                <Button.Text>Cancel</Button.Text>
+              </Button>
+            </Stack>
+          </Stack>
+        </form>
+      </Page.Section.Body>
+    </Page.Section>
   );
 }
