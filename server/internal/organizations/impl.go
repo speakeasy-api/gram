@@ -15,7 +15,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/workos/workos-go/v6/pkg/workos_errors"
@@ -189,6 +191,18 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		return nil, oops.E(oops.CodeBadRequest, nil, "email must be a valid email address").Log(ctx, logger)
 	}
 
+	_, err = userrepo.New(s.db).GetConnectedUserByEmail(ctx, userrepo.GetConnectedUserByEmailParams{
+		Email:          normalizedEmail,
+		OrganizationID: ac.ActiveOrganizationID,
+	})
+	switch {
+	case err == nil:
+		return nil, oops.E(oops.CodeConflict, nil, "user is already a member of this organization").Log(ctx, logger)
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "check organization membership").Log(ctx, logger)
+	}
+
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, logger)
@@ -242,6 +256,10 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		ExpiresInDays:  int32(defaultInviteExpiryDays),
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "organization_invitations_org_email_pending_key" {
+			return nil, oops.E(oops.CodeConflict, nil, "an invitation is already pending for this email").Log(ctx, logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create invitation").Log(ctx, logger)
 	}
 	span.SetAttributes(attr.OrganizationInviteID(row.ID.String()))

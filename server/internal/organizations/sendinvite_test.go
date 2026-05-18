@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -177,7 +178,38 @@ func TestService_SendInvite_DuplicatePendingEmail(t *testing.T) {
 
 	// Second invite to same email in same org should fail (partial unique index).
 	_, err = ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "dup@example.com"})
-	require.Error(t, err, "duplicate pending invite for same email should fail")
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.Equal(t, "an invitation is already pending for this email", oopsErr.Error())
+}
+
+func TestService_SendInvite_ExistingMemberEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, err := userrepo.New(ti.conn).UpsertUser(ctx, userrepo.UpsertUserParams{
+		ID:          "existing-member",
+		Email:       "member@example.com",
+		DisplayName: "Existing Member",
+		PhotoUrl:    conv.ToPGText(""),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	_, err = orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText("existing-member"),
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "member@example.com"})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.Equal(t, "user is already a member of this organization", oopsErr.Error())
 }
 
 func TestService_SendInvite_UnknownRoleID(t *testing.T) {
