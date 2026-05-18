@@ -85,7 +85,8 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     // skeleton flash for logged-out users before the redirect to /login fires.
     if (
       location.pathname === "/" ||
-      UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p))
+      UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p)) ||
+      location.pathname.endsWith("/setup")
     ) {
       return null;
     }
