@@ -3304,6 +3304,7 @@ func marshalAccessRoleToRoleResponseBody(v *access.Role) *RoleResponseBody {
 	res := &RoleResponseBody{
 		ID:          v.ID,
 		Name:        v.Name,
+		Slug:        v.Slug,
 		Description: v.Description,
 		IsSystem:    v.IsSystem,
 		MemberCount: v.MemberCount,

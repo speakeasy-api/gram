@@ -21,6 +21,15 @@ type SendInviteRequestBody struct {
 	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
 }
 
+// UpdateInviteRoleRequestBody is the type of the "organizations" service
+// "updateInviteRole" endpoint HTTP request body.
+type UpdateInviteRoleRequestBody struct {
+	// WorkOS invitation ID.
+	InvitationID *string `form:"invitation_id,omitempty" json:"invitation_id,omitempty" xml:"invitation_id,omitempty"`
+	// Role ID to assign to the invitee.
+	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
+}
+
 // GetResponseBody is the type of the "organizations" service "get" endpoint
 // HTTP response body.
 type GetResponseBody struct {
@@ -57,6 +66,31 @@ type SendInviteResponseBody struct {
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
 	// Gram user ID of the inviter, when known.
 	InviterUserID *string `form:"inviter_user_id,omitempty" json:"inviter_user_id,omitempty" xml:"inviter_user_id,omitempty"`
+	// WorkOS role slug assigned when the invite is accepted.
+	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
+	// When the invitation expires.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// UpdateInviteRoleResponseBody is the type of the "organizations" service
+// "updateInviteRole" endpoint HTTP response body.
+type UpdateInviteRoleResponseBody struct {
+	// WorkOS invitation ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Invitee email address.
+	Email string `form:"email" json:"email" xml:"email"`
+	// Invitation lifecycle state.
+	State string `form:"state" json:"state" xml:"state"`
+	// When the invitation was accepted.
+	AcceptedAt *string `form:"accepted_at,omitempty" json:"accepted_at,omitempty" xml:"accepted_at,omitempty"`
+	// When the invitation was revoked.
+	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
+	// Gram user ID of the inviter, when known.
+	InviterUserID *string `form:"inviter_user_id,omitempty" json:"inviter_user_id,omitempty" xml:"inviter_user_id,omitempty"`
+	// WorkOS role slug assigned when the invite is accepted.
+	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
 	// When the invitation expires.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
@@ -622,6 +656,196 @@ type RevokeInviteUnexpectedResponseBody struct {
 // service "revokeInvite" endpoint HTTP response body for the "gateway_error"
 // error.
 type RevokeInviteGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateInviteRoleUnauthorizedResponseBody is the type of the "organizations"
+// service "updateInviteRole" endpoint HTTP response body for the
+// "unauthorized" error.
+type UpdateInviteRoleUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateInviteRoleForbiddenResponseBody is the type of the "organizations"
+// service "updateInviteRole" endpoint HTTP response body for the "forbidden"
+// error.
+type UpdateInviteRoleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateInviteRoleBadRequestResponseBody is the type of the "organizations"
+// service "updateInviteRole" endpoint HTTP response body for the "bad_request"
+// error.
+type UpdateInviteRoleBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateInviteRoleNotFoundResponseBody is the type of the "organizations"
+// service "updateInviteRole" endpoint HTTP response body for the "not_found"
+// error.
+type UpdateInviteRoleNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateInviteRoleConflictResponseBody is the type of the "organizations"
+// service "updateInviteRole" endpoint HTTP response body for the "conflict"
+// error.
+type UpdateInviteRoleConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateInviteRoleUnsupportedMediaResponseBody is the type of the
+// "organizations" service "updateInviteRole" endpoint HTTP response body for
+// the "unsupported_media" error.
+type UpdateInviteRoleUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateInviteRoleInvalidResponseBody is the type of the "organizations"
+// service "updateInviteRole" endpoint HTTP response body for the "invalid"
+// error.
+type UpdateInviteRoleInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateInviteRoleInvariantViolationResponseBody is the type of the
+// "organizations" service "updateInviteRole" endpoint HTTP response body for
+// the "invariant_violation" error.
+type UpdateInviteRoleInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateInviteRoleUnexpectedResponseBody is the type of the "organizations"
+// service "updateInviteRole" endpoint HTTP response body for the "unexpected"
+// error.
+type UpdateInviteRoleUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateInviteRoleGatewayErrorResponseBody is the type of the "organizations"
+// service "updateInviteRole" endpoint HTTP response body for the
+// "gateway_error" error.
+type UpdateInviteRoleGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1771,6 +1995,8 @@ type OrganizationInvitationResponseBody struct {
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
 	// Gram user ID of the inviter, when known.
 	InviterUserID *string `form:"inviter_user_id,omitempty" json:"inviter_user_id,omitempty" xml:"inviter_user_id,omitempty"`
+	// WorkOS role slug assigned when the invite is accepted.
+	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
 	// When the invitation expires.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
@@ -1825,6 +2051,25 @@ func NewSendInviteResponseBody(res *organizations.OrganizationInvitation) *SendI
 		AcceptedAt:    res.AcceptedAt,
 		RevokedAt:     res.RevokedAt,
 		InviterUserID: res.InviterUserID,
+		RoleSlug:      res.RoleSlug,
+		ExpiresAt:     res.ExpiresAt,
+		CreatedAt:     res.CreatedAt,
+		UpdatedAt:     res.UpdatedAt,
+	}
+	return body
+}
+
+// NewUpdateInviteRoleResponseBody builds the HTTP response body from the
+// result of the "updateInviteRole" endpoint of the "organizations" service.
+func NewUpdateInviteRoleResponseBody(res *organizations.OrganizationInvitation) *UpdateInviteRoleResponseBody {
+	body := &UpdateInviteRoleResponseBody{
+		ID:            res.ID,
+		Email:         res.Email,
+		State:         res.State,
+		AcceptedAt:    res.AcceptedAt,
+		RevokedAt:     res.RevokedAt,
+		InviterUserID: res.InviterUserID,
+		RoleSlug:      res.RoleSlug,
 		ExpiresAt:     res.ExpiresAt,
 		CreatedAt:     res.CreatedAt,
 		UpdatedAt:     res.UpdatedAt,
@@ -2292,6 +2537,150 @@ func NewRevokeInviteUnexpectedResponseBody(res *goa.ServiceError) *RevokeInviteU
 // the result of the "revokeInvite" endpoint of the "organizations" service.
 func NewRevokeInviteGatewayErrorResponseBody(res *goa.ServiceError) *RevokeInviteGatewayErrorResponseBody {
 	body := &RevokeInviteGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateInviteRoleUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "updateInviteRole" endpoint of the "organizations"
+// service.
+func NewUpdateInviteRoleUnauthorizedResponseBody(res *goa.ServiceError) *UpdateInviteRoleUnauthorizedResponseBody {
+	body := &UpdateInviteRoleUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateInviteRoleForbiddenResponseBody builds the HTTP response body from
+// the result of the "updateInviteRole" endpoint of the "organizations" service.
+func NewUpdateInviteRoleForbiddenResponseBody(res *goa.ServiceError) *UpdateInviteRoleForbiddenResponseBody {
+	body := &UpdateInviteRoleForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateInviteRoleBadRequestResponseBody builds the HTTP response body from
+// the result of the "updateInviteRole" endpoint of the "organizations" service.
+func NewUpdateInviteRoleBadRequestResponseBody(res *goa.ServiceError) *UpdateInviteRoleBadRequestResponseBody {
+	body := &UpdateInviteRoleBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateInviteRoleNotFoundResponseBody builds the HTTP response body from
+// the result of the "updateInviteRole" endpoint of the "organizations" service.
+func NewUpdateInviteRoleNotFoundResponseBody(res *goa.ServiceError) *UpdateInviteRoleNotFoundResponseBody {
+	body := &UpdateInviteRoleNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateInviteRoleConflictResponseBody builds the HTTP response body from
+// the result of the "updateInviteRole" endpoint of the "organizations" service.
+func NewUpdateInviteRoleConflictResponseBody(res *goa.ServiceError) *UpdateInviteRoleConflictResponseBody {
+	body := &UpdateInviteRoleConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateInviteRoleUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "updateInviteRole" endpoint of the
+// "organizations" service.
+func NewUpdateInviteRoleUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateInviteRoleUnsupportedMediaResponseBody {
+	body := &UpdateInviteRoleUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateInviteRoleInvalidResponseBody builds the HTTP response body from
+// the result of the "updateInviteRole" endpoint of the "organizations" service.
+func NewUpdateInviteRoleInvalidResponseBody(res *goa.ServiceError) *UpdateInviteRoleInvalidResponseBody {
+	body := &UpdateInviteRoleInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateInviteRoleInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "updateInviteRole" endpoint of the
+// "organizations" service.
+func NewUpdateInviteRoleInvariantViolationResponseBody(res *goa.ServiceError) *UpdateInviteRoleInvariantViolationResponseBody {
+	body := &UpdateInviteRoleInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateInviteRoleUnexpectedResponseBody builds the HTTP response body from
+// the result of the "updateInviteRole" endpoint of the "organizations" service.
+func NewUpdateInviteRoleUnexpectedResponseBody(res *goa.ServiceError) *UpdateInviteRoleUnexpectedResponseBody {
+	body := &UpdateInviteRoleUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateInviteRoleGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "updateInviteRole" endpoint of the "organizations"
+// service.
+func NewUpdateInviteRoleGatewayErrorResponseBody(res *goa.ServiceError) *UpdateInviteRoleGatewayErrorResponseBody {
+	body := &UpdateInviteRoleGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3188,6 +3577,18 @@ func NewRevokeInvitePayload(invitationID string, sessionToken *string) *organiza
 	return v
 }
 
+// NewUpdateInviteRolePayload builds a organizations service updateInviteRole
+// endpoint payload.
+func NewUpdateInviteRolePayload(body *UpdateInviteRoleRequestBody, sessionToken *string) *organizations.UpdateInviteRolePayload {
+	v := &organizations.UpdateInviteRolePayload{
+		InvitationID: *body.InvitationID,
+		RoleID:       *body.RoleID,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewListInvitesPayload builds a organizations service listInvites endpoint
 // payload.
 func NewListInvitesPayload(sessionToken *string) *organizations.ListInvitesPayload {
@@ -3248,6 +3649,18 @@ func NewCreatePortalSessionPayload(sessionToken *string) *organizations.CreatePo
 func ValidateSendInviteRequestBody(body *SendInviteRequestBody) (err error) {
 	if body.Email == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("email", "body"))
+	}
+	return
+}
+
+// ValidateUpdateInviteRoleRequestBody runs the validations defined on
+// UpdateInviteRoleRequestBody
+func ValidateUpdateInviteRoleRequestBody(body *UpdateInviteRoleRequestBody) (err error) {
+	if body.InvitationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("invitation_id", "body"))
+	}
+	if body.RoleID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_id", "body"))
 	}
 	return
 }

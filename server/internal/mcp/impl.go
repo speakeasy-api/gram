@@ -75,7 +75,7 @@ import (
 // IdentityResolver abstracts the identity operations the authn-challenge OAuth
 // flow needs. Satisfied by *identity.Resolver.
 type IdentityResolver interface {
-	BuildAuthorizationURL(ctx context.Context, params sessions.AuthURLParams) (*url.URL, error)
+	BuildAuthorizationURL(ctx context.Context, params identity.AuthorizationURLParams) (*url.URL, error)
 	ExchangeCodeForTokens(ctx context.Context, code string) (*identity.IDPUserInfo, error)
 	UpsertUserFromIDP(ctx context.Context, idpUser *identity.IDPUserInfo) (string, error)
 	HasAccessToOrganization(ctx context.Context, organizationID, userID string) (*sessions.Organization, string, bool)

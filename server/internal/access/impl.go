@@ -1102,6 +1102,7 @@ func buildRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organ
 	return &gen.Role{
 		ID:          role.ID,
 		Name:        role.Name,
+		Slug:        role.Slug,
 		Description: role.Description,
 		IsSystem:    isSystemRole(role.Slug),
 		Grants:      genGrants,

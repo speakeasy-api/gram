@@ -31,29 +31,6 @@ func newMockOrganizationProvider(t *testing.T) *MockOrganizationProvider {
 	return orgs
 }
 
-func (m *MockOrganizationProvider) CreatePasswordlessSession(ctx context.Context, opts thirdpartyworkos.CreatePasswordlessSessionOpts) (*thirdpartyworkos.PasswordlessSession, error) {
-	args := m.Called(ctx, opts)
-	if err := args.Error(1); err != nil {
-		sess, _ := args.Get(0).(*thirdpartyworkos.PasswordlessSession)
-		return sess, mockErr(args, 1)
-	}
-	if sess, ok := args.Get(0).(*thirdpartyworkos.PasswordlessSession); ok {
-		return sess, nil
-	}
-	return nil, nil
-}
-
-func (m *MockOrganizationProvider) AuthenticateWithInviteLink(ctx context.Context, code string) (*thirdpartyworkos.InviteLinkProfile, error) {
-	args := m.Called(ctx, code)
-	if err := args.Error(1); err != nil {
-		return nil, mockErr(args, 1)
-	}
-	if profile, ok := args.Get(0).(*thirdpartyworkos.InviteLinkProfile); ok {
-		return profile, nil
-	}
-	return nil, nil
-}
-
 func (m *MockOrganizationProvider) CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error) {
 	args := m.Called(ctx, workosUserID, workosOrgID, roleSlug)
 	if err := args.Error(1); err != nil {
@@ -73,6 +50,25 @@ func (m *MockOrganizationProvider) ListRoles(ctx context.Context, workosOrgID st
 	return nil, nil
 }
 
+func (m *MockOrganizationProvider) GetOrganizationDomainPolicy(ctx context.Context, workosOrgID string) (*thirdpartyworkos.OrganizationDomainPolicy, error) {
+	for _, call := range m.ExpectedCalls {
+		if call.Method == "GetOrganizationDomainPolicy" {
+			args := m.Called(ctx, workosOrgID)
+			if err := args.Error(1); err != nil {
+				return nil, fmt.Errorf("mock GetOrganizationDomainPolicy: %w", err)
+			}
+			if policy, ok := args.Get(0).(*thirdpartyworkos.OrganizationDomainPolicy); ok {
+				return policy, nil
+			}
+			return nil, nil
+		}
+	}
+
+	return &thirdpartyworkos.OrganizationDomainPolicy{
+		Domains: nil,
+	}, nil
+}
+
 func (m *MockOrganizationProvider) DeleteOrganizationMembership(ctx context.Context, workosMembershipID string) error {
 	args := m.Called(ctx, workosMembershipID)
 	if err := args.Error(0); err != nil {
@@ -84,6 +80,18 @@ func (m *MockOrganizationProvider) DeleteOrganizationMembership(ctx context.Cont
 // stubUserProvisioner is a no-op implementation of UserProvisioner for tests
 // that don't exercise the invite callback HTTP handler.
 type stubUserProvisioner struct{}
+
+func (stubUserProvisioner) AuthenticateWithMagicAuth(_ context.Context, email string) (*identity.IDPUserInfo, error) {
+	return &identity.IDPUserInfo{
+		Sub:             "user_01INVITEE",
+		Email:           email,
+		Name:            "Invitee",
+		Picture:         nil,
+		ExternalID:      "",
+		WorkOSSessionID: "session_01INVITE",
+		OrganizationID:  "",
+	}, nil
+}
 
 func (stubUserProvisioner) UpsertUserFromIDP(_ context.Context, idpUser *identity.IDPUserInfo) (string, error) {
 	return idpUser.Sub, nil
@@ -108,13 +116,4 @@ func newMockLoopsClient(t *testing.T) *MockLoopsClient {
 func (m *MockLoopsClient) SendTransactional(ctx context.Context, input loops.SendTransactionalInput) error {
 	args := m.Called(ctx, input)
 	return args.Error(0)
-}
-
-func mockErr(args mock.Arguments, index int) error {
-	err := args.Error(index)
-	if err == nil {
-		return nil
-	}
-
-	return fmt.Errorf("mock return error: %w", err)
 }

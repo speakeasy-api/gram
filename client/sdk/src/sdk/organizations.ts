@@ -11,6 +11,7 @@ import { organizationsListUsers } from "../funcs/organizationsListUsers.js";
 import { organizationsRemoveUser } from "../funcs/organizationsRemoveUser.js";
 import { organizationsRevokeInvite } from "../funcs/organizationsRevokeInvite.js";
 import { organizationsSendInvite } from "../funcs/organizationsSendInvite.js";
+import { organizationsUpdateInviteRole } from "../funcs/organizationsUpdateInviteRole.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -181,6 +182,25 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.OrganizationInvitation> {
     return unwrapAsync(organizationsSendInvite(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateInviteRole organizations
+   *
+   * @remarks
+   * Change the role assigned to a pending WorkOS invitation.
+   */
+  async updateInviteRole(
+    request: operations.UpdateInviteRoleRequest,
+    security?: operations.UpdateInviteRoleSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.OrganizationInvitation> {
+    return unwrapAsync(organizationsUpdateInviteRole(
       this,
       request,
       security,

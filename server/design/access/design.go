@@ -504,10 +504,11 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 })
 
 var RoleModel = Type("Role", func() {
-	Required("id", "name", "description", "is_system", "grants", "member_count", "created_at", "updated_at")
+	Required("id", "name", "slug", "description", "is_system", "grants", "member_count", "created_at", "updated_at")
 
 	Attribute("id", String, "Unique role identifier.")
 	Attribute("name", String, "Display name of the role.")
+	Attribute("slug", String, "Stable WorkOS role slug.")
 	Attribute("description", String, "Human-readable description.")
 	Attribute("is_system", Boolean, "Whether this is a built-in system role that cannot be deleted.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants assigned to this role.")

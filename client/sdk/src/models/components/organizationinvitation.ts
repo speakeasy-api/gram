@@ -50,6 +50,10 @@ export type OrganizationInvitation = {
    */
   revokedAt?: Date | undefined;
   /**
+   * WorkOS role slug assigned when the invite is accepted.
+   */
+  roleSlug?: string | undefined;
+  /**
    * Invitation lifecycle state.
    */
   state: State;
@@ -81,6 +85,7 @@ export const OrganizationInvitation$inboundSchema: z.ZodMiniType<
     revoked_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
+    role_slug: z.optional(z.string()),
     state: State$inboundSchema,
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -94,6 +99,7 @@ export const OrganizationInvitation$inboundSchema: z.ZodMiniType<
       "expires_at": "expiresAt",
       "inviter_user_id": "inviterUserId",
       "revoked_at": "revokedAt",
+      "role_slug": "roleSlug",
       "updated_at": "updatedAt",
     });
   }),
