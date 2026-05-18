@@ -843,7 +843,7 @@ func renderClaudeSessionStartScript(cfg GenerateConfig) []byte {
 #   - cowork: detected by the presence of cmux's per-run local_<rid>.json
 #     config file. We extract its remoteMcpServersConfig (connector UUID +
 #     URL pairs) and ship them as mcp_inventory_cowork.
-#   - Claude Code (default): shell out to ` + "`claude mcp list`" + ` and forward
+#   - Claude Code (default): shell out to `+"`claude mcp list`"+` and forward
 #     the human-readable output as mcp_inventory_claude_code.
 
 set -u
@@ -885,7 +885,7 @@ fi
 
 if [ -n "$local_run_json" ] && command -v jq >/dev/null 2>&1; then
   # Extract the connector UUID + URL pairs we actually care about.
-  # ` + "`tools`" + ` is dropped — it can be huge and we don't need it here.
+  # `+"`tools`"+` is dropped — it can be huge and we don't need it here.
   inv=$(jq -c '
     [
       (.remoteMcpServersConfig // [])[]
@@ -899,11 +899,11 @@ if [ -n "$local_run_json" ] && command -v jq >/dev/null 2>&1; then
   ' "$local_run_json" 2>/dev/null)
   [ -n "$inv" ] && mcp_inventory_cowork="$inv"
 elif command -v claude >/dev/null 2>&1; then
-  # Claude Code: ` + "`claude mcp list`" + ` health-checks every server, which can
+  # Claude Code: `+"`claude mcp list`"+` health-checks every server, which can
   # take seconds for stdio servers. Hard-cap wall time so a misbehaving
   # server can't keep this hook alive forever; since the hook is async
   # the latency is invisible to Claude anyway. macOS doesn't ship GNU
-  # ` + "`timeout`" + ` — prefer it, fall back to coreutils' ` + "`gtimeout`" + `, then to
+  # `+"`timeout`"+` — prefer it, fall back to coreutils' `+"`gtimeout`"+`, then to
   # no timeout at all rather than failing.
   if command -v timeout >/dev/null 2>&1; then
     mcp_inventory_claude_code=$(timeout 15 claude mcp list 2>&1 || true)

@@ -338,6 +338,10 @@ func newWorkerCommand() *cli.Command {
 			meterProvider := otel.GetMeterProvider()
 			slog.SetDefault(logger)
 
+			if serviceEnv == "local" {
+				risk_analysis.EnableRuleIDFormatEnforcement()
+			}
+
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
 
@@ -693,7 +697,7 @@ func newWorkerCommand() *cli.Command {
 				promptInjectionClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
 				logger.InfoContext(ctx, "pi_classifier L1 prompt-injection scanner enabled", attr.SlogURL(piURL))
 			}
-			piScanner := risk_analysis.NewPromptInjectionScanner(logger, promptInjectionClassifier)
+			piScanner := risk_analysis.NewPromptInjectionScanner(logger, promptInjectionClassifier, featureFlags)
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:      guardianPolicy,

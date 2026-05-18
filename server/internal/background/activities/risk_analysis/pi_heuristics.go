@@ -8,6 +8,9 @@ import (
 // heuristicRule is one named L0 detector. Each rule contributes findings
 // independently; the orchestrator filters by HeuristicEmitThreshold and the
 // per-policy family toggle (e.g. PromptInjectionConfig.DetectRoleHijack).
+// `id` and `description` are kept as diagnostic metadata only — the public
+// finding rule_id is always RulePromptInjection, emitted via
+// DescribePromptInjection().
 type heuristicRule struct {
 	id          string
 	description string
@@ -181,9 +184,10 @@ func runFamily(text string, fam ruleFamily) []Finding {
 		if loc == nil {
 			continue
 		}
+		ruleID, description := DescribePromptInjection()
 		out = append(out, Finding{
-			RuleID:           rule.id,
-			Description:      rule.description,
+			RuleID:           ruleID,
+			Description:      description,
 			Match:            text[loc[0]:loc[1]],
 			StartPos:         loc[0],
 			EndPos:           loc[1],
@@ -217,9 +221,10 @@ func detectInstructionOverrides(text string) []Finding {
 		if idx < 0 {
 			continue
 		}
+		ruleID, description := DescribePromptInjection()
 		out = append(out, Finding{
-			RuleID:           "pi.instruction-override",
-			Description:      "Instruction override phrase detected: " + kw,
+			RuleID:           ruleID,
+			Description:      description,
 			Match:            scan[idx : idx+len(kw)],
 			StartPos:         idx,
 			EndPos:           idx + len(kw),
@@ -242,9 +247,10 @@ func detectDelimiterInjection(text string) []Finding {
 	if loc == nil {
 		return nil
 	}
+	ruleID, description := DescribePromptInjection()
 	return []Finding{{
-		RuleID:           "pi.delimiter-injection",
-		Description:      "Forged role or instruction delimiter detected",
+		RuleID:           ruleID,
+		Description:      description,
 		Match:            text[loc[0]:loc[1]],
 		StartPos:         loc[0],
 		EndPos:           loc[1],

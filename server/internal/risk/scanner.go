@@ -126,7 +126,7 @@ func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner,
 	}
 
 	if piScanner == nil {
-		piScanner = ra.NewPromptInjectionScanner(logger, ra.StubClassifier{})
+		piScanner = ra.NewPromptInjectionScanner(logger, ra.StubClassifier{}, nil)
 	}
 
 	return &Scanner{
@@ -290,7 +290,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 				}, nil
 			}
 		case ra.SourcePromptInjection:
-			findings, err := s.piScanner.Scan(ctx, text, policy.PromptInjectionRules)
+			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID)
 			if err != nil {
 				return nil, fmt.Errorf("prompt injection scan: %w", err)
 			}
