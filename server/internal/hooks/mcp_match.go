@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -114,8 +115,9 @@ func resolvedMCPMatch(matched *MCPServerEntry, serverPrefix string) string {
 }
 
 // isGramHostedMCPURL reports whether rawURL points at a Gram-managed MCP
-// server. Exact host match, case-insensitive.
-func isGramHostedMCPURL(rawURL string) bool {
+// server. Checks the canonical host plus any additional trusted hosts.
+// Exact host match, case-insensitive.
+func isGramHostedMCPURL(rawURL string, additionalTrustedHosts ...string) bool {
 	if rawURL == "" {
 		return false
 	}
@@ -123,7 +125,30 @@ func isGramHostedMCPURL(rawURL string) bool {
 	if err != nil {
 		return false
 	}
-	return strings.EqualFold(u.Hostname(), gramHostedMCPHost)
+	hostname := u.Hostname()
+	if strings.EqualFold(hostname, gramHostedMCPHost) {
+		return true
+	}
+	for _, h := range additionalTrustedHosts {
+		if strings.EqualFold(hostname, h) {
+			return true
+		}
+	}
+	return false
+}
+
+// isGramHostedMCPURLForOrg checks if a URL is a Gram-managed MCP server for
+// the given organization. It checks against the canonical host plus any
+// verified and activated custom domain for the org.
+func (s *Service) isGramHostedMCPURLForOrg(ctx context.Context, rawURL, orgID string) bool {
+	if rawURL == "" || orgID == "" {
+		return isGramHostedMCPURL(rawURL)
+	}
+	customDomain, err := repo.New(s.db).GetCustomDomainByOrganization(ctx, orgID)
+	if err != nil || !customDomain.Verified || !customDomain.Activated {
+		return isGramHostedMCPURL(rawURL)
+	}
+	return isGramHostedMCPURL(rawURL, customDomain.Domain)
 }
 
 // isMatchedMCPApproved returns whether the call has been allowlisted
