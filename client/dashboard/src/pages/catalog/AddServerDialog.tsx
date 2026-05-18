@@ -190,9 +190,20 @@ export interface AddServerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onServersAdded?: () => void;
+  onInstallFinished?: (result: {
+    projectSlug?: string;
+    status: "succeeded" | "partial" | "failed";
+    succeededCount: number;
+    failedCount: number;
+    error?: string;
+  }) => void;
   projectSlug?: string;
   /** When true, shows a summary view instead of individual name inputs in the configure phase. */
   bulk?: boolean;
+  /** When true, starts deployment as soon as the default configuration is ready. */
+  autoStartDeployment?: boolean;
+  /** When true, runs the workflow without rendering the dialog UI. */
+  headless?: boolean;
 }
 
 function filterToHttpRemotes(server: PulseMCPServer): PulseMCPServer {
@@ -299,8 +310,11 @@ export function AddServerDialog({
   open,
   onOpenChange,
   onServersAdded,
+  onInstallFinished,
   projectSlug,
   bulk,
+  autoStartDeployment,
+  headless,
 }: AddServerDialogProps) {
   const telemetry = useTelemetry();
   // Fetch server details (including remotes) when dialog opens
@@ -318,14 +332,40 @@ export function AddServerDialog({
       telemetry.isFeatureEnabled(ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG) ??
       false,
   });
+  const serversKey = servers.map((s) => s.registrySpecifier).join(",");
+  const autoDeployStartedRef = useRef(false);
+  const finishedRef = useRef(false);
 
   // Reset when dialog closes
   useEffect(() => {
     if (!open) {
       releaseState.reset();
+      autoDeployStartedRef.current = false;
+      finishedRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset when dialog open/close state changes, not on every releaseState update
   }, [open]);
+
+  useEffect(() => {
+    autoDeployStartedRef.current = false;
+    finishedRef.current = false;
+  }, [projectSlug, serversKey]);
+
+  useEffect(() => {
+    if (
+      !open ||
+      !autoStartDeployment ||
+      autoDeployStartedRef.current ||
+      releaseState.phase !== "configure" ||
+      releaseState.isInstallStateLoading ||
+      !releaseState.canDeploy
+    ) {
+      return;
+    }
+
+    autoDeployStartedRef.current = true;
+    void releaseState.startDeployment();
+  }, [autoStartDeployment, open, releaseState]);
 
   // Clean up Radix body scroll-lock on unmount (e.g. when navigating away mid-dialog)
   useEffect(() => {
@@ -352,7 +392,74 @@ export function AddServerDialog({
     }
   }, [allToolsetsDone, onServersAdded]);
 
+  useEffect(() => {
+    if (!open || !onInstallFinished || finishedRef.current) return;
+
+    if (detailsError) {
+      finishedRef.current = true;
+      onInstallFinished({
+        projectSlug,
+        status: "failed",
+        succeededCount: 0,
+        failedCount: servers.length,
+        error: detailsError,
+      });
+      return;
+    }
+
+    if (releaseState.phase === "error") {
+      finishedRef.current = true;
+      onInstallFinished({
+        projectSlug,
+        status: "failed",
+        succeededCount: 0,
+        failedCount: servers.length,
+        error: releaseState.error,
+      });
+      return;
+    }
+
+    if (releaseState.phase !== "complete") return;
+
+    const statuses = releaseState.toolsetStatuses;
+    const allDone =
+      statuses.length > 0 &&
+      statuses.every((s) => s.status === "completed" || s.status === "failed");
+    if (!allDone) return;
+
+    const succeededCount = statuses.filter(
+      (s) => s.status === "completed",
+    ).length;
+    const failedCount = statuses.filter((s) => s.status === "failed").length;
+
+    finishedRef.current = true;
+    onInstallFinished({
+      projectSlug,
+      status:
+        failedCount === 0
+          ? "succeeded"
+          : succeededCount > 0
+            ? "partial"
+            : "failed",
+      succeededCount,
+      failedCount,
+      error: statuses
+        .filter((s) => s.status === "failed" && s.error)
+        .map((s) => `${s.name}: ${s.error}`)
+        .join("\n"),
+    });
+  }, [
+    detailsError,
+    onInstallFinished,
+    open,
+    projectSlug,
+    releaseState,
+    servers.length,
+  ]);
+
   if (servers.length === 0) return null;
+
+  if (headless) return null;
 
   // Show loading state while fetching server details
   if (isLoadingDetails) {

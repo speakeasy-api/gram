@@ -42,6 +42,7 @@ import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
 import { buildCollectionMcpJson, formatMcpJson } from "@/lib/mcp-json";
 import { toast } from "sonner";
+import { CollectionInstallDialog } from "./CollectionInstallDialog";
 
 export function CollectionDetailRoot() {
   return <Outlet />;
@@ -72,10 +73,7 @@ function CollectionDetailInner() {
     useState<CatalogServer | null>(null);
   const [activeInstallServer, setActiveInstallServer] =
     useState<CatalogServer | null>(null);
-  const [pendingBulkInstall, setPendingBulkInstall] = useState(false);
-  const [bulkInstallServers, setBulkInstallServers] = useState<
-    CatalogServer[] | null
-  >(null);
+  const [showBulkInstallDialog, setShowBulkInstallDialog] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -234,8 +232,7 @@ function CollectionDetailInner() {
       );
     }
 
-    setPendingBulkInstall(true);
-    setSelectedProjectSlug((current) => current ?? defaultProjectSlug);
+    setShowBulkInstallDialog(true);
   };
 
   const totalTools = servers.reduce((sum, s) => sum + s.toolCount, 0);
@@ -806,11 +803,10 @@ function CollectionDetailInner() {
           </div>
         </div>
         <Dialog
-          open={pendingInstallServer !== null || pendingBulkInstall}
+          open={pendingInstallServer !== null}
           onOpenChange={(open) => {
             if (!open) {
               setPendingInstallServer(null);
-              setPendingBulkInstall(false);
             }
           }}
         >
@@ -818,28 +814,16 @@ function CollectionDetailInner() {
             <Dialog.Header>
               <Dialog.Title>Select Project</Dialog.Title>
               <Dialog.Description>
-                {pendingBulkInstall ? (
-                  <>
-                    Choose where to install{" "}
-                    <span className="font-medium">
-                      {installableServersWithEndpoint.length} servers
-                    </span>
-                    .
-                  </>
-                ) : (
-                  <>
-                    Choose where to install{" "}
-                    <span className="font-medium">
-                      {pendingInstallServer?.title ??
-                        pendingInstallServer?.registrySpecifier}
-                    </span>
-                    .
-                  </>
-                )}
+                Choose where to install{" "}
+                <span className="font-medium">
+                  {pendingInstallServer?.title ??
+                    pendingInstallServer?.registrySpecifier}
+                </span>
+                .
               </Dialog.Description>
             </Dialog.Header>
             <div className="space-y-4 py-2">
-              {pendingInstallServer && !pendingBulkInstall && (
+              {pendingInstallServer && (
                 <div className="rounded-lg border p-3">
                   <div className="text-sm font-medium">
                     {pendingInstallServer.title ??
@@ -850,15 +834,6 @@ function CollectionDetailInner() {
                       {pendingInstallServer.description}
                     </p>
                   )}
-                </div>
-              )}
-              {pendingBulkInstall && (
-                <div className="rounded-lg border p-3">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <Server className="h-4 w-4" />
-                    {installableServersWithEndpoint.length} servers from{" "}
-                    {collection.name}
-                  </div>
                 </div>
               )}
               {projectOptions.length === 0 ? (
@@ -901,26 +876,18 @@ function CollectionDetailInner() {
                 variant="secondary"
                 onClick={() => {
                   setPendingInstallServer(null);
-                  setPendingBulkInstall(false);
                 }}
               >
                 Cancel
               </Button>
               <Button
-                disabled={
-                  (!pendingInstallServer && !pendingBulkInstall) ||
-                  !selectedProjectOption
-                }
+                disabled={!pendingInstallServer || !selectedProjectOption}
                 onClick={() => {
                   if (!selectedProjectOption) return;
 
                   setSelectedProjectSlug(selectedProjectOption.value);
 
-                  if (pendingBulkInstall) {
-                    setBulkInstallServers(installableServersWithEndpoint);
-                    setPendingBulkInstall(false);
-                    setShowAddDialog(true);
-                  } else if (pendingInstallServer) {
+                  if (pendingInstallServer) {
                     setActiveInstallServer(pendingInstallServer);
                     setPendingInstallServer(null);
                     setShowAddDialog(true);
@@ -945,20 +912,13 @@ function CollectionDetailInner() {
             }}
           />
         )}
-        {bulkInstallServers && selectedProjectSlug && (
-          <AddServerDialog
-            servers={bulkInstallServers}
-            projectSlug={selectedProjectSlug}
-            open={showAddDialog}
-            bulk
-            onOpenChange={(open) => {
-              setShowAddDialog(open);
-              if (!open) {
-                setTimeout(() => setBulkInstallServers(null), 300);
-              }
-            }}
-          />
-        )}
+        <CollectionInstallDialog
+          open={showBulkInstallDialog}
+          onOpenChange={setShowBulkInstallDialog}
+          collectionName={collection.name}
+          servers={installableServersWithEndpoint}
+          projects={projects}
+        />
       </Page.Body>
     </Page>
   );
