@@ -23,6 +23,7 @@ import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  invalidateAllRiskListResults,
   useRiskApproveShadowMCPMutation,
   useRiskListPolicies,
   invalidateAllRiskListShadowMCPApprovals,
@@ -118,6 +119,7 @@ function SecurityOverviewContent() {
             queryClient.invalidateQueries({
               queryKey: ["risk", "results", "list"],
             });
+            invalidateAllRiskListResults(queryClient);
             invalidateAllRiskListShadowMCPApprovals(queryClient);
           },
           onError: (err) => {

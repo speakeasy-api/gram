@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
 import type { RiskResult } from "@gram/client/models/components";
 import {
+  invalidateAllRiskListResults,
   invalidateAllRiskListShadowMCPApprovals,
   useRiskApproveShadowMCPMutation,
   useRiskListPolicies,
@@ -127,6 +128,7 @@ export default function RiskEvents() {
             queryClient.invalidateQueries({
               queryKey: ["risk", "results", "list"],
             });
+            invalidateAllRiskListResults(queryClient);
             invalidateAllRiskListShadowMCPApprovals(queryClient);
           },
           onError: (err) => {
