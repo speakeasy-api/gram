@@ -174,13 +174,14 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 	}
 
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
-		ProjectID:             *authCtx.ProjectID,
-		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
-		ClientID:              clientID,
-		ClientSecretEncrypted: secretCiphertext,
-		ClientIDIssuedAt:      issuedAt,
-		ClientSecretExpiresAt: expiresAt,
+		ProjectID:               *authCtx.ProjectID,
+		RemoteSessionIssuerID:   issuerID,
+		UserSessionIssuerID:     userIssuerID,
+		ClientID:                clientID,
+		ClientSecretEncrypted:   secretCiphertext,
+		ClientIDIssuedAt:        issuedAt,
+		ClientSecretExpiresAt:   expiresAt,
+		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").Log(ctx, logger)
@@ -295,13 +296,14 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 	}
 
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
-		ProjectID:             *authCtx.ProjectID,
-		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
-		ClientID:              clientID,
-		ClientSecretEncrypted: conv.ToPGText(encrypted),
-		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
-		ClientSecretExpiresAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		ProjectID:               *authCtx.ProjectID,
+		RemoteSessionIssuerID:   issuerID,
+		UserSessionIssuerID:     userIssuerID,
+		ClientID:                clientID,
+		ClientSecretEncrypted:   conv.ToPGText(encrypted),
+		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").Log(ctx, logger)
@@ -428,11 +430,12 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 	}
 
 	updated, err := txRepo.UpdateRemoteSessionClient(ctx, repo.UpdateRemoteSessionClientParams{
-		ClientSecretEncrypted: secretCiphertext,
-		ClientSecretExpiresAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-		UserSessionIssuerID:   userIssuerID,
-		ID:                    clientID,
-		ProjectID:             *authCtx.ProjectID,
+		ClientSecretEncrypted:   secretCiphertext,
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		UserSessionIssuerID:     userIssuerID,
+		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
+		ID:                      clientID,
+		ProjectID:               *authCtx.ProjectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

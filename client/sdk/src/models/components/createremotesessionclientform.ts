@@ -4,6 +4,21 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
+
+/**
+ * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
+ */
+export const CreateRemoteSessionClientFormTokenEndpointAuthMethod = {
+  ClientSecretBasic: "client_secret_basic",
+  ClientSecretPost: "client_secret_post",
+} as const;
+/**
+ * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
+ */
+export type CreateRemoteSessionClientFormTokenEndpointAuthMethod = ClosedEnum<
+  typeof CreateRemoteSessionClientFormTokenEndpointAuthMethod
+>;
 
 /**
  * Form for creating a remote_session_client. Either supply client_id (manual path) or set auto_register=true (DCR path).
@@ -26,10 +41,21 @@ export type CreateRemoteSessionClientForm = {
    */
   remoteSessionIssuerId: string;
   /**
+   * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
+   */
+  tokenEndpointAuthMethod?:
+    | CreateRemoteSessionClientFormTokenEndpointAuthMethod
+    | undefined;
+  /**
    * The user_session_issuer this client is paired with.
    */
   userSessionIssuerId: string;
 };
+
+/** @internal */
+export const CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema:
+  z.ZodMiniEnum<typeof CreateRemoteSessionClientFormTokenEndpointAuthMethod> = z
+    .enum(CreateRemoteSessionClientFormTokenEndpointAuthMethod);
 
 /** @internal */
 export type CreateRemoteSessionClientForm$Outbound = {
@@ -37,6 +63,7 @@ export type CreateRemoteSessionClientForm$Outbound = {
   client_id?: string | undefined;
   client_secret?: string | undefined;
   remote_session_issuer_id: string;
+  token_endpoint_auth_method?: string | undefined;
   user_session_issuer_id: string;
 };
 
@@ -50,6 +77,9 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
     clientId: z.optional(z.string()),
     clientSecret: z.optional(z.string()),
     remoteSessionIssuerId: z.string(),
+    tokenEndpointAuthMethod: z.optional(
+      CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema,
+    ),
     userSessionIssuerId: z.string(),
   }),
   z.transform((v) => {
@@ -58,6 +88,7 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
       clientId: "client_id",
       clientSecret: "client_secret",
       remoteSessionIssuerId: "remote_session_issuer_id",
+      tokenEndpointAuthMethod: "token_endpoint_auth_method",
       userSessionIssuerId: "user_session_issuer_id",
     });
   }),

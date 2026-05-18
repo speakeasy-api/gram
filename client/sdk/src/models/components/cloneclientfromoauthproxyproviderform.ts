@@ -4,6 +4,21 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
+
+/**
+ * How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
+ */
+export const TokenEndpointAuthMethod = {
+  ClientSecretBasic: "client_secret_basic",
+  ClientSecretPost: "client_secret_post",
+} as const;
+/**
+ * How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
+ */
+export type TokenEndpointAuthMethod = ClosedEnum<
+  typeof TokenEndpointAuthMethod
+>;
 
 /**
  * Form for cloning an oauth_proxy_provider's client credentials into a new remote_session_client. The caller supplies the existing oauth_proxy_provider, plus the remote_session_issuer and user_session_issuer to pair the new client with.
@@ -18,15 +33,25 @@ export type CloneClientFromOAuthProxyProviderForm = {
    */
   remoteSessionIssuerId: string;
   /**
+   * How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
+   */
+  tokenEndpointAuthMethod?: TokenEndpointAuthMethod | undefined;
+  /**
    * The user_session_issuer the new client is paired with.
    */
   userSessionIssuerId: string;
 };
 
 /** @internal */
+export const TokenEndpointAuthMethod$outboundSchema: z.ZodMiniEnum<
+  typeof TokenEndpointAuthMethod
+> = z.enum(TokenEndpointAuthMethod);
+
+/** @internal */
 export type CloneClientFromOAuthProxyProviderForm$Outbound = {
   oauth_proxy_provider_id: string;
   remote_session_issuer_id: string;
+  token_endpoint_auth_method?: string | undefined;
   user_session_issuer_id: string;
 };
 
@@ -39,12 +64,16 @@ export const CloneClientFromOAuthProxyProviderForm$outboundSchema:
     z.object({
       oauthProxyProviderId: z.string(),
       remoteSessionIssuerId: z.string(),
+      tokenEndpointAuthMethod: z.optional(
+        TokenEndpointAuthMethod$outboundSchema,
+      ),
       userSessionIssuerId: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
         oauthProxyProviderId: "oauth_proxy_provider_id",
         remoteSessionIssuerId: "remote_session_issuer_id",
+        tokenEndpointAuthMethod: "token_endpoint_auth_method",
         userSessionIssuerId: "user_session_issuer_id",
       });
     }),
