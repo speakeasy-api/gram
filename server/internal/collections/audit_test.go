@@ -103,12 +103,14 @@ func TestCollectionsService_Audit_Update(t *testing.T) {
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpCollectionUpdate)
 	require.NoError(t, err)
 
+	name := "After Update"
 	desc := "Updated description"
+	visibility := "public"
 	updated, err := ti.service.Update(ctx, &gen.UpdatePayload{
 		CollectionID: collection.ID,
-		Name:         new("After Update"),
+		Name:         &name,
 		Description:  &desc,
-		Visibility:   new("public"),
+		Visibility:   &visibility,
 		SessionToken: nil,
 		ApikeyToken:  nil,
 	})
@@ -217,9 +219,4 @@ func TestCollectionsService_Audit_AttachAndDetachServer(t *testing.T) {
 	detachMetadata, err := audittest.DecodeAuditData(detachRecord.Metadata)
 	require.NoError(t, err)
 	require.Equal(t, toolset.ID, detachMetadata["toolset_id"])
-}
-
-//go:fix inline
-func strPtr(value string) *string {
-	return new(value)
 }
