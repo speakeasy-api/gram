@@ -47,6 +47,10 @@ vi.mock("./product-tier-badge", () => ({
   ProductTierBadge: () => null,
 }));
 
+vi.mock("./release-stage-badge", () => ({
+  ReleaseStageBadge: () => null,
+}));
+
 const TestIcon = ({ className }: { className?: string }) => (
   <svg data-testid="nav-icon" className={className} />
 );
