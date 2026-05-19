@@ -1,0 +1,71 @@
+openapi: 3.1.0
+info:
+  title: Todo API (tagged)
+  description: A minimal tagged variant used to verify OpenAPI operation tags are persisted into http_tool_definitions.tags during deployment ingestion.
+  version: 1.0.0
+
+servers:
+  - url: https://api.example.com/v1
+    description: Production server
+
+# Root-level tag declarations are metadata for documentation tooling — they
+# must NOT propagate onto an operation that declares no tags of its own.
+tags:
+  - name: todos
+    description: Todo endpoints.
+  - name: admin
+    description: Admin endpoints.
+
+paths:
+  /todos:
+    get:
+      summary: Get all todos
+      operationId: getTodos
+      tags:
+        - todos
+        - admin
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  todos:
+                    type: array
+                    items:
+                      type: object
+  /todos/{id}:
+    get:
+      summary: Get a todo by ID
+      operationId: getTodoById
+      tags:
+        - todos
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+    delete:
+      summary: Delete a todo
+      operationId: deleteTodo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Todo deleted successfully
