@@ -19,10 +19,8 @@ import (
 // an OAuth client of a remote_session_issuer. client_secret_encrypted is never
 // returned.
 type Service interface {
-	// Register a remote_session_client. Two paths: manual (caller supplies
-	// client_id and optionally client_secret) or auto-DCR (auto_register=true
-	// triggers an outbound RFC 7591 registration against the issuer's
-	// registration_endpoint).
+	// Register a remote_session_client by supplying a client_id and optional
+	// client_secret obtained out-of-band from the upstream issuer.
 	CreateRemoteSessionClient(context.Context, *CreateRemoteSessionClientPayload) (res *types.RemoteSessionClient, err error)
 	// Platform-admin-only. Clone the client_id / client_secret from an existing
 	// oauth_proxy_provider into a new remote_session_client paired with the
@@ -77,6 +75,9 @@ type CloneClientFromOAuthProxyProviderPayload struct {
 	RemoteSessionIssuerID string
 	// The user_session_issuer the new client is paired with.
 	UserSessionIssuerID string
+	// How the cloned client authenticates at the issuer's token endpoint. Omit to
+	// default to client_secret_basic.
+	TokenEndpointAuthMethod *string
 }
 
 // CreateRemoteSessionClientPayload is the payload type of the
@@ -89,13 +90,13 @@ type CreateRemoteSessionClientPayload struct {
 	RemoteSessionIssuerID string
 	// The user_session_issuer this client is paired with.
 	UserSessionIssuerID string
-	// Manual-path client_id supplied by the caller.
-	ClientID *string
-	// Manual-path client secret. Gram encrypts before persisting.
+	// client_id supplied by the caller.
+	ClientID string
+	// client_secret supplied by the caller. Gram encrypts before persisting.
 	ClientSecret *string
-	// When true, Gram fires an outbound RFC 7591 DCR call against the issuer's
-	// registration_endpoint and ignores client_id and client_secret.
-	AutoRegister *bool
+	// How the client authenticates at the issuer's token endpoint. Omit to default
+	// to client_secret_basic.
+	TokenEndpointAuthMethod *string
 }
 
 // DeleteRemoteSessionClientPayload is the payload type of the
@@ -154,6 +155,8 @@ type UpdateRemoteSessionClientPayload struct {
 	ClientSecret *string
 	// Re-pair with a different user_session_issuer.
 	UserSessionIssuerID *string
+	// Change how the client authenticates at the issuer's token endpoint.
+	TokenEndpointAuthMethod *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
