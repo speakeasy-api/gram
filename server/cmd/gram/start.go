@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/signal"
@@ -894,11 +895,46 @@ func newStartCommand() *cli.Command {
 				logger.InfoContext(ctx, "marketplace proxy: disabled (no github app configured)")
 			}
 
+			// TEMP: unauthenticated proxy to Presidio /analyze for load
+			// testing in the dev preview env. Mounted via the outermost
+			// mux.Use middleware so it bypasses auth/CORS/etc. The path
+			// lives under /rpc/ so the preview ingress (which only routes
+			// /rpc/* and /mcp/* to the server) lets the request through.
+			// Remove once load testing is complete.
+			var presidioProxy http.Handler
+			if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
+				target, err := url.Parse(presidioURL)
+				if err != nil {
+					return fmt.Errorf("parse presidio-analyzer-url: %w", err)
+				}
+				presidioProxy = &httputil.ReverseProxy{
+					Director: nil,
+					Rewrite: func(pr *httputil.ProxyRequest) {
+						pr.SetURL(target)
+						pr.Out.URL.Path = "/analyze"
+						pr.Out.Host = target.Host
+					},
+					Transport:      nil,
+					FlushInterval:  0,
+					ErrorLog:       nil,
+					BufferPool:     nil,
+					ModifyResponse: nil,
+					ErrorHandler:   nil,
+				}
+				logger.InfoContext(ctx, "temp presidio proxy: enabled at POST /rpc/temp.presidioAnalyze",
+					attr.SlogServerAddress(c.String("address")),
+				)
+			}
+
 			mux := goahttp.NewMuxer()
 			mux.Use(func(h http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.Method == http.MethodGet && r.URL.Path == "/healthz" {
 						w.WriteHeader(http.StatusOK)
+						return
+					}
+					if presidioProxy != nil && r.Method == http.MethodPost && r.URL.Path == "/rpc/temp.presidioAnalyze" {
+						presidioProxy.ServeHTTP(w, r)
 						return
 					}
 					if marketplaceServer != nil && marketplaceServer.IsMarketplaceRoute(r) {
