@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
+	"net/netip"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -613,17 +615,32 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 	return findings
 }
 
+// ipv6ShortFormFP matches IPv6 strings of the form "<hex>::" — a single
+// hex group of up to four chars followed immediately by "::" and nothing
+// else (e.g. "b::", "dead::", "1::"). Production risk_results analysis
+// showed Presidio greedily flagging these as IP_ADDRESS whenever the
+// pattern appeared in code, hex dumps, or text, and none of them
+// represent an address anyone meaningfully uses.
+var ipv6ShortFormFP = regexp.MustCompile(`(?i)^[0-9a-f]{1,4}::$`)
+
 // isPresidioFalsePositive filters Presidio matches the policy author
-// would treat as noise. Today it catches the IPv6 unspecified address
-// `::` (and its all-zeros equivalents) which Presidio's IP_ADDRESS
-// detector aggressively flags wherever it appears in code, networking
-// configs, or stack traces but which is never a meaningful PII finding.
+// would treat as noise. It currently drops:
+//   - the IPv6/IPv4 unspecified address in any spelling (`::`, `::0`,
+//     `0:0:0:0:0:0:0:0`, `0.0.0.0`), via net/netip;
+//   - loopback addresses (`127.0.0.0/8`, `::1`), via net/netip;
+//   - IPv6 short-form strings of shape "<hex>::" (e.g. "b::", "dead::"),
+//     which dominate Presidio's IP_ADDRESS noise on prod.
 func isPresidioFalsePositive(entityType, match string) bool {
 	if entityType != "IP_ADDRESS" {
 		return false
 	}
-	switch strings.TrimSpace(match) {
-	case "::", "::0", "0::0", "0:0:0:0:0:0:0:0":
+	trimmed := strings.TrimSpace(match)
+	if addr, err := netip.ParseAddr(trimmed); err == nil {
+		if addr.IsUnspecified() || addr.IsLoopback() {
+			return true
+		}
+	}
+	if ipv6ShortFormFP.MatchString(trimmed) {
 		return true
 	}
 	return false
