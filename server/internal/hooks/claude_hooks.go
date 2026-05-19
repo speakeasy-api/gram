@@ -402,15 +402,6 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 		result = makeHookResult(payload.HookEventName)
 	}
 
-	// Debug: log the JSON body we're about to send so we can confirm the
-	// shape (continue / stopReason / hookSpecificOutput) the agent will see.
-	if body, jerr := json.Marshal(result); jerr == nil {
-		logger.InfoContext(ctx, "claude hook response body",
-			attr.SlogEvent("claude_hook_response_body"),
-			slog.String("response_body", string(body)),
-		)
-	}
-
 	return result, err
 }
 
