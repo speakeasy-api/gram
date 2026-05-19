@@ -425,6 +425,8 @@ type Role struct {
 	ID string
 	// Display name of the role.
 	Name string
+	// Stable WorkOS role slug.
+	Slug string
 	// Human-readable description.
 	Description string
 	// Whether this is a built-in system role that cannot be deleted.

@@ -75,6 +75,17 @@ func (s *StubClient) GetOrganization(_ context.Context, orgID string) (*Organiza
 	return &org, nil
 }
 
+func (s *StubClient) GetOrganizationDomainPolicy(_ context.Context, orgID string) (*OrganizationDomainPolicy, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	if _, ok := s.orgs[orgID]; !ok {
+		return nil, &APIError{Method: "GET", Path: "/stub/organizations/" + orgID, StatusCode: 404, Body: "organization not found"}
+	}
+
+	return &OrganizationDomainPolicy{Domains: nil}, nil
+}
+
 func (s *StubClient) ListOrganizations(_ context.Context) ([]Organization, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()

@@ -83,6 +83,8 @@ type GetRoleResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Stable WorkOS role slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Human-readable description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is a built-in system role that cannot be deleted.
@@ -102,6 +104,8 @@ type CreateRoleResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Stable WorkOS role slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Human-readable description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is a built-in system role that cannot be deleted.
@@ -121,6 +125,8 @@ type UpdateRoleResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Stable WorkOS role slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Human-readable description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is a built-in system role that cannot be deleted.
@@ -2926,6 +2932,8 @@ type RoleResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Stable WorkOS role slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Human-readable description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is a built-in system role that cannot be deleted.
@@ -3404,6 +3412,7 @@ func NewGetRoleRoleOK(body *GetRoleResponseBody) *access.Role {
 	v := &access.Role{
 		ID:          *body.ID,
 		Name:        *body.Name,
+		Slug:        *body.Slug,
 		Description: *body.Description,
 		IsSystem:    *body.IsSystem,
 		MemberCount: *body.MemberCount,
@@ -3574,6 +3583,7 @@ func NewCreateRoleRoleCreated(body *CreateRoleResponseBody) *access.Role {
 	v := &access.Role{
 		ID:          *body.ID,
 		Name:        *body.Name,
+		Slug:        *body.Slug,
 		Description: *body.Description,
 		IsSystem:    *body.IsSystem,
 		MemberCount: *body.MemberCount,
@@ -3748,6 +3758,7 @@ func NewUpdateRoleRoleOK(body *UpdateRoleResponseBody) *access.Role {
 	v := &access.Role{
 		ID:          *body.ID,
 		Name:        *body.Name,
+		Slug:        *body.Slug,
 		Description: *body.Description,
 		IsSystem:    *body.IsSystem,
 		MemberCount: *body.MemberCount,
@@ -5716,6 +5727,9 @@ func ValidateGetRoleResponseBody(body *GetRoleResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
 	}
@@ -5759,6 +5773,9 @@ func ValidateCreateRoleResponseBody(body *CreateRoleResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
 	}
@@ -5801,6 +5818,9 @@ func ValidateUpdateRoleResponseBody(body *UpdateRoleResponseBody) (err error) {
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
@@ -9578,6 +9598,9 @@ func ValidateRoleResponseBody(body *RoleResponseBody) (err error) {
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))

@@ -15,11 +15,10 @@ import {
   Loader2,
   Lock,
   Globe,
-  Monitor,
+  LayoutGrid,
   SearchX,
   Server,
   Server as ServerIcon,
-  Wrench,
 } from "lucide-react";
 import { Button, Input } from "@speakeasy-api/moonshine";
 import { Textarea } from "@/components/moon/textarea";
@@ -43,6 +42,7 @@ import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
 import { buildCollectionMcpJson, formatMcpJson } from "@/lib/mcp-json";
 import { toast } from "sonner";
+import { CollectionInstallDialog } from "./CollectionInstallDialog";
 
 export function CollectionDetailRoot() {
   return <Outlet />;
@@ -73,6 +73,7 @@ function CollectionDetailInner() {
     useState<CatalogServer | null>(null);
   const [activeInstallServer, setActiveInstallServer] =
     useState<CatalogServer | null>(null);
+  const [showBulkInstallDialog, setShowBulkInstallDialog] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -182,6 +183,16 @@ function CollectionDetailInner() {
     [rawServers],
   );
 
+  // Servers that have an active endpoint and can be installed
+  const installableServersWithEndpoint = useMemo(() => {
+    const excludedSpecifiers = new Set(
+      collectionMcpJson.excludedServers.map((s) => s.registrySpecifier),
+    );
+    return installableServers.filter(
+      (s) => !excludedSpecifiers.has(s.registrySpecifier),
+    );
+  }, [installableServers, collectionMcpJson.excludedServers]);
+
   const excludedServersNotice =
     collectionMcpJson.excludedCount === 1
       ? "1 server was excluded because it has no active endpoint."
@@ -211,7 +222,18 @@ function CollectionDetailInner() {
     setSelectedProjectSlug((current) => current ?? defaultProjectSlug);
   };
 
-  const totalTools = servers.reduce((sum, s) => sum + s.toolCount, 0);
+  const openBulkInstallDialog = () => {
+    const servers = installableServersWithEndpoint;
+    if (servers.length === 0) return;
+
+    if (collectionMcpJson.excludedCount > 0) {
+      toast.info(
+        `Installing ${servers.length} of ${rawServers.length} servers (${collectionMcpJson.excludedCount} ${collectionMcpJson.excludedCount === 1 ? "has" : "have"} no active endpoint).`,
+      );
+    }
+
+    setShowBulkInstallDialog(true);
+  };
 
   const handleDownloadCollectionMcpJson = () => {
     if (!collection || collectionMcpJson.includedCount === 0) {
@@ -259,41 +281,94 @@ function CollectionDetailInner() {
         />
       </Page.Header>
       <Page.Body>
-        <div className="flex gap-8">
+        <div className="flex flex-col gap-8 xl:flex-row">
           {/* Main content */}
           <div className="min-w-0 flex-1">
             {/* Header */}
-            <div className="mb-6 flex items-start gap-4">
-              <div className="bg-muted flex h-14 w-14 items-center justify-center rounded-lg border">
-                <Monitor className="text-muted-foreground h-7 w-7" />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-semibold">{collection.name}</h1>
-                  <Badge variant="outline" className="text-xs">
-                    {collection.visibility === "private" ? (
-                      <>
-                        <Lock className="mr-1 h-3 w-3" />
-                        Private
-                      </>
-                    ) : (
-                      <>
-                        <Globe className="mr-1 h-3 w-3" />
-                        Public
-                      </>
-                    )}
-                  </Badge>
+            <div className="bg-card mb-6 rounded-xl border p-5 shadow-sm">
+              <div className="flex flex-col gap-5 2xl:flex-row 2xl:items-start 2xl:justify-between">
+                <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start">
+                  <div className="bg-muted/60 flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border">
+                    <LayoutGrid className="text-muted-foreground h-8 w-8" />
+                  </div>
+                  <div className="min-w-0 space-y-3">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h1 className="truncate text-2xl font-semibold">
+                          {collection.name}
+                        </h1>
+                        <Badge variant="outline" className="text-xs">
+                          {collection.visibility === "private" ? (
+                            <>
+                              <Lock className="mr-1 h-3 w-3" />
+                              Private
+                            </>
+                          ) : (
+                            <>
+                              <Globe className="mr-1 h-3 w-3" />
+                              Public
+                            </>
+                          )}
+                        </Badge>
+                      </div>
+                      <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                        <span>
+                          {servers.length}{" "}
+                          {servers.length === 1 ? "server" : "servers"}
+                        </span>
+                        {collectionMcpJson.excludedCount > 0 && (
+                          <>
+                            <span aria-hidden="true">/</span>
+                            <span>
+                              {collectionMcpJson.excludedCount} unavailable
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-muted-foreground max-w-2xl text-sm">
+                      {collection.description ||
+                        "A reusable collection of MCP servers that can be installed into a project together."}
+                    </p>
+                  </div>
                 </div>
-                {collection.description && (
-                  <p className="text-muted-foreground text-sm">
-                    {collection.description}
-                  </p>
-                )}
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 2xl:shrink-0 2xl:justify-end">
+                  <RequireScope scope="project:write" level="component">
+                    <Button
+                      size="sm"
+                      className="w-full sm:w-auto"
+                      disabled={
+                        isLoading ||
+                        installableServersWithEndpoint.length === 0 ||
+                        projects.length === 0
+                      }
+                      onClick={openBulkInstallDialog}
+                    >
+                      <Button.LeftIcon>
+                        <Download />
+                      </Button.LeftIcon>
+                      <Button.Text>Install</Button.Text>
+                    </Button>
+                  </RequireScope>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="w-full sm:w-auto"
+                    disabled={
+                      isLoading || collectionMcpJson.includedCount === 0
+                    }
+                    onClick={handleDownloadCollectionMcpJson}
+                  >
+                    <Button.LeftIcon>
+                      <Download />
+                    </Button.LeftIcon>
+                    <Button.Text>Generate mcp.json</Button.Text>
+                  </Button>
                   <RequireScope scope="org:admin" level="component">
                     <Button
                       size="sm"
                       variant="secondary"
+                      className="w-full sm:w-auto"
                       onClick={() => {
                         setEditName(collection.name);
                         setEditDescription(collection.description);
@@ -302,24 +377,12 @@ function CollectionDetailInner() {
                         setEditing(true);
                       }}
                     >
-                      <Button.Icon>
+                      <Button.LeftIcon>
                         <Pencil />
-                      </Button.Icon>
+                      </Button.LeftIcon>
                       <Button.Text>Edit</Button.Text>
                     </Button>
                   </RequireScope>
-                  <Button
-                    size="sm"
-                    disabled={
-                      isLoading || collectionMcpJson.includedCount === 0
-                    }
-                    onClick={handleDownloadCollectionMcpJson}
-                  >
-                    <Button.Icon>
-                      <Download />
-                    </Button.Icon>
-                    <Button.Text>Generate mcp.json</Button.Text>
-                  </Button>
                 </div>
               </div>
             </div>
@@ -547,7 +610,9 @@ function CollectionDetailInner() {
             {/* About */}
             {!editing && (
               <div className="mb-4 rounded-lg border p-5">
-                <h2 className="mb-2 text-base font-semibold">About</h2>
+                <h2 className="mb-2 text-base font-semibold">
+                  About this collection
+                </h2>
                 <p className="text-muted-foreground text-sm">
                   {collection.description || "No description provided."}
                 </p>
@@ -557,9 +622,20 @@ function CollectionDetailInner() {
             {/* MCP Servers (read-only list) */}
             {!editing && (
               <div className="rounded-lg border p-5">
-                <h2 className="mb-4 text-base font-semibold">
-                  MCP Servers ({servers.length})
-                </h2>
+                <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h2 className="text-base font-semibold">
+                      Included servers
+                    </h2>
+                    <p className="text-muted-foreground mt-1 text-sm">
+                      These servers install together into the selected project.
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="shrink-0">
+                    <Server className="mr-1 h-3 w-3" />
+                    {servers.length}
+                  </Badge>
+                </div>
                 {isLoading ? (
                   <p className="text-muted-foreground text-sm">
                     Loading servers...
@@ -578,36 +654,34 @@ function CollectionDetailInner() {
                       return (
                         <div
                           key={server.registrySpecifier}
-                          className="flex items-center gap-3 rounded-md border p-3"
+                          className="bg-card hover:bg-accent/30 flex flex-col gap-4 rounded-lg border p-4 transition-colors sm:flex-row sm:items-center"
                         >
-                          <div className="bg-muted flex h-9 w-9 shrink-0 items-center justify-center rounded border">
-                            <Monitor className="text-muted-foreground h-4 w-4" />
+                          <div className="bg-muted/60 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border">
+                            {server.iconUrl ? (
+                              <img
+                                src={server.iconUrl}
+                                alt=""
+                                className="h-6 w-6 rounded"
+                              />
+                            ) : (
+                              <ServerIcon className="text-muted-foreground h-5 w-5" />
+                            )}
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <span className="truncate text-sm font-medium">
                                 {server.title ?? server.registrySpecifier}
                               </span>
-                              {(server.tools?.length ?? 0) > 0 && (
-                                <Badge
-                                  variant="secondary"
-                                  className="shrink-0 text-xs"
-                                >
-                                  <Wrench className="mr-1 h-3 w-3" />
-                                  {server.tools?.length ?? 0} tools
-                                </Badge>
-                              )}
                             </div>
-                            {server.description && (
-                              <p className="text-muted-foreground mt-0.5 truncate text-xs">
-                                {server.description}
-                              </p>
-                            )}
+                            <p className="text-muted-foreground mt-1 line-clamp-2 text-xs">
+                              {server.description || server.registrySpecifier}
+                            </p>
                           </div>
                           <RequireScope scope="project:write" level="component">
                             <Button
                               size="sm"
                               variant="secondary"
+                              className="w-full sm:w-auto"
                               disabled={
                                 !installableServer || projects.length === 0
                               }
@@ -617,10 +691,10 @@ function CollectionDetailInner() {
                                 }
                               }}
                             >
-                              <Button.Icon>
+                              <Button.LeftIcon>
                                 <Download />
-                              </Button.Icon>
-                              <Button.Text>Install</Button.Text>
+                              </Button.LeftIcon>
+                              <Button.Text>Install Server</Button.Text>
                             </Button>
                           </RequireScope>
                         </div>
@@ -630,19 +704,54 @@ function CollectionDetailInner() {
                 )}
               </div>
             )}
+          </div>
 
-            {/* Danger Zone */}
+          {/* Sidebar */}
+          <div className="w-full shrink-0 space-y-4 xl:w-72">
+            {/* Stats */}
+            <div className="rounded-lg border p-5">
+              <h3 className="mb-3 text-base font-semibold">Stats</h3>
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Servers</span>
+                  <span className="font-medium">{servers.length}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Details */}
+            <div className="rounded-lg border p-5">
+              <h3 className="mb-3 text-base font-semibold">Details</h3>
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Visibility</span>
+                  <span className="font-medium capitalize">
+                    {collection.visibility}
+                  </span>
+                </div>
+                {collection.createdAt && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Created</span>
+                    <span className="flex items-center gap-1 font-medium">
+                      <Calendar className="h-3.5 w-3.5" />
+                      {new Date(collection.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <RequireScope scope="org:admin" level="section">
-              <div className="border-destructive/30 mt-4 rounded-lg border p-5">
-                <h2 className="text-destructive mb-2 text-base font-semibold">
+              <div className="border-destructive/30 rounded-lg border p-5">
+                <h3 className="text-destructive mb-2 text-base font-semibold">
                   Danger Zone
-                </h2>
+                </h3>
                 <p className="text-muted-foreground mb-3 text-sm">
                   Permanently delete this collection. This action cannot be
                   undone.
                 </p>
                 {confirmDelete ? (
-                  <div className="flex items-center gap-2">
+                  <div className="space-y-2">
                     <Button
                       variant="destructive-primary"
                       size="sm"
@@ -681,46 +790,6 @@ function CollectionDetailInner() {
                 )}
               </div>
             </RequireScope>
-          </div>
-
-          {/* Sidebar */}
-          <div className="w-72 shrink-0 space-y-4">
-            {/* Stats */}
-            <div className="rounded-lg border p-5">
-              <h3 className="mb-3 text-base font-semibold">Stats</h3>
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Servers</span>
-                  <span className="font-medium">{servers.length}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Total Tools</span>
-                  <span className="font-medium">{totalTools}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Details */}
-            <div className="rounded-lg border p-5">
-              <h3 className="mb-3 text-base font-semibold">Details</h3>
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Visibility</span>
-                  <span className="font-medium capitalize">
-                    {collection.visibility}
-                  </span>
-                </div>
-                {collection.createdAt && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Created</span>
-                    <span className="flex items-center gap-1 font-medium">
-                      <Calendar className="h-3.5 w-3.5" />
-                      {new Date(collection.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
         </div>
         <Dialog
@@ -795,21 +864,24 @@ function CollectionDetailInner() {
             <Dialog.Footer>
               <Button
                 variant="secondary"
-                onClick={() => setPendingInstallServer(null)}
+                onClick={() => {
+                  setPendingInstallServer(null);
+                }}
               >
                 Cancel
               </Button>
               <Button
                 disabled={!pendingInstallServer || !selectedProjectOption}
                 onClick={() => {
-                  if (!pendingInstallServer || !selectedProjectOption) {
-                    return;
-                  }
+                  if (!selectedProjectOption) return;
 
                   setSelectedProjectSlug(selectedProjectOption.value);
-                  setActiveInstallServer(pendingInstallServer);
-                  setPendingInstallServer(null);
-                  setShowAddDialog(true);
+
+                  if (pendingInstallServer) {
+                    setActiveInstallServer(pendingInstallServer);
+                    setPendingInstallServer(null);
+                    setShowAddDialog(true);
+                  }
                 }}
               >
                 Continue
@@ -830,6 +902,13 @@ function CollectionDetailInner() {
             }}
           />
         )}
+        <CollectionInstallDialog
+          open={showBulkInstallDialog}
+          onOpenChange={setShowBulkInstallDialog}
+          collectionName={collection.name}
+          servers={installableServersWithEndpoint}
+          projects={projects}
+        />
       </Page.Body>
     </Page>
   );

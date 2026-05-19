@@ -21,7 +21,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -149,11 +149,10 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").Log(ctx, logger)
 		}
-		idpURL, err := s.identityResolver.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
+		idpURL, err := s.identityResolver.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
 			CallbackURL:     callbackURL,
 			Scope:           "",
 			State:           challengeID,
-			ClientID:        "",
 			ScopesSupported: nil,
 		})
 		if err != nil {

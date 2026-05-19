@@ -92,6 +92,62 @@ function getSubjectLabel(log: AuditLog) {
   return log.subjectDisplayName || log.subjectSlug || log.subjectId;
 }
 
+function recordString(value: unknown, key: string): string | undefined {
+  if (value == null || typeof value !== "object") return undefined;
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "string" && field !== "" ? field : undefined;
+}
+
+function formatRoleSlug(roleSlug: string) {
+  return roleSlug.replace(/[-_]/g, " ");
+}
+
+function inviteCreatedRole(log: AuditLog): string | undefined {
+  return recordString(log.metadata, "role_slug");
+}
+
+function inviteRoleBefore(log: AuditLog): string | undefined {
+  return (
+    recordString(log.beforeSnapshot, "RoleSlug") ??
+    recordString(log.beforeSnapshot, "role_slug")
+  );
+}
+
+function inviteRoleAfter(log: AuditLog): string | undefined {
+  return (
+    recordString(log.afterSnapshot, "RoleSlug") ??
+    recordString(log.afterSnapshot, "role_slug")
+  );
+}
+
+function inviteSubjectText(log: AuditLog) {
+  const subject = getSubjectLabel(log);
+
+  if (log.action === "organization_invitation:create") {
+    const role = inviteCreatedRole(log);
+    return role ? `${subject} as ${formatRoleSlug(role)}` : subject;
+  }
+
+  if (log.action === "organization_invitation:update_role") {
+    const before = inviteRoleBefore(log);
+    const after = inviteRoleAfter(log);
+    let roleText = "";
+    if (before && after && before !== after) {
+      roleText = ` from ${formatRoleSlug(before)} to ${formatRoleSlug(after)}`;
+    } else if (after) {
+      roleText = ` to ${formatRoleSlug(after)}`;
+    }
+
+    return `${subject}${roleText}`;
+  }
+
+  return subject;
+}
+
+function renderInviteSubject(log: AuditLog, monoClass: string) {
+  return <span className={monoClass}>{inviteSubjectText(log)}</span>;
+}
+
 function truncateMiddle(value: string, start = 18, end = 16) {
   if (value.length <= start + end + 1) {
     return value;
@@ -116,6 +172,8 @@ function getResourceLabel(resource: string) {
     case "otel_forwarding":
     case "otel_forwarding_config":
       return "OpenTelemetry forwarding";
+    case "organization_invitation":
+      return "organization invitation";
     case "plugin":
       return "plugin";
     case "project":
@@ -142,6 +200,10 @@ function formatAuditAction(action: string) {
 
 function renderSubject(log: AuditLog, orgSlug: string) {
   const monoClass = "font-mono text-xs text-muted-foreground";
+
+  if (log.subjectType === "organization_invitation") {
+    return renderInviteSubject(log, monoClass);
+  }
 
   if (log.subjectType === "deployment" && log.projectSlug) {
     return (
@@ -403,6 +465,12 @@ function renderVerb(log: AuditLog): string {
       return "enabled webhooks delivery";
     case "organization:webhooks_disabled":
       return "disabled webhooks delivery";
+    case "organization_invitation:create":
+      return "invited";
+    case "organization_invitation:revoke":
+      return "revoked invite for";
+    case "organization_invitation:update_role":
+      return "changed invite role for";
     default: {
       const [resource = "activity", verb = "updated"] = log.action.split(":");
       return `${verb.replace(/_/g, " ")} ${getResourceLabel(resource)}`;
@@ -477,10 +545,10 @@ function AuditLogRow({
         <span>
           <StrongName>
             {highlightMatch ? highlightMatch(actorLabel) : actorLabel}
-          </StrongName>
-          <span className="text-muted-foreground mx-1.5">
+          </StrongName>{" "}
+          <span className="text-muted-foreground">
             {highlightMatch ? highlightMatch(verbText) : verbText}
-          </span>
+          </span>{" "}
           {renderSubject(log, orgSlug)}
         </span>
         {showDiff && (
@@ -890,7 +958,10 @@ export function OrgAuditLogsInner() {
     const actor = getActorLabel(log);
     const action = formatAuditAction(log.action);
     const verb = renderVerb(log);
-    const subject = getSubjectLabel(log);
+    const subject =
+      log.subjectType === "organization_invitation"
+        ? inviteSubjectText(log)
+        : getSubjectLabel(log);
     return `${actor} ${action} ${verb} ${subject}`;
   }, []);
 

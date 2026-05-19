@@ -863,6 +863,7 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   client_secret_encrypted TEXT,
   client_id_issued_at timestamptz,
   client_secret_expires_at timestamptz,
+  token_endpoint_auth_method TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2399,8 +2400,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   slug TEXT CHECK (slug IS NULL OR slug <> ''),
 
   environment_id uuid,
-  external_oauth_server_id uuid,
-  oauth_proxy_server_id uuid,
+  user_session_issuer_id uuid,
   remote_mcp_server_id uuid,
   toolset_id uuid,
   visibility TEXT NOT NULL CHECK (visibility <> ''),
@@ -2413,8 +2413,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_pkey PRIMARY KEY (id),
   CONSTRAINT mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT mcp_servers_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL,
-  CONSTRAINT mcp_servers_external_oauth_server_id_fkey FOREIGN KEY (external_oauth_server_id) REFERENCES external_oauth_server_metadata (id) ON DELETE SET NULL,
-  CONSTRAINT mcp_servers_oauth_proxy_server_id_fkey FOREIGN KEY (oauth_proxy_server_id) REFERENCES oauth_proxy_servers (id) ON DELETE SET NULL,
+  CONSTRAINT mcp_servers_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
   CONSTRAINT mcp_servers_remote_mcp_server_id_fkey FOREIGN KEY (remote_mcp_server_id) REFERENCES remote_mcp_servers (id) ON DELETE RESTRICT,
   CONSTRAINT mcp_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
   -- Exactly one backend must be set: either a remote MCP server or a toolset.

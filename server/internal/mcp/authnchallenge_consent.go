@@ -26,6 +26,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	users_repo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -53,6 +55,10 @@ type consentTemplateData struct {
 	SubjectDisplay     string
 	RedirectURI        string
 	RemoteSessionCards []remoteSessionCard
+	// ConsentEnabled gates the "Give Access" button. True when there are no
+	// remote-session challenges, or when at least one challenge has been
+	// completed (a card is Connected). Cancel is always available.
+	ConsentEnabled bool
 }
 
 // remoteSessionCard is the per-remote view rendered by the {{range}} block
@@ -146,11 +152,19 @@ func (s *Service) handleConsentGet(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").Log(ctx, logger)
 	}
 
-	subjectDisplay := challengeState.Subject.String()
+	subjectDisplay := resolveSubjectDisplay(ctx, s.db, *challengeState.Subject)
 
 	cards, err := s.buildRemoteSessionCards(ctx, toolset, challengeState, mcpSlug)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build remote session cards").Log(ctx, logger)
+	}
+
+	consentEnabled := len(cards) == 0
+	for _, c := range cards {
+		if c.Connected {
+			consentEnabled = true
+			break
+		}
 	}
 
 	data := consentTemplateData{
@@ -161,6 +175,7 @@ func (s *Service) handleConsentGet(w http.ResponseWriter, r *http.Request) error
 		SubjectDisplay:     subjectDisplay,
 		RedirectURI:        challengeState.RedirectURI,
 		RemoteSessionCards: cards,
+		ConsentEnabled:     consentEnabled,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -296,6 +311,28 @@ func (s *Service) handleConsentPost(w http.ResponseWriter, r *http.Request) erro
 	// the user agent to GET the redirect target with NO body re-submission.
 	http.Redirect(w, r, clientRedirect, http.StatusSeeOther)
 	return nil
+}
+
+// resolveSubjectDisplay picks the friendliest label for the consent page's
+// "Signing in as" row. User-kind subjects look up the gram user and prefer
+// email then display_name; any miss (anonymous subject, deleted user, lookup
+// error) falls back to the URN string so the UI still renders.
+func resolveSubjectDisplay(ctx context.Context, db users_repo.DBTX, subject urn.SessionSubject) string {
+	fallback := subject.String()
+	if subject.Kind != urn.SessionSubjectKindUser {
+		return fallback
+	}
+	user, err := users_repo.New(db).GetUser(ctx, subject.ID)
+	if err != nil {
+		return fallback
+	}
+	if user.Email != "" {
+		return user.Email
+	}
+	if user.DisplayName != "" {
+		return user.DisplayName
+	}
+	return fallback
 }
 
 func buildConsentURL(baseURL, mcpSlug, stateID string) (string, error) {

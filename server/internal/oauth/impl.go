@@ -379,12 +379,11 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 
 	switch provider.ProviderType {
 	case string(OAuthProxyProviderTypeGram):
-		authURL, err = s.identity.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
+		authURL, err = s.identity.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
 			CallbackURL:     callbackURL,
 			Scope:           req.Scope,
 			State:           string(oauthReqInfoJSON),
 			ScopesSupported: provider.ScopesSupported,
-			ClientID:        "",
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to build gram OAuth URL").Log(ctx, s.logger)

@@ -83,6 +83,8 @@ type GetRoleResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
+	// Stable WorkOS role slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Human-readable description.
 	Description string `form:"description" json:"description" xml:"description"`
 	// Whether this is a built-in system role that cannot be deleted.
@@ -102,6 +104,8 @@ type CreateRoleResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
+	// Stable WorkOS role slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Human-readable description.
 	Description string `form:"description" json:"description" xml:"description"`
 	// Whether this is a built-in system role that cannot be deleted.
@@ -121,6 +125,8 @@ type UpdateRoleResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
+	// Stable WorkOS role slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Human-readable description.
 	Description string `form:"description" json:"description" xml:"description"`
 	// Whether this is a built-in system role that cannot be deleted.
@@ -2926,6 +2932,8 @@ type RoleResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
+	// Stable WorkOS role slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Human-readable description.
 	Description string `form:"description" json:"description" xml:"description"`
 	// Whether this is a built-in system role that cannot be deleted.
@@ -3171,6 +3179,7 @@ func NewGetRoleResponseBody(res *access.Role) *GetRoleResponseBody {
 	body := &GetRoleResponseBody{
 		ID:          res.ID,
 		Name:        res.Name,
+		Slug:        res.Slug,
 		Description: res.Description,
 		IsSystem:    res.IsSystem,
 		MemberCount: res.MemberCount,
@@ -3198,6 +3207,7 @@ func NewCreateRoleResponseBody(res *access.Role) *CreateRoleResponseBody {
 	body := &CreateRoleResponseBody{
 		ID:          res.ID,
 		Name:        res.Name,
+		Slug:        res.Slug,
 		Description: res.Description,
 		IsSystem:    res.IsSystem,
 		MemberCount: res.MemberCount,
@@ -3225,6 +3235,7 @@ func NewUpdateRoleResponseBody(res *access.Role) *UpdateRoleResponseBody {
 	body := &UpdateRoleResponseBody{
 		ID:          res.ID,
 		Name:        res.Name,
+		Slug:        res.Slug,
 		Description: res.Description,
 		IsSystem:    res.IsSystem,
 		MemberCount: res.MemberCount,

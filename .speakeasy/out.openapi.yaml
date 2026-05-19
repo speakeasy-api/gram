@@ -12216,6 +12216,94 @@ paths:
       x-speakeasy-name-override: sendInvite
       x-speakeasy-react-hook:
         name: SendInvite
+  /rpc/organizations.updateInviteRole:
+    put:
+      description: Change the role assigned to a pending WorkOS invitation.
+      operationId: updateInviteRole
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInviteRoleRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationInvitation'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: updateInviteRole organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: updateInviteRole
+      x-speakeasy-react-hook:
+        name: UpdateInviteRole
   /rpc/otelForwarding.deleteConfig:
     post:
       description: Delete the org-wide OTEL forwarding config.
@@ -32571,6 +32659,9 @@ components:
           type: string
           description: When the invitation was revoked.
           format: date-time
+        role_slug:
+          type: string
+          description: WorkOS role slug assigned when the invite is accepted.
         state:
           type: string
           description: Invitation lifecycle state.
@@ -34198,12 +34289,16 @@ components:
         name:
           type: string
           description: Display name of the role.
+        slug:
+          type: string
+          description: Stable WorkOS role slug.
         updated_at:
           type: string
           format: date-time
       required:
         - id
         - name
+        - slug
         - description
         - is_system
         - grants
@@ -36219,6 +36314,18 @@ components:
       required:
         - entries_to_update
         - entries_to_remove
+    UpdateInviteRoleRequestBody:
+      type: object
+      properties:
+        invitation_id:
+          type: string
+          description: WorkOS invitation ID.
+        role_id:
+          type: string
+          description: Role ID to assign to the invitee.
+      required:
+        - invitation_id
+        - role_id
     UpdateMcpEndpointForm:
       type: object
       properties:

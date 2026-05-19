@@ -23,6 +23,8 @@ type Service interface {
 	SendInvite(context.Context, *SendInvitePayload) (res *OrganizationInvitation, err error)
 	// Revoke a pending WorkOS invitation.
 	RevokeInvite(context.Context, *RevokeInvitePayload) (err error)
+	// Change the role assigned to a pending WorkOS invitation.
+	UpdateInviteRole(context.Context, *UpdateInviteRolePayload) (res *OrganizationInvitation, err error)
 	// List pending WorkOS invitations for the active organization.
 	ListInvites(context.Context, *ListInvitesPayload) (res *ListInvitesResult, err error)
 	// List users in the active organization from Gram
@@ -59,7 +61,7 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"get", "sendInvite", "revokeInvite", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession"}
+var MethodNames = [10]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession"}
 
 // CreatePortalSessionPayload is the payload type of the organizations service
 // createPortalSession method.
@@ -155,6 +157,8 @@ type OrganizationInvitation struct {
 	RevokedAt *string
 	// Gram user ID of the inviter, when known.
 	InviterUserID *string
+	// WorkOS role slug assigned when the invite is accepted.
+	RoleSlug *string
 	// When the invitation expires.
 	ExpiresAt *string
 	CreatedAt string
@@ -205,6 +209,16 @@ type SendInvitePayload struct {
 	Email string
 	// Optional role ID for the invitee.
 	RoleID       *string
+	SessionToken *string
+}
+
+// UpdateInviteRolePayload is the payload type of the organizations service
+// updateInviteRole method.
+type UpdateInviteRolePayload struct {
+	// WorkOS invitation ID.
+	InvitationID string
+	// Role ID to assign to the invitee.
+	RoleID       string
 	SessionToken *string
 }
 

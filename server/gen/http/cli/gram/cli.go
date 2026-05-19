@@ -96,7 +96,7 @@ func UsageCommands() []string {
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|update-mcp-server|delete-mcp-server)",
-		"organizations (get|send-invite|revoke-invite|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session)",
+		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins)",
@@ -837,6 +837,10 @@ func ParseEndpoint(
 		organizationsRevokeInviteFlags            = flag.NewFlagSet("revoke-invite", flag.ExitOnError)
 		organizationsRevokeInviteInvitationIDFlag = organizationsRevokeInviteFlags.String("invitation-id", "REQUIRED", "")
 		organizationsRevokeInviteSessionTokenFlag = organizationsRevokeInviteFlags.String("session-token", "", "")
+
+		organizationsUpdateInviteRoleFlags            = flag.NewFlagSet("update-invite-role", flag.ExitOnError)
+		organizationsUpdateInviteRoleBodyFlag         = organizationsUpdateInviteRoleFlags.String("body", "REQUIRED", "")
+		organizationsUpdateInviteRoleSessionTokenFlag = organizationsUpdateInviteRoleFlags.String("session-token", "", "")
 
 		organizationsListInvitesFlags            = flag.NewFlagSet("list-invites", flag.ExitOnError)
 		organizationsListInvitesSessionTokenFlag = organizationsListInvitesFlags.String("session-token", "", "")
@@ -1848,6 +1852,7 @@ func ParseEndpoint(
 	organizationsGetFlags.Usage = organizationsGetUsage
 	organizationsSendInviteFlags.Usage = organizationsSendInviteUsage
 	organizationsRevokeInviteFlags.Usage = organizationsRevokeInviteUsage
+	organizationsUpdateInviteRoleFlags.Usage = organizationsUpdateInviteRoleUsage
 	organizationsListInvitesFlags.Usage = organizationsListInvitesUsage
 	organizationsListUsersFlags.Usage = organizationsListUsersUsage
 	organizationsRemoveUserFlags.Usage = organizationsRemoveUserUsage
@@ -2625,6 +2630,9 @@ func ParseEndpoint(
 
 			case "revoke-invite":
 				epf = organizationsRevokeInviteFlags
+
+			case "update-invite-role":
+				epf = organizationsUpdateInviteRoleFlags
 
 			case "list-invites":
 				epf = organizationsListInvitesFlags
@@ -3639,6 +3647,9 @@ func ParseEndpoint(
 			case "revoke-invite":
 				endpoint = c.RevokeInvite()
 				data, err = organizationsc.BuildRevokeInvitePayload(*organizationsRevokeInviteInvitationIDFlag, *organizationsRevokeInviteSessionTokenFlag)
+			case "update-invite-role":
+				endpoint = c.UpdateInviteRole()
+				data, err = organizationsc.BuildUpdateInviteRolePayload(*organizationsUpdateInviteRoleBodyFlag, *organizationsUpdateInviteRoleSessionTokenFlag)
 			case "list-invites":
 				endpoint = c.ListInvites()
 				data, err = organizationsc.BuildListInvitesPayload(*organizationsListInvitesSessionTokenFlag)
@@ -7197,6 +7208,7 @@ func organizationsUsage() {
 	fmt.Fprintln(os.Stderr, `    get: Get the active organization from the session.`)
 	fmt.Fprintln(os.Stderr, `    send-invite: Send a WorkOS invitation for the active organization.`)
 	fmt.Fprintln(os.Stderr, `    revoke-invite: Revoke a pending WorkOS invitation.`)
+	fmt.Fprintln(os.Stderr, `    update-invite-role: Change the role assigned to a pending WorkOS invitation.`)
 	fmt.Fprintln(os.Stderr, `    list-invites: List pending WorkOS invitations for the active organization.`)
 	fmt.Fprintln(os.Stderr, `    list-users: List users in the active organization from Gram organization_user_relationships.`)
 	fmt.Fprintln(os.Stderr, `    remove-user: Remove a user from the active organization in Gram and delete their WorkOS organization membership.`)
@@ -7263,6 +7275,26 @@ func organizationsRevokeInviteUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations revoke-invite --invitation-id \"abc123\" --session-token \"abc123\"")
+}
+
+func organizationsUpdateInviteRoleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations update-invite-role", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Change the role assigned to a pending WorkOS invitation.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations update-invite-role --body '{\n      \"invitation_id\": \"abc123\",\n      \"role_id\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func organizationsListInvitesUsage() {

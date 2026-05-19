@@ -22,6 +22,7 @@ import {
   useListInvitesSuspense,
   useSendInviteMutation,
   useRevokeInviteMutation,
+  useUpdateInviteRoleMutation,
   useRemoveOrganizationUserMutation,
 } from "@gram/client/react-query";
 import { useMembers } from "@gram/client/react-query/members.js";
@@ -31,12 +32,38 @@ import {
   OrganizationInvitation,
 } from "@gram/client/models/components";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Button, Column, Stack, Table } from "@speakeasy-api/moonshine";
+import {
+  Button,
+  Column,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  Icon,
+  Input,
+  Stack,
+  Table,
+} from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, Trash2, UserPlus, Users, X } from "lucide-react";
-import { useState } from "react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Ellipsis,
+  RefreshCw,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-react";
+import { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { RequireScope } from "@/components/require-scope";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useOrgRoutes } from "@/routes";
+import { cn } from "@/lib/utils";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import { ChangeRoleDialog } from "@/pages/access/ChangeRoleDialog";
 
 function getMemberColors(id: string) {
   let hash = 2166136261;
@@ -75,7 +102,10 @@ export default function Team() {
 export function TeamInner() {
   const organization = useOrganization();
   const user = useUser();
+  const { isRbacEnabled } = useRBAC();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const orgRoutes = useOrgRoutes();
 
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -89,25 +119,62 @@ export function TeamInner() {
   );
   const [inviteToCancel, setInviteToCancel] =
     useState<OrganizationInvitation | null>(null);
+  const [changingMember, setChangingMember] = useState<AccessMember | null>(
+    null,
+  );
+
+  const MEMBERS_PAGE_SIZE = 10;
+  const [page, setPage] = useState(0);
+  const [search, setSearch] = useState("");
 
   const { data: membersData } = useListOrganizationUsersSuspense();
   const { data: invitesData } = useListInvitesSuspense();
   const { data: rolesData } = useRoles();
   const { data: accessMembersData } = useMembers();
 
-  const members = membersData?.users ?? [];
+  const allMembers = useMemo(
+    () =>
+      [...(membersData?.users ?? [])].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      ),
+    [membersData?.users],
+  );
+  const members = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return allMembers;
+    return allMembers.filter(
+      (m) =>
+        m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q),
+    );
+  }, [allMembers, search]);
+  const totalPages = Math.ceil(members.length / MEMBERS_PAGE_SIZE);
+  const safePage = Math.min(page, Math.max(totalPages - 1, 0));
+  const visibleMembers = members.slice(
+    safePage * MEMBERS_PAGE_SIZE,
+    (safePage + 1) * MEMBERS_PAGE_SIZE,
+  );
   const invites = invitesData?.invitations ?? [];
   const roles = rolesData?.roles ?? [];
   const accessMembers = accessMembersData?.members ?? [];
-  const defaultRoleId = roles.find(
-    (r) => r.name.toLowerCase() === "member",
-  )?.id;
-  const effectiveInviteRoleId = inviteRoleId ?? defaultRoleId;
+  const memberRole = roles.find(
+    (r) => r.slug === "member" || r.name.toLowerCase() === "member",
+  );
+  const memberRoleId = memberRole?.id;
+  const defaultRoleId = memberRoleId;
+  const effectiveInviteRoleId = isRbacEnabled
+    ? (inviteRoleId ?? defaultRoleId)
+    : memberRoleId;
 
   // Cross-reference AccessMember (has roleId) by user ID
   const roleByUserId = new Map(accessMembers.map((m) => [m.id, m.roleId]));
+  const accessMemberByUserId = new Map(accessMembers.map((m) => [m.id, m]));
+  const roleBySlug = new Map(roles.map((role) => [role.slug, role]));
   const getRoleName = (roleId: string) =>
     roles.find((r) => r.id === roleId)?.name ?? "Unknown";
+  const getInviteRole = (invite: OrganizationInvitation) =>
+    invite.roleSlug ? roleBySlug.get(invite.roleSlug) : undefined;
+  const getInviteRoleId = (invite: OrganizationInvitation) =>
+    getInviteRole(invite)?.id;
 
   // Identify admin role and count admins for last-admin protection
   const adminRoleId = roles.find((r) => r.name.toLowerCase() === "admin")?.id;
@@ -131,20 +198,30 @@ export function TeamInner() {
       : undefined;
 
   const inviteMutation = useSendInviteMutation({
-    onError: () => {
-      toast.error("Failed to send invite");
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to send invite",
+      );
     },
   });
 
   const removeMemberMutation = useRemoveOrganizationUserMutation({
-    onError: () => {
-      toast.error("Failed to remove member");
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to remove member",
+      );
     },
   });
 
   const revokeInviteMutation = useRevokeInviteMutation({
     onError: () => {
       toast.error("Failed to cancel invite");
+    },
+  });
+
+  const updateInviteRoleMutation = useUpdateInviteRoleMutation({
+    onError: () => {
+      toast.error("Failed to update invite role");
     },
   });
 
@@ -216,10 +293,39 @@ export function TeamInner() {
     );
   };
 
+  const handleUpdateInviteRole = (
+    invite: OrganizationInvitation,
+    roleId: string,
+  ) => {
+    if (!isRbacEnabled) return;
+    if (!roleId || roleId === getInviteRoleId(invite)) return;
+
+    updateInviteRoleMutation.mutate(
+      {
+        request: {
+          updateInviteRoleRequestBody: {
+            invitationId: invite.id,
+            roleId,
+          },
+        },
+      },
+      {
+        onSuccess: async () => {
+          await invalidateAllListInvites(queryClient);
+          toast.success(`Invite role changed to ${getRoleName(roleId)}`);
+        },
+      },
+    );
+  };
+
   const handleResendInvite = (invite: OrganizationInvitation) => {
+    const inviteRoleId = isRbacEnabled
+      ? (getInviteRoleId(invite) ?? effectiveInviteRoleId)
+      : memberRoleId;
+
     // Must revoke first — the unique partial index (org_id, email) WHERE
     // state = 'pending' blocks a second pending invite for the same email.
-    // Pass the effective role ID so the resent invite preserves the role.
+    // Pass this invite's role ID so the resent invite preserves the role.
     revokeInviteMutation.mutate(
       { request: { invitationId: invite.id } },
       {
@@ -229,7 +335,7 @@ export function TeamInner() {
               request: {
                 sendInviteRequestBody: {
                   email: invite.email,
-                  roleId: effectiveInviteRoleId,
+                  roleId: inviteRoleId,
                 },
               },
             },
@@ -308,19 +414,30 @@ export function TeamInner() {
         </Type>
       ),
     },
-    {
-      key: "role",
-      header: "Role",
-      width: "140px",
-      render: (member) => {
-        const roleId = roleByUserId.get(member.userId);
-        return (
-          <Type variant="body" className="text-muted-foreground">
-            {roleId ? getRoleName(roleId) : "—"}
-          </Type>
-        );
-      },
-    },
+    ...(isRbacEnabled
+      ? [
+          {
+            key: "role",
+            header: "Role",
+            width: "140px",
+            render: (member) => {
+              const roleId = roleByUserId.get(member.userId);
+              if (!roleId)
+                return <span className="text-muted-foreground">—</span>;
+              return (
+                <Type variant="body">
+                  <Link
+                    to={`${orgRoutes.access.roles.href()}?editRole=${roleId}`}
+                    className="text-primary hover:text-primary/80 underline decoration-dotted underline-offset-4 transition-colors"
+                  >
+                    {getRoleName(roleId)}
+                  </Link>
+                </Type>
+              );
+            },
+          } satisfies Column<OrganizationUser>,
+        ]
+      : []),
     {
       key: "lastLogin",
       header: "Last active",
@@ -341,38 +458,84 @@ export function TeamInner() {
     {
       key: "actions",
       header: "",
-      width: "80px",
+      width: "60px",
       render: (member) => {
         const memberRoleId = roleByUserId.get(member.userId);
         const isLastAdmin =
           adminRoleId != null &&
           memberRoleId === adminRoleId &&
           adminCount <= 1;
-
-        if (member.email === user.email) {
-          return (
-            <Type variant="body" className="text-muted-foreground text-sm">
-              You
-            </Type>
-          );
-        }
-
-        if (isLastAdmin) return null;
+        const isSelf = member.email === user.email;
+        const roleId = roleByUserId.get(member.userId);
+        const accessMember: AccessMember | undefined =
+          accessMemberByUserId.get(member.userId) ??
+          (roleId
+            ? {
+                id: member.userId,
+                name: member.name,
+                email: member.email,
+                photoUrl: member.photoUrl,
+                roleId,
+                joinedAt: member.createdAt,
+              }
+            : undefined);
 
         return (
-          <RequireScope scope="org:admin" level="component">
-            <Button
-              variant="tertiary"
-              size="sm"
-              onClick={() => setMemberToRemove(member)}
-              className="hover:text-destructive"
-            >
-              <Button.LeftIcon>
-                <Trash2 className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text className="sr-only">Remove member</Button.Text>
-            </Button>
-          </RequireScope>
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors",
+                )}
+              >
+                <Ellipsis className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {isRbacEnabled && accessMember && !isSelf && (
+                <RequireScope scope="org:admin" level="component">
+                  <DropdownMenuItem
+                    onSelect={() =>
+                      setTimeout(() => setChangingMember(accessMember), 0)
+                    }
+                  >
+                    Change role
+                  </DropdownMenuItem>
+                </RequireScope>
+              )}
+              {isRbacEnabled && (
+                <DropdownMenuItem
+                  onSelect={() =>
+                    setTimeout(
+                      () =>
+                        navigate(
+                          `${orgRoutes.access.challenges.href()}?identity=${encodeURIComponent(member.email)}`,
+                        ),
+                      0,
+                    )
+                  }
+                >
+                  View challenges
+                </DropdownMenuItem>
+              )}
+              {!isSelf && !isLastAdmin && (
+                <>
+                  {isRbacEnabled && <DropdownMenuSeparator />}
+                  <RequireScope scope="org:admin" level="component">
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onSelect={() =>
+                        setTimeout(() => setMemberToRemove(member), 0)
+                      }
+                    >
+                      Remove member
+                    </DropdownMenuItem>
+                  </RequireScope>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         );
       },
     },
@@ -409,6 +572,48 @@ export function TeamInner() {
         );
       },
     },
+    ...(isRbacEnabled
+      ? [
+          {
+            key: "role",
+            header: "Role",
+            width: "180px",
+            render: (invite) => {
+              const inviteRole = getInviteRole(invite);
+              if (roles.length === 0) {
+                return (
+                  <Type variant="body" className="text-muted-foreground">
+                    {invite.roleSlug ?? "—"}
+                  </Type>
+                );
+              }
+
+              return (
+                <Select
+                  value={inviteRole?.id}
+                  onValueChange={(roleId) =>
+                    handleUpdateInviteRole(invite, roleId)
+                  }
+                  disabled={updateInviteRoleMutation.isPending}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={invite.roleSlug ?? "Select role"}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roles.map((role) => (
+                      <SelectItem key={role.id} value={role.id}>
+                        {role.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              );
+            },
+          } satisfies Column<OrganizationInvitation>,
+        ]
+      : []),
     {
       key: "invitedBy",
       header: "Invited by",
@@ -548,25 +753,79 @@ export function TeamInner() {
             </RequireScope>
           </Stack>
 
-          <Table
-            columns={memberColumns}
-            data={members}
-            rowKey={(row) => row.userId}
-            className="min-h-fit"
-            noResultsMessage={
-              <Stack
-                gap={2}
-                className="bg-background h-full p-8"
-                align="center"
-                justify="center"
-              >
-                <Users className="text-muted-foreground h-12 w-12" />
-                <Type variant="body" className="text-muted-foreground">
-                  No team members yet
-                </Type>
-              </Stack>
-            }
-          />
+          <div className="relative">
+            <Icon
+              name="search"
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+            />
+            <Input
+              type="text"
+              placeholder="Search members..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(0);
+              }}
+              className="mb-4 w-full py-2 pl-9 text-sm"
+            />
+          </div>
+
+          <div className="min-h-[580px]">
+            <Table
+              columns={memberColumns}
+              data={visibleMembers}
+              rowKey={(row) => row.userId}
+              className="min-h-fit"
+              noResultsMessage={
+                <Stack
+                  gap={2}
+                  className="bg-background h-full p-8"
+                  align="center"
+                  justify="center"
+                >
+                  <Users className="text-muted-foreground h-12 w-12" />
+                  <Type variant="body" className="text-muted-foreground">
+                    {search
+                      ? "No members matching your search"
+                      : "No team members yet"}
+                  </Type>
+                </Stack>
+              }
+            />
+          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t px-4 py-3">
+              <Type variant="body" className="text-muted-foreground text-sm">
+                {safePage * MEMBERS_PAGE_SIZE + 1}–
+                {Math.min((safePage + 1) * MEMBERS_PAGE_SIZE, members.length)}{" "}
+                of {members.length}
+              </Type>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  onClick={() => setPage((p) => p - 1)}
+                  disabled={safePage === 0}
+                >
+                  <Button.LeftIcon>
+                    <ChevronLeft className="size-4" />
+                  </Button.LeftIcon>
+                  <Button.Text className="sr-only">Previous page</Button.Text>
+                </Button>
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={safePage >= totalPages - 1}
+                >
+                  <Button.LeftIcon>
+                    <ChevronRight className="size-4" />
+                  </Button.LeftIcon>
+                  <Button.Text className="sr-only">Next page</Button.Text>
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Pending Invites Section */}
@@ -624,7 +883,7 @@ export function TeamInner() {
               data-lpignore="true"
               data-bwignore
             />
-            {roles.length > 0 && (
+            {isRbacEnabled && roles.length > 0 && (
               <AnyField
                 label="Role"
                 optionality="hidden"
@@ -741,6 +1000,16 @@ export function TeamInner() {
           </div>
         </Dialog.Content>
       </Dialog>
+
+      {/* Change Role Dialog */}
+      {isRbacEnabled && (
+        <ChangeRoleDialog
+          member={changingMember}
+          onOpenChange={(open) => {
+            if (!open) setChangingMember(null);
+          }}
+        />
+      )}
     </>
   );
 }

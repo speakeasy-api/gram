@@ -42,7 +42,7 @@ type mockIdentityResolver struct {
 	hasAccessOK     bool
 }
 
-func (m *mockIdentityResolver) BuildAuthorizationURL(_ context.Context, _ sessions.AuthURLParams) (*url.URL, error) {
+func (m *mockIdentityResolver) BuildAuthorizationURL(_ context.Context, _ identity.AuthorizationURLParams) (*url.URL, error) {
 	return m.buildAuthURLResult, m.buildAuthURLErr
 }
 

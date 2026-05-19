@@ -77,6 +77,28 @@ func (m *mockWorkOSFetcher) CreateOrganizationMembership(_ context.Context, work
 	return "om_mock_" + workosUserID, nil
 }
 
+func (m *mockWorkOSFetcher) GetOrgMembership(_ context.Context, workosUserID, workosOrgID string) (*workos.Member, error) {
+	for _, member := range m.members[workosUserID] {
+		if member.OrganizationID == workosOrgID {
+			return &member, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *mockWorkOSFetcher) UpdateMemberRole(_ context.Context, membershipID, roleSlug string) (*workos.Member, error) {
+	for userID, members := range m.members {
+		for i := range members {
+			if members[i].ID == membershipID {
+				members[i].RoleSlug = roleSlug
+				m.members[userID] = members
+				return &members[i], nil
+			}
+		}
+	}
+	return nil, nil
+}
+
 // --- test setup that wires a WorkOSMembershipFetcher into the session manager ---
 
 type e2eInstance struct {
@@ -653,6 +675,65 @@ func TestE2E_Callback_IDPOrgSelection(t *testing.T) {
 	expectedOrgB := orgid.FromWorkOSID(workosOrgB)
 	assert.Equal(t, expectedOrgB, infoResult.ActiveOrganizationID,
 		"active org should be the one selected in the IDP auth flow, not the first org")
+}
+
+func TestE2E_Callback_AcceptsPendingInviteAndAppliesRole(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01INVITE_SSO"
+		workosOrgID  = "org_01INVITE_SSO"
+		gramOrgID    = "invite-sso-org"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_01INVITE_SSO", UserID: workosUserID, OrganizationID: workosOrgID, Organization: "Invite SSO", RoleSlug: "member"},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: "Invite SSO", ExternalID: gramOrgID},
+		},
+	}
+	userInfo := &MockUserInfo{
+		UserID:         workosUserID,
+		Email:          "invite-sso@example.com",
+		OrganizationID: workosOrgID,
+		Organizations:  []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	workosID := workosOrgID
+	require.NoError(t, inst.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:       gramOrgID,
+		Name:     "Invite SSO",
+		Slug:     "invite-sso",
+		WorkosID: &workosID,
+	}, ""))
+
+	invite, err := orgRepo.New(inst.conn).CreateInvitation(ctx, orgRepo.CreateInvitationParams{
+		OrganizationID: gramOrgID,
+		Email:          userInfo.Email,
+		TokenHash:      "invite-sso-token-hash",
+		InviterUserID:  pgtype.Text{String: "", Valid: false},
+		RoleSlug:       pgtype.Text{String: "admin", Valid: true},
+		ExpiresInDays:  7,
+	})
+	require.NoError(t, err)
+
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+
+	storedInvite, err := orgRepo.New(inst.conn).GetInvitationByID(ctx, invite.ID)
+	require.NoError(t, err)
+	require.Equal(t, "accepted", storedInvite.State)
+
+	member, err := fetcher.GetOrgMembership(ctx, workosUserID, workosOrgID)
+	require.NoError(t, err)
+	require.NotNil(t, member)
+	require.Equal(t, "admin", member.RoleSlug)
 }
 
 // TestE2E_Callback_ThenInfo exercises the full login→info flow.
