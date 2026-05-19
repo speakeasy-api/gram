@@ -78,7 +78,7 @@ type GetConfigByOrgAndProviderRow struct {
 	OrganizationID  string
 	Provider        string
 	ProjectID       uuid.UUID
-	ApiKeyEncrypted pgtype.Text
+	ApiKeyEncrypted string
 	Enabled         bool
 	ID              uuid.UUID
 	Deleted         bool
@@ -149,7 +149,7 @@ type ListEnabledConfigsByProviderRow struct {
 	OrganizationID  string
 	Provider        string
 	ProjectID       uuid.UUID
-	ApiKeyEncrypted pgtype.Text
+	ApiKeyEncrypted string
 	Enabled         bool
 	ID              uuid.UUID
 	Deleted         bool
@@ -168,6 +168,100 @@ func (q *Queries) ListEnabledConfigsByProvider(ctx context.Context, provider str
 	var items []ListEnabledConfigsByProviderRow
 	for rows.Next() {
 		var i ListEnabledConfigsByProviderRow
+		if err := rows.Scan(
+			&i.CreatedAt,
+			&i.DeletedAt,
+			&i.UpdatedAt,
+			&i.OrganizationID,
+			&i.Provider,
+			&i.ProjectID,
+			&i.ApiKeyEncrypted,
+			&i.Enabled,
+			&i.ID,
+			&i.Deleted,
+			&i.SyncID,
+			&i.LastPolledAt,
+			&i.SyncCreatedAt,
+			&i.SyncUpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsagePollCandidates = `-- name: ListUsagePollCandidates :many
+SELECT
+    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.api_key_encrypted, c.enabled, c.id, c.deleted
+  , s.id AS sync_id
+  , s.last_polled_at
+  , s.created_at AS sync_created_at
+  , s.updated_at AS sync_updated_at
+FROM ai_integration_syncs s
+JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
+WHERE c.provider = $1
+  AND c.enabled IS TRUE
+  AND c.deleted IS FALSE
+  AND c.api_key_encrypted IS NOT NULL
+  AND s.last_polled_at < $2
+  AND (
+    $3::timestamptz IS NULL
+    OR (s.last_polled_at, c.organization_id, c.provider) > (
+      $3::timestamptz,
+      $4::text,
+      $5::text
+    )
+  )
+ORDER BY s.last_polled_at ASC, c.organization_id ASC, c.provider ASC
+LIMIT $6
+`
+
+type ListUsagePollCandidatesParams struct {
+	Provider             string
+	LastPolledBefore     pgtype.Timestamptz
+	CursorLastPolledAt   pgtype.Timestamptz
+	CursorOrganizationID pgtype.Text
+	CursorProvider       pgtype.Text
+	LimitCount           int32
+}
+
+type ListUsagePollCandidatesRow struct {
+	CreatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	OrganizationID  string
+	Provider        string
+	ProjectID       uuid.UUID
+	ApiKeyEncrypted string
+	Enabled         bool
+	ID              uuid.UUID
+	Deleted         bool
+	SyncID          uuid.UUID
+	LastPolledAt    pgtype.Timestamptz
+	SyncCreatedAt   pgtype.Timestamptz
+	SyncUpdatedAt   pgtype.Timestamptz
+}
+
+func (q *Queries) ListUsagePollCandidates(ctx context.Context, arg ListUsagePollCandidatesParams) ([]ListUsagePollCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listUsagePollCandidates,
+		arg.Provider,
+		arg.LastPolledBefore,
+		arg.CursorLastPolledAt,
+		arg.CursorOrganizationID,
+		arg.CursorProvider,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUsagePollCandidatesRow
+	for rows.Next() {
+		var i ListUsagePollCandidatesRow
 		if err := rows.Scan(
 			&i.CreatedAt,
 			&i.DeletedAt,
@@ -229,6 +323,23 @@ func (q *Queries) UpdateSyncLastPolledAt(ctx context.Context, arg UpdateSyncLast
 	return err
 }
 
+const updateUsagePollWatermark = `-- name: UpdateUsagePollWatermark :exec
+UPDATE ai_integration_syncs
+SET last_polled_at = $1,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = $2
+`
+
+type UpdateUsagePollWatermarkParams struct {
+	LastPolledAt          pgtype.Timestamptz
+	AiIntegrationConfigID uuid.UUID
+}
+
+func (q *Queries) UpdateUsagePollWatermark(ctx context.Context, arg UpdateUsagePollWatermarkParams) error {
+	_, err := q.db.Exec(ctx, updateUsagePollWatermark, arg.LastPolledAt, arg.AiIntegrationConfigID)
+	return err
+}
+
 const upsertConfig = `-- name: UpsertConfig :one
 INSERT INTO ai_integration_configs (
     organization_id
@@ -256,7 +367,7 @@ type UpsertConfigParams struct {
 	OrganizationID  string
 	Provider        string
 	ProjectID       uuid.UUID
-	ApiKeyEncrypted pgtype.Text
+	ApiKeyEncrypted string
 	Enabled         bool
 }
 

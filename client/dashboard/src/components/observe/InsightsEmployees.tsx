@@ -285,10 +285,6 @@ export function InsightsEmployeesContent() {
 
   const members = useMemo(() => membersData?.members ?? [], [membersData]);
   const roles = useMemo(() => rolesData?.roles ?? [], [rolesData]);
-  const memberIds = useMemo(
-    () => members.map((member) => member.id),
-    [members],
-  );
   const usageQuery = useQuery({
     queryKey: [
       "insights",
@@ -296,20 +292,15 @@ export function InsightsEmployeesContent() {
       "usage",
       from.toISOString(),
       to.toISOString(),
-      memberIds,
     ],
-    queryFn: () => fetchEmployeeUsage(client, from, to, memberIds),
-    enabled: memberIds.length > 0,
+    queryFn: () => fetchEmployeeUsage(client, from, to),
     throwOnError: false,
   });
   const usageSummaries = useMemo(
     () => usageQuery.data ?? [],
     [usageQuery.data],
   );
-  const isLoading =
-    membersLoading ||
-    rolesLoading ||
-    (memberIds.length > 0 && usageQuery.isLoading);
+  const isLoading = membersLoading || rolesLoading || usageQuery.isLoading;
   const error = membersError ?? usageQuery.error;
   const allEmployees = useMemo(
     () => buildEmployees(members, roles, usageSummaries),
@@ -354,8 +345,8 @@ export function InsightsEmployeesContent() {
     0,
   );
   const employeesBase = `/${orgSlug}/projects/${projectSlug}/insights/employees`;
-  const openUser = (name: string) => {
-    navigate(`${employeesBase}/${slugify(name)}`);
+  const openUser = (employee: Employee) => {
+    navigate(`${employeesBase}/${routeSegmentForEmployee(employee)}`);
   };
   const enrollmentRate =
     totalEmployees > 0 ? (enrolledEmployees / totalEmployees) * 100 : 0;
@@ -488,7 +479,7 @@ export function InsightsEmployeesContent() {
                   value={totalEmployees}
                   icon="user"
                   accentColor="blue"
-                  subtext="Organization members"
+                  subtext="Members plus unmatched usage"
                 />
                 <MetricCard
                   title="Enrolled"
@@ -530,7 +521,7 @@ function EmployeeTable({
   onSelectUser,
 }: {
   employees: Employee[];
-  onSelectUser: (name: string) => void;
+  onSelectUser: (employee: Employee) => void;
 }) {
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
@@ -586,7 +577,7 @@ function EmployeeTable({
                 <TableRow
                   key={item.id}
                   className="cursor-pointer"
-                  onClick={() => onSelectUser(item.name)}
+                  onClick={() => onSelectUser(item)}
                 >
                   <TableCell className="pl-6">
                     <div className="flex items-center gap-3">
@@ -627,7 +618,7 @@ function EmployeeTable({
                       aria-label={`View ${item.name}`}
                       onClick={(event) => {
                         event.stopPropagation();
-                        onSelectUser(item.name);
+                        onSelectUser(item);
                       }}
                     >
                       View
@@ -679,6 +670,13 @@ function EmployeeTable({
       </div>
     </section>
   );
+}
+
+function routeSegmentForEmployee(employee: Employee) {
+  if (employee.id.startsWith("usage:") && employee.name.includes("@")) {
+    return encodeURIComponent(employee.name);
+  }
+  return slugify(employee.name);
 }
 
 function EnrollmentLegend() {
@@ -783,42 +781,67 @@ function buildEmployees(
   const summaryByUserId = new Map(
     summaries.map((summary) => [summary.userId, summary]),
   );
+  const summaryByEmail = new Map(
+    summaries
+      .filter((summary) => summary.userId.includes("@"))
+      .map((summary) => [summary.userId.toLowerCase(), summary]),
+  );
+  const matchedSummaryIds = new Set<string>();
 
-  return members
-    .map((member) => {
-      const summary = summaryByUserId.get(member.id);
-      const tokenCount =
-        (summary?.totalInputTokens ?? 0) + (summary?.totalOutputTokens ?? 0);
-      const status: EmployeeStatus =
-        summary != null ? "enrolled" : "not_enrolled";
+  const employees = members.map((member) => {
+    const summary =
+      summaryByUserId.get(member.id) ??
+      summaryByEmail.get(member.email.toLowerCase());
+    if (summary) {
+      matchedSummaryIds.add(summary.userId);
+    }
+    const tokenCount =
+      (summary?.totalInputTokens ?? 0) + (summary?.totalOutputTokens ?? 0);
+    const status: EmployeeStatus =
+      summary != null ? "enrolled" : "not_enrolled";
 
+    return {
+      id: member.id,
+      name: member.name,
+      email: member.email,
+      role: roleNameById.get(member.roleId) ?? member.roleId,
+      status,
+      tokenCount,
+      photoUrl: member.photoUrl,
+      lastActivity: summary
+        ? formatUnixNano(summary.lastSeenUnixNano)
+        : "No activity found",
+    };
+  });
+
+  const unmatchedUsage = summaries
+    .filter((summary) => !matchedSummaryIds.has(summary.userId))
+    .map((summary) => {
+      const tokenCount = summary.totalInputTokens + summary.totalOutputTokens;
       return {
-        id: member.id,
-        name: member.name,
-        email: member.email,
-        role: roleNameById.get(member.roleId) ?? member.roleId,
-        status,
+        id: `usage:${summary.userId}`,
+        name: summary.userId,
+        email: summary.userId.includes("@") ? summary.userId : "",
+        role: "-",
+        status: "enrolled" as const,
         tokenCount,
-        photoUrl: member.photoUrl,
-        lastActivity: summary
-          ? formatUnixNano(summary.lastSeenUnixNano)
-          : "No activity found",
+        lastActivity: formatUnixNano(summary.lastSeenUnixNano),
       };
-    })
-    .sort((a, b) => {
-      if (a.status !== b.status) {
-        return a.status === "not_enrolled" ? -1 : 1;
-      }
-
-      return a.name.localeCompare(b.name);
     });
+
+  return [...employees, ...unmatchedUsage].sort((a, b) => {
+    if (a.status !== b.status) {
+      return a.status === "not_enrolled" ? -1 : 1;
+    }
+
+    return a.name.localeCompare(b.name);
+  });
 }
 
 async function fetchEmployeeUsage(
   client: Parameters<typeof telemetrySearchUsers>[0],
   from: Date,
   to: Date,
-  userIds: string[],
 ): Promise<UserSummary[]> {
   const users: UserSummary[] = [];
   let cursor: string | undefined;
@@ -831,8 +854,6 @@ async function fetchEmployeeUsage(
           filter: {
             from,
             to,
-            userIds,
-            eventSource: "hook",
           },
           limit: 1000,
           sort: "desc",

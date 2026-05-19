@@ -88,30 +88,63 @@ func (l *Logger) checkToolIOLogsEnabled(ctx context.Context, organizationID stri
 }
 
 func (l *Logger) Log(ctx context.Context, params LogParams) {
+	if err := l.LogBulk(ctx, []LogParams{params}); err != nil {
+		l.logger.ErrorContext(ctx, "failed to insert telemetry log", attr.SlogError(err))
+	}
+}
+
+func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
+	if len(params) == 0 {
+		return nil
+	}
+
 	shutdownCtx := l.shutdownCtx()
 
 	chRepo := repo.New(l.chConn)
 
-	enabled, err := l.logsEnabled(shutdownCtx, params.ToolInfo.OrganizationID)
-	if err != nil || !enabled {
-		return
+	logParams := make([]repo.InsertTelemetryLogParams, 0, len(params))
+	logsEnabledByOrg := make(map[string]bool)
+	toolIOLogsEnabledByOrg := make(map[string]bool)
+
+	for _, param := range params {
+		enabled, ok := logsEnabledByOrg[param.ToolInfo.OrganizationID]
+		if !ok {
+			var err error
+			enabled, err = l.logsEnabled(shutdownCtx, param.ToolInfo.OrganizationID)
+			if err != nil || !enabled {
+				logsEnabledByOrg[param.ToolInfo.OrganizationID] = false
+				continue
+			}
+			logsEnabledByOrg[param.ToolInfo.OrganizationID] = true
+		}
+		if !enabled {
+			continue
+		}
+
+		toolIOEnabled, ok := toolIOLogsEnabledByOrg[param.ToolInfo.OrganizationID]
+		if !ok {
+			toolIOEnabled = l.checkToolIOLogsEnabled(shutdownCtx, param.ToolInfo.OrganizationID)
+			toolIOLogsEnabledByOrg[param.ToolInfo.OrganizationID] = toolIOEnabled
+		}
+
+		// Scrub tool IO content if the feature is disabled for this organization.
+		if !toolIOEnabled {
+			delete(param.Attributes, attr.GenAIToolCallArgumentsKey)
+			delete(param.Attributes, attr.GenAIToolCallResultKey)
+		}
+
+		logParam, err := buildTelemetryLogParams(param)
+		if err != nil {
+			l.logger.ErrorContext(ctx, "failed to build telemetry log params", attr.SlogError(err))
+			continue
+		}
+		logParams = append(logParams, *logParam)
 	}
 
-	// Scrub tool IO content if the feature is disabled for this organization.
-	if !l.checkToolIOLogsEnabled(shutdownCtx, params.ToolInfo.OrganizationID) {
-		delete(params.Attributes, attr.GenAIToolCallArgumentsKey)
-		delete(params.Attributes, attr.GenAIToolCallResultKey)
+	if len(logParams) == 0 {
+		return nil
 	}
-
-	logParams, err := buildTelemetryLogParams(params)
-	if err != nil {
-		l.logger.ErrorContext(ctx, "failed to build telemetry log params", attr.SlogError(err))
-		return
-	}
-
-	if err := chRepo.InsertTelemetryLog(shutdownCtx, *logParams); err != nil {
-		l.logger.ErrorContext(ctx, "failed to insert telemetry log", attr.SlogError(err))
-	}
+	return chRepo.InsertTelemetryLogs(shutdownCtx, logParams)
 }
 
 // buildTelemetryLogParams constructs InsertTelemetryLogParams from attributes.

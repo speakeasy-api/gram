@@ -20,7 +20,7 @@ export type UpsertOtelForwardingConfigRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  upsertConfigRequestBody: components.UpsertConfigRequestBody;
+  upsertConfigRequestBody2: components.UpsertConfigRequestBody2;
 };
 
 /** @internal */
@@ -60,7 +60,7 @@ export function upsertOtelForwardingConfigSecurityToJSON(
 export type UpsertOtelForwardingConfigRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
-  UpsertConfigRequestBody: components.UpsertConfigRequestBody$Outbound;
+  UpsertConfigRequestBody2: components.UpsertConfigRequestBody2$Outbound;
 };
 
 /** @internal */
@@ -71,13 +71,14 @@ export const UpsertOtelForwardingConfigRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-    upsertConfigRequestBody: components.UpsertConfigRequestBody$outboundSchema,
+    upsertConfigRequestBody2:
+      components.UpsertConfigRequestBody2$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
-      upsertConfigRequestBody: "UpsertConfigRequestBody",
+      upsertConfigRequestBody2: "UpsertConfigRequestBody2",
     });
   }),
 );
