@@ -1,13 +1,10 @@
 package remotesessions
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
 
@@ -23,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/environments"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -31,46 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
-
-// dcrHTTPTimeout caps every outbound RFC 7591 registration call so a slow
-// upstream cannot tie up the request handler.
-const dcrHTTPTimeout = 10 * time.Second
-
-// dcrMaxBodyBytes bounds the registration response body to keep a hostile
-// upstream from exhausting memory. Currently 1 MiB.
-const dcrMaxBodyBytes = 1 << 20
-
-// rfc7591Request is the subset of an RFC 7591 Dynamic Client Registration
-// request body Gram sends when auto-registering against an issuer's
-// registration_endpoint.
-type rfc7591Request struct {
-	ClientName              string   `json:"client_name,omitempty"`
-	RedirectURIs            []string `json:"redirect_uris,omitempty"`
-	GrantTypes              []string `json:"grant_types,omitempty"`
-	ResponseTypes           []string `json:"response_types,omitempty"`
-	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method,omitempty"`
-	Scope                   string   `json:"scope,omitempty"`
-}
-
-// dcrParams collects the inputs the RFC 7591 helper accepts. ClientName,
-// RedirectURIs are optional caller overrides; Scopes is the union of scopes
-// the issuer advertised.
-type dcrParams struct {
-	RegistrationEndpoint string
-	Scopes               []string
-	ClientName           string
-	RedirectURIs         []string
-}
-
-// rfc7591Response is the subset of an RFC 7591 registration response Gram
-// persists. client_id_issued_at and client_secret_expires_at are seconds since
-// the Unix epoch per the spec.
-type rfc7591Response struct {
-	ClientID              string `json:"client_id"`
-	ClientSecret          string `json:"client_secret,omitempty"`
-	ClientIDIssuedAt      int64  `json:"client_id_issued_at,omitempty"`
-	ClientSecretExpiresAt int64  `json:"client_secret_expires_at,omitempty"`
-}
 
 func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.CreateRemoteSessionClientPayload) (*types.RemoteSessionClient, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -560,59 +516,3 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 	return nil
 }
 
-// registerClientViaDCR fires an RFC 7591 Dynamic Client Registration request
-// against the issuer's registration_endpoint. The guardian.Policy supplies an
-// SSRF-gated HTTP client.
-func registerClientViaDCR(ctx context.Context, policy *guardian.Policy, params dcrParams) (rfc7591Response, error) {
-	clientName := params.ClientName
-	if strings.TrimSpace(clientName) == "" {
-		clientName = "Speakeasy"
-	}
-	reqBody, err := json.Marshal(rfc7591Request{
-		ClientName:              clientName,
-		RedirectURIs:            params.RedirectURIs,
-		GrantTypes:              []string{"authorization_code", "refresh_token"},
-		ResponseTypes:           []string{"code"},
-		TokenEndpointAuthMethod: "client_secret_basic",
-		Scope:                   strings.Join(params.Scopes, " "),
-	})
-	if err != nil {
-		return rfc7591Response{}, fmt.Errorf("marshal dcr request: %w", err)
-	}
-
-	reqCtx, cancel := context.WithTimeout(ctx, dcrHTTPTimeout)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, params.RegistrationEndpoint, bytes.NewReader(reqBody))
-	if err != nil {
-		return rfc7591Response{}, fmt.Errorf("build dcr request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := policy.Client().Do(req)
-	if err != nil {
-		return rfc7591Response{}, fmt.Errorf("dcr request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, dcrMaxBodyBytes))
-	if err != nil {
-		return rfc7591Response{}, fmt.Errorf("read dcr response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return rfc7591Response{}, fmt.Errorf("dcr returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var dcr rfc7591Response
-	if err := json.Unmarshal(body, &dcr); err != nil {
-		return rfc7591Response{}, fmt.Errorf("decode dcr response: %w", err)
-	}
-
-	if strings.TrimSpace(dcr.ClientID) == "" {
-		return rfc7591Response{}, fmt.Errorf("dcr response missing client_id")
-	}
-
-	return dcr, nil
-}

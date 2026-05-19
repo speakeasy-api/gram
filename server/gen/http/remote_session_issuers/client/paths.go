@@ -17,11 +17,6 @@ func CreateRemoteSessionIssuerRemoteSessionIssuersPath() string {
 	return "/rpc/remoteSessionIssuers.create"
 }
 
-// RegisterRemoteSessionIssuerRemoteSessionIssuersPath returns the URL path to the remoteSessionIssuers service registerRemoteSessionIssuer HTTP endpoint.
-func RegisterRemoteSessionIssuerRemoteSessionIssuersPath() string {
-	return "/rpc/remoteSessionIssuers.register"
-}
-
 // UpdateRemoteSessionIssuerRemoteSessionIssuersPath returns the URL path to the remoteSessionIssuers service updateRemoteSessionIssuer HTTP endpoint.
 func UpdateRemoteSessionIssuerRemoteSessionIssuersPath() string {
 	return "/rpc/remoteSessionIssuers.update"

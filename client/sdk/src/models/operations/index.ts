@@ -191,7 +191,6 @@ export * from "./receiveworkoswebhook.js";
 export * from "./redeploydeployment.js";
 export * from "./register.js";
 export * from "./registerdomain.js";
-export * from "./registerremotesessionissuer.js";
 export * from "./removeoauthserver.js";
 export * from "./removeorganizationuser.js";
 export * from "./removepluginserver.js";

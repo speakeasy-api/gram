@@ -104,7 +104,7 @@ func UsageCommands() []string {
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|verify-url|delete-server)",
 		"remote-session-clients (create-remote-session-client|clone-client-fromoauth-proxy-provider|update-remote-session-client|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
-		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|register-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
+		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-by-chat|get-risk-policy-status|list-shadow-mcp-approvals|approve-shadow-mcp|revoke-shadow-mcp-approval|trigger-risk-analysis)",
@@ -1123,12 +1123,6 @@ func ParseEndpoint(
 		remoteSessionIssuersCreateRemoteSessionIssuerApikeyTokenFlag      = remoteSessionIssuersCreateRemoteSessionIssuerFlags.String("apikey-token", "", "")
 		remoteSessionIssuersCreateRemoteSessionIssuerProjectSlugInputFlag = remoteSessionIssuersCreateRemoteSessionIssuerFlags.String("project-slug-input", "", "")
 
-		remoteSessionIssuersRegisterRemoteSessionIssuerFlags                = flag.NewFlagSet("register-remote-session-issuer", flag.ExitOnError)
-		remoteSessionIssuersRegisterRemoteSessionIssuerBodyFlag             = remoteSessionIssuersRegisterRemoteSessionIssuerFlags.String("body", "REQUIRED", "")
-		remoteSessionIssuersRegisterRemoteSessionIssuerSessionTokenFlag     = remoteSessionIssuersRegisterRemoteSessionIssuerFlags.String("session-token", "", "")
-		remoteSessionIssuersRegisterRemoteSessionIssuerApikeyTokenFlag      = remoteSessionIssuersRegisterRemoteSessionIssuerFlags.String("apikey-token", "", "")
-		remoteSessionIssuersRegisterRemoteSessionIssuerProjectSlugInputFlag = remoteSessionIssuersRegisterRemoteSessionIssuerFlags.String("project-slug-input", "", "")
-
 		remoteSessionIssuersUpdateRemoteSessionIssuerFlags                = flag.NewFlagSet("update-remote-session-issuer", flag.ExitOnError)
 		remoteSessionIssuersUpdateRemoteSessionIssuerBodyFlag             = remoteSessionIssuersUpdateRemoteSessionIssuerFlags.String("body", "REQUIRED", "")
 		remoteSessionIssuersUpdateRemoteSessionIssuerSessionTokenFlag     = remoteSessionIssuersUpdateRemoteSessionIssuerFlags.String("session-token", "", "")
@@ -1921,7 +1915,6 @@ func ParseEndpoint(
 	remoteSessionIssuersFlags.Usage = remoteSessionIssuersUsage
 	remoteSessionIssuersDiscoverRemoteSessionIssuerFlags.Usage = remoteSessionIssuersDiscoverRemoteSessionIssuerUsage
 	remoteSessionIssuersCreateRemoteSessionIssuerFlags.Usage = remoteSessionIssuersCreateRemoteSessionIssuerUsage
-	remoteSessionIssuersRegisterRemoteSessionIssuerFlags.Usage = remoteSessionIssuersRegisterRemoteSessionIssuerUsage
 	remoteSessionIssuersUpdateRemoteSessionIssuerFlags.Usage = remoteSessionIssuersUpdateRemoteSessionIssuerUsage
 	remoteSessionIssuersListRemoteSessionIssuersFlags.Usage = remoteSessionIssuersListRemoteSessionIssuersUsage
 	remoteSessionIssuersGetRemoteSessionIssuerFlags.Usage = remoteSessionIssuersGetRemoteSessionIssuerUsage
@@ -2821,9 +2814,6 @@ func ParseEndpoint(
 
 			case "create-remote-session-issuer":
 				epf = remoteSessionIssuersCreateRemoteSessionIssuerFlags
-
-			case "register-remote-session-issuer":
-				epf = remoteSessionIssuersRegisterRemoteSessionIssuerFlags
 
 			case "update-remote-session-issuer":
 				epf = remoteSessionIssuersUpdateRemoteSessionIssuerFlags
@@ -3838,9 +3828,6 @@ func ParseEndpoint(
 			case "create-remote-session-issuer":
 				endpoint = c.CreateRemoteSessionIssuer()
 				data, err = remotesessionissuersc.BuildCreateRemoteSessionIssuerPayload(*remoteSessionIssuersCreateRemoteSessionIssuerBodyFlag, *remoteSessionIssuersCreateRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersCreateRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersCreateRemoteSessionIssuerProjectSlugInputFlag)
-			case "register-remote-session-issuer":
-				endpoint = c.RegisterRemoteSessionIssuer()
-				data, err = remotesessionissuersc.BuildRegisterRemoteSessionIssuerPayload(*remoteSessionIssuersRegisterRemoteSessionIssuerBodyFlag, *remoteSessionIssuersRegisterRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersRegisterRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersRegisterRemoteSessionIssuerProjectSlugInputFlag)
 			case "update-remote-session-issuer":
 				endpoint = c.UpdateRemoteSessionIssuer()
 				data, err = remotesessionissuersc.BuildUpdateRemoteSessionIssuerPayload(*remoteSessionIssuersUpdateRemoteSessionIssuerBodyFlag, *remoteSessionIssuersUpdateRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersUpdateRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersUpdateRemoteSessionIssuerProjectSlugInputFlag)
@@ -8521,7 +8508,6 @@ func remoteSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    discover-remote-session-issuer: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. No persistence.`)
 	fmt.Fprintln(os.Stderr, `    create-remote-session-issuer: Create a new remote_session_issuer.`)
-	fmt.Fprintln(os.Stderr, `    register-remote-session-issuer: Perform an RFC 7591 Dynamic Client Registration call against an existing issuer's registration_endpoint and persist the issued credentials as a new remote_session_client. The issuer must already have a registration_endpoint configured.`)
 	fmt.Fprintln(os.Stderr, `    update-remote-session-issuer: Update fields on an existing remote_session_issuer.`)
 	fmt.Fprintln(os.Stderr, `    list-remote-session-issuers: List remote_session_issuers in the caller's project.`)
 	fmt.Fprintln(os.Stderr, `    get-remote-session-issuer: Get a remote_session_issuer by id or by slug. Provide exactly one.`)
@@ -8576,30 +8562,6 @@ func remoteSessionIssuersCreateRemoteSessionIssuerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers create-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func remoteSessionIssuersRegisterRemoteSessionIssuerUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers register-remote-session-issuer", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Perform an RFC 7591 Dynamic Client Registration call against an existing issuer's registration_endpoint and persist the issued credentials as a new remote_session_client. The issuer must already have a registration_endpoint configured.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers register-remote-session-issuer --body '{\n      \"client_name\": \"abc123\",\n      \"redirect_uris\": [\n         \"abc123\"\n      ],\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionIssuersUpdateRemoteSessionIssuerUsage() {
