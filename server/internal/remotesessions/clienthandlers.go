@@ -137,9 +137,13 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 			return nil, oops.E(oops.CodeBadRequest, nil, "issuer has no registration_endpoint; auto_register unavailable").Log(ctx, logger)
 		}
 
+		dcrScopes := payload.Scope
+		if len(dcrScopes) == 0 {
+			dcrScopes = issuer.ScopesSupported
+		}
 		dcrResp, err := registerClientViaDCR(ctx, s.policy, dcrParams{
 			RegistrationEndpoint: regEndpoint,
-			Scopes:               issuer.ScopesSupported,
+			Scopes:               dcrScopes,
 			ClientName:           "",
 			RedirectURIs:         nil,
 		})
