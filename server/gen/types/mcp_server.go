@@ -16,6 +16,9 @@ type McpServer struct {
 	ProjectID string
 	// The ID of the environment associated with the server
 	EnvironmentID *string
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication for this server, if any.
+	UserSessionIssuerID *string
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string
 	// The ID of the toolset used as the backend

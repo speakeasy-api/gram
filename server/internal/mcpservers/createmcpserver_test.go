@@ -3,6 +3,7 @@ package mcpservers_test
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
@@ -86,6 +87,57 @@ func TestCreateMcpServer_BothBackends(t *testing.T) {
 		RemoteMcpServerID: &serverID,
 		ToolsetID:         &toolsetID,
 		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func TestCreateMcpServer_WithUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	result, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		EnvironmentID:       nil,
+		UserSessionIssuerID: &issuerID,
+		RemoteMcpServerID:   &serverID,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.UserSessionIssuerID)
+	require.Equal(t, issuerID, *result.UserSessionIssuerID)
+}
+
+func TestCreateMcpServer_InvalidUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	// Issuer UUID that does not exist in this project.
+	bogusIssuerID := uuid.NewString()
+
+	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		EnvironmentID:       nil,
+		UserSessionIssuerID: &bogusIssuerID,
+		RemoteMcpServerID:   &serverID,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("disabled"),
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 }

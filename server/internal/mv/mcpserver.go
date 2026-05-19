@@ -12,14 +12,15 @@ import (
 // type.
 func BuildMcpServerView(server repo.McpServer) *types.McpServer {
 	return &types.McpServer{
-		ID:                server.ID.String(),
-		ProjectID:         server.ProjectID.String(),
-		EnvironmentID:     conv.FromNullableUUID(server.EnvironmentID),
-		RemoteMcpServerID: conv.FromNullableUUID(server.RemoteMcpServerID),
-		ToolsetID:         conv.FromNullableUUID(server.ToolsetID),
-		Visibility:        types.McpServerVisibility(server.Visibility),
-		CreatedAt:         server.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:         server.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                  server.ID.String(),
+		ProjectID:           server.ProjectID.String(),
+		EnvironmentID:       conv.FromNullableUUID(server.EnvironmentID),
+		UserSessionIssuerID: conv.FromNullableUUID(server.UserSessionIssuerID),
+		RemoteMcpServerID:   conv.FromNullableUUID(server.RemoteMcpServerID),
+		ToolsetID:           conv.FromNullableUUID(server.ToolsetID),
+		Visibility:          types.McpServerVisibility(server.Visibility),
+		CreatedAt:           server.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:           server.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 

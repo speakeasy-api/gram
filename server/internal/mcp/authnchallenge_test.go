@@ -240,7 +240,7 @@ func TestHandleConsentGet_RendersCSRFToken(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  stateID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		Endpoint: mcp.LegacyMcpEndpointRef{
+		Endpoint: mcp.EndpointRef{
 			McpSlug:        toolset.McpSlug.String,
 			CustomDomainID: toolset.CustomDomainID,
 		},
@@ -278,7 +278,7 @@ func TestHandleConsentPost_RejectsInvalidCSRFToken(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  stateID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		Endpoint: mcp.LegacyMcpEndpointRef{
+		Endpoint: mcp.EndpointRef{
 			McpSlug:        toolset.McpSlug.String,
 			CustomDomainID: toolset.CustomDomainID,
 		},
@@ -321,7 +321,7 @@ func TestHandleConsentPost_ApproveWithCSRFRedirectsWithCode(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  stateID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		Endpoint: mcp.LegacyMcpEndpointRef{
+		Endpoint: mcp.EndpointRef{
 			McpSlug:        toolset.McpSlug.String,
 			CustomDomainID: toolset.CustomDomainID,
 		},
@@ -383,7 +383,7 @@ func TestHandleIDPCallback_ExchangesCodeAndRedirectsToConsent(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		Endpoint: mcp.LegacyMcpEndpointRef{
+		Endpoint: mcp.EndpointRef{
 			McpSlug:        toolset.McpSlug.String,
 			CustomDomainID: toolset.CustomDomainID,
 		},
@@ -420,6 +420,79 @@ func TestHandleIDPCallback_ExchangesCodeAndRedirectsToConsent(t *testing.T) {
 	require.NotContains(t, loc, challengeID, "challenge state should be rotated after IDP callback")
 }
 
+// TestHandleIDPCallback_UsesBaseURLFromCachedState verifies that the
+// consent-redirect Location is built from the BaseURL snapshotted onto
+// the cached EndpointRef at mint time, rather than from s.serverURL.
+// The IDP callback is registered at a global URL and loses the
+// originating request's customdomains.Context, so without this
+// snapshot a challenge minted under a custom domain would be resumed
+// on the server default origin — breaking the consent redirect URL
+// match for custom-domain MCP clients.
+func TestHandleIDPCallback_UsesBaseURLFromCachedState(t *testing.T) {
+	t.Parallel()
+
+	gramUserID := "user-" + uuid.New().String()[:8]
+	mock := &mockIdentityResolver{
+		exchangeResult: &identity.IDPUserInfo{
+			Sub:   "workos-user-baseurl",
+			Email: "test@example.com",
+			Name:  "Test User",
+		},
+		upsertResult: gramUserID,
+		hasAccessResult: &sessions.Organization{
+			ID:   "org-id-placeholder",
+			Name: "Test Org",
+		},
+		hasAccessEmail: "test@example.com",
+		hasAccessOK:    true,
+	}
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+
+	const customDomainBaseURL = "https://gram.custom.example.com"
+	challengeID := uuid.NewString()
+	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:                  challengeID,
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		Endpoint: mcp.EndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+			BaseURL:        customDomainBaseURL,
+			RouteBase:      "mcp",
+		},
+		ClientID:            "test-client",
+		RedirectURI:         "http://localhost:3000/callback",
+		State:               "client-state",
+		CodeChallenge:       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+		CodeChallengeMethod: "S256",
+		CSRFToken:           "csrf-token",
+		CreatedAt:           time.Now(),
+	})
+	require.NoError(t, err)
+
+	mcpSlug := toolset.McpSlug.String
+	q := url.Values{
+		"state": {challengeID},
+		"code":  {"idp-auth-code-baseurl"},
+	}
+	// Request arrives at the global /mcp/idp_callback URL — no
+	// customdomains.Context, so without the snapshot the redirect
+	// would fall back to s.serverURL.
+	req := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?"+q.Encode(), nil)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, chi.NewRouteContext()))
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleIDPCallback(w, req))
+	require.Equal(t, http.StatusFound, w.Code)
+
+	loc := w.Header().Get("Location")
+	require.True(t, strings.HasPrefix(loc, customDomainBaseURL+"/"), "consent redirect must start with the cached BaseURL (custom domain origin); got %q", loc)
+	require.NotContains(t, loc, "0.0.0.0", "consent redirect must not fall back to the server default origin when BaseURL is set")
+	require.Contains(t, loc, "/connect", "should redirect to consent page")
+	require.Contains(t, loc, "/"+mcpSlug+"/connect", "should include the slug under /mcp")
+}
+
 func TestHandleIDPCallback_UserNotInOrg_ReturnsForbidden(t *testing.T) {
 	t.Parallel()
 
@@ -440,7 +513,7 @@ func TestHandleIDPCallback_UserNotInOrg_ReturnsForbidden(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		Endpoint: mcp.LegacyMcpEndpointRef{
+		Endpoint: mcp.EndpointRef{
 			McpSlug:        toolset.McpSlug.String,
 			CustomDomainID: toolset.CustomDomainID,
 		},
@@ -500,7 +573,7 @@ func TestHandleIDPCallback_IDPError_ForwardsToClient(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		Endpoint: mcp.LegacyMcpEndpointRef{
+		Endpoint: mcp.EndpointRef{
 			McpSlug:        toolset.McpSlug.String,
 			CustomDomainID: toolset.CustomDomainID,
 		},
@@ -571,7 +644,7 @@ func TestHandleIDPCallback_ToolsetMismatch_ReturnsUnauthorized(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		Endpoint: mcp.LegacyMcpEndpointRef{
+		Endpoint: mcp.EndpointRef{
 			McpSlug:        "wrong-toolset-slug",
 			CustomDomainID: uuid.NullUUID{Valid: false},
 		},
@@ -611,7 +684,7 @@ func TestHandleIDPCallback_MissingCode_ReturnsError(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		Endpoint: mcp.LegacyMcpEndpointRef{
+		Endpoint: mcp.EndpointRef{
 			McpSlug:        toolset.McpSlug.String,
 			CustomDomainID: toolset.CustomDomainID,
 		},
@@ -655,7 +728,7 @@ func TestHandleIDPCallback_ExchangeFailure_ReturnsUnauthorized(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		Endpoint: mcp.LegacyMcpEndpointRef{
+		Endpoint: mcp.EndpointRef{
 			McpSlug:        toolset.McpSlug.String,
 			CustomDomainID: toolset.CustomDomainID,
 		},

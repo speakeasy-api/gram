@@ -22,10 +22,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	users_repo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -50,6 +48,7 @@ var remoteSetHashEmpty = func() string {
 type consentTemplateData struct {
 	ClientName         string
 	MCPSlug            string
+	MCPRouteBase       string
 	State              string
 	CSRFToken          string
 	SubjectDisplay     string
@@ -88,41 +87,35 @@ type remoteSessionCard struct {
 //     scope) and 302 the MCP client to its registered redirect_uri with
 //     `?code={code}&state={original_state}`.
 func (s *Service) HandleConsent(w http.ResponseWriter, r *http.Request) error {
-	switch r.Method {
-	case http.MethodGet:
-		return s.handleConsentGet(w, r)
-	case http.MethodPost:
-		return s.handleConsentPost(w, r)
-	default:
-		return oops.E(oops.CodeBadRequest, nil, "method not allowed").Log(r.Context(), s.logger)
-	}
-}
-
-func (s *Service) handleConsentGet(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
 	}
-
-	toolset, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
-	switch {
-	case errors.Is(err, errToolsetNotFound):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
-	}
-	if !toolset.UserSessionIssuerID.Valid {
-		return oops.E(oops.CodeNotFound, nil, "not found")
-	}
-	if err := s.requireUserSessionIssuer(ctx, toolset); err != nil {
+	endpoint, err := s.loadResolvedMcpEndpointByToolsetSlug(ctx, mcpSlug)
+	if err != nil {
 		return err
 	}
+	return s.ServeConsent(w, r, endpoint)
+}
 
-	logger := s.logger.With(
-		attr.SlogToolsetID(toolset.ID.String()),
-		attr.SlogProjectID(toolset.ProjectID.String()),
-	)
+// ServeConsent is the post-resolution entry point for the consent UI
+// (GET) and consent POST handlers, shared by /mcp's HandleConsent
+// (toolset-keyed) and /x/mcp's mcp_endpoint-keyed route registration.
+func (s *Service) ServeConsent(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+	switch r.Method {
+	case http.MethodGet:
+		return s.serveConsentGet(w, r, endpoint)
+	case http.MethodPost:
+		return s.serveConsentPost(w, r, endpoint)
+	default:
+		return oops.E(oops.CodeBadRequest, nil, "method not allowed").Log(r.Context(), s.logger)
+	}
+}
+
+func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+	ctx := r.Context()
+	logger := endpoint.LogWith(s.logger)
 
 	stateID := r.URL.Query().Get("state")
 	if stateID == "" {
@@ -133,12 +126,12 @@ func (s *Service) handleConsentGet(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").Log(ctx, logger)
 	}
-	if err := compareToolsetEndpoint(toolset, challengeState.Endpoint); err != nil {
+	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").Log(ctx, logger)
 	}
 
 	client, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		ClientID:            challengeState.ClientID,
 	})
 	if err != nil {
@@ -154,7 +147,7 @@ func (s *Service) handleConsentGet(w http.ResponseWriter, r *http.Request) error
 
 	subjectDisplay := resolveSubjectDisplay(ctx, s.db, *challengeState.Subject)
 
-	cards, err := s.buildRemoteSessionCards(ctx, toolset, challengeState, mcpSlug)
+	cards, err := s.buildRemoteSessionCards(ctx, endpoint, challengeState)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build remote session cards").Log(ctx, logger)
 	}
@@ -169,7 +162,8 @@ func (s *Service) handleConsentGet(w http.ResponseWriter, r *http.Request) error
 
 	data := consentTemplateData{
 		ClientName:         client.ClientName,
-		MCPSlug:            mcpSlug,
+		MCPSlug:            endpoint.Slug,
+		MCPRouteBase:       endpoint.RouteBase,
 		State:              stateID,
 		CSRFToken:          challengeState.CSRFToken,
 		SubjectDisplay:     subjectDisplay,
@@ -186,12 +180,8 @@ func (s *Service) handleConsentGet(w http.ResponseWriter, r *http.Request) error
 	return nil
 }
 
-func (s *Service) handleConsentPost(w http.ResponseWriter, r *http.Request) error {
+func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
-	mcpSlug := chi.URLParam(r, "mcpSlug")
-	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
-	}
 
 	// Cap form body to defend against memory exhaustion (gosec G120). The
 	// consent form has a few short fields; 16 KiB is generous.
@@ -200,24 +190,7 @@ func (s *Service) handleConsentPost(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeBadRequest, err, "failed to parse form").Log(ctx, s.logger)
 	}
 
-	toolset, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
-	switch {
-	case errors.Is(err, errToolsetNotFound):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
-	}
-	if !toolset.UserSessionIssuerID.Valid {
-		return oops.E(oops.CodeNotFound, nil, "not found")
-	}
-	if err := s.requireUserSessionIssuer(ctx, toolset); err != nil {
-		return err
-	}
-
-	logger := s.logger.With(
-		attr.SlogToolsetID(toolset.ID.String()),
-		attr.SlogProjectID(toolset.ProjectID.String()),
-	)
+	logger := endpoint.LogWith(s.logger)
 
 	stateID := r.PostForm.Get("state")
 	if stateID == "" {
@@ -232,7 +205,7 @@ func (s *Service) handleConsentPost(w http.ResponseWriter, r *http.Request) erro
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").Log(ctx, logger)
 	}
-	if err := compareToolsetEndpoint(toolset, challengeState.Endpoint); err != nil {
+	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").Log(ctx, logger)
 	}
 
@@ -264,7 +237,7 @@ func (s *Service) handleConsentPost(w http.ResponseWriter, r *http.Request) erro
 
 	// Resolve the user_session_clients row id for the consent FK.
 	clientRow, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		ClientID:            challengeState.ClientID,
 	})
 	if err != nil {
@@ -293,7 +266,7 @@ func (s *Service) handleConsentPost(w http.ResponseWriter, r *http.Request) erro
 
 	grant := UserSessionGrant{
 		Code:                code,
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		UserSessionClientID: clientRow.ID,
 		ClientID:            challengeState.ClientID,
 		RedirectURI:         challengeState.RedirectURI,
@@ -335,21 +308,6 @@ func resolveSubjectDisplay(ctx context.Context, db users_repo.DBTX, subject urn.
 	return fallback
 }
 
-func buildConsentURL(baseURL, mcpSlug, stateID string) (string, error) {
-	consentURL, err := url.JoinPath(baseURL, "mcp", mcpSlug, "connect")
-	if err != nil {
-		return "", fmt.Errorf("join consent path: %w", err)
-	}
-	u, err := url.Parse(consentURL)
-	if err != nil {
-		return "", fmt.Errorf("parse consent URL: %w", err)
-	}
-	q := u.Query()
-	q.Set("state", stateID)
-	u.RawQuery = q.Encode()
-	return u.String(), nil
-}
-
 // buildClientRedirect produces the URL to redirect the MCP client to,
 // preserving any prior query string on redirectURI and adding `code` (success)
 // or `error` / `error_description` (failure) plus the original `state`.
@@ -385,18 +343,17 @@ func isUniqueViolation(err error) bool {
 }
 
 // buildRemoteSessionCards loads every remote_session_client linked to the
-// toolset's user_session_issuer and materialises a card per client. Each
+// endpoint's user_session_issuer and materialises a card per client. Each
 // card carries a connected/disconnected state (read from remote_sessions
 // for the stamped subject) plus the upstream authorize URL minted by the
 // ChallengeManager. Mints fresh per-card Redis state on every render —
 // the 10-min TTL keeps abandoned states from piling up.
 func (s *Service) buildRemoteSessionCards(
 	ctx context.Context,
-	toolset *toolsets_repo.Toolset,
+	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
-	mcpSlug string,
 ) ([]remoteSessionCard, error) {
-	clients, err := s.remoteChallengeMgr.ListClients(ctx, toolset.ProjectID, toolset.UserSessionIssuerID.UUID)
+	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.UserSessionIssuerID)
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
@@ -409,7 +366,7 @@ func (s *Service) buildRemoteSessionCards(
 	// anonymous late-bind); the per-card check below then resolves false.
 	var connectedIDs map[uuid.UUID]struct{}
 	if challengeState.Subject != nil && !challengeState.Subject.IsZero() {
-		connectedIDs, err = s.remoteChallengeMgr.ConnectedClientIDs(ctx, *challengeState.Subject, toolset.UserSessionIssuerID.UUID)
+		connectedIDs, err = s.remoteChallengeMgr.ConnectedClientIDs(ctx, *challengeState.Subject, endpoint.UserSessionIssuerID)
 		if err != nil {
 			return nil, fmt.Errorf("connected client ids: %w", err)
 		}
@@ -417,10 +374,11 @@ func (s *Service) buildRemoteSessionCards(
 
 	parent := remotesessions.ParentChallenge{
 		ID:                  challengeState.ID,
-		ProjectID:           toolset.ProjectID,
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		ProjectID:           endpoint.ProjectID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		Subject:             challengeState.Subject,
-		McpSlug:             mcpSlug,
+		McpSlug:             endpoint.Slug,
+		RouteBase:           endpoint.RouteBase,
 		FinalRedirectURI:    "",
 	}
 

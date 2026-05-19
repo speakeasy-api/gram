@@ -66,7 +66,7 @@ func TestRemoteLoginCallback_AuthenticatedSubject(t *testing.T) {
 	require.NoError(t, authnCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  parentID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
-		Endpoint: mcp.LegacyMcpEndpointRef{
+		Endpoint: mcp.EndpointRef{
 			McpSlug:        result.Toolset.McpSlug.String,
 			CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		},
@@ -110,7 +110,7 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 	require.NoError(t, authnCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  parentID,
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
-		Endpoint: mcp.LegacyMcpEndpointRef{
+		Endpoint: mcp.EndpointRef{
 			McpSlug:        result.Toolset.McpSlug.String,
 			CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		},

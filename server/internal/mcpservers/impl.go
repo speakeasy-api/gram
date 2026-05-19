@@ -33,6 +33,7 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 type Service struct {
@@ -95,6 +96,7 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 
 	ids, err := parseServerIDs(
 		payload.EnvironmentID,
+		payload.UserSessionIssuerID,
 		payload.RemoteMcpServerID,
 		payload.ToolsetID,
 	)
@@ -118,11 +120,12 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	}
 
 	server, err := txRepo.CreateMCPServer(ctx, repo.CreateMCPServerParams{
-		ProjectID:         *authCtx.ProjectID,
-		EnvironmentID:     ids.EnvironmentID,
-		RemoteMcpServerID: ids.RemoteMcpServerID,
-		ToolsetID:         ids.ToolsetID,
-		Visibility:        string(payload.Visibility),
+		ProjectID:           *authCtx.ProjectID,
+		EnvironmentID:       ids.EnvironmentID,
+		UserSessionIssuerID: ids.UserSessionIssuerID,
+		RemoteMcpServerID:   ids.RemoteMcpServerID,
+		ToolsetID:           ids.ToolsetID,
+		Visibility:          string(payload.Visibility),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create mcp server").Log(ctx, logger)
@@ -230,6 +233,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 
 	ids, err := parseServerIDs(
 		payload.EnvironmentID,
+		payload.UserSessionIssuerID,
 		payload.RemoteMcpServerID,
 		payload.ToolsetID,
 	)
@@ -266,12 +270,13 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 
 	updated, err := txRepo.UpdateMCPServer(ctx, repo.UpdateMCPServerParams{
-		EnvironmentID:     ids.EnvironmentID,
-		RemoteMcpServerID: ids.RemoteMcpServerID,
-		ToolsetID:         ids.ToolsetID,
-		Visibility:        string(payload.Visibility),
-		ID:                serverID,
-		ProjectID:         *authCtx.ProjectID,
+		EnvironmentID:       ids.EnvironmentID,
+		UserSessionIssuerID: ids.UserSessionIssuerID,
+		RemoteMcpServerID:   ids.RemoteMcpServerID,
+		ToolsetID:           ids.ToolsetID,
+		Visibility:          string(payload.Visibility),
+		ID:                  serverID,
+		ProjectID:           *authCtx.ProjectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -385,15 +390,17 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 // create/update payloads so they can be passed around without a long
 // positional argument list.
 type serverIDs struct {
-	EnvironmentID     uuid.NullUUID
-	RemoteMcpServerID uuid.NullUUID
-	ToolsetID         uuid.NullUUID
+	EnvironmentID       uuid.NullUUID
+	UserSessionIssuerID uuid.NullUUID
+	RemoteMcpServerID   uuid.NullUUID
+	ToolsetID           uuid.NullUUID
 }
 
 // parseServerIDs parses the optional UUID payload fields into a
 // serverIDs struct. Any malformed UUID surfaces with a field-specific error.
 func parseServerIDs(
 	environmentIDStr *string,
+	userSessionIssuerIDStr *string,
 	remoteMcpServerIDStr *string,
 	toolsetIDStr *string,
 ) (serverIDs, error) {
@@ -404,6 +411,9 @@ func parseServerIDs(
 
 	if ids.EnvironmentID, err = conv.PtrToNullUUID(environmentIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid environment_id: %w", err)
+	}
+	if ids.UserSessionIssuerID, err = conv.PtrToNullUUID(userSessionIssuerIDStr); err != nil {
+		return serverIDs{}, fmt.Errorf("invalid user_session_issuer_id: %w", err)
 	}
 	if ids.RemoteMcpServerID, err = conv.PtrToNullUUID(remoteMcpServerIDStr); err != nil {
 		return serverIDs{}, fmt.Errorf("invalid remote_mcp_server_id: %w", err)
@@ -446,6 +456,18 @@ func verifyServerReferenceOwnership(
 				return fmt.Errorf("environment_id does not reference a resource in this project")
 			}
 			return fmt.Errorf("check environment ownership: %w", err)
+		}
+	}
+
+	if ids.UserSessionIssuerID.Valid {
+		if _, err := usersessionsrepo.New(dbtx).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{
+			ID:        ids.UserSessionIssuerID.UUID,
+			ProjectID: projectID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("user_session_issuer_id does not reference a resource in this project")
+			}
+			return fmt.Errorf("check user session issuer ownership: %w", err)
 		}
 	}
 

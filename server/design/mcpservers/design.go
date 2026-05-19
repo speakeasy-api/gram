@@ -166,6 +166,9 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 	Attribute("environment_id", String, "The ID of the environment to associate with the server", func() {
 		Format(FormatUUID)
 	})
+	Attribute("user_session_issuer_id", String, "The ID of the user session issuer that gates OAuth-based MCP client authentication. When set, MCP clients are required to authenticate against this issuer before connecting.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("remote_mcp_server_id", String, "The ID of the remote MCP server to use as the backend", func() {
 		Format(FormatUUID)
 	})
@@ -184,6 +187,9 @@ var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("environment_id", String, "The ID of the environment to associate with the server", func() {
+		Format(FormatUUID)
+	})
+	Attribute("user_session_issuer_id", String, "The ID of the user session issuer that gates OAuth-based MCP client authentication. Omit to disable issuer-gated OAuth.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("remote_mcp_server_id", String, "The ID of the remote MCP server to use as the backend", func() {
@@ -209,6 +215,9 @@ var McpServer = Type("McpServer", func() {
 		Format(FormatUUID)
 	})
 	Attribute("environment_id", String, "The ID of the environment associated with the server", func() {
+		Format(FormatUUID)
+	})
+	Attribute("user_session_issuer_id", String, "The ID of the user session issuer that gates OAuth-based MCP client authentication for this server, if any.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("remote_mcp_server_id", String, "The ID of the remote MCP server used as the backend", func() {
