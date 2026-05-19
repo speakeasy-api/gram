@@ -2,7 +2,6 @@ package remotesessions_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -85,9 +83,8 @@ func TestCreateRemoteSessionClient_Manual(t *testing.T) {
 	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
 		UserSessionIssuerID:   userIssuerID,
-		ClientID:              &clientID,
+		ClientID:              clientID,
 		ClientSecret:          &clientSecret,
-		AutoRegister:          nil,
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -119,9 +116,8 @@ func TestCreateRemoteSessionClient_Manual_WithAuthMethodPost(t *testing.T) {
 	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID:   issuerID,
 		UserSessionIssuerID:     userIssuerID,
-		ClientID:                &clientID,
+		ClientID:                clientID,
 		ClientSecret:            &clientSecret,
-		AutoRegister:            nil,
 		TokenEndpointAuthMethod: &authMethod,
 		SessionToken:            nil,
 		ApikeyToken:             nil,
@@ -156,9 +152,8 @@ func TestCreateRemoteSessionClient_Manual_AuthMethodOmittedStaysNil(t *testing.T
 	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID:   issuerID,
 		UserSessionIssuerID:     userIssuerID,
-		ClientID:                &clientID,
+		ClientID:                clientID,
 		ClientSecret:            nil,
-		AutoRegister:            nil,
 		TokenEndpointAuthMethod: nil,
 		SessionToken:            nil,
 		ApikeyToken:             nil,
@@ -169,33 +164,6 @@ func TestCreateRemoteSessionClient_Manual_AuthMethodOmittedStaysNil(t *testing.T
 	// client_secret_basic via resolveClientAuthMethod, but the API surface
 	// preserves the unset state.
 	require.Nil(t, result.TokenEndpointAuthMethod)
-}
-
-func TestCreateRemoteSessionClient_AutoRegister(t *testing.T) {
-	t.Parallel()
-
-	idp := devidptest.Launch(t, devidptest.LaunchOpts{})
-	ctx, ti := newTestService(t)
-
-	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-auto", idp.OAuth21URL+"/register")
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-auto").String()
-
-	autoRegister := true
-	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
-		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
-		ClientID:              nil,
-		ClientSecret:          nil,
-		AutoRegister:          &autoRegister,
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-	})
-	require.NoError(t, err)
-	require.True(t, strings.HasPrefix(result.ClientID, "client_"), "dev-idp DCR mints client_<hex> ids")
-	// dev-idp's /register sets client_secret_expires_at=0 per RFC 7591
-	// (0 = never expires), which Gram surfaces as a nil ExpiresAt.
-	require.Nil(t, result.ClientSecretExpiresAt)
 }
 
 func TestCreateRemoteSessionClient_RBACForbidden(t *testing.T) {
@@ -218,9 +186,8 @@ func TestCreateRemoteSessionClient_RBACForbidden(t *testing.T) {
 	_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
 		UserSessionIssuerID:   userIssuerID,
-		ClientID:              &clientID,
+		ClientID:              clientID,
 		ClientSecret:          nil,
-		AutoRegister:          nil,
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -241,9 +208,8 @@ func TestGetRemoteSessionClient(t *testing.T) {
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
 		UserSessionIssuerID:   userIssuerID,
-		ClientID:              &clientID,
+		ClientID:              clientID,
 		ClientSecret:          nil,
-		AutoRegister:          nil,
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -283,9 +249,8 @@ func TestListRemoteSessionClients(t *testing.T) {
 		_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 			RemoteSessionIssuerID: issuerID,
 			UserSessionIssuerID:   userIssuerID,
-			ClientID:              &clientID,
+			ClientID:              clientID,
 			ClientSecret:          nil,
-			AutoRegister:          nil,
 			SessionToken:          nil,
 			ApikeyToken:           nil,
 			ProjectSlugInput:      nil,
@@ -368,9 +333,8 @@ func TestUpdateRemoteSessionClient(t *testing.T) {
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
 		UserSessionIssuerID:   userIssuerID,
-		ClientID:              &clientID,
+		ClientID:              clientID,
 		ClientSecret:          nil,
-		AutoRegister:          nil,
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -412,9 +376,8 @@ func TestUpdateRemoteSessionClient_SwitchAuthMethod(t *testing.T) {
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID:   issuerID,
 		UserSessionIssuerID:     userIssuerID,
-		ClientID:                &clientID,
+		ClientID:                clientID,
 		ClientSecret:            nil,
-		AutoRegister:            nil,
 		TokenEndpointAuthMethod: nil,
 		SessionToken:            nil,
 		ApikeyToken:             nil,
@@ -450,9 +413,8 @@ func TestDeleteRemoteSessionClient(t *testing.T) {
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
 		UserSessionIssuerID:   userIssuerID,
-		ClientID:              &clientID,
+		ClientID:              clientID,
 		ClientSecret:          nil,
-		AutoRegister:          nil,
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,

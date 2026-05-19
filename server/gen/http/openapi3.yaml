@@ -16043,7 +16043,7 @@ paths:
                 name: CloneClientFromOAuthProxyProvider
     /rpc/remoteSessionClients.create:
         post:
-            description: 'Register a remote_session_client. Two paths: manual (caller supplies client_id and optionally client_secret) or auto-DCR (auto_register=true triggers an outbound RFC 7591 registration against the issuer''s registration_endpoint).'
+            description: Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.
             operationId: createRemoteSessionClient
             parameters:
                 - allowEmptyValue: true
@@ -28033,15 +28033,12 @@ components:
         CreateRemoteSessionClientForm:
             type: object
             properties:
-                auto_register:
-                    type: boolean
-                    description: When true, Gram fires an outbound RFC 7591 DCR call against the issuer's registration_endpoint and ignores client_id and client_secret.
                 client_id:
                     type: string
-                    description: Manual-path client_id supplied by the caller.
+                    description: client_id supplied by the caller.
                 client_secret:
                     type: string
-                    description: Manual-path client secret. Gram encrypts before persisting.
+                    description: client_secret supplied by the caller. Gram encrypts before persisting.
                 remote_session_issuer_id:
                     type: string
                     description: The owning remote_session_issuer id.
@@ -28056,10 +28053,11 @@ components:
                     type: string
                     description: The user_session_issuer this client is paired with.
                     format: uuid
-            description: Form for creating a remote_session_client. Either supply client_id (manual path) or set auto_register=true (DCR path).
+            description: Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer.
             required:
                 - remote_session_issuer_id
                 - user_session_issuer_id
+                - client_id
         CreateRemoteSessionIssuerForm:
             type: object
             properties:
