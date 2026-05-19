@@ -716,7 +716,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	switch {
 	case matched == nil:
 		detail = fmt.Sprintf("MCP server %q is not in the active configuration", serverPrefix)
-	case matched.URL != "" && !isGramHostedMCPURL(matched.URL):
+	case matched.URL != "" && !s.isGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID):
 		detail = fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverPrefix, matched.URL)
 	case matched.URL == "" && matched.Command != "":
 		// Local stdio servers have no URL, so the Gram-hosted check above
