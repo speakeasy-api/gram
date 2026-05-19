@@ -33,14 +33,9 @@ func TestService_ListRoles_AllowsOrgReadGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, testAccessAuthContext(t, ctx).ActiveOrganizationID)})
-
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockSystemRole("role_admin", "Admin", "admin"),
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
-	}, nil).Once()
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)})
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
 
 	result, err := ti.service.ListRoles(ctx, &gen.ListRolesPayload{})
 	require.NoError(t, err)
@@ -66,17 +61,12 @@ func TestService_GetRole_AllowsOrgReadGrant(t *testing.T) {
 	authCtx := testAccessAuthContext(t, ctx)
 	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)})
 
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockRole("role_custom", "Custom Builder", "custom-builder", "Can build selected resources"),
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"),
-	}, nil).Once()
+	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Can build selected resources"))
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
 
-	role, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_custom"})
+	role, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: roleID})
 	require.NoError(t, err)
-	require.Equal(t, "role_custom", role.ID)
+	require.Equal(t, roleID, role.ID)
 }
 
 func TestService_ListScopes_ForbiddenWithoutOrgReadGrant(t *testing.T) {
@@ -122,16 +112,8 @@ func TestService_ListMembers_AllowsOrgReadGrant(t *testing.T) {
 	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)})
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
-
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockSystemRole("role_admin", "Admin", "admin"),
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
-	}, nil).Once()
-	ti.roles.On("ListOrgUsers", mock.Anything, mockidp.MockOrgID).Return(map[string]thirdpartyworkos.User{
-		"user_1": mockUser("user_1", "Ada", "Lovelace", "ada@example.com"),
-	}, nil).Once()
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMember("", "membership_1", "user_1", "admin"))
 
 	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
 	require.NoError(t, err)
@@ -171,7 +153,8 @@ func TestService_CreateRole_AllowsOrgAdminGrant(t *testing.T) {
 
 	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{Name: "Allowed", Description: "Allowed"})
 	require.NoError(t, err)
-	require.Equal(t, "role_allowed", role.ID)
+	require.NotEmpty(t, role.ID)
+	require.NotEqual(t, "role_allowed", role.ID)
 }
 
 func TestService_UpdateRole_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
@@ -194,10 +177,7 @@ func TestService_UpdateRole_AllowsOrgAdminGrant(t *testing.T) {
 	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
 	name := "Updated"
 
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockRole("role_custom", "Custom Builder", "custom-builder", "Old"),
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{}, nil).Once()
+	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Old"))
 	ti.roles.On("UpdateRole", mock.Anything, mockidp.MockOrgID, "custom-builder", thirdpartyworkos.UpdateRoleOpts{Name: &name}).Return(&thirdpartyworkos.Role{
 		ID:          "role_custom",
 		Name:        name,
@@ -206,9 +186,8 @@ func TestService_UpdateRole_AllowsOrgAdminGrant(t *testing.T) {
 		CreatedAt:   mockRoleTimestamp,
 		UpdatedAt:   mockRoleTimestamp,
 	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{}, nil).Once()
 
-	role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: "role_custom", Name: &name})
+	role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: roleID, Name: &name})
 	require.NoError(t, err)
 	require.Equal(t, name, role.Name)
 }
@@ -232,14 +211,11 @@ func TestService_DeleteRole_AllowsOrgAdminGrant(t *testing.T) {
 	authCtx := testAccessAuthContext(t, ctx)
 	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
 
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"),
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{}, nil).Once()
+	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"))
 	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(nil).Once()
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
 
-	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})
+	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: roleID})
 	require.NoError(t, err)
 }
 
@@ -262,12 +238,10 @@ func TestService_UpdateMemberRole_AllowsOrgAdminGrant(t *testing.T) {
 	authCtx := testAccessAuthContext(t, ctx)
 	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
 
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockRole("role_builder", "Builder", "custom-builder", ""),
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
-	}, nil).Once()
+	builderID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_builder", "Builder", "custom-builder", ""))
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMember("", "membership_1", "user_1", "admin"))
 	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "custom-builder").Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
@@ -275,14 +249,10 @@ func TestService_UpdateMemberRole_AllowsOrgAdminGrant(t *testing.T) {
 		RoleSlug:       "custom-builder",
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
-	ti.roles.On("ListOrgUsers", mock.Anything, mockidp.MockOrgID).Return(map[string]thirdpartyworkos.User{
-		"user_1": mockUser("user_1", "Ada", "Lovelace", "ada@example.com"),
-	}, nil).Once()
-	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
 
-	member, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "local_user_1", RoleID: "role_builder"})
+	member, err := ti.service.UpdateMemberRole(ctx, &gen.UpdateMemberRolePayload{UserID: "local_user_1", RoleID: builderID})
 	require.NoError(t, err)
-	require.Equal(t, "role_builder", member.RoleID)
+	require.Equal(t, builderID, member.RoleID)
 }
 
 func withRBACGrants(t *testing.T, ctx context.Context, grants ...authz.Grant) context.Context {

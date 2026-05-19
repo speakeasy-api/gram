@@ -195,7 +195,7 @@ func backfillOrganizationRoles(ctx context.Context, logger *slog.Logger, dbtx pg
 			continue
 		}
 
-		if err := repo.UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+		if _, err := repo.UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
 			OrganizationID:    organizationID,
 			WorkosSlug:        role.Slug,
 			WorkosName:        role.Name,

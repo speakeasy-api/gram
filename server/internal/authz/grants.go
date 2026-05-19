@@ -81,7 +81,7 @@ var SystemRoleGrants = map[string][]*RoleGrant{
 // SeedSystemRoleGrants upserts the fixed grant sets for all system roles.
 func SeedSystemRoleGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string) error {
 	for roleSlug, grants := range SystemRoleGrants {
-		if err := SyncGrants(ctx, logger, db, organizationID, roleSlug, grants); err != nil {
+		if err := SyncGrants(ctx, logger, db, organizationID, roleSlug, "", grants); err != nil {
 			return fmt.Errorf("seed %s grants: %w", roleSlug, err)
 		}
 	}
@@ -102,12 +102,10 @@ type ScopedGrant struct {
 	Selectors []Selector
 }
 
-func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string, grants []*RoleGrant) error {
+func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string, rolePrincipalURN string, grants []*RoleGrant) error {
 	if orgID == "" {
 		return fmt.Errorf("organization id is required")
 	}
-
-	principalURN := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -115,15 +113,45 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	q := repo.New(tx)
-
-	if _, err := q.DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
-		OrganizationID: orgID,
-		PrincipalUrn:   principalURN,
-	}); err != nil {
-		return fmt.Errorf("delete grants for role %q: %w", roleSlug, err)
+	if _, err := SyncGrantsTx(ctx, tx, orgID, roleSlug, rolePrincipalURN, grants); err != nil {
+		return err
 	}
 
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit grant sync transaction: %w", err)
+	}
+
+	return nil
+}
+
+func SyncGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug string, rolePrincipalURN string, grants []*RoleGrant) ([]*ScopedGrant, error) {
+	if orgID == "" {
+		return nil, fmt.Errorf("organization id is required")
+	}
+
+	if rolePrincipalURN == "" {
+		role, err := repo.New(dbtx).GetActiveOrganizationRoleBySlug(ctx, repo.GetActiveOrganizationRoleBySlugParams{
+			OrganizationID: orgID,
+			WorkosSlug:     roleSlug,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("resolve role principal for %q: %w", roleSlug, err)
+		}
+		rolePrincipalURN = role.RoleUrn
+	}
+
+	principalURN, err := urn.ParsePrincipal(rolePrincipalURN)
+	if err != nil {
+		return nil, fmt.Errorf("parse role principal urn %q: %w", rolePrincipalURN, err)
+	}
+
+	q := repo.New(dbtx)
+	if err := DeleteRoleGrants(ctx, q, orgID, roleSlug, rolePrincipalURN); err != nil {
+		return nil, err
+	}
+
+	grantRows := make([]Grant, 0, len(grants))
+	seenGrants := make(map[string]struct{}, len(grants))
 	for _, grant := range grants {
 		if grant == nil {
 			continue
@@ -138,7 +166,7 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 			sel := NewSelector(scope, WildcardResource)
 			selBytes, err := sel.MarshalJSON()
 			if err != nil {
-				return fmt.Errorf("marshal wildcard selector for %q: %w", grant.Scope, err)
+				return nil, fmt.Errorf("marshal wildcard selector for %q: %w", grant.Scope, err)
 			}
 			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
 				OrganizationID: orgID,
@@ -147,19 +175,29 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 				Effect:         effectToPgtype(effect),
 				Selectors:      selBytes,
 			}); err != nil {
-				return fmt.Errorf("upsert unrestricted grant %q for role %q: %w", grant.Scope, roleSlug, err)
+				return nil, fmt.Errorf("upsert unrestricted grant %q for role %q: %w", grant.Scope, roleSlug, err)
+			}
+			grantKey := grant.Scope + "\x00" + string(selBytes)
+			if _, ok := seenGrants[grantKey]; !ok {
+				seenGrants[grantKey] = struct{}{}
+				grantRows = append(grantRows, Grant{
+					PrincipalUrn: principalURN.String(),
+					Scope:        scope,
+					Effect:       effect,
+					Selector:     sel,
+				})
 			}
 			continue
 		}
 
 		for _, sel := range grant.Selectors {
 			if err := ValidateSelector(scope, sel); err != nil {
-				return fmt.Errorf("invalid selector for scope %q: %w", grant.Scope, err)
+				return nil, fmt.Errorf("invalid selector for scope %q: %w", grant.Scope, err)
 			}
 
 			selBytes, err := sel.MarshalJSON()
 			if err != nil {
-				return fmt.Errorf("marshal selector for scope %q: %w", grant.Scope, err)
+				return nil, fmt.Errorf("marshal selector for scope %q: %w", grant.Scope, err)
 			}
 			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
 				OrganizationID: orgID,
@@ -168,37 +206,110 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 				Effect:         effectToPgtype(effect),
 				Selectors:      selBytes,
 			}); err != nil {
-				return fmt.Errorf("upsert grant %q for role %q: %w", grant.Scope, roleSlug, err)
+				return nil, fmt.Errorf("upsert grant %q for role %q: %w", grant.Scope, roleSlug, err)
+			}
+			grantKey := grant.Scope + "\x00" + string(selBytes)
+			if _, ok := seenGrants[grantKey]; !ok {
+				seenGrants[grantKey] = struct{}{}
+				grantRows = append(grantRows, Grant{
+					PrincipalUrn: principalURN.String(),
+					Scope:        scope,
+					Effect:       effect,
+					Selector:     sel,
+				})
 			}
 		}
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit grant sync transaction: %w", err)
+	return GrantsToScopedGrants(grantRows), nil
+}
+
+func DeleteRoleGrants(ctx context.Context, q *repo.Queries, orgID, roleSlug, rolePrincipalURN string) error {
+	principalURN, err := urn.ParsePrincipal(rolePrincipalURN)
+	if err != nil {
+		return fmt.Errorf("parse role principal urn %q: %w", rolePrincipalURN, err)
+	}
+
+	if _, err := q.DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
+		OrganizationID: orgID,
+		PrincipalUrn:   principalURN,
+	}); err != nil {
+		return fmt.Errorf("delete grants for role %q: %w", roleSlug, err)
+	}
+
+	legacyPrincipalURN := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
+	if legacyPrincipalURN.String() == principalURN.String() {
+		return nil
+	}
+	if _, err := q.DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
+		OrganizationID: orgID,
+		PrincipalUrn:   legacyPrincipalURN,
+	}); err != nil {
+		return fmt.Errorf("delete legacy grants for role %q: %w", roleSlug, err)
 	}
 
 	return nil
 }
 
-func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string) ([]*ScopedGrant, error) {
-	rows, err := repo.New(db).ListPrincipalGrantsByOrg(ctx, repo.ListPrincipalGrantsByOrgParams{
+func RolePrincipals(roleSlug, rolePrincipalURN string) ([]urn.Principal, error) {
+	// TODO(AGE-1954): drop legacy role:<slug> principals after the role-principal backfill is complete.
+	// Keep the legacy role:<slug> principal until the role-principal backfill
+	// has moved existing grants to role:<kind>:<uuid>.
+	principals := make([]urn.Principal, 0, 2)
+	if rolePrincipalURN != "" {
+		principal, err := urn.ParsePrincipal(rolePrincipalURN)
+		if err != nil {
+			return nil, fmt.Errorf("parse role principal urn %q: %w", rolePrincipalURN, err)
+		}
+		principals = append(principals, principal)
+	}
+
+	legacyPrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
+	if rolePrincipalURN == "" || legacyPrincipal.String() != rolePrincipalURN {
+		principals = append(principals, legacyPrincipal)
+	}
+
+	return principals, nil
+}
+
+func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string, rolePrincipalURN string) ([]*ScopedGrant, error) {
+	// TODO(AGE-1954): remove dual-read after legacy role:<slug> grants are backfilled.
+	// During the role-principal migration, reads include both the canonical
+	// role:<kind>:<uuid> principal and the legacy role:<slug> principal.
+	principals, err := RolePrincipals(roleSlug, rolePrincipalURN)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build role principals").Log(ctx, logger)
+	}
+	principalURNs, err := parsePrincipalURNs(principals)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build role principals").Log(ctx, logger)
+	}
+
+	rows, err := repo.New(db).GetPrincipalGrants(ctx, repo.GetPrincipalGrantsParams{
 		OrganizationID: orgID,
-		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug).String(),
+		PrincipalUrns:  principalURNs,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list grants for role").Log(ctx, logger)
 	}
 
-	rolePrincipalURN := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug).String()
+	scoped, err := scopedGrantsFromGrantRows(rows)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unmarshal grant selector").Log(ctx, logger)
+	}
 
+	return scoped, nil
+}
+
+func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGrant, error) {
 	grantRows := make([]Grant, 0, len(rows))
 	for _, row := range rows {
 		selectors, err := SelectorFromRow(row.Selectors)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "unmarshal grant selector").Log(ctx, logger)
+			return nil, err
 		}
 		grantRows = append(grantRows, Grant{
-			PrincipalUrn: rolePrincipalURN,
+			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        Scope(row.Scope),
 			Effect:       effectFromNullable(row.Effect),
 			Selector:     selectors,

@@ -54,6 +54,73 @@ func (q *Queries) DeletePrincipalGrantsByPrincipal(ctx context.Context, arg Dele
 	return result.RowsAffected(), nil
 }
 
+const getActiveOrganizationRoleBySlug = `-- name: GetActiveOrganizationRoleBySlug :one
+WITH active_roles AS (
+  SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'global'::text AS role_kind
+  FROM global_roles
+  WHERE global_roles.workos_slug = $2
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+  UNION ALL
+  SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'organization'::text AS role_kind
+  FROM organization_roles
+  WHERE organization_id = $1
+    AND organization_roles.workos_slug = $2
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+)
+SELECT
+  active_roles.id,
+  ('role:' || active_roles.role_kind || ':' || active_roles.id::text)::text AS role_urn,
+  active_roles.workos_slug,
+  active_roles.workos_name,
+  active_roles.workos_description,
+  active_roles.workos_created_at,
+  active_roles.workos_updated_at,
+  COUNT(ora.id)::bigint AS member_count
+FROM active_roles
+LEFT JOIN organization_role_assignments AS ora
+  ON ora.organization_id = $1
+  AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
+  AND ora.user_id IS NOT NULL
+GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
+ORDER BY active_roles.role_kind DESC
+LIMIT 1
+`
+
+type GetActiveOrganizationRoleBySlugParams struct {
+	OrganizationID string
+	WorkosSlug     string
+}
+
+type GetActiveOrganizationRoleBySlugRow struct {
+	ID                uuid.UUID
+	RoleUrn           string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	MemberCount       int64
+}
+
+// Organization roles shadow global roles if a slug ever collides.
+func (q *Queries) GetActiveOrganizationRoleBySlug(ctx context.Context, arg GetActiveOrganizationRoleBySlugParams) (GetActiveOrganizationRoleBySlugRow, error) {
+	row := q.db.QueryRow(ctx, getActiveOrganizationRoleBySlug, arg.OrganizationID, arg.WorkosSlug)
+	var i GetActiveOrganizationRoleBySlugRow
+	err := row.Scan(
+		&i.ID,
+		&i.RoleUrn,
+		&i.WorkosSlug,
+		&i.WorkosName,
+		&i.WorkosDescription,
+		&i.WorkosCreatedAt,
+		&i.WorkosUpdatedAt,
+		&i.MemberCount,
+	)
+	return i, err
+}
+
 const getGlobalRoleBySlug = `-- name: GetGlobalRoleBySlug :one
 SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, workos_deleted_at, workos_deleted, workos_last_event_id, created_at, updated_at, deleted_at, deleted
 FROM global_roles
@@ -77,6 +144,126 @@ func (q *Queries) GetGlobalRoleBySlug(ctx context.Context, workosSlug string) (G
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getOrganizationRoleAssignmentByWorkosUser = `-- name: GetOrganizationRoleAssignmentByWorkosUser :one
+SELECT
+  ora.user_id,
+  ora.workos_user_id,
+  ora.workos_membership_id,
+  COALESCE(organization_roles.id, global_roles.id)::uuid AS role_id,
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+  ora.created_at
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = $1
+  AND ora.workos_user_id = $2
+  AND COALESCE(organization_roles.id, global_roles.id) IS NOT NULL
+ORDER BY ora.created_at
+LIMIT 1
+`
+
+type GetOrganizationRoleAssignmentByWorkosUserParams struct {
+	OrganizationID string
+	WorkosUserID   string
+}
+
+type GetOrganizationRoleAssignmentByWorkosUserRow struct {
+	UserID             pgtype.Text
+	WorkosUserID       string
+	WorkosMembershipID pgtype.Text
+	RoleID             uuid.UUID
+	RoleSlug           string
+	CreatedAt          pgtype.Timestamptz
+}
+
+func (q *Queries) GetOrganizationRoleAssignmentByWorkosUser(ctx context.Context, arg GetOrganizationRoleAssignmentByWorkosUserParams) (GetOrganizationRoleAssignmentByWorkosUserRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationRoleAssignmentByWorkosUser, arg.OrganizationID, arg.WorkosUserID)
+	var i GetOrganizationRoleAssignmentByWorkosUserRow
+	err := row.Scan(
+		&i.UserID,
+		&i.WorkosUserID,
+		&i.WorkosMembershipID,
+		&i.RoleID,
+		&i.RoleSlug,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getOrganizationRoleByID = `-- name: GetOrganizationRoleByID :one
+WITH active_roles AS (
+  SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'global'::text AS role_kind
+  FROM global_roles
+  WHERE global_roles.id = $2
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+UNION ALL
+  SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'organization'::text AS role_kind
+  FROM organization_roles
+  WHERE organization_id = $1
+    AND organization_roles.id = $2
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+)
+SELECT
+  active_roles.id,
+  ('role:' || active_roles.role_kind || ':' || active_roles.id::text)::text AS role_urn,
+  active_roles.workos_slug,
+  active_roles.workos_name,
+  active_roles.workos_description,
+  active_roles.workos_created_at,
+  active_roles.workos_updated_at,
+  COUNT(ora.id)::bigint AS member_count
+FROM active_roles
+LEFT JOIN organization_role_assignments AS ora
+  ON ora.organization_id = $1
+  AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
+  AND ora.user_id IS NOT NULL
+GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
+ORDER BY active_roles.role_kind DESC
+LIMIT 1
+`
+
+type GetOrganizationRoleByIDParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+type GetOrganizationRoleByIDRow struct {
+	ID                uuid.UUID
+	RoleUrn           string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	MemberCount       int64
+}
+
+// Organization roles shadow global roles if an ID ever collides.
+func (q *Queries) GetOrganizationRoleByID(ctx context.Context, arg GetOrganizationRoleByIDParams) (GetOrganizationRoleByIDRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationRoleByID, arg.OrganizationID, arg.ID)
+	var i GetOrganizationRoleByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.RoleUrn,
+		&i.WorkosSlug,
+		&i.WorkosName,
+		&i.WorkosDescription,
+		&i.WorkosCreatedAt,
+		&i.WorkosUpdatedAt,
+		&i.MemberCount,
 	)
 	return i, err
 }
@@ -229,6 +416,138 @@ func (q *Queries) InsertChallengeResolutions(ctx context.Context, arg InsertChal
 	return items, nil
 }
 
+const listAccessMembers = `-- name: ListAccessMembers :many
+SELECT
+  users.id,
+  users.display_name,
+  users.email,
+  users.photo_url,
+  COALESCE(organization_roles.id, global_roles.id)::uuid AS role_id,
+  ora.created_at AS joined_at
+FROM organization_role_assignments AS ora
+JOIN users
+  ON users.id = ora.user_id
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = $1
+  AND COALESCE(organization_roles.id, global_roles.id) IS NOT NULL
+ORDER BY users.email, users.id
+`
+
+type ListAccessMembersRow struct {
+	ID          string
+	DisplayName string
+	Email       string
+	PhotoUrl    pgtype.Text
+	RoleID      uuid.UUID
+	JoinedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) ListAccessMembers(ctx context.Context, organizationID string) ([]ListAccessMembersRow, error) {
+	rows, err := q.db.Query(ctx, listAccessMembers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAccessMembersRow
+	for rows.Next() {
+		var i ListAccessMembersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.Email,
+			&i.PhotoUrl,
+			&i.RoleID,
+			&i.JoinedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveOrganizationRoles = `-- name: ListActiveOrganizationRoles :many
+WITH active_roles AS (
+  SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'global'::text AS role_kind
+  FROM global_roles
+  WHERE deleted IS FALSE
+    AND workos_deleted IS FALSE
+  UNION ALL
+  SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'organization'::text AS role_kind
+  FROM organization_roles
+  WHERE organization_id = $1
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+)
+SELECT
+  active_roles.id,
+  ('role:' || active_roles.role_kind || ':' || active_roles.id::text)::text AS role_urn,
+  active_roles.workos_slug,
+  active_roles.workos_name,
+  active_roles.workos_description,
+  active_roles.workos_created_at,
+  active_roles.workos_updated_at,
+  COUNT(ora.id)::bigint AS member_count
+FROM active_roles
+LEFT JOIN organization_role_assignments AS ora
+  ON ora.organization_id = $1
+  AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
+  AND ora.user_id IS NOT NULL
+GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
+ORDER BY active_roles.workos_slug
+`
+
+type ListActiveOrganizationRolesRow struct {
+	ID                uuid.UUID
+	RoleUrn           string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	MemberCount       int64
+}
+
+func (q *Queries) ListActiveOrganizationRoles(ctx context.Context, organizationID string) ([]ListActiveOrganizationRolesRow, error) {
+	rows, err := q.db.Query(ctx, listActiveOrganizationRoles, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveOrganizationRolesRow
+	for rows.Next() {
+		var i ListActiveOrganizationRolesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RoleUrn,
+			&i.WorkosSlug,
+			&i.WorkosName,
+			&i.WorkosDescription,
+			&i.WorkosCreatedAt,
+			&i.WorkosUpdatedAt,
+			&i.MemberCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChallengeResolutions = `-- name: ListChallengeResolutions :many
 
 SELECT id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, resolved_by, created_at FROM authz_challenge_resolutions
@@ -306,6 +625,180 @@ func (q *Queries) ListGlobalRoles(ctx context.Context) ([]GlobalRole, error) {
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMemberRolePrincipalsByWorkosUser = `-- name: ListMemberRolePrincipalsByWorkosUser :many
+SELECT
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+  ora.role_urn::text AS principal_urn
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = $1
+  AND ora.workos_user_id = $2
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+ORDER BY role_slug
+`
+
+type ListMemberRolePrincipalsByWorkosUserParams struct {
+	OrganizationID string
+	WorkosUserID   string
+}
+
+type ListMemberRolePrincipalsByWorkosUserRow struct {
+	RoleSlug     string
+	PrincipalUrn string
+}
+
+func (q *Queries) ListMemberRolePrincipalsByWorkosUser(ctx context.Context, arg ListMemberRolePrincipalsByWorkosUserParams) ([]ListMemberRolePrincipalsByWorkosUserRow, error) {
+	rows, err := q.db.Query(ctx, listMemberRolePrincipalsByWorkosUser, arg.OrganizationID, arg.WorkosUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMemberRolePrincipalsByWorkosUserRow
+	for rows.Next() {
+		var i ListMemberRolePrincipalsByWorkosUserRow
+		if err := rows.Scan(&i.RoleSlug, &i.PrincipalUrn); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationRoleAssignmentsBySlug = `-- name: ListOrganizationRoleAssignmentsBySlug :many
+SELECT
+  ora.user_id,
+  ora.workos_user_id,
+  ora.workos_membership_id,
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+  ora.created_at
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = $1
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) = $2
+ORDER BY ora.workos_user_id
+`
+
+type ListOrganizationRoleAssignmentsBySlugParams struct {
+	OrganizationID string
+	WorkosRoleSlug string
+}
+
+type ListOrganizationRoleAssignmentsBySlugRow struct {
+	UserID             pgtype.Text
+	WorkosUserID       string
+	WorkosMembershipID pgtype.Text
+	RoleSlug           string
+	CreatedAt          pgtype.Timestamptz
+}
+
+func (q *Queries) ListOrganizationRoleAssignmentsBySlug(ctx context.Context, arg ListOrganizationRoleAssignmentsBySlugParams) ([]ListOrganizationRoleAssignmentsBySlugRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationRoleAssignmentsBySlug, arg.OrganizationID, arg.WorkosRoleSlug)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationRoleAssignmentsBySlugRow
+	for rows.Next() {
+		var i ListOrganizationRoleAssignmentsBySlugRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.WorkosUserID,
+			&i.WorkosMembershipID,
+			&i.RoleSlug,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationRoleAssignmentsByWorkosUsers = `-- name: ListOrganizationRoleAssignmentsByWorkosUsers :many
+SELECT
+  ora.user_id,
+  ora.workos_user_id,
+  ora.workos_membership_id,
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+  ora.created_at
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = $1
+  AND ora.workos_user_id = ANY($2::text[])
+  AND ora.workos_membership_id IS NOT NULL
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+ORDER BY ora.workos_user_id, role_slug
+`
+
+type ListOrganizationRoleAssignmentsByWorkosUsersParams struct {
+	OrganizationID string
+	WorkosUserIds  []string
+}
+
+type ListOrganizationRoleAssignmentsByWorkosUsersRow struct {
+	UserID             pgtype.Text
+	WorkosUserID       string
+	WorkosMembershipID pgtype.Text
+	RoleSlug           string
+	CreatedAt          pgtype.Timestamptz
+}
+
+func (q *Queries) ListOrganizationRoleAssignmentsByWorkosUsers(ctx context.Context, arg ListOrganizationRoleAssignmentsByWorkosUsersParams) ([]ListOrganizationRoleAssignmentsByWorkosUsersRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationRoleAssignmentsByWorkosUsers, arg.OrganizationID, arg.WorkosUserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationRoleAssignmentsByWorkosUsersRow
+	for rows.Next() {
+		var i ListOrganizationRoleAssignmentsByWorkosUsersRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.WorkosUserID,
+			&i.WorkosMembershipID,
+			&i.RoleSlug,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -474,6 +967,108 @@ func (q *Queries) MarkOrganizationRoleDeleted(ctx context.Context, arg MarkOrgan
 	return result.RowsAffected(), nil
 }
 
+const markOrganizationRoleDeletedLocally = `-- name: MarkOrganizationRoleDeletedLocally :execrows
+UPDATE organization_roles
+SET workos_last_event_id = $1,
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND workos_slug = $3
+  AND deleted_at IS NULL
+`
+
+type MarkOrganizationRoleDeletedLocallyParams struct {
+	WorkosLastEventID pgtype.Text
+	OrganizationID    string
+	WorkosSlug        string
+}
+
+func (q *Queries) MarkOrganizationRoleDeletedLocally(ctx context.Context, arg MarkOrganizationRoleDeletedLocallyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markOrganizationRoleDeletedLocally, arg.WorkosLastEventID, arg.OrganizationID, arg.WorkosSlug)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const replaceOrganizationRoleAssignment = `-- name: ReplaceOrganizationRoleAssignment :one
+WITH input_role_urn AS (
+  SELECT 'role:organization:' || id::text AS role_urn
+  FROM organization_roles
+  WHERE organization_roles.organization_id = $1
+    AND organization_roles.workos_slug = $2
+    AND organization_roles.deleted IS FALSE
+    AND organization_roles.workos_deleted IS FALSE
+  UNION ALL
+  SELECT 'role:global:' || id::text AS role_urn
+  FROM global_roles
+  WHERE global_roles.workos_slug = $2
+    AND global_roles.deleted IS FALSE
+    AND global_roles.workos_deleted IS FALSE
+),
+upserted AS (
+  INSERT INTO organization_role_assignments (
+    organization_id,
+    workos_user_id,
+    user_id,
+    role_urn,
+    workos_membership_id,
+    workos_updated_at,
+    workos_last_event_id
+  )
+  SELECT
+    $1,
+    $3,
+    $4,
+    input_role_urn.role_urn,
+    $5,
+    $6,
+    $7
+  FROM input_role_urn
+  ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL DO UPDATE SET
+    user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
+    workos_membership_id = EXCLUDED.workos_membership_id,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = EXCLUDED.workos_last_event_id,
+    updated_at = clock_timestamp()
+  RETURNING role_urn
+),
+deleted AS (
+DELETE FROM organization_role_assignments
+WHERE organization_role_assignments.organization_id = $1
+  AND organization_role_assignments.workos_user_id = $3
+  AND EXISTS (SELECT 1 FROM upserted)
+  AND organization_role_assignments.role_urn NOT IN (SELECT role_urn FROM upserted)
+  RETURNING 1
+)
+SELECT COUNT(*)::bigint FROM upserted
+`
+
+type ReplaceOrganizationRoleAssignmentParams struct {
+	OrganizationID     string
+	WorkosRoleSlug     string
+	WorkosUserID       string
+	UserID             pgtype.Text
+	WorkosMembershipID pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+}
+
+func (q *Queries) ReplaceOrganizationRoleAssignment(ctx context.Context, arg ReplaceOrganizationRoleAssignmentParams) (int64, error) {
+	row := q.db.QueryRow(ctx, replaceOrganizationRoleAssignment,
+		arg.OrganizationID,
+		arg.WorkosRoleSlug,
+		arg.WorkosUserID,
+		arg.UserID,
+		arg.WorkosMembershipID,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+	)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const upsertGlobalRole = `-- name: UpsertGlobalRole :exec
 INSERT INTO global_roles (
     workos_slug,
@@ -524,7 +1119,8 @@ func (q *Queries) UpsertGlobalRole(ctx context.Context, arg UpsertGlobalRolePara
 	return err
 }
 
-const upsertOrganizationRole = `-- name: UpsertOrganizationRole :exec
+const upsertOrganizationRole = `-- name: UpsertOrganizationRole :one
+WITH upserted AS (
 INSERT INTO organization_roles (
     organization_id,
     workos_slug,
@@ -550,6 +1146,30 @@ ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
     deleted_at = NULL,
     workos_deleted_at = NULL,
     updated_at = clock_timestamp()
+RETURNING
+    id,
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at
+)
+SELECT
+  upserted.id,
+  ('role:organization:' || upserted.id::text)::text AS role_urn,
+  upserted.workos_slug,
+  upserted.workos_name,
+  upserted.workos_description,
+  upserted.workos_created_at,
+  upserted.workos_updated_at,
+  COUNT(ora.id)::bigint AS member_count
+FROM upserted
+LEFT JOIN organization_role_assignments AS ora
+  ON ora.organization_id = upserted.organization_id
+  AND ora.role_urn = 'role:organization:' || upserted.id::text
+  AND ora.user_id IS NOT NULL
+GROUP BY upserted.id, upserted.workos_slug, upserted.workos_name, upserted.workos_description, upserted.workos_created_at, upserted.workos_updated_at
 `
 
 type UpsertOrganizationRoleParams struct {
@@ -562,11 +1182,22 @@ type UpsertOrganizationRoleParams struct {
 	WorkosLastEventID pgtype.Text
 }
 
+type UpsertOrganizationRoleRow struct {
+	ID                uuid.UUID
+	RoleUrn           string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	MemberCount       int64
+}
+
 // Upsert an org-scoped WorkOS role. Caller must have already passed the row
 // through ShouldProcessEvent. Resurrects a previously soft-deleted role on
 // conflict.
-func (q *Queries) UpsertOrganizationRole(ctx context.Context, arg UpsertOrganizationRoleParams) error {
-	_, err := q.db.Exec(ctx, upsertOrganizationRole,
+func (q *Queries) UpsertOrganizationRole(ctx context.Context, arg UpsertOrganizationRoleParams) (UpsertOrganizationRoleRow, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationRole,
 		arg.OrganizationID,
 		arg.WorkosSlug,
 		arg.WorkosName,
@@ -575,7 +1206,85 @@ func (q *Queries) UpsertOrganizationRole(ctx context.Context, arg UpsertOrganiza
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
 	)
-	return err
+	var i UpsertOrganizationRoleRow
+	err := row.Scan(
+		&i.ID,
+		&i.RoleUrn,
+		&i.WorkosSlug,
+		&i.WorkosName,
+		&i.WorkosDescription,
+		&i.WorkosCreatedAt,
+		&i.WorkosUpdatedAt,
+		&i.MemberCount,
+	)
+	return i, err
+}
+
+const upsertOrganizationRoleAssignment = `-- name: UpsertOrganizationRoleAssignment :execrows
+WITH input_role_urn AS (
+  SELECT 'role:organization:' || id::text AS role_urn
+  FROM organization_roles
+  WHERE organization_roles.organization_id = $1
+    AND organization_roles.workos_slug = $7
+    AND organization_roles.deleted IS FALSE
+    AND organization_roles.workos_deleted IS FALSE
+  UNION ALL
+  SELECT 'role:global:' || id::text AS role_urn
+  FROM global_roles
+  WHERE global_roles.workos_slug = $7
+    AND global_roles.deleted IS FALSE
+    AND global_roles.workos_deleted IS FALSE
+)
+INSERT INTO organization_role_assignments (
+  organization_id,
+  workos_user_id,
+  user_id,
+  role_urn,
+  workos_membership_id,
+  workos_updated_at,
+  workos_last_event_id
+)
+SELECT
+  $1,
+  $2,
+  $3,
+  input_role_urn.role_urn,
+  $4,
+  $5,
+  $6
+FROM input_role_urn
+ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL DO UPDATE SET
+  user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
+  workos_membership_id = EXCLUDED.workos_membership_id,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  workos_last_event_id = EXCLUDED.workos_last_event_id,
+  updated_at = clock_timestamp()
+`
+
+type UpsertOrganizationRoleAssignmentParams struct {
+	OrganizationID     string
+	WorkosUserID       string
+	UserID             pgtype.Text
+	WorkosMembershipID pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+	WorkosRoleSlug     string
+}
+
+func (q *Queries) UpsertOrganizationRoleAssignment(ctx context.Context, arg UpsertOrganizationRoleAssignmentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertOrganizationRoleAssignment,
+		arg.OrganizationID,
+		arg.WorkosUserID,
+		arg.UserID,
+		arg.WorkosMembershipID,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+		arg.WorkosRoleSlug,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one

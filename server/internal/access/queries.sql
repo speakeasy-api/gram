@@ -122,10 +122,11 @@ WHERE organization_id = @organization_id
   AND deleted_at IS NULL
 ORDER BY workos_slug;
 
--- name: UpsertOrganizationRole :exec
+-- name: UpsertOrganizationRole :one
 -- Upsert an org-scoped WorkOS role. Caller must have already passed the row
 -- through ShouldProcessEvent. Resurrects a previously soft-deleted role on
 -- conflict.
+WITH upserted AS (
 INSERT INTO organization_roles (
     organization_id,
     workos_slug,
@@ -150,7 +151,31 @@ ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     deleted_at = NULL,
     workos_deleted_at = NULL,
-    updated_at = clock_timestamp();
+    updated_at = clock_timestamp()
+RETURNING
+    id,
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at
+)
+SELECT
+  upserted.id,
+  ('role:organization:' || upserted.id::text)::text AS role_urn,
+  upserted.workos_slug,
+  upserted.workos_name,
+  upserted.workos_description,
+  upserted.workos_created_at,
+  upserted.workos_updated_at,
+  COUNT(ora.id)::bigint AS member_count
+FROM upserted
+LEFT JOIN organization_role_assignments AS ora
+  ON ora.organization_id = upserted.organization_id
+  AND ora.role_urn = 'role:organization:' || upserted.id::text
+  AND ora.user_id IS NOT NULL
+GROUP BY upserted.id, upserted.workos_slug, upserted.workos_name, upserted.workos_description, upserted.workos_created_at, upserted.workos_updated_at;
 
 -- name: MarkOrganizationRoleDeleted :execrows
 UPDATE organization_roles
@@ -161,3 +186,313 @@ SET workos_deleted_at = @workos_deleted_at,
 WHERE organization_id = @organization_id
   AND workos_slug = @workos_slug
   AND deleted_at IS NULL;
+
+-- name: MarkOrganizationRoleDeletedLocally :execrows
+UPDATE organization_roles
+SET workos_last_event_id = @workos_last_event_id,
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND workos_slug = @workos_slug
+  AND deleted_at IS NULL;
+
+-- name: ListActiveOrganizationRoles :many
+WITH active_roles AS (
+  SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'global'::text AS role_kind
+  FROM global_roles
+  WHERE deleted IS FALSE
+    AND workos_deleted IS FALSE
+  UNION ALL
+  SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'organization'::text AS role_kind
+  FROM organization_roles
+  WHERE organization_id = @organization_id
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+)
+SELECT
+  active_roles.id,
+  ('role:' || active_roles.role_kind || ':' || active_roles.id::text)::text AS role_urn,
+  active_roles.workos_slug,
+  active_roles.workos_name,
+  active_roles.workos_description,
+  active_roles.workos_created_at,
+  active_roles.workos_updated_at,
+  COUNT(ora.id)::bigint AS member_count
+FROM active_roles
+LEFT JOIN organization_role_assignments AS ora
+  ON ora.organization_id = @organization_id
+  AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
+  AND ora.user_id IS NOT NULL
+GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
+ORDER BY active_roles.workos_slug;
+
+-- name: GetActiveOrganizationRoleBySlug :one
+WITH active_roles AS (
+  SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'global'::text AS role_kind
+  FROM global_roles
+  WHERE global_roles.workos_slug = @workos_slug
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+  UNION ALL
+  SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'organization'::text AS role_kind
+  FROM organization_roles
+  WHERE organization_id = @organization_id
+    AND organization_roles.workos_slug = @workos_slug
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+)
+SELECT
+  active_roles.id,
+  ('role:' || active_roles.role_kind || ':' || active_roles.id::text)::text AS role_urn,
+  active_roles.workos_slug,
+  active_roles.workos_name,
+  active_roles.workos_description,
+  active_roles.workos_created_at,
+  active_roles.workos_updated_at,
+  COUNT(ora.id)::bigint AS member_count
+FROM active_roles
+LEFT JOIN organization_role_assignments AS ora
+  ON ora.organization_id = @organization_id
+  AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
+  AND ora.user_id IS NOT NULL
+GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
+-- Organization roles shadow global roles if a slug ever collides.
+ORDER BY active_roles.role_kind DESC
+LIMIT 1;
+
+-- name: GetOrganizationRoleByID :one
+WITH active_roles AS (
+  SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'global'::text AS role_kind
+  FROM global_roles
+  WHERE global_roles.id = sqlc.arg(id)
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+UNION ALL
+  SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'organization'::text AS role_kind
+  FROM organization_roles
+  WHERE organization_id = @organization_id
+    AND organization_roles.id = sqlc.arg(id)
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+)
+SELECT
+  active_roles.id,
+  ('role:' || active_roles.role_kind || ':' || active_roles.id::text)::text AS role_urn,
+  active_roles.workos_slug,
+  active_roles.workos_name,
+  active_roles.workos_description,
+  active_roles.workos_created_at,
+  active_roles.workos_updated_at,
+  COUNT(ora.id)::bigint AS member_count
+FROM active_roles
+LEFT JOIN organization_role_assignments AS ora
+  ON ora.organization_id = @organization_id
+  AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
+  AND ora.user_id IS NOT NULL
+GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
+-- Organization roles shadow global roles if an ID ever collides.
+ORDER BY active_roles.role_kind DESC
+LIMIT 1;
+
+-- name: ListOrganizationRoleAssignmentsBySlug :many
+SELECT
+  ora.user_id,
+  ora.workos_user_id,
+  ora.workos_membership_id,
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+  ora.created_at
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) = @workos_role_slug
+ORDER BY ora.workos_user_id;
+
+-- name: GetOrganizationRoleAssignmentByWorkosUser :one
+SELECT
+  ora.user_id,
+  ora.workos_user_id,
+  ora.workos_membership_id,
+  COALESCE(organization_roles.id, global_roles.id)::uuid AS role_id,
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+  ora.created_at
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND ora.workos_user_id = @workos_user_id
+  AND COALESCE(organization_roles.id, global_roles.id) IS NOT NULL
+ORDER BY ora.created_at
+LIMIT 1;
+
+-- name: ListOrganizationRoleAssignmentsByWorkosUsers :many
+SELECT
+  ora.user_id,
+  ora.workos_user_id,
+  ora.workos_membership_id,
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+  ora.created_at
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND ora.workos_user_id = ANY(@workos_user_ids::text[])
+  AND ora.workos_membership_id IS NOT NULL
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+ORDER BY ora.workos_user_id, role_slug;
+
+-- name: ListAccessMembers :many
+SELECT
+  users.id,
+  users.display_name,
+  users.email,
+  users.photo_url,
+  COALESCE(organization_roles.id, global_roles.id)::uuid AS role_id,
+  ora.created_at AS joined_at
+FROM organization_role_assignments AS ora
+JOIN users
+  ON users.id = ora.user_id
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND COALESCE(organization_roles.id, global_roles.id) IS NOT NULL
+ORDER BY users.email, users.id;
+
+-- name: ListMemberRolePrincipalsByWorkosUser :many
+SELECT
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+  ora.role_urn::text AS principal_urn
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND ora.workos_user_id = @workos_user_id
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+ORDER BY role_slug;
+
+-- name: UpsertOrganizationRoleAssignment :execrows
+WITH input_role_urn AS (
+  SELECT 'role:organization:' || id::text AS role_urn
+  FROM organization_roles
+  WHERE organization_roles.organization_id = @organization_id
+    AND organization_roles.workos_slug = sqlc.arg(workos_role_slug)
+    AND organization_roles.deleted IS FALSE
+    AND organization_roles.workos_deleted IS FALSE
+  UNION ALL
+  SELECT 'role:global:' || id::text AS role_urn
+  FROM global_roles
+  WHERE global_roles.workos_slug = sqlc.arg(workos_role_slug)
+    AND global_roles.deleted IS FALSE
+    AND global_roles.workos_deleted IS FALSE
+)
+INSERT INTO organization_role_assignments (
+  organization_id,
+  workos_user_id,
+  user_id,
+  role_urn,
+  workos_membership_id,
+  workos_updated_at,
+  workos_last_event_id
+)
+SELECT
+  @organization_id,
+  @workos_user_id,
+  @user_id,
+  input_role_urn.role_urn,
+  @workos_membership_id,
+  @workos_updated_at,
+  @workos_last_event_id
+FROM input_role_urn
+ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL DO UPDATE SET
+  user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
+  workos_membership_id = EXCLUDED.workos_membership_id,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  workos_last_event_id = EXCLUDED.workos_last_event_id,
+  updated_at = clock_timestamp();
+
+-- name: ReplaceOrganizationRoleAssignment :one
+WITH input_role_urn AS (
+  SELECT 'role:organization:' || id::text AS role_urn
+  FROM organization_roles
+  WHERE organization_roles.organization_id = @organization_id
+    AND organization_roles.workos_slug = sqlc.arg(workos_role_slug)
+    AND organization_roles.deleted IS FALSE
+    AND organization_roles.workos_deleted IS FALSE
+  UNION ALL
+  SELECT 'role:global:' || id::text AS role_urn
+  FROM global_roles
+  WHERE global_roles.workos_slug = sqlc.arg(workos_role_slug)
+    AND global_roles.deleted IS FALSE
+    AND global_roles.workos_deleted IS FALSE
+),
+upserted AS (
+  INSERT INTO organization_role_assignments (
+    organization_id,
+    workos_user_id,
+    user_id,
+    role_urn,
+    workos_membership_id,
+    workos_updated_at,
+    workos_last_event_id
+  )
+  SELECT
+    @organization_id,
+    @workos_user_id,
+    @user_id,
+    input_role_urn.role_urn,
+    @workos_membership_id,
+    @workos_updated_at,
+    @workos_last_event_id
+  FROM input_role_urn
+  ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL DO UPDATE SET
+    user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
+    workos_membership_id = EXCLUDED.workos_membership_id,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = EXCLUDED.workos_last_event_id,
+    updated_at = clock_timestamp()
+  RETURNING role_urn
+),
+deleted AS (
+DELETE FROM organization_role_assignments
+WHERE organization_role_assignments.organization_id = @organization_id
+  AND organization_role_assignments.workos_user_id = @workos_user_id
+  AND EXISTS (SELECT 1 FROM upserted)
+  AND organization_role_assignments.role_urn NOT IN (SELECT role_urn FROM upserted)
+  RETURNING 1
+)
+SELECT COUNT(*)::bigint FROM upserted;

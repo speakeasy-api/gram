@@ -80,7 +80,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, nil)
 	t.Cleanup(func() { _ = chatWriterShutdown(t.Context()) })
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter)

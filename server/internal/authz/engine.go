@@ -5,16 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -31,28 +29,6 @@ type EngineOpts struct {
 	DevMode bool
 }
 
-// roleSlugCache is the Redis cache entry for a resolved role slug.
-// Key is org-first so DeleteByPrefix on "role-slug:{orgID}:" invalidates the whole org.
-type roleSlugCache struct {
-	UserID string
-	OrgID  string
-	Slug   string
-}
-
-var _ cache.CacheableObject[roleSlugCache] = (*roleSlugCache)(nil)
-
-func (r roleSlugCache) CacheKey() string {
-	return "role-slug:" + r.OrgID + ":" + r.UserID
-}
-
-func (r roleSlugCache) TTL() time.Duration {
-	return 5 * time.Minute
-}
-
-func (r roleSlugCache) AdditionalCacheKeys() []string {
-	return nil
-}
-
 // ChallengeLoggingEnabled checks whether authz challenge logging to ClickHouse
 // is enabled for a given organization. Same signature as IsRBACEnabled.
 type ChallengeLoggingEnabled func(ctx context.Context, organizationID string) (bool, error)
@@ -65,10 +41,9 @@ type Engine struct {
 	challengeLoggingEnabled ChallengeLoggingEnabled
 	isDev                   bool
 	membership              MembershipFetcher
-	roleCache               cache.TypedCacheObject[roleSlugCache]
 }
 
-func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEnabled IsRBACEnabled, challengeLogging ChallengeLoggingEnabled, membership MembershipFetcher, roleCache cache.Cache, opts ...EngineOpts) *Engine {
+func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEnabled IsRBACEnabled, challengeLogging ChallengeLoggingEnabled, membership MembershipFetcher, opts ...EngineOpts) *Engine {
 	var devMode bool
 	if len(opts) > 0 {
 		devMode = opts[0].DevMode
@@ -84,7 +59,6 @@ func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEn
 		challengeLoggingEnabled: challengeLogging,
 		isDev:                   devMode,
 		membership:              membership,
-		roleCache:               cache.NewTypedObjectCache[roleSlugCache](logger.With(attr.SlogCacheNamespace("authz-role-slug")), roleCache, cache.SuffixNone),
 	}
 }
 
@@ -158,19 +132,23 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 
 	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)}
 
-	roleSlug, err := e.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	rolePrincipals, err := e.resolveRolePrincipals(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
 	if err != nil {
 		e.logger.ErrorContext(
 			ctx,
-			"failed to resolve role for authz grants",
+			"failed to resolve roles for authz grants",
 			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 			attr.SlogUserID(authCtx.UserID),
 			attr.SlogError(err),
 		)
-		return ctx, fmt.Errorf("resolve role slug: %w", err)
+		return ctx, fmt.Errorf("resolve role slugs: %w", err)
 	}
-	if roleSlug != "" {
-		principals = append(principals, urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug))
+	for _, role := range rolePrincipals {
+		rolePrincipalURNs, err := RolePrincipals(role.RoleSlug, role.PrincipalUrn)
+		if err != nil {
+			return ctx, fmt.Errorf("build role principals: %w", err)
+		}
+		principals = append(principals, rolePrincipalURNs...)
 	}
 
 	grants, err := LoadGrants(ctx, e.db, authCtx.ActiveOrganizationID, principals)
@@ -188,77 +166,27 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	return GrantsToContext(ctx, grants), nil
 }
 
-func (e *Engine) resolveRoleSlug(ctx context.Context, userID, orgID string) (string, error) {
-	cacheKey := roleSlugCache{UserID: userID, OrgID: orgID, Slug: ""}.CacheKey()
-	if cached, err := e.roleCache.Get(ctx, cacheKey); err == nil {
-		return cached.Slug, nil
-	}
-
+func (e *Engine) resolveRolePrincipals(ctx context.Context, userID, orgID string) ([]accessrepo.ListMemberRolePrincipalsByWorkosUserRow, error) {
 	user, err := usersrepo.New(e.db).GetUser(ctx, userID)
 	if err != nil {
-		return "", fmt.Errorf("get user: %w", err)
+		return nil, fmt.Errorf("get user: %w", err)
 	}
 	if !user.WorkosID.Valid || user.WorkosID.String == "" {
-		e.storeRoleSlugCache(ctx, userID, orgID, "")
-		return "", nil
+		return nil, nil
 	}
 
-	org, err := orgrepo.New(e.db).GetOrganizationMetadata(ctx, orgID)
+	// Role assignments are local source-of-truth records. They are written by
+	// the access write path and by WorkOS sync, so invitation/admin-console
+	// changes can lag until the sync job catches up.
+	rolePrincipals, err := accessrepo.New(e.db).ListMemberRolePrincipalsByWorkosUser(ctx, accessrepo.ListMemberRolePrincipalsByWorkosUserParams{
+		OrganizationID: orgID,
+		WorkosUserID:   user.WorkosID.String,
+	})
 	if err != nil {
-		return "", fmt.Errorf("get org: %w", err)
-	}
-	if !org.WorkosID.Valid || org.WorkosID.String == "" {
-		e.storeRoleSlugCache(ctx, userID, orgID, "")
-		return "", nil
+		return nil, fmt.Errorf("list member role slugs: %w", err)
 	}
 
-	member, err := e.membership.GetOrgMembership(ctx, user.WorkosID.String, org.WorkosID.String)
-	if err != nil {
-		return "", fmt.Errorf("get org membership: %w", err)
-	}
-	if member == nil {
-		e.storeRoleSlugCache(ctx, userID, orgID, "")
-		return "", nil
-	}
-
-	e.storeRoleSlugCache(ctx, userID, orgID, member.RoleSlug)
-
-	return member.RoleSlug, nil
-}
-
-func (e *Engine) storeRoleSlugCache(ctx context.Context, userID, orgID, slug string) {
-	entry := roleSlugCache{UserID: userID, OrgID: orgID, Slug: slug}
-	if err := e.roleCache.Store(ctx, entry); err != nil {
-		e.logger.WarnContext(ctx, "failed to cache role slug",
-			attr.SlogUserID(userID),
-			attr.SlogOrganizationID(orgID),
-			attr.SlogError(err),
-		)
-	}
-}
-
-// InvalidateRoleCache removes the cached role slug for a single user. Call
-// this after updating a specific member's role via UpdateMemberRole.
-func (e *Engine) InvalidateRoleCache(ctx context.Context, userID, orgID string) {
-	entry := roleSlugCache{UserID: userID, OrgID: orgID, Slug: ""}
-	if err := e.roleCache.Delete(ctx, entry); err != nil {
-		e.logger.WarnContext(ctx, "failed to invalidate cached role slug",
-			attr.SlogUserID(userID),
-			attr.SlogOrganizationID(orgID),
-			attr.SlogError(err),
-		)
-	}
-}
-
-// InvalidateAllRoleCaches removes all cached role slugs for an org. Call this
-// after bulk role reassignments where individual user IDs aren't tracked.
-func (e *Engine) InvalidateAllRoleCaches(ctx context.Context, orgID string) {
-	if err := e.roleCache.DeleteByPrefix(ctx, "role-slug:"+orgID+":"); err != nil {
-		e.logger.WarnContext(ctx, "failed to invalidate cached role slugs for org",
-			attr.SlogOrganizationID(orgID),
-			attr.SlogError(err),
-		)
-	}
+	return rolePrincipals, nil
 }
 
 func (e *Engine) Require(ctx context.Context, checks ...Check) error {

@@ -14,6 +14,7 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -373,7 +374,7 @@ func upsertOrganizationRole(ctx context.Context, logger *slog.Logger, dbtx datab
 		return nil
 	}
 
-	if err := repo.UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+	if _, err := repo.UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
 		OrganizationID:    org.ID,
 		WorkosSlug:        payload.Slug,
 		WorkosName:        payload.Name,
@@ -438,10 +439,8 @@ func handleRoleDeleted(ctx context.Context, logger *slog.Logger, dbtx database.D
 		return fmt.Errorf("mark organization role %q deleted: %w", payload.Slug, err)
 	}
 
-	if _, err := repo.DeletePrincipalGrantsByPrincipal(ctx, accessrepo.DeletePrincipalGrantsByPrincipalParams{
-		OrganizationID: org.ID,
-		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeRole, payload.Slug),
-	}); err != nil {
+	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+existing.ID.String())
+	if err := authz.DeleteRoleGrants(ctx, repo, org.ID, payload.Slug, rolePrincipal.String()); err != nil {
 		return fmt.Errorf("delete grants for role %q: %w", payload.Slug, err)
 	}
 

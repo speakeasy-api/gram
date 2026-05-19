@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -90,7 +91,8 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roles, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache), noopFeatureCacheWriter{}, auditLogger)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, NewRoleManager(logger, conn, roles, auditLogger), authzEngine, noopFeatureCacheWriter{}, auditLogger)
 
 	return ctx, &testInstance{
 		service: svc,
@@ -137,6 +139,61 @@ func listPrincipalGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	require.NoError(t, err)
 
 	return grants
+}
+
+func seedRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, role workos.Role) string {
+	t.Helper()
+
+	createdAt, err := time.Parse(time.RFC3339, role.CreatedAt)
+	require.NoError(t, err)
+	updatedAt, err := time.Parse(time.RFC3339, role.UpdatedAt)
+	require.NoError(t, err)
+
+	_, err = accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+		OrganizationID:    organizationID,
+		WorkosSlug:        role.Slug,
+		WorkosName:        role.Name,
+		WorkosDescription: conv.ToPGTextEmpty(role.Description),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(createdAt),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(updatedAt),
+		WorkosLastEventID: conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	row, err := accessrepo.New(conn).GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{
+		OrganizationID: organizationID,
+		WorkosSlug:     role.Slug,
+	})
+	require.NoError(t, err)
+
+	return row.ID.String()
+}
+
+func seedRoleAssignment(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, userID string, member workos.Member) {
+	t.Helper()
+
+	updatedAt := time.Now().UTC()
+	if member.UpdatedAt != "" {
+		parsed, err := time.Parse(time.RFC3339, member.UpdatedAt)
+		require.NoError(t, err)
+		updatedAt = parsed
+	} else if member.CreatedAt != "" {
+		parsed, err := time.Parse(time.RFC3339, member.CreatedAt)
+		require.NoError(t, err)
+		updatedAt = parsed
+	}
+
+	replaced, err := accessrepo.New(conn).ReplaceOrganizationRoleAssignment(ctx, accessrepo.ReplaceOrganizationRoleAssignmentParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       member.UserID,
+		WorkosRoleSlug:     member.RoleSlug,
+		UserID:             conv.ToPGTextEmpty(userID),
+		WorkosMembershipID: conv.ToPGTextEmpty(member.ID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(updatedAt),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), replaced)
 }
 
 // seedDisconnectedUser creates a user in the users table with a workos_id but

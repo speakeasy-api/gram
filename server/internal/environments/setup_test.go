@@ -74,7 +74,7 @@ func newTestEnvironmentService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 	auditLogger := audit.NewLogger()
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := environments.NewService(logger, tracerProvider, conn, sessionManager, enc, authzEngine, auditLogger)
 
 	return ctx, &testInstance{

@@ -13,7 +13,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/assistant_memories"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/memory/repo"
@@ -64,7 +63,7 @@ func newTestHarness(t *testing.T) (*testHarness, context.Context) {
 
 	mem := &fakeMemory{listFn: nil, getFn: nil, deleteFn: nil}
 
-	authzEngine := authz.NewEngine(logger, nil, nil, authztest.RBACAlwaysDisabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, nil, nil, authztest.RBACAlwaysDisabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	svc := &Service{
 		tracer: tracerProvider.Tracer("test"),
@@ -135,7 +134,7 @@ func TestListAssistantMemories_RBACDenied(t *testing.T) {
 
 	h, ctx := newTestHarness(t)
 	logger := testenv.NewLogger(t)
-	h.svc.authz = authz.NewEngine(logger, nil, nil, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	h.svc.authz = authz.NewEngine(logger, nil, nil, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := h.svc.ListAssistantMemories(ctx, &gen.ListAssistantMemoriesPayload{
@@ -304,7 +303,7 @@ func TestGetAssistantMemory_RBACDenied(t *testing.T) {
 
 	h, ctx := newTestHarness(t)
 	logger := testenv.NewLogger(t)
-	h.svc.authz = authz.NewEngine(logger, nil, nil, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	h.svc.authz = authz.NewEngine(logger, nil, nil, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := h.svc.GetAssistantMemory(ctx, &gen.GetAssistantMemoryPayload{
@@ -375,7 +374,7 @@ func TestDeleteAssistantMemory_RBACDenied(t *testing.T) {
 
 	h, ctx := newTestHarness(t)
 	logger := testenv.NewLogger(t)
-	h.svc.authz = authz.NewEngine(logger, nil, nil, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	h.svc.authz = authz.NewEngine(logger, nil, nil, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, h.projectID.String()))
 

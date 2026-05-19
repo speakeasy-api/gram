@@ -355,7 +355,7 @@ func seedOrganizationRoleWithCursor(t *testing.T, ctx context.Context, conn *pgx
 	t.Helper()
 
 	updatedAt := time.Date(2026, 5, 7, 10, 0, 0, 0, time.UTC)
-	err := accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+	_, err := accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
 		OrganizationID:    organizationID,
 		WorkosSlug:        slug,
 		WorkosName:        name,

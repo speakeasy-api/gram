@@ -1,16 +1,13 @@
 package access
 
 import (
-	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"testing"
 
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -22,21 +19,16 @@ func TestService_ListRoles(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockSystemRole("role_admin", "Admin", "admin"),
-		mockRole("role_custom", "Custom Builder", "custom-builder", "Can build selected resources"),
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
-		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "custom-builder"),
-		mockMember(mockidp.MockOrgID, "membership_3", "user_3", "custom-builder"),
-		// user_workos_only has never logged into Gram — should not be counted
-		mockMember(mockidp.MockOrgID, "membership_workos_only", "user_workos_only", "custom-builder"),
-	}, nil).Once()
+	adminID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
+	customID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Can build selected resources"))
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "user2@test.com", "User 2", "user_2", "membership_2")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_3", "user3@test.com", "User 3", "user_3", "membership_3")
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMember("", "membership_1", "user_1", "admin"))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", mockMember("", "membership_2", "user_2", "custom-builder"))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_3", mockMember("", "membership_3", "user_3", "custom-builder"))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "", mockMember("", "membership_workos_only", "user_workos_only", "custom-builder"))
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "admin"), authz.ScopeOrgAdmin, authz.WildcardResource)
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-2")
@@ -51,7 +43,7 @@ func TestService_ListRoles(t *testing.T) {
 		rolesByID[role.ID] = role
 	}
 
-	adminRole := rolesByID["role_admin"]
+	adminRole := rolesByID[adminID]
 	require.NotNil(t, adminRole)
 	require.Equal(t, "Admin", adminRole.Name)
 	require.True(t, adminRole.IsSystem)
@@ -62,7 +54,7 @@ func TestService_ListRoles(t *testing.T) {
 	require.Equal(t, string(authz.ScopeOrgAdmin), adminRole.Grants[0].Scope)
 	require.Nil(t, adminRole.Grants[0].Selectors)
 
-	customRole := rolesByID["role_custom"]
+	customRole := rolesByID[customID]
 	require.NotNil(t, customRole)
 	require.Equal(t, "Custom Builder", customRole.Name)
 	require.False(t, customRole.IsSystem)
@@ -96,14 +88,10 @@ func TestService_ListRoles_ExcludesDisconnectedUsersFromMemberCounts(t *testing.
 	// (no organization_user_relationships row). Should not inflate member count.
 	seedDisconnectedUser(t, ctx, ti.conn, "local_user_2", "user2@test.com", "User 2", "user_2")
 
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockSystemRole("role_admin", "Admin", "admin"),
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
-		// user_2 appears in WorkOS members but is disconnected locally.
-		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "admin"),
-	}, nil).Once()
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMember("", "membership_1", "user_1", "admin"))
+	// user_2 appears in role assignments but is disconnected locally.
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "", mockMember("", "membership_2", "user_2", "admin"))
 
 	result, err := ti.service.ListRoles(ctx, &gen.ListRolesPayload{})
 	require.NoError(t, err)
