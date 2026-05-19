@@ -892,12 +892,28 @@ func (s *Service) TriggerRiskAnalysis(ctx context.Context, payload *gen.TriggerR
 		return oops.C(oops.CodeInvalid)
 	}
 
-	policy, err := s.repo.BumpRiskPolicyVersion(ctx, repo.BumpRiskPolicyVersionParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "bump policy version").Log(ctx, s.logger)
+	// reanalyze=true → bump the policy version so previously-analyzed
+	// messages re-run. reanalyze=false (default) → leave the version
+	// alone and just signal the drain; the workflow will pick up only
+	// messages with no analysis at the current version, i.e. extend
+	// rather than redo.
+	var policy repo.RiskPolicy
+	if payload.Reanalyze {
+		policy, err = s.repo.BumpRiskPolicyVersion(ctx, repo.BumpRiskPolicyVersionParams{
+			ID:        id,
+			ProjectID: *authCtx.ProjectID,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "bump policy version").Log(ctx, s.logger)
+		}
+	} else {
+		policy, err = s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+			ID:        id,
+			ProjectID: *authCtx.ProjectID,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "load policy").Log(ctx, s.logger)
+		}
 	}
 
 	if err := s.audit.LogRiskPolicyTrigger(ctx, s.db, audit.LogRiskPolicyTriggerEvent{
@@ -913,8 +929,7 @@ func (s *Service) TriggerRiskAnalysis(ctx context.Context, payload *gen.TriggerR
 	}
 
 	// payload.Limit defaults to 100 (Goa fills in the recent-N budget
-	// when callers omit it). Explicit 0 requests a full backfill of
-	// every unanalyzed message.
+	// when callers omit it). Explicit 0 requests every message in scope.
 	maxMessages := payload.Limit
 
 	if err := s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{

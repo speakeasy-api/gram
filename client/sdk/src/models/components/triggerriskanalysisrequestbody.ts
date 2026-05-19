@@ -10,15 +10,20 @@ export type TriggerRiskAnalysisRequestBody = {
    */
   id: string;
   /**
-   * Cap the backfill at the most recent N unanalyzed messages. Defaults to 100 (the recent-N drain budget). Pass 0 to request a full backfill of every unanalyzed message.
+   * Cap the run at the most recent N messages. Defaults to 100 (the recent-N drain budget). Pass 0 to request every message in scope.
    */
   limit?: number | undefined;
+  /**
+   * When true, bump the policy version so messages already analyzed at the current version are re-scanned. When false (default), only messages with no analysis at the current version are scanned.
+   */
+  reanalyze?: boolean | undefined;
 };
 
 /** @internal */
 export type TriggerRiskAnalysisRequestBody$Outbound = {
   id: string;
   limit: number;
+  reanalyze: boolean;
 };
 
 /** @internal */
@@ -28,6 +33,7 @@ export const TriggerRiskAnalysisRequestBody$outboundSchema: z.ZodMiniType<
 > = z.object({
   id: z.string(),
   limit: z._default(z.int(), 100),
+  reanalyze: z._default(z.boolean(), false),
 });
 
 export function triggerRiskAnalysisRequestBodyToJSON(

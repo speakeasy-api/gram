@@ -18643,7 +18643,7 @@ paths:
             x-speakeasy-name-override: status
     /rpc/risk.policies.trigger:
         post:
-            description: Manually trigger risk analysis for a policy, starting or signaling the drain workflow. Defaults to the most recent 100 unanalyzed messages; pass `limit=0` to backfill every unanalyzed message.
+            description: Manually trigger risk analysis for a policy. Defaults to extending analysis to the most recent 100 messages not yet analyzed at the current policy version; pass `limit=0` to cover every message in scope. Pass `reanalyze=true` to bump the policy version and re-scan messages already analyzed at the current version (e.g. after a rule change).
             operationId: triggerRiskAnalysis
             parameters:
                 - allowEmptyValue: true
@@ -36013,10 +36013,14 @@ components:
                     format: uuid
                 limit:
                     type: integer
-                    description: Cap the backfill at the most recent N unanalyzed messages. Defaults to 100 (the recent-N drain budget). Pass 0 to request a full backfill of every unanalyzed message.
+                    description: Cap the run at the most recent N messages. Defaults to 100 (the recent-N drain budget). Pass 0 to request every message in scope.
                     default: 100
                     format: int32
                     minimum: 0
+                reanalyze:
+                    type: boolean
+                    description: When true, bump the policy version so messages already analyzed at the current version are re-scanned. When false (default), only messages with no analysis at the current version are scanned.
+                    default: false
             required:
                 - id
         UpdateAssistantForm:
