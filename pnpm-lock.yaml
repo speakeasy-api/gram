@@ -38,6 +38,7 @@ catalogs:
       version: 5.9.3
 
 overrides:
+  glob@>=10.0 <10.5.0: 10.5.0
   react-is: 19.2.3
   recharts: 2.15.4
 
