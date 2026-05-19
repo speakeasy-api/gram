@@ -87,7 +87,8 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     if (
       location.pathname === "/" ||
       UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p)) ||
-      location.pathname.endsWith("/setup")
+      location.pathname.endsWith("/setup") ||
+      isSetupDomain()
     ) {
       return null;
     }
@@ -151,19 +152,22 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // Handle initial navigation
   const redirectParam = searchParams.get("redirect");
 
-  // On the setup subdomain, always funnel authenticated users to the setup wizard
+  // On the setup subdomain, always funnel authenticated users to the setup wizard.
+  // The setup domain renders the wizard at "/" so the org slug stays out of the URL.
+  // Early-return after the redirect so we never hit the slug-based navigation below
+  // (which would redirect to /:orgSlug and cause a loop).
   if (isSetupDomain() && session.organization) {
-    const setupPath = `/${session.organization.slug}/setup`;
-    if (!location.pathname.startsWith(setupPath)) {
-      return <Navigate to={setupPath} replace />;
+    if (location.pathname !== "/") {
+      return <Navigate to="/" replace />;
     }
+    return (
+      <SessionContext.Provider value={session}>
+        {children}
+      </SessionContext.Provider>
+    );
   }
 
   if (redirectParam) {
-    // On setup domain, ignore redirect params that would leave the setup flow
-    if (isSetupDomain() && session.organization) {
-      return <Navigate to={`/${session.organization.slug}/setup`} replace />;
-    }
     return <Navigate to={redirectParam} replace />;
   } else if (isSlugExempt) {
     // Fall through to render children

@@ -155,6 +155,16 @@ func newStartCommand() *cli.Command {
 			Required: true,
 		},
 		&cli.StringFlag{
+			Name:    "setup-site-url",
+			Usage:   "Origin of the enterprise setup subdomain (e.g. https://setup.getgram.ai)",
+			EnvVars: []string{"GRAM_SETUP_SITE_URL"},
+		},
+		&cli.StringFlag{
+			Name:    "cookie-domain",
+			Usage:   "Domain attribute for session cookies (e.g. getgram.ai, localhost)",
+			EnvVars: []string{"GRAM_COOKIE_DOMAIN"},
+		},
+		&cli.StringFlag{
 			Name:     "database-url",
 			Usage:    "Database URL",
 			EnvVars:  []string{"GRAM_DATABASE_URL"},
@@ -968,6 +978,8 @@ func newStartCommand() *cli.Command {
 					IDPBaseURL:        c.String("idp-base-url"),
 					GramServerURL:     c.String("server-url"),
 					SignInRedirectURL: auth.FormSignInRedirectURL(c.String("site-url")),
+					SetupSiteURL:      c.String("setup-site-url"),
+					CookieDomain:      c.String("cookie-domain"),
 					Environment:       c.String("environment"),
 				},
 				authzEngine,

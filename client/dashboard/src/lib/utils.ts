@@ -11,6 +11,12 @@ export function cn(...inputs: ClassValue[]) {
 // Use everywhere except the playground — MCP configs, callback URL
 // displays, anything operator-facing.
 export function getServerURL(): string {
+  // On the setup subdomain, route API calls through the current origin
+  // (Vite proxy in dev, same-origin in prod) so that session cookies —
+  // which are scoped to the setup host — are included by the browser.
+  if (isSetupDomain()) {
+    return window.location.origin;
+  }
   return __GRAM_SERVER_URL__ ?? window.location.origin;
 }
 
@@ -23,7 +29,10 @@ export function getPlaygroundMcpBaseURL(): string {
 }
 
 export function buildLoginRedirectURL(redirectTo: string | null): string {
-  let href = `${getServerURL()}/rpc/auth.login`;
+  // On the setup subdomain, route auth through the current origin so the
+  // session cookie is scoped to setup.* (Vite proxies /rpc to the server).
+  const base = isSetupDomain() ? window.location.origin : getServerURL();
+  let href = `${base}/rpc/auth.login`;
   if (redirectTo) href += `?redirect=${encodeURIComponent(redirectTo)}`;
   return href;
 }
