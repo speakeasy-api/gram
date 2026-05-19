@@ -186,6 +186,64 @@ func (q *Queries) GetAllOrganizationsWithToolsets(ctx context.Context) ([]GetAll
 	return items, nil
 }
 
+const getOpenRouterCreditsMonitoringTargets = `-- name: GetOpenRouterCreditsMonitoringTargets :many
+SELECT
+    om.id AS organization_id,
+    om.slug AS organization_slug,
+    om.gram_account_type,
+    k.monthly_credits,
+    k.key AS api_key
+FROM organization_metadata om
+JOIN openrouter_api_keys k ON k.organization_id = om.id
+WHERE om.disabled_at IS NULL
+  AND k.disabled = FALSE
+  AND k.deleted = FALSE
+  AND om.gram_account_type = ANY($1::text[])
+ORDER BY om.slug
+`
+
+type GetOpenRouterCreditsMonitoringTargetsRow struct {
+	OrganizationID   string
+	OrganizationSlug string
+	GramAccountType  string
+	MonthlyCredits   int64
+	ApiKey           string
+}
+
+// Targets for periodic OpenRouter credit usage polling. Filters out disabled
+// orgs and disabled/deleted keys, and restricts to the caller-supplied
+// account-type allowlist so coverage can expand (e.g. add 'pro') without a
+// code change. monthly_credits is the canonical limit last written by
+// RefreshAPIKeyLimit and reflects any per-org overrides applied via the
+// OpenrouterKeyRefreshWorkflow. The api_key is included so the caller can
+// issue the upstream usage HTTP call in a single round-trip — keep it inside
+// the activity boundary and never return it to the workflow.
+func (q *Queries) GetOpenRouterCreditsMonitoringTargets(ctx context.Context, accountTypes []string) ([]GetOpenRouterCreditsMonitoringTargetsRow, error) {
+	rows, err := q.db.Query(ctx, getOpenRouterCreditsMonitoringTargets, accountTypes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetOpenRouterCreditsMonitoringTargetsRow
+	for rows.Next() {
+		var i GetOpenRouterCreditsMonitoringTargetsRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.OrganizationSlug,
+			&i.GramAccountType,
+			&i.MonthlyCredits,
+			&i.ApiKey,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPlatformUsageMetrics = `-- name: GetPlatformUsageMetrics :many
 WITH latest_deployments AS (
   SELECT DISTINCT ON (project_id) project_id, d.id as deployment_id

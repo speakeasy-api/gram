@@ -22,14 +22,14 @@ func RevokeInviteOrganizationsPath() string {
 	return "/rpc/organizations.revokeInvite"
 }
 
+// UpdateInviteRoleOrganizationsPath returns the URL path to the organizations service updateInviteRole HTTP endpoint.
+func UpdateInviteRoleOrganizationsPath() string {
+	return "/rpc/organizations.updateInviteRole"
+}
+
 // ListInvitesOrganizationsPath returns the URL path to the organizations service listInvites HTTP endpoint.
 func ListInvitesOrganizationsPath() string {
 	return "/rpc/organizations.listInvites"
-}
-
-// GetInviteByTokenOrganizationsPath returns the URL path to the organizations service getInviteByToken HTTP endpoint.
-func GetInviteByTokenOrganizationsPath() string {
-	return "/rpc/organizations.getInviteByToken"
 }
 
 // ListUsersOrganizationsPath returns the URL path to the organizations service listUsers HTTP endpoint.

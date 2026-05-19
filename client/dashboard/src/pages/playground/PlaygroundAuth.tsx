@@ -6,7 +6,7 @@ import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { Toolset } from "@/lib/toolTypes";
-import { getServerURL } from "@/lib/utils";
+import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
   useGetMcpMetadata,
@@ -54,15 +54,17 @@ function ExternalMcpOAuthConnection({
   toolsetSlug,
   oauthMode,
   providerName,
+  isIssuerGated,
 }: {
   toolsetSlug: string;
   oauthMode: "custom-proxy" | "external";
   providerName: string;
+  isIssuerGated: boolean;
 }) {
   const { data: toolset } = useToolset(toolsetSlug);
   const project = useProject();
   const queryClient = useQueryClient();
-  const apiUrl = getServerURL();
+  const apiUrl = getPlaygroundMcpBaseURL();
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Clean up poll timer on unmount
@@ -72,6 +74,18 @@ function ExternalMcpOAuthConnection({
         clearInterval(pollTimerRef.current);
       }
     };
+  }, []);
+
+  // Auto-close when this page is loaded inside the issuer-connect popup:
+  // the server redirects back to the dashboard URL with ?issuer_connected=1
+  // after writing remote_sessions; the parent window's popup-close polling
+  // then refetches status.
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.opener) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("issuer_connected") === "1") {
+      window.close();
+    }
   }, []);
 
   // Query OAuth status using the shared hook
@@ -130,7 +144,10 @@ function ExternalMcpOAuthConnection({
       project: project.slug,
     });
 
-    const authUrl = `${apiUrl}/oauth-external/authorize?${params.toString()}`;
+    const endpoint = isIssuerGated
+      ? "/oauth-external/issuer-connect"
+      : "/oauth-external/authorize";
+    const authUrl = `${apiUrl}${endpoint}?${params.toString()}`;
 
     const width = 600;
     const height = 700;
@@ -197,16 +214,18 @@ function ExternalMcpOAuthConnection({
         </Type>
 
         {isConnected ? (
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full"
-            onClick={() => disconnectMutation.mutate()}
-            disabled={disconnectMutation.isPending}
-          >
-            <LogOut className="mr-2 size-3" />
-            Disconnect
-          </Button>
+          isIssuerGated ? null : (
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full"
+              onClick={() => disconnectMutation.mutate()}
+              disabled={disconnectMutation.isPending}
+            >
+              <LogOut className="mr-2 size-3" />
+              Disconnect
+            </Button>
+          )
         ) : (
           <Button
             size="sm"
@@ -232,6 +251,7 @@ export function PlaygroundAuth({
   // Check if toolset has OAuth configuration at the toolset level
   const oauthMode = useMemo(() => getToolsetOAuthMode(toolset), [toolset]);
   const hasOAuth = oauthMode !== "none";
+  const loginSecured = !!toolset.userSessionIssuerSlug;
   const oauthProviderName = useMemo(
     () => getOAuthProviderName(toolset),
     [toolset],
@@ -329,7 +349,12 @@ export function PlaygroundAuth({
   };
 
   // Show "no auth required" only if there are no env vars AND no OAuth
-  if (envVars.length === 0 && !hasOAuth && !oauthConfigRequired) {
+  if (
+    envVars.length === 0 &&
+    !hasOAuth &&
+    !oauthConfigRequired &&
+    !loginSecured
+  ) {
     return (
       <div className="py-4 text-center">
         <Type variant="small" className="text-muted-foreground">
@@ -341,8 +366,22 @@ export function PlaygroundAuth({
 
   return (
     <div className="space-y-3">
+      {loginSecured && (
+        <div className="border-success-softest bg-success-softest rounded-md border p-3">
+          <Stack direction="horizontal" align="center" className="gap-2">
+            <Badge variant="success">
+              <CheckCircle className="mr-1 size-3" />
+              Login Secured
+            </Badge>
+            <Type variant="small" className="text-success-foreground">
+              Interactive auth is configured.
+            </Type>
+          </Stack>
+        </div>
+      )}
+
       {oauthConfigRequired && (
-        <div className="border-warning-foreground/80 bg-warning rounded-md border border-dashed p-3 text-center">
+        <div className="border-warning-foreground/80 bg-warning dark:bg-warning/10 dark:border-warning-foreground/30 rounded-md border border-dashed p-3 text-center">
           <AlertTriangle className="text-warning-foreground mx-auto mb-1 size-4" />
           <Type
             variant="small"
@@ -385,6 +424,7 @@ export function PlaygroundAuth({
             toolsetSlug={toolset.slug}
             oauthMode={oauthMode}
             providerName={oauthProviderName}
+            isIssuerGated={loginSecured}
           />
         )}
 

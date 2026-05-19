@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
-	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -144,12 +143,6 @@ func (s *Service) serveRemoteBackend(
 	ctx := r.Context()
 	logger = logger.With(attr.SlogRemoteMCPServerID(mcpServer.RemoteMcpServerID.UUID.String()))
 
-	// authorizationOverride is the Bearer token to set on the outgoing
-	// upstream request. The caller's Authorization is always dropped by
-	// the proxy (Gram credentials don't apply upstream); this value
-	// replaces it. Empty means send no Authorization upstream.
-	var authorizationOverride string
-
 	// Identity auth + access checks, mirroring the relevant cases of
 	// mcp.ServeToolsetResolved. Unrecognised visibility values fail closed
 	// in the default branch — disabled was already filtered upstream in
@@ -162,16 +155,6 @@ func (s *Service) serveRemoteBackend(
 		// callers — API keys bypass RBAC by design (they have their own
 		// scoping), so the org-membership check is the meaningful gate
 		// for API-key callers.
-		//
-		// TODO: when mcpServer.OauthProxyServerID is set with a "gram"
-		// provider, isOAuthCapable below should be true so the caller's
-		// Bearer is validated as a Gram-issued OAuth token (rather than
-		// only as an API key / chat session). Today it's hardcoded to
-		// false because the supporting oauth machinery is keyed by
-		// toolset_id and needs generalising to mcp_servers.id first
-		// (same blocker as ResolveOAuthProxyUpstreamToken). When
-		// isOAuthCapable becomes true, wwwAuthResourceMetadataURL must
-		// also be plumbed through (see /x/mcp .well-known route).
 		var err error
 		ctx, err = s.mcpService.RequirePrivateIdentityAuth(ctx, w, r, false, mcpServer.ID, "")
 		if err != nil {
@@ -195,46 +178,14 @@ func (s *Service) serveRemoteBackend(
 			return err
 		}
 	case visibilityPublic:
-		switch {
-		case mcpServer.OauthProxyServerID.Valid:
-			// Public + OAuth proxy ("custom" provider): the caller's
-			// Bearer is a Gram-issued OAuth token; resolve it to the
-			// user's stored upstream credential and forward that to the
-			// remote MCP server.
-			//
-			// TODO: ResolveOAuthProxyUpstreamToken is currently a stub
-			// returning ("", nil) until the OAuth resource model is
-			// generalised from toolset_id to mcp_servers.id. For now
-			// this branch behaves like a no-token public flow — the
-			// upstream receives no Authorization and may reject. Once
-			// the stub is implemented, callers with a valid Gram OAuth
-			// token will get their stored upstream credential forwarded
-			// automatically.
-			var err error
-			authorizationOverride, err = s.mcpService.ResolveOAuthProxyUpstreamToken(
-				ctx,
-				mcpServer.OauthProxyServerID.UUID,
-				mcpServer.ID,
-				mcp.AuthorizationBearerToken(r),
-			)
-			if err != nil {
-				return fmt.Errorf("resolve oauth proxy upstream token: %w", err)
-			}
-		case mcpServer.ExternalOauthServerID.Valid:
-			// Public + external OAuth: the caller's Bearer is intended
-			// for the upstream remote MCP server (Gram is not the AS in
-			// this configuration), so forward it verbatim.
-			authorizationOverride = mcp.AuthorizationBearerToken(r)
-		default:
-			// Public, no OAuth: optionally probe Gram identity if the
-			// caller supplied an Authorization or Gram-Chat-Session
-			// token so authenticated callers carry the right context
-			// downstream. Nothing meaningful to forward upstream.
-			var err error
-			ctx, err = s.mcpService.TryPublicIdentityAuth(ctx, r, false, mcpServer.ID)
-			if err != nil {
-				return fmt.Errorf("public identity auth: %w", err)
-			}
+		// Public, no OAuth: optionally probe Gram identity if the
+		// caller supplied an Authorization or Gram-Chat-Session
+		// token so authenticated callers carry the right context
+		// downstream. Nothing meaningful to forward upstream.
+		var err error
+		ctx, err = s.mcpService.TryPublicIdentityAuth(ctx, r, false, mcpServer.ID)
+		if err != nil {
+			return fmt.Errorf("public identity auth: %w", err)
 		}
 	default:
 		return oops.E(oops.CodeUnexpected, nil, "unrecognized mcp server visibility %q", mcpServer.Visibility).Log(ctx, logger)
@@ -256,7 +207,7 @@ func (s *Service) serveRemoteBackend(
 		return oops.E(oops.CodeUnexpected, err, "load remote mcp server headers").Log(ctx, logger)
 	}
 
-	p := s.buildProxy(logger, &server, headers, authorizationOverride, mcpServer.Visibility, endpoint.ProjectID.String())
+	p := s.buildProxy(logger, &server, headers, mcpServer.Visibility, endpoint.ProjectID.String())
 
 	r = r.WithContext(ctx)
 
@@ -284,15 +235,15 @@ func (s *Service) serveRemoteBackend(
 }
 
 // buildProxy converts the loaded DB types into the typed configuration
-// expected by the remotemcp/proxy package. authorizationOverride is the
-// Bearer token to set on the outgoing upstream request — leave empty to
-// send no Authorization. The caller's incoming Authorization header is
-// always dropped by the proxy regardless of this value. visibility scopes
-// which interceptors are attached: per-tool RBAC fires on private servers
-// only, since public servers bypass server-level RBAC. projectID is the
-// owning project for the mcp_endpoint and is forwarded to the per-tool
-// authz interceptor as a dimension so project-scoped grants can match.
-func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMcpServer, headers []remotemcprepo.RemoteMcpServerHeader, authorizationOverride string, visibility string, projectID string) *proxy.Proxy {
+// expected by the remotemcp/proxy package. The caller's incoming
+// Authorization header is always dropped by the proxy and no Authorization
+// is sent upstream — the upstream remote MCP server handles its own OAuth
+// where applicable. visibility scopes which interceptors are attached:
+// per-tool RBAC fires on private servers only, since public servers bypass
+// server-level RBAC. projectID is the owning project for the mcp_endpoint
+// and is forwarded to the per-tool authz interceptor as a dimension so
+// project-scoped grants can match.
+func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMcpServer, headers []remotemcprepo.RemoteMcpServerHeader, visibility string, projectID string) *proxy.Proxy {
 	configured := make([]proxy.ConfiguredHeader, 0, len(headers))
 	for _, h := range headers {
 		configured = append(configured, proxy.ConfiguredHeader{
@@ -310,19 +261,48 @@ func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMc
 	// RecordMCPToolCall fires before the per-tool RBAC check in
 	// rpc_tools_call.go.
 	//
-	// The per-tool authz interceptor is only attached for private-visibility
-	// servers. Public servers bypass server-level RBAC by design (see
-	// serveRemoteBackend), so per-tool RBAC is also skipped — otherwise an
-	// unauthenticated public caller would be unable to invoke any tool.
+	// Per-tool RBAC interceptors (ToolsCallAuthzInterceptor on the
+	// request side; ToolsListMCPConnectFilterInterceptor on the response
+	// side) are only attached for private-visibility servers. Public
+	// servers bypass server-level RBAC by design (see
+	// serveRemoteBackend), so per-tool RBAC is also skipped — otherwise
+	// an unauthenticated public caller would be unable to invoke any
+	// tool, and the tools/list filter would have no grants to consult.
+	//
+	// The shadow-MCP interceptors are attached unconditionally — public
+	// AND private — because they enforce a project-scoped risk policy,
+	// not an identity-scoped grant. A project that enables tool-identity
+	// capture wants the property injected and validated on every call
+	// the proxy serves, regardless of whether the underlying transport
+	// authenticated the caller. The pair self-gates via
+	// shadowmcp.Client.IsEnabledForProject at intercept time; the lookup
+	// is Redis-cached (15-minute TTL) so the hot-path cost when the
+	// policy is disabled is a single cache GET.
 	toolsCallReqInterceptors := []proxy.ToolsCallRequestInterceptor{
 		NewToolsCallOTELCounterInterceptor(s.xmcpMetrics, serverID, logger),
 		s.toolsCallUsageLimitsInterceptor,
+		NewToolsCallShadowMCPValidateAndStripInterceptor(s.shadowmcpClient, serverID, projectID, logger),
 	}
 	if visibility == visibilityPrivate {
 		toolsCallReqInterceptors = append(toolsCallReqInterceptors,
 			NewToolsCallAuthzInterceptor(s.authz, serverID, projectID, logger),
 		)
 	}
+
+	// ToolsList response chain ordering: filter first (drop tools the
+	// caller can't see), then inject (only mutate schemas of tools that
+	// survive the filter — saves work and prevents leaking the
+	// proxy-only x-gram-toolset-id property on tools the caller couldn't
+	// invoke anyway).
+	toolsListRespInterceptors := []proxy.ToolsListResponseInterceptor{}
+	if visibility == visibilityPrivate {
+		toolsListRespInterceptors = append(toolsListRespInterceptors,
+			NewToolsListMCPConnectFilterInterceptor(s.authz, serverID, projectID, logger),
+		)
+	}
+	toolsListRespInterceptors = append(toolsListRespInterceptors,
+		NewToolsListShadowMCPInjectInterceptor(s.shadowmcpClient, serverID, projectID, logger),
+	)
 
 	return &proxy.Proxy{
 		GuardianPolicy:          s.guardianPolicy,
@@ -335,7 +315,7 @@ func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMc
 		ServerID:                serverID,
 		RemoteURL:               server.Url,
 		Headers:                 configured,
-		AuthorizationOverride:   authorizationOverride,
+		AuthorizationOverride:   "",
 		UserRequestInterceptors: nil,
 		InitializeRequestInterceptors: []proxy.InitializeRequestInterceptor{
 			s.initializePostHogEventInterceptor,
@@ -348,6 +328,6 @@ func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMc
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
 			NewToolsListPostHogEventInterceptor(s.posthog, serverID, logger),
 		},
-		ToolsListResponseInterceptors: nil,
+		ToolsListResponseInterceptors: toolsListRespInterceptors,
 	}
 }

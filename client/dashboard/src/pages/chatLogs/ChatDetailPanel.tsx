@@ -8,6 +8,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { CodeBlock } from "@/components/ui/code-block";
+import { ruleIdCategoryLabel } from "@/pages/security/rule-ids";
 import type {
   ChatMessage,
   ChatResolution,
@@ -17,7 +18,7 @@ import { useLoadChat, useSearchLogsMutation } from "@gram/client/react-query";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
 import {
   Popover,
@@ -31,6 +32,20 @@ import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { MessageContent } from "@gram-ai/elements";
 import { useIsAdmin } from "@/contexts/Auth";
 import { toast } from "sonner";
+import { EntryTypeFilterBar } from "./TraceEntryFilterBar";
+import { TraceEntryIcon } from "./TraceEntryIcon";
+import {
+  DEFAULT_ENABLED_ENTRY_TYPES,
+  ENTRY_TYPE_META,
+  type FilterableTraceEntryType,
+  type ToolCall,
+  type TraceEntryType,
+  getEntryTypeCounts,
+  getTraceEntryType,
+  getVisibleMessageCount,
+  isMessageVisible,
+  parseToolCalls,
+} from "./traceEntries";
 
 interface ChatDetailPanelProps {
   chatId: string;
@@ -45,68 +60,68 @@ function getTraceId(chatId: string): string {
   return `trace-${chatId.slice(0, 3)}`;
 }
 
-function exportChatAsJson(chat: {
-  id: string;
-  title: string;
-  source?: string;
-  createdAt: Date;
-  updatedAt: Date;
-  messages: Array<{
+const PANEL_TELEMETRY_LOG_LIMIT = 100;
+
+function downloadJsonFile(filename: string, data: unknown) {
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function getTraceExportSlug(chat: { id: string; title?: string | null }) {
+  const titleSlug = chat.title
+    ?.toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40);
+
+  return titleSlug || chat.id.slice(0, 8);
+}
+
+function exportTraceDataAsJson({
+  chatId,
+  chat,
+  telemetryLogLimit,
+  telemetryLogs,
+  riskResults,
+}: {
+  chatId: string;
+  chat: {
     id: string;
-    role: string;
-    content?: string;
-    model: string;
-    toolCallId?: string;
-    toolCalls?: string;
-    finishReason?: string;
-    createdAt: Date;
-    generation: number;
-  }>;
-  totalInputTokens?: number;
-  totalOutputTokens?: number;
-  totalTokens?: number;
-  totalCost?: number;
+    title?: string | null;
+    messages: ChatMessage[];
+  };
+  telemetryLogLimit: number;
+  telemetryLogs: TelemetryLogRecord[];
+  riskResults: RiskResult[];
 }) {
   try {
     const exported = {
-      id: chat.id,
-      title: chat.title,
-      source: chat.source,
-      created_at: chat.createdAt.toISOString(),
-      updated_at: chat.updatedAt.toISOString(),
-      total_input_tokens: chat.totalInputTokens,
-      total_output_tokens: chat.totalOutputTokens,
-      total_tokens: chat.totalTokens,
-      total_cost: chat.totalCost,
-      messages: chat.messages.map((m) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        model: m.model,
-        tool_call_id: m.toolCallId,
-        tool_calls: m.toolCalls ? JSON.parse(m.toolCalls) : undefined,
-        finish_reason: m.finishReason,
-        created_at: m.createdAt.toISOString(),
-        generation: m.generation,
-      })),
+      schemaVersion: 1,
+      exportScope: "chat_detail_panel",
+      exportedAt: new Date().toISOString(),
+      chatId,
+      telemetryLogsQuery: {
+        filter: { gramChatId: chatId },
+        limit: telemetryLogLimit,
+        loadedCount: telemetryLogs.length,
+      },
+      panelData: {
+        chat,
+        messages: chat.messages,
+        telemetryLogs,
+        riskResults,
+      },
     };
 
-    const json = JSON.stringify(exported, null, 2);
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const slug = chat.title
-      ? chat.title
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .slice(0, 40)
-      : chat.id.slice(0, 8);
-    a.download = `chat-${slug}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  } catch (_err) {
-    toast.error("Failed to export chat session");
+    downloadJsonFile(`trace-${getTraceExportSlug(chat)}.json`, exported);
+  } catch {
+    toast.error("Failed to export trace data");
   }
 }
 
@@ -152,30 +167,30 @@ function getSeverityBadgeVariant(
   }
 }
 
-interface ToolCall {
-  id?: string;
-  type?: string;
-  name?: string;
-  function?: {
-    name?: string;
-    arguments?: string | object;
-  };
-}
-
 function ChatMessagesList({
   messages,
   messageResolutionMap,
   riskResultsByMessage,
   collapseNonRisk,
+  enabledEntryTypes,
 }: {
   messages: ChatMessage[];
   messageResolutionMap: Map<string, ChatResolution>;
   riskResultsByMessage: Map<string, RiskResult[]>;
   collapseNonRisk?: boolean;
+  enabledEntryTypes: FilterableTraceEntryType[];
 }) {
+  const visibleMessages = useMemo(
+    () =>
+      messages.filter((message) =>
+        isMessageVisible(message, enabledEntryTypes),
+      ),
+    [enabledEntryTypes, messages],
+  );
+
   const groups = useMemo(() => {
     const byGeneration = new Map<number, ChatMessage[]>();
-    for (const m of messages) {
+    for (const m of visibleMessages) {
       const list = byGeneration.get(m.generation) ?? [];
       list.push(m);
       byGeneration.set(m.generation, list);
@@ -183,16 +198,26 @@ function ChatMessagesList({
     return Array.from(byGeneration.entries())
       .sort(([a], [b]) => a - b)
       .map(([generation, items]) => ({ generation, messages: items }));
-  }, [messages]);
+  }, [visibleMessages]);
 
   const maxGeneration =
     groups.length > 0 ? groups[groups.length - 1]!.generation : 0;
 
+  if (visibleMessages.length === 0) {
+    return (
+      <div className="border-muted border-t p-6">
+        <div className="text-muted-foreground rounded-lg border border-dashed p-6 text-center text-sm">
+          No entries match the selected filters.
+        </div>
+      </div>
+    );
+  }
+
   // A single segment (no compaction has ever occurred) stays flat — no accordion.
   if (maxGeneration === 0) {
     return (
-      <Stack direction="vertical" gap={4}>
-        {messages.map((message) => (
+      <Stack direction="vertical" className="border-muted border-b">
+        {visibleMessages.map((message) => (
           <MessageItem
             key={message.id}
             message={message}
@@ -219,7 +244,7 @@ function ChatMessagesList({
             </div>
           </AccordionTrigger>
           <AccordionContent>
-            <Stack direction="vertical" gap={4}>
+            <Stack direction="vertical">
               {groupMessages.map((message) => (
                 <MessageItem
                   key={message.id}
@@ -248,207 +273,365 @@ function MessageItem({
   riskResults: RiskResult[] | undefined;
   collapseNonRisk?: boolean;
 }) {
-  const hasRisk = riskResults && riskResults.length > 0;
+  const hasRisk = !!riskResults && riskResults.length > 0;
   const hasSensitiveContent =
     riskResults?.some(
       (r) => r.source === "gitleaks" || r.source === "presidio",
     ) ?? false;
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(!collapseNonRisk || hasRisk);
   const [contentRevealed, setContentRevealed] = useState(false);
-  const isCollapsed = collapseNonRisk && !hasRisk && !expanded;
+  const isCollapsed = !expanded;
 
-  const parsedToolCalls: ToolCall[] | null = useMemo(() => {
-    if (!message.toolCalls) return null;
-    try {
-      let parsed: unknown = JSON.parse(message.toolCalls);
-      // Handle double-encoded JSON strings
-      if (typeof parsed === "string") {
-        parsed = JSON.parse(parsed);
-      }
-      return Array.isArray(parsed) ? (parsed as ToolCall[]) : null;
-    } catch {
-      return null;
+  useEffect(() => {
+    if (!collapseNonRisk || hasRisk) {
+      setExpanded(true);
     }
-  }, [message.toolCalls]);
+  }, [collapseNonRisk, hasRisk]);
 
-  if (isCollapsed) {
-    const label =
-      message.role === "tool"
-        ? "Tool Result"
-        : message.role === "system"
-          ? "System Prompt"
-          : parsedToolCalls
-            ? `Tool Call: ${parsedToolCalls[0]?.function?.name ?? "unknown"}`
-            : message.role;
-    const preview =
-      !parsedToolCalls && typeof message.content === "string"
-        ? message.content.trim().slice(0, 80)
-        : "";
-
-    return (
-      <button
-        type="button"
-        onClick={() => setExpanded(true)}
-        className="text-muted-foreground hover:bg-muted/50 flex w-full items-center gap-2 rounded px-1 py-1 text-xs transition-colors"
-      >
-        <Icon name="chevron-right" className="size-3 shrink-0" />
-        <span className="capitalize">{label}</span>
-        {message.createdAt && (
-          <span>{format(new Date(message.createdAt), "HH:mm:ss")}</span>
-        )}
-        {preview && <span className="truncate opacity-60">{preview}...</span>}
-      </button>
-    );
-  }
+  const parsedToolCalls = useMemo(
+    () => parseToolCalls(message.toolCalls),
+    [message.toolCalls],
+  );
+  const entryType = getTraceEntryType(message, parsedToolCalls);
+  const entryMeta = ENTRY_TYPE_META[entryType];
+  const label =
+    entryType === "tool_call"
+      ? `Tool Call: ${parsedToolCalls?.[0]?.function?.name ?? "unknown"}`
+      : entryMeta.label;
 
   return (
     <div>
-      {resolution && (
-        <div className="bg-primary/10 border-primary mb-3 rounded-lg border-l-4 p-3">
-          <div className="text-xs font-semibold">
-            Resolution Point: {resolution.resolution}
-          </div>
-        </div>
-      )}
+      <MessageItemToggle
+        createdAt={message.createdAt}
+        entryType={entryType}
+        isCollapsed={isCollapsed}
+        label={label}
+        onToggle={() => setExpanded((current) => !current)}
+        riskResults={riskResults}
+      />
 
-      {parsedToolCalls ? (
-        parsedToolCalls.map((tc, idx: number) => (
-          <div key={tc.id || idx} className="flex items-start gap-3">
-            <div className="bg-primary flex size-8 flex-shrink-0 items-center justify-center rounded-full">
-              <Icon name="zap" className="text-primary-foreground size-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="mb-1 flex items-center gap-2">
-                <span className="text-sm font-semibold">Tool Call</span>
-                {tc.id && (
-                  <code className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
-                    {tc.id}
-                  </code>
-                )}
-                <span className="text-muted-foreground text-xs">
-                  {message.createdAt &&
-                    format(new Date(message.createdAt), "HH:mm:ss")}
-                </span>
-                {riskResults && riskResults.length > 0 && (
-                  <RiskBadgePopover results={riskResults} />
-                )}
+      {isCollapsed ? null : (
+        <div className="pt-0 pr-3 pb-3 pl-12">
+          {resolution && (
+            <div className="bg-primary/10 border-primary mb-3 rounded-lg border-l-4 p-3">
+              <div className="text-xs font-semibold">
+                Resolution Point: {resolution.resolution}
               </div>
-              {hasSensitiveContent && !contentRevealed ? (
-                <MaskedContent onReveal={() => setContentRevealed(true)} />
-              ) : (
-                <div className="bg-background overflow-hidden rounded-lg border text-sm">
-                  <div className="bg-muted/30 border-b p-3">
-                    <div className="flex items-center gap-2">
-                      <Icon name="zap" className="text-primary size-4" />
-                      <span className="font-semibold">
-                        {tc.function?.name || tc.name || "Tool Call"}
-                      </span>
-                    </div>
-                  </div>
-                  {tc.function?.arguments && (
-                    <CodeBlock
-                      content={
-                        typeof tc.function.arguments === "string"
-                          ? tc.function.arguments
-                          : JSON.stringify(tc.function.arguments, null, 2)
-                      }
-                      maxHeight={300}
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        ))
-      ) : (
-        <div className="flex items-start gap-3">
-          {message.role === "user" && (
-            <div className="bg-primary/10 flex size-8 flex-shrink-0 items-center justify-center rounded-full">
-              <Icon name="user" className="text-primary size-4" />
-            </div>
-          )}
-          {message.role === "assistant" && (
-            <div className="bg-muted flex size-8 flex-shrink-0 items-center justify-center rounded-full">
-              <Icon name="bot" className="size-4" />
-            </div>
-          )}
-          {message.role === "tool" && (
-            <div className="bg-primary flex size-8 flex-shrink-0 items-center justify-center rounded-full">
-              <Icon name="zap" className="text-primary-foreground size-4" />
-            </div>
-          )}
-          {message.role === "system" && (
-            <div className="bg-muted flex size-8 flex-shrink-0 items-center justify-center rounded-full">
-              <Icon name="settings" className="size-4" />
             </div>
           )}
 
-          <div className="min-w-0 flex-1">
-            <div className="mb-1 flex items-center gap-2">
-              <span className="text-sm font-semibold capitalize">
-                {message.role === "tool"
-                  ? "Tool Result"
-                  : message.role === "system"
-                    ? "System Prompt"
-                    : message.role}
-              </span>
-              {message.toolCallId && (
-                <code className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
-                  {message.toolCallId}
-                </code>
-              )}
-              <span className="text-muted-foreground text-xs">
-                {message.createdAt &&
-                  format(new Date(message.createdAt), "HH:mm:ss")}
-              </span>
-              {riskResults && riskResults.length > 0 && (
-                <RiskBadgePopover results={riskResults} />
-              )}
-            </div>
-            {hasSensitiveContent && !contentRevealed ? (
-              <MaskedContent onReveal={() => setContentRevealed(true)} />
-            ) : message.role === "system" ? (
-              <details className="bg-muted/30 group overflow-hidden rounded-lg border text-sm">
-                <summary className="text-muted-foreground hover:bg-muted/50 flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs select-none">
-                  <Icon
-                    name="chevron-right"
-                    className="size-3 transition-transform group-open:rotate-90"
-                  />
-                  <span>Show content</span>
-                </summary>
-                <div className="border-t p-3 font-mono text-xs whitespace-pre-wrap">
-                  {typeof message.content === "string"
-                    ? message.content.trim()
-                    : JSON.stringify(message.content)}
-                </div>
-              </details>
-            ) : (
-              <div
-                className={cn(
-                  "overflow-hidden rounded-lg text-sm",
-                  message.role === "user" && "bg-primary/5 p-3",
-                  message.role === "assistant" && "bg-muted/50 p-3",
-                  message.role === "tool" && "bg-background border",
-                )}
-              >
-                {message.role === "tool" ? (
-                  <CodeBlock content={message.content ?? ""} maxHeight={300} />
-                ) : (
-                  <MessageContent
-                    content={
-                      typeof message.content === "string"
-                        ? message.content.trim()
-                        : JSON.stringify(message.content)
-                    }
-                  />
-                )}
-              </div>
-            )}
-          </div>
+          <TraceEntryBody
+            contentRevealed={contentRevealed}
+            entryType={entryType}
+            hasSensitiveContent={hasSensitiveContent}
+            message={message}
+            onRevealContent={() => setContentRevealed(true)}
+            parsedToolCalls={parsedToolCalls}
+          />
         </div>
       )}
     </div>
   );
+}
+
+function MessageItemToggle({
+  createdAt,
+  entryType,
+  isCollapsed,
+  label,
+  onToggle,
+  riskResults,
+}: {
+  createdAt: Date | string | undefined;
+  entryType: TraceEntryType;
+  isCollapsed: boolean;
+  label: string;
+  onToggle: () => void;
+  riskResults: RiskResult[] | undefined;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={!isCollapsed}
+      className={cn(
+        "flex w-full items-center gap-3 px-3 py-2",
+        "text-muted-foreground truncate text-sm transition-colors",
+        "border-t-muted border-y border-b-transparent",
+      )}
+    >
+      <TraceEntryIcon entryType={entryType} />
+      {createdAt && (
+        <span className="font-mono text-xs">
+          {format(new Date(createdAt), "HH:mm:ss")}
+        </span>
+      )}
+      <span className="font-semibold">{label}</span>
+
+      {riskResults && riskResults.length > 0 && (
+        <RiskBadgePopover results={riskResults} />
+      )}
+
+      <Icon
+        name="chevron-down"
+        className={cn(
+          "ml-auto size-3 shrink-0 transition-transform",
+          isCollapsed && "-rotate-90",
+        )}
+      />
+    </button>
+  );
+}
+
+function TraceEntryBody({
+  contentRevealed,
+  entryType,
+  hasSensitiveContent,
+  message,
+  onRevealContent,
+  parsedToolCalls,
+}: {
+  contentRevealed: boolean;
+  entryType: TraceEntryType;
+  hasSensitiveContent: boolean;
+  message: ChatMessage;
+  onRevealContent: () => void;
+  parsedToolCalls: ToolCall[] | null;
+}) {
+  switch (entryType) {
+    case "tool_call":
+      return (
+        <ToolCallEntry
+          contentRevealed={contentRevealed}
+          hasSensitiveContent={hasSensitiveContent}
+          onRevealContent={onRevealContent}
+          toolCalls={parsedToolCalls ?? []}
+        />
+      );
+    case "tool_result":
+      return (
+        <ToolResultEntry
+          content={message.content}
+          contentRevealed={contentRevealed}
+          hasSensitiveContent={hasSensitiveContent}
+          onRevealContent={onRevealContent}
+          toolCallId={message.toolCallId}
+        />
+      );
+    case "system":
+      return (
+        <SystemEntry
+          content={message.content}
+          contentRevealed={contentRevealed}
+          hasSensitiveContent={hasSensitiveContent}
+          onRevealContent={onRevealContent}
+        />
+      );
+    case "assistant":
+    case "user":
+      return (
+        <TextMessageEntry
+          content={message.content}
+          contentRevealed={contentRevealed}
+          hasSensitiveContent={hasSensitiveContent}
+          onRevealContent={onRevealContent}
+          entryType={entryType}
+        />
+      );
+  }
+}
+
+function EntryContentFrame({
+  entryType,
+  children,
+}: {
+  entryType?: TraceEntryType;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "border-muted min-w-0 overflow-hidden rounded-md border text-sm",
+        {
+          "bg-muted/30 border-neutral-default": entryType === "user",
+          "bg-information-softest border-information-softest":
+            entryType === "assistant",
+        },
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SensitiveContentGate({
+  children,
+  contentRevealed,
+  hasSensitiveContent,
+  onRevealContent,
+}: {
+  children: ReactNode;
+  contentRevealed: boolean;
+  hasSensitiveContent: boolean;
+  onRevealContent: () => void;
+}) {
+  if (hasSensitiveContent && !contentRevealed) {
+    return <MaskedContent onReveal={onRevealContent} />;
+  }
+
+  return <>{children}</>;
+}
+
+function ToolCallEntry({
+  contentRevealed,
+  hasSensitiveContent,
+  onRevealContent,
+  toolCalls,
+}: {
+  contentRevealed: boolean;
+  hasSensitiveContent: boolean;
+  onRevealContent: () => void;
+  toolCalls: ToolCall[];
+}) {
+  return (
+    <div className="space-y-2">
+      {toolCalls.map((toolCall, idx) => (
+        <EntryContentFrame key={toolCall.id || idx} entryType={"tool_call"}>
+          <SensitiveContentGate
+            contentRevealed={contentRevealed}
+            hasSensitiveContent={hasSensitiveContent}
+            onRevealContent={onRevealContent}
+          >
+            <div className="p-3">
+              <div className="flex items-center gap-2">
+                <span className="truncate font-semibold">
+                  {toolCall.function?.name || toolCall.name || "Tool Call"}
+                </span>
+                {toolCall.id && (
+                  <Badge variant="neutral" className="ml-auto">
+                    <Badge.Text>{toolCall.id}</Badge.Text>
+                  </Badge>
+                )}
+              </div>
+            </div>
+            {toolCall.function?.arguments && (
+              <CodeBlock
+                content={
+                  typeof toolCall.function.arguments === "string"
+                    ? toolCall.function.arguments
+                    : JSON.stringify(toolCall.function.arguments, null, 2)
+                }
+                maxHeight={300}
+              />
+            )}
+          </SensitiveContentGate>
+        </EntryContentFrame>
+      ))}
+    </div>
+  );
+}
+
+function ToolResultEntry({
+  content,
+  contentRevealed,
+  hasSensitiveContent,
+  onRevealContent,
+  toolCallId,
+}: {
+  content: unknown;
+  contentRevealed: boolean;
+  hasSensitiveContent: boolean;
+  onRevealContent: () => void;
+  toolCallId: string | undefined;
+}) {
+  return (
+    <EntryContentFrame entryType="tool_result">
+      <SensitiveContentGate
+        contentRevealed={contentRevealed}
+        hasSensitiveContent={hasSensitiveContent}
+        onRevealContent={onRevealContent}
+      >
+        <div className="bg-background/50 p-3">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold">Response</span>
+            {toolCallId && (
+              <Badge variant="neutral" className="ml-auto">
+                <Badge.Text>{toolCallId}</Badge.Text>
+              </Badge>
+            )}
+          </div>
+        </div>
+        <CodeBlock content={String(content ?? "")} maxHeight={300} />
+      </SensitiveContentGate>
+    </EntryContentFrame>
+  );
+}
+
+function SystemEntry({
+  content,
+  contentRevealed,
+  hasSensitiveContent,
+  onRevealContent,
+}: {
+  content: unknown;
+  contentRevealed: boolean;
+  hasSensitiveContent: boolean;
+  onRevealContent: () => void;
+}) {
+  return (
+    <EntryContentFrame>
+      <SensitiveContentGate
+        contentRevealed={contentRevealed}
+        hasSensitiveContent={hasSensitiveContent}
+        onRevealContent={onRevealContent}
+      >
+        <details className="group overflow-hidden">
+          <summary className="text-muted-foreground hover:bg-muted/50 flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs select-none">
+            <Icon
+              name="chevron-right"
+              className="size-3 transition-transform group-open:rotate-90"
+            />
+            <span>Show content</span>
+          </summary>
+          <div className="border-t p-3 font-mono text-xs whitespace-pre-wrap">
+            {formatMessageContent(content)}
+          </div>
+        </details>
+      </SensitiveContentGate>
+    </EntryContentFrame>
+  );
+}
+
+function TextMessageEntry({
+  content,
+  contentRevealed,
+  hasSensitiveContent,
+  onRevealContent,
+  entryType,
+}: {
+  content: unknown;
+  contentRevealed: boolean;
+  hasSensitiveContent: boolean;
+  onRevealContent: () => void;
+  entryType: TraceEntryType;
+}) {
+  return (
+    <EntryContentFrame entryType={entryType}>
+      <SensitiveContentGate
+        contentRevealed={contentRevealed}
+        hasSensitiveContent={hasSensitiveContent}
+        onRevealContent={onRevealContent}
+      >
+        <div className="overflow-hidden rounded-md p-3">
+          <MessageContent content={formatMessageContent(content)} />
+        </div>
+      </SensitiveContentGate>
+    </EntryContentFrame>
+  );
+}
+
+function formatMessageContent(content: unknown) {
+  return typeof content === "string" ? content.trim() : JSON.stringify(content);
 }
 
 function formatTimestamp(nanos: string): string {
@@ -502,7 +685,7 @@ function TelemetryLogsTab({
               {log.severityText || "INFO"}
             </Badge>
             <div className="min-w-0 flex-1 space-y-1">
-              <div className="text-sm font-medium break-words">
+              <div className="text-sm font-medium wrap-break-word">
                 {log.body.trim()}
               </div>
               <div className="text-muted-foreground flex items-center gap-3 text-xs">
@@ -733,7 +916,7 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
               <div key={r.id} className="py-2 first:pt-0 last:pb-0">
                 <div className="flex items-center gap-2">
                   <Badge variant="destructive" className="shrink-0 text-[10px]">
-                    {r.source}
+                    {ruleIdCategoryLabel(r.ruleId) || r.source.toUpperCase()}
                   </Badge>
                   {r.ruleId && (
                     <span className="text-muted-foreground truncate font-mono text-xs">
@@ -786,6 +969,9 @@ export function ChatDetailPanel({
 }: ChatDetailPanelProps) {
   const isAdmin = useIsAdmin();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [enabledEntryTypes, setEnabledEntryTypes] = useState<
+    FilterableTraceEntryType[]
+  >([...DEFAULT_ENABLED_ENTRY_TYPES]);
   const { data: chat, isLoading: chatLoading } = useLoadChat(
     { id: chatId },
     undefined,
@@ -808,7 +994,7 @@ export function ChatDetailPanel({
           filter: {
             gramChatId: chatId,
           },
-          limit: 100,
+          limit: PANEL_TELEMETRY_LOG_LIMIT,
         },
       },
     });
@@ -819,9 +1005,13 @@ export function ChatDetailPanel({
 
   // Fetch risk findings for this chat
   const { data: riskData } = useRiskListResults({ chatId });
+  const riskResults = useMemo(
+    () => riskData?.results ?? [],
+    [riskData?.results],
+  );
   const riskResultsByMessage = useMemo(() => {
     const map = new Map<string, RiskResult[]>();
-    for (const r of riskData?.results ?? []) {
+    for (const r of riskResults) {
       const existing = map.get(r.chatMessageId);
       if (existing) {
         existing.push(r);
@@ -830,7 +1020,7 @@ export function ChatDetailPanel({
       }
     }
     return map;
-  }, [riskData]);
+  }, [riskResults]);
 
   if (chatLoading) {
     return <div className="p-8">Loading chat details...</div>;
@@ -847,6 +1037,11 @@ export function ChatDetailPanel({
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const duration = Math.round(
     (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
+  );
+  const entryTypeCounts = getEntryTypeCounts(chat.messages);
+  const visibleEntryCount = getVisibleMessageCount(
+    chat.messages,
+    enabledEntryTypes,
   );
 
   // Create a map of message IDs to resolution info for showing breakpoints
@@ -887,11 +1082,20 @@ export function ChatDetailPanel({
             {isAdmin && (
               <>
                 <button
-                  onClick={() => exportChatAsJson(chat)}
-                  className="hover:bg-muted text-muted-foreground rounded-md p-1 transition-colors"
-                  aria-label="Export chat as JSON"
+                  onClick={() =>
+                    exportTraceDataAsJson({
+                      chatId,
+                      chat,
+                      telemetryLogLimit: PANEL_TELEMETRY_LOG_LIMIT,
+                      telemetryLogs: logs,
+                      riskResults,
+                    })
+                  }
+                  className="hover:bg-muted text-muted-foreground inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
+                  aria-label="Export data as JSON"
                 >
-                  <Icon name="download" className="size-5" />
+                  <Icon name="download" className="size-4" />
+                  <span>Export data</span>
                 </button>
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
@@ -911,7 +1115,7 @@ export function ChatDetailPanel({
             </button>
           </div>
         </div>
-        <div className="text-muted-foreground mb-3 text-sm">
+        <div className="text-muted-foreground mb-3 font-mono text-sm">
           {format(new Date(chat.createdAt), "yyyy-MM-dd HH:mm:ss")}
         </div>
         <div className="text-sm">{chat.title}</div>
@@ -1103,15 +1307,22 @@ export function ChatDetailPanel({
             </div>
           )}
 
+          <EntryTypeFilterBar
+            value={enabledEntryTypes}
+            counts={entryTypeCounts}
+            totalCount={chat.messages.length}
+            visibleCount={visibleEntryCount}
+            onChange={setEnabledEntryTypes}
+          />
+
           {/* Chat Messages */}
-          <div className="p-6">
-            <ChatMessagesList
-              messages={chat.messages}
-              messageResolutionMap={messageResolutionMap}
-              riskResultsByMessage={riskResultsByMessage}
-              collapseNonRisk={collapseNonRisk}
-            />
-          </div>
+          <ChatMessagesList
+            messages={chat.messages}
+            messageResolutionMap={messageResolutionMap}
+            riskResultsByMessage={riskResultsByMessage}
+            collapseNonRisk={collapseNonRisk}
+            enabledEntryTypes={enabledEntryTypes}
+          />
         </TabsContent>
 
         {/* Telemetry Logs Tab */}

@@ -44,6 +44,7 @@ type RiskScanner interface {
 type ShadowMCPPolicy struct {
 	ID          string
 	Name        string
+	Version     int64
 	UserMessage *string // nil/empty means "render the default message"
 }
 
@@ -125,7 +126,7 @@ func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner,
 	}
 
 	if piScanner == nil {
-		piScanner = ra.NewPromptInjectionScanner(logger, ra.StubClassifier{})
+		piScanner = ra.NewPromptInjectionScanner(logger, ra.StubClassifier{}, nil)
 	}
 
 	return &Scanner{
@@ -212,6 +213,7 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, projectID u
 			return &ShadowMCPPolicy{
 				ID:          p.ID.String(),
 				Name:        p.Name,
+				Version:     p.Version,
 				UserMessage: conv.FromPGText[string](p.UserMessage),
 			}, nil
 		}
@@ -288,7 +290,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 				}, nil
 			}
 		case ra.SourcePromptInjection:
-			findings, err := s.piScanner.Scan(ctx, text, policy.PromptInjectionRules)
+			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID)
 			if err != nil {
 				return nil, fmt.Errorf("prompt injection scan: %w", err)
 			}

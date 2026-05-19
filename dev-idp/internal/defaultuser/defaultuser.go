@@ -31,6 +31,11 @@ import (
 const (
 	DefaultOrgName = "Speakeasy"
 	DefaultOrgSlug = "speakeasy"
+
+	// DefaultOrgWorkosID is a stable WorkOS-style org ID assigned to the
+	// default "Speakeasy" org. Matches production format so Gram-side's
+	// organization_metadata.workos_id looks realistic in local dev.
+	DefaultOrgWorkosID = "org_devidp_speakeasy"
 )
 
 // userIDNamespace is a fixed UUID v5 namespace used to derive deterministic
@@ -102,6 +107,19 @@ func BootstrapLocalUser(ctx context.Context, db *sql.DB, mode string) (uuid.UUID
 	})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("upsert default organization: %w", err)
+	}
+
+	// Stamp a WorkOS-style org ID so the Gram-side identity resolver
+	// sees a production-shaped workos_id in organization_metadata.
+	if !org.WorkosID.Valid {
+		org, err = queries.UpdateOrganization(ctx, repo.UpdateOrganizationParams{
+			ID:       org.ID,
+			WorkosID: sql.NullString{String: DefaultOrgWorkosID, Valid: true},
+			Ts:       now,
+		})
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("stamp workos_id on default org: %w", err)
+		}
 	}
 
 	// Seed the two default roles WorkOS provisions on every org so the

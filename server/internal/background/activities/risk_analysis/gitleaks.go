@@ -10,6 +10,13 @@ import (
 	"github.com/zricethezav/gitleaks/v8/report"
 )
 
+// DescribeGitleaks returns the canonical (rule_id, description) for a
+// gitleaks finding. Gitleaks ships a human-readable description per rule
+// that never echoes the matched secret, so it passes through unchanged.
+func DescribeGitleaks(rawRuleID, upstreamDescription string) (string, string) {
+	return guard(CanonicalGitleaksRuleID(rawRuleID)), upstreamDescription
+}
+
 // Finding represents a single secret or sensitive data match found in a message.
 // DeadLetterReason is populated only on synthetic "could not analyze" markers
 // emitted when a scanner exhausts its retry budget for a message; it is empty
@@ -24,6 +31,11 @@ type Finding struct {
 	Source           string  // Detection source (e.g. "gitleaks", "presidio")
 	Confidence       float64 // 0.0-1.0 confidence score
 	DeadLetterReason string  // Non-empty => dead-letter sentinel, not a real finding
+	// toolCallID is an internal correlation key used by scanShadowMCP to
+	// patch the resolved MCP server identifier onto findings via the
+	// telemetry CH lookup. Not persisted — converters that map Finding
+	// into repo.InsertRiskResultParams ignore it.
+	toolCallID string
 }
 
 // detectorInitMu serializes gitleaks detector creation process-wide.
@@ -141,15 +153,20 @@ func ScanWithGitleaks(content string) ([]Finding, error) {
 }
 
 // ConvertFindings converts raw gitleaks findings to the internal Finding type.
+// Rule ids are canonicalized through Normalize so they share the same
+// snake_case shape as findings from other scanners. Gitleaks already ships
+// human-readable descriptions, so they pass through as the fallback when the
+// catalog has no override.
 func ConvertFindings(content string, raw []report.Finding) []Finding {
 	out := make([]Finding, 0, len(raw))
 	for _, f := range raw {
 		tags := parseTags(f.Tags)
 		startPos := lineColToBytePos(content, f.StartLine, f.StartColumn)
 		endPos := min(lineColToBytePos(content, f.EndLine, f.EndColumn)+1, len(content))
+		ruleID, description := DescribeGitleaks(f.RuleID, f.Description)
 		out = append(out, Finding{
-			RuleID:           f.RuleID,
-			Description:      f.Description,
+			RuleID:           ruleID,
+			Description:      description,
 			Match:            f.Match,
 			StartPos:         startPos,
 			EndPos:           endPos,
@@ -157,6 +174,7 @@ func ConvertFindings(content string, raw []report.Finding) []Finding {
 			Source:           "gitleaks",
 			Confidence:       1.0,
 			DeadLetterReason: "",
+			toolCallID:       "",
 		})
 	}
 	return out

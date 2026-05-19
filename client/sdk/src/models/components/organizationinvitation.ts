@@ -12,7 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Invitation lifecycle state.
  */
-export const OrganizationInvitationState = {
+export const State = {
   Pending: "pending",
   Accepted: "accepted",
   Expired: "expired",
@@ -21,9 +21,7 @@ export const OrganizationInvitationState = {
 /**
  * Invitation lifecycle state.
  */
-export type OrganizationInvitationState = ClosedEnum<
-  typeof OrganizationInvitationState
->;
+export type State = ClosedEnum<typeof State>;
 
 export type OrganizationInvitation = {
   /**
@@ -52,16 +50,18 @@ export type OrganizationInvitation = {
    */
   revokedAt?: Date | undefined;
   /**
+   * WorkOS role slug assigned when the invite is accepted.
+   */
+  roleSlug?: string | undefined;
+  /**
    * Invitation lifecycle state.
    */
-  state: OrganizationInvitationState;
+  state: State;
   updatedAt: Date;
 };
 
 /** @internal */
-export const OrganizationInvitationState$inboundSchema: z.ZodMiniEnum<
-  typeof OrganizationInvitationState
-> = z.enum(OrganizationInvitationState);
+export const State$inboundSchema: z.ZodMiniEnum<typeof State> = z.enum(State);
 
 /** @internal */
 export const OrganizationInvitation$inboundSchema: z.ZodMiniType<
@@ -85,7 +85,8 @@ export const OrganizationInvitation$inboundSchema: z.ZodMiniType<
     revoked_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
-    state: OrganizationInvitationState$inboundSchema,
+    role_slug: z.optional(z.string()),
+    state: State$inboundSchema,
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -98,6 +99,7 @@ export const OrganizationInvitation$inboundSchema: z.ZodMiniType<
       "expires_at": "expiresAt",
       "inviter_user_id": "inviterUserId",
       "revoked_at": "revokedAt",
+      "role_slug": "roleSlug",
       "updated_at": "updatedAt",
     });
   }),

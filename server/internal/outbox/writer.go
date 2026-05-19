@@ -3,11 +3,7 @@
 //
 // Typical usage from a service handler:
 //
-//	id, err := outbox.NewWriter(db).Insert(ctx, tx, outbox.InsertParams{
-//	    OrganizationID: orgID,
-//	    EventType:      "audit_log:created",
-//	    Payload:        payloadJSON,
-//	})
+//	id, err := outbox.AppendEvent(ctx, tx, orgID, events.AuditLogCreated, payload)
 //	if err != nil { ... }
 //	// commit the caller's tx, then:
 //	signaler.SignalRelay(ctx, orgID)
@@ -21,48 +17,85 @@ package outbox
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/outbox/repo"
 )
 
-type EventType string
-
-const (
-	EventTypeAuditLogCreated EventType = "audit_log.created"
-)
-
-// InsertParams is the producer-facing payload for queuing an event.
-type InsertParams struct {
-	OrganizationID string
-	EventType      EventType
-	Payload        any
+// DBTX is the minimal database interface required by AppendEvent. Callers can
+// pass a transaction or a pool; bulk operations require repo.DBTX (see
+// AppendBatchEvents).
+type DBTX interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
-// InsertResult identifies the inserted row.
-type InsertResult struct {
+// AppendResult identifies the inserted outbox row.
+type AppendResult struct {
 	ID             int64
 	OrganizationID string
 }
 
-// Append inserts a new outbox event for an organization and returns identifiers
-// needed for downstream relay/signal coordination.
-func Append(ctx context.Context, dbtx repo.DBTX, p InsertParams) (InsertResult, error) {
-	jsonPayload, err := json.Marshal(p.Payload)
-	if err != nil {
-		return InsertResult{}, fmt.Errorf("marshal outbox payload: %w", err)
-	}
+// AppendBatchResult is returned by AppendBatchEvents.
+type AppendBatchResult struct {
+	Count int64
+}
 
-	row, err := repo.New(dbtx).InsertOutboxEntry(ctx, repo.InsertOutboxEntryParams{
-		OrganizationID: p.OrganizationID,
-		EventType:      string(p.EventType),
+// Append inserts a single typed outbox event within a transaction.
+//
+// THIS METHOD MUST BE CALLED WITHIN A TRANSACTION.
+func Append[T any](ctx context.Context, dbtx DBTX, orgID string, def *EventDef[T], payload T) (AppendResult, error) {
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return AppendResult{}, fmt.Errorf("marshal outbox payload: %w", err)
+	}
+	row, err := repo.New(noopCopyFromDBTX{DBTX: dbtx}).InsertOutboxEntry(ctx, repo.InsertOutboxEntryParams{
+		OrganizationID: orgID,
+		EventType:      string(def.EventType()),
 		Payload:        jsonPayload,
 	})
 	if err != nil {
-		return InsertResult{}, fmt.Errorf("insert outbox entry: %w", err)
+		return AppendResult{}, fmt.Errorf("insert outbox entry: %w", err)
 	}
-	return InsertResult{
+	return AppendResult{
 		ID:             row.ID,
-		OrganizationID: p.OrganizationID,
+		OrganizationID: orgID,
 	}, nil
+}
+
+// AppendBatch inserts multiple events of the same type within a transaction.
+// This is much more efficient than repeated AppendEvent calls for large batches.
+//
+// THIS METHOD MUST BE CALLED WITHIN A TRANSACTION.
+func AppendBatch[T any](ctx context.Context, dbtx repo.DBTX, orgID string, def *EventDef[T], payloads []T) (AppendBatchResult, error) {
+	entries := make([]repo.BulkInsertOutboxEntriesParams, 0, len(payloads))
+	for _, p := range payloads {
+		jsonPayload, err := json.Marshal(p)
+		if err != nil {
+			return AppendBatchResult{}, fmt.Errorf("marshal outbox payload: %w", err)
+		}
+		entries = append(entries, repo.BulkInsertOutboxEntriesParams{
+			OrganizationID: orgID,
+			EventType:      string(def.EventType()),
+			Payload:        jsonPayload,
+		})
+	}
+	n, err := repo.New(dbtx).BulkInsertOutboxEntries(ctx, entries)
+	if err != nil {
+		return AppendBatchResult{}, fmt.Errorf("bulk insert outbox entries: %w", err)
+	}
+	return AppendBatchResult{Count: n}, nil
+}
+
+type noopCopyFromDBTX struct {
+	DBTX
+}
+
+func (n noopCopyFromDBTX) CopyFrom(context.Context, pgx.Identifier, []string, pgx.CopyFromSource) (int64, error) {
+	return 0, oops.Permanent(errors.New("not implemented"))
 }

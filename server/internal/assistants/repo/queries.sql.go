@@ -12,6 +12,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireAssistantAdvisoryLock = `-- name: AcquireAssistantAdvisoryLock :exec
+SELECT pg_advisory_xact_lock(hashtext('asst:' || $1::text))
+`
+
+// pg_advisory_xact_lock auto-releases at commit. Hashed on the assistant
+// id so concurrent workers admitting the same assistant serialise on VM
+// creation; concurrent admits across assistants do not contend.
+func (q *Queries) AcquireAssistantAdvisoryLock(ctx context.Context, assistantID string) error {
+	_, err := q.db.Exec(ctx, acquireAssistantAdvisoryLock, assistantID)
+	return err
+}
+
 type AddAssistantToolsetsParams struct {
 	AssistantID   uuid.UUID
 	ToolsetID     uuid.UUID
@@ -44,8 +56,24 @@ UPDATE assistant_runtimes
 SET
   state = $1,
   updated_at = clock_timestamp()
-WHERE project_id = $2
-  AND assistant_thread_id = $3
+WHERE id = (
+  SELECT r.id
+  FROM assistant_runtimes r
+  JOIN assistant_threads t
+    ON t.project_id = r.project_id
+   AND t.id = $2
+   AND (
+     r.assistant_thread_id = t.id
+     OR (r.runtime_version = 2 AND r.assistant_id = t.assistant_id)
+   )
+  WHERE r.project_id = $3
+    AND r.state IN ($4, $1)
+    AND r.deleted IS FALSE
+    AND r.ended IS FALSE
+  ORDER BY r.runtime_version DESC, r.created_at DESC
+  LIMIT 1
+)
+  AND project_id = $3
   AND state IN ($4, $1)
   AND deleted IS FALSE
   AND ended IS FALSE
@@ -54,8 +82,8 @@ RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_me
 
 type BeginExpireAssistantRuntimeParams struct {
 	ExpiringState string
-	ProjectID     uuid.UUID
 	ThreadID      uuid.UUID
+	ProjectID     uuid.UUID
 	ActiveState   string
 }
 
@@ -74,11 +102,18 @@ type BeginExpireAssistantRuntimeRow struct {
 // Stop failed mid-flight) re-enters the Status/Stop path idempotently.
 // ErrNoRows means another actor (Stop, reaper, manual API) already finalized
 // the row; callers must not then call Stop.
+//
+// v2 (single-VM-per-assistant) rows pin assistant_thread_id to the admitting
+// thread, but every thread workflow under the assistant runs its own warm
+// timer and calls expire with its own thread id. Resolve the row via
+// assistant_threads.assistant_id when no v1 row matches the caller's thread
+// so any thread can flip the v2 row to expiring; the post-CAS /state poll
+// guards against tearing down a VM another thread is still using.
 func (q *Queries) BeginExpireAssistantRuntime(ctx context.Context, arg BeginExpireAssistantRuntimeParams) (BeginExpireAssistantRuntimeRow, error) {
 	row := q.db.QueryRow(ctx, beginExpireAssistantRuntime,
 		arg.ExpiringState,
-		arg.ProjectID,
 		arg.ThreadID,
+		arg.ProjectID,
 		arg.ActiveState,
 	)
 	var i BeginExpireAssistantRuntimeRow
@@ -232,6 +267,45 @@ func (q *Queries) CountActiveAssistantRuntimes(ctx context.Context, arg CountAct
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const countActiveAssistantThreads = `-- name: CountActiveAssistantThreads :one
+SELECT COUNT(*)::BIGINT AS active_threads
+FROM assistant_threads t
+WHERE t.project_id = $1
+  AND t.assistant_id = $2
+  AND t.deleted IS FALSE
+  AND t.last_event_at > $3
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_thread_events e
+    WHERE e.project_id = t.project_id
+      AND e.assistant_thread_id = t.id
+      AND e.deleted IS FALSE
+      AND e.status = $4
+  )
+`
+
+type CountActiveAssistantThreadsParams struct {
+	ProjectID     uuid.UUID
+	AssistantID   uuid.UUID
+	ActiveSince   pgtype.Timestamptz
+	PendingStatus string
+}
+
+// Threads with last_event_at inside the warm TTL window. Excludes threads
+// that themselves have a pending event so callers computing headroom for
+// a fresh pending admit don't double-count it.
+func (q *Queries) CountActiveAssistantThreads(ctx context.Context, arg CountActiveAssistantThreadsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveAssistantThreads,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.ActiveSince,
+		arg.PendingStatus,
+	)
+	var active_threads int64
+	err := row.Scan(&active_threads)
+	return active_threads, err
 }
 
 const createAssistant = `-- name: CreateAssistant :one
@@ -460,7 +534,7 @@ func (q *Queries) FailAssistantThreadEvent(ctx context.Context, arg FailAssistan
 }
 
 const getActiveAssistantRuntimeByThreadID = `-- name: GetActiveAssistantRuntimeByThreadID :one
-SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE assistant_thread_id = $1
   AND project_id = $2
   AND deleted IS FALSE
@@ -488,6 +562,7 @@ func (q *Queries) GetActiveAssistantRuntimeByThreadID(ctx context.Context, arg G
 		&i.LastHeartbeatAt,
 		&i.BackendMetadataJson,
 		&i.EndedAt,
+		&i.RuntimeVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -641,7 +716,7 @@ func (q *Queries) GetAssistantIgnoringDeleted(ctx context.Context, arg GetAssist
 }
 
 const getAssistantRuntime = `-- name: GetAssistantRuntime :one
-SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE id = $1
   AND project_id = $2
 `
@@ -666,6 +741,7 @@ func (q *Queries) GetAssistantRuntime(ctx context.Context, arg GetAssistantRunti
 		&i.LastHeartbeatAt,
 		&i.BackendMetadataJson,
 		&i.EndedAt,
+		&i.RuntimeVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -676,7 +752,7 @@ func (q *Queries) GetAssistantRuntime(ctx context.Context, arg GetAssistantRunti
 }
 
 const getLatestAssistantRuntimeByThreadID = `-- name: GetLatestAssistantRuntimeByThreadID :one
-SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE assistant_thread_id = $1
   AND project_id = $2
 ORDER BY created_at DESC
@@ -705,6 +781,7 @@ func (q *Queries) GetLatestAssistantRuntimeByThreadID(ctx context.Context, arg G
 		&i.LastHeartbeatAt,
 		&i.BackendMetadataJson,
 		&i.EndedAt,
+		&i.RuntimeVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -805,6 +882,65 @@ func (q *Queries) InsertAssistantThreadEvent(ctx context.Context, arg InsertAssi
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const listAssistantPendingThreads = `-- name: ListAssistantPendingThreads :many
+SELECT t.id, t.project_id
+FROM assistant_threads t
+WHERE t.project_id = $1
+  AND t.assistant_id = $2
+  AND t.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM assistant_thread_events e
+    WHERE e.project_id = t.project_id
+      AND e.assistant_thread_id = t.id
+      AND e.deleted IS FALSE
+      AND e.status = $3
+  )
+ORDER BY (
+  SELECT MIN(e.created_at)
+  FROM assistant_thread_events e
+  WHERE e.project_id = t.project_id
+    AND e.assistant_thread_id = t.id
+    AND e.deleted IS FALSE
+    AND e.status = $3
+) ASC
+`
+
+type ListAssistantPendingThreadsParams struct {
+	ProjectID     uuid.UUID
+	AssistantID   uuid.UUID
+	PendingStatus string
+}
+
+type ListAssistantPendingThreadsRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// v2 admit needs every thread with pending events under an assistant
+// (no per-thread runtime gating — one VM serves them all). Used after
+// the v2 runtime row is reserved so the workflow can fan out to one
+// ProcessThreadEvents per thread.
+func (q *Queries) ListAssistantPendingThreads(ctx context.Context, arg ListAssistantPendingThreadsParams) ([]ListAssistantPendingThreadsRow, error) {
+	rows, err := q.db.Query(ctx, listAssistantPendingThreads, arg.ProjectID, arg.AssistantID, arg.PendingStatus)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssistantPendingThreadsRow
+	for rows.Next() {
+		var i ListAssistantPendingThreadsRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAssistantRuntimesForReap = `-- name: ListAssistantRuntimesForReap :many
@@ -1023,21 +1159,18 @@ const listInactiveAssistantRuntimesForReap = `-- name: ListInactiveAssistantRunt
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.backend_metadata_json <> '{}'::jsonb
-  AND r.state NOT IN ($1, $2)
   AND NOT EXISTS (
     SELECT 1
     FROM assistant_runtimes r2
     WHERE r2.assistant_id = r.assistant_id
-      AND r2.updated_at >= $3
+      AND r2.updated_at >= $1
       AND r2.backend_metadata_json <> '{}'::jsonb
   )
 ORDER BY r.updated_at ASC
-LIMIT $4
+LIMIT $2
 `
 
 type ListInactiveAssistantRuntimesForReapParams struct {
-	StartingState  string
-	ActiveState    string
 	InactiveBefore pgtype.Timestamptz
 	LimitCount     int32
 }
@@ -1053,17 +1186,12 @@ type ListInactiveAssistantRuntimesForReapRow struct {
 	WarmUntil           pgtype.Timestamptz
 }
 
-// Returns runtime rows that still carry backend metadata and whose owning
-// assistant has had no runtime activity since @inactive_before. Active and
-// starting rows are excluded so a long-running session that updated_at
-// recently is never collected mid-flight.
+// Returns runtime rows that still carry backend metadata whose owning
+// assistant has had no runtime activity since @inactive_before. Liveness is
+// judged solely by the EXISTS-on-updated_at join across the assistant's
+// runtime rows; row state is intentionally ignored.
 func (q *Queries) ListInactiveAssistantRuntimesForReap(ctx context.Context, arg ListInactiveAssistantRuntimesForReapParams) ([]ListInactiveAssistantRuntimesForReapRow, error) {
-	rows, err := q.db.Query(ctx, listInactiveAssistantRuntimesForReap,
-		arg.StartingState,
-		arg.ActiveState,
-		arg.InactiveBefore,
-		arg.LimitCount,
-	)
+	rows, err := q.db.Query(ctx, listInactiveAssistantRuntimesForReap, arg.InactiveBefore, arg.LimitCount)
 	if err != nil {
 		return nil, err
 	}
@@ -1144,6 +1272,86 @@ func (q *Queries) ListWarmPendingThreads(ctx context.Context, arg ListWarmPendin
 		return nil, err
 	}
 	return items, nil
+}
+
+const loadAssistantThreadForBootstrap = `-- name: LoadAssistantThreadForBootstrap :one
+SELECT
+  t.id,
+  t.assistant_id,
+  t.project_id,
+  t.correlation_id,
+  t.chat_id,
+  t.source_kind,
+  t.source_ref_json,
+  a.organization_id,
+  a.created_by_user_id,
+  a.name,
+  a.model,
+  a.instructions,
+  a.warm_ttl_seconds,
+  a.max_concurrency,
+  a.status,
+  a.created_at,
+  a.updated_at,
+  a.deleted_at
+FROM assistant_threads t
+JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
+WHERE t.id = $1
+  AND t.project_id = $2
+  AND t.deleted IS FALSE
+  AND a.deleted IS FALSE
+`
+
+type LoadAssistantThreadForBootstrapParams struct {
+	ThreadID  uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type LoadAssistantThreadForBootstrapRow struct {
+	ID              uuid.UUID
+	AssistantID     uuid.UUID
+	ProjectID       uuid.UUID
+	CorrelationID   string
+	ChatID          uuid.UUID
+	SourceKind      string
+	SourceRefJson   []byte
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Model           string
+	Instructions    string
+	WarmTtlSeconds  int64
+	MaxConcurrency  int64
+	Status          string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+}
+
+func (q *Queries) LoadAssistantThreadForBootstrap(ctx context.Context, arg LoadAssistantThreadForBootstrapParams) (LoadAssistantThreadForBootstrapRow, error) {
+	row := q.db.QueryRow(ctx, loadAssistantThreadForBootstrap, arg.ThreadID, arg.ProjectID)
+	var i LoadAssistantThreadForBootstrapRow
+	err := row.Scan(
+		&i.ID,
+		&i.AssistantID,
+		&i.ProjectID,
+		&i.CorrelationID,
+		&i.ChatID,
+		&i.SourceKind,
+		&i.SourceRefJson,
+		&i.OrganizationID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.Model,
+		&i.Instructions,
+		&i.WarmTtlSeconds,
+		&i.MaxConcurrency,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }
 
 const loadAssistantToolsets = `-- name: LoadAssistantToolsets :many
@@ -1335,6 +1543,166 @@ func (q *Queries) LoadThreadContext(ctx context.Context, arg LoadThreadContextPa
 	return i, err
 }
 
+const loadThreadContextV2 = `-- name: LoadThreadContextV2 :one
+SELECT
+  t.id,
+  t.assistant_id,
+  t.project_id,
+  t.correlation_id,
+  t.chat_id,
+  t.source_kind,
+  t.source_ref_json,
+  t.last_event_at,
+  a.id AS assistant_record_id,
+  a.project_id AS assistant_record_project_id,
+  a.organization_id,
+  a.created_by_user_id,
+  a.name,
+  a.model,
+  a.instructions,
+  a.warm_ttl_seconds,
+  a.max_concurrency,
+  a.status,
+  a.created_at,
+  a.updated_at,
+  a.deleted_at,
+  r.id AS runtime_id,
+  r.assistant_id AS runtime_assistant_id,
+  r.project_id AS runtime_project_id,
+  r.backend,
+  r.backend_metadata_json,
+  r.state,
+  r.warm_until
+FROM assistant_threads t
+JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
+JOIN assistant_runtimes r ON r.assistant_id = t.assistant_id
+  AND r.project_id = t.project_id
+  AND r.runtime_version = 2
+WHERE t.id = $1
+  AND t.project_id = $2
+  AND t.deleted IS FALSE
+  AND a.deleted IS FALSE
+  AND r.deleted IS FALSE
+  AND r.ended IS FALSE
+  AND r.state IN ($3, $4)
+`
+
+type LoadThreadContextV2Params struct {
+	ThreadID      uuid.UUID
+	ProjectID     uuid.UUID
+	StartingState string
+	ActiveState   string
+}
+
+type LoadThreadContextV2Row struct {
+	ID                       uuid.UUID
+	AssistantID              uuid.UUID
+	ProjectID                uuid.UUID
+	CorrelationID            string
+	ChatID                   uuid.UUID
+	SourceKind               string
+	SourceRefJson            []byte
+	LastEventAt              pgtype.Timestamptz
+	AssistantRecordID        uuid.UUID
+	AssistantRecordProjectID uuid.UUID
+	OrganizationID           string
+	CreatedByUserID          pgtype.Text
+	Name                     string
+	Model                    string
+	Instructions             string
+	WarmTtlSeconds           int64
+	MaxConcurrency           int64
+	Status                   string
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+	DeletedAt                pgtype.Timestamptz
+	RuntimeID                uuid.UUID
+	RuntimeAssistantID       uuid.UUID
+	RuntimeProjectID         uuid.UUID
+	Backend                  string
+	BackendMetadataJson      []byte
+	State                    string
+	WarmUntil                pgtype.Timestamptz
+}
+
+// v2 sibling of LoadThreadContext: the runtime row is keyed on assistant,
+// not thread. Joins assistant_thread → assistant → v2 runtime by
+// assistant_id, returning the same shape as LoadThreadContext (with
+// assistant_thread_id on the runtime row left NULL).
+func (q *Queries) LoadThreadContextV2(ctx context.Context, arg LoadThreadContextV2Params) (LoadThreadContextV2Row, error) {
+	row := q.db.QueryRow(ctx, loadThreadContextV2,
+		arg.ThreadID,
+		arg.ProjectID,
+		arg.StartingState,
+		arg.ActiveState,
+	)
+	var i LoadThreadContextV2Row
+	err := row.Scan(
+		&i.ID,
+		&i.AssistantID,
+		&i.ProjectID,
+		&i.CorrelationID,
+		&i.ChatID,
+		&i.SourceKind,
+		&i.SourceRefJson,
+		&i.LastEventAt,
+		&i.AssistantRecordID,
+		&i.AssistantRecordProjectID,
+		&i.OrganizationID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.Model,
+		&i.Instructions,
+		&i.WarmTtlSeconds,
+		&i.MaxConcurrency,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.RuntimeID,
+		&i.RuntimeAssistantID,
+		&i.RuntimeProjectID,
+		&i.Backend,
+		&i.BackendMetadataJson,
+		&i.State,
+		&i.WarmUntil,
+	)
+	return i, err
+}
+
+const lookupActiveAssistantRuntimeV2 = `-- name: LookupActiveAssistantRuntimeV2 :one
+SELECT id, state
+FROM assistant_runtimes
+WHERE project_id = $1
+  AND assistant_id = $2
+  AND runtime_version = 2
+  AND deleted IS FALSE
+  AND ended IS FALSE
+LIMIT 1
+`
+
+type LookupActiveAssistantRuntimeV2Params struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+}
+
+type LookupActiveAssistantRuntimeV2Row struct {
+	ID    uuid.UUID
+	State string
+}
+
+// Returns the live v2 row including its state so admit can distinguish
+// starting/active (signal threads) from expiring (skip this cycle and wait
+// for the warm-timer workflow's Stop to soft-delete the row, then re-admit
+// on the next coordinator kick). The unique partial index keyed on
+// (project_id, assistant_id) means there is at most one matching row.
+func (q *Queries) LookupActiveAssistantRuntimeV2(ctx context.Context, arg LookupActiveAssistantRuntimeV2Params) (LookupActiveAssistantRuntimeV2Row, error) {
+	row := q.db.QueryRow(ctx, lookupActiveAssistantRuntimeV2, arg.ProjectID, arg.AssistantID)
+	var i LookupActiveAssistantRuntimeV2Row
+	err := row.Scan(&i.ID, &i.State)
+	return i, err
+}
+
 const markAssistantRuntimeReaped = `-- name: MarkAssistantRuntimeReaped :exec
 UPDATE assistant_runtimes
 SET state = $1,
@@ -1377,7 +1745,8 @@ WHERE deleted IS FALSE
     )
     -- Backstop for activities that exhaust Temporal's retry budget after CAS
     -- active->expiring without reaching Stop. Without this the partial unique
-    -- index on (assistant_thread_id) blocks new admits indefinitely.
+    -- indexes (v1 on assistant_thread_id, v2 on assistant_id) block new
+    -- admits indefinitely.
     OR (state = $7 AND updated_at < $8)
   )
 RETURNING assistant_id
@@ -1394,6 +1763,13 @@ type ReapStuckAssistantRuntimesParams struct {
 	ExpiringCutoff  pgtype.Timestamptz
 }
 
+// Short-horizon reaper for rows the happy-path can no longer move. Applies
+// to both v1 (per-thread VM) and v2 (single VM per assistant) rows: the
+// starting/active/expiring liveness markers it keys on are version-agnostic.
+// A v2 VM in active use updates warm_until and last_heartbeat_at via every
+// thread workflow, so an in-flight VM is never matched by the active branch;
+// only assistants whose entire thread set has gone idle past the cutoffs are
+// collected.
 func (q *Queries) ReapStuckAssistantRuntimes(ctx context.Context, arg ReapStuckAssistantRuntimesParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, reapStuckAssistantRuntimes,
 		arg.StoppedState,
@@ -1507,6 +1883,65 @@ func (q *Queries) ReserveAssistantRuntime(ctx context.Context, arg ReserveAssist
 	return err
 }
 
+const reserveAssistantRuntimeV2 = `-- name: ReserveAssistantRuntimeV2 :exec
+INSERT INTO assistant_runtimes (
+  assistant_thread_id,
+  assistant_id,
+  project_id,
+  backend,
+  state,
+  runtime_version,
+  backend_metadata_json
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  2,
+  COALESCE((
+    SELECT r.backend_metadata_json
+    FROM assistant_runtimes r
+    WHERE r.project_id = $3
+      AND r.assistant_id = $2
+      AND r.runtime_version = 2
+      AND r.backend = $4
+      AND r.backend_metadata_json <> '{}'::jsonb
+    ORDER BY r.created_at DESC
+    LIMIT 1
+  ), '{}'::jsonb)
+)
+ON CONFLICT DO NOTHING
+`
+
+type ReserveAssistantRuntimeV2Params struct {
+	AssistantThreadID uuid.UUID
+	AssistantID       uuid.UUID
+	ProjectID         uuid.UUID
+	Backend           string
+	State             string
+}
+
+// v2 runtimes are keyed on (project_id, assistant_id) — one VM serves
+// every thread under an assistant. assistant_thread_id is set to the
+// admitting thread (the one that triggered admit) so the column stays
+// a real reference; the runtime_version = 2 marker carries the v2
+// semantic distinction. The unique partial index
+// `assistant_runtimes_v2_one_per_assistant` backs the ON CONFLICT and
+// guarantees the single-VM invariant under concurrent admit. Callers
+// must hold pg_advisory_xact_lock on the assistant id to serialise VM
+// creation across workers.
+func (q *Queries) ReserveAssistantRuntimeV2(ctx context.Context, arg ReserveAssistantRuntimeV2Params) error {
+	_, err := q.db.Exec(ctx, reserveAssistantRuntimeV2,
+		arg.AssistantThreadID,
+		arg.AssistantID,
+		arg.ProjectID,
+		arg.Backend,
+		arg.State,
+	)
+	return err
+}
+
 const resetAssistantThreadEventToPending = `-- name: ResetAssistantThreadEventToPending :exec
 UPDATE assistant_thread_events
 SET
@@ -1576,8 +2011,14 @@ const resolveThreadCorrelation = `-- name: ResolveThreadCorrelation :one
 SELECT id, project_id, assistant_id, correlation_id
 FROM assistant_threads
 WHERE id = $1
+  AND project_id = $2
   AND deleted IS FALSE
 `
+
+type ResolveThreadCorrelationParams struct {
+	ThreadID  uuid.UUID
+	ProjectID uuid.UUID
+}
 
 type ResolveThreadCorrelationRow struct {
 	ID            uuid.UUID
@@ -1586,8 +2027,8 @@ type ResolveThreadCorrelationRow struct {
 	CorrelationID string
 }
 
-func (q *Queries) ResolveThreadCorrelation(ctx context.Context, threadID uuid.UUID) (ResolveThreadCorrelationRow, error) {
-	row := q.db.QueryRow(ctx, resolveThreadCorrelation, threadID)
+func (q *Queries) ResolveThreadCorrelation(ctx context.Context, arg ResolveThreadCorrelationParams) (ResolveThreadCorrelationRow, error) {
+	row := q.db.QueryRow(ctx, resolveThreadCorrelation, arg.ThreadID, arg.ProjectID)
 	var i ResolveThreadCorrelationRow
 	err := row.Scan(
 		&i.ID,
@@ -1768,7 +2209,7 @@ SET
   updated_at = clock_timestamp(),
   deleted_at = clock_timestamp()
 WHERE project_id = $2
-  AND assistant_thread_id = $3
+  AND id = $3
   AND deleted IS FALSE
   AND ended IS FALSE
   AND state IN ($4, $5, $6)
@@ -1777,7 +2218,7 @@ WHERE project_id = $2
 type StopAssistantRuntimeParams struct {
 	State         string
 	ProjectID     uuid.UUID
-	ThreadID      uuid.UUID
+	RuntimeID     uuid.UUID
 	StartingState string
 	ActiveState   string
 	ExpiringState string
@@ -1787,7 +2228,7 @@ func (q *Queries) StopAssistantRuntime(ctx context.Context, arg StopAssistantRun
 	_, err := q.db.Exec(ctx, stopAssistantRuntime,
 		arg.State,
 		arg.ProjectID,
-		arg.ThreadID,
+		arg.RuntimeID,
 		arg.StartingState,
 		arg.ActiveState,
 		arg.ExpiringState,

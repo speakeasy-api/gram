@@ -71,6 +71,7 @@ var _ = Service("userSessionConsents", func() {
 
 		HTTP(func() {
 			POST("/rpc/userSessionConsents.revoke")
+			Param("id")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()

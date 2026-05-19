@@ -1,6 +1,7 @@
 import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -53,7 +54,8 @@ import {
   Info,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
+import { useRoutes } from "@/routes";
 import { useSlugs } from "@/contexts/Sdk";
 import { slugify } from "@/lib/constants";
 import { Badge } from "@speakeasy-api/moonshine";
@@ -426,12 +428,15 @@ export function InsightsEmployeesContent() {
             )}
           >
             <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="text-xl font-semibold">Employee Enrollment</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-semibold">Employee Enrollment</h1>
+                <ReleaseStageBadge stage="preview" />
+              </div>
               <p className="text-muted-foreground text-sm">
-                Track Gram uptake for organization members in this project over{" "}
-                {rangeLabel}. Employees with Gram Hooks activity are marked
-                enrolled; employees without any activity are marked not
-                enrolled.
+                Track platform adoption for organization members in this project
+                over {rangeLabel}. Employees with tool or agent session activity
+                are marked enrolled; employees without any activity are marked
+                not enrolled.
               </p>
             </div>
             <div
@@ -678,6 +683,7 @@ function EmployeeTable({
 
 function EnrollmentLegend() {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
+  const routes = useRoutes();
 
   return (
     <>
@@ -685,9 +691,16 @@ function EnrollmentLegend() {
         <div className="max-w-3xl space-y-1">
           <h2 className="text-sm font-semibold">How enrollment works</h2>
           <p className="text-muted-foreground text-sm">
-            Employees appear as enrolled once the Gram Hooks plugin is installed
-            in their AI tool and sends activity to this project. Not enrolled
-            yet? Install the plugin to start tracking their usage.
+            Employees appear as enrolled once the{" "}
+            <Link
+              to={routes.plugins.href()}
+              className="hover:text-foreground underline underline-offset-2"
+            >
+              Observability plugin
+            </Link>{" "}
+            is installed in their AI agent and sends activity to this project.
+            Not enrolled yet? Install the observability plugin to start tracking
+            their usage.
           </p>
         </div>
         <Button

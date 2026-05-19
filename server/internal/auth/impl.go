@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -358,12 +360,71 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		return redirectWithError(authErrInit, err)
 	}
+	if inviteeEmail := strings.ToLower(strings.TrimSpace(userInfo.Email)); inviteeEmail != "" {
+		if err := s.acceptPendingInvitationForMember(ctx, activeOrgID, inviteeEmail, userID, idpUser.Sub); err != nil {
+			s.logger.WarnContext(ctx, "failed to accept pending invite after login",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(activeOrgID),
+				attr.SlogAuthUserEmail(inviteeEmail),
+			)
+		}
+	}
 
 	return &gen.CallbackResult{
 		Location:      s.callbackRedirectURL(ctx, payload),
 		SessionToken:  session.SessionID,
 		SessionCookie: session.SessionID,
 	}, nil
+}
+
+func (s *Service) acceptPendingInvitationForMember(ctx context.Context, organizationID, inviteeEmail, gramUserID, workosUserID string) error {
+	invite, err := s.orgRepo.AcceptPendingInvitationForMember(ctx, orgRepo.AcceptPendingInvitationForMemberParams{
+		OrganizationID: organizationID,
+		Email:          inviteeEmail,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return fmt.Errorf("accept pending invitation: %w", err)
+	}
+
+	if invite.RoleSlug.Valid {
+		if workosUserID == "" {
+			return errors.New("cannot sync invite role without WorkOS user id")
+		}
+
+		orgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, invite.OrganizationID)
+		if err != nil {
+			return fmt.Errorf("get invite organization metadata: %w", err)
+		}
+		var workosMembershipID string
+		if orgMetadata.WorkosID.Valid && orgMetadata.WorkosID.String != "" {
+			membershipID, err := s.identity.UpdateOrganizationMembershipRole(ctx, workosUserID, orgMetadata.WorkosID.String, invite.RoleSlug.String)
+			if err != nil {
+				return fmt.Errorf("update WorkOS membership role: %w", err)
+			}
+			workosMembershipID = membershipID
+		}
+
+		if err := s.orgRepo.SyncUserOrganizationRoleAssignments(ctx, orgRepo.SyncUserOrganizationRoleAssignmentsParams{
+			OrganizationID:     invite.OrganizationID,
+			WorkosUserID:       workosUserID,
+			WorkosRoleSlugs:    []string{invite.RoleSlug.String},
+			UserID:             conv.ToPGText(gramUserID),
+			WorkosMembershipID: conv.ToPGText(workosMembershipID),
+			WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
+			WorkosLastEventID:  pgtype.Text{String: "", Valid: false},
+		}); err != nil {
+			return fmt.Errorf("sync invite role assignments: %w", err)
+		}
+		s.authz.InvalidateRoleCache(ctx, gramUserID, invite.OrganizationID)
+	}
+
+	if err := s.sessions.InvalidateUserInfoCache(ctx, gramUserID); err != nil {
+		return fmt.Errorf("invalidate user info cache: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *gen.LoginResult, err error) {
@@ -382,11 +443,10 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 
 	state := encodeStateParam(payload, nonce)
 
-	authURL, err := s.identity.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
+	authURL, err := s.identity.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
 		CallbackURL:     callbackURL,
 		State:           state,
 		Scope:           "",
-		ClientID:        "",
 		ScopesSupported: nil,
 	})
 	if err != nil {
@@ -660,7 +720,7 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeInvalid, errors.New("organization name contains invalid characters"), "organization name contains invalid characters")
 	}
 
-	slug, err := s.findUniqueSlug(ctx, slugify(payload.OrgName))
+	slug, err := orgslug.FindUnique(ctx, s.orgRepo, orgslug.Slugify(payload.OrgName))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error finding unique slug").Log(ctx, s.logger)
 	}
@@ -710,7 +770,7 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sessions.CachedUserInfo, session *sessions.Session) (string, error) {
 	orgName := generateLegibleOrgName()
 
-	slug, err := s.findUniqueSlug(ctx, slugify(orgName))
+	slug, err := orgslug.FindUnique(ctx, s.orgRepo, orgslug.Slugify(orgName))
 	if err != nil {
 		return "", fmt.Errorf("find unique slug: %w", err)
 	}
@@ -953,46 +1013,6 @@ func (s *Service) buildCallbackURL(ctx context.Context) string {
 
 // validOrgNameRegex allows alphanumeric characters, spaces, hyphens, and underscores.
 var validOrgNameRegex = regexp.MustCompile(`^[a-zA-Z0-9\s-_]+$`)
-
-var slugifyRe = regexp.MustCompile(`[^a-z0-9]+`)
-
-// slugify converts a name into a URL-safe slug.
-func slugify(name string) string {
-	s := strings.ToLower(strings.TrimSpace(name))
-	s = slugifyRe.ReplaceAllString(s, "-")
-	s = strings.Trim(s, "-")
-	return s
-}
-
-const maxSlugAttempts = 10
-
-// findUniqueSlug checks the DB for an existing org with the given slug and
-// appends a random 4-character suffix until a unique one is found.
-func (s *Service) findUniqueSlug(ctx context.Context, base string) (string, error) {
-	candidate := base
-	for range maxSlugAttempts {
-		_, err := s.orgRepo.GetOrganizationMetadataBySlug(ctx, candidate)
-		if err != nil {
-			// No row found — slug is available.
-			return candidate, nil
-		}
-		suffix, err := randomHexSuffix(4)
-		if err != nil {
-			return "", fmt.Errorf("generate slug suffix: %w", err)
-		}
-		candidate = base + "-" + suffix
-	}
-	return "", errors.New("unable to find unique slug after max attempts")
-}
-
-// randomHexSuffix returns n random lowercase hex characters.
-func randomHexSuffix(n int) (string, error) {
-	b := make([]byte, (n+1)/2)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("crypto/rand: %w", err)
-	}
-	return hex.EncodeToString(b)[:n], nil
-}
 
 // callbackRedirectURL determines the redirect location after authentication. It
 // only allows relative URLs to prevent open redirect attacks (see relativeURL).

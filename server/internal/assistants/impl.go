@@ -24,16 +24,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	auth     *auth.Auth
-	authz    *authz.Engine
-	core     *ServiceCore
-	signaler WorkflowSignaler
+	tracer           trace.Tracer
+	logger           *slog.Logger
+	auth             *auth.Auth
+	authz            *authz.Engine
+	core             *ServiceCore
+	signaler         WorkflowSignaler
+	bootstrapLimiter *assistantRateLimiter
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -51,12 +53,13 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("assistants"))
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
-		logger:   logger,
-		auth:     auth.New(logger, db, sessions, authzEngine),
-		authz:    authzEngine,
-		core:     core,
-		signaler: signaler,
+		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
+		logger:           logger,
+		auth:             auth.New(logger, db, sessions, authzEngine),
+		authz:            authzEngine,
+		core:             core,
+		signaler:         signaler,
+		bootstrapLimiter: newAssistantRateLimiter(),
 	}
 }
 
@@ -68,6 +71,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
+	o11y.AttachHandler(mux, "POST", "/rpc/assistants.getThreadBootstrap", oops.ErrHandle(service.logger, service.handleGetThreadBootstrap).ServeHTTP)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

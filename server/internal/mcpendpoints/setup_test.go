@@ -137,13 +137,11 @@ func seedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projec
 	})
 
 	frontend, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ProjectID:             projectID,
-		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ExternalOauthServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OauthProxyServerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID:     uuid.NullUUID{UUID: server.ID, Valid: true},
-		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:            "disabled",
+		ProjectID:         projectID,
+		EnvironmentID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
+		ToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:        "disabled",
 	})
 	require.NoError(t, err)
 
@@ -171,13 +169,11 @@ func seedOtherProjectMcpFrontend(t *testing.T, ctx context.Context, conn *pgxpoo
 	})
 
 	frontend, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ProjectID:             otherProject.ID,
-		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ExternalOauthServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OauthProxyServerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID:     uuid.NullUUID{UUID: server.ID, Valid: true},
-		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:            "disabled",
+		ProjectID:         otherProject.ID,
+		EnvironmentID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
+		ToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:        "disabled",
 	})
 	require.NoError(t, err)
 

@@ -1,5 +1,62 @@
 # server
 
+## 0.54.0
+
+### Minor Changes
+
+- 0f52a3e: The playground's Connect button now drives the issuer-gated OAuth flow when a toolset is bound to a user-session issuer, so connecting to MCP servers like `speakeasy-team-github` lands an upstream session that the runtime can resolve. The connection-status badge and the 401 challenge on `/mcp/{slug}` both read from the issuer-gated session store for these toolsets, and the security-check fallback now always emits a non-empty `resource_metadata` URL.
+
+### Patch Changes
+
+- e40ac39: Assistant runtimes no longer get stuck unresponsive after a Gram release. When the assistant runtime image was upgraded in place, the underlying VM was being left stopped, so the next chat turn timed out and the assistant stopped responding. Subsequent turns now bring the runtime back up cleanly.
+- 9ee283c: Issuer-gated MCP servers now accept an assistant-runtime JWT and use the assistant owner's linked upstream account, so the runtime can call `/mcp/{slug}` without re-prompting for login. Requests with no linked upstream still return a 401 + WWW-Authenticate as before.
+- 48779ef: Fixed a bug where snapshot and metadata fields in audit log outbox entries were being base64-encoded instead of preserved as inline JSON objects.
+
+## 0.53.0
+
+### Minor Changes
+
+- bdb246a: monitor OpenRouter credits usage for enterprise organizations
+- 73f273e: auto-reconcile OpenRouter per-key credit limits via metrics workflow
+- 21dd9c7: Lay the groundwork for the v2 assistant runtime path: optional `ThreadID` claim on assistant runtime tokens (assistant-scoped tokens omit it), a `runtime_version` column plus partial unique index on `assistant_runtimes`, a new `/rpc/assistants.getThreadBootstrap` endpoint that lets a runner pull a thread's bootstrap state on demand, and an assistant-scope check on `/chat/completions` that rejects writes whose `Gram-Chat-ID` resolves to a chat outside the caller's assistant. Existing v1 admit, configure, and run-turn flows are unchanged.
+
+### Patch Changes
+
+- 733bf43: Allow tool URNs to use MCP-valid tool names, including camelCase, PascalCase, dotted, and kebab-case names.
+
+## 0.52.1
+
+### Patch Changes
+
+- e129f0a: Assistant platform toolsets are now served from `/platform/mcp/{slug}` instead of `/x/platform-mcp/{slug}`, in line with `/mcp` prefix for MCP servers.
+- 89588d7: dedupe chat asset writes and idempotently upload to prevent GCS 429s
+- 5f00991: Make hook routes (Claude / Cursor / Codex / OTEL Logs / OTEL Metrics) filterable in Datadog by `gram.org.id`, `gram.project.id`, `gram.hook.source`, and `gram.hook.event`. Replace nested `value` payloads with top-level slog attrs attached via `slog.With`, and log on every early-return path — including unauthorized requests and missing-session-id branches — so a silent 401 or no-session request is still visible when debugging hook setup for a given org/project.
+- 1240c7a: fix: get stop hook working in cowork again
+
+## 0.52.0
+
+### Minor Changes
+
+- 512a432: assistants now self-heal when the inference provider rejects a chat as malformed: the runtime trims history to the last 5 user messages, prepends a recovery notice that nudges the agent to recover lost context via its tools, and retries — instead of leaving the thread stuck.
+- 6cf658b: Every assistant now exposes a platform toolset to its runtime alongside its user-attached toolsets, with no user-facing toolset row and no setup required. Removes the `assistant_memory` product feature flag in the process: `GET /rpc/productFeatures.get` no longer returns `assistant_memory_enabled`, and `POST /rpc/productFeatures.set` no longer accepts `"assistant_memory"` as a `feature_name` — the assistant memory tools are always-on.
+- 707bc98: Outbound Slack messages can now render rich Block Kit content. `chat.postMessage` and `chat.postEphemeral` accept an optional typed `Blocks` field (section, actions+button, context, divider) alongside the existing text fallback. Button clicks come back as `block_actions` interactions on the existing Slack trigger webhook, are correlated to the originating thread, and reach the assistant as a new turn carrying `action_id`, `action_value`, and `block_id` — so assistants can present options and receive the user's choice in the same conversation.
+- fa5ef43: Add Codex (OpenAI) hooks support. A new `/rpc/hooks.codex` endpoint accepts all six Codex hook events (SessionStart, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, Stop), enforces org-level risk policies on blocking events, and records telemetry to ClickHouse. The plugin generator now produces a downloadable Codex observability plugin (ZIP and install script) that registers the hooks with a Gram marketplace entry in `~/.codex/config.toml`. The install instructions dialog gains a Codex tab alongside Claude Code and Cursor.
+- eb65287: Remove the legacy Speakeasy IDP authentication layer and migrate to WorkOS-native auth. Authorization, token exchange, and session management now go directly through the WorkOS SDK instead of the intermediate Speakeasy IDP proxy. Deterministic UUIDv5 user/org IDs bridge cross-system identity without runtime lookups. Adds OAuth CSRF nonce validation and browser-binding cookie to the login flow.
+- bbfecc5: Allow adding multiple GitHub collaborators when publishing plugins to a marketplace. The publish dialog accepts a list of usernames as chips, and the `publishPlugins` API now takes `github_usernames` (array) instead of `github_username` (string).
+- 1057ea9: Add OTEL forwarding: customers can configure a URL and headers on the Org Logs page, and a body-tee middleware mirrors every payload received on `/rpc/hooks.otel/v1/*` to that endpoint. Forwarding is org-wide, async (bounded worker pool, fire-and-forget on failure), capped at 4 MiB per request, and gated behind `org:admin` for writes / `org:read` for reads. Header values are encrypted at rest and never returned by the API.
+- a5e0990: Added support for configuring webhooks to deliver audit log events to external destinations.
+
+### Patch Changes
+
+- 491f3b8: add an opt-in L1 ML prompt-injection classifier (deberta-v3) that runs alongside the heuristic baseline. enable the new "ML classifier (deberta-v3)" rule under the Prompt Injection category in the policy editor to layer the classifier on top of L0 heuristics. detection runs in a sidecar service; configure with `PI_CLASSIFIER_URL` and `PI_CLASSIFIER_THRESHOLD` (default `0.9`)
+- 7290607: Removed the 1-public-MCP-server cap on accounts without an active subscription. Users can now enable as many public MCP servers as they want on any plan.
+- ad3c963: `/rpc/tools.list` now accepts a `tool_types` filter and can return direct external MCP tools, unblocking the toolset editor's "Add Tools" picker for tools from already-attached external MCP servers.
+- ec37cf7: quiet false-positive Temporal workflow failure alerts: benign `ContinueAsNewError` and `CanceledError` log at Info, and `VerifyCustomDomain` is non-retryable on NXDOMAIN.
+- 6305bd6: harden AnalyzeBatch against Presidio degradation
+- 44ccc02: The assistant runtime now spills oversized MCP tool results to a file inside the assistant workdir instead of letting them 413 the provider. The in-band tool result is replaced with a pointer (`{ truncated, saved_to, original_bytes }`) so the model can read or grep the full output via the filesystem tools — no information loss, no provider error.
+- f872cc2: Drop trigger dispatches whose target assistant has been deleted instead of failing the activity; retrying can't recover a missing row.
+- 44be24a: Fix plugin re-publish so Claude Code, Cursor, and Codex marketplace clients refresh installed copies. Every plugin manifest now ships with a per-publish version (`0.1.<unix_ts>`) instead of a hardcoded `0.1.0`, so platform clients see a newer version on republish and pull the updated content.
+
 ## 0.51.2
 
 ### Patch Changes

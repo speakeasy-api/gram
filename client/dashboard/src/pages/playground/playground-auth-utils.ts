@@ -1,6 +1,6 @@
 import { useProject } from "@/contexts/Auth";
 import { Toolset } from "@/lib/toolTypes";
-import { getServerURL } from "@/lib/utils";
+import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod/v4";
 
@@ -40,7 +40,7 @@ export function useExternalMcpOAuthStatus(
   const { enabled = true } = options || {};
 
   const project = useProject();
-  const apiUrl = getServerURL();
+  const apiUrl = getPlaygroundMcpBaseURL();
 
   const queryKey = getExternalMcpOAuthStatusQueryKey(toolsetId, options?.slug);
 

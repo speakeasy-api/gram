@@ -1,4 +1,4 @@
-h1:SsofrDEE2APE3hATdXPKar00jXe5UHjfAo3D3rw2D9Y=
+h1:LvR2Up6I4Li09LtfI4ElgEr738wykaSHNJMj6Pr1/08=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -177,3 +177,9 @@ h1:SsofrDEE2APE3hATdXPKar00jXe5UHjfAo3D3rw2D9Y=
 20260513143640_add-organization-invitations.sql h1:ullg5rI+Zo173EOQ56n2B6UFQB5mGLljO2FqLTeJXiQ=
 20260513152016_alter-user-id-membership-to-be-nullable.sql h1:WXg7B2CQFX4uuXTJYiaNkMtjDhSrBsZqNl4rWR09d5U=
 20260514141917_org-metadata-add-slug-unique-index.sql h1:8snzreqjc8R39UL9bJGKeXl4WlnVaE9YOo8o8RV5GTk=
+20260514200205_age-2320-assistant-runtime-v2.sql h1:gkTPaBGw63rZlYLc2LZvsjlU/jdfZYIq0p6osNzP+5U=
+20260515094400_add_workos_role_assignments_deleted_at.sql h1:peR1HLGXocOJyh1WwnuLyDKzP+R47IMEB5Kho7lNuXg=
+20260515120000_ai-integration-configs.sql h1:bR1UTZ9lHjJUsJL1LY0ByUTkWefnmPOhovosRGRSJc0=
+20260518114737_add_effect_to_principal_grants.sql h1:J3lR6SeKv0v+S+ecUzf2oHgI2nI5aXCZXKimjxWmLOo=
+20260518145220_age-2366-mcp_servers-user_session_issuer_id.sql h1:sfZwy1S/Axh3pmIYxEW0/ODPqfZ8H4+id0EhWc8LNac=
+20260518213910_add-remote-session-client-token-endpoint-auth-method.sql h1:JuOMsaREjEdVpN5V9su1Gi7al06kmYwZw6LGLyYqq3o=

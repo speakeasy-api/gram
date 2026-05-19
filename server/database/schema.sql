@@ -863,6 +863,7 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   client_secret_encrypted TEXT,
   client_id_issued_at timestamptz,
   client_secret_expires_at timestamptz,
+  token_endpoint_auth_method TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1139,6 +1140,11 @@ WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS assistant_runtimes (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  -- v1 rows pin one VM per thread and stamp the thread's id here. v2 rows
+  -- host every thread under one assistant and use uuid.Nil as a sentinel —
+  -- the foreign key to assistant_threads is intentionally absent so the
+  -- sentinel does not have to back to a real row, and so reaping a thread
+  -- does not cascade-delete the assistant's shared v2 runtime.
   assistant_thread_id uuid NOT NULL,
   assistant_id uuid NOT NULL,
   project_id uuid NOT NULL,
@@ -1149,6 +1155,7 @@ CREATE TABLE IF NOT EXISTS assistant_runtimes (
   last_heartbeat_at timestamptz,
   backend_metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   ended_at timestamptz,
+  runtime_version smallint NOT NULL DEFAULT 1,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1157,14 +1164,17 @@ CREATE TABLE IF NOT EXISTS assistant_runtimes (
   ended boolean NOT NULL GENERATED ALWAYS AS (ended_at IS NOT NULL) stored,
 
   CONSTRAINT assistant_runtimes_pkey PRIMARY KEY (id),
-  CONSTRAINT assistant_runtimes_assistant_thread_id_fkey FOREIGN KEY (assistant_thread_id) REFERENCES assistant_threads(id) ON DELETE CASCADE,
   CONSTRAINT assistant_runtimes_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants(id) ON DELETE CASCADE,
   CONSTRAINT assistant_runtimes_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS assistant_runtimes_assistant_thread_id_active_key
 ON assistant_runtimes (assistant_thread_id)
-WHERE deleted IS FALSE AND ended IS FALSE;
+WHERE deleted IS FALSE AND ended IS FALSE AND runtime_version = 1;
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_runtimes_v2_one_per_assistant
+ON assistant_runtimes (project_id, assistant_id)
+WHERE runtime_version = 2 AND deleted IS FALSE AND ended IS FALSE;
 
 CREATE INDEX IF NOT EXISTS assistant_runtimes_project_id_assistant_id_state_idx
 ON assistant_runtimes (project_id, assistant_id, state)
@@ -1716,6 +1726,7 @@ CREATE TABLE IF NOT EXISTS organization_role_assignments (
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
 
   CONSTRAINT organization_role_assignments_pkey PRIMARY KEY (id),
   CONSTRAINT organization_role_assignments_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
@@ -1723,7 +1734,8 @@ CREATE TABLE IF NOT EXISTS organization_role_assignments (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_role_assignments_org_workos_user_role_key
-ON organization_role_assignments (organization_id, workos_user_id, role_urn);
+ON organization_role_assignments (organization_id, workos_user_id, role_urn)
+WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS organization_role_assignments_org_user_idx
 ON organization_role_assignments (organization_id, user_id)
@@ -2199,12 +2211,49 @@ CREATE UNIQUE INDEX IF NOT EXISTS otel_forwarding_configs_org_project_key
   ON otel_forwarding_configs (organization_id, project_id)
   WHERE project_id IS NOT NULL AND deleted IS FALSE;
 
+-- AI integration configs: encrypted provider credentials and activation
+-- metadata. Provider-specific sync state lives in ai_integration_syncs.
+CREATE TABLE IF NOT EXISTS ai_integration_configs (
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  organization_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  api_key_encrypted TEXT NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT ai_integration_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_configs_org_provider_key
+  ON ai_integration_configs (organization_id, provider)
+  WHERE deleted IS FALSE;
+
+-- AI integration syncs: provider-specific high-water marks and future sync
+-- metadata. Cursor usage polling uses last_polled_at as its watermark.
+CREATE TABLE IF NOT EXISTS ai_integration_syncs (
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  ai_integration_config_id uuid NOT NULL,
+  last_polled_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+
+  CONSTRAINT ai_integration_syncs_config_id_fkey FOREIGN KEY (ai_integration_config_id) REFERENCES ai_integration_configs (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_syncs_config_id_key
+  ON ai_integration_syncs (ai_integration_config_id);
+
 CREATE TABLE IF NOT EXISTS principal_grants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   principal_urn TEXT NOT NULL,
   principal_type TEXT NOT NULL GENERATED ALWAYS AS (split_part(principal_urn, ':', 1)) STORED,
   scope TEXT NOT NULL,
+  effect TEXT,
   drop_resource TEXT,
   selectors JSONB NOT NULL,
 
@@ -2213,7 +2262,8 @@ CREATE TABLE IF NOT EXISTS principal_grants (
 
   CONSTRAINT principal_grants_pkey PRIMARY KEY (id),
   CONSTRAINT principal_grants_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT principal_grants_selectors_check CHECK (jsonb_typeof(selectors) = 'object' AND selectors != '{}')
+  CONSTRAINT principal_grants_selectors_check CHECK (jsonb_typeof(selectors) = 'object' AND selectors != '{}'),
+  CONSTRAINT principal_grants_effect_check CHECK (effect IS NULL OR effect IN ('allow', 'deny'))
 );
 
 COMMENT ON TABLE principal_grants IS 'RBAC grants. Normalized: one row per (org, principal, scope). Selectors can further constrain applicability.';
@@ -2221,11 +2271,15 @@ COMMENT ON COLUMN principal_grants.organization_id IS 'The organization this gra
 COMMENT ON COLUMN principal_grants.principal_urn IS 'URN identifying the principal, e.g. "user:user_abc", "role:admin". Format is type:id.';
 COMMENT ON COLUMN principal_grants.principal_type IS 'Derived from principal_urn. The type prefix, e.g. "user", "role".';
 COMMENT ON COLUMN principal_grants.scope IS 'The scope being granted, e.g. "build:read". Validated in application code, not via FK.';
+COMMENT ON COLUMN principal_grants.effect IS 'Whether this grant allows or denies the scope. NULL = allow for backward compatibility.';
 COMMENT ON COLUMN principal_grants.drop_resource IS 'Deprecated. Formerly ''*'' = unrestricted. Nullable, scheduled for removal.';
 COMMENT ON COLUMN principal_grants.selectors IS 'JSON selector constraints attached to a grant. Must be a non-empty JSONB object. Wildcard/unrestricted grants use {"resource_kind":"*","resource_id":"*"}.';
 
 CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_selector_key
 ON principal_grants (organization_id, principal_urn, scope, selectors);
+
+CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_effect_selector_key
+ON principal_grants (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors);
 
 CREATE INDEX IF NOT EXISTS principal_grants_selectors_idx
 ON principal_grants
@@ -2346,8 +2400,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   slug TEXT CHECK (slug IS NULL OR slug <> ''),
 
   environment_id uuid,
-  external_oauth_server_id uuid,
-  oauth_proxy_server_id uuid,
+  user_session_issuer_id uuid,
   remote_mcp_server_id uuid,
   toolset_id uuid,
   visibility TEXT NOT NULL CHECK (visibility <> ''),
@@ -2360,8 +2413,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_pkey PRIMARY KEY (id),
   CONSTRAINT mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT mcp_servers_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL,
-  CONSTRAINT mcp_servers_external_oauth_server_id_fkey FOREIGN KEY (external_oauth_server_id) REFERENCES external_oauth_server_metadata (id) ON DELETE SET NULL,
-  CONSTRAINT mcp_servers_oauth_proxy_server_id_fkey FOREIGN KEY (oauth_proxy_server_id) REFERENCES oauth_proxy_servers (id) ON DELETE SET NULL,
+  CONSTRAINT mcp_servers_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
   CONSTRAINT mcp_servers_remote_mcp_server_id_fkey FOREIGN KEY (remote_mcp_server_id) REFERENCES remote_mcp_servers (id) ON DELETE RESTRICT,
   CONSTRAINT mcp_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
   -- Exactly one backend must be set: either a remote MCP server or a toolset.

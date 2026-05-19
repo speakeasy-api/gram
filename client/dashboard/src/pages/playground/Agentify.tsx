@@ -7,7 +7,7 @@ import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { getServerURL } from "@/lib/utils";
+import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { generateObject } from "ai";
@@ -176,7 +176,7 @@ export const AgentifyButton = ({
 
   const openrouter = createOpenRouter({
     apiKey: "this is required",
-    baseURL: getServerURL(),
+    baseURL: getPlaygroundMcpBaseURL(),
     headers: {
       "Gram-Session": session.session,
       "Gram-Project": project.slug,

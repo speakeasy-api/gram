@@ -11,6 +11,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type BulkInsertOutboxEntriesParams struct {
+	OrganizationID string
+	EventType      string
+	Payload        []byte
+}
+
 const insertOutboxEntry = `-- name: InsertOutboxEntry :one
 INSERT INTO outbox (organization_id, event_type, payload)
 VALUES ($1, $2, $3)

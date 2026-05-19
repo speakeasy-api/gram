@@ -23,9 +23,18 @@ export default function SDK() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <AgentifyProvider>
-          <SdkContent />
-        </AgentifyProvider>
+        <Page.Section>
+          <Page.Section.Title>SDKs</Page.Section.Title>
+          <Page.Section.Description>
+            Generate client code that calls your toolsets from the language and
+            framework of your choice.
+          </Page.Section.Description>
+          <Page.Section.Body>
+            <AgentifyProvider>
+              <SdkContent />
+            </AgentifyProvider>
+          </Page.Section.Body>
+        </Page.Section>
       </Page.Body>
     </Page>
   );

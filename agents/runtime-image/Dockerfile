@@ -1,13 +1,13 @@
-FROM rust:1.95-bookworm AS runner-builder
+FROM rust:1.95-bookworm@sha256:503651ea31e66ecb74623beabde781059a5978df1595a9e8ed03974d5fec1bf0 AS runner-builder
 
 WORKDIR /src
 COPY agents/runner/Cargo.toml agents/runner/Cargo.lock ./agents/runner/
 COPY agents/runner/src ./agents/runner/src
 RUN cargo build --manifest-path ./agents/runner/Cargo.toml --release --bin gram-assistant-runner
 
-FROM oven/bun:1.2.15 AS bun
+FROM oven/bun:1.2.15@sha256:8b5e8d3b6a734ae438c7c6f1bdc23e54eb9c35a0e2e3099ea2ca0ef781aca23b AS bun
 
-FROM oven/bun:1.2.15 AS sandbox-deps
+FROM oven/bun:1.2.15@sha256:8b5e8d3b6a734ae438c7c6f1bdc23e54eb9c35a0e2e3099ea2ca0ef781aca23b AS sandbox-deps
 WORKDIR /sandbox
 COPY agents/runtime-image/sandbox/package.json ./
 RUN bun install --production
@@ -30,7 +30,7 @@ RUN target=node_modules/playwright-core/lib/utilsBundle.js \
  && sed -i "s|const ws = exports.ws = require('./utilsBundleImpl').ws;|const ws = exports.ws = 'Bun' in globalThis ? require('ws') : require('./utilsBundleImpl').ws;|" "$target" \
  && grep -q "'Bun' in globalThis ? require('ws')" "$target"
 
-FROM debian:bookworm-slim AS workdir-template
+FROM debian:bookworm-slim@sha256:67b30a61dc87758f0caf819646104f29ecbda97d920aaf5edc834128ac8493d3 AS workdir-template
 # 256 MiB hard cap on assistant workspace + bundled sandbox helpers.
 ARG WORKDIR_IMAGE_SIZE=268435456
 RUN apt-get update \
@@ -43,7 +43,7 @@ COPY --from=sandbox-deps /sandbox/node_modules /staging/node_modules
 RUN fallocate -l "${WORKDIR_IMAGE_SIZE}" /workdir-template.ext4 \
  && mke2fs -t ext4 -d /staging -F /workdir-template.ext4
 
-FROM debian:bookworm-slim AS lightpanda
+FROM debian:bookworm-slim@sha256:67b30a61dc87758f0caf819646104f29ecbda97d920aaf5edc834128ac8493d3 AS lightpanda
 ARG TARGETARCH
 ARG LIGHTPANDA_VERSION=0.2.8
 ARG LIGHTPANDA_SHA256_AMD64=8e3a5e04cf508699990a78a0a8686ea3398912cd9891fda90513429b89230300
@@ -60,7 +60,7 @@ RUN case "${TARGETARCH:-amd64}" in \
  && echo "${sha}  /lightpanda" | sha256sum -c - \
  && chmod 0755 /lightpanda
 
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:67b30a61dc87758f0caf819646104f29ecbda97d920aaf5edc834128ac8493d3
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \

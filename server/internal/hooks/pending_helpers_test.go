@@ -23,6 +23,103 @@ func otelOnlyCtx(ctx context.Context) context.Context {
 	return contextvalues.SetAuthContext(ctx, nil)
 }
 
+// MCP-routed tool calls must carry the resolved server identifier on every
+// telemetry log via gram.mcp.match — for *every* MCP tool call regardless
+// of policy state. The offline risk batch scanner reads this back by
+// trace_id to populate risk_results.match.
+func TestBuildTelemetryAttributesWithMetadata_SetsMCPMatchFromCachedList(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
+		sessionMCPListTTL,
+	))
+
+	mcpToolName := "mcp__mise__run_task"
+	toolUse := "toolu_local_mcp"
+	metadata := &SessionMetadata{
+		SessionID: sessionID,
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &mcpToolName,
+		ToolUseID:     &toolUse,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	assert.Equal(t, "mise mcp", attrs[attr.MCPMatchKey])
+}
+
+// Native (non-MCP) tools must NOT get a gram.mcp.match attribute — the
+// hook never routes them through an MCP server, and an empty value on the
+// log row would pollute the CH index.
+func TestBuildTelemetryAttributesWithMetadata_NoMCPMatchForNativeTool(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	bashTool := "Bash"
+	toolUse := "toolu_bash"
+	metadata := &SessionMetadata{
+		SessionID: sessionID,
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &bashTool,
+		ToolUseID:     &toolUse,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	_, has := attrs[attr.MCPMatchKey]
+	assert.False(t, has, "Bash and other native tools must not get an MCP match attribute")
+}
+
+// When the MCP list snapshot doesn't include the called server, we fall
+// back to the server-prefix portion of the tool name so the batch scanner
+// still has *something* to allowlist on. Better than no attribute (which
+// would force the scanner into its own prefix-derivation fallback).
+func TestBuildTelemetryAttributesWithMetadata_FallsBackToServerPrefix(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "local", Name: "other", URL: "https://other.example.com/mcp", Transport: "HTTP"}},
+		sessionMCPListTTL,
+	))
+
+	mcpToolName := "mcp__mise__run_task"
+	toolUse := "toolu_no_match"
+	metadata := &SessionMetadata{
+		SessionID: sessionID,
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &mcpToolName,
+		ToolUseID:     &toolUse,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	assert.Equal(t, "mise", attrs[attr.MCPMatchKey])
+}
+
 func TestBuildTelemetryAttributesWithMetadata_ResolvesUserIDFromEmail(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

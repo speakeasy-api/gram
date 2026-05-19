@@ -1,3 +1,11 @@
+-- name: GetAssistantThreadAssistantIDByChatID :one
+SELECT t.assistant_id
+FROM assistant_threads t
+WHERE t.chat_id = @chat_id
+  AND t.project_id = @project_id
+  AND t.deleted IS FALSE
+LIMIT 1;
+
 -- name: UpsertChat :one
 INSERT INTO chats (
     id

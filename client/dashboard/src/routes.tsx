@@ -6,6 +6,7 @@ import {
   RedirectToLogAgents,
   RedirectToLogTools,
 } from "./components/observe/ObserveRedirects";
+import { ReleaseStage } from "./components/release-stage-badge";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
 import AssistantPage from "./pages/assistants/Assistant";
@@ -72,7 +73,6 @@ import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import SecurityOverview from "./pages/security/SecurityOverview";
 import PolicyCenter from "./pages/security/PolicyCenter";
 import Team from "./pages/team/Team";
-import AcceptInvite from "./pages/invite/AcceptInvite";
 import SourceDetails from "./pages/sources/SourceDetails";
 import {
   AddFromCatalogGate,
@@ -96,6 +96,10 @@ type AppRouteBasic = {
   subPages?: AppRoutesBasic;
   unauthenticated?: boolean;
   outsideMainLayout?: boolean;
+  // Release stage badge shown on this route's nav entry. Use sparingly —
+  // only for features that are genuinely pre-GA. Page-level badges live on
+  // <Page.Section.Title stage="..." /> and must be set separately.
+  stage?: ReleaseStage;
 };
 
 type GoToFunction = (...params: string[]) => void;
@@ -124,6 +128,7 @@ type RouteEntry = {
   url: string;
   icon?: IconName;
   customIcon?: React.ComponentType<{ className?: string }>;
+  stage?: ReleaseStage;
 } & (
   | {
       external: true;
@@ -155,12 +160,6 @@ const ROUTE_STRUCTURE = {
     title: "Register",
     url: "/register",
     component: Register,
-    unauthenticated: true,
-  },
-  invite: {
-    title: "Accept Invite",
-    url: "/invite",
-    component: AcceptInvite,
     unauthenticated: true,
   },
   onboarding: {
@@ -285,6 +284,7 @@ const ROUTE_STRUCTURE = {
     title: "Assistants",
     url: "assistants",
     icon: "bot",
+    stage: "preview",
     component: AssistantsRoot,
     indexComponent: AssistantsIndex,
     subPages: {
@@ -438,12 +438,14 @@ const ROUTE_STRUCTURE = {
     title: "Risk Overview",
     url: "risk-overview",
     icon: "shield",
+    stage: "beta",
     component: SecurityOverview,
   },
   policyCenter: {
-    title: "Policy Center",
+    title: "Risk Policies",
     url: "risk-policies",
     icon: "shield-check",
+    stage: "beta",
     component: PolicyCenter,
   },
   sdks: {

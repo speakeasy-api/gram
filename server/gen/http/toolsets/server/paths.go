@@ -66,3 +66,8 @@ func AddOAuthProxyServerToolsetsPath() string {
 func UpdateOAuthProxyServerToolsetsPath() string {
 	return "/rpc/toolsets.updateOAuthProxyServer"
 }
+
+// SetUserSessionIssuerToolsetsPath returns the URL path to the toolsets service setUserSessionIssuer HTTP endpoint.
+func SetUserSessionIssuerToolsetsPath() string {
+	return "/rpc/toolsets.setUserSessionIssuer"
+}

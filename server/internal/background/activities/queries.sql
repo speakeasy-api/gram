@@ -49,6 +49,29 @@ WHERE toolsets.deleted = false
 GROUP BY organization_metadata.id
 HAVING COUNT(toolsets.id) > 0;
 
+-- name: GetOpenRouterCreditsMonitoringTargets :many
+-- Targets for periodic OpenRouter credit usage polling. Filters out disabled
+-- orgs and disabled/deleted keys, and restricts to the caller-supplied
+-- account-type allowlist so coverage can expand (e.g. add 'pro') without a
+-- code change. monthly_credits is the canonical limit last written by
+-- RefreshAPIKeyLimit and reflects any per-org overrides applied via the
+-- OpenrouterKeyRefreshWorkflow. The api_key is included so the caller can
+-- issue the upstream usage HTTP call in a single round-trip — keep it inside
+-- the activity boundary and never return it to the workflow.
+SELECT
+    om.id AS organization_id,
+    om.slug AS organization_slug,
+    om.gram_account_type,
+    k.monthly_credits,
+    k.key AS api_key
+FROM organization_metadata om
+JOIN openrouter_api_keys k ON k.organization_id = om.id
+WHERE om.disabled_at IS NULL
+  AND k.disabled = FALSE
+  AND k.deleted = FALSE
+  AND om.gram_account_type = ANY(@account_types::text[])
+ORDER BY om.slug;
+
 -- name: GetUserEmailsByOrgIDs :many
 -- Get user emails for organization IDs by looking up the latest deployment for each org
 SELECT DISTINCT

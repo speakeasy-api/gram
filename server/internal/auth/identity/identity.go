@@ -4,17 +4,19 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
-	"regexp"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -32,6 +34,16 @@ import (
 // browser-flow fields (CodeVerifier, IPAddress, UserAgent).
 type IDPClient interface {
 	AuthenticateWithCode(ctx context.Context, clientID, code string) (*AuthenticateResult, error)
+	CreateMagicAuth(ctx context.Context, email string) (*MagicAuthChallenge, error)
+	AuthenticateWithMagicAuth(ctx context.Context, clientID, email, code string) (*AuthenticateResult, error)
+	SetEmailVerified(ctx context.Context, userID string) error
+}
+
+type AuthorizationURLParams struct {
+	CallbackURL     string
+	Scope           string
+	State           string
+	ScopesSupported []string
 }
 
 // AuthenticateResult holds the fields Gram uses from the IDP code exchange.
@@ -41,12 +53,18 @@ type AuthenticateResult struct {
 	User           AuthenticatedUser
 }
 
+type MagicAuthChallenge struct {
+	Email string
+	Code  string
+}
+
 // AuthenticatedUser holds the user fields Gram reads after IDP authentication.
 type AuthenticatedUser struct {
 	ID                string
 	FirstName         string
 	LastName          string
 	Email             string
+	EmailVerified     bool
 	ProfilePictureURL string
 	ExternalID        string
 }
@@ -59,7 +77,9 @@ type WorkOSClient interface {
 	EnsureUserExternalID(ctx context.Context, workosUserID, gramUserID string) error
 	EnsureOrgExternalID(ctx context.Context, workosOrgID, gramOrgID string) error
 	CreateOrganization(ctx context.Context, name, gramOrgID string) (string, error)
-	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID string) error
+	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
+	GetOrgMembership(ctx context.Context, workosUserID, workosOrgID string) (*workos.Member, error)
+	UpdateMemberRole(ctx context.Context, membershipID, roleSlug string) (*workos.Member, error)
 }
 
 // IDPUserInfo represents the user identity returned by the IDP after code exchange.
@@ -133,7 +153,47 @@ func (r *Resolver) ExchangeCodeForTokens(ctx context.Context, code string) (_ *I
 	if err != nil {
 		return nil, fmt.Errorf("workos authenticate with code: %w", err)
 	}
+	if resp == nil {
+		return nil, errors.New("workos authenticate with code: empty response")
+	}
 
+	return idpUserInfoFromAuthenticateResult(resp), nil
+}
+
+func (r *Resolver) AuthenticateWithMagicAuth(ctx context.Context, email string) (_ *IDPUserInfo, err error) {
+	ctx, span := r.tracer.Start(ctx, "identity.authenticateWithMagicAuth")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
+	challenge, err := r.idpClient.CreateMagicAuth(ctx, email)
+	if err != nil {
+		return nil, fmt.Errorf("workos create magic auth: %w", err)
+	}
+	if challenge == nil || challenge.Code == "" {
+		return nil, errors.New("workos create magic auth: empty code")
+	}
+
+	resp, err := r.idpClient.AuthenticateWithMagicAuth(ctx, r.idpClientID, challenge.Email, challenge.Code)
+	if err != nil {
+		return nil, fmt.Errorf("workos authenticate with magic auth: %w", err)
+	}
+	if resp == nil {
+		return nil, errors.New("workos authenticate with magic auth: empty response")
+	}
+	if !resp.User.EmailVerified {
+		if err := r.idpClient.SetEmailVerified(ctx, resp.User.ID); err != nil {
+			return nil, fmt.Errorf("workos mark email verified: %w", err)
+		}
+	}
+
+	return idpUserInfoFromAuthenticateResult(resp), nil
+}
+
+func idpUserInfoFromAuthenticateResult(resp *AuthenticateResult) *IDPUserInfo {
 	name := strings.TrimSpace(resp.User.FirstName + " " + resp.User.LastName)
 	var picture *string
 	if resp.User.ProfilePictureURL != "" {
@@ -148,7 +208,7 @@ func (r *Resolver) ExchangeCodeForTokens(ctx context.Context, code string) (_ *I
 		ExternalID:      resp.User.ExternalID,
 		WorkOSSessionID: extractSessionIDFromJWT(resp.AccessToken),
 		OrganizationID:  resp.OrganizationID,
-	}, nil
+	}
 }
 
 func extractSessionIDFromJWT(token string) string {
@@ -303,15 +363,6 @@ func (r *Resolver) BuildUserInfoFromDB(ctx context.Context, userID string) (*ses
 	}, nil
 }
 
-var slugifyRe = regexp.MustCompile(`[^a-z0-9]+`)
-
-func slugify(name string) string {
-	s := strings.ToLower(strings.TrimSpace(name))
-	s = slugifyRe.ReplaceAllString(s, "-")
-	s = strings.Trim(s, "-")
-	return s
-}
-
 // SyncMembershipsFromWorkOS refreshes local WorkOS organization memberships
 // and invalidates cached user info so the next read observes the synced rows.
 func (r *Resolver) SyncMembershipsFromWorkOS(ctx context.Context, gramUserID, workosUserID string) error {
@@ -327,6 +378,32 @@ func (r *Resolver) SyncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 		return fmt.Errorf("invalidate user info cache: %w", err)
 	}
 	return nil
+}
+
+func (r *Resolver) UpdateOrganizationMembershipRole(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error) {
+	if r.workosClient == nil || workosUserID == "" || workosOrgID == "" || roleSlug == "" {
+		return "", nil
+	}
+
+	membership, err := r.workosClient.GetOrgMembership(ctx, workosUserID, workosOrgID)
+	if err != nil {
+		return "", fmt.Errorf("get WorkOS organization membership: %w", err)
+	}
+	if membership == nil || membership.ID == "" {
+		return "", errors.New("WorkOS organization membership not found")
+	}
+	if membership.RoleSlug == roleSlug {
+		return membership.ID, nil
+	}
+
+	updated, err := r.workosClient.UpdateMemberRole(ctx, membership.ID, roleSlug)
+	if err != nil {
+		return "", fmt.Errorf("update WorkOS organization membership role: %w", err)
+	}
+	if updated != nil && updated.ID != "" {
+		return updated.ID, nil
+	}
+	return membership.ID, nil
 }
 
 func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, workosUserID string) ([]orgRepo.ListOrganizationsForUserRow, error) {
@@ -346,19 +423,44 @@ func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 
 		gramOrgID := r.resolveGramOrgID(ctx, m.OrganizationID, org.ExternalID)
 
-		slug := slugify(org.Name)
+		slug := orgslug.Slugify(org.Name)
 		if slug == "" {
 			slug = m.OrganizationID
 		}
+		shouldCreateOrg := false
+		existingOrg, err := r.orgRepo.GetOrganizationMetadata(ctx, gramOrgID)
+		switch {
+		case err == nil:
+			if !existingOrg.WorkosID.Valid {
+				if _, err := r.orgRepo.SetOrgWorkosID(ctx, orgRepo.SetOrgWorkosIDParams{
+					WorkosID:       pgtype.Text{String: m.OrganizationID, Valid: true},
+					OrganizationID: gramOrgID,
+				}); err != nil {
+					return nil, fmt.Errorf("set workos id for organization %q: %w", gramOrgID, err)
+				}
+			} else if existingOrg.WorkosID.String != m.OrganizationID {
+				return nil, fmt.Errorf("workos organization %q resolved to gram organization %q with different workos_id %q", m.OrganizationID, gramOrgID, existingOrg.WorkosID.String)
+			}
+		case errors.Is(err, pgx.ErrNoRows):
+			slug, err = orgslug.FindUnique(ctx, r.orgRepo, slug)
+			if err != nil {
+				return nil, fmt.Errorf("find unique slug for workos organization %q: %w", m.OrganizationID, err)
+			}
+			shouldCreateOrg = true
+		default:
+			return nil, fmt.Errorf("get org metadata for workos organization %q: %w", m.OrganizationID, err)
+		}
 
-		if _, err := r.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-			ID:          gramOrgID,
-			Name:        org.Name,
-			Slug:        slug,
-			WorkosID:    pgtype.Text{String: m.OrganizationID, Valid: true},
-			Whitelisted: pgtype.Bool{Bool: false, Valid: false},
-		}); err != nil {
-			return nil, fmt.Errorf("upsert org metadata from workos %q: %w", m.OrganizationID, err)
+		if shouldCreateOrg {
+			if _, err := r.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+				ID:          gramOrgID,
+				Name:        org.Name,
+				Slug:        slug,
+				WorkosID:    pgtype.Text{String: m.OrganizationID, Valid: true},
+				Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+			}); err != nil {
+				return nil, fmt.Errorf("upsert org metadata from workos %q: %w", m.OrganizationID, err)
+			}
 		}
 
 		if err := r.workosClient.EnsureOrgExternalID(ctx, m.OrganizationID, gramOrgID); err != nil {
@@ -464,7 +566,7 @@ const workosAuthorizeEndpoint = "https://api.workos.com/user_management/authoriz
 
 // BuildAuthorizationURL constructs the OIDC authorization URL that the
 // browser should be redirected to.
-func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params sessions.AuthURLParams) (*url.URL, error) {
+func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params AuthorizationURLParams) (*url.URL, error) {
 	q := url.Values{}
 	q.Set("response_type", "code")
 	q.Set("client_id", r.idpClientID)
@@ -513,7 +615,7 @@ func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, gramOrgID, orgName,
 		return "", fmt.Errorf("create WorkOS organization: %w", err)
 	}
 
-	if err := r.workosClient.CreateOrganizationMembership(ctx, user.WorkosID.String, workosOrgID); err != nil {
+	if _, err := r.workosClient.CreateOrganizationMembership(ctx, user.WorkosID.String, workosOrgID, "admin"); err != nil {
 		return "", fmt.Errorf("create WorkOS organization membership: %w", err)
 	}
 

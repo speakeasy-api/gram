@@ -6,12 +6,12 @@ import { organizationsCreatePortalSession } from "../funcs/organizationsCreatePo
 import { organizationsDisableWebhooks } from "../funcs/organizationsDisableWebhooks.js";
 import { organizationsEnableWebhooks } from "../funcs/organizationsEnableWebhooks.js";
 import { organizationsGet } from "../funcs/organizationsGet.js";
-import { organizationsGetInviteByToken } from "../funcs/organizationsGetInviteByToken.js";
 import { organizationsListInvites } from "../funcs/organizationsListInvites.js";
 import { organizationsListUsers } from "../funcs/organizationsListUsers.js";
 import { organizationsRemoveUser } from "../funcs/organizationsRemoveUser.js";
 import { organizationsRevokeInvite } from "../funcs/organizationsRevokeInvite.js";
 import { organizationsSendInvite } from "../funcs/organizationsSendInvite.js";
+import { organizationsUpdateInviteRole } from "../funcs/organizationsUpdateInviteRole.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -90,23 +90,6 @@ export class Organizations extends ClientSDK {
       this,
       request,
       security,
-      options,
-    ));
-  }
-
-  /**
-   * getInviteByToken organizations
-   *
-   * @remarks
-   * Resolve a WorkOS invitation from its token (e.g. accept-flow).
-   */
-  async getInviteByToken(
-    request: operations.GetInviteByTokenRequest,
-    options?: RequestOptions,
-  ): Promise<components.OrganizationInvitationAccept> {
-    return unwrapAsync(organizationsGetInviteByToken(
-      this,
-      request,
       options,
     ));
   }
@@ -199,6 +182,25 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.OrganizationInvitation> {
     return unwrapAsync(organizationsSendInvite(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateInviteRole organizations
+   *
+   * @remarks
+   * Change the role assigned to a pending WorkOS invitation.
+   */
+  async updateInviteRole(
+    request: operations.UpdateInviteRoleRequest,
+    security?: operations.UpdateInviteRoleSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.OrganizationInvitation> {
+    return unwrapAsync(organizationsUpdateInviteRole(
       this,
       request,
       security,

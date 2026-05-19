@@ -28,13 +28,13 @@ type Client struct {
 	// revokeInvite endpoint.
 	RevokeInviteDoer goahttp.Doer
 
+	// UpdateInviteRole Doer is the HTTP client used to make requests to the
+	// updateInviteRole endpoint.
+	UpdateInviteRoleDoer goahttp.Doer
+
 	// ListInvites Doer is the HTTP client used to make requests to the listInvites
 	// endpoint.
 	ListInvitesDoer goahttp.Doer
-
-	// GetInviteByToken Doer is the HTTP client used to make requests to the
-	// getInviteByToken endpoint.
-	GetInviteByTokenDoer goahttp.Doer
 
 	// ListUsers Doer is the HTTP client used to make requests to the listUsers
 	// endpoint.
@@ -80,8 +80,8 @@ func NewClient(
 		GetDoer:                 doer,
 		SendInviteDoer:          doer,
 		RevokeInviteDoer:        doer,
+		UpdateInviteRoleDoer:    doer,
 		ListInvitesDoer:         doer,
-		GetInviteByTokenDoer:    doer,
 		ListUsersDoer:           doer,
 		RemoveUserDoer:          doer,
 		EnableWebhooksDoer:      doer,
@@ -167,6 +167,30 @@ func (c *Client) RevokeInvite() goa.Endpoint {
 	}
 }
 
+// UpdateInviteRole returns an endpoint that makes HTTP requests to the
+// organizations service updateInviteRole server.
+func (c *Client) UpdateInviteRole() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateInviteRoleRequest(c.encoder)
+		decodeResponse = DecodeUpdateInviteRoleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateInviteRoleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateInviteRoleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "updateInviteRole", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // ListInvites returns an endpoint that makes HTTP requests to the
 // organizations service listInvites server.
 func (c *Client) ListInvites() goa.Endpoint {
@@ -186,30 +210,6 @@ func (c *Client) ListInvites() goa.Endpoint {
 		resp, err := c.ListInvitesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizations", "listInvites", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// GetInviteByToken returns an endpoint that makes HTTP requests to the
-// organizations service getInviteByToken server.
-func (c *Client) GetInviteByToken() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeGetInviteByTokenRequest(c.encoder)
-		decodeResponse = DecodeGetInviteByTokenResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetInviteByTokenRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.GetInviteByTokenDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("organizations", "getInviteByToken", err)
 		}
 		return decodeResponse(resp)
 	}

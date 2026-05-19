@@ -113,3 +113,25 @@ func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterK
 	)
 	return i, err
 }
+
+const updateOpenRouterKeyMonthlyCredits = `-- name: UpdateOpenRouterKeyMonthlyCredits :exec
+UPDATE openrouter_api_keys
+SET monthly_credits = $1
+WHERE organization_id = $2
+  AND deleted IS FALSE
+`
+
+type UpdateOpenRouterKeyMonthlyCreditsParams struct {
+	MonthlyCredits int64
+	OrganizationID string
+}
+
+// Updates only monthly_credits for the given organization. Used by the
+// metrics-collection reconciliation path when the upstream OpenRouter limit
+// diverges from the locally cached value (e.g. after a manual change on the
+// OpenRouter dashboard). Distinct from UpdateOpenRouterKey, which is the
+// key-provisioning write path and also mutates key/key_hash.
+func (q *Queries) UpdateOpenRouterKeyMonthlyCredits(ctx context.Context, arg UpdateOpenRouterKeyMonthlyCreditsParams) error {
+	_, err := q.db.Exec(ctx, updateOpenRouterKeyMonthlyCredits, arg.MonthlyCredits, arg.OrganizationID)
+	return err
+}

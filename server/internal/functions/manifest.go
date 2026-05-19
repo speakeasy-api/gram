@@ -85,8 +85,8 @@ func (m *Manifest) UnmarshalJSON(data []byte) error {
 func validateManifestToolV0(tool ManifestToolV0) (err error) {
 	if tool.Name == "" {
 		err = errors.Join(err, errors.New("tool name is required"))
-	} else if !constants.SlugPatternRE.MatchString(tool.Name) {
-		err = errors.Join(err, fmt.Errorf("tool name does not match regular expression: %s", constants.SlugPattern))
+	} else if !constants.MCPToolNamePatternRE.MatchString(tool.Name) {
+		err = errors.Join(err, fmt.Errorf("tool name does not match regular expression: %s", constants.MCPToolNamePattern))
 	}
 
 	if tool.Description == "" {

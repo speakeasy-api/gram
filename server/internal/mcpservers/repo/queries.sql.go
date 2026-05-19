@@ -15,8 +15,6 @@ const createMCPServer = `-- name: CreateMCPServer :one
 INSERT INTO mcp_servers (
     project_id,
     environment_id,
-    external_oauth_server_id,
-    oauth_proxy_server_id,
     remote_mcp_server_id,
     toolset_id,
     visibility
@@ -26,29 +24,23 @@ VALUES (
     $2,
     $3,
     $4,
-    $5,
-    $6,
-    $7
+    $5
 )
-RETURNING id, project_id, name, slug, environment_id, external_oauth_server_id, oauth_proxy_server_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateMCPServerParams struct {
-	ProjectID             uuid.UUID
-	EnvironmentID         uuid.NullUUID
-	ExternalOauthServerID uuid.NullUUID
-	OauthProxyServerID    uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
-	ToolsetID             uuid.NullUUID
-	Visibility            string
+	ProjectID         uuid.UUID
+	EnvironmentID     uuid.NullUUID
+	RemoteMcpServerID uuid.NullUUID
+	ToolsetID         uuid.NullUUID
+	Visibility        string
 }
 
 func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams) (McpServer, error) {
 	row := q.db.QueryRow(ctx, createMCPServer,
 		arg.ProjectID,
 		arg.EnvironmentID,
-		arg.ExternalOauthServerID,
-		arg.OauthProxyServerID,
 		arg.RemoteMcpServerID,
 		arg.ToolsetID,
 		arg.Visibility,
@@ -60,8 +52,7 @@ func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams
 		&i.Name,
 		&i.Slug,
 		&i.EnvironmentID,
-		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
 		&i.ToolsetID,
 		&i.Visibility,
@@ -77,7 +68,7 @@ const deleteMCPServer = `-- name: DeleteMCPServer :one
 UPDATE mcp_servers
 SET deleted_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, name, slug, environment_id, external_oauth_server_id, oauth_proxy_server_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteMCPServerParams struct {
@@ -94,8 +85,7 @@ func (q *Queries) DeleteMCPServer(ctx context.Context, arg DeleteMCPServerParams
 		&i.Name,
 		&i.Slug,
 		&i.EnvironmentID,
-		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
 		&i.ToolsetID,
 		&i.Visibility,
@@ -108,7 +98,7 @@ func (q *Queries) DeleteMCPServer(ctx context.Context, arg DeleteMCPServerParams
 }
 
 const getMCPServerByID = `-- name: GetMCPServerByID :one
-SELECT id, project_id, name, slug, environment_id, external_oauth_server_id, oauth_proxy_server_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -127,8 +117,7 @@ func (q *Queries) GetMCPServerByID(ctx context.Context, arg GetMCPServerByIDPara
 		&i.Name,
 		&i.Slug,
 		&i.EnvironmentID,
-		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
 		&i.ToolsetID,
 		&i.Visibility,
@@ -141,7 +130,7 @@ func (q *Queries) GetMCPServerByID(ctx context.Context, arg GetMCPServerByIDPara
 }
 
 const listMCPServersByProjectID = `-- name: ListMCPServersByProjectID :many
-SELECT id, project_id, name, slug, environment_id, external_oauth_server_id, oauth_proxy_server_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -171,8 +160,7 @@ func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServ
 			&i.Name,
 			&i.Slug,
 			&i.EnvironmentID,
-			&i.ExternalOauthServerID,
-			&i.OauthProxyServerID,
+			&i.UserSessionIssuerID,
 			&i.RemoteMcpServerID,
 			&i.ToolsetID,
 			&i.Visibility,
@@ -195,32 +183,26 @@ const updateMCPServer = `-- name: UpdateMCPServer :one
 UPDATE mcp_servers
 SET
     environment_id = $1,
-    external_oauth_server_id = $2,
-    oauth_proxy_server_id = $3,
-    remote_mcp_server_id = $4,
-    toolset_id = $5,
-    visibility = $6,
+    remote_mcp_server_id = $2,
+    toolset_id = $3,
+    visibility = $4,
     updated_at = clock_timestamp()
-WHERE id = $7 AND project_id = $8 AND deleted IS FALSE
-RETURNING id, project_id, name, slug, environment_id, external_oauth_server_id, oauth_proxy_server_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
+WHERE id = $5 AND project_id = $6 AND deleted IS FALSE
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateMCPServerParams struct {
-	EnvironmentID         uuid.NullUUID
-	ExternalOauthServerID uuid.NullUUID
-	OauthProxyServerID    uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
-	ToolsetID             uuid.NullUUID
-	Visibility            string
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
+	EnvironmentID     uuid.NullUUID
+	RemoteMcpServerID uuid.NullUUID
+	ToolsetID         uuid.NullUUID
+	Visibility        string
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
 }
 
 func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams) (McpServer, error) {
 	row := q.db.QueryRow(ctx, updateMCPServer,
 		arg.EnvironmentID,
-		arg.ExternalOauthServerID,
-		arg.OauthProxyServerID,
 		arg.RemoteMcpServerID,
 		arg.ToolsetID,
 		arg.Visibility,
@@ -234,8 +216,7 @@ func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams
 		&i.Name,
 		&i.Slug,
 		&i.EnvironmentID,
-		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
 		&i.ToolsetID,
 		&i.Visibility,

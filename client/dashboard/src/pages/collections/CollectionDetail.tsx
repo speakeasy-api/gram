@@ -1,5 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { ProjectAvatar } from "@/components/project-menu";
+import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
@@ -14,11 +15,10 @@ import {
   Loader2,
   Lock,
   Globe,
-  Monitor,
+  LayoutGrid,
   SearchX,
   Server,
   Server as ServerIcon,
-  Wrench,
 } from "lucide-react";
 import { Button, Input } from "@speakeasy-api/moonshine";
 import { Textarea } from "@/components/moon/textarea";
@@ -42,12 +42,21 @@ import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
 import { buildCollectionMcpJson, formatMcpJson } from "@/lib/mcp-json";
 import { toast } from "sonner";
+import { CollectionInstallDialog } from "./CollectionInstallDialog";
 
 export function CollectionDetailRoot() {
   return <Outlet />;
 }
 
 export default function CollectionDetail() {
+  return (
+    <RequireScope scope={["org:read", "org:admin"]} level="page">
+      <CollectionDetailInner />
+    </RequireScope>
+  );
+}
+
+function CollectionDetailInner() {
   const { collectionSlug } = useParams<{ collectionSlug: string }>();
   const { data: collections } = useCollections();
   const orgRoutes = useOrgRoutes();
@@ -64,6 +73,7 @@ export default function CollectionDetail() {
     useState<CatalogServer | null>(null);
   const [activeInstallServer, setActiveInstallServer] =
     useState<CatalogServer | null>(null);
+  const [showBulkInstallDialog, setShowBulkInstallDialog] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -173,6 +183,16 @@ export default function CollectionDetail() {
     [rawServers],
   );
 
+  // Servers that have an active endpoint and can be installed
+  const installableServersWithEndpoint = useMemo(() => {
+    const excludedSpecifiers = new Set(
+      collectionMcpJson.excludedServers.map((s) => s.registrySpecifier),
+    );
+    return installableServers.filter(
+      (s) => !excludedSpecifiers.has(s.registrySpecifier),
+    );
+  }, [installableServers, collectionMcpJson.excludedServers]);
+
   const excludedServersNotice =
     collectionMcpJson.excludedCount === 1
       ? "1 server was excluded because it has no active endpoint."
@@ -202,7 +222,18 @@ export default function CollectionDetail() {
     setSelectedProjectSlug((current) => current ?? defaultProjectSlug);
   };
 
-  const totalTools = servers.reduce((sum, s) => sum + s.toolCount, 0);
+  const openBulkInstallDialog = () => {
+    const servers = installableServersWithEndpoint;
+    if (servers.length === 0) return;
+
+    if (collectionMcpJson.excludedCount > 0) {
+      toast.info(
+        `Installing ${servers.length} of ${rawServers.length} servers (${collectionMcpJson.excludedCount} ${collectionMcpJson.excludedCount === 1 ? "has" : "have"} no active endpoint).`,
+      );
+    }
+
+    setShowBulkInstallDialog(true);
+  };
 
   const handleDownloadCollectionMcpJson = () => {
     if (!collection || collectionMcpJson.includedCount === 0) {
@@ -250,65 +281,108 @@ export default function CollectionDetail() {
         />
       </Page.Header>
       <Page.Body>
-        <div className="flex gap-8">
+        <div className="flex flex-col gap-8 xl:flex-row">
           {/* Main content */}
           <div className="min-w-0 flex-1">
             {/* Header */}
-            <div className="mb-6 flex items-start gap-4">
-              <div className="bg-muted flex h-14 w-14 items-center justify-center rounded-lg border">
-                <Monitor className="text-muted-foreground h-7 w-7" />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-semibold">{collection.name}</h1>
-                  <Badge variant="outline" className="text-xs">
-                    {collection.visibility === "private" ? (
-                      <>
-                        <Lock className="mr-1 h-3 w-3" />
-                        Private
-                      </>
-                    ) : (
-                      <>
-                        <Globe className="mr-1 h-3 w-3" />
-                        Public
-                      </>
-                    )}
-                  </Badge>
+            <div className="bg-card mb-6 rounded-xl border p-5 shadow-sm">
+              <div className="flex flex-col gap-5 2xl:flex-row 2xl:items-start 2xl:justify-between">
+                <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start">
+                  <div className="bg-muted/60 flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border">
+                    <LayoutGrid className="text-muted-foreground h-8 w-8" />
+                  </div>
+                  <div className="min-w-0 space-y-3">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h1 className="truncate text-2xl font-semibold">
+                          {collection.name}
+                        </h1>
+                        <Badge variant="outline" className="text-xs">
+                          {collection.visibility === "private" ? (
+                            <>
+                              <Lock className="mr-1 h-3 w-3" />
+                              Private
+                            </>
+                          ) : (
+                            <>
+                              <Globe className="mr-1 h-3 w-3" />
+                              Public
+                            </>
+                          )}
+                        </Badge>
+                      </div>
+                      <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                        <span>
+                          {servers.length}{" "}
+                          {servers.length === 1 ? "server" : "servers"}
+                        </span>
+                        {collectionMcpJson.excludedCount > 0 && (
+                          <>
+                            <span aria-hidden="true">/</span>
+                            <span>
+                              {collectionMcpJson.excludedCount} unavailable
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-muted-foreground max-w-2xl text-sm">
+                      {collection.description ||
+                        "A reusable collection of MCP servers that can be installed into a project together."}
+                    </p>
+                  </div>
                 </div>
-                {collection.description && (
-                  <p className="text-muted-foreground text-sm">
-                    {collection.description}
-                  </p>
-                )}
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 2xl:shrink-0 2xl:justify-end">
+                  <RequireScope scope="project:write" level="component">
+                    <Button
+                      size="sm"
+                      className="w-full sm:w-auto"
+                      disabled={
+                        isLoading ||
+                        installableServersWithEndpoint.length === 0 ||
+                        projects.length === 0
+                      }
+                      onClick={openBulkInstallDialog}
+                    >
+                      <Button.LeftIcon>
+                        <Download />
+                      </Button.LeftIcon>
+                      <Button.Text>Install</Button.Text>
+                    </Button>
+                  </RequireScope>
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => {
-                      setEditName(collection.name);
-                      setEditDescription(collection.description);
-                      setEditVisibility(collection.visibility);
-                      setEditSelectedToolsetIds(new Set(attachedToolsetIds));
-                      setEditing(true);
-                    }}
-                  >
-                    <Button.Icon>
-                      <Pencil />
-                    </Button.Icon>
-                    <Button.Text>Edit</Button.Text>
-                  </Button>
-                  <Button
-                    size="sm"
+                    className="w-full sm:w-auto"
                     disabled={
                       isLoading || collectionMcpJson.includedCount === 0
                     }
                     onClick={handleDownloadCollectionMcpJson}
                   >
-                    <Button.Icon>
+                    <Button.LeftIcon>
                       <Download />
-                    </Button.Icon>
+                    </Button.LeftIcon>
                     <Button.Text>Generate mcp.json</Button.Text>
                   </Button>
+                  <RequireScope scope="org:admin" level="component">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="w-full sm:w-auto"
+                      onClick={() => {
+                        setEditName(collection.name);
+                        setEditDescription(collection.description);
+                        setEditVisibility(collection.visibility);
+                        setEditSelectedToolsetIds(new Set(attachedToolsetIds));
+                        setEditing(true);
+                      }}
+                    >
+                      <Button.LeftIcon>
+                        <Pencil />
+                      </Button.LeftIcon>
+                      <Button.Text>Edit</Button.Text>
+                    </Button>
+                  </RequireScope>
                 </div>
               </div>
             </div>
@@ -329,206 +403,216 @@ export default function CollectionDetail() {
 
             {/* Edit Form */}
             {editing && (
-              <div className="mb-4 space-y-4 rounded-lg border p-5">
-                <h2 className="text-base font-semibold">Edit Collection</h2>
-                <div>
-                  <label className="mb-1 block text-sm font-medium">Name</label>
-                  <Input
-                    value={editName}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setEditName(e.target.value)
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium">
-                    Description
-                  </label>
-                  <Textarea
-                    value={editDescription}
-                    onChange={(e) => setEditDescription(e.target.value)}
-                    rows={3}
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    Visibility
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      className={cn(
-                        "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
-                        editVisibility === "public"
-                          ? "border-foreground/30 bg-accent"
-                          : "border-border hover:bg-accent/50",
-                      )}
-                      onClick={() => setEditVisibility("public")}
-                    >
-                      <Globe className="h-3.5 w-3.5" />
-                      Public
-                    </button>
-                    <button
-                      type="button"
-                      className={cn(
-                        "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
-                        editVisibility === "private"
-                          ? "border-foreground/30 bg-accent"
-                          : "border-border hover:bg-accent/50",
-                      )}
-                      onClick={() => setEditVisibility("private")}
-                    >
-                      <Lock className="h-3.5 w-3.5" />
-                      Private
-                    </button>
+              <RequireScope scope="org:admin" level="section">
+                <div className="mb-4 space-y-4 rounded-lg border p-5">
+                  <h2 className="text-base font-semibold">Edit Collection</h2>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">
+                      Name
+                    </label>
+                    <Input
+                      value={editName}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setEditName(e.target.value)
+                      }
+                    />
                   </div>
-                </div>
-
-                {/* Server picker (edit mode only) */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    MCP Servers ({editSelectedToolsetIds.size} selected)
-                  </label>
-                  <div className="rounded-md border">
-                    <div className="relative border-b">
-                      <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        placeholder="Search servers..."
-                        value={serverSearch}
-                        onChange={(e) => setServerSearch(e.target.value)}
-                        className="placeholder:text-muted-foreground w-full bg-transparent py-2.5 pr-3 pl-9 text-sm outline-none"
-                      />
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">
+                      Description
+                    </label>
+                    <Textarea
+                      value={editDescription}
+                      onChange={(e) => setEditDescription(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">
+                      Visibility
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
+                          editVisibility === "public"
+                            ? "border-foreground/30 bg-accent"
+                            : "border-border hover:bg-accent/50",
+                        )}
+                        onClick={() => setEditVisibility("public")}
+                      >
+                        <Globe className="h-3.5 w-3.5" />
+                        Public
+                      </button>
+                      <button
+                        type="button"
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
+                          editVisibility === "private"
+                            ? "border-foreground/30 bg-accent"
+                            : "border-border hover:bg-accent/50",
+                        )}
+                        onClick={() => setEditVisibility("private")}
+                      >
+                        <Lock className="h-3.5 w-3.5" />
+                        Private
+                      </button>
                     </div>
-                    <div className="max-h-64 overflow-y-auto">
-                      {toolsetsLoading ? (
-                        <div className="flex items-center justify-center p-4">
-                          <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-                        </div>
-                      ) : filteredToolsets.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center p-4 text-center">
-                          <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
-                          <Type small muted>
-                            {serverSearch
-                              ? "No servers match your search."
-                              : "No MCP servers available."}
-                          </Type>
-                        </div>
-                      ) : (
-                        filteredToolsets.map((toolset) => (
-                          <label
-                            key={toolset.id}
-                            className="hover:bg-accent/50 flex cursor-pointer items-start gap-3 border-b px-3 py-2.5 last:border-b-0"
-                          >
-                            <Checkbox
-                              checked={editSelectedToolsetIds.has(toolset.id)}
-                              disabled={isSaving}
-                              onCheckedChange={() => toggleToolset(toolset.id)}
-                              className="mt-0.5"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="truncate text-sm font-medium">
-                                  {toolset.name}
-                                </span>
-                                <Badge
-                                  variant="secondary"
-                                  className="shrink-0 text-xs"
-                                >
-                                  {toolset.projectName}
-                                </Badge>
-                              </div>
-                              {toolset.description && (
-                                <div className="text-muted-foreground mt-0.5 truncate text-xs">
-                                  {toolset.description}
+                  </div>
+
+                  {/* Server picker (edit mode only) */}
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">
+                      MCP Servers ({editSelectedToolsetIds.size} selected)
+                    </label>
+                    <div className="rounded-md border">
+                      <div className="relative border-b">
+                        <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="Search servers..."
+                          value={serverSearch}
+                          onChange={(e) => setServerSearch(e.target.value)}
+                          className="placeholder:text-muted-foreground w-full bg-transparent py-2.5 pr-3 pl-9 text-sm outline-none"
+                        />
+                      </div>
+                      <div className="max-h-64 overflow-y-auto">
+                        {toolsetsLoading ? (
+                          <div className="flex items-center justify-center p-4">
+                            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+                          </div>
+                        ) : filteredToolsets.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center p-4 text-center">
+                            <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
+                            <Type small muted>
+                              {serverSearch
+                                ? "No servers match your search."
+                                : "No MCP servers available."}
+                            </Type>
+                          </div>
+                        ) : (
+                          filteredToolsets.map((toolset) => (
+                            <label
+                              key={toolset.id}
+                              className="hover:bg-accent/50 flex cursor-pointer items-start gap-3 border-b px-3 py-2.5 last:border-b-0"
+                            >
+                              <Checkbox
+                                checked={editSelectedToolsetIds.has(toolset.id)}
+                                disabled={isSaving}
+                                onCheckedChange={() =>
+                                  toggleToolset(toolset.id)
+                                }
+                                className="mt-0.5"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="truncate text-sm font-medium">
+                                    {toolset.name}
+                                  </span>
+                                  <Badge
+                                    variant="secondary"
+                                    className="shrink-0 text-xs"
+                                  >
+                                    {toolset.projectName}
+                                  </Badge>
                                 </div>
-                              )}
-                            </div>
-                          </label>
-                        ))
-                      )}
+                                {toolset.description && (
+                                  <div className="text-muted-foreground mt-0.5 truncate text-xs">
+                                    {toolset.description}
+                                  </div>
+                                )}
+                              </div>
+                            </label>
+                          ))
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    disabled={isSaving || !editName}
-                    onClick={async () => {
-                      setIsSaving(true);
-                      try {
-                        // Update collection metadata
-                        await updateCollection.mutateAsync({
-                          request: {
-                            updateRequestBody: {
-                              collectionId: collection.id,
-                              name: editName,
-                              description: editDescription,
-                              visibility: editVisibility,
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      disabled={isSaving || !editName}
+                      onClick={async () => {
+                        setIsSaving(true);
+                        try {
+                          // Update collection metadata
+                          await updateCollection.mutateAsync({
+                            request: {
+                              updateRequestBody: {
+                                collectionId: collection.id,
+                                name: editName,
+                                description: editDescription,
+                                visibility: editVisibility,
+                              },
                             },
-                          },
-                        });
+                          });
 
-                        // Diff server changes: attach new, detach removed
-                        const toAttach = [...editSelectedToolsetIds].filter(
-                          (id) => !attachedToolsetIds.has(id),
-                        );
-                        const toDetach = [...attachedToolsetIds].filter(
-                          (id) => !editSelectedToolsetIds.has(id),
-                        );
+                          // Diff server changes: attach new, detach removed
+                          const toAttach = [...editSelectedToolsetIds].filter(
+                            (id) => !attachedToolsetIds.has(id),
+                          );
+                          const toDetach = [...attachedToolsetIds].filter(
+                            (id) => !editSelectedToolsetIds.has(id),
+                          );
 
-                        await Promise.all([
-                          ...toAttach.map((toolsetId) =>
-                            attachServer.mutateAsync({
-                              request: {
-                                attachServerRequestBody: {
-                                  collectionId: collection.id,
-                                  toolsetId,
+                          await Promise.all([
+                            ...toAttach.map((toolsetId) =>
+                              attachServer.mutateAsync({
+                                request: {
+                                  attachServerRequestBody: {
+                                    collectionId: collection.id,
+                                    toolsetId,
+                                  },
                                 },
-                              },
-                            }),
-                          ),
-                          ...toDetach.map((toolsetId) =>
-                            detachServer.mutateAsync({
-                              request: {
-                                attachServerRequestBody: {
-                                  collectionId: collection.id,
-                                  toolsetId,
+                              }),
+                            ),
+                            ...toDetach.map((toolsetId) =>
+                              detachServer.mutateAsync({
+                                request: {
+                                  attachServerRequestBody: {
+                                    collectionId: collection.id,
+                                    toolsetId,
+                                  },
                                 },
-                              },
-                            }),
-                          ),
-                        ]);
+                              }),
+                            ),
+                          ]);
 
+                          setEditing(false);
+                          setServerSearch("");
+                        } finally {
+                          setIsSaving(false);
+                        }
+                      }}
+                    >
+                      <Button.Text>
+                        {isSaving ? "Saving..." : "Save"}
+                      </Button.Text>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={isSaving}
+                      onClick={() => {
                         setEditing(false);
                         setServerSearch("");
-                      } finally {
-                        setIsSaving(false);
-                      }
-                    }}
-                  >
-                    <Button.Text>{isSaving ? "Saving..." : "Save"}</Button.Text>
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={isSaving}
-                    onClick={() => {
-                      setEditing(false);
-                      setServerSearch("");
-                    }}
-                  >
-                    <Button.Text>Cancel</Button.Text>
-                  </Button>
+                      }}
+                    >
+                      <Button.Text>Cancel</Button.Text>
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              </RequireScope>
             )}
 
             {/* About */}
             {!editing && (
               <div className="mb-4 rounded-lg border p-5">
-                <h2 className="mb-2 text-base font-semibold">About</h2>
+                <h2 className="mb-2 text-base font-semibold">
+                  About this collection
+                </h2>
                 <p className="text-muted-foreground text-sm">
                   {collection.description || "No description provided."}
                 </p>
@@ -538,9 +622,20 @@ export default function CollectionDetail() {
             {/* MCP Servers (read-only list) */}
             {!editing && (
               <div className="rounded-lg border p-5">
-                <h2 className="mb-4 text-base font-semibold">
-                  MCP Servers ({servers.length})
-                </h2>
+                <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h2 className="text-base font-semibold">
+                      Included servers
+                    </h2>
+                    <p className="text-muted-foreground mt-1 text-sm">
+                      These servers install together into the selected project.
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="shrink-0">
+                    <Server className="mr-1 h-3 w-3" />
+                    {servers.length}
+                  </Badge>
+                </div>
                 {isLoading ? (
                   <p className="text-muted-foreground text-sm">
                     Loading servers...
@@ -559,49 +654,49 @@ export default function CollectionDetail() {
                       return (
                         <div
                           key={server.registrySpecifier}
-                          className="flex items-center gap-3 rounded-md border p-3"
+                          className="bg-card hover:bg-accent/30 flex flex-col gap-4 rounded-lg border p-4 transition-colors sm:flex-row sm:items-center"
                         >
-                          <div className="bg-muted flex h-9 w-9 shrink-0 items-center justify-center rounded border">
-                            <Monitor className="text-muted-foreground h-4 w-4" />
+                          <div className="bg-muted/60 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border">
+                            {server.iconUrl ? (
+                              <img
+                                src={server.iconUrl}
+                                alt=""
+                                className="h-6 w-6 rounded"
+                              />
+                            ) : (
+                              <ServerIcon className="text-muted-foreground h-5 w-5" />
+                            )}
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <span className="truncate text-sm font-medium">
                                 {server.title ?? server.registrySpecifier}
                               </span>
-                              {(server.tools?.length ?? 0) > 0 && (
-                                <Badge
-                                  variant="secondary"
-                                  className="shrink-0 text-xs"
-                                >
-                                  <Wrench className="mr-1 h-3 w-3" />
-                                  {server.tools?.length ?? 0} tools
-                                </Badge>
-                              )}
                             </div>
-                            {server.description && (
-                              <p className="text-muted-foreground mt-0.5 truncate text-xs">
-                                {server.description}
-                              </p>
-                            )}
+                            <p className="text-muted-foreground mt-1 line-clamp-2 text-xs">
+                              {server.description || server.registrySpecifier}
+                            </p>
                           </div>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            disabled={
-                              !installableServer || projects.length === 0
-                            }
-                            onClick={() => {
-                              if (installableServer) {
-                                openInstallDialog(installableServer);
+                          <RequireScope scope="project:write" level="component">
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="w-full sm:w-auto"
+                              disabled={
+                                !installableServer || projects.length === 0
                               }
-                            }}
-                          >
-                            <Button.Icon>
-                              <Download />
-                            </Button.Icon>
-                            <Button.Text>Install</Button.Text>
-                          </Button>
+                              onClick={() => {
+                                if (installableServer) {
+                                  openInstallDialog(installableServer);
+                                }
+                              }}
+                            >
+                              <Button.LeftIcon>
+                                <Download />
+                              </Button.LeftIcon>
+                              <Button.Text>Install Server</Button.Text>
+                            </Button>
+                          </RequireScope>
                         </div>
                       );
                     })}
@@ -609,59 +704,10 @@ export default function CollectionDetail() {
                 )}
               </div>
             )}
-
-            {/* Danger Zone */}
-            <div className="border-destructive/30 mt-4 rounded-lg border p-5">
-              <h2 className="text-destructive mb-2 text-base font-semibold">
-                Danger Zone
-              </h2>
-              <p className="text-muted-foreground mb-3 text-sm">
-                Permanently delete this collection. This action cannot be
-                undone.
-              </p>
-              {confirmDelete ? (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="destructive-primary"
-                    size="sm"
-                    disabled={deleteCollection.isPending}
-                    onClick={async () => {
-                      await deleteCollection.mutateAsync({
-                        request: {
-                          collectionId: collection.id,
-                        },
-                      });
-                      orgRoutes.collections.goTo();
-                    }}
-                  >
-                    <Button.Text>
-                      {deleteCollection.isPending
-                        ? "Deleting..."
-                        : "Confirm Delete"}
-                    </Button.Text>
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setConfirmDelete(false)}
-                  >
-                    <Button.Text>Cancel</Button.Text>
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  variant="destructive-primary"
-                  size="sm"
-                  onClick={() => setConfirmDelete(true)}
-                >
-                  <Button.Text>Delete Collection</Button.Text>
-                </Button>
-              )}
-            </div>
           </div>
 
           {/* Sidebar */}
-          <div className="w-72 shrink-0 space-y-4">
+          <div className="w-full shrink-0 space-y-4 xl:w-72">
             {/* Stats */}
             <div className="rounded-lg border p-5">
               <h3 className="mb-3 text-base font-semibold">Stats</h3>
@@ -669,10 +715,6 @@ export default function CollectionDetail() {
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Servers</span>
                   <span className="font-medium">{servers.length}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Total Tools</span>
-                  <span className="font-medium">{totalTools}</span>
                 </div>
               </div>
             </div>
@@ -698,6 +740,56 @@ export default function CollectionDetail() {
                 )}
               </div>
             </div>
+
+            <RequireScope scope="org:admin" level="section">
+              <div className="border-destructive/30 rounded-lg border p-5">
+                <h3 className="text-destructive mb-2 text-base font-semibold">
+                  Danger Zone
+                </h3>
+                <p className="text-muted-foreground mb-3 text-sm">
+                  Permanently delete this collection. This action cannot be
+                  undone.
+                </p>
+                {confirmDelete ? (
+                  <div className="space-y-2">
+                    <Button
+                      variant="destructive-primary"
+                      size="sm"
+                      disabled={deleteCollection.isPending}
+                      onClick={async () => {
+                        await deleteCollection.mutateAsync({
+                          request: {
+                            collectionId: collection.id,
+                          },
+                        });
+                        orgRoutes.collections.goTo();
+                      }}
+                    >
+                      <Button.Text>
+                        {deleteCollection.isPending
+                          ? "Deleting..."
+                          : "Confirm Delete"}
+                      </Button.Text>
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setConfirmDelete(false)}
+                    >
+                      <Button.Text>Cancel</Button.Text>
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    variant="destructive-primary"
+                    size="sm"
+                    onClick={() => setConfirmDelete(true)}
+                  >
+                    <Button.Text>Delete Collection</Button.Text>
+                  </Button>
+                )}
+              </div>
+            </RequireScope>
           </div>
         </div>
         <Dialog
@@ -772,21 +864,24 @@ export default function CollectionDetail() {
             <Dialog.Footer>
               <Button
                 variant="secondary"
-                onClick={() => setPendingInstallServer(null)}
+                onClick={() => {
+                  setPendingInstallServer(null);
+                }}
               >
                 Cancel
               </Button>
               <Button
                 disabled={!pendingInstallServer || !selectedProjectOption}
                 onClick={() => {
-                  if (!pendingInstallServer || !selectedProjectOption) {
-                    return;
-                  }
+                  if (!selectedProjectOption) return;
 
                   setSelectedProjectSlug(selectedProjectOption.value);
-                  setActiveInstallServer(pendingInstallServer);
-                  setPendingInstallServer(null);
-                  setShowAddDialog(true);
+
+                  if (pendingInstallServer) {
+                    setActiveInstallServer(pendingInstallServer);
+                    setPendingInstallServer(null);
+                    setShowAddDialog(true);
+                  }
                 }}
               >
                 Continue
@@ -807,6 +902,13 @@ export default function CollectionDetail() {
             }}
           />
         )}
+        <CollectionInstallDialog
+          open={showBulkInstallDialog}
+          onOpenChange={setShowBulkInstallDialog}
+          collectionName={collection.name}
+          servers={installableServersWithEndpoint}
+          projects={projects}
+        />
       </Page.Body>
     </Page>
   );

@@ -148,6 +148,8 @@ linters:
               disabled: false
             audit-event-urn-typing:
               disabled: false
+            audit-action-naming:
+              disabled: true
     gosec:
       excludes:
         # Temporarily ignore this lint rule because it needs to be a separate
@@ -261,6 +263,7 @@ linters:
         - '^github\.com/aws/aws-sdk-go-v2/service/s3\..+Input$'
         - '^github\.com/aws/aws-sdk-go-v2/service/s3\..+Options$'
         - '^cloud\.google\.com/go/storage\.SignedURLOptions$'
+        - '^github.com/google/jsonschema-go/jsonschema\.Schema$'
     exhaustive:
       check:
         - switch

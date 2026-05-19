@@ -15,11 +15,14 @@ import "context"
 // code, message, and data; returning a plain error falls back to a
 // generic mapping (see [RejectErrorFromCause]).
 //
-// Payload mutation is not yet supported — changes to req.JSONRPCMessages
-// are silent no-ops and the request body is forwarded verbatim. Header
-// mutation on req.UserHTTPRequest.Header is the one exception and does
-// flow to the upstream request today. Typed setters for payload
-// modification will be introduced when modification becomes a requirement.
+// Payload mutation is available only through typed-view setters on
+// downstream interceptors — today, [ToolsCallRequest.SetArguments] for
+// tools/call requests and [ToolsListResponse.SetTools] for tools/list
+// responses. Direct mutation of req.JSONRPCMessages on a
+// UserRequestInterceptor is a silent no-op against the wire because the
+// framework only re-marshals the body when a typed setter flips the
+// dirty flag. Header mutation on req.UserHTTPRequest.Header continues to
+// flow to the upstream request as before.
 type UserRequestInterceptor interface {
 	// InterceptUserRequest is called with the parsed inbound request.
 	// Implementations may inspect req and should return a non-nil error to

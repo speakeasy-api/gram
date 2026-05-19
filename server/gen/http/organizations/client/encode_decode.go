@@ -702,6 +702,240 @@ func DecodeRevokeInviteResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildUpdateInviteRoleRequest instantiates a HTTP request object with method
+// and path set to call the "organizations" service "updateInviteRole" endpoint
+func (c *Client) BuildUpdateInviteRoleRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateInviteRoleOrganizationsPath()}
+	req, err := http.NewRequest("PUT", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizations", "updateInviteRole", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateInviteRoleRequest returns an encoder for requests sent to the
+// organizations updateInviteRole server.
+func EncodeUpdateInviteRoleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizations.UpdateInviteRolePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizations", "updateInviteRole", "*organizations.UpdateInviteRolePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewUpdateInviteRoleRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizations", "updateInviteRole", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateInviteRoleResponse returns a decoder for responses returned by
+// the organizations updateInviteRole endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeUpdateInviteRoleResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateInviteRoleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateInviteRoleResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "updateInviteRole", err)
+			}
+			err = ValidateUpdateInviteRoleResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "updateInviteRole", err)
+			}
+			res := NewUpdateInviteRoleOrganizationInvitationOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateInviteRoleUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "updateInviteRole", err)
+			}
+			err = ValidateUpdateInviteRoleUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "updateInviteRole", err)
+			}
+			return nil, NewUpdateInviteRoleUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateInviteRoleForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "updateInviteRole", err)
+			}
+			err = ValidateUpdateInviteRoleForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "updateInviteRole", err)
+			}
+			return nil, NewUpdateInviteRoleForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateInviteRoleBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "updateInviteRole", err)
+			}
+			err = ValidateUpdateInviteRoleBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "updateInviteRole", err)
+			}
+			return nil, NewUpdateInviteRoleBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateInviteRoleNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "updateInviteRole", err)
+			}
+			err = ValidateUpdateInviteRoleNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "updateInviteRole", err)
+			}
+			return nil, NewUpdateInviteRoleNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateInviteRoleConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "updateInviteRole", err)
+			}
+			err = ValidateUpdateInviteRoleConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "updateInviteRole", err)
+			}
+			return nil, NewUpdateInviteRoleConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateInviteRoleUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "updateInviteRole", err)
+			}
+			err = ValidateUpdateInviteRoleUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "updateInviteRole", err)
+			}
+			return nil, NewUpdateInviteRoleUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateInviteRoleInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "updateInviteRole", err)
+			}
+			err = ValidateUpdateInviteRoleInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "updateInviteRole", err)
+			}
+			return nil, NewUpdateInviteRoleInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateInviteRoleInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "updateInviteRole", err)
+				}
+				err = ValidateUpdateInviteRoleInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "updateInviteRole", err)
+				}
+				return nil, NewUpdateInviteRoleInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateInviteRoleUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "updateInviteRole", err)
+				}
+				err = ValidateUpdateInviteRoleUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "updateInviteRole", err)
+				}
+				return nil, NewUpdateInviteRoleUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizations", "updateInviteRole", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateInviteRoleGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "updateInviteRole", err)
+			}
+			err = ValidateUpdateInviteRoleGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "updateInviteRole", err)
+			}
+			return nil, NewUpdateInviteRoleGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizations", "updateInviteRole", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListInvitesRequest instantiates a HTTP request object with method and
 // path set to call the "organizations" service "listInvites" endpoint
 func (c *Client) BuildListInvitesRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -928,235 +1162,6 @@ func DecodeListInvitesResponse(decoder func(*http.Response) goahttp.Decoder, res
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("organizations", "listInvites", resp.StatusCode, string(body))
-		}
-	}
-}
-
-// BuildGetInviteByTokenRequest instantiates a HTTP request object with method
-// and path set to call the "organizations" service "getInviteByToken" endpoint
-func (c *Client) BuildGetInviteByTokenRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetInviteByTokenOrganizationsPath()}
-	req, err := http.NewRequest("GET", u.String(), nil)
-	if err != nil {
-		return nil, goahttp.ErrInvalidURL("organizations", "getInviteByToken", u.String(), err)
-	}
-	if ctx != nil {
-		req = req.WithContext(ctx)
-	}
-
-	return req, nil
-}
-
-// EncodeGetInviteByTokenRequest returns an encoder for requests sent to the
-// organizations getInviteByToken server.
-func EncodeGetInviteByTokenRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
-	return func(req *http.Request, v any) error {
-		p, ok := v.(*organizations.GetInviteByTokenPayload)
-		if !ok {
-			return goahttp.ErrInvalidType("organizations", "getInviteByToken", "*organizations.GetInviteByTokenPayload", v)
-		}
-		values := req.URL.Query()
-		values.Add("token", p.Token)
-		req.URL.RawQuery = values.Encode()
-		return nil
-	}
-}
-
-// DecodeGetInviteByTokenResponse returns a decoder for responses returned by
-// the organizations getInviteByToken endpoint. restoreBody controls whether
-// the response body should be restored after having been read.
-// DecodeGetInviteByTokenResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
-//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
-//   - error: internal error
-func DecodeGetInviteByTokenResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
-	return func(resp *http.Response) (any, error) {
-		if restoreBody {
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-			resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			defer func() {
-				resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			}()
-		} else {
-			defer resp.Body.Close()
-		}
-		switch resp.StatusCode {
-		case http.StatusOK:
-			var (
-				body GetInviteByTokenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("organizations", "getInviteByToken", err)
-			}
-			err = ValidateGetInviteByTokenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("organizations", "getInviteByToken", err)
-			}
-			res := NewGetInviteByTokenOrganizationInvitationAcceptOK(&body)
-			return res, nil
-		case http.StatusUnauthorized:
-			var (
-				body GetInviteByTokenUnauthorizedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("organizations", "getInviteByToken", err)
-			}
-			err = ValidateGetInviteByTokenUnauthorizedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("organizations", "getInviteByToken", err)
-			}
-			return nil, NewGetInviteByTokenUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body GetInviteByTokenForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("organizations", "getInviteByToken", err)
-			}
-			err = ValidateGetInviteByTokenForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("organizations", "getInviteByToken", err)
-			}
-			return nil, NewGetInviteByTokenForbidden(&body)
-		case http.StatusBadRequest:
-			var (
-				body GetInviteByTokenBadRequestResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("organizations", "getInviteByToken", err)
-			}
-			err = ValidateGetInviteByTokenBadRequestResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("organizations", "getInviteByToken", err)
-			}
-			return nil, NewGetInviteByTokenBadRequest(&body)
-		case http.StatusNotFound:
-			var (
-				body GetInviteByTokenNotFoundResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("organizations", "getInviteByToken", err)
-			}
-			err = ValidateGetInviteByTokenNotFoundResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("organizations", "getInviteByToken", err)
-			}
-			return nil, NewGetInviteByTokenNotFound(&body)
-		case http.StatusConflict:
-			var (
-				body GetInviteByTokenConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("organizations", "getInviteByToken", err)
-			}
-			err = ValidateGetInviteByTokenConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("organizations", "getInviteByToken", err)
-			}
-			return nil, NewGetInviteByTokenConflict(&body)
-		case http.StatusUnsupportedMediaType:
-			var (
-				body GetInviteByTokenUnsupportedMediaResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("organizations", "getInviteByToken", err)
-			}
-			err = ValidateGetInviteByTokenUnsupportedMediaResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("organizations", "getInviteByToken", err)
-			}
-			return nil, NewGetInviteByTokenUnsupportedMedia(&body)
-		case http.StatusUnprocessableEntity:
-			var (
-				body GetInviteByTokenInvalidResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("organizations", "getInviteByToken", err)
-			}
-			err = ValidateGetInviteByTokenInvalidResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("organizations", "getInviteByToken", err)
-			}
-			return nil, NewGetInviteByTokenInvalid(&body)
-		case http.StatusInternalServerError:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "invariant_violation":
-				var (
-					body GetInviteByTokenInvariantViolationResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("organizations", "getInviteByToken", err)
-				}
-				err = ValidateGetInviteByTokenInvariantViolationResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("organizations", "getInviteByToken", err)
-				}
-				return nil, NewGetInviteByTokenInvariantViolation(&body)
-			case "unexpected":
-				var (
-					body GetInviteByTokenUnexpectedResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("organizations", "getInviteByToken", err)
-				}
-				err = ValidateGetInviteByTokenUnexpectedResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("organizations", "getInviteByToken", err)
-				}
-				return nil, NewGetInviteByTokenUnexpected(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("organizations", "getInviteByToken", resp.StatusCode, string(body))
-			}
-		case http.StatusBadGateway:
-			var (
-				body GetInviteByTokenGatewayErrorResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("organizations", "getInviteByToken", err)
-			}
-			err = ValidateGetInviteByTokenGatewayErrorResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("organizations", "getInviteByToken", err)
-			}
-			return nil, NewGetInviteByTokenGatewayError(&body)
-		default:
-			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("organizations", "getInviteByToken", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -2287,6 +2292,7 @@ func unmarshalOrganizationInvitationResponseBodyToOrganizationsOrganizationInvit
 		AcceptedAt:    v.AcceptedAt,
 		RevokedAt:     v.RevokedAt,
 		InviterUserID: v.InviterUserID,
+		RoleSlug:      v.RoleSlug,
 		ExpiresAt:     v.ExpiresAt,
 		CreatedAt:     *v.CreatedAt,
 		UpdatedAt:     *v.UpdatedAt,
@@ -2309,6 +2315,7 @@ func unmarshalOrganizationUserResponseBodyToOrganizationsOrganizationUser(v *Org
 		WorkosMembershipID: v.WorkosMembershipID,
 		CreatedAt:          *v.CreatedAt,
 		UpdatedAt:          *v.UpdatedAt,
+		LastLogin:          v.LastLogin,
 	}
 
 	return res

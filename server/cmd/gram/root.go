@@ -42,6 +42,7 @@ func newApp() *cli.App {
 			newWorkerCommand(),
 			newAdminCommand(),
 			newVersionCommand(),
+			newGenWebhookSpecCommand(),
 		},
 		Before: func(c *cli.Context) error {
 			c.Context = o11y.PushAppInfo(c.Context, &o11y.AppInfo{

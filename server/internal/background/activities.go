@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	svix "github.com/svix/svix-webhooks/go"
@@ -33,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -41,9 +43,11 @@ import (
 )
 
 type Activities struct {
+	collectOpenRouterCreditsMetrics *activities.CollectOpenRouterCreditsMetrics
 	collectPlatformUsageMetrics     *activities.CollectPlatformUsageMetrics
 	customDomainIngress             *activities.CustomDomainIngress
 	fallbackModelUsageTracking      *activities.FallbackModelUsageTracking
+	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
 	freeTierReportingUsageMetrics   *activities.FreeTierReportingUsageMetrics
 	generateChatTitle               *activities.GenerateChatTitle
@@ -113,6 +117,7 @@ func NewActivities(
 	mcpRegistryClient *externalmcp.RegistryClient,
 	temporalEnv *tenv.Environment,
 	telemetryLogger *telemetry.Logger,
+	chConn clickhouse.Conn,
 	triggerApp *bgtriggers.App,
 	cacheAdapter cache.Cache,
 	assistantsCore *assistants.ServiceCore,
@@ -127,9 +132,11 @@ func NewActivities(
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
 
 	return &Activities{
+		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
 		fallbackModelUsageTracking:      activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
+		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		freeTierReportingUsageMetrics:   activities.NewFreeTierReportingMetrics(logger, db, billingRepo, posthogClient),
 		generateChatTitle:               activities.NewGenerateChatTitle(logger, db, chatClient),
@@ -155,7 +162,7 @@ func NewActivities(
 		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
-		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient),
+		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn)),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
 		processAssistantThread:          activities.NewProcessAssistantThread(assistantsCore),
 		expireAssistantThreadRuntime:    activities.NewExpireAssistantThreadRuntime(assistantsCore),
@@ -243,6 +250,14 @@ func (a *Activities) CollectPlatformUsageMetrics(ctx context.Context) ([]activit
 
 func (a *Activities) FirePlatformUsageMetrics(ctx context.Context, metrics []activities.PlatformUsageMetrics) error {
 	return a.firePlatformUsageMetrics.Do(ctx, metrics)
+}
+
+func (a *Activities) CollectOpenRouterCreditsMetrics(ctx context.Context, args activities.CollectOpenRouterCreditsMetricsArgs) ([]activities.OpenRouterCreditsMetric, error) {
+	return a.collectOpenRouterCreditsMetrics.Do(ctx, args)
+}
+
+func (a *Activities) FireOpenRouterCreditsMetrics(ctx context.Context, metrics []activities.OpenRouterCreditsMetric) error {
+	return a.fireOpenRouterCreditsMetrics.Do(ctx, metrics)
 }
 
 func (a *Activities) FreeTierReportingUsageMetrics(ctx context.Context, orgIDs []string) error {

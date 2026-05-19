@@ -17,6 +17,23 @@ type Organization struct {
 	UpdatedAt  string
 }
 
+type OrganizationDomainState string
+
+const (
+	OrganizationDomainStatePending        OrganizationDomainState = OrganizationDomainState(organizations.OrganizationDomainPending)
+	OrganizationDomainStateVerified       OrganizationDomainState = OrganizationDomainState(organizations.OrganizationDomainVerified)
+	OrganizationDomainStateLegacyVerified OrganizationDomainState = OrganizationDomainState(organizations.OrganizationDomainLegacyVerified)
+)
+
+type OrganizationDomain struct {
+	Domain string
+	State  OrganizationDomainState
+}
+
+type OrganizationDomainPolicy struct {
+	Domains []OrganizationDomain
+}
+
 // GetOrganization fetches a WorkOS organization by id.
 func (wc *Client) GetOrganization(ctx context.Context, orgID string) (*Organization, error) {
 	o, err := wc.orgs.GetOrganization(ctx, organizations.GetOrganizationOpts{Organization: orgID})
@@ -33,17 +50,35 @@ func (wc *Client) GetOrganization(ctx context.Context, orgID string) (*Organizat
 	}, nil
 }
 
+func (wc *Client) GetOrganizationDomainPolicy(ctx context.Context, orgID string) (*OrganizationDomainPolicy, error) {
+	o, err := wc.orgs.GetOrganization(ctx, organizations.GetOrganizationOpts{Organization: orgID})
+	if err != nil {
+		return nil, fmt.Errorf("get organization domain policy: %w", err)
+	}
+
+	domains := make([]OrganizationDomain, 0, len(o.Domains))
+	for _, domain := range o.Domains {
+		domains = append(domains, OrganizationDomain{
+			Domain: domain.Domain,
+			State:  OrganizationDomainState(domain.State),
+		})
+	}
+
+	return &OrganizationDomainPolicy{
+		Domains: domains,
+	}, nil
+}
+
 // CreateOrganization creates a WorkOS organization with the given name and
 // sets its external_id to the Gram org ID. Returns the WorkOS org ID.
 func (wc *Client) CreateOrganization(ctx context.Context, name, gramOrgID string) (string, error) {
-	o, err := wc.orgs.CreateOrganization(ctx, organizations.CreateOrganizationOpts{
-		Name:                             name,
-		AllowProfilesOutsideOrganization: false,
-		Domains:                          nil,
-		DomainData:                       nil,
-		ExternalID:                       gramOrgID,
-		IdempotencyKey:                   gramOrgID,
-		Metadata:                         nil,
+	o, err := wc.orgs.CreateOrganization(ctx, organizations.CreateOrganizationOpts{ //nolint:exhaustruct // deprecated WorkOS fields are intentionally omitted.
+		Name:           name,
+		Domains:        nil,
+		DomainData:     nil,
+		ExternalID:     gramOrgID,
+		IdempotencyKey: gramOrgID,
+		Metadata:       nil,
 	})
 	if err != nil {
 		return "", fmt.Errorf("create organization: %w", err)
@@ -52,18 +87,19 @@ func (wc *Client) CreateOrganization(ctx context.Context, name, gramOrgID string
 	return o.ID, nil
 }
 
-// CreateOrganizationMembership adds a WorkOS user to a WorkOS organization.
-func (wc *Client) CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID string) error {
-	_, err := wc.um.CreateOrganizationMembership(ctx, usermanagement.CreateOrganizationMembershipOpts{
+// CreateOrganizationMembership adds a WorkOS user to a WorkOS organization
+// with the given role and returns the membership ID.
+func (wc *Client) CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error) {
+	membership, err := wc.um.CreateOrganizationMembership(ctx, usermanagement.CreateOrganizationMembershipOpts{
 		UserID:         workosUserID,
 		OrganizationID: workosOrgID,
-		RoleSlug:       "admin",
+		RoleSlug:       roleSlug,
 		RoleSlugs:      nil,
 	})
 	if err != nil {
-		return fmt.Errorf("create organization membership: %w", err)
+		return "", fmt.Errorf("create organization membership: %w", err)
 	}
-	return nil
+	return membership.ID, nil
 }
 
 // EnsureOrgExternalID sets the WorkOS organization's external_id to gramOrgID
@@ -82,15 +118,14 @@ func (wc *Client) EnsureOrgExternalID(ctx context.Context, workosOrgID, gramOrgI
 		return fmt.Errorf("workos org %s external_id mismatch: got %q, want %q", workosOrgID, org.ExternalID, gramOrgID)
 	}
 
-	_, err = wc.orgs.UpdateOrganization(ctx, organizations.UpdateOrganizationOpts{
-		Organization:                     workosOrgID,
-		Name:                             "",
-		AllowProfilesOutsideOrganization: false,
-		Domains:                          nil,
-		DomainData:                       nil,
-		ExternalID:                       gramOrgID,
-		StripeCustomerID:                 "",
-		Metadata:                         nil,
+	_, err = wc.orgs.UpdateOrganization(ctx, organizations.UpdateOrganizationOpts{ //nolint:exhaustruct // deprecated WorkOS fields are intentionally omitted.
+		Organization:     workosOrgID,
+		Name:             "",
+		Domains:          nil,
+		DomainData:       nil,
+		ExternalID:       gramOrgID,
+		StripeCustomerID: "",
+		Metadata:         nil,
 	})
 	if err != nil {
 		return fmt.Errorf("set workos org external_id: %w", err)

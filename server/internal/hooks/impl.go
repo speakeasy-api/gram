@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -150,6 +151,23 @@ func generateSpanID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// withAuthContext returns a child logger with gram.org.id and gram.project.id
+// attached when an AuthContext is present on ctx. Falls through to logger
+// unchanged when there's no auth context — callers can use the result
+// regardless and the unauthenticated path still emits a (less attributed)
+// log line.
+func (s *Service) withAuthContext(ctx context.Context, logger *slog.Logger) *slog.Logger {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return logger
+	}
+	logger = logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+	if authCtx.ProjectID != nil {
+		logger = logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+	}
+	return logger
 }
 
 // lookupShadowMCPBlockingPolicy returns the first enabled shadow_mcp policy

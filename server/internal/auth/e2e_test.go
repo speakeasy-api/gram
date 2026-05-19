@@ -72,9 +72,31 @@ func (m *mockWorkOSFetcher) CreateOrganization(_ context.Context, name, gramOrgI
 	return "workos_org_" + gramOrgID, nil
 }
 
-func (m *mockWorkOSFetcher) CreateOrganizationMembership(_ context.Context, workosUserID, workosOrgID string) error {
+func (m *mockWorkOSFetcher) CreateOrganizationMembership(_ context.Context, workosUserID, workosOrgID, _ string) (string, error) {
 	m.createdMemberships = append(m.createdMemberships, createdMembershipRecord{WorkOSUserID: workosUserID, WorkOSOrgID: workosOrgID})
-	return nil
+	return "om_mock_" + workosUserID, nil
+}
+
+func (m *mockWorkOSFetcher) GetOrgMembership(_ context.Context, workosUserID, workosOrgID string) (*workos.Member, error) {
+	for _, member := range m.members[workosUserID] {
+		if member.OrganizationID == workosOrgID {
+			return &member, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *mockWorkOSFetcher) UpdateMemberRole(_ context.Context, membershipID, roleSlug string) (*workos.Member, error) {
+	for userID, members := range m.members {
+		for i := range members {
+			if members[i].ID == membershipID {
+				members[i].RoleSlug = roleSlug
+				m.members[userID] = members
+				return &members[i], nil
+			}
+		}
+	}
+	return nil, nil
 }
 
 // --- test setup that wires a WorkOSMembershipFetcher into the session manager ---
@@ -210,6 +232,7 @@ func TestE2E_Callback_NewUserWithWorkOSOrgMemberships(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, orgName, orgMeta.Name)
 	assert.Equal(t, workosOrgID, orgMeta.WorkosID.String)
+	assert.False(t, orgMeta.Whitelisted, "new org created via login must not be auto-whitelisted")
 }
 
 // TestE2E_Callback_NewUserJoiningExistingOrg verifies that when a new user
@@ -385,12 +408,13 @@ func TestE2E_Callback_IDPOrgSelectionSyncsMissingMembershipForExistingUser(t *te
 	t.Parallel()
 
 	const (
-		workosUserID       = "user_01IDP_EXISTING_SYNC"
-		speakeasyWorkosID  = "org_01EXISTING_SPEAKEASY"
-		walkerWorkosID     = "org_01EXISTING_WALKER"
-		existingLocalOrgID = "existing-speakeasy-org"
+		workosUserID      = "user_01IDP_EXISTING_SYNC"
+		speakeasyWorkosID = "org_01EXISTING_SPEAKEASY"
+		walkerWorkosID    = "org_01EXISTING_WALKER"
+		collidingOrgID    = "existing-walker-slug-org"
 	)
 	gramUserID := users.UserIDFromWorkOSID(workosUserID)
+	existingLocalOrgID := orgid.FromWorkOSID(speakeasyWorkosID)
 
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{
@@ -424,14 +448,26 @@ func TestE2E_Callback_IDPOrgSelectionSyncsMissingMembershipForExistingUser(t *te
 	require.NoError(t, err)
 	inst.setUserWorkosID(ctx, t, gramUserID, workosUserID)
 
-	speakeasyWorkosIDPtr := speakeasyWorkosID
+	orgQueries := orgRepo.New(inst.conn)
+	_, err = orgQueries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          existingLocalOrgID,
+		Name:        "Local Speakeasy",
+		Slug:        "local-speakeasy",
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = orgQueries.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: existingLocalOrgID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.NoError(t, err)
 	require.NoError(t, inst.createTestOrganization(ctx, MockOrganizationEntry{
-		ID:                 existingLocalOrgID,
-		Name:               "Speakeasy Team",
-		Slug:               "speakeasy-team",
-		WorkosID:           &speakeasyWorkosIDPtr,
-		UserWorkspaceSlugs: []string{"speakeasy-team"},
-	}, gramUserID))
+		ID:                 collidingOrgID,
+		Name:               "Walker Test Org",
+		Slug:               "walker-test-org",
+		UserWorkspaceSlugs: []string{"walker-test-org"},
+	}, ""))
 
 	cached, _, err := inst.sessionManager.GetUserInfo(ctx, gramUserID)
 	require.NoError(t, err)
@@ -450,6 +486,17 @@ func TestE2E_Callback_IDPOrgSelectionSyncsMissingMembershipForExistingUser(t *te
 	require.NoError(t, err)
 	require.NotNil(t, infoResult)
 	assert.Equal(t, orgid.FromWorkOSID(walkerWorkosID), infoResult.ActiveOrganizationID)
+
+	walkerOrg, err := orgRepo.New(inst.conn).GetOrganizationMetadata(ctx, orgid.FromWorkOSID(walkerWorkosID))
+	require.NoError(t, err)
+	assert.Regexp(t, `^walker-test-org-[0-9a-f]{4}$`, walkerOrg.Slug)
+
+	speakeasyOrg, err := orgQueries.GetOrganizationMetadata(ctx, existingLocalOrgID)
+	require.NoError(t, err)
+	assert.Equal(t, "Local Speakeasy", speakeasyOrg.Name)
+	assert.Equal(t, "local-speakeasy", speakeasyOrg.Slug)
+	assert.Equal(t, speakeasyWorkosID, speakeasyOrg.WorkosID.String)
+	assert.False(t, speakeasyOrg.Whitelisted)
 }
 
 // TestE2E_Callback_RejoinedOrg verifies that when a user left an org (soft-deleted
@@ -628,6 +675,65 @@ func TestE2E_Callback_IDPOrgSelection(t *testing.T) {
 	expectedOrgB := orgid.FromWorkOSID(workosOrgB)
 	assert.Equal(t, expectedOrgB, infoResult.ActiveOrganizationID,
 		"active org should be the one selected in the IDP auth flow, not the first org")
+}
+
+func TestE2E_Callback_AcceptsPendingInviteAndAppliesRole(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01INVITE_SSO"
+		workosOrgID  = "org_01INVITE_SSO"
+		gramOrgID    = "invite-sso-org"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_01INVITE_SSO", UserID: workosUserID, OrganizationID: workosOrgID, Organization: "Invite SSO", RoleSlug: "member"},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: "Invite SSO", ExternalID: gramOrgID},
+		},
+	}
+	userInfo := &MockUserInfo{
+		UserID:         workosUserID,
+		Email:          "invite-sso@example.com",
+		OrganizationID: workosOrgID,
+		Organizations:  []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	workosID := workosOrgID
+	require.NoError(t, inst.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:       gramOrgID,
+		Name:     "Invite SSO",
+		Slug:     "invite-sso",
+		WorkosID: &workosID,
+	}, ""))
+
+	invite, err := orgRepo.New(inst.conn).CreateInvitation(ctx, orgRepo.CreateInvitationParams{
+		OrganizationID: gramOrgID,
+		Email:          userInfo.Email,
+		TokenHash:      "invite-sso-token-hash",
+		InviterUserID:  pgtype.Text{String: "", Valid: false},
+		RoleSlug:       pgtype.Text{String: "admin", Valid: true},
+		ExpiresInDays:  7,
+	})
+	require.NoError(t, err)
+
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+
+	storedInvite, err := orgRepo.New(inst.conn).GetInvitationByID(ctx, invite.ID)
+	require.NoError(t, err)
+	require.Equal(t, "accepted", storedInvite.State)
+
+	member, err := fetcher.GetOrgMembership(ctx, workosUserID, workosOrgID)
+	require.NoError(t, err)
+	require.NotNil(t, member)
+	require.Equal(t, "admin", member.RoleSlug)
 }
 
 // TestE2E_Callback_ThenInfo exercises the full login→info flow.

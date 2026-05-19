@@ -10,6 +10,7 @@ import {
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
+import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import type { McpEnvironmentConfigInput } from "@gram/client/models/components";
@@ -44,6 +45,7 @@ import {
   getValueForEnvironment,
 } from "./environmentVariableUtils";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
+import { WireUserSessionIssuerModal } from "./wire-user-session-issuer/WireUserSessionIssuerModal";
 
 // Empty array constant to avoid creating new references
 const EMPTY_ENVIRONMENTS: never[] = [];
@@ -893,10 +895,17 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
   const [isEditOAuthModalOpen, setIsEditOAuthModalOpen] = useState(false);
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
+  const [
+    isWireUserSessionIssuerModalOpen,
+    setIsWireUserSessionIssuerModalOpen,
+  ] = useState(false);
+
+  const telemetry = useTelemetry();
 
   const { data: environmentsData } = useListEnvironments();
   const environments = environmentsData?.environments ?? [];
 
+  const loginSecured = !!toolset.userSessionIssuerSlug;
   const isOAuthConnected = !!(
     toolset?.oauthProxyServer || toolset?.externalOauthServer
   );
@@ -929,38 +938,79 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
     ? "Enable the MCP server to configure OAuth"
     : "This MCP server does not require the OAuth authorization code flow";
 
+  // userSessionIssuerSlug is populated by the toolsets read path when the
+  // OAuth-Proxy → user-sessions migration has produced a user_session_issuer
+  // for this toolset.
+  const userSessionIssuerWired = !!toolset.userSessionIssuerSlug;
+  // The migration entry point appears for both OAuth Proxy paradigms (custom
+  // and gram-managed): both produce a user_session_issuer, even though
+  // gram-managed skips the remote_session_* pair. External-OAuth toolsets
+  // have nothing to port. Gated to feature-flag holders, and hidden once a
+  // user_session_issuer is already wired (nothing left to migrate).
+  const showWireUserSessionIssuer =
+    (telemetry.isFeatureEnabled(ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG) ??
+      false) &&
+    !userSessionIssuerWired &&
+    (oauthParadigm === "proxy" || oauthParadigm === "gram");
+  // Once the user_session_issuer is wired, the OAuth-proxy CLIENT_ID/SECRET
+  // it was cloned from is no longer the live credential — hide Configure to
+  // avoid steering operators back into the legacy paradigm.
+  const hideConfigureButton = userSessionIssuerWired;
+
   return (
     <PageSection
       heading="OAuth"
       description="OAuth let's you control access to MCP servers through an identity provider."
       headingExtra={undefined}
       action={
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {!isOAuthEligible ? (
-              <span className="inline-block">
-                <Button disabled>
-                  <Button.Text>Configure</Button.Text>
-                </Button>
-              </span>
-            ) : (
-              <Button onClick={handleConfigureClick}>
-                <Button.Text>
-                  {isOAuthConnected ? "Manage" : "Configure"}
-                </Button.Text>
-              </Button>
-            )}
-          </TooltipTrigger>
-          {!isOAuthEligible && (
-            <TooltipContent>{disabledTooltipText}</TooltipContent>
+        <div className="flex items-center gap-2">
+          {userSessionIssuerWired && (
+            <Badge variant="success">
+              <Badge.LeftIcon>
+                <CheckCircle className="h-3.5 w-3.5" />
+              </Badge.LeftIcon>
+              <Badge.Text>Login Secured</Badge.Text>
+            </Badge>
           )}
-        </Tooltip>
+          {showWireUserSessionIssuer && (
+            <Button
+              variant="tertiary"
+              onClick={() => setIsWireUserSessionIssuerModalOpen(true)}
+            >
+              <Button.Text>Wire User Session Issuer</Button.Text>
+            </Button>
+          )}
+          {!hideConfigureButton && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {!isOAuthEligible ? (
+                  <span className="inline-block">
+                    <Button disabled>
+                      <Button.Text>Configure</Button.Text>
+                    </Button>
+                  </span>
+                ) : (
+                  <Button onClick={handleConfigureClick}>
+                    <Button.Text>
+                      {isOAuthConnected ? "Manage" : "Configure"}
+                    </Button.Text>
+                  </Button>
+                )}
+              </TooltipTrigger>
+              {!isOAuthEligible && (
+                <TooltipContent>{disabledTooltipText}</TooltipContent>
+              )}
+            </Tooltip>
+          )}
+        </div>
       }
     >
       <OAuthStatusDisplay
         isOAuthConnected={isOAuthConnected}
         isOAuthEligible={!!isOAuthEligible}
         externalMcpRequiresOAuth={externalMcpRequiresOAuth}
+        loginSecured={loginSecured}
+        showConfigureAction={!hideConfigureButton}
         oauthParadigm={oauthParadigm}
         mcpEnabled={!!toolset.mcpEnabled}
         proxyEnvironmentSlug={proxyEnvironmentSlug}
@@ -997,6 +1047,13 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
           proxyServer={toolset.oauthProxyServer}
         />
       )}
+      {showWireUserSessionIssuer && (
+        <WireUserSessionIssuerModal
+          isOpen={isWireUserSessionIssuerModalOpen}
+          onClose={() => setIsWireUserSessionIssuerModalOpen(false)}
+          toolset={toolset}
+        />
+      )}
     </PageSection>
   );
 }
@@ -1011,6 +1068,8 @@ function OAuthStatusDisplay({
   isOAuthConnected,
   isOAuthEligible,
   externalMcpRequiresOAuth,
+  loginSecured,
+  showConfigureAction,
   oauthParadigm,
   mcpEnabled,
   proxyEnvironmentSlug,
@@ -1020,6 +1079,8 @@ function OAuthStatusDisplay({
   isOAuthConnected: boolean;
   isOAuthEligible: boolean;
   externalMcpRequiresOAuth: boolean;
+  loginSecured: boolean;
+  showConfigureAction: boolean;
   oauthParadigm: OAuthParadigm | null;
   mcpEnabled: boolean;
   proxyEnvironmentSlug: string | undefined;
@@ -1027,6 +1088,21 @@ function OAuthStatusDisplay({
   onConfigureClick: () => void;
 }) {
   const routes = useRoutes();
+
+  if (loginSecured) {
+    return (
+      <div className="border-success-softest bg-success-softest rounded-lg border border-dashed p-8 text-center">
+        <p className="text-success-foreground mb-1">
+          <CheckCircle className="text-success-foreground mx-auto mb-1 h-5 w-5" />
+          Login Secured
+        </p>
+        <p className="text-success-foreground text-sm">
+          Users will authenticate with interactive auth before accessing this
+          MCP server.
+        </p>
+      </div>
+    );
+  }
 
   if (isOAuthConnected && oauthParadigm) {
     return (
@@ -1064,7 +1140,7 @@ function OAuthStatusDisplay({
 
   if (externalMcpRequiresOAuth) {
     return (
-      <div className="border-warning-foreground/80 bg-warning rounded-lg border border-dashed px-6 py-8 text-center">
+      <div className="border-warning-foreground/80 bg-warning dark:bg-warning/10 dark:border-warning-foreground/30 rounded-lg border border-dashed px-6 py-8 text-center">
         <AlertTriangle className="text-warning mx-auto mb-1 h-5 w-5" />
         <p className="text-warning-foreground mb-1 font-bold">
           OAuth setup required
@@ -1072,9 +1148,11 @@ function OAuthStatusDisplay({
         <p className="text-warning-foreground/80 mb-3 text-sm">
           This MCP server requires OAuth configuration before it can be used.
         </p>
-        <Button variant="secondary" onClick={onConfigureClick}>
-          <Button.Text>Configure OAuth</Button.Text>
-        </Button>
+        {showConfigureAction && (
+          <Button variant="secondary" onClick={onConfigureClick}>
+            <Button.Text>Configure OAuth</Button.Text>
+          </Button>
+        )}
       </div>
     );
   }
@@ -1090,9 +1168,11 @@ function OAuthStatusDisplay({
           Enable OAuth to require users to authenticate before accessing this
           MCP server.
         </p>
-        <Button variant="secondary" onClick={onConfigureClick}>
-          <Button.Text>Configure OAuth</Button.Text>
-        </Button>
+        {showConfigureAction && (
+          <Button variant="secondary" onClick={onConfigureClick}>
+            <Button.Text>Configure OAuth</Button.Text>
+          </Button>
+        )}
       </div>
     );
   }

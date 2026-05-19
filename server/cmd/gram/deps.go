@@ -477,17 +477,18 @@ func workosClientOpts(c *cli.Context) workos.ClientOpts {
 	return workos.ClientOpts{
 		Endpoint:   c.String("workos-endpoint"),
 		HTTPClient: nil,
+		ClientID:   c.String("idp-client-id"),
 	}
 }
 
 func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) (access.RoleProvider, error) {
-	apiKey := c.String("workos-api-key")
+	apiKey := c.String("idp-client-secret")
 
-	// Local dev: when a real WORKOS_API_KEY is configured (GRAM_IDP_MODE=workos),
+	// Local dev: when a real GRAM_IDP_CLIENT_SECRET is configured (GRAM_IDP_MODE=workos),
 	// use it so the access role provider proxies through dev-idp to real WorkOS.
 	// Otherwise fall back to the mock-workos emulator or a stub.
 	if c.String("environment") == "local" {
-		haveRealKey := apiKey != ""
+		haveRealKey := apiKey != "" && apiKey != "unset"
 		opts := workosClientOpts(c)
 
 		if haveRealKey {
@@ -512,7 +513,7 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPol
 
 func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *workos.Client, workosAvailable bool, err error) {
 	env := c.String("environment")
-	apiKey := c.String("workos-api-key")
+	apiKey := c.String("idp-client-secret")
 
 	haveAPIKey := apiKey != "" && apiKey != "unset"
 	if env != "local" && !haveAPIKey {
@@ -523,10 +524,11 @@ func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *w
 }
 
 // newIDPUserManagementClient creates a WorkOS user-management SDK client
-// scoped to the IDP application key. Returns nil when the key is empty
-// (local dev with mock IDP).
+// scoped to the IDP application key. Returns nil only when the key is empty.
+// In mock-workos mode the key can be any non-empty string (e.g. "unset") —
+// the mock endpoint accepts it.
 func newIDPUserManagementClient(guardianPolicy *guardian.Policy, apiKey string, c *cli.Context) *usermanagement.Client {
-	if apiKey == "" || apiKey == "unset" {
+	if apiKey == "" {
 		return nil
 	}
 

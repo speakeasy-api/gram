@@ -25,6 +25,27 @@ type AgentExecution struct {
 	Deleted      bool
 }
 
+type AiIntegrationConfig struct {
+	CreatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	OrganizationID  string
+	Provider        string
+	ProjectID       uuid.UUID
+	ApiKeyEncrypted string
+	Enabled         bool
+	ID              uuid.UUID
+	Deleted         bool
+}
+
+type AiIntegrationSync struct {
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	AiIntegrationConfigID uuid.UUID
+	LastPolledAt          pgtype.Timestamptz
+	ID                    uuid.UUID
+}
+
 type ApiKey struct {
 	ID              uuid.UUID
 	OrganizationID  string
@@ -105,6 +126,7 @@ type AssistantRuntime struct {
 	LastHeartbeatAt     pgtype.Timestamptz
 	BackendMetadataJson []byte
 	EndedAt             pgtype.Timestamptz
+	RuntimeVersion      int16
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
@@ -669,20 +691,19 @@ type McpRegistry struct {
 }
 
 type McpServer struct {
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
-	Name                  pgtype.Text
-	Slug                  pgtype.Text
-	EnvironmentID         uuid.NullUUID
-	ExternalOauthServerID uuid.NullUUID
-	OauthProxyServerID    uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
-	ToolsetID             uuid.NullUUID
-	Visibility            string
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	DeletedAt             pgtype.Timestamptz
-	Deleted               bool
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	Name                pgtype.Text
+	Slug                pgtype.Text
+	EnvironmentID       uuid.NullUUID
+	UserSessionIssuerID uuid.NullUUID
+	RemoteMcpServerID   uuid.NullUUID
+	ToolsetID           uuid.NullUUID
+	Visibility          string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
 }
 
 type OauthProxyClientInfo struct {
@@ -853,6 +874,7 @@ type OrganizationRoleAssignment struct {
 	WorkosLastEventID  pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
 }
 
 type OrganizationUserRelationship struct {
@@ -995,6 +1017,8 @@ type PrincipalGrant struct {
 	PrincipalType string
 	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
 	Scope string
+	// Whether this grant allows or denies the scope. NULL = allow for backward compatibility.
+	Effect pgtype.Text
 	// Deprecated. Formerly '*' = unrestricted. Nullable, scheduled for removal.
 	DropResource pgtype.Text
 	// JSON selector constraints attached to a grant. Must be a non-empty JSONB object. Wildcard/unrestricted grants use {"resource_kind":"*","resource_id":"*"}.
@@ -1083,7 +1107,7 @@ type RemoteMcpServerHeader struct {
 
 type RemoteSession struct {
 	ID                    uuid.UUID
-	SubjectUrn            string
+	SubjectUrn            urn.SessionSubject
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionClientID uuid.UUID
 	AccessTokenEncrypted  string
@@ -1098,18 +1122,19 @@ type RemoteSession struct {
 }
 
 type RemoteSessionClient struct {
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
-	RemoteSessionIssuerID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-	ClientID              string
-	ClientSecretEncrypted pgtype.Text
-	ClientIDIssuedAt      pgtype.Timestamptz
-	ClientSecretExpiresAt pgtype.Timestamptz
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	DeletedAt             pgtype.Timestamptz
-	Deleted               bool
+	ID                      uuid.UUID
+	ProjectID               uuid.UUID
+	RemoteSessionIssuerID   uuid.UUID
+	UserSessionIssuerID     uuid.UUID
+	ClientID                string
+	ClientSecretEncrypted   pgtype.Text
+	ClientIDIssuedAt        pgtype.Timestamptz
+	ClientSecretExpiresAt   pgtype.Timestamptz
+	TokenEndpointAuthMethod pgtype.Text
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	DeletedAt               pgtype.Timestamptz
+	Deleted                 bool
 }
 
 type RemoteSessionIssuer struct {

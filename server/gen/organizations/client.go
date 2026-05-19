@@ -18,8 +18,8 @@ type Client struct {
 	GetEndpoint                 goa.Endpoint
 	SendInviteEndpoint          goa.Endpoint
 	RevokeInviteEndpoint        goa.Endpoint
+	UpdateInviteRoleEndpoint    goa.Endpoint
 	ListInvitesEndpoint         goa.Endpoint
-	GetInviteByTokenEndpoint    goa.Endpoint
 	ListUsersEndpoint           goa.Endpoint
 	RemoveUserEndpoint          goa.Endpoint
 	EnableWebhooksEndpoint      goa.Endpoint
@@ -28,13 +28,13 @@ type Client struct {
 }
 
 // NewClient initializes a "organizations" service client given the endpoints.
-func NewClient(get, sendInvite, revokeInvite, listInvites, getInviteByToken, listUsers, removeUser, enableWebhooks, disableWebhooks, createPortalSession goa.Endpoint) *Client {
+func NewClient(get, sendInvite, revokeInvite, updateInviteRole, listInvites, listUsers, removeUser, enableWebhooks, disableWebhooks, createPortalSession goa.Endpoint) *Client {
 	return &Client{
 		GetEndpoint:                 get,
 		SendInviteEndpoint:          sendInvite,
 		RevokeInviteEndpoint:        revokeInvite,
+		UpdateInviteRoleEndpoint:    updateInviteRole,
 		ListInvitesEndpoint:         listInvites,
-		GetInviteByTokenEndpoint:    getInviteByToken,
 		ListUsersEndpoint:           listUsers,
 		RemoveUserEndpoint:          removeUser,
 		EnableWebhooksEndpoint:      enableWebhooks,
@@ -106,6 +106,29 @@ func (c *Client) RevokeInvite(ctx context.Context, p *RevokeInvitePayload) (err 
 	return
 }
 
+// UpdateInviteRole calls the "updateInviteRole" endpoint of the
+// "organizations" service.
+// UpdateInviteRole may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateInviteRole(ctx context.Context, p *UpdateInviteRolePayload) (res *OrganizationInvitation, err error) {
+	var ires any
+	ires, err = c.UpdateInviteRoleEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*OrganizationInvitation), nil
+}
+
 // ListInvites calls the "listInvites" endpoint of the "organizations" service.
 // ListInvites may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
@@ -126,29 +149,6 @@ func (c *Client) ListInvites(ctx context.Context, p *ListInvitesPayload) (res *L
 		return
 	}
 	return ires.(*ListInvitesResult), nil
-}
-
-// GetInviteByToken calls the "getInviteByToken" endpoint of the
-// "organizations" service.
-// GetInviteByToken may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) GetInviteByToken(ctx context.Context, p *GetInviteByTokenPayload) (res *OrganizationInvitationAccept, err error) {
-	var ires any
-	ires, err = c.GetInviteByTokenEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*OrganizationInvitationAccept), nil
 }
 
 // ListUsers calls the "listUsers" endpoint of the "organizations" service.

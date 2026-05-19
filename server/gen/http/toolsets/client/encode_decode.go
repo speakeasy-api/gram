@@ -2905,6 +2905,252 @@ func DecodeUpdateOAuthProxyServerResponse(decoder func(*http.Response) goahttp.D
 	}
 }
 
+// BuildSetUserSessionIssuerRequest instantiates a HTTP request object with
+// method and path set to call the "toolsets" service "setUserSessionIssuer"
+// endpoint
+func (c *Client) BuildSetUserSessionIssuerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetUserSessionIssuerToolsetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "setUserSessionIssuer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetUserSessionIssuerRequest returns an encoder for requests sent to
+// the toolsets setUserSessionIssuer server.
+func EncodeSetUserSessionIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.SetUserSessionIssuerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "setUserSessionIssuer", "*toolsets.SetUserSessionIssuerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		body := NewSetUserSessionIssuerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("toolsets", "setUserSessionIssuer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetUserSessionIssuerResponse returns a decoder for responses returned
+// by the toolsets setUserSessionIssuer endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeSetUserSessionIssuerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetUserSessionIssuerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetUserSessionIssuerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
+			}
+			err = ValidateSetUserSessionIssuerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
+			}
+			res := NewSetUserSessionIssuerToolsetOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetUserSessionIssuerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
+			}
+			err = ValidateSetUserSessionIssuerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
+			}
+			return nil, NewSetUserSessionIssuerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetUserSessionIssuerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
+			}
+			err = ValidateSetUserSessionIssuerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
+			}
+			return nil, NewSetUserSessionIssuerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetUserSessionIssuerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
+			}
+			err = ValidateSetUserSessionIssuerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
+			}
+			return nil, NewSetUserSessionIssuerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetUserSessionIssuerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
+			}
+			err = ValidateSetUserSessionIssuerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
+			}
+			return nil, NewSetUserSessionIssuerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetUserSessionIssuerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
+			}
+			err = ValidateSetUserSessionIssuerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
+			}
+			return nil, NewSetUserSessionIssuerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetUserSessionIssuerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
+			}
+			err = ValidateSetUserSessionIssuerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
+			}
+			return nil, NewSetUserSessionIssuerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetUserSessionIssuerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
+			}
+			err = ValidateSetUserSessionIssuerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
+			}
+			return nil, NewSetUserSessionIssuerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetUserSessionIssuerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
+				}
+				err = ValidateSetUserSessionIssuerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
+				}
+				return nil, NewSetUserSessionIssuerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetUserSessionIssuerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
+				}
+				err = ValidateSetUserSessionIssuerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
+				}
+				return nil, NewSetUserSessionIssuerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "setUserSessionIssuer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetUserSessionIssuerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "setUserSessionIssuer", err)
+			}
+			err = ValidateSetUserSessionIssuerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "setUserSessionIssuer", err)
+			}
+			return nil, NewSetUserSessionIssuerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "setUserSessionIssuer", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // marshalTypesToolsetOriginToToolsetOriginRequestBody builds a value of type
 // *ToolsetOriginRequestBody from a value of type *types.ToolsetOrigin.
 func marshalTypesToolsetOriginToToolsetOriginRequestBody(v *types.ToolsetOrigin) *ToolsetOriginRequestBody {

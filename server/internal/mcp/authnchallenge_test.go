@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -40,7 +42,7 @@ type mockIdentityResolver struct {
 	hasAccessOK     bool
 }
 
-func (m *mockIdentityResolver) BuildAuthorizationURL(_ context.Context, _ sessions.AuthURLParams) (*url.URL, error) {
+func (m *mockIdentityResolver) BuildAuthorizationURL(_ context.Context, _ identity.AuthorizationURLParams) (*url.URL, error) {
 	return m.buildAuthURLResult, m.buildAuthURLErr
 }
 
@@ -186,6 +188,14 @@ func TestHandleAuthorize_PublicToolset_RedirectsToConsent(t *testing.T) {
 	loc := w.Header().Get("Location")
 	require.Contains(t, loc, "/connect", "public toolset should redirect to consent page")
 	require.Contains(t, loc, "state=", "consent redirect should carry challenge state")
+
+	parsedLoc, err := url.Parse(loc)
+	require.NoError(t, err)
+	stored, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+parsedLoc.Query().Get("state"))
+	require.NoError(t, err)
+	require.NotEmpty(t, stored.CSRFToken)
+	require.NotNil(t, stored.Subject)
+	require.Equal(t, urn.SessionSubjectKindAnonymous, stored.Subject.Kind)
 }
 
 func TestHandleAuthorize_InvalidClientID_ReturnsError(t *testing.T) {
@@ -218,6 +228,134 @@ func TestHandleAuthorize_InvalidClientID_ReturnsError(t *testing.T) {
 	require.Equal(t, "invalid_client", body["error"])
 }
 
+func TestHandleConsentGet_RendersCSRFToken(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	subject := urn.NewUserSubject("consent-user-" + uuid.NewString())
+	stateID := uuid.NewString()
+	csrfToken := "csrf-" + uuid.NewString()
+
+	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:                  stateID,
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		Endpoint: mcp.LegacyMcpEndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+		},
+		ClientID:            client.ClientID,
+		RedirectURI:         client.RedirectUris[0],
+		State:               "client-state",
+		CodeChallenge:       "abc",
+		CodeChallengeMethod: "S256",
+		CSRFToken:           csrfToken,
+		Subject:             &subject,
+		CreatedAt:           time.Now(),
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+toolset.McpSlug.String+"/connect?state="+stateID, nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	err = ti.service.HandleConsent(w, req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `name="csrf_token" value="`+csrfToken+`"`)
+}
+
+func TestHandleConsentPost_RejectsInvalidCSRFToken(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	subject := urn.NewUserSubject("consent-user-" + uuid.NewString())
+	stateID := uuid.NewString()
+
+	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:                  stateID,
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		Endpoint: mcp.LegacyMcpEndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+		},
+		ClientID:            client.ClientID,
+		RedirectURI:         client.RedirectUris[0],
+		State:               "client-state",
+		CodeChallenge:       "abc",
+		CodeChallengeMethod: "S256",
+		CSRFToken:           "expected-csrf",
+		Subject:             &subject,
+		CreatedAt:           time.Now(),
+	})
+	require.NoError(t, err)
+
+	form := url.Values{}
+	form.Set("state", stateID)
+	form.Set("csrf_token", "wrong-csrf")
+	form.Set("action", "approve")
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/connect", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	err = ti.service.HandleConsent(w, req)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid consent csrf token")
+}
+
+func TestHandleConsentPost_ApproveWithCSRFRedirectsWithCode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	subject := urn.NewUserSubject("consent-user-" + uuid.NewString())
+	stateID := uuid.NewString()
+	csrfToken := "csrf-" + uuid.NewString()
+
+	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:                  stateID,
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		Endpoint: mcp.LegacyMcpEndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+		},
+		ClientID:            client.ClientID,
+		RedirectURI:         client.RedirectUris[0],
+		State:               "client-state",
+		CodeChallenge:       "abc",
+		CodeChallengeMethod: "S256",
+		CSRFToken:           csrfToken,
+		Subject:             &subject,
+		CreatedAt:           time.Now(),
+	})
+	require.NoError(t, err)
+
+	form := url.Values{}
+	form.Set("state", stateID)
+	form.Set("csrf_token", csrfToken)
+	form.Set("action", "approve")
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/connect", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	err = ti.service.HandleConsent(w, req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "client-state", loc.Query().Get("state"))
+	require.NotEmpty(t, loc.Query().Get("code"))
+}
+
 func TestHandleIDPCallback_ExchangesCodeAndRedirectsToConsent(t *testing.T) {
 	t.Parallel()
 
@@ -245,12 +383,16 @@ func TestHandleIDPCallback_ExchangesCodeAndRedirectsToConsent(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		ToolsetID:           toolset.ID,
+		Endpoint: mcp.LegacyMcpEndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
 		State:               "client-state",
 		CodeChallenge:       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
 		CodeChallengeMethod: "S256",
+		CSRFToken:           "csrf-token",
 		CreatedAt:           time.Now(),
 	})
 	require.NoError(t, err)
@@ -298,12 +440,16 @@ func TestHandleIDPCallback_UserNotInOrg_ReturnsForbidden(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		ToolsetID:           toolset.ID,
+		Endpoint: mcp.LegacyMcpEndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
 		State:               "client-state",
 		CodeChallenge:       "abc",
 		CodeChallengeMethod: "S256",
+		CSRFToken:           "csrf-token",
 		CreatedAt:           time.Now(),
 	})
 	require.NoError(t, err)
@@ -354,12 +500,16 @@ func TestHandleIDPCallback_IDPError_ForwardsToClient(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		ToolsetID:           toolset.ID,
+		Endpoint: mcp.LegacyMcpEndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
 		State:               "client-state",
 		CodeChallenge:       "abc",
 		CodeChallengeMethod: "S256",
+		CSRFToken:           "csrf-token",
 		CreatedAt:           time.Now(),
 	})
 	require.NoError(t, err)
@@ -421,11 +571,15 @@ func TestHandleIDPCallback_ToolsetMismatch_ReturnsUnauthorized(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		ToolsetID:           uuid.New(), // wrong toolset
+		Endpoint: mcp.LegacyMcpEndpointRef{
+			McpSlug:        "wrong-toolset-slug",
+			CustomDomainID: uuid.NullUUID{Valid: false},
+		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
 		CodeChallenge:       "abc",
 		CodeChallengeMethod: "S256",
+		CSRFToken:           "csrf-token",
 		CreatedAt:           time.Now(),
 	})
 	require.NoError(t, err)
@@ -457,11 +611,15 @@ func TestHandleIDPCallback_MissingCode_ReturnsError(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		ToolsetID:           toolset.ID,
+		Endpoint: mcp.LegacyMcpEndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
 		CodeChallenge:       "abc",
 		CodeChallengeMethod: "S256",
+		CSRFToken:           "csrf-token",
 		CreatedAt:           time.Now(),
 	})
 	require.NoError(t, err)
@@ -497,11 +655,15 @@ func TestHandleIDPCallback_ExchangeFailure_ReturnsUnauthorized(t *testing.T) {
 	err := ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		ToolsetID:           toolset.ID,
+		Endpoint: mcp.LegacyMcpEndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+		},
 		ClientID:            "test-client",
 		RedirectURI:         "http://localhost:3000/callback",
 		CodeChallenge:       "abc",
 		CodeChallengeMethod: "S256",
+		CSRFToken:           "csrf-token",
 		CreatedAt:           time.Now(),
 	})
 	require.NoError(t, err)

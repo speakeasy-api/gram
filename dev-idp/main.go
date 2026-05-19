@@ -6,7 +6,7 @@
 //   - the mock-workos mode at /mock-workos/ (mock WorkOS REST surface);
 //   - the oauth2 mode at /oauth2/;
 //   - the oauth2-1 mode at /oauth2-1/;
-//   - the workos mode at /workos/ (only when GRAM_IDP_MODE=workos and WORKOS_API_KEY is set).
+//   - the workos mode at /workos/ (only when GRAM_IDP_MODE=workos and GRAM_IDP_CLIENT_SECRET is a real key).
 //
 // A second tiny health server is mounted on GRAM_DEVIDP_CONTROL_ADDRESS.
 //
@@ -61,7 +61,7 @@ func run() error {
 	dbSpec := flag.String("db", os.Getenv("GRAM_DEVIDP_DB"), "SQLite location: 'memory' or 'file:<path>' (default file:local/devidp/devidp.db)")
 	rsaKey := flag.String("rsa-private-key", os.Getenv("GRAM_DEVIDP_RSA_PRIVATE_KEY"), "PEM-encoded RSA private key (omit to generate a fresh ephemeral key)")
 	idpMode := flag.String("idp-mode", envOr("GRAM_IDP_MODE", "mock-workos"), "IDP mode: mock-workos (default) or workos")
-	workosKey := flag.String("workos-api-key", os.Getenv("WORKOS_API_KEY"), "WorkOS API key (required when --idp-mode=workos)")
+	workosKey := flag.String("workos-api-key", os.Getenv("GRAM_IDP_CLIENT_SECRET"), "WorkOS API key (required when --idp-mode=workos)")
 	workosHost := flag.String("workos-host", envOr("WORKOS_API_URL", "https://api.workos.com"), "Base URL of the WorkOS API")
 	flag.Parse()
 
@@ -129,16 +129,18 @@ func run() error {
 		ks, logger, tp, db,
 	)
 	outer.Handle(oauth21.Prefix+"/", http.StripPrefix(oauth21.Prefix, oauth21Handler.Handler()))
+	oauth21Handler.RegisterRootRoutes(outer)
 
 	oauth2Handler := oauth2.NewHandler(
 		oauth2.Config{ExternalURL: pubURL},
 		ks, logger, tp, db,
 	)
 	outer.Handle(oauth2.Prefix+"/", http.StripPrefix(oauth2.Prefix, oauth2Handler.Handler()))
+	oauth2Handler.RegisterRootRoutes(outer)
 
 	if *idpMode == "workos" {
 		if *workosKey == "" {
-			return fmt.Errorf("GRAM_IDP_MODE=workos requires WORKOS_API_KEY to be set")
+			return fmt.Errorf("GRAM_IDP_MODE=workos requires GRAM_IDP_CLIENT_SECRET to be a real WorkOS API key")
 		}
 		wsClient := workos.NewClient(*workosKey, workos.Opts{
 			Endpoint: *workosHost,

@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/tools/security"
 	tsr "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsR "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	vr "github.com/speakeasy-api/gram/server/internal/variations/repo"
 	"golang.org/x/sync/errgroup"
 )
@@ -560,6 +561,29 @@ func DescribeToolset(
 		}
 	}
 
+	// Surface the linked user_session_issuer if the toolset has one. The link
+	// lives on the toolsets row (toolsets.user_session_issuer_id, ON DELETE
+	// SET NULL); a missing link is the common case and is not an error.
+	var userSessionIssuerID *string
+	var userSessionIssuerSlug *types.Slug
+	if toolset.UserSessionIssuerID.Valid {
+		usi, err := usersessionsR.New(tx).GetUserSessionIssuerByID(ctx, usersessionsR.GetUserSessionIssuerByIDParams{
+			ID:        toolset.UserSessionIssuerID.UUID,
+			ProjectID: pid,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// FK is dangling — treat as unlinked rather than erroring.
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load linked user session issuer").Log(ctx, logger)
+		default:
+			id := usi.ID.String()
+			slug := types.Slug(usi.Slug)
+			userSessionIssuerID = &id
+			userSessionIssuerSlug = &slug
+		}
+	}
+
 	result := &types.Toolset{
 		ID:                           toolset.ID.String(),
 		OrganizationID:               toolset.OrganizationID,
@@ -589,6 +613,8 @@ func DescribeToolset(
 		ResourceUrns:                 resourceUrns,
 		ExternalOauthServer:          externalOAuthServer,
 		OauthProxyServer:             oauthProxyServer,
+		UserSessionIssuerID:          userSessionIssuerID,
+		UserSessionIssuerSlug:        userSessionIssuerSlug,
 		OauthEnablementMetadata: &types.OAuthEnablementMetadata{
 			Oauth2SecurityCount: oauth2AuthCodeSecurityCount,
 		},

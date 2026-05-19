@@ -12,13 +12,6 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// RevokeUserSessionConsentRequestBody is the type of the "userSessionConsents"
-// service "revokeUserSessionConsent" endpoint HTTP request body.
-type RevokeUserSessionConsentRequestBody struct {
-	// The user_session_consent id.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-}
-
 // ListUserSessionConsentsResponseBody is the type of the "userSessionConsents"
 // service "listUserSessionConsents" endpoint HTTP response body.
 type ListUserSessionConsentsResponseBody struct {
@@ -765,25 +758,12 @@ func NewListUserSessionConsentsPayload(subjectUrn *string, userSessionClientID *
 
 // NewRevokeUserSessionConsentPayload builds a userSessionConsents service
 // revokeUserSessionConsent endpoint payload.
-func NewRevokeUserSessionConsentPayload(body *RevokeUserSessionConsentRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionconsents.RevokeUserSessionConsentPayload {
-	v := &usersessionconsents.RevokeUserSessionConsentPayload{
-		ID: *body.ID,
-	}
+func NewRevokeUserSessionConsentPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionconsents.RevokeUserSessionConsentPayload {
+	v := &usersessionconsents.RevokeUserSessionConsentPayload{}
+	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
-}
-
-// ValidateRevokeUserSessionConsentRequestBody runs the validations defined on
-// RevokeUserSessionConsentRequestBody
-func ValidateRevokeUserSessionConsentRequestBody(body *RevokeUserSessionConsentRequestBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	return
 }

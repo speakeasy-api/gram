@@ -21,8 +21,9 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -38,8 +39,8 @@ import (
 //   - branch on the toolset's privacy:
 //   - private (`!McpIsPublic`): 302 to the Speakeasy IDP login page; on
 //     return HandleIDPCallback stamps `user:<id>` onto the state
-//   - public (`McpIsPublic`): 302 directly to /connect; HandleConsent's
-//     POST stamps `anonymous:<prospective_mcp_session_id>`
+//   - public (`McpIsPublic`): stamp an anonymous subject, then 302 directly
+//     to /connect
 func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
@@ -103,20 +104,35 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	challengeID := uuid.NewString()
+	csrfToken, err := generateOpaqueToken()
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "generate consent csrf token").Log(ctx, logger)
+	}
+	customDomainID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if customDomainCtx != nil {
+		customDomainID = uuid.NullUUID{UUID: customDomainCtx.DomainID, Valid: true}
+	}
+	var subject *urn.SessionSubject
+	if toolset.McpIsPublic {
+		sub := urn.NewAnonymousSubject(uuid.NewString())
+		subject = &sub
+	}
 
 	challengeState := AuthnChallengeState{
 		ID:                  challengeID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		ToolsetID:           toolset.ID,
+		Endpoint: LegacyMcpEndpointRef{
+			McpSlug:        mcpSlug,
+			CustomDomainID: customDomainID,
+		},
 		ClientID:            req.ClientID,
 		RedirectURI:         req.RedirectURI,
 		State:               req.State,
 		CodeChallenge:       req.CodeChallenge,
 		CodeChallengeMethod: req.CodeChallengeMethod,
-		// Subject is left nil — HandleIDPCallback (private path) and
-		// HandleConsent (public path) stamp it later in the flow.
-		Subject:   nil,
-		CreatedAt: time.Now(),
+		CSRFToken:           csrfToken,
+		Subject:             subject,
+		CreatedAt:           time.Now(),
 	}
 
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
@@ -129,12 +145,14 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	if !toolset.McpIsPublic {
-		callbackURL := fmt.Sprintf("%s/mcp/%s/idp_callback", baseURL, mcpSlug)
-		idpURL, err := s.identityResolver.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
+		callbackURL, err := url.JoinPath(s.serverURL.String(), "mcp", "idp_callback")
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").Log(ctx, logger)
+		}
+		idpURL, err := s.identityResolver.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
 			CallbackURL:     callbackURL,
 			Scope:           "",
 			State:           challengeID,
-			ClientID:        "",
 			ScopesSupported: nil,
 		})
 		if err != nil {
@@ -144,9 +162,11 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		return nil
 	}
 
-	// Public toolset: skip IDP, route straight to consent. The anonymous sub
-	// is minted on the consent POST (per plan).
-	consentURL := fmt.Sprintf("%s/mcp/%s/connect?state=%s", baseURL, mcpSlug, url.QueryEscape(challengeID))
+	// Public toolset: skip IDP and route straight to consent.
+	consentURL, err := buildConsentURL(baseURL, mcpSlug, challengeID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build consent URL").Log(ctx, logger)
+	}
 	http.Redirect(w, r, consentURL, http.StatusFound)
 	return nil
 }

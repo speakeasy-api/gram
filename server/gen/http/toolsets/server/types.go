@@ -81,6 +81,13 @@ type UpdateOAuthProxyServerRequestBody struct {
 	OauthProxyServer *OAuthProxyServerUpdateFormRequestBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
 }
 
+// SetUserSessionIssuerRequestBody is the type of the "toolsets" service
+// "setUserSessionIssuer" endpoint HTTP request body.
+type SetUserSessionIssuerRequestBody struct {
+	// The user_session_issuer id to link, or null to unlink.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+}
+
 // CreateToolsetResponseBody is the type of the "toolsets" service
 // "createToolset" endpoint HTTP response body.
 type CreateToolsetResponseBody struct {
@@ -139,6 +146,12 @@ type CreateToolsetResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// The id of the user_session_issuer wired to this toolset. Set via
+	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The slug of the user_session_issuer wired to this toolset; present when
+	// user_session_issuer_id is.
+	UserSessionIssuerSlug *string `form:"user_session_issuer_slug,omitempty" json:"user_session_issuer_slug,omitempty" xml:"user_session_issuer_slug,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -217,6 +230,12 @@ type UpdateToolsetResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// The id of the user_session_issuer wired to this toolset. Set via
+	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The slug of the user_session_issuer wired to this toolset; present when
+	// user_session_issuer_id is.
+	UserSessionIssuerSlug *string `form:"user_session_issuer_slug,omitempty" json:"user_session_issuer_slug,omitempty" xml:"user_session_issuer_slug,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -281,6 +300,12 @@ type GetToolsetResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// The id of the user_session_issuer wired to this toolset. Set via
+	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The slug of the user_session_issuer wired to this toolset; present when
+	// user_session_issuer_id is.
+	UserSessionIssuerSlug *string `form:"user_session_issuer_slug,omitempty" json:"user_session_issuer_slug,omitempty" xml:"user_session_issuer_slug,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -345,6 +370,12 @@ type CloneToolsetResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// The id of the user_session_issuer wired to this toolset. Set via
+	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The slug of the user_session_issuer wired to this toolset; present when
+	// user_session_issuer_id is.
+	UserSessionIssuerSlug *string `form:"user_session_issuer_slug,omitempty" json:"user_session_issuer_slug,omitempty" xml:"user_session_issuer_slug,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -409,6 +440,12 @@ type AddExternalOAuthServerResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// The id of the user_session_issuer wired to this toolset. Set via
+	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The slug of the user_session_issuer wired to this toolset; present when
+	// user_session_issuer_id is.
+	UserSessionIssuerSlug *string `form:"user_session_issuer_slug,omitempty" json:"user_session_issuer_slug,omitempty" xml:"user_session_issuer_slug,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -473,6 +510,12 @@ type RemoveOAuthServerResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// The id of the user_session_issuer wired to this toolset. Set via
+	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The slug of the user_session_issuer wired to this toolset; present when
+	// user_session_issuer_id is.
+	UserSessionIssuerSlug *string `form:"user_session_issuer_slug,omitempty" json:"user_session_issuer_slug,omitempty" xml:"user_session_issuer_slug,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -537,6 +580,12 @@ type AddOAuthProxyServerResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// The id of the user_session_issuer wired to this toolset. Set via
+	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The slug of the user_session_issuer wired to this toolset; present when
+	// user_session_issuer_id is.
+	UserSessionIssuerSlug *string `form:"user_session_issuer_slug,omitempty" json:"user_session_issuer_slug,omitempty" xml:"user_session_issuer_slug,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -601,6 +650,82 @@ type UpdateOAuthProxyServerResponseBody struct {
 	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
 	// The OAuth proxy server details
 	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// The id of the user_session_issuer wired to this toolset. Set via
+	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The slug of the user_session_issuer wired to this toolset; present when
+	// user_session_issuer_id is.
+	UserSessionIssuerSlug *string `form:"user_session_issuer_slug,omitempty" json:"user_session_issuer_slug,omitempty" xml:"user_session_issuer_slug,omitempty"`
+	// When the toolset was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the toolset was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// SetUserSessionIssuerResponseBody is the type of the "toolsets" service
+// "setUserSessionIssuer" endpoint HTTP response body.
+type SetUserSessionIssuerResponseBody struct {
+	// The ID of the toolset
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this toolset belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The organization ID this toolset belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// The name of the toolset
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Description of the toolset
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
+	// The external MCP header definitions that are relevant to the toolset
+	ExternalMcpHeaderDefinitions []*ExternalMCPHeaderDefinitionResponseBody `form:"external_mcp_header_definitions,omitempty" json:"external_mcp_header_definitions,omitempty" xml:"external_mcp_header_definitions,omitempty"`
+	// The metadata surrounding oauth enabled tools within this server
+	OauthEnablementMetadata *OAuthEnablementMetadataResponseBody `form:"oauth_enablement_metadata" json:"oauth_enablement_metadata" xml:"oauth_enablement_metadata"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// The tool URNs in this toolset
+	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The version of the toolset (will be 0 if none exists)
+	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
+	// The resources in this toolset
+	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// The ID of the custom domain to use for the toolset
+	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The registry lineage for toolsets installed from an external MCP catalog
+	Origin *ToolsetOriginResponseBody `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// The id of the user_session_issuer wired to this toolset. Set via
+	// toolsets.setUserSessionIssuer; null when no USI is linked.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The slug of the user_session_issuer wired to this toolset; present when
+	// user_session_issuer_id is.
+	UserSessionIssuerSlug *string `form:"user_session_issuer_slug,omitempty" json:"user_session_issuer_slug,omitempty" xml:"user_session_issuer_slug,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -2830,6 +2955,196 @@ type UpdateOAuthProxyServerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SetUserSessionIssuerUnauthorizedResponseBody is the type of the "toolsets"
+// service "setUserSessionIssuer" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetUserSessionIssuerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetUserSessionIssuerForbiddenResponseBody is the type of the "toolsets"
+// service "setUserSessionIssuer" endpoint HTTP response body for the
+// "forbidden" error.
+type SetUserSessionIssuerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetUserSessionIssuerBadRequestResponseBody is the type of the "toolsets"
+// service "setUserSessionIssuer" endpoint HTTP response body for the
+// "bad_request" error.
+type SetUserSessionIssuerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetUserSessionIssuerNotFoundResponseBody is the type of the "toolsets"
+// service "setUserSessionIssuer" endpoint HTTP response body for the
+// "not_found" error.
+type SetUserSessionIssuerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetUserSessionIssuerConflictResponseBody is the type of the "toolsets"
+// service "setUserSessionIssuer" endpoint HTTP response body for the
+// "conflict" error.
+type SetUserSessionIssuerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetUserSessionIssuerUnsupportedMediaResponseBody is the type of the
+// "toolsets" service "setUserSessionIssuer" endpoint HTTP response body for
+// the "unsupported_media" error.
+type SetUserSessionIssuerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetUserSessionIssuerInvalidResponseBody is the type of the "toolsets"
+// service "setUserSessionIssuer" endpoint HTTP response body for the "invalid"
+// error.
+type SetUserSessionIssuerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetUserSessionIssuerInvariantViolationResponseBody is the type of the
+// "toolsets" service "setUserSessionIssuer" endpoint HTTP response body for
+// the "invariant_violation" error.
+type SetUserSessionIssuerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetUserSessionIssuerUnexpectedResponseBody is the type of the "toolsets"
+// service "setUserSessionIssuer" endpoint HTTP response body for the
+// "unexpected" error.
+type SetUserSessionIssuerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetUserSessionIssuerGatewayErrorResponseBody is the type of the "toolsets"
+// service "setUserSessionIssuer" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetUserSessionIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SecurityVariableResponseBody is used to define fields on response body types.
 type SecurityVariableResponseBody struct {
 	// The unique identifier of the security variable
@@ -3556,20 +3871,21 @@ type OAuthProxyServerUpdateFormRequestBody struct {
 // of the "createToolset" endpoint of the "toolsets" service.
 func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody {
 	body := &CreateToolsetResponseBody{
-		ID:                res.ID,
-		ProjectID:         res.ProjectID,
-		OrganizationID:    res.OrganizationID,
-		AccountType:       res.AccountType,
-		Name:              res.Name,
-		Slug:              string(res.Slug),
-		Description:       res.Description,
-		ToolsetVersion:    res.ToolsetVersion,
-		McpIsPublic:       res.McpIsPublic,
-		McpEnabled:        res.McpEnabled,
-		ToolSelectionMode: res.ToolSelectionMode,
-		CustomDomainID:    res.CustomDomainID,
-		CreatedAt:         res.CreatedAt,
-		UpdatedAt:         res.UpdatedAt,
+		ID:                  res.ID,
+		ProjectID:           res.ProjectID,
+		OrganizationID:      res.OrganizationID,
+		AccountType:         res.AccountType,
+		Name:                res.Name,
+		Slug:                string(res.Slug),
+		Description:         res.Description,
+		ToolsetVersion:      res.ToolsetVersion,
+		McpIsPublic:         res.McpIsPublic,
+		McpEnabled:          res.McpEnabled,
+		ToolSelectionMode:   res.ToolSelectionMode,
+		CustomDomainID:      res.CustomDomainID,
+		UserSessionIssuerID: res.UserSessionIssuerID,
+		CreatedAt:           res.CreatedAt,
+		UpdatedAt:           res.UpdatedAt,
 	}
 	if res.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
@@ -3578,6 +3894,10 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 	if res.McpSlug != nil {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
+	}
+	if res.UserSessionIssuerSlug != nil {
+		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
+		body.UserSessionIssuerSlug = &userSessionIssuerSlug
 	}
 	if res.SecurityVariables != nil {
 		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
@@ -3728,20 +4048,21 @@ func NewListToolsetsForOrgResponseBody(res *toolsets.ListToolsetSummariesResult)
 // of the "updateToolset" endpoint of the "toolsets" service.
 func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody {
 	body := &UpdateToolsetResponseBody{
-		ID:                res.ID,
-		ProjectID:         res.ProjectID,
-		OrganizationID:    res.OrganizationID,
-		AccountType:       res.AccountType,
-		Name:              res.Name,
-		Slug:              string(res.Slug),
-		Description:       res.Description,
-		ToolsetVersion:    res.ToolsetVersion,
-		McpIsPublic:       res.McpIsPublic,
-		McpEnabled:        res.McpEnabled,
-		ToolSelectionMode: res.ToolSelectionMode,
-		CustomDomainID:    res.CustomDomainID,
-		CreatedAt:         res.CreatedAt,
-		UpdatedAt:         res.UpdatedAt,
+		ID:                  res.ID,
+		ProjectID:           res.ProjectID,
+		OrganizationID:      res.OrganizationID,
+		AccountType:         res.AccountType,
+		Name:                res.Name,
+		Slug:                string(res.Slug),
+		Description:         res.Description,
+		ToolsetVersion:      res.ToolsetVersion,
+		McpIsPublic:         res.McpIsPublic,
+		McpEnabled:          res.McpEnabled,
+		ToolSelectionMode:   res.ToolSelectionMode,
+		CustomDomainID:      res.CustomDomainID,
+		UserSessionIssuerID: res.UserSessionIssuerID,
+		CreatedAt:           res.CreatedAt,
+		UpdatedAt:           res.UpdatedAt,
 	}
 	if res.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
@@ -3750,6 +4071,10 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 	if res.McpSlug != nil {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
+	}
+	if res.UserSessionIssuerSlug != nil {
+		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
+		body.UserSessionIssuerSlug = &userSessionIssuerSlug
 	}
 	if res.SecurityVariables != nil {
 		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
@@ -3862,20 +4187,21 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 // the "getToolset" endpoint of the "toolsets" service.
 func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 	body := &GetToolsetResponseBody{
-		ID:                res.ID,
-		ProjectID:         res.ProjectID,
-		OrganizationID:    res.OrganizationID,
-		AccountType:       res.AccountType,
-		Name:              res.Name,
-		Slug:              string(res.Slug),
-		Description:       res.Description,
-		ToolsetVersion:    res.ToolsetVersion,
-		McpIsPublic:       res.McpIsPublic,
-		McpEnabled:        res.McpEnabled,
-		ToolSelectionMode: res.ToolSelectionMode,
-		CustomDomainID:    res.CustomDomainID,
-		CreatedAt:         res.CreatedAt,
-		UpdatedAt:         res.UpdatedAt,
+		ID:                  res.ID,
+		ProjectID:           res.ProjectID,
+		OrganizationID:      res.OrganizationID,
+		AccountType:         res.AccountType,
+		Name:                res.Name,
+		Slug:                string(res.Slug),
+		Description:         res.Description,
+		ToolsetVersion:      res.ToolsetVersion,
+		McpIsPublic:         res.McpIsPublic,
+		McpEnabled:          res.McpEnabled,
+		ToolSelectionMode:   res.ToolSelectionMode,
+		CustomDomainID:      res.CustomDomainID,
+		UserSessionIssuerID: res.UserSessionIssuerID,
+		CreatedAt:           res.CreatedAt,
+		UpdatedAt:           res.UpdatedAt,
 	}
 	if res.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
@@ -3884,6 +4210,10 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 	if res.McpSlug != nil {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
+	}
+	if res.UserSessionIssuerSlug != nil {
+		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
+		body.UserSessionIssuerSlug = &userSessionIssuerSlug
 	}
 	if res.SecurityVariables != nil {
 		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
@@ -3996,20 +4326,21 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 // the "cloneToolset" endpoint of the "toolsets" service.
 func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
 	body := &CloneToolsetResponseBody{
-		ID:                res.ID,
-		ProjectID:         res.ProjectID,
-		OrganizationID:    res.OrganizationID,
-		AccountType:       res.AccountType,
-		Name:              res.Name,
-		Slug:              string(res.Slug),
-		Description:       res.Description,
-		ToolsetVersion:    res.ToolsetVersion,
-		McpIsPublic:       res.McpIsPublic,
-		McpEnabled:        res.McpEnabled,
-		ToolSelectionMode: res.ToolSelectionMode,
-		CustomDomainID:    res.CustomDomainID,
-		CreatedAt:         res.CreatedAt,
-		UpdatedAt:         res.UpdatedAt,
+		ID:                  res.ID,
+		ProjectID:           res.ProjectID,
+		OrganizationID:      res.OrganizationID,
+		AccountType:         res.AccountType,
+		Name:                res.Name,
+		Slug:                string(res.Slug),
+		Description:         res.Description,
+		ToolsetVersion:      res.ToolsetVersion,
+		McpIsPublic:         res.McpIsPublic,
+		McpEnabled:          res.McpEnabled,
+		ToolSelectionMode:   res.ToolSelectionMode,
+		CustomDomainID:      res.CustomDomainID,
+		UserSessionIssuerID: res.UserSessionIssuerID,
+		CreatedAt:           res.CreatedAt,
+		UpdatedAt:           res.UpdatedAt,
 	}
 	if res.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
@@ -4018,6 +4349,10 @@ func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
 	if res.McpSlug != nil {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
+	}
+	if res.UserSessionIssuerSlug != nil {
+		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
+		body.UserSessionIssuerSlug = &userSessionIssuerSlug
 	}
 	if res.SecurityVariables != nil {
 		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
@@ -4130,20 +4465,21 @@ func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
 // result of the "addExternalOAuthServer" endpoint of the "toolsets" service.
 func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuthServerResponseBody {
 	body := &AddExternalOAuthServerResponseBody{
-		ID:                res.ID,
-		ProjectID:         res.ProjectID,
-		OrganizationID:    res.OrganizationID,
-		AccountType:       res.AccountType,
-		Name:              res.Name,
-		Slug:              string(res.Slug),
-		Description:       res.Description,
-		ToolsetVersion:    res.ToolsetVersion,
-		McpIsPublic:       res.McpIsPublic,
-		McpEnabled:        res.McpEnabled,
-		ToolSelectionMode: res.ToolSelectionMode,
-		CustomDomainID:    res.CustomDomainID,
-		CreatedAt:         res.CreatedAt,
-		UpdatedAt:         res.UpdatedAt,
+		ID:                  res.ID,
+		ProjectID:           res.ProjectID,
+		OrganizationID:      res.OrganizationID,
+		AccountType:         res.AccountType,
+		Name:                res.Name,
+		Slug:                string(res.Slug),
+		Description:         res.Description,
+		ToolsetVersion:      res.ToolsetVersion,
+		McpIsPublic:         res.McpIsPublic,
+		McpEnabled:          res.McpEnabled,
+		ToolSelectionMode:   res.ToolSelectionMode,
+		CustomDomainID:      res.CustomDomainID,
+		UserSessionIssuerID: res.UserSessionIssuerID,
+		CreatedAt:           res.CreatedAt,
+		UpdatedAt:           res.UpdatedAt,
 	}
 	if res.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
@@ -4152,6 +4488,10 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 	if res.McpSlug != nil {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
+	}
+	if res.UserSessionIssuerSlug != nil {
+		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
+		body.UserSessionIssuerSlug = &userSessionIssuerSlug
 	}
 	if res.SecurityVariables != nil {
 		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
@@ -4264,20 +4604,21 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 // result of the "removeOAuthServer" endpoint of the "toolsets" service.
 func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResponseBody {
 	body := &RemoveOAuthServerResponseBody{
-		ID:                res.ID,
-		ProjectID:         res.ProjectID,
-		OrganizationID:    res.OrganizationID,
-		AccountType:       res.AccountType,
-		Name:              res.Name,
-		Slug:              string(res.Slug),
-		Description:       res.Description,
-		ToolsetVersion:    res.ToolsetVersion,
-		McpIsPublic:       res.McpIsPublic,
-		McpEnabled:        res.McpEnabled,
-		ToolSelectionMode: res.ToolSelectionMode,
-		CustomDomainID:    res.CustomDomainID,
-		CreatedAt:         res.CreatedAt,
-		UpdatedAt:         res.UpdatedAt,
+		ID:                  res.ID,
+		ProjectID:           res.ProjectID,
+		OrganizationID:      res.OrganizationID,
+		AccountType:         res.AccountType,
+		Name:                res.Name,
+		Slug:                string(res.Slug),
+		Description:         res.Description,
+		ToolsetVersion:      res.ToolsetVersion,
+		McpIsPublic:         res.McpIsPublic,
+		McpEnabled:          res.McpEnabled,
+		ToolSelectionMode:   res.ToolSelectionMode,
+		CustomDomainID:      res.CustomDomainID,
+		UserSessionIssuerID: res.UserSessionIssuerID,
+		CreatedAt:           res.CreatedAt,
+		UpdatedAt:           res.UpdatedAt,
 	}
 	if res.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
@@ -4286,6 +4627,10 @@ func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResp
 	if res.McpSlug != nil {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
+	}
+	if res.UserSessionIssuerSlug != nil {
+		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
+		body.UserSessionIssuerSlug = &userSessionIssuerSlug
 	}
 	if res.SecurityVariables != nil {
 		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
@@ -4398,20 +4743,21 @@ func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResp
 // result of the "addOAuthProxyServer" endpoint of the "toolsets" service.
 func NewAddOAuthProxyServerResponseBody(res *types.Toolset) *AddOAuthProxyServerResponseBody {
 	body := &AddOAuthProxyServerResponseBody{
-		ID:                res.ID,
-		ProjectID:         res.ProjectID,
-		OrganizationID:    res.OrganizationID,
-		AccountType:       res.AccountType,
-		Name:              res.Name,
-		Slug:              string(res.Slug),
-		Description:       res.Description,
-		ToolsetVersion:    res.ToolsetVersion,
-		McpIsPublic:       res.McpIsPublic,
-		McpEnabled:        res.McpEnabled,
-		ToolSelectionMode: res.ToolSelectionMode,
-		CustomDomainID:    res.CustomDomainID,
-		CreatedAt:         res.CreatedAt,
-		UpdatedAt:         res.UpdatedAt,
+		ID:                  res.ID,
+		ProjectID:           res.ProjectID,
+		OrganizationID:      res.OrganizationID,
+		AccountType:         res.AccountType,
+		Name:                res.Name,
+		Slug:                string(res.Slug),
+		Description:         res.Description,
+		ToolsetVersion:      res.ToolsetVersion,
+		McpIsPublic:         res.McpIsPublic,
+		McpEnabled:          res.McpEnabled,
+		ToolSelectionMode:   res.ToolSelectionMode,
+		CustomDomainID:      res.CustomDomainID,
+		UserSessionIssuerID: res.UserSessionIssuerID,
+		CreatedAt:           res.CreatedAt,
+		UpdatedAt:           res.UpdatedAt,
 	}
 	if res.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
@@ -4420,6 +4766,10 @@ func NewAddOAuthProxyServerResponseBody(res *types.Toolset) *AddOAuthProxyServer
 	if res.McpSlug != nil {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
+	}
+	if res.UserSessionIssuerSlug != nil {
+		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
+		body.UserSessionIssuerSlug = &userSessionIssuerSlug
 	}
 	if res.SecurityVariables != nil {
 		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
@@ -4532,20 +4882,21 @@ func NewAddOAuthProxyServerResponseBody(res *types.Toolset) *AddOAuthProxyServer
 // result of the "updateOAuthProxyServer" endpoint of the "toolsets" service.
 func NewUpdateOAuthProxyServerResponseBody(res *types.Toolset) *UpdateOAuthProxyServerResponseBody {
 	body := &UpdateOAuthProxyServerResponseBody{
-		ID:                res.ID,
-		ProjectID:         res.ProjectID,
-		OrganizationID:    res.OrganizationID,
-		AccountType:       res.AccountType,
-		Name:              res.Name,
-		Slug:              string(res.Slug),
-		Description:       res.Description,
-		ToolsetVersion:    res.ToolsetVersion,
-		McpIsPublic:       res.McpIsPublic,
-		McpEnabled:        res.McpEnabled,
-		ToolSelectionMode: res.ToolSelectionMode,
-		CustomDomainID:    res.CustomDomainID,
-		CreatedAt:         res.CreatedAt,
-		UpdatedAt:         res.UpdatedAt,
+		ID:                  res.ID,
+		ProjectID:           res.ProjectID,
+		OrganizationID:      res.OrganizationID,
+		AccountType:         res.AccountType,
+		Name:                res.Name,
+		Slug:                string(res.Slug),
+		Description:         res.Description,
+		ToolsetVersion:      res.ToolsetVersion,
+		McpIsPublic:         res.McpIsPublic,
+		McpEnabled:          res.McpEnabled,
+		ToolSelectionMode:   res.ToolSelectionMode,
+		CustomDomainID:      res.CustomDomainID,
+		UserSessionIssuerID: res.UserSessionIssuerID,
+		CreatedAt:           res.CreatedAt,
+		UpdatedAt:           res.UpdatedAt,
 	}
 	if res.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
@@ -4554,6 +4905,149 @@ func NewUpdateOAuthProxyServerResponseBody(res *types.Toolset) *UpdateOAuthProxy
 	if res.McpSlug != nil {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
+	}
+	if res.UserSessionIssuerSlug != nil {
+		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
+		body.UserSessionIssuerSlug = &userSessionIssuerSlug
+	}
+	if res.SecurityVariables != nil {
+		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
+		for i, val := range res.SecurityVariables {
+			if val == nil {
+				body.SecurityVariables[i] = nil
+				continue
+			}
+			body.SecurityVariables[i] = marshalTypesSecurityVariableToSecurityVariableResponseBody(val)
+		}
+	}
+	if res.ServerVariables != nil {
+		body.ServerVariables = make([]*ServerVariableResponseBody, len(res.ServerVariables))
+		for i, val := range res.ServerVariables {
+			if val == nil {
+				body.ServerVariables[i] = nil
+				continue
+			}
+			body.ServerVariables[i] = marshalTypesServerVariableToServerVariableResponseBody(val)
+		}
+	}
+	if res.FunctionEnvironmentVariables != nil {
+		body.FunctionEnvironmentVariables = make([]*FunctionEnvironmentVariableResponseBody, len(res.FunctionEnvironmentVariables))
+		for i, val := range res.FunctionEnvironmentVariables {
+			if val == nil {
+				body.FunctionEnvironmentVariables[i] = nil
+				continue
+			}
+			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
+		}
+	}
+	if res.ExternalMcpHeaderDefinitions != nil {
+		body.ExternalMcpHeaderDefinitions = make([]*ExternalMCPHeaderDefinitionResponseBody, len(res.ExternalMcpHeaderDefinitions))
+		for i, val := range res.ExternalMcpHeaderDefinitions {
+			if val == nil {
+				body.ExternalMcpHeaderDefinitions[i] = nil
+				continue
+			}
+			body.ExternalMcpHeaderDefinitions[i] = marshalTypesExternalMCPHeaderDefinitionToExternalMCPHeaderDefinitionResponseBody(val)
+		}
+	}
+	if res.OauthEnablementMetadata != nil {
+		body.OauthEnablementMetadata = marshalTypesOAuthEnablementMetadataToOAuthEnablementMetadataResponseBody(res.OauthEnablementMetadata)
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*ToolResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			if val == nil {
+				body.Tools[i] = nil
+				continue
+			}
+			body.Tools[i] = marshalTypesToolToToolResponseBody(val)
+		}
+	} else {
+		body.Tools = []*ToolResponseBody{}
+	}
+	if res.ToolUrns != nil {
+		body.ToolUrns = make([]string, len(res.ToolUrns))
+		for i, val := range res.ToolUrns {
+			body.ToolUrns[i] = val
+		}
+	} else {
+		body.ToolUrns = []string{}
+	}
+	if res.Resources != nil {
+		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			if val == nil {
+				body.Resources[i] = nil
+				continue
+			}
+			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
+		}
+	} else {
+		body.Resources = []*ResourceResponseBody{}
+	}
+	if res.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(res.ResourceUrns))
+		for i, val := range res.ResourceUrns {
+			body.ResourceUrns[i] = val
+		}
+	} else {
+		body.ResourceUrns = []string{}
+	}
+	if res.PromptTemplates != nil {
+		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
+		for i, val := range res.PromptTemplates {
+			if val == nil {
+				body.PromptTemplates[i] = nil
+				continue
+			}
+			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
+	} else {
+		body.PromptTemplates = []*PromptTemplateResponseBody{}
+	}
+	if res.Origin != nil {
+		body.Origin = marshalTypesToolsetOriginToToolsetOriginResponseBody(res.Origin)
+	}
+	if res.ExternalOauthServer != nil {
+		body.ExternalOauthServer = marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(res.ExternalOauthServer)
+	}
+	if res.OauthProxyServer != nil {
+		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	return body
+}
+
+// NewSetUserSessionIssuerResponseBody builds the HTTP response body from the
+// result of the "setUserSessionIssuer" endpoint of the "toolsets" service.
+func NewSetUserSessionIssuerResponseBody(res *types.Toolset) *SetUserSessionIssuerResponseBody {
+	body := &SetUserSessionIssuerResponseBody{
+		ID:                  res.ID,
+		ProjectID:           res.ProjectID,
+		OrganizationID:      res.OrganizationID,
+		AccountType:         res.AccountType,
+		Name:                res.Name,
+		Slug:                string(res.Slug),
+		Description:         res.Description,
+		ToolsetVersion:      res.ToolsetVersion,
+		McpIsPublic:         res.McpIsPublic,
+		McpEnabled:          res.McpEnabled,
+		ToolSelectionMode:   res.ToolSelectionMode,
+		CustomDomainID:      res.CustomDomainID,
+		UserSessionIssuerID: res.UserSessionIssuerID,
+		CreatedAt:           res.CreatedAt,
+		UpdatedAt:           res.UpdatedAt,
+	}
+	if res.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
+		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if res.McpSlug != nil {
+		mcpSlug := string(*res.McpSlug)
+		body.McpSlug = &mcpSlug
+	}
+	if res.UserSessionIssuerSlug != nil {
+		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
+		body.UserSessionIssuerSlug = &userSessionIssuerSlug
 	}
 	if res.SecurityVariables != nil {
 		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
@@ -6394,6 +6888,156 @@ func NewUpdateOAuthProxyServerGatewayErrorResponseBody(res *goa.ServiceError) *U
 	return body
 }
 
+// NewSetUserSessionIssuerUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "setUserSessionIssuer" endpoint of the
+// "toolsets" service.
+func NewSetUserSessionIssuerUnauthorizedResponseBody(res *goa.ServiceError) *SetUserSessionIssuerUnauthorizedResponseBody {
+	body := &SetUserSessionIssuerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetUserSessionIssuerForbiddenResponseBody builds the HTTP response body
+// from the result of the "setUserSessionIssuer" endpoint of the "toolsets"
+// service.
+func NewSetUserSessionIssuerForbiddenResponseBody(res *goa.ServiceError) *SetUserSessionIssuerForbiddenResponseBody {
+	body := &SetUserSessionIssuerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetUserSessionIssuerBadRequestResponseBody builds the HTTP response body
+// from the result of the "setUserSessionIssuer" endpoint of the "toolsets"
+// service.
+func NewSetUserSessionIssuerBadRequestResponseBody(res *goa.ServiceError) *SetUserSessionIssuerBadRequestResponseBody {
+	body := &SetUserSessionIssuerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetUserSessionIssuerNotFoundResponseBody builds the HTTP response body
+// from the result of the "setUserSessionIssuer" endpoint of the "toolsets"
+// service.
+func NewSetUserSessionIssuerNotFoundResponseBody(res *goa.ServiceError) *SetUserSessionIssuerNotFoundResponseBody {
+	body := &SetUserSessionIssuerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetUserSessionIssuerConflictResponseBody builds the HTTP response body
+// from the result of the "setUserSessionIssuer" endpoint of the "toolsets"
+// service.
+func NewSetUserSessionIssuerConflictResponseBody(res *goa.ServiceError) *SetUserSessionIssuerConflictResponseBody {
+	body := &SetUserSessionIssuerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetUserSessionIssuerUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "setUserSessionIssuer" endpoint of the
+// "toolsets" service.
+func NewSetUserSessionIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *SetUserSessionIssuerUnsupportedMediaResponseBody {
+	body := &SetUserSessionIssuerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetUserSessionIssuerInvalidResponseBody builds the HTTP response body
+// from the result of the "setUserSessionIssuer" endpoint of the "toolsets"
+// service.
+func NewSetUserSessionIssuerInvalidResponseBody(res *goa.ServiceError) *SetUserSessionIssuerInvalidResponseBody {
+	body := &SetUserSessionIssuerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetUserSessionIssuerInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "setUserSessionIssuer" endpoint of the
+// "toolsets" service.
+func NewSetUserSessionIssuerInvariantViolationResponseBody(res *goa.ServiceError) *SetUserSessionIssuerInvariantViolationResponseBody {
+	body := &SetUserSessionIssuerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetUserSessionIssuerUnexpectedResponseBody builds the HTTP response body
+// from the result of the "setUserSessionIssuer" endpoint of the "toolsets"
+// service.
+func NewSetUserSessionIssuerUnexpectedResponseBody(res *goa.ServiceError) *SetUserSessionIssuerUnexpectedResponseBody {
+	body := &SetUserSessionIssuerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetUserSessionIssuerGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "setUserSessionIssuer" endpoint of the
+// "toolsets" service.
+func NewSetUserSessionIssuerGatewayErrorResponseBody(res *goa.ServiceError) *SetUserSessionIssuerGatewayErrorResponseBody {
+	body := &SetUserSessionIssuerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateToolsetPayload builds a toolsets service createToolset endpoint
 // payload.
 func NewCreateToolsetPayload(body *CreateToolsetRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.CreateToolsetPayload {
@@ -6591,6 +7235,20 @@ func NewUpdateOAuthProxyServerPayload(body *UpdateOAuthProxyServerRequestBody, s
 	return v
 }
 
+// NewSetUserSessionIssuerPayload builds a toolsets service
+// setUserSessionIssuer endpoint payload.
+func NewSetUserSessionIssuerPayload(body *SetUserSessionIssuerRequestBody, slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.SetUserSessionIssuerPayload {
+	v := &toolsets.SetUserSessionIssuerPayload{
+		UserSessionIssuerID: body.UserSessionIssuerID,
+	}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // ValidateCreateToolsetRequestBody runs the validations defined on
 // CreateToolsetRequestBody
 func ValidateCreateToolsetRequestBody(body *CreateToolsetRequestBody) (err error) {
@@ -6673,6 +7331,15 @@ func ValidateUpdateOAuthProxyServerRequestBody(body *UpdateOAuthProxyServerReque
 		if err2 := ValidateOAuthProxyServerUpdateFormRequestBody(body.OauthProxyServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	return
+}
+
+// ValidateSetUserSessionIssuerRequestBody runs the validations defined on
+// SetUserSessionIssuerRequestBody
+func ValidateSetUserSessionIssuerRequestBody(body *SetUserSessionIssuerRequestBody) (err error) {
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 	}
 	return
 }
