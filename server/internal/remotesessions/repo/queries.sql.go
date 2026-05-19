@@ -48,7 +48,8 @@ INSERT INTO remote_session_clients (
     client_secret_encrypted,
     client_id_issued_at,
     client_secret_expires_at,
-    token_endpoint_auth_method
+    token_endpoint_auth_method,
+    scope
 )
 VALUES (
     $1,
@@ -58,9 +59,10 @@ VALUES (
     $5,
     $6,
     $7,
-    $8
+    $8,
+    $9::text[]
 )
-RETURNING id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateRemoteSessionClientParams struct {
@@ -72,6 +74,7 @@ type CreateRemoteSessionClientParams struct {
 	ClientIDIssuedAt        pgtype.Timestamptz
 	ClientSecretExpiresAt   pgtype.Timestamptz
 	TokenEndpointAuthMethod pgtype.Text
+	Scope                   []string
 }
 
 func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemoteSessionClientParams) (RemoteSessionClient, error) {
@@ -84,6 +87,7 @@ func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemot
 		arg.ClientIDIssuedAt,
 		arg.ClientSecretExpiresAt,
 		arg.TokenEndpointAuthMethod,
+		arg.Scope,
 	)
 	var i RemoteSessionClient
 	err := row.Scan(
@@ -96,6 +100,7 @@ func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemot
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
+		&i.Scope,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -201,7 +206,7 @@ const deleteRemoteSessionClient = `-- name: DeleteRemoteSessionClient :one
 UPDATE remote_session_clients
 SET deleted_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteRemoteSessionClientParams struct {
@@ -222,6 +227,7 @@ func (q *Queries) DeleteRemoteSessionClient(ctx context.Context, arg DeleteRemot
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
+		&i.Scope,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -376,7 +382,7 @@ func (q *Queries) GetRemoteSessionByID(ctx context.Context, arg GetRemoteSession
 }
 
 const getRemoteSessionClientByID = `-- name: GetRemoteSessionClientByID :one
-SELECT id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, created_at, updated_at, deleted_at, deleted
 FROM remote_session_clients
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -399,6 +405,7 @@ func (q *Queries) GetRemoteSessionClientByID(ctx context.Context, arg GetRemoteS
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
+		&i.Scope,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -413,6 +420,7 @@ SELECT
     c.client_id                            AS external_client_id,
     c.client_secret_encrypted              AS client_secret_encrypted,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
+    c.scope                                AS client_scope,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     c.user_session_issuer_id               AS user_session_issuer_id,
     i.slug                                 AS issuer_slug,
@@ -434,6 +442,7 @@ type GetRemoteSessionClientWithIssuerByIDRow struct {
 	ExternalClientID        string
 	ClientSecretEncrypted   pgtype.Text
 	TokenEndpointAuthMethod pgtype.Text
+	ClientScope             []string
 	RemoteSessionIssuerID   uuid.UUID
 	UserSessionIssuerID     uuid.UUID
 	IssuerSlug              string
@@ -459,6 +468,7 @@ func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id u
 		&i.ExternalClientID,
 		&i.ClientSecretEncrypted,
 		&i.TokenEndpointAuthMethod,
+		&i.ClientScope,
 		&i.RemoteSessionIssuerID,
 		&i.UserSessionIssuerID,
 		&i.IssuerSlug,
@@ -640,7 +650,7 @@ func (q *Queries) ListConnectedClientIDsForSubject(ctx context.Context, arg List
 }
 
 const listRemoteSessionClientsByProjectID = `-- name: ListRemoteSessionClientsByProjectID :many
-SELECT id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, created_at, updated_at, deleted_at, deleted
 FROM remote_session_clients
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -684,6 +694,7 @@ func (q *Queries) ListRemoteSessionClientsByProjectID(ctx context.Context, arg L
 			&i.ClientIDIssuedAt,
 			&i.ClientSecretExpiresAt,
 			&i.TokenEndpointAuthMethod,
+			&i.Scope,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -705,6 +716,7 @@ SELECT
     c.client_id                            AS external_client_id,
     c.client_secret_encrypted              AS client_secret_encrypted,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
+    c.scope                                AS client_scope,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     c.user_session_issuer_id               AS user_session_issuer_id,
     i.slug                                 AS issuer_slug,
@@ -733,6 +745,7 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	ExternalClientID        string
 	ClientSecretEncrypted   pgtype.Text
 	TokenEndpointAuthMethod pgtype.Text
+	ClientScope             []string
 	RemoteSessionIssuerID   uuid.UUID
 	UserSessionIssuerID     uuid.UUID
 	IssuerSlug              string
@@ -761,6 +774,7 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.ExternalClientID,
 			&i.ClientSecretEncrypted,
 			&i.TokenEndpointAuthMethod,
+			&i.ClientScope,
 			&i.RemoteSessionIssuerID,
 			&i.UserSessionIssuerID,
 			&i.IssuerSlug,
@@ -957,9 +971,10 @@ SET
     client_secret_expires_at = COALESCE($2, client_secret_expires_at),
     user_session_issuer_id = COALESCE($3, user_session_issuer_id),
     token_endpoint_auth_method = COALESCE($4, token_endpoint_auth_method),
+    scope = COALESCE($5::text[], scope),
     updated_at = clock_timestamp()
-WHERE id = $5 AND project_id = $6 AND deleted IS FALSE
-RETURNING id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, created_at, updated_at, deleted_at, deleted
+WHERE id = $6 AND project_id = $7 AND deleted IS FALSE
+RETURNING id, project_id, remote_session_issuer_id, user_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRemoteSessionClientParams struct {
@@ -967,6 +982,7 @@ type UpdateRemoteSessionClientParams struct {
 	ClientSecretExpiresAt   pgtype.Timestamptz
 	UserSessionIssuerID     uuid.NullUUID
 	TokenEndpointAuthMethod pgtype.Text
+	Scope                   []string
 	ID                      uuid.UUID
 	ProjectID               uuid.UUID
 }
@@ -977,6 +993,7 @@ func (q *Queries) UpdateRemoteSessionClient(ctx context.Context, arg UpdateRemot
 		arg.ClientSecretExpiresAt,
 		arg.UserSessionIssuerID,
 		arg.TokenEndpointAuthMethod,
+		arg.Scope,
 		arg.ID,
 		arg.ProjectID,
 	)
@@ -991,6 +1008,7 @@ func (q *Queries) UpdateRemoteSessionClient(ctx context.Context, arg UpdateRemot
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.TokenEndpointAuthMethod,
+		&i.Scope,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
