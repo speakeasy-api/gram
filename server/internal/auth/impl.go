@@ -88,6 +88,8 @@ type AuthConfigurations struct {
 	IDPBaseURL        string
 	GramServerURL     string
 	SignInRedirectURL string
+	SetupSiteURL      string // Origin of the enterprise setup subdomain (e.g. https://setup.getgram.ai)
+	CookieDomain      string // Domain attribute for session cookies (e.g. "getgram.ai", "localhost")
 	Environment       string
 }
 
@@ -168,7 +170,51 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// context so validateAuthNonce() can verify it.
 	server.Callback = callbackNonceBindingMiddleware(server.Callback)
 
+	// If a cookie domain is configured, rewrite gram_session cookies to
+	// include Domain= so they're shared across subdomains (e.g. app.getgram.ai
+	// and setup.getgram.ai both under getgram.ai).
+	if service.cfg.CookieDomain != "" {
+		server.Login = cookieDomainMiddleware(service.cfg.CookieDomain)(server.Login)
+		server.Callback = cookieDomainMiddleware(service.cfg.CookieDomain)(server.Callback)
+		server.SwitchScopes = cookieDomainMiddleware(service.cfg.CookieDomain)(server.SwitchScopes)
+		server.Logout = cookieDomainMiddleware(service.cfg.CookieDomain)(server.Logout)
+		server.Info = cookieDomainMiddleware(service.cfg.CookieDomain)(server.Info)
+	}
+
 	srv.Mount(mux, server)
+}
+
+// cookieDomainMiddleware rewrites Set-Cookie headers for auth cookies
+// (gram_session, gram_auth_nonce) to include the specified Domain attribute.
+// This is needed because the Goa generated code and nonce middleware set
+// cookies without a Domain, making them host-only.
+func cookieDomainMiddleware(domain string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			wrapped := &cookieDomainWriter{ResponseWriter: w, domain: domain}
+			next.ServeHTTP(wrapped, r)
+		})
+	}
+}
+
+type cookieDomainWriter struct {
+	http.ResponseWriter
+	domain string
+}
+
+func (w *cookieDomainWriter) WriteHeader(statusCode int) {
+	headers := w.Header()
+	cookies := headers.Values("Set-Cookie")
+	if len(cookies) > 0 {
+		headers.Del("Set-Cookie")
+		for _, c := range cookies {
+			if strings.HasPrefix(c, "gram_session=") {
+				c += "; Domain=" + w.domain
+			}
+			headers.Add("Set-Cookie", c)
+		}
+	}
+	w.ResponseWriter.WriteHeader(statusCode)
 }
 
 // loginNonceBindingMiddleware generates a random nonce-binding token, sets it
@@ -1008,6 +1054,19 @@ func (s *Service) buildCallbackURL(ctx context.Context) string {
 		returnAddress = "https://" + requestCtx.Host
 	}
 
+	// In local dev, if the login request came from the setup subdomain
+	// (detected via Referer host, since the Vite proxy rewrites Host),
+	// route the IDP callback through the setup origin so the nonce-binding
+	// cookie is scoped correctly.
+	if s.cfg.Environment == "local" && s.cfg.SetupSiteURL != "" {
+		if requestCtx, ok := contextvalues.GetRequestContext(ctx); ok && requestCtx != nil {
+			setupURL, err := url.Parse(s.cfg.SetupSiteURL)
+			if err == nil && requestCtx.RefererHost == setupURL.Host {
+				returnAddress = strings.TrimRight(s.cfg.SetupSiteURL, "/")
+			}
+		}
+	}
+
 	return returnAddress + "/rpc/auth.callback"
 }
 
@@ -1015,26 +1074,41 @@ func (s *Service) buildCallbackURL(ctx context.Context) string {
 var validOrgNameRegex = regexp.MustCompile(`^[a-zA-Z0-9\s-_]+$`)
 
 // callbackRedirectURL determines the redirect location after authentication. It
-// only allows relative URLs to prevent open redirect attacks (see relativeURL).
+// only allows relative URLs to prevent open redirect attacks (see relativeURL),
+// with the exception of the trusted setup subdomain origin (SetupSiteURL).
 // If no redirect is found, fall back to SignInRedirectURL.
 func (s *Service) callbackRedirectURL(
 	ctx context.Context,
 	payload *gen.CallbackPayload,
 ) string {
-	var location string
-
 	if state := decodeStateParam(payload); state != nil {
-		location = relativeURL(state.FinalDestinationURL)
-	}
+		// Allow absolute redirects to the trusted setup subdomain.
+		if s.cfg.SetupSiteURL != "" && isTrustedSetupRedirect(state.FinalDestinationURL, s.cfg.SetupSiteURL) {
+			s.logger.InfoContext(ctx, fmt.Sprintf("Redirecting to setup domain: '%s'", state.FinalDestinationURL))
+			return state.FinalDestinationURL
+		}
 
-	if location != "" {
-		msg := fmt.Sprintf("Found destination URL in state: '%s'", location)
-		s.logger.InfoContext(ctx, msg)
-
-		return location
+		if location := relativeURL(state.FinalDestinationURL); location != "" {
+			s.logger.InfoContext(ctx, fmt.Sprintf("Found destination URL in state: '%s'", location))
+			return location
+		}
 	}
 
 	return s.cfg.SignInRedirectURL
+}
+
+// isTrustedSetupRedirect returns true if destURL is an absolute URL whose
+// origin (scheme + host) matches the trusted setup site URL.
+func isTrustedSetupRedirect(destURL, setupSiteURL string) bool {
+	dest, err := url.Parse(destURL)
+	if err != nil || dest.Host == "" {
+		return false
+	}
+	trusted, err := url.Parse(setupSiteURL)
+	if err != nil || trusted.Host == "" {
+		return false
+	}
+	return dest.Scheme == trusted.Scheme && dest.Host == trusted.Host
 }
 
 // relativeURL converts any URL to a safe relative URL by extracting only the

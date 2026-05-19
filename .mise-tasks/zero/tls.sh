@@ -117,6 +117,7 @@ cert_names() {
     "$server_host" \
     "$assistant_host" \
     "localhost" \
+    "setup.localhost" \
     "127.0.0.1" \
     "::1" \
     "gram.local" \

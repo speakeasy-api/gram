@@ -31,6 +31,8 @@ import { usePageTitle } from "./hooks/use-page-title";
 import CliCallback from "./pages/cli/CliCallback";
 import SlackRegister from "./pages/slackapp/SlackRegister";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
+import SetupPage from "./pages/setup/Setup";
+import { isSetupDomain } from "./lib/utils";
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -246,6 +248,8 @@ const RouteProvider = () => {
           <Route index element={<SlackRegister />} />
         </Route>
         <Route path="/" element={<LoginCheck />}>
+          {/* On the setup subdomain, render the wizard at "/" so the org slug stays hidden */}
+          {isSetupDomain() && <Route index element={<SetupPage />} />}
           <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}
           </Route>
@@ -257,6 +261,7 @@ const RouteProvider = () => {
             />
             {routesWithSubroutes(authenticatedRoutes)}
           </Route>
+          <Route path=":orgSlug/setup" element={<SetupPage />} />
           <Route path=":orgSlug" element={<OrgLayout />}>
             {orgHomeRoute?.component && (
               <Route index element={<orgHomeRoute.component />} />

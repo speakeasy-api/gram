@@ -29,6 +29,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { orgRoutePaths } from "@/routes";
+import { isSetupDomain } from "@/lib/utils";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -85,7 +86,9 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     // skeleton flash for logged-out users before the redirect to /login fires.
     if (
       location.pathname === "/" ||
-      UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p))
+      UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p)) ||
+      location.pathname.endsWith("/setup") ||
+      isSetupDomain()
     ) {
       return null;
     }
@@ -148,6 +151,22 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   // Handle initial navigation
   const redirectParam = searchParams.get("redirect");
+
+  // On the setup subdomain, always funnel authenticated users to the setup wizard.
+  // The setup domain renders the wizard at "/" so the org slug stays out of the URL.
+  // Early-return after the redirect so we never hit the slug-based navigation below
+  // (which would redirect to /:orgSlug and cause a loop).
+  if (isSetupDomain() && session.organization) {
+    if (location.pathname !== "/") {
+      return <Navigate to="/" replace />;
+    }
+    return (
+      <SessionContext.Provider value={session}>
+        {children}
+      </SessionContext.Provider>
+    );
+  }
+
   if (redirectParam) {
     return <Navigate to={redirectParam} replace />;
   } else if (isSlugExempt) {

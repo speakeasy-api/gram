@@ -107,6 +107,11 @@ GRAM_ENVIRONMENT = "local"
 GRAM_HOST = "localhost" # Only needed for local development. In production, you should set GRAM_SERVER_URL and GRAM_SITE_URL directly.
 GRAM_SITE_PORT = "5173"
 GRAM_SITE_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SITE_PORT}}"
+GRAM_SETUP_SITE_URL = "https://setup.{{env.GRAM_HOST}}:{{env.GRAM_SITE_PORT}}"
+## In production set this to the apex domain (e.g. getgram.ai) so session
+## cookies are shared across subdomains (app.*, setup.*).  Leave blank for
+## local dev — "localhost" is a reserved TLD and Chrome rejects Domain=localhost.
+# GRAM_COOKIE_DOMAIN = ""
 GRAM_SERVER_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SERVER_PORT}}"
 GRAM_ASSETS_BACKEND = "fs"
 GRAM_ASSETS_URI = ".assets"
