@@ -41,17 +41,26 @@ func TestConvertPresidioFindings_FiltersIPv6Unspecified(t *testing.T) {
 func TestIsPresidioFalsePositive_OnlyIPAddressUnspecified(t *testing.T) {
 	t.Parallel()
 
-	// Unspecified IPv6 variants are filtered.
+	// Unspecified addresses are filtered, IPv6 and IPv4.
 	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "::"))
 	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "::0"))
 	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "0::0"))
 	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "0:0:0:0:0:0:0:0"))
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "0.0.0.0"))
 	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "  ::  "), "trimmed")
+
+	// IPv6 short-form "<hex>::" patterns dominate Presidio's IP_ADDRESS
+	// noise on prod (hex constants and text fragments greedily matched).
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "b::"))
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "dead::"))
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "1::"))
+	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "DEAF::"), "case-insensitive")
 
 	// Real addresses are not filtered.
 	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "127.0.0.1"))
 	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "2001:db8::1"))
 	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "::1"), "loopback is a real address")
+	assert.False(t, isPresidioFalsePositive("IP_ADDRESS", "dead::beef"), "two-group IPv6 still real")
 
 	// Other entity types are never filtered by this rule.
 	assert.False(t, isPresidioFalsePositive("EMAIL_ADDRESS", "::"))
