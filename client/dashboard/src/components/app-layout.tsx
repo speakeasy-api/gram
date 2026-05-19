@@ -2,10 +2,12 @@ import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth.tsx";
 import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
+import { isSetupDomain } from "@/lib/utils";
 import { Icon, Modal, ModalProvider } from "@speakeasy-api/moonshine";
 import { ShieldAlert } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
+import Login from "@/pages/login/Login";
 import { AppSidebar } from "./app-sidebar.tsx";
 import { BrandGradientLine } from "./brand-gradient-line.tsx";
 import { InsightsProvider } from "./insights-sidebar.tsx";
@@ -19,6 +21,10 @@ export const LoginCheck = () => {
   const location = useLocation();
 
   if (session.session === "") {
+    // On setup domain, render login inline — no redirect, no URL change
+    if (isSetupDomain()) {
+      return <Login />;
+    }
     const redirectTo = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?redirect=${redirectTo}`} />;
   }

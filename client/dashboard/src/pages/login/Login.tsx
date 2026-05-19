@@ -14,9 +14,14 @@ export default function Login() {
 
   const explicitRedirect = searchParams.get("redirect");
   const disposition = searchParams.get("disposition");
-  const redirectTo =
-    explicitRedirect ??
-    (disposition ? `/?disposition=${encodeURIComponent(disposition)}` : null);
+  // On setup domain, redirect back to the setup origin after auth so the
+  // server doesn't send us to the default GRAM_SITE_URL (app domain).
+  const redirectTo = isSetupDomain()
+    ? window.location.origin
+    : (explicitRedirect ??
+      (disposition
+        ? `/?disposition=${encodeURIComponent(disposition)}`
+        : null));
   useEffect(() => {
     if (session.session !== "") {
       // Disposition signups must reach the server-side Callback so
