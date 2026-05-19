@@ -19091,6 +19091,138 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: RiskListResults
+    /rpc/risk.results.listForAgent:
+        get:
+            description: List risk analysis results with the `match` field redacted to an opaque length+sha256-prefix fingerprint. Matches the payload and pagination semantics of listRiskResults. Designed for AI assistant / MCP consumption so secret content (gitleaks captures, presidio entities, prompt-injection payloads) never reaches the model context. For shadow_mcp findings the `match` value — a non-sensitive server URL or command identifier — is passed through verbatim.
+            operationId: listRiskResultsForAgent
+            parameters:
+                - allowEmptyValue: true
+                  description: Optional policy ID to filter by.
+                  in: query
+                  name: policy_id
+                  schema:
+                    description: Optional policy ID to filter by.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional chat ID to filter by.
+                  in: query
+                  name: chat_id
+                  schema:
+                    description: Optional chat ID to filter by.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Cursor to fetch the next page of results.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor to fetch the next page of results.
+                    type: string
+                - allowEmptyValue: true
+                  description: Maximum number of results to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    description: Maximum number of results to return per page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListRiskResultsForAgentResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listRiskResultsForAgent risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.results
+            x-speakeasy-name-override: listForAgent
+            x-speakeasy-react-hook:
+                name: RiskListResultsForAgent
     /rpc/slack-apps.configure:
         post:
             description: Store Slack credentials (client ID, client secret, signing secret) for an app.
@@ -31237,6 +31369,24 @@ components:
                     description: Cursor for the next page of results.
             required:
                 - chats
+        ListRiskResultsForAgentResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of results.
+                results:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskResultRedacted'
+                    description: The list of risk results with match content redacted to opaque fingerprints.
+                total_count:
+                    type: integer
+                    description: Total number of findings across all enabled policies.
+                    format: int64
+            required:
+                - results
+                - total_count
         ListRiskResultsResult:
             type: object
             properties:
@@ -34055,6 +34205,72 @@ components:
                 - chat_message_id
                 - source
                 - created_at
+        RiskResultRedacted:
+            type: object
+            properties:
+                chat_id:
+                    type: string
+                    description: The chat session containing the message.
+                    format: uuid
+                chat_message_id:
+                    type: string
+                    description: The chat message that was scanned.
+                    format: uuid
+                chat_title:
+                    type: string
+                    description: Title of the chat session.
+                confidence:
+                    type: number
+                    description: Confidence score for this finding.
+                    format: double
+                created_at:
+                    type: string
+                    description: When this result was created.
+                    format: date-time
+                description:
+                    type: string
+                    description: Human-readable description of the finding.
+                id:
+                    type: string
+                    description: The result ID.
+                    format: uuid
+                match_redacted:
+                    type: string
+                    description: Opaque fingerprint of the original match in the form `<redacted len=N sha=XXXXXXXX>` where N is the byte length of the original match and XXXXXXXX is the first 8 hex characters of sha256(match). For shadow_mcp findings the original match value (a non-sensitive server URL or command identifier) is passed through verbatim.
+                policy_id:
+                    type: string
+                    description: The risk policy ID.
+                    format: uuid
+                policy_version:
+                    type: integer
+                    description: Policy version when this result was produced.
+                    format: int64
+                position_known:
+                    type: boolean
+                    description: Whether the original finding carried byte-position information within the source message. Exact positions are intentionally not exposed to avoid reconstruction attacks.
+                rule_id:
+                    type: string
+                    description: The matched rule identifier.
+                source:
+                    type: string
+                    description: Detection source (e.g. gitleaks, presidio, shadow_mcp).
+                tags:
+                    type: array
+                    items:
+                        type: string
+                    description: Tags from the detection rule.
+                user_id:
+                    type: string
+                    description: The user who owns the chat session.
+            required:
+                - id
+                - policy_id
+                - policy_version
+                - chat_message_id
+                - source
+                - created_at
+                - match_redacted
+                - position_known
         Role:
             type: object
             properties:

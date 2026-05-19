@@ -45,6 +45,10 @@ type Client struct {
 	// listRiskResults endpoint.
 	ListRiskResultsDoer goahttp.Doer
 
+	// ListRiskResultsForAgent Doer is the HTTP client used to make requests to the
+	// listRiskResultsForAgent endpoint.
+	ListRiskResultsForAgentDoer goahttp.Doer
+
 	// ListRiskResultsByChat Doer is the HTTP client used to make requests to the
 	// listRiskResultsByChat endpoint.
 	ListRiskResultsByChatDoer goahttp.Doer
@@ -96,6 +100,7 @@ func NewClient(
 		UpdateRiskPolicyDoer:        doer,
 		DeleteRiskPolicyDoer:        doer,
 		ListRiskResultsDoer:         doer,
+		ListRiskResultsForAgentDoer: doer,
 		ListRiskResultsByChatDoer:   doer,
 		GetRiskPolicyStatusDoer:     doer,
 		ListShadowMCPApprovalsDoer:  doer,
@@ -273,6 +278,30 @@ func (c *Client) ListRiskResults() goa.Endpoint {
 		resp, err := c.ListRiskResultsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "listRiskResults", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRiskResultsForAgent returns an endpoint that makes HTTP requests to the
+// risk service listRiskResultsForAgent server.
+func (c *Client) ListRiskResultsForAgent() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRiskResultsForAgentRequest(c.encoder)
+		decodeResponse = DecodeListRiskResultsForAgentResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRiskResultsForAgentRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRiskResultsForAgentDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "listRiskResultsForAgent", err)
 		}
 		return decodeResponse(resp)
 	}

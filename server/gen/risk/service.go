@@ -31,6 +31,14 @@ type Service interface {
 	DeleteRiskPolicy(context.Context, *DeleteRiskPolicyPayload) (err error)
 	// List risk analysis results for the current project.
 	ListRiskResults(context.Context, *ListRiskResultsPayload) (res *ListRiskResultsResult, err error)
+	// List risk analysis results with the `match` field redacted to an opaque
+	// length+sha256-prefix fingerprint. Matches the payload and pagination
+	// semantics of listRiskResults. Designed for AI assistant / MCP consumption so
+	// secret content (gitleaks captures, presidio entities, prompt-injection
+	// payloads) never reaches the model context. For shadow_mcp findings the
+	// `match` value — a non-sensitive server URL or command identifier — is passed
+	// through verbatim.
+	ListRiskResultsForAgent(context.Context, *ListRiskResultsForAgentPayload) (res *ListRiskResultsForAgentResult, err error)
 	// List risk results grouped by chat session for the current project.
 	ListRiskResultsByChat(context.Context, *ListRiskResultsByChatPayload) (res *ListRiskResultsByChatResult, err error)
 	// Get the analysis status of a risk policy including progress and workflow
@@ -72,7 +80,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis"}
+var MethodNames = [14]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis"}
 
 // ApproveShadowMCPPayload is the payload type of the risk service
 // approveShadowMCP method.
@@ -184,6 +192,33 @@ type ListRiskResultsByChatPayload struct {
 type ListRiskResultsByChatResult struct {
 	// Risk results grouped by chat.
 	Chats []*types.RiskChatSummary
+	// Cursor for the next page of results.
+	NextCursor *string
+}
+
+// ListRiskResultsForAgentPayload is the payload type of the risk service
+// listRiskResultsForAgent method.
+type ListRiskResultsForAgentPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Optional policy ID to filter by.
+	PolicyID *string
+	// Optional chat ID to filter by.
+	ChatID *string
+	// Cursor to fetch the next page of results.
+	Cursor *string
+	// Maximum number of results to return per page.
+	Limit *int
+}
+
+// ListRiskResultsForAgentResult is the result type of the risk service
+// listRiskResultsForAgent method.
+type ListRiskResultsForAgentResult struct {
+	// The list of risk results with match content redacted to opaque fingerprints.
+	Results []*types.RiskResultRedacted
+	// Total number of findings across all enabled policies.
+	TotalCount int64
 	// Cursor for the next page of results.
 	NextCursor *string
 }

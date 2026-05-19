@@ -196,6 +196,7 @@ export * from "./riskCreatePolicy.js";
 export * from "./riskListPolicies.js";
 export * from "./riskListResults.js";
 export * from "./riskListResultsByChat.js";
+export * from "./riskListResultsForAgent.js";
 export * from "./riskListShadowMCPApprovals.js";
 export * from "./riskPoliciesDelete.js";
 export * from "./riskPoliciesGet.js";

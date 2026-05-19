@@ -2,6 +2,8 @@ package risk
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -670,6 +672,80 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 		return s.listResultsByPolicy(ctx, *authCtx.ProjectID, *payload.PolicyID, cursor, pageSize, totalCount)
 	}
 	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount)
+}
+
+// ListRiskResultsForAgent serves the same data as ListRiskResults but strips
+// raw `match` content from non-shadow_mcp findings before returning, so the
+// agent / MCP surface never holds secret values in model context. Shadow-MCP
+// findings pass `match` through verbatim because the value is a server URL
+// or stdio command identifier the dashboard already exposes unmasked.
+func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.ListRiskResultsForAgentPayload) (*gen.ListRiskResultsForAgentResult, error) {
+	base, err := s.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
+		ApikeyToken:      payload.ApikeyToken,
+		SessionToken:     payload.SessionToken,
+		ProjectSlugInput: payload.ProjectSlugInput,
+		PolicyID:         payload.PolicyID,
+		ChatID:           payload.ChatID,
+		Cursor:           payload.Cursor,
+		Limit:            payload.Limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	redacted := make([]*types.RiskResultRedacted, 0, len(base.Results))
+	for _, r := range base.Results {
+		redacted = append(redacted, redactRiskResult(r))
+	}
+
+	return &gen.ListRiskResultsForAgentResult{
+		Results:    redacted,
+		TotalCount: base.TotalCount,
+		NextCursor: base.NextCursor,
+	}, nil
+}
+
+// redactRiskResult converts a RiskResult into a RiskResultRedacted by
+// replacing raw `match` content with an opaque length+sha256-prefix
+// fingerprint and coarsening position info to a single boolean. Source ==
+// "shadow_mcp" is a deliberate carve-out: its match is a server URL or
+// command identifier (already shown unmasked in the dashboard) and the agent
+// needs to be able to name it to be useful.
+func redactRiskResult(r *types.RiskResult) *types.RiskResultRedacted {
+	matchRedacted := redactMatch(r.Source, r.Match)
+
+	return &types.RiskResultRedacted{
+		ID:            r.ID,
+		PolicyID:      r.PolicyID,
+		PolicyVersion: r.PolicyVersion,
+		ChatMessageID: r.ChatMessageID,
+		ChatID:        r.ChatID,
+		ChatTitle:     r.ChatTitle,
+		UserID:        r.UserID,
+		Source:        r.Source,
+		RuleID:        r.RuleID,
+		Description:   r.Description,
+		MatchRedacted: matchRedacted,
+		PositionKnown: r.StartPos != nil && r.EndPos != nil,
+		Confidence:    r.Confidence,
+		Tags:          r.Tags,
+		CreatedAt:     r.CreatedAt,
+	}
+}
+
+// redactMatch encodes a match value as `<redacted len=N sha=XXXXXXXX>` for
+// non-shadow_mcp sources, or passes it through verbatim for shadow_mcp.
+// A nil/empty match collapses to `<redacted len=0>` without a sha component
+// so the absence of a finding payload is distinguishable from a real hash.
+func redactMatch(source string, match *string) string {
+	if match == nil || *match == "" {
+		return "<redacted len=0>"
+	}
+	if source == shadowmcp.SourceShadowMCP {
+		return *match
+	}
+	sum := sha256.Sum256([]byte(*match))
+	return fmt.Sprintf("<redacted len=%d sha=%s>", len(*match), hex.EncodeToString(sum[:4]))
 }
 
 func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRiskResultsByChatPayload) (*gen.ListRiskResultsByChatResult, error) {

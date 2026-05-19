@@ -1,3 +1,4 @@
+import { InsightsConfig } from "@/components/insights-sidebar";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
@@ -359,12 +360,54 @@ function PolicyCenterContent() {
     );
   }
 
+  const enabledPolicies = policies.filter((p) => p.enabled);
+  const insightsContext = [
+    "Page: Policy Center.",
+    `Total policies: ${policies.length}, enabled: ${enabledPolicies.length}.`,
+    `Policy actions: ${policies.map((p) => `${p.name} (${p.action})`).join(", ") || "none"}.`,
+    "Available risk tools: listRiskPolicies, getRiskPolicy, getRiskCapabilities, getRiskPolicyStatus, listRiskResultsForAgent (finding-level with match redaction), listRiskResultsByChat, listShadowMCPApprovals.",
+    "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
+  ].join(" ");
+
+  const insightsSuggestions = [
+    {
+      title: "Policy status snapshot",
+      label: "what's running and what's stuck",
+      prompt:
+        "For each policy returned by listRiskPolicies, call getRiskPolicyStatus and report: enabled flag, action (flag vs block), total messages, pending messages, and workflow state. Flag any policy with non-zero pending messages.",
+    },
+    {
+      title: "Quiet policies",
+      label: "policies with no recent findings",
+      prompt:
+        "Identify policies that have not produced any findings in the last 30 days. Use listRiskResultsForAgent with policy_id to check each policy. Report by name and last-seen finding date.",
+    },
+    {
+      title: "Coverage by source",
+      label: "what's each source catching",
+      prompt:
+        "Group findings by source (gitleaks, presidio, prompt_injection, shadow_mcp, destructive_tool) over the last 7 days using listRiskResultsForAgent. Report counts and the top rule_id per source family.",
+    },
+    {
+      title: "Capabilities check",
+      label: "what detectors are available",
+      prompt:
+        "Call getRiskCapabilities and tell me which detection backends are configured on this server (e.g. prompt-injection ML classifier).",
+    },
+  ];
+
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
+        <InsightsConfig
+          contextInfo={insightsContext}
+          suggestions={insightsSuggestions}
+          title="Policy insights"
+          subtitle="Ask about policy status, coverage, and detector capabilities. Match content is redacted before it reaches the assistant."
+        />
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">Risk Policies</h2>
