@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -72,7 +73,7 @@ func (l *Logger) LogOtelForwardingUpsert(ctx context.Context, dbtx repo.DBTX, ev
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OtelForwarding})
 }
 
 type LogOtelForwardingDeleteEvent struct {
@@ -109,5 +110,5 @@ func (l *Logger) LogOtelForwardingDelete(ctx context.Context, dbtx repo.DBTX, ev
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OtelForwarding})
 }

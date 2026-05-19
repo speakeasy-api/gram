@@ -8,6 +8,7 @@ import (
 	organizationsgen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -62,7 +63,7 @@ func (l *Logger) LogOrganizationInviteCreate(ctx context.Context, dbtx repo.DBTX
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationInvite})
 }
 
 type LogOrganizationInviteRevokeEvent struct {
@@ -113,7 +114,7 @@ func (l *Logger) LogOrganizationInviteRevoke(ctx context.Context, dbtx repo.DBTX
 		AfterSnapshot:  afterSnapshot,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationInvite})
 }
 
 type LogOrganizationInviteRoleUpdateEvent struct {
@@ -164,7 +165,7 @@ func (l *Logger) LogOrganizationInviteRoleUpdate(ctx context.Context, dbtx repo.
 		AfterSnapshot:  afterSnapshot,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationInvite})
 }
 
 type LogOrganizationWebhooksToggledEvent struct {
@@ -209,5 +210,5 @@ func (l *Logger) LogOrganizationWebhooksToggled(ctx context.Context, dbtx repo.D
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationWebhooks})
 }
