@@ -21,13 +21,10 @@ type CreateRemoteSessionClientRequestBody struct {
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The user_session_issuer this client is paired with.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
-	// Manual-path client_id supplied by the caller.
+	// client_id supplied by the caller.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
-	// Manual-path client secret. Gram encrypts before persisting.
+	// client_secret supplied by the caller. Gram encrypts before persisting.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
-	// When true, Gram fires an outbound RFC 7591 DCR call against the issuer's
-	// registration_endpoint and ignores client_id and client_secret.
-	AutoRegister *bool `form:"auto_register,omitempty" json:"auto_register,omitempty" xml:"auto_register,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Omit to default
 	// to client_secret_basic.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -2341,9 +2338,8 @@ func NewCreateRemoteSessionClientPayload(body *CreateRemoteSessionClientRequestB
 	v := &remotesessionclients.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
 		UserSessionIssuerID:     *body.UserSessionIssuerID,
-		ClientID:                body.ClientID,
+		ClientID:                *body.ClientID,
 		ClientSecret:            body.ClientSecret,
-		AutoRegister:            body.AutoRegister,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 	}
 	v.SessionToken = sessionToken
@@ -2432,6 +2428,9 @@ func ValidateCreateRemoteSessionClientRequestBody(body *CreateRemoteSessionClien
 	}
 	if body.UserSessionIssuerID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
 	if body.RemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))

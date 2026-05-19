@@ -20,7 +20,7 @@ var _ = Service("remoteSessionClients", func() {
 	shared.DeclareErrorResponses()
 
 	Method("createRemoteSessionClient", func() {
-		Description("Register a remote_session_client. Two paths: manual (caller supplies client_id and optionally client_secret) or auto-DCR (auto_register=true triggers an outbound RFC 7591 registration against the issuer's registration_endpoint).")
+		Description("Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.")
 
 		Payload(func() {
 			Extend(CreateRemoteSessionClientForm)
@@ -189,7 +189,7 @@ var _ = Service("remoteSessionClients", func() {
 })
 
 var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func() {
-	Description("Form for creating a remote_session_client. Either supply client_id (manual path) or set auto_register=true (DCR path).")
+	Description("Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer.")
 
 	Attribute("remote_session_issuer_id", String, "The owning remote_session_issuer id.", func() {
 		Format(FormatUUID)
@@ -197,12 +197,11 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 	Attribute("user_session_issuer_id", String, "The user_session_issuer this client is paired with.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("client_id", String, "Manual-path client_id supplied by the caller.")
-	Attribute("client_secret", String, "Manual-path client secret. Gram encrypts before persisting.")
-	Attribute("auto_register", Boolean, "When true, Gram fires an outbound RFC 7591 DCR call against the issuer's registration_endpoint and ignores client_id and client_secret.")
+	Attribute("client_id", String, "client_id supplied by the caller.")
+	Attribute("client_secret", String, "client_secret supplied by the caller. Gram encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
 
-	Required("remote_session_issuer_id", "user_session_issuer_id")
+	Required("remote_session_issuer_id", "user_session_issuer_id", "client_id")
 })
 
 var CloneClientFromOAuthProxyProviderForm = Type("CloneClientFromOAuthProxyProviderForm", func() {

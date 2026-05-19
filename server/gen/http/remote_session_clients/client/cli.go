@@ -24,7 +24,7 @@ func BuildCreateRemoteSessionClientPayload(remoteSessionClientsCreateRemoteSessi
 	{
 		err = json.Unmarshal([]byte(remoteSessionClientsCreateRemoteSessionClientBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"auto_register\": false,\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
@@ -60,7 +60,6 @@ func BuildCreateRemoteSessionClientPayload(remoteSessionClientsCreateRemoteSessi
 		UserSessionIssuerID:     body.UserSessionIssuerID,
 		ClientID:                body.ClientID,
 		ClientSecret:            body.ClientSecret,
-		AutoRegister:            body.AutoRegister,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 	}
 	v.SessionToken = sessionToken

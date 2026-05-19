@@ -21,19 +21,15 @@ export type CreateRemoteSessionClientFormTokenEndpointAuthMethod = ClosedEnum<
 >;
 
 /**
- * Form for creating a remote_session_client. Either supply client_id (manual path) or set auto_register=true (DCR path).
+ * Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer.
  */
 export type CreateRemoteSessionClientForm = {
   /**
-   * When true, Gram fires an outbound RFC 7591 DCR call against the issuer's registration_endpoint and ignores client_id and client_secret.
+   * client_id supplied by the caller.
    */
-  autoRegister?: boolean | undefined;
+  clientId: string;
   /**
-   * Manual-path client_id supplied by the caller.
-   */
-  clientId?: string | undefined;
-  /**
-   * Manual-path client secret. Gram encrypts before persisting.
+   * client_secret supplied by the caller. Gram encrypts before persisting.
    */
   clientSecret?: string | undefined;
   /**
@@ -59,8 +55,7 @@ export const CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema
 
 /** @internal */
 export type CreateRemoteSessionClientForm$Outbound = {
-  auto_register?: boolean | undefined;
-  client_id?: string | undefined;
+  client_id: string;
   client_secret?: string | undefined;
   remote_session_issuer_id: string;
   token_endpoint_auth_method?: string | undefined;
@@ -73,8 +68,7 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
   CreateRemoteSessionClientForm
 > = z.pipe(
   z.object({
-    autoRegister: z.optional(z.boolean()),
-    clientId: z.optional(z.string()),
+    clientId: z.string(),
     clientSecret: z.optional(z.string()),
     remoteSessionIssuerId: z.string(),
     tokenEndpointAuthMethod: z.optional(
@@ -84,7 +78,6 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      autoRegister: "auto_register",
       clientId: "client_id",
       clientSecret: "client_secret",
       remoteSessionIssuerId: "remote_session_issuer_id",
