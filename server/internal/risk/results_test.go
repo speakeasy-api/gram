@@ -276,3 +276,133 @@ func TestDeleteRiskPolicy_Unauthorized(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
+
+// seedRiskResultWith inserts a finding with caller-supplied source, rule_id,
+// and match so redaction-mode tests can vary inputs independently of the
+// gitleaks-flavoured default in seedRiskResult.
+func seedRiskResultWith(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string, policyID uuid.UUID, msgID uuid.UUID, source, ruleID, match string) {
+	t.Helper()
+	ctx := t.Context()
+
+	resultID, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	repo := riskrepo.New(ti.conn)
+	_, err = repo.InsertRiskResults(ctx, []riskrepo.InsertRiskResultsParams{{
+		ID:                resultID,
+		ProjectID:         projectID,
+		OrganizationID:    orgID,
+		RiskPolicyID:      policyID,
+		RiskPolicyVersion: 1,
+		ChatMessageID:     msgID,
+		Source:            source,
+		Found:             true,
+		RuleID:            pgtype.Text{String: ruleID, Valid: ruleID != ""},
+		Description:       pgtype.Text{String: "", Valid: false},
+		Match:             pgtype.Text{String: match, Valid: match != ""},
+		StartPos:          pgtype.Int4{Int32: 0, Valid: true},
+		EndPos:            pgtype.Int4{Int32: int32(len(match)), Valid: true}, //nolint:gosec // test fixture, match len is bounded
+		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
+		Tags:              nil,
+	}})
+	require.NoError(t, err)
+}
+
+func TestListRiskResultsForAgent_RedactsGitleaksMatch(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Agent Redact")})
+	require.NoError(t, err)
+
+	policyID, _ := uuid.Parse(policy.ID)
+	_, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msgID, true)
+
+	result, err := ti.service.ListRiskResultsForAgent(ctx, &gen.ListRiskResultsForAgentPayload{
+		PolicyID: &policy.ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 1)
+
+	got := result.Results[0]
+	// seedRiskResult uses match "AKIAIOSFODNN7EXAMPLE" (len 20).
+	require.NotContains(t, got.MatchRedacted, "AKIA", "raw secret leaked into redacted output")
+	require.Contains(t, got.MatchRedacted, "len=20")
+	require.Regexp(t, `^<redacted len=20 sha=[0-9a-f]{8}>$`, got.MatchRedacted)
+	require.True(t, got.PositionKnown, "position_known should be true when start/end pos are present")
+	require.Equal(t, "aws-access-key-id", *got.RuleID)
+}
+
+func TestListRiskResultsForAgent_ShadowMCPPassthrough(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:    new("Shadow Passthrough"),
+		Sources: []string{"shadow_mcp"},
+	})
+	require.NoError(t, err)
+
+	policyID, _ := uuid.Parse(policy.ID)
+	_, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	const shadowMatch = "mcp__evil-server__"
+	seedRiskResultWith(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, msgID, "shadow_mcp", "unapproved-mcp", shadowMatch)
+
+	result, err := ti.service.ListRiskResultsForAgent(ctx, &gen.ListRiskResultsForAgentPayload{
+		PolicyID: &policy.ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 1)
+	require.Equal(t, shadowMatch, result.Results[0].MatchRedacted, "shadow_mcp match should pass through verbatim")
+}
+
+func TestListRiskResultsForAgent_DeterministicFingerprint(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Dedupe")})
+	require.NoError(t, err)
+	policyID, _ := uuid.Parse(policy.ID)
+
+	_, msgA := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	_, msgB := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	const sameSecret = "sk-abc123def456"
+	seedRiskResultWith(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, msgA, "gitleaks", "openai-api-key", sameSecret)
+	seedRiskResultWith(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, msgB, "gitleaks", "openai-api-key", sameSecret)
+
+	result, err := ti.service.ListRiskResultsForAgent(ctx, &gen.ListRiskResultsForAgentPayload{
+		PolicyID: &policy.ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 2)
+	require.Equal(t, result.Results[0].MatchRedacted, result.Results[1].MatchRedacted,
+		"identical secrets must produce identical fingerprints so the agent can dedupe")
+}
+
+func TestListRiskResultsForAgent_Unauthorized(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn)
+
+	_, err := ti.service.ListRiskResultsForAgent(ctx, &gen.ListRiskResultsForAgentPayload{})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
