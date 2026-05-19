@@ -20,6 +20,7 @@ import {
   type FrontendTool,
 } from "@/lib/tools";
 import { compactForModel } from "@/lib/contextCompaction";
+import { describeStreamError } from "@/lib/streamErrorMessage";
 import { cn } from "@/lib/utils";
 import { recommended } from "@/plugins";
 import { ElementsConfig, Model } from "@/types";
@@ -465,11 +466,17 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           // fresh random messageId into every `start` chunk. On auto-resume that mismatches the
           // prior assistant message's id, so useChat pushes a new UIMessage carrying the snapshot
           // of the prior turn's parts — duplicating text and tool_calls into storage.
+          //
+          // onError: AI SDK masks errors by default; surface the friendly
+          // credits prompt for 402, otherwise keep the masking intact.
           return createUIMessageStream({
             execute: ({ writer }) => {
               writer.merge(result.toUIMessageStream());
             },
             originalMessages: messages,
+            onError: (error) =>
+              describeStreamError(error) ??
+              "An error occurred while generating a response.",
           });
         } catch (error) {
           console.error("Error creating stream:", error);
