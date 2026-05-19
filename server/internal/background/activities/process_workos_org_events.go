@@ -14,10 +14,12 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
@@ -42,10 +44,8 @@ type ProcessWorkOSOrganizationEventsResult struct {
 }
 
 // ProcessWorkOSOrganizationEvents pages through WorkOS organization-scoped events
-// since the stored cursor, advancing the cursor as it goes. Event handling itself
-// (upserting org metadata, role rows, etc.) is wired in a follow-up PR — for now
-// the activity only advances the cursor so subsequent runs pick up where this
-// left off.
+// since the stored cursor, applying supported organization, role, and
+// membership events in a transaction before advancing the cursor.
 type ProcessWorkOSOrganizationEvents struct {
 	db           *pgxpool.Pool
 	logger       *slog.Logger
@@ -151,22 +151,14 @@ func (p *ProcessWorkOSOrganizationEvents) handlePage(ctx context.Context, logger
 		if err != nil {
 			return lastEventID, oops.E(oops.CodeUnexpected, err, "failed to handle WorkOS event").Log(ctx, eventLogger)
 		}
-		if eventID != "" {
-			lastEventID = eventID
-		}
+		lastEventID = eventID
 	}
 
 	return lastEventID, nil
 }
 
-// handleEvent will be implemented in a subsequent PR.
-//
-// Note: the cursor advances as soon as this returns nil, even though the
-// dispatched handler is currently a no-op. If the workflow runs before the
-// real handlers land, all in-flight WorkOS events will be consumed and the
-// cursor will move past them — real handlers will only see events going
-// forward. That is the intended design (sync handles forward, not history;
-// historical state is reconciled by the future backfill workflow).
+// handleEvent applies a single WorkOS event and advances the per-organization
+// cursor in the same transaction.
 func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logger *slog.Logger, workosOrgID string, event events.Event) (string, error) {
 	dbtx, err := p.db.Begin(ctx)
 	if err != nil {
@@ -174,7 +166,8 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	if err := handleOrganizationEvent(ctx, logger, dbtx, event); err != nil {
+	externalIDUpdate, err := handleOrganizationEvent(ctx, logger, dbtx, event)
+	if err != nil {
 		return "", err
 	}
 
@@ -189,29 +182,35 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 		return "", fmt.Errorf("commit transaction: %w", err)
 	}
 
+	if externalIDUpdate != nil {
+		if err := p.workosClient.EnsureOrgExternalID(ctx, externalIDUpdate.workosOrgID, externalIDUpdate.externalID); err != nil {
+			logger.WarnContext(ctx, "failed to set WorkOS organization external ID", attr.SlogError(err))
+		}
+	}
+
 	return event.ID, nil
 }
 
 // handleOrganizationEvent dispatches a WorkOS event scoped to a specific
 // organization to its handler. Each handler is responsible for the
 // ShouldProcessEvent guard against duplicate apply.
-func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
+func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) (*workosOrgExternalIDUpdate, error) {
 	switch event.Event {
 	case string(workos.EventKindOrganizationCreated), string(workos.EventKindOrganizationUpdated):
 		return handleOrganizationUpsert(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationDeleted):
-		return handleOrganizationDeleted(ctx, logger, dbtx, event)
+		return nil, handleOrganizationDeleted(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationRoleCreated), string(workos.EventKindOrganizationRoleUpdated):
-		return handleRoleUpsert(ctx, logger, dbtx, event)
+		return nil, handleRoleUpsert(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationRoleDeleted):
-		return handleRoleDeleted(ctx, logger, dbtx, event)
+		return nil, handleRoleDeleted(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationMembershipCreated), string(workos.EventKindOrganizationMembershipUpdated):
-		return handleOrganizationMembershipUpsert(ctx, logger, dbtx, event)
+		return nil, handleOrganizationMembershipUpsert(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationMembershipDeleted):
-		return handleOrganizationMembershipDeleted(ctx, logger, dbtx, event)
+		return nil, handleOrganizationMembershipDeleted(ctx, logger, dbtx, event)
 	}
 
-	return oops.Permanent(fmt.Errorf("unhandled workos organization event type: %s", event.Event))
+	return nil, oops.Permanent(fmt.Errorf("unhandled workos organization event type: %s", event.Event))
 }
 
 // workosOrganizationEventPayload is the relevant subset of an
@@ -223,61 +222,130 @@ type workosOrganizationEventPayload struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
+type workosOrgExternalIDUpdate struct {
+	workosOrgID string
+	externalID  string
+}
+
 // handleOrganizationUpsert applies an organization.created or
-// organization.updated event. Maps the WorkOS organization to a Gram org by
-// looking up workos_id; falls back to the payload's external_id for orgs not
-// yet linked.
-func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
+// organization.updated event. WorkOS external_id is the Gram organization ID
+// when present. If WorkOS has no external_id, Gram derives a deterministic org
+// ID from the WorkOS org ID and writes that ID back to WorkOS after committing
+// the local transaction. WorkOS owns name/workos_id metadata, but never updates
+// an existing Gram slug.
+func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) (*workosOrgExternalIDUpdate, error) {
 	var payload workosOrganizationEventPayload
 	if err := json.Unmarshal(event.Data, &payload); err != nil {
-		return oops.Permanent(fmt.Errorf("unmarshal organization event payload: %w", err))
+		return nil, oops.Permanent(fmt.Errorf("unmarshal organization event payload: %w", err))
 	}
 
 	repo := orgrepo.New(dbtx)
 
 	row, err := repo.GetOrganizationByWorkosID(ctx, conv.ToPGText(payload.ID))
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		if payload.ExternalID == "" {
-			// Unlinked org with no external_id: skip + advance cursor so a
-			// later event in the same stream that does carry an external_id
-			// (or sets workos_id via another path) can still land. A
-			// permanent error here would stall the per-org workflow and
-			// block every subsequent event for this org.
-			logger.WarnContext(ctx, "skipping organization event for unlinked org with no external_id", attr.SlogWorkOSOrganizationID(payload.ID))
-			return nil
+	case err == nil:
+		if err := updateOrganizationFromWorkOSEvent(ctx, repo, row, payload, event.ID); err != nil {
+			return nil, err
 		}
+		if payload.ExternalID == "" {
+			return &workosOrgExternalIDUpdate{workosOrgID: payload.ID, externalID: row.ID}, nil
+		}
+		return nil, nil
+	case errors.Is(err, pgx.ErrNoRows):
+		// Resolve below by external_id or by a deterministic ID derived from
+		// the WorkOS org ID.
 	case err != nil:
-		return fmt.Errorf("get organization by workos id %q: %w", payload.ID, err)
-	}
-
-	var lastEventID *string
-	if row.WorkosLastEventID.Valid {
-		lastEventID = &row.WorkosLastEventID.String
-	}
-	var rowUpdatedAt *time.Time
-	if row.WorkosUpdatedAt.Valid {
-		rowUpdatedAt = &row.WorkosUpdatedAt.Time
-	}
-	if !ShouldProcessEvent(lastEventID, rowUpdatedAt, event.ID, payload.UpdatedAt) {
-		return nil
+		return nil, fmt.Errorf("get organization for workos id %q: %w", payload.ID, err)
 	}
 
 	organizationID := payload.ExternalID
-	if err == nil {
-		organizationID = row.ID
+	needsExternalIDUpdate := false
+	if organizationID == "" {
+		organizationID = orgid.FromWorkOSID(payload.ID)
+		needsExternalIDUpdate = true
+	}
+
+	row, err = repo.GetOrganizationMetadata(ctx, organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		if err := createOrganizationFromWorkOSEvent(ctx, repo, payload, event.ID, organizationID); err != nil {
+			return nil, err
+		}
+	case err != nil:
+		return nil, fmt.Errorf("get organization metadata %q: %w", organizationID, err)
+	default:
+		if err := updateOrganizationFromWorkOSEvent(ctx, repo, row, payload, event.ID); err != nil {
+			return nil, err
+		}
+	}
+
+	if needsExternalIDUpdate {
+		return &workosOrgExternalIDUpdate{workosOrgID: payload.ID, externalID: organizationID}, nil
+	}
+	return nil, nil
+}
+
+func createOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Queries, payload workosOrganizationEventPayload, eventID string, organizationID string) error {
+	slug := orgslug.Slugify(payload.Name)
+	if slug == "" {
+		return fmt.Errorf("slugify workos organization name %q: empty slug", payload.Name)
+	}
+	if err := repo.LockOrganizationSlug(ctx, slug); err != nil {
+		return fmt.Errorf("lock organization slug %q: %w", slug, err)
+	}
+	uniqueSlug, err := orgslug.FindUnique(ctx, repo, slug)
+	if err != nil {
+		return fmt.Errorf("find unique slug for workos organization %q: %w", payload.ID, err)
+	}
+
+	row, err := repo.GetOrganizationMetadata(ctx, organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return fmt.Errorf("get organization metadata %q: %w", organizationID, err)
+	default:
+		return updateOrganizationFromWorkOSEvent(ctx, repo, row, payload, eventID)
 	}
 
 	_, err = repo.UpsertOrganizationMetadataFromWorkOS(ctx, orgrepo.UpsertOrganizationMetadataFromWorkOSParams{
 		ID:                organizationID,
 		Name:              payload.Name,
-		Slug:              conv.ToSlug(payload.Name),
+		Slug:              uniqueSlug,
 		WorkosID:          conv.ToPGText(payload.ID),
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(payload.UpdatedAt),
-		WorkosLastEventID: conv.ToPGText(event.ID),
+		WorkosLastEventID: conv.ToPGText(eventID),
 	})
 	if err != nil {
 		return fmt.Errorf("upsert organization %q from workos event: %w", payload.ID, err)
+	}
+	return nil
+}
+
+func updateOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Queries, row orgrepo.OrganizationMetadatum, payload workosOrganizationEventPayload, eventID string) error {
+	// If external_id points at a Gram row linked to another WorkOS org, this is
+	// a deliberate relink. Its stored cursor belongs to the prior WorkOS org.
+	useExistingCursor := !row.WorkosID.Valid || row.WorkosID.String == "" || row.WorkosID.String == payload.ID
+	var lastEventID *string
+	if row.WorkosLastEventID.Valid && useExistingCursor {
+		lastEventID = &row.WorkosLastEventID.String
+	}
+	var rowUpdatedAt *time.Time
+	if row.WorkosUpdatedAt.Valid && useExistingCursor {
+		rowUpdatedAt = &row.WorkosUpdatedAt.Time
+	}
+	if !ShouldProcessEvent(lastEventID, rowUpdatedAt, eventID, payload.UpdatedAt) {
+		return nil
+	}
+
+	_, err := repo.UpdateOrganizationMetadataFromWorkOS(ctx, orgrepo.UpdateOrganizationMetadataFromWorkOSParams{
+		ID:                row.ID,
+		Name:              payload.Name,
+		WorkosID:          conv.ToPGText(payload.ID),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(payload.UpdatedAt),
+		WorkosLastEventID: conv.ToPGText(eventID),
+	})
+	if err != nil {
+		return fmt.Errorf("update organization %q from workos event: %w", payload.ID, err)
 	}
 
 	return nil

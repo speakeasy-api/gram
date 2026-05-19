@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -155,22 +157,24 @@ func TestProcessWorkOSOrganizationEvents_EmptyPage(t *testing.T) {
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
-func TestProcessWorkOSOrganizationEvents_SkipsUnlinkedOrgWithoutExternalID(t *testing.T) {
+func TestProcessWorkOSOrganizationEvents_CreatesOrgAndUpdatesWorkOSExternalIDWhenMissing(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conn := newOrgEventsTestConn(t, "workos_org_events_unlinked_no_external_id")
+	conn := newOrgEventsTestConn(t, "workos_org_events_unlinked")
 	logger := testenv.NewLogger(t)
 
 	const workosOrgID = "org_01HZTESTBAD"
+	organizationID := orgid.FromWorkOSID(workosOrgID)
 
-	// First event has neither a Gram-side mapping nor an external_id — must
-	// not stall the stream. Second event in the same page carries the
-	// external_id and should be applied normally.
+	// The first event has no external_id, so Gram creates the org with a
+	// deterministic ID and updates WorkOS after commit. The second event still
+	// updates the existing workos_id-linked org even if its payload carries a
+	// different external_id.
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{
 			{ID: "event_01HZBAD", Event: "organization.updated", CreatedAt: time.Now(), Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Pending","updated_at":"2026-05-06T11:00:00Z"}`)},
-			{ID: "event_01HZGOOD", Event: "organization.updated", CreatedAt: time.Now(), Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Resolved","external_id":"sb_resolved","updated_at":"2026-05-06T12:00:00Z"}`)},
+			{ID: "event_01HZGOOD", Event: "organization.updated", CreatedAt: time.Now(), Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Resolved","external_id":"sb_missing","updated_at":"2026-05-06T12:00:00Z"}`)},
 		},
 	})
 
@@ -182,12 +186,177 @@ func TestProcessWorkOSOrganizationEvents_SkipsUnlinkedOrgWithoutExternalID(t *te
 
 	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
 	require.NoError(t, err)
-	require.Equal(t, "sb_resolved", row.ID)
+	require.Equal(t, organizationID, row.ID)
 	require.Equal(t, "Resolved", row.Name)
+	require.Equal(t, "pending", row.Slug)
+	require.Equal(t, []workos.OrgExternalIDUpdate{{WorkOSOrgID: workosOrgID, ExternalID: organizationID}}, stub.OrgExternalIDUpdates())
 
 	cursor, err := workosrepo.New(conn).GetOrganizationSyncLastEventID(ctx, workosOrgID)
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZGOOD", cursor)
+}
+
+func TestProcessWorkOSOrganizationEvents_OrganizationCreateRejectsEmptySlug(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_org_empty_slug")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZEMPTYSLUG"
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{
+				ID:        "event_01HZEMPTYSLUG",
+				Event:     "organization.created",
+				CreatedAt: time.Now(),
+				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"!!!","external_id":"sb_empty_slug",` +
+					`"updated_at":"2026-05-06T12:00:00Z"}`),
+			},
+		},
+	})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.Error(t, err)
+
+	_, err = orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	_, err = workosrepo.New(conn).GetOrganizationSyncLastEventID(ctx, workosOrgID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestProcessWorkOSOrganizationEvents_OrganizationCreateHandlesConcurrentInsert(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_org_concurrent_insert")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZCONCURRENT"
+	const externalID = "sb_concurrent"
+
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   externalID,
+		Name: "Concurrent Original",
+		Slug: "concurrent-original",
+	})
+	require.NoError(t, err)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{
+				ID:        "event_01HZCONCURRENT",
+				Event:     "organization.created",
+				CreatedAt: time.Now(),
+				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Concurrent WorkOS","external_id":"` + externalID +
+					`","updated_at":"2026-05-06T12:00:00Z"}`),
+			},
+		},
+	})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZCONCURRENT", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.Equal(t, externalID, row.ID)
+	require.Equal(t, "Concurrent WorkOS", row.Name)
+	require.Equal(t, "concurrent-original", row.Slug)
+}
+
+func TestProcessWorkOSOrganizationEvents_OrganizationCreateAddsHashForTakenSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_org_create_taken_slug")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZTAKENSLUG"
+	const externalID = "sb_taken_slug"
+
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   "sb_slug_owner",
+		Name: "Acme",
+		Slug: "acme",
+	})
+	require.NoError(t, err)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{
+				ID:        "event_01HZTAKENSLUG",
+				Event:     "organization.created",
+				CreatedAt: time.Now(),
+				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Acme","external_id":"` + externalID +
+					`","updated_at":"2026-05-06T12:00:00Z"}`),
+			},
+		},
+	})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZTAKENSLUG", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.Equal(t, externalID, row.ID)
+	require.NotEqual(t, "acme", row.Slug)
+	require.True(t, strings.HasPrefix(row.Slug, "acme-"))
+}
+
+func TestProcessWorkOSOrganizationEvents_OrganizationCreateConflictSkipsStaleEvent(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_org_stale_create_conflict")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZSTALECREATE"
+	const externalID = "sb_stale_create"
+
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   externalID,
+		Name: "Newer Name",
+		Slug: "newer-name",
+	})
+	require.NoError(t, err)
+	_, err = orgrepo.New(conn).UpdateOrganizationMetadataFromWorkOS(ctx, orgrepo.UpdateOrganizationMetadataFromWorkOSParams{
+		ID:                externalID,
+		Name:              "Newer Name",
+		WorkosID:          conv.ToPGText(workosOrgID),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)),
+		WorkosLastEventID: conv.ToPGText("event_01HZ0002"),
+	})
+	require.NoError(t, err)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{
+				ID:        "event_01HZ0001",
+				Event:     "organization.created",
+				CreatedAt: time.Now(),
+				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Older Name","external_id":"` + externalID +
+					`","updated_at":"2026-05-06T11:00:00Z"}`),
+			},
+		},
+	})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZ0001", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationMetadata(ctx, externalID)
+	require.NoError(t, err)
+	require.Equal(t, "Newer Name", row.Name)
+	require.Equal(t, "newer-name", row.Slug)
+	require.Equal(t, "event_01HZ0002", row.WorkosLastEventID.String)
 }
 
 func TestProcessWorkOSOrganizationEvents_OrganizationCreatedAndUpdated(t *testing.T) {
@@ -199,6 +368,13 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreatedAndUpdated(t *testin
 
 	const workosOrgID = "org_01HZCREATE"
 	const externalID = "sb_01HZCREATE"
+
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   externalID,
+		Name: "Original",
+		Slug: "original",
+	})
+	require.NoError(t, err)
 
 	created := time.Date(2026, 5, 6, 10, 0, 0, 0, time.UTC)
 	updated := time.Date(2026, 5, 6, 11, 0, 0, 0, time.UTC)
@@ -223,18 +399,192 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreatedAndUpdated(t *testin
 	})
 
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
-	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
 	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
 	require.NoError(t, err)
 	require.Equal(t, externalID, row.ID)
 	require.Equal(t, "Acme Inc", row.Name)
+	require.Equal(t, "original", row.Slug)
 	require.True(t, row.WorkosLastEventID.Valid)
 	require.Equal(t, "event_01HZB", row.WorkosLastEventID.String)
 	require.True(t, row.WorkosUpdatedAt.Valid)
 	require.True(t, row.WorkosUpdatedAt.Time.Equal(updated))
 	require.False(t, row.DisabledAt.Valid)
+}
+
+func TestProcessWorkOSOrganizationEvents_OrganizationUpdatePreservesExistingSlugOnNameConflict(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_org_slug_preserved")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_slug_preserved"
+	const workosOrgID = "org_01HZSLUGPRESERVE"
+
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   organizationID,
+		Name: "Original Name",
+		Slug: "original-name",
+	})
+	require.NoError(t, err)
+
+	err = orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   "gram_org_slug_owner",
+		Name: "Taken Name",
+		Slug: "taken-name",
+	})
+	require.NoError(t, err)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{
+				ID:        "event_01HZSLUG1",
+				Event:     "organization.updated",
+				CreatedAt: time.Now(),
+				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Taken Name","external_id":"` + organizationID +
+					`","updated_at":"2026-05-06T12:00:00Z"}`),
+			},
+		},
+	})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSLUG1", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.Equal(t, organizationID, row.ID)
+	require.Equal(t, "Taken Name", row.Name)
+	require.Equal(t, "original-name", row.Slug)
+	require.Equal(t, "event_01HZSLUG1", row.WorkosLastEventID.String)
+}
+
+func TestProcessWorkOSOrganizationEvents_OrganizationUpdateDoesNotRemapExistingWorkOSLink(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_org_no_remap")
+	logger := testenv.NewLogger(t)
+
+	const oldOrganizationID = "gram_org_old_workos_link"
+	const newOrganizationID = "gram_org_new_workos_link"
+	const workosOrgID = "org_01HZREMAP"
+
+	seedWorkOSOrganization(t, ctx, conn, oldOrganizationID, workosOrgID)
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   newOrganizationID,
+		Name: "Target Org",
+		Slug: "target-org",
+	})
+	require.NoError(t, err)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{
+				ID:        "event_01HZREMAP",
+				Event:     "organization.updated",
+				CreatedAt: time.Now(),
+				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Remapped Org","external_id":"` + newOrganizationID +
+					`","updated_at":"2026-05-06T12:00:00Z"}`),
+			},
+		},
+	})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZREMAP", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.Equal(t, oldOrganizationID, row.ID)
+	require.Equal(t, "Remapped Org", row.Name)
+	require.Equal(t, oldOrganizationID, row.Slug)
+
+	targetRow, err := orgrepo.New(conn).GetOrganizationMetadata(ctx, newOrganizationID)
+	require.NoError(t, err)
+	require.False(t, targetRow.WorkosID.Valid)
+}
+
+func TestProcessWorkOSOrganizationEvents_OrganizationUpdateRelinksExternalIDMatch(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_org_relink_external_id")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_external_id_relink"
+	const oldWorkosOrgID = "org_01HZOLDLINK"
+	const newWorkosOrgID = "org_01HZNEWLINK"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, oldWorkosOrgID)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{
+				ID:        "event_01HZRELINK",
+				Event:     "organization.updated",
+				CreatedAt: time.Now(),
+				Data: []byte(`{"id":"` + newWorkosOrgID + `","object":"organization","name":"Relinked Org","external_id":"` + organizationID +
+					`","updated_at":"2026-05-06T12:00:00Z"}`),
+			},
+		},
+	})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: newWorkosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZRELINK", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationMetadata(ctx, organizationID)
+	require.NoError(t, err)
+	require.Equal(t, "Relinked Org", row.Name)
+	require.Equal(t, newWorkosOrgID, row.WorkosID.String)
+	require.Equal(t, "event_01HZRELINK", row.WorkosLastEventID.String)
+
+	_, err = orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(oldWorkosOrgID))
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestProcessWorkOSOrganizationEvents_OrganizationUpdateWithoutExternalIDKeepsExistingWorkOSLink(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_org_no_external_keeps_link")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_existing_workos_link"
+	const workosOrgID = "org_01HZNOEXTERNAL"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{
+				ID:        "event_01HZNOEXTERNAL",
+				Event:     "organization.updated",
+				CreatedAt: time.Now(),
+				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Still Linked",` +
+					`"updated_at":"2026-05-06T12:00:00Z"}`),
+			},
+		},
+	})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZNOEXTERNAL", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationMetadata(ctx, organizationID)
+	require.NoError(t, err)
+	require.Equal(t, "Still Linked", row.Name)
+	require.True(t, row.WorkosID.Valid)
+	require.Equal(t, workosOrgID, row.WorkosID.String)
+	require.Equal(t, []workos.OrgExternalIDUpdate{{WorkOSOrgID: workosOrgID, ExternalID: organizationID}}, stub.OrgExternalIDUpdates())
 }
 
 func TestProcessWorkOSOrganizationEvents_OrganizationUpdateSkippedWhenStale(t *testing.T) {
@@ -246,6 +596,13 @@ func TestProcessWorkOSOrganizationEvents_OrganizationUpdateSkippedWhenStale(t *t
 
 	const workosOrgID = "org_01HZSTALE"
 	const externalID = "sb_01HZSTALE"
+
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   externalID,
+		Name: "Original",
+		Slug: "original-stale",
+	})
+	require.NoError(t, err)
 
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{
@@ -268,7 +625,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationUpdateSkippedWhenStale(t *t
 	})
 
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
-	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
 	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
@@ -287,10 +644,16 @@ func TestProcessWorkOSOrganizationEvents_OrganizationDeletedSetsDisabled(t *test
 	const workosOrgID = "org_01HZDELETE"
 	const externalID = "sb_01HZDELETE"
 
-	_, err := orgrepo.New(conn).UpsertOrganizationMetadataFromWorkOS(ctx, orgrepo.UpsertOrganizationMetadataFromWorkOSParams{
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   externalID,
+		Name: "Doomed",
+		Slug: "doomed",
+	})
+	require.NoError(t, err)
+
+	_, err = orgrepo.New(conn).UpdateOrganizationMetadataFromWorkOS(ctx, orgrepo.UpdateOrganizationMetadataFromWorkOSParams{
 		ID:                externalID,
 		Name:              "Doomed",
-		Slug:              "doomed",
 		WorkosID:          conv.ToPGText(workosOrgID),
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(time.Now()),
 		WorkosLastEventID: conv.ToPGText("event_00SEED"),
@@ -372,10 +735,16 @@ func TestProcessWorkOSOrganizationEvents_OrganizationRoleUpsertAndDelete(t *test
 	const externalID = "sb_01HZORGROLE"
 	const slug = "billing-manager"
 
-	_, err := orgrepo.New(conn).UpsertOrganizationMetadataFromWorkOS(ctx, orgrepo.UpsertOrganizationMetadataFromWorkOSParams{
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   externalID,
+		Name: "Acme",
+		Slug: "acme",
+	})
+	require.NoError(t, err)
+
+	_, err = orgrepo.New(conn).UpdateOrganizationMetadataFromWorkOS(ctx, orgrepo.UpdateOrganizationMetadataFromWorkOSParams{
 		ID:                externalID,
 		Name:              "Acme",
-		Slug:              "acme",
 		WorkosID:          conv.ToPGText(workosOrgID),
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(time.Now()),
 		WorkosLastEventID: conv.ToPGText("event_00SEED"),
@@ -444,10 +813,16 @@ func TestProcessWorkOSOrganizationEvents_OrganizationDeletedSkippedWhenStale(t *
 	const externalID = "sb_01HZDELSTALE"
 
 	// Seed org with cursor advanced past the stale delete event ID.
-	_, err := orgrepo.New(conn).UpsertOrganizationMetadataFromWorkOS(ctx, orgrepo.UpsertOrganizationMetadataFromWorkOSParams{
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   externalID,
+		Name: "Live",
+		Slug: "live",
+	})
+	require.NoError(t, err)
+
+	_, err = orgrepo.New(conn).UpdateOrganizationMetadataFromWorkOS(ctx, orgrepo.UpdateOrganizationMetadataFromWorkOSParams{
 		ID:                externalID,
 		Name:              "Live",
-		Slug:              "live",
 		WorkosID:          conv.ToPGText(workosOrgID),
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(time.Now()),
 		WorkosLastEventID: conv.ToPGText("event_99FRESH"),
@@ -520,10 +895,16 @@ func newWorkOSMembershipEvent(t *testing.T, eventType, eventID, membershipID, wo
 func seedWorkOSOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, workosOrgID string) {
 	t.Helper()
 
-	_, err := orgrepo.New(conn).UpsertOrganizationMetadataFromWorkOS(ctx, orgrepo.UpsertOrganizationMetadataFromWorkOSParams{
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   organizationID,
+		Name: "Test Org",
+		Slug: organizationID,
+	})
+	require.NoError(t, err)
+
+	_, err = orgrepo.New(conn).UpdateOrganizationMetadataFromWorkOS(ctx, orgrepo.UpdateOrganizationMetadataFromWorkOSParams{
 		ID:                organizationID,
 		Name:              "Test Org",
-		Slug:              organizationID,
 		WorkosID:          conv.ToPGText(workosOrgID),
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(time.Date(2026, 5, 6, 10, 0, 0, 0, time.UTC)),
 		WorkosLastEventID: conv.ToPGText("event_00SEED"),

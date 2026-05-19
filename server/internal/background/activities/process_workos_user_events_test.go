@@ -134,10 +134,16 @@ func TestProcessWorkOSUserEvents_LinksOptimisticRoleAssignments(t *testing.T) {
 	gramID := users.UserIDFromWorkOSID(workosUserID)
 	seedTime := time.Date(2026, 5, 10, 10, 0, 0, 0, time.UTC)
 
-	_, err := orgrepo.New(conn).UpsertOrganizationMetadataFromWorkOS(ctx, orgrepo.UpsertOrganizationMetadataFromWorkOSParams{
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   "org_role_assignment",
+		Name: "Role Assignment Org",
+		Slug: "role-assignment-org",
+	})
+	require.NoError(t, err)
+
+	_, err = orgrepo.New(conn).UpdateOrganizationMetadataFromWorkOS(ctx, orgrepo.UpdateOrganizationMetadataFromWorkOSParams{
 		ID:                "org_role_assignment",
 		Name:              "Role Assignment Org",
-		Slug:              "role-assignment-org",
 		WorkosID:          conv.ToPGText("org_role_assignment"),
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(seedTime),
 		WorkosLastEventID: conv.ToPGText("event_org_role_assignment"),
@@ -198,10 +204,16 @@ func TestProcessWorkOSUserEvents_LinksPendingRelationshipOverTombstone(t *testin
 	const secondMembershipID = "mem_relationship_tombstone_2"
 	seedTime := time.Date(2026, 5, 10, 10, 0, 0, 0, time.UTC)
 
-	_, err := orgrepo.New(conn).UpsertOrganizationMetadataFromWorkOS(ctx, orgrepo.UpsertOrganizationMetadataFromWorkOSParams{
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   organizationID,
+		Name: "Relationship Tombstone Org",
+		Slug: "relationship-tombstone-org",
+	})
+	require.NoError(t, err)
+
+	_, err = orgrepo.New(conn).UpdateOrganizationMetadataFromWorkOS(ctx, orgrepo.UpdateOrganizationMetadataFromWorkOSParams{
 		ID:                organizationID,
 		Name:              "Relationship Tombstone Org",
-		Slug:              "relationship-tombstone-org",
 		WorkosID:          conv.ToPGText(workosOrgID),
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(seedTime),
 		WorkosLastEventID: conv.ToPGText("event_org_relationship_tombstone"),
