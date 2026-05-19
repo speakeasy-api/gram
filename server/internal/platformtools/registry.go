@@ -64,6 +64,165 @@ var registry = []toolFactory{
 	func(deps Dependencies) PlatformToolExecutor {
 		return platformslack.NewListEmojiTool(deps.SlackHTTPClient)
 	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewChatUpdateTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewChatDeleteTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewChatPostEphemeralTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewChatGetPermalinkTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewChatDeleteScheduledMessageTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewChatListScheduledMessagesTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewChatMeMessageTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewGetChannelInfoTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewListChannelMembersTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewOpenConversationTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewCreateChannelTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewJoinChannelTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewLeaveChannelTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewInviteToChannelTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewSetChannelTopicTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewSetChannelPurposeTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewMarkConversationTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewArchiveChannelTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewUnarchiveChannelTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewRenameChannelTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewRemoveFromChannelTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewLookupUserByEmailTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewListUserConversationsTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewGetUserPresenceTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewGetUserProfileFieldsTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewGetUserDndTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewGetTeamDndTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewAddReminderTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewListRemindersTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewCompleteReminderTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewDeleteReminderTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewGetReminderTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewUploadFileTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewGetFileInfoTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewListFilesTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewDeleteFileTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewPinMessageTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewUnpinMessageTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewListPinsTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewAddBookmarkTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewEditBookmarkTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewRemoveBookmarkTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewListBookmarksTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewListUsergroupsTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewListUsergroupMembersTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewGetTeamInfoTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewCreateCanvasTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewEditCanvasTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewDeleteCanvasTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewLookupCanvasSectionsTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewSetCanvasAccessTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewRemoveCanvasAccessTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewCreateChannelCanvasTool(deps.SlackHTTPClient)
+	},
 }
 
 // BuildExecutors materializes executors for built-in plus caller-supplied
