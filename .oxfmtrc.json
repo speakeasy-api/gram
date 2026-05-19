@@ -14,7 +14,8 @@
     "/elements/docs/**",
     "/elements/examples/tanstack-start/src/routeTree.gen.ts",
     "/server/**/fixtures/**",
-    "/server/gen/**"
+    "/server/gen/**",
+    "/server/**/*_gen.yaml"
   ],
   "overrides": [
     {
