@@ -40,6 +40,8 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  Icon,
+  Input,
   Stack,
   Table,
 } from "@speakeasy-api/moonshine";
@@ -124,19 +126,28 @@ export function TeamInner() {
 
   const MEMBERS_PAGE_SIZE = 10;
   const [page, setPage] = useState(0);
+  const [search, setSearch] = useState("");
 
   const { data: membersData } = useListOrganizationUsersSuspense();
   const { data: invitesData } = useListInvitesSuspense();
   const { data: rolesData } = useRoles();
   const { data: accessMembersData } = useMembers();
 
-  const members = useMemo(
+  const allMembers = useMemo(
     () =>
       [...(membersData?.users ?? [])].sort((a, b) =>
         a.name.localeCompare(b.name),
       ),
     [membersData?.users],
   );
+  const members = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return allMembers;
+    return allMembers.filter(
+      (m) =>
+        m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q),
+    );
+  }, [allMembers, search]);
   const totalPages = Math.ceil(members.length / MEMBERS_PAGE_SIZE);
   const safePage = Math.min(page, Math.max(totalPages - 1, 0));
   const visibleMembers = members.slice(
@@ -742,6 +753,23 @@ export function TeamInner() {
               </Button>
             </RequireScope>
           </Stack>
+
+          <div className="relative">
+            <Icon
+              name="search"
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+            />
+            <Input
+              type="text"
+              placeholder="Search members..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(0);
+              }}
+              className="mb-4 w-full py-2 pl-9 text-sm"
+            />
+          </div>
 
           <Table
             columns={memberColumns}
