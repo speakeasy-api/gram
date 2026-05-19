@@ -98,15 +98,6 @@ func (q *Queries) AttachWorkOSUserToOrg(ctx context.Context, arg AttachWorkOSUse
 	return err
 }
 
-const clearOrganizationWorkosID = `-- name: ClearOrganizationWorkosID :exec
-UPDATE organization_metadata SET workos_id = NULL WHERE id = $1
-`
-
-func (q *Queries) ClearOrganizationWorkosID(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, clearOrganizationWorkosID, organizationID)
-	return err
-}
-
 const createInvitation = `-- name: CreateInvitation :one
 INSERT INTO organization_invitations (
     organization_id,
@@ -845,6 +836,15 @@ func (q *Queries) ListPendingInvitations(ctx context.Context, organizationID str
 	return items, nil
 }
 
+const lockOrganizationSlug = `-- name: LockOrganizationSlug :exec
+SELECT pg_advisory_xact_lock(hashtext($1))
+`
+
+func (q *Queries) LockOrganizationSlug(ctx context.Context, slug string) error {
+	_, err := q.db.Exec(ctx, lockOrganizationSlug, slug)
+	return err
+}
+
 const markRoleAssignmentsDeleted = `-- name: MarkRoleAssignmentsDeleted :exec
 UPDATE organization_role_assignments
 SET workos_updated_at = $1,
@@ -1237,6 +1237,60 @@ func (q *Queries) UpdateInvitationRole(ctx context.Context, arg UpdateInvitation
 	return i, err
 }
 
+const updateOrganizationMetadataFromWorkOS = `-- name: UpdateOrganizationMetadataFromWorkOS :one
+UPDATE organization_metadata
+SET name = $1,
+    workos_id = $2,
+    workos_updated_at = $3,
+    workos_last_event_id = $4,
+    disabled_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $5
+RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+`
+
+type UpdateOrganizationMetadataFromWorkOSParams struct {
+	Name              string
+	WorkosID          pgtype.Text
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+	ID                string
+}
+
+// Update an existing organization row from a WorkOS organization event. Caller
+// must have already resolved the Gram organization and passed the row through
+// ShouldProcessEvent. WorkOS does not own Gram slugs, so this only updates
+// WorkOS-owned metadata and cursor columns.
+func (q *Queries) UpdateOrganizationMetadataFromWorkOS(ctx context.Context, arg UpdateOrganizationMetadataFromWorkOSParams) (OrganizationMetadatum, error) {
+	row := q.db.QueryRow(ctx, updateOrganizationMetadataFromWorkOS,
+		arg.Name,
+		arg.WorkosID,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+		arg.ID,
+	)
+	var i OrganizationMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.SsoConnectionID,
+		&i.WorkosID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
 const upsertOrganizationMetadata = `-- name: UpsertOrganizationMetadata :one
 INSERT INTO organization_metadata (
     id,
@@ -1320,7 +1374,6 @@ INSERT INTO organization_metadata (
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
-    slug = EXCLUDED.slug,
     workos_id = EXCLUDED.workos_id,
     workos_updated_at = EXCLUDED.workos_updated_at,
     workos_last_event_id = EXCLUDED.workos_last_event_id,
@@ -1338,10 +1391,10 @@ type UpsertOrganizationMetadataFromWorkOSParams struct {
 	WorkosLastEventID pgtype.Text
 }
 
-// Upsert an organization row from a WorkOS organization event. Caller must
-// have already passed the row through ShouldProcessEvent. Sets workos_id and
-// the cursor columns; clears disabled_at so a deleted-then-recreated org
-// comes back online.
+// Upsert a Gram organization row from a WorkOS organization event.
+// The caller must only use this when WorkOS external_id is set and is the Gram
+// org ID. Slug is a Gram-owned initial value chosen by the caller and is never
+// updated by WorkOS sync after creation.
 func (q *Queries) UpsertOrganizationMetadataFromWorkOS(ctx context.Context, arg UpsertOrganizationMetadataFromWorkOSParams) (OrganizationMetadatum, error) {
 	row := q.db.QueryRow(ctx, upsertOrganizationMetadataFromWorkOS,
 		arg.ID,
