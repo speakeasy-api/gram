@@ -8,6 +8,7 @@
 package client
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -84,6 +85,73 @@ func BuildGetProjectPayload(adminGetProjectIDOrSlug string, adminGetProjectAdmin
 	}
 	v := &admin.GetProjectPayload{}
 	v.IDOrSlug = idOrSlug
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildUpdateOrganizationPayload builds the payload for the admin
+// updateOrganization endpoint from CLI flags.
+func BuildUpdateOrganizationPayload(adminUpdateOrganizationBody string, adminUpdateOrganizationAdminSessionToken string) (*admin.UpdateOrganizationPayload, error) {
+	var err error
+	var body UpdateOrganizationRequestBody
+	{
+		err = json.Unmarshal([]byte(adminUpdateOrganizationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"id\": \"abc123\",\n      \"whitelisted\": false\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminUpdateOrganizationAdminSessionToken != "" {
+			adminSessionToken = &adminUpdateOrganizationAdminSessionToken
+		}
+	}
+	v := &admin.UpdateOrganizationPayload{
+		ID:          body.ID,
+		AccountType: body.AccountType,
+		Whitelisted: body.Whitelisted,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetOrganizationPayload builds the payload for the admin getOrganization
+// endpoint from CLI flags.
+func BuildGetOrganizationPayload(adminGetOrganizationIDOrSlug string, adminGetOrganizationAdminSessionToken string) (*admin.GetOrganizationPayload, error) {
+	var idOrSlug string
+	{
+		idOrSlug = adminGetOrganizationIDOrSlug
+	}
+	var adminSessionToken *string
+	{
+		if adminGetOrganizationAdminSessionToken != "" {
+			adminSessionToken = &adminGetOrganizationAdminSessionToken
+		}
+	}
+	v := &admin.GetOrganizationPayload{}
+	v.IDOrSlug = idOrSlug
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListOrganizationProjectsPayload builds the payload for the admin
+// listOrganizationProjects endpoint from CLI flags.
+func BuildListOrganizationProjectsPayload(adminListOrganizationProjectsOrganizationID string, adminListOrganizationProjectsAdminSessionToken string) (*admin.ListOrganizationProjectsPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminListOrganizationProjectsOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminListOrganizationProjectsAdminSessionToken != "" {
+			adminSessionToken = &adminListOrganizationProjectsAdminSessionToken
+		}
+	}
+	v := &admin.ListOrganizationProjectsPayload{}
+	v.OrganizationID = organizationID
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

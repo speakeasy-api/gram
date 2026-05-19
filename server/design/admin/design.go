@@ -43,6 +43,62 @@ var AdminOrganization = Type("AdminOrganization", func() {
 	})
 })
 
+var AdminProject = Type("AdminProject", func() {
+	Description("Project summary surfaced to admin operators.")
+	Required("id", "name", "slug", "created_at", "updated_at")
+
+	Attribute("id", String, "The ID of the project")
+	Attribute("name", String, "The name of the project")
+	Attribute("slug", String, "The slug of the project")
+	Attribute("created_at", String, func() {
+		Description("The creation date of the project.")
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Description("The last update date of the project.")
+		Format(FormatDateTime)
+	})
+})
+
+var AdminProjectDetail = Type("AdminProjectDetail", func() {
+	Description("Full project detail surfaced to admin operators, including aggregated counts of child resources.")
+	Required(
+		"id",
+		"name",
+		"slug",
+		"organization_id",
+		"toolset_count",
+		"deployment_count",
+		"http_tool_count",
+		"environment_count",
+		"api_key_count",
+		"assistant_count",
+		"created_at",
+		"updated_at",
+	)
+
+	Attribute("id", String, "Project ID.")
+	Attribute("name", String, "Project name.")
+	Attribute("slug", String, "Project slug.")
+	Attribute("organization_id", String, "Owning organization ID.")
+	Attribute("logo_asset_id", String, "Project logo asset ID, if set.")
+	Attribute("functions_runner_version", String, "Functions runner version pin, if set.")
+	Attribute("toolset_count", Int, "Number of active toolsets in the project.")
+	Attribute("deployment_count", Int, "Total number of deployments in the project.")
+	Attribute("http_tool_count", Int, "Number of active HTTP tool definitions in the project.")
+	Attribute("environment_count", Int, "Number of active environments in the project.")
+	Attribute("api_key_count", Int, "Number of active API keys in the project.")
+	Attribute("assistant_count", Int, "Number of active assistants in the project.")
+	Attribute("created_at", String, func() { Format(FormatDateTime) })
+	Attribute("updated_at", String, func() { Format(FormatDateTime) })
+})
+
+var AdminListOrganizationProjectsResult = Type("AdminListOrganizationProjectsResult", func() {
+	Required("projects")
+
+	Attribute("projects", ArrayOf(AdminProject), "The projects belonging to the organization.")
+})
+
 var AdminListOrganizationsResult = Type("AdminListOrganizationsResult", func() {
 	Required("organizations")
 
@@ -131,21 +187,16 @@ var _ = Service("admin", func() {
 	})
 
 	Method("getProject", func() {
-		Description("Returns the project with the given id or slug.")
+		Description("Returns full admin details for a project by id or slug, including aggregated counts of child resources.")
 
 		Payload(func() {
 			security.AdminAuthPayload()
 			Required("id_or_slug")
 
-			Attribute("id_or_slug")
+			Attribute("id_or_slug", String, "Project ID or slug.")
 		})
 
-		Result(func() {
-			Required("id", "slug")
-
-			Attribute("id", String)
-			Attribute("slug", String)
-		})
+		Result(AdminProjectDetail)
 
 		HTTP(func() {
 			GET("/admin/project.get")
@@ -153,6 +204,74 @@ var _ = Service("admin", func() {
 			Param("id_or_slug")
 			Response(StatusOK)
 		})
+
+		Meta("openapi:operationId", "adminGetProject")
+	})
+
+	Method("updateOrganization", func() {
+		Description("Updates admin-managed fields on an organization. At least one of account_type or whitelisted must be supplied.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("id")
+
+			Attribute("id", String, "Organization ID.")
+			Attribute("account_type", String, "New gram_account_type (e.g. free, pro, enterprise).")
+			Attribute("whitelisted", Boolean, "New whitelisted flag.")
+		})
+
+		Result(AdminOrganization)
+
+		HTTP(func() {
+			POST("/admin/organization.update")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminUpdateOrganization")
+	})
+
+	Method("getOrganization", func() {
+		Description("Returns full admin details for a single organization by id or slug.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("id_or_slug")
+
+			Attribute("id_or_slug", String, "Organization ID or slug.")
+		})
+
+		Result(AdminOrganization)
+
+		HTTP(func() {
+			GET("/admin/organization.get")
+
+			Param("id_or_slug")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminGetOrganization")
+	})
+
+	Method("listOrganizationProjects", func() {
+		Description("Lists projects belonging to an organization (admin view, no auth scoping).")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+
+			Attribute("organization_id", String, "Organization ID.")
+		})
+
+		Result(AdminListOrganizationProjectsResult)
+
+		HTTP(func() {
+			GET("/admin/organization.projects")
+
+			Param("organization_id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminListOrganizationProjects")
 	})
 
 	Method("listOrganizations", func() {

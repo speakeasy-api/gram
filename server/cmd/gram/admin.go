@@ -131,6 +131,21 @@ func newAdminCommand() *cli.Command {
 			Value:   cli.NewStringSlice("speakeasyapi.dev", "speakeasy.com"),
 			EnvVars: []string{"GRAM_ADMIN_ALLOWED_HDS"},
 		},
+		&cli.StringSliceFlag{
+			Name:    "admin-allowed-origins",
+			Usage:   "Comma-separated browser origins permitted to make credentialed cross-origin requests to the admin API (e.g. https://admin.speakeasy.com).",
+			EnvVars: []string{"GRAM_ADMIN_ALLOWED_ORIGINS"},
+		},
+		&cli.BoolFlag{
+			Name:    "admin-cross-origin-cookies",
+			Usage:   "When true, rewrite admin session cookies to SameSite=None; Secure so browsers send them on cross-origin fetches from the admin web UI. Required whenever the SPA origin differs from the admin API origin (local dev with separate Vite + admin ports, prod with admin.* SPA hitting gram-admin.*).",
+			EnvVars: []string{"GRAM_ADMIN_CROSS_ORIGIN_COOKIES"},
+		},
+		&cli.StringFlag{
+			Name:    "admin-cookie-domain",
+			Usage:   "Optional Domain attribute applied to admin session cookies when admin-cross-origin-cookies is enabled (e.g. .speakeasy.com). Leave empty for localhost-only setups.",
+			EnvVars: []string{"GRAM_ADMIN_COOKIE_DOMAIN"},
+		},
 		&cli.StringFlag{
 			Name:    "admin-oidc-emulator-url",
 			Usage:   "Base URL for the OAuth 2.0 and OIDC emulator",
@@ -249,12 +264,19 @@ func newAdminCommand() *cli.Command {
 					h.ServeHTTP(w, r)
 				})
 			})
+			adminAllowedOrigins := c.StringSlice("admin-allowed-origins")
+			adminCookieDomain := c.String("admin-cookie-domain")
+			adminCrossOriginCookies := c.Bool("admin-cross-origin-cookies")
+
+			mux.Use(middleware.AdminCORS(adminAllowedOrigins))
+			mux.Use(middleware.AdminOriginCheck(adminAllowedOrigins))
 			mux.Use(func(h http.Handler) http.Handler {
 				return otelhttp.NewHandler(h, "http", otelhttp.WithServerName("gram"))
 			})
 			mux.Use(middleware.RouteLabelerMiddleware)
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
 			mux.Use(middleware.NewRecovery(logger))
+			mux.Use(middleware.AdminCookieAttributes(adminCrossOriginCookies, adminCookieDomain))
 			mux.Use(admin.SessionMiddleware)
 
 			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption))

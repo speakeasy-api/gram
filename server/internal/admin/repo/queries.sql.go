@@ -12,6 +12,186 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adminGetOrganizationByIDOrSlug = `-- name: AdminGetOrganizationByIDOrSlug :one
+SELECT
+    om.id,
+    om.name,
+    om.slug,
+    om.gram_account_type AS account_type,
+    om.workos_id,
+    om.whitelisted,
+    om.disabled_at,
+    om.free_trial_started_at,
+    om.free_trial_ends_at,
+    om.created_at,
+    om.updated_at,
+    (
+        SELECT count(*)
+        FROM organization_user_relationships our
+        WHERE our.organization_id = om.id
+          AND our.deleted IS FALSE
+    )::bigint AS member_count
+FROM organization_metadata om
+WHERE om.id = $1::text
+   OR om.slug = $1::text
+LIMIT 1
+`
+
+type AdminGetOrganizationByIDOrSlugRow struct {
+	ID                 string
+	Name               string
+	Slug               string
+	AccountType        string
+	WorkosID           pgtype.Text
+	Whitelisted        bool
+	DisabledAt         pgtype.Timestamptz
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	MemberCount        int64
+}
+
+func (q *Queries) AdminGetOrganizationByIDOrSlug(ctx context.Context, idOrSlug string) (AdminGetOrganizationByIDOrSlugRow, error) {
+	row := q.db.QueryRow(ctx, adminGetOrganizationByIDOrSlug, idOrSlug)
+	var i AdminGetOrganizationByIDOrSlugRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.AccountType,
+		&i.WorkosID,
+		&i.Whitelisted,
+		&i.DisabledAt,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.MemberCount,
+	)
+	return i, err
+}
+
+const adminGetProjectDetailByID = `-- name: AdminGetProjectDetailByID :one
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    p.organization_id,
+    p.logo_asset_id,
+    p.functions_runner_version,
+    p.created_at,
+    p.updated_at,
+    (SELECT count(*) FROM toolsets t WHERE t.project_id = p.id AND t.deleted IS FALSE)::bigint AS toolset_count,
+    (SELECT count(*) FROM deployments d WHERE d.project_id = p.id)::bigint AS deployment_count,
+    (SELECT count(*) FROM http_tool_definitions h WHERE h.project_id = p.id AND h.deleted IS FALSE)::bigint AS http_tool_count,
+    (SELECT count(*) FROM environments e WHERE e.project_id = p.id AND e.deleted IS FALSE)::bigint AS environment_count,
+    (SELECT count(*) FROM api_keys k WHERE k.project_id = p.id AND k.deleted IS FALSE)::bigint AS api_key_count,
+    (SELECT count(*) FROM assistants a WHERE a.project_id = p.id AND a.deleted IS FALSE)::bigint AS assistant_count
+FROM projects p
+WHERE p.id = $1
+  AND p.deleted IS FALSE
+`
+
+type AdminGetProjectDetailByIDRow struct {
+	ID                     uuid.UUID
+	Name                   string
+	Slug                   string
+	OrganizationID         string
+	LogoAssetID            uuid.NullUUID
+	FunctionsRunnerVersion pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	ToolsetCount           int64
+	DeploymentCount        int64
+	HttpToolCount          int64
+	EnvironmentCount       int64
+	ApiKeyCount            int64
+	AssistantCount         int64
+}
+
+func (q *Queries) AdminGetProjectDetailByID(ctx context.Context, id uuid.UUID) (AdminGetProjectDetailByIDRow, error) {
+	row := q.db.QueryRow(ctx, adminGetProjectDetailByID, id)
+	var i AdminGetProjectDetailByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.OrganizationID,
+		&i.LogoAssetID,
+		&i.FunctionsRunnerVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ToolsetCount,
+		&i.DeploymentCount,
+		&i.HttpToolCount,
+		&i.EnvironmentCount,
+		&i.ApiKeyCount,
+		&i.AssistantCount,
+	)
+	return i, err
+}
+
+const adminGetProjectDetailBySlug = `-- name: AdminGetProjectDetailBySlug :one
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    p.organization_id,
+    p.logo_asset_id,
+    p.functions_runner_version,
+    p.created_at,
+    p.updated_at,
+    (SELECT count(*) FROM toolsets t WHERE t.project_id = p.id AND t.deleted IS FALSE)::bigint AS toolset_count,
+    (SELECT count(*) FROM deployments d WHERE d.project_id = p.id)::bigint AS deployment_count,
+    (SELECT count(*) FROM http_tool_definitions h WHERE h.project_id = p.id AND h.deleted IS FALSE)::bigint AS http_tool_count,
+    (SELECT count(*) FROM environments e WHERE e.project_id = p.id AND e.deleted IS FALSE)::bigint AS environment_count,
+    (SELECT count(*) FROM api_keys k WHERE k.project_id = p.id AND k.deleted IS FALSE)::bigint AS api_key_count,
+    (SELECT count(*) FROM assistants a WHERE a.project_id = p.id AND a.deleted IS FALSE)::bigint AS assistant_count
+FROM projects p
+WHERE p.slug = $1
+  AND p.deleted IS FALSE
+`
+
+type AdminGetProjectDetailBySlugRow struct {
+	ID                     uuid.UUID
+	Name                   string
+	Slug                   string
+	OrganizationID         string
+	LogoAssetID            uuid.NullUUID
+	FunctionsRunnerVersion pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	ToolsetCount           int64
+	DeploymentCount        int64
+	HttpToolCount          int64
+	EnvironmentCount       int64
+	ApiKeyCount            int64
+	AssistantCount         int64
+}
+
+func (q *Queries) AdminGetProjectDetailBySlug(ctx context.Context, slug string) (AdminGetProjectDetailBySlugRow, error) {
+	row := q.db.QueryRow(ctx, adminGetProjectDetailBySlug, slug)
+	var i AdminGetProjectDetailBySlugRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.OrganizationID,
+		&i.LogoAssetID,
+		&i.FunctionsRunnerVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ToolsetCount,
+		&i.DeploymentCount,
+		&i.HttpToolCount,
+		&i.EnvironmentCount,
+		&i.ApiKeyCount,
+		&i.AssistantCount,
+	)
+	return i, err
+}
+
 const adminListOrganizations = `-- name: AdminListOrganizations :many
 SELECT
     om.id,
@@ -101,6 +281,71 @@ func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrgan
 		return nil, err
 	}
 	return items, nil
+}
+
+const adminListProjectsForOrganization = `-- name: AdminListProjectsForOrganization :many
+SELECT id, slug, name, created_at, updated_at
+FROM projects
+WHERE organization_id = $1
+  AND deleted IS FALSE
+ORDER BY created_at DESC
+LIMIT 200
+`
+
+type AdminListProjectsForOrganizationRow struct {
+	ID        uuid.UUID
+	Slug      string
+	Name      string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) AdminListProjectsForOrganization(ctx context.Context, organizationID string) ([]AdminListProjectsForOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, adminListProjectsForOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListProjectsForOrganizationRow
+	for rows.Next() {
+		var i AdminListProjectsForOrganizationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminUpdateOrganization = `-- name: AdminUpdateOrganization :exec
+UPDATE organization_metadata
+SET
+    gram_account_type = COALESCE($1::text, gram_account_type),
+    whitelisted = COALESCE($2::boolean, whitelisted),
+    updated_at = clock_timestamp()
+WHERE id = $3
+`
+
+type AdminUpdateOrganizationParams struct {
+	AccountType pgtype.Text
+	Whitelisted pgtype.Bool
+	ID          string
+}
+
+// Admin-only mutation. Both fields are optional — caller passes NULL to skip
+// the field. NULL on both is a no-op (still touches updated_at).
+func (q *Queries) AdminUpdateOrganization(ctx context.Context, arg AdminUpdateOrganizationParams) error {
+	_, err := q.db.Exec(ctx, adminUpdateOrganization, arg.AccountType, arg.Whitelisted, arg.ID)
+	return err
 }
 
 const getProjectByID = `-- name: GetProjectByID :one

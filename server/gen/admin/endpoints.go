@@ -16,11 +16,14 @@ import (
 
 // Endpoints wraps the "admin" service endpoints.
 type Endpoints struct {
-	Login             goa.Endpoint
-	Callback          goa.Endpoint
-	Logout            goa.Endpoint
-	GetProject        goa.Endpoint
-	ListOrganizations goa.Endpoint
+	Login                    goa.Endpoint
+	Callback                 goa.Endpoint
+	Logout                   goa.Endpoint
+	GetProject               goa.Endpoint
+	UpdateOrganization       goa.Endpoint
+	GetOrganization          goa.Endpoint
+	ListOrganizationProjects goa.Endpoint
+	ListOrganizations        goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "admin" service with endpoints.
@@ -28,11 +31,14 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Login:             NewLoginEndpoint(s),
-		Callback:          NewCallbackEndpoint(s),
-		Logout:            NewLogoutEndpoint(s),
-		GetProject:        NewGetProjectEndpoint(s, a.APIKeyAuth),
-		ListOrganizations: NewListOrganizationsEndpoint(s, a.APIKeyAuth),
+		Login:                    NewLoginEndpoint(s),
+		Callback:                 NewCallbackEndpoint(s),
+		Logout:                   NewLogoutEndpoint(s),
+		GetProject:               NewGetProjectEndpoint(s, a.APIKeyAuth),
+		UpdateOrganization:       NewUpdateOrganizationEndpoint(s, a.APIKeyAuth),
+		GetOrganization:          NewGetOrganizationEndpoint(s, a.APIKeyAuth),
+		ListOrganizationProjects: NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
+		ListOrganizations:        NewListOrganizationsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -42,6 +48,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Callback = m(e.Callback)
 	e.Logout = m(e.Logout)
 	e.GetProject = m(e.GetProject)
+	e.UpdateOrganization = m(e.UpdateOrganization)
+	e.GetOrganization = m(e.GetOrganization)
+	e.ListOrganizationProjects = m(e.ListOrganizationProjects)
 	e.ListOrganizations = m(e.ListOrganizations)
 }
 
@@ -92,6 +101,75 @@ func NewGetProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return s.GetProject(ctx, p)
+	}
+}
+
+// NewUpdateOrganizationEndpoint returns an endpoint function that calls the
+// method "updateOrganization" of service "admin".
+func NewUpdateOrganizationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateOrganizationPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateOrganization(ctx, p)
+	}
+}
+
+// NewGetOrganizationEndpoint returns an endpoint function that calls the
+// method "getOrganization" of service "admin".
+func NewGetOrganizationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrganizationPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrganization(ctx, p)
+	}
+}
+
+// NewListOrganizationProjectsEndpoint returns an endpoint function that calls
+// the method "listOrganizationProjects" of service "admin".
+func NewListOrganizationProjectsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListOrganizationProjectsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListOrganizationProjects(ctx, p)
 	}
 }
 

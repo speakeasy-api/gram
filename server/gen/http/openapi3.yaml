@@ -257,6 +257,240 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+    /admin/organization.get:
+        get:
+            tags:
+                - admin
+            summary: getOrganization admin
+            description: Returns full admin details for a single organization by id or slug.
+            operationId: adminGetOrganization
+            parameters:
+                - name: id_or_slug
+                  in: query
+                  description: Organization ID or slug.
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: Organization ID or slug.
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOrganization'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/organization.projects:
+        get:
+            tags:
+                - admin
+            summary: listOrganizationProjects admin
+            description: Lists projects belonging to an organization (admin view, no auth scoping).
+            operationId: adminListOrganizationProjects
+            parameters:
+                - name: organization_id
+                  in: query
+                  description: Organization ID.
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: Organization ID.
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminListOrganizationProjectsResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/organization.update:
+        post:
+            tags:
+                - admin
+            summary: updateOrganization admin
+            description: Updates admin-managed fields on an organization. At least one of account_type or whitelisted must be supplied.
+            operationId: adminUpdateOrganization
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateOrganizationRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOrganization'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/organizations.list:
         get:
             description: Lists organizations for admin operations with optional search and filters.
@@ -377,22 +611,24 @@ paths:
             tags:
                 - admin
             summary: getProject admin
-            description: Returns the project with the given id or slug.
-            operationId: admin#getProject
+            description: Returns full admin details for a project by id or slug, including aggregated counts of child resources.
+            operationId: adminGetProject
             parameters:
                 - name: id_or_slug
                   in: query
+                  description: Project ID or slug.
                   allowEmptyValue: true
                   required: true
                   schema:
                     type: string
+                    description: Project ID or slug.
             responses:
                 "200":
                     description: OK response.
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/GetProjectResponseBody'
+                                $ref: '#/components/schemas/AdminProjectDetail'
                 "400":
                     description: 'bad_request: request is invalid'
                     content:
@@ -24639,6 +24875,16 @@ components:
                 - plugin_id
                 - toolset_id
                 - display_name
+        AdminListOrganizationProjectsResult:
+            type: object
+            properties:
+                projects:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminProject'
+                    description: The projects belonging to the organization.
+            required:
+                - projects
         AdminListOrganizationsResult:
             type: object
             properties:
@@ -24705,6 +24951,98 @@ components:
                 - account_type
                 - whitelisted
                 - member_count
+                - created_at
+                - updated_at
+        AdminProject:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: The creation date of the project.
+                    format: date-time
+                id:
+                    type: string
+                    description: The ID of the project
+                name:
+                    type: string
+                    description: The name of the project
+                slug:
+                    type: string
+                    description: The slug of the project
+                updated_at:
+                    type: string
+                    description: The last update date of the project.
+                    format: date-time
+            description: Project summary surfaced to admin operators.
+            required:
+                - id
+                - name
+                - slug
+                - created_at
+                - updated_at
+        AdminProjectDetail:
+            type: object
+            properties:
+                api_key_count:
+                    type: integer
+                    description: Number of active API keys in the project.
+                    format: int64
+                assistant_count:
+                    type: integer
+                    description: Number of active assistants in the project.
+                    format: int64
+                created_at:
+                    type: string
+                    format: date-time
+                deployment_count:
+                    type: integer
+                    description: Total number of deployments in the project.
+                    format: int64
+                environment_count:
+                    type: integer
+                    description: Number of active environments in the project.
+                    format: int64
+                functions_runner_version:
+                    type: string
+                    description: Functions runner version pin, if set.
+                http_tool_count:
+                    type: integer
+                    description: Number of active HTTP tool definitions in the project.
+                    format: int64
+                id:
+                    type: string
+                    description: Project ID.
+                logo_asset_id:
+                    type: string
+                    description: Project logo asset ID, if set.
+                name:
+                    type: string
+                    description: Project name.
+                organization_id:
+                    type: string
+                    description: Owning organization ID.
+                slug:
+                    type: string
+                    description: Project slug.
+                toolset_count:
+                    type: integer
+                    description: Number of active toolsets in the project.
+                    format: int64
+                updated_at:
+                    type: string
+                    format: date-time
+            description: Full project detail surfaced to admin operators, including aggregated counts of child resources.
+            required:
+                - id
+                - name
+                - slug
+                - organization_id
+                - toolset_count
+                - deployment_count
+                - http_tool_count
+                - environment_count
+                - api_key_count
+                - assistant_count
                 - created_at
                 - updated_at
         AllowedOrigin:
@@ -28338,16 +28676,6 @@ components:
                 - summary
                 - comparison
                 - metrics_mode
-        GetProjectResponseBody:
-            type: object
-            properties:
-                id:
-                    type: string
-                slug:
-                    type: string
-            required:
-                - id
-                - slug
         GetProjectResult:
             type: object
             properties:
@@ -34073,6 +34401,20 @@ components:
                     $ref: '#/components/schemas/OAuthProxyServerUpdateForm'
             required:
                 - oauth_proxy_server
+        UpdateOrganizationRequestBody:
+            type: object
+            properties:
+                account_type:
+                    type: string
+                    description: New gram_account_type (e.g. free, pro, enterprise).
+                id:
+                    type: string
+                    description: Organization ID.
+                whitelisted:
+                    type: boolean
+                    description: New whitelisted flag.
+            required:
+                - id
         UpdatePackageForm:
             type: object
             properties:

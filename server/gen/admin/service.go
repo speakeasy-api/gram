@@ -22,8 +22,16 @@ type Service interface {
 	Callback(context.Context, *CallbackPayload) (res *CallbackResult, err error)
 	// Logout implements logout.
 	Logout(context.Context, *LogoutPayload) (err error)
-	// Returns the project with the given id or slug.
-	GetProject(context.Context, *GetProjectPayload) (res *GetProjectResult, err error)
+	// Returns full admin details for a project by id or slug, including aggregated
+	// counts of child resources.
+	GetProject(context.Context, *GetProjectPayload) (res *AdminProjectDetail, err error)
+	// Updates admin-managed fields on an organization. At least one of
+	// account_type or whitelisted must be supplied.
+	UpdateOrganization(context.Context, *UpdateOrganizationPayload) (res *AdminOrganization, err error)
+	// Returns full admin details for a single organization by id or slug.
+	GetOrganization(context.Context, *GetOrganizationPayload) (res *AdminOrganization, err error)
+	// Lists projects belonging to an organization (admin view, no auth scoping).
+	ListOrganizationProjects(context.Context, *ListOrganizationProjectsPayload) (res *AdminListOrganizationProjectsResult, err error)
 	// Lists organizations for admin operations with optional search and filters.
 	ListOrganizations(context.Context, *ListOrganizationsPayload) (res *AdminListOrganizationsResult, err error)
 }
@@ -48,7 +56,14 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"login", "callback", "logout", "getProject", "listOrganizations"}
+var MethodNames = [8]string{"login", "callback", "logout", "getProject", "updateOrganization", "getOrganization", "listOrganizationProjects", "listOrganizations"}
+
+// AdminListOrganizationProjectsResult is the result type of the admin service
+// listOrganizationProjects method.
+type AdminListOrganizationProjectsResult struct {
+	// The projects belonging to the organization.
+	Projects []*AdminProject
+}
 
 // AdminListOrganizationsResult is the result type of the admin service
 // listOrganizations method.
@@ -59,7 +74,8 @@ type AdminListOrganizationsResult struct {
 	NextCursor *string
 }
 
-// Organization details surfaced to admin operators.
+// AdminOrganization is the result type of the admin service updateOrganization
+// method.
 type AdminOrganization struct {
 	// The ID of the organization
 	ID string
@@ -87,6 +103,50 @@ type AdminOrganization struct {
 	UpdatedAt string
 }
 
+// Project summary surfaced to admin operators.
+type AdminProject struct {
+	// The ID of the project
+	ID string
+	// The name of the project
+	Name string
+	// The slug of the project
+	Slug string
+	// The creation date of the project.
+	CreatedAt string
+	// The last update date of the project.
+	UpdatedAt string
+}
+
+// AdminProjectDetail is the result type of the admin service getProject method.
+type AdminProjectDetail struct {
+	// Project ID.
+	ID string
+	// Project name.
+	Name string
+	// Project slug.
+	Slug string
+	// Owning organization ID.
+	OrganizationID string
+	// Project logo asset ID, if set.
+	LogoAssetID *string
+	// Functions runner version pin, if set.
+	FunctionsRunnerVersion *string
+	// Number of active toolsets in the project.
+	ToolsetCount int
+	// Total number of deployments in the project.
+	DeploymentCount int
+	// Number of active HTTP tool definitions in the project.
+	HTTPToolCount int
+	// Number of active environments in the project.
+	EnvironmentCount int
+	// Number of active API keys in the project.
+	APIKeyCount int
+	// Number of active assistants in the project.
+	AssistantCount int
+	CreatedAt      string
+	UpdatedAt      string
+}
+
 // CallbackPayload is the payload type of the admin service callback method.
 type CallbackPayload struct {
 	// The authorization code returned
@@ -106,16 +166,27 @@ type CallbackResult struct {
 	SessionID string
 }
 
+// GetOrganizationPayload is the payload type of the admin service
+// getOrganization method.
+type GetOrganizationPayload struct {
+	AdminSessionToken *string
+	// Organization ID or slug.
+	IDOrSlug string
+}
+
 // GetProjectPayload is the payload type of the admin service getProject method.
 type GetProjectPayload struct {
 	AdminSessionToken *string
-	IDOrSlug          string
+	// Project ID or slug.
+	IDOrSlug string
 }
 
-// GetProjectResult is the result type of the admin service getProject method.
-type GetProjectResult struct {
-	ID   string
-	Slug string
+// ListOrganizationProjectsPayload is the payload type of the admin service
+// listOrganizationProjects method.
+type ListOrganizationProjectsPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	OrganizationID string
 }
 
 // ListOrganizationsPayload is the payload type of the admin service
@@ -153,6 +224,18 @@ type LoginResult struct {
 type LogoutPayload struct {
 	// The session cookie value to clear for logging out
 	SessionID *string
+}
+
+// UpdateOrganizationPayload is the payload type of the admin service
+// updateOrganization method.
+type UpdateOrganizationPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+	// New gram_account_type (e.g. free, pro, enterprise).
+	AccountType *string
+	// New whitelisted flag.
+	Whitelisted *bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

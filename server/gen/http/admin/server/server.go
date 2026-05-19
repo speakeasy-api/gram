@@ -18,12 +18,15 @@ import (
 
 // Server lists the admin service endpoint HTTP handlers.
 type Server struct {
-	Mounts            []*MountPoint
-	Login             http.Handler
-	Callback          http.Handler
-	Logout            http.Handler
-	GetProject        http.Handler
-	ListOrganizations http.Handler
+	Mounts                   []*MountPoint
+	Login                    http.Handler
+	Callback                 http.Handler
+	Logout                   http.Handler
+	GetProject               http.Handler
+	UpdateOrganization       http.Handler
+	GetOrganization          http.Handler
+	ListOrganizationProjects http.Handler
+	ListOrganizations        http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -57,13 +60,19 @@ func New(
 			{"Callback", "GET", "/admin/auth.callback"},
 			{"Logout", "POST", "/admin/auth.logout"},
 			{"GetProject", "GET", "/admin/project.get"},
+			{"UpdateOrganization", "POST", "/admin/organization.update"},
+			{"GetOrganization", "GET", "/admin/organization.get"},
+			{"ListOrganizationProjects", "GET", "/admin/organization.projects"},
 			{"ListOrganizations", "GET", "/admin/organizations.list"},
 		},
-		Login:             NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
-		Callback:          NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
-		Logout:            NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
-		GetProject:        NewGetProjectHandler(e.GetProject, mux, decoder, encoder, errhandler, formatter),
-		ListOrganizations: NewListOrganizationsHandler(e.ListOrganizations, mux, decoder, encoder, errhandler, formatter),
+		Login:                    NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
+		Callback:                 NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
+		Logout:                   NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
+		GetProject:               NewGetProjectHandler(e.GetProject, mux, decoder, encoder, errhandler, formatter),
+		UpdateOrganization:       NewUpdateOrganizationHandler(e.UpdateOrganization, mux, decoder, encoder, errhandler, formatter),
+		GetOrganization:          NewGetOrganizationHandler(e.GetOrganization, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizationProjects: NewListOrganizationProjectsHandler(e.ListOrganizationProjects, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizations:        NewListOrganizationsHandler(e.ListOrganizations, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -76,6 +85,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Callback = m(s.Callback)
 	s.Logout = m(s.Logout)
 	s.GetProject = m(s.GetProject)
+	s.UpdateOrganization = m(s.UpdateOrganization)
+	s.GetOrganization = m(s.GetOrganization)
+	s.ListOrganizationProjects = m(s.ListOrganizationProjects)
 	s.ListOrganizations = m(s.ListOrganizations)
 }
 
@@ -88,6 +100,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCallbackHandler(mux, h.Callback)
 	MountLogoutHandler(mux, h.Logout)
 	MountGetProjectHandler(mux, h.GetProject)
+	MountUpdateOrganizationHandler(mux, h.UpdateOrganization)
+	MountGetOrganizationHandler(mux, h.GetOrganization)
+	MountListOrganizationProjectsHandler(mux, h.ListOrganizationProjects)
 	MountListOrganizationsHandler(mux, h.ListOrganizations)
 }
 
@@ -285,6 +300,166 @@ func NewGetProjectHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getProject")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateOrganizationHandler configures the mux to serve the "admin"
+// service "updateOrganization" endpoint.
+func MountUpdateOrganizationHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.update", f)
+}
+
+// NewUpdateOrganizationHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "updateOrganization" endpoint.
+func NewUpdateOrganizationHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateOrganizationRequest(mux, decoder)
+		encodeResponse = EncodeUpdateOrganizationResponse(encoder)
+		encodeError    = EncodeUpdateOrganizationError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateOrganization")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetOrganizationHandler configures the mux to serve the "admin" service
+// "getOrganization" endpoint.
+func MountGetOrganizationHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.get", f)
+}
+
+// NewGetOrganizationHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getOrganization" endpoint.
+func NewGetOrganizationHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetOrganizationRequest(mux, decoder)
+		encodeResponse = EncodeGetOrganizationResponse(encoder)
+		encodeError    = EncodeGetOrganizationError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganization")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListOrganizationProjectsHandler configures the mux to serve the "admin"
+// service "listOrganizationProjects" endpoint.
+func MountListOrganizationProjectsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.projects", f)
+}
+
+// NewListOrganizationProjectsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "listOrganizationProjects"
+// endpoint.
+func NewListOrganizationProjectsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListOrganizationProjectsRequest(mux, decoder)
+		encodeResponse = EncodeListOrganizationProjectsResponse(encoder)
+		encodeError    = EncodeListOrganizationProjectsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listOrganizationProjects")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

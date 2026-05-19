@@ -31,6 +31,18 @@ type Client struct {
 	// endpoint.
 	GetProjectDoer goahttp.Doer
 
+	// UpdateOrganization Doer is the HTTP client used to make requests to the
+	// updateOrganization endpoint.
+	UpdateOrganizationDoer goahttp.Doer
+
+	// GetOrganization Doer is the HTTP client used to make requests to the
+	// getOrganization endpoint.
+	GetOrganizationDoer goahttp.Doer
+
+	// ListOrganizationProjects Doer is the HTTP client used to make requests to
+	// the listOrganizationProjects endpoint.
+	ListOrganizationProjectsDoer goahttp.Doer
+
 	// ListOrganizations Doer is the HTTP client used to make requests to the
 	// listOrganizations endpoint.
 	ListOrganizationsDoer goahttp.Doer
@@ -55,16 +67,19 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		LoginDoer:             doer,
-		CallbackDoer:          doer,
-		LogoutDoer:            doer,
-		GetProjectDoer:        doer,
-		ListOrganizationsDoer: doer,
-		RestoreResponseBody:   restoreBody,
-		scheme:                scheme,
-		host:                  host,
-		decoder:               dec,
-		encoder:               enc,
+		LoginDoer:                    doer,
+		CallbackDoer:                 doer,
+		LogoutDoer:                   doer,
+		GetProjectDoer:               doer,
+		UpdateOrganizationDoer:       doer,
+		GetOrganizationDoer:          doer,
+		ListOrganizationProjectsDoer: doer,
+		ListOrganizationsDoer:        doer,
+		RestoreResponseBody:          restoreBody,
+		scheme:                       scheme,
+		host:                         host,
+		decoder:                      dec,
+		encoder:                      enc,
 	}
 }
 
@@ -159,6 +174,78 @@ func (c *Client) GetProject() goa.Endpoint {
 		resp, err := c.GetProjectDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getProject", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateOrganization returns an endpoint that makes HTTP requests to the admin
+// service updateOrganization server.
+func (c *Client) UpdateOrganization() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateOrganizationRequest(c.encoder)
+		decodeResponse = DecodeUpdateOrganizationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateOrganizationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateOrganizationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "updateOrganization", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetOrganization returns an endpoint that makes HTTP requests to the admin
+// service getOrganization server.
+func (c *Client) GetOrganization() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetOrganizationRequest(c.encoder)
+		decodeResponse = DecodeGetOrganizationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetOrganizationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetOrganizationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getOrganization", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListOrganizationProjects returns an endpoint that makes HTTP requests to the
+// admin service listOrganizationProjects server.
+func (c *Client) ListOrganizationProjects() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListOrganizationProjectsRequest(c.encoder)
+		decodeResponse = DecodeListOrganizationProjectsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListOrganizationProjectsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListOrganizationProjectsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listOrganizationProjects", err)
 		}
 		return decodeResponse(resp)
 	}

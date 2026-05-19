@@ -212,28 +212,78 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) error 
 	return nil
 }
 
-func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload) (*gen.GetProjectResult, error) {
-	repo := repo.New(s.db)
+func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload) (*gen.AdminProjectDetail, error) {
+	queries := repo.New(s.db)
 
 	if id, err := uuid.Parse(payload.IDOrSlug); err == nil {
-		row, err := repo.GetProjectByID(ctx, id)
+		row, err := queries.AdminGetProjectDetailByID(ctx, id)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			return nil, oops.C(oops.CodeNotFound)
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "lookup project by id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "lookup project detail by id").Log(ctx, s.logger)
 		}
-		return &gen.GetProjectResult{ID: row.ID.String(), Slug: row.Slug}, nil
+		return adminProjectDetailFromIDRow(row), nil
 	}
 
-	row, err := repo.GetProjectBySlug(ctx, payload.IDOrSlug)
+	row, err := queries.AdminGetProjectDetailBySlug(ctx, payload.IDOrSlug)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "lookup project by slug").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "lookup project detail by slug").Log(ctx, s.logger)
 	}
-	return &gen.GetProjectResult{ID: row.ID.String(), Slug: row.Slug}, nil
+	return adminProjectDetailFromSlugRow(row), nil
+}
+
+func adminProjectDetailFromIDRow(row repo.AdminGetProjectDetailByIDRow) *gen.AdminProjectDetail {
+	logo := uuidPtr(row.LogoAssetID)
+	runner := conv.FromPGText[string](row.FunctionsRunnerVersion)
+	return &gen.AdminProjectDetail{
+		ID:                     row.ID.String(),
+		Name:                   row.Name,
+		Slug:                   row.Slug,
+		OrganizationID:         row.OrganizationID,
+		LogoAssetID:            logo,
+		FunctionsRunnerVersion: runner,
+		ToolsetCount:           int(row.ToolsetCount),
+		DeploymentCount:        int(row.DeploymentCount),
+		HTTPToolCount:          int(row.HttpToolCount),
+		EnvironmentCount:       int(row.EnvironmentCount),
+		APIKeyCount:            int(row.ApiKeyCount),
+		AssistantCount:         int(row.AssistantCount),
+		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
+	}
+}
+
+func adminProjectDetailFromSlugRow(row repo.AdminGetProjectDetailBySlugRow) *gen.AdminProjectDetail {
+	logo := uuidPtr(row.LogoAssetID)
+	runner := conv.FromPGText[string](row.FunctionsRunnerVersion)
+	return &gen.AdminProjectDetail{
+		ID:                     row.ID.String(),
+		Name:                   row.Name,
+		Slug:                   row.Slug,
+		OrganizationID:         row.OrganizationID,
+		LogoAssetID:            logo,
+		FunctionsRunnerVersion: runner,
+		ToolsetCount:           int(row.ToolsetCount),
+		DeploymentCount:        int(row.DeploymentCount),
+		HTTPToolCount:          int(row.HttpToolCount),
+		EnvironmentCount:       int(row.EnvironmentCount),
+		APIKeyCount:            int(row.ApiKeyCount),
+		AssistantCount:         int(row.AssistantCount),
+		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
+	}
+}
+
+func uuidPtr(u uuid.NullUUID) *string {
+	if !u.Valid {
+		return nil
+	}
+	s := u.UUID.String()
+	return &s
 }
 
 const (
@@ -282,6 +332,78 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		Organizations: orgs,
 		NextCursor:    nextCursor,
 	}, nil
+}
+
+func (s *Service) ListOrganizationProjects(ctx context.Context, payload *gen.ListOrganizationProjectsPayload) (*gen.AdminListOrganizationProjectsResult, error) {
+	rows, err := repo.New(s.db).AdminListProjectsForOrganization(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list projects for organization").Log(ctx, s.logger)
+	}
+
+	projects := make([]*gen.AdminProject, len(rows))
+	for i, row := range rows {
+		projects[i] = &gen.AdminProject{
+			ID:        row.ID.String(),
+			Name:      row.Name,
+			Slug:      row.Slug,
+			CreatedAt: row.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt: row.UpdatedAt.Time.Format(time.RFC3339),
+		}
+	}
+
+	return &gen.AdminListOrganizationProjectsResult{Projects: projects}, nil
+}
+
+func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrganizationPayload) (*gen.AdminOrganization, error) {
+	if payload.AccountType == nil && payload.Whitelisted == nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of account_type or whitelisted must be supplied")
+	}
+
+	queries := repo.New(s.db)
+	if err := queries.AdminUpdateOrganization(ctx, repo.AdminUpdateOrganizationParams{
+		ID:          payload.ID,
+		AccountType: conv.PtrToPGText(payload.AccountType),
+		Whitelisted: conv.PtrToPGBool(payload.Whitelisted),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "update organization").Log(ctx, s.logger)
+	}
+
+	row, err := queries.AdminGetOrganizationByIDOrSlug(ctx, payload.ID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch organization after update").Log(ctx, s.logger)
+	}
+	return adminOrganizationFromGetRow(row), nil
+}
+
+func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizationPayload) (*gen.AdminOrganization, error) {
+	row, err := repo.New(s.db).AdminGetOrganizationByIDOrSlug(ctx, payload.IDOrSlug)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization by id or slug").Log(ctx, s.logger)
+	}
+	return adminOrganizationFromGetRow(row), nil
+}
+
+func adminOrganizationFromGetRow(row repo.AdminGetOrganizationByIDOrSlugRow) *gen.AdminOrganization {
+	return &gen.AdminOrganization{
+		ID:                 row.ID,
+		Name:               row.Name,
+		Slug:               row.Slug,
+		AccountType:        row.AccountType,
+		WorkosID:           conv.FromPGText[string](row.WorkosID),
+		Whitelisted:        row.Whitelisted,
+		DisabledAt:         pgTimestampPtr(row.DisabledAt),
+		FreeTrialStartedAt: pgTimestampPtr(row.FreeTrialStartedAt),
+		FreeTrialEndsAt:    pgTimestampPtr(row.FreeTrialEndsAt),
+		MemberCount:        int(row.MemberCount),
+		CreatedAt:          row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:          row.UpdatedAt.Time.Format(time.RFC3339),
+	}
 }
 
 func adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *gen.AdminOrganization {

@@ -27,6 +27,21 @@ func GetProjectAdminPath() string {
 	return "/admin/project.get"
 }
 
+// UpdateOrganizationAdminPath returns the URL path to the admin service updateOrganization HTTP endpoint.
+func UpdateOrganizationAdminPath() string {
+	return "/admin/organization.update"
+}
+
+// GetOrganizationAdminPath returns the URL path to the admin service getOrganization HTTP endpoint.
+func GetOrganizationAdminPath() string {
+	return "/admin/organization.get"
+}
+
+// ListOrganizationProjectsAdminPath returns the URL path to the admin service listOrganizationProjects HTTP endpoint.
+func ListOrganizationProjectsAdminPath() string {
+	return "/admin/organization.projects"
+}
+
 // ListOrganizationsAdminPath returns the URL path to the admin service listOrganizations HTTP endpoint.
 func ListOrganizationsAdminPath() string {
 	return "/admin/organizations.list"
