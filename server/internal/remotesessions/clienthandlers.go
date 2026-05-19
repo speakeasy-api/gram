@@ -81,6 +81,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
 		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
+		Scope:                   payload.Scope,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").Log(ctx, logger)
@@ -203,6 +204,7 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
 		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
+		Scope:                   payload.Scope,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").Log(ctx, logger)
@@ -333,6 +335,7 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		UserSessionIssuerID:     userIssuerID,
 		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
+		Scope:                   payload.Scope,
 		ID:                      clientID,
 		ProjectID:               *authCtx.ProjectID,
 	})
