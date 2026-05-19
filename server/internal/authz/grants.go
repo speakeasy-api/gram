@@ -120,6 +120,8 @@ func SyncGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug st
 		return nil, err
 	}
 
+	grantRows := make([]Grant, 0, len(grants))
+	seenGrants := make(map[string]struct{}, len(grants))
 	for _, grant := range grants {
 		if grant == nil {
 			continue
@@ -143,6 +145,15 @@ func SyncGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug st
 			}); err != nil {
 				return nil, fmt.Errorf("upsert unrestricted grant %q for role %q: %w", grant.Scope, roleSlug, err)
 			}
+			grantKey := grant.Scope + "\x00" + string(selBytes)
+			if _, ok := seenGrants[grantKey]; !ok {
+				seenGrants[grantKey] = struct{}{}
+				grantRows = append(grantRows, Grant{
+					PrincipalUrn: principalURN.String(),
+					Scope:        scope,
+					Selector:     sel,
+				})
+			}
 			continue
 		}
 
@@ -163,23 +174,19 @@ func SyncGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug st
 			}); err != nil {
 				return nil, fmt.Errorf("upsert grant %q for role %q: %w", grant.Scope, roleSlug, err)
 			}
+			grantKey := grant.Scope + "\x00" + string(selBytes)
+			if _, ok := seenGrants[grantKey]; !ok {
+				seenGrants[grantKey] = struct{}{}
+				grantRows = append(grantRows, Grant{
+					PrincipalUrn: principalURN.String(),
+					Scope:        scope,
+					Selector:     sel,
+				})
+			}
 		}
 	}
 
-	rows, err := q.ListPrincipalGrantsByOrg(ctx, repo.ListPrincipalGrantsByOrgParams{
-		OrganizationID: orgID,
-		PrincipalUrn:   principalURN.String(),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list synced grants for role %q: %w", roleSlug, err)
-	}
-
-	scoped, err := scopedGrantsFromRows(principalURN.String(), rows)
-	if err != nil {
-		return nil, fmt.Errorf("load synced grants for role %q: %w", roleSlug, err)
-	}
-
-	return scoped, nil
+	return GrantsToScopedGrants(grantRows), nil
 }
 
 func DeleteRoleGrants(ctx context.Context, q *repo.Queries, orgID, roleSlug, rolePrincipalURN string) error {
@@ -210,6 +217,7 @@ func DeleteRoleGrants(ctx context.Context, q *repo.Queries, orgID, roleSlug, rol
 }
 
 func RolePrincipals(roleSlug, rolePrincipalURN string) ([]urn.Principal, error) {
+	// TODO(AGE-1954): drop legacy role:<slug> principals after the role-principal backfill is complete.
 	// Keep the legacy role:<slug> principal until the role-principal backfill
 	// has moved existing grants to role:<kind>:<uuid>.
 	principals := make([]urn.Principal, 0, 2)
@@ -230,6 +238,7 @@ func RolePrincipals(roleSlug, rolePrincipalURN string) ([]urn.Principal, error) 
 }
 
 func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string, rolePrincipalURN string) ([]*ScopedGrant, error) {
+	// TODO(AGE-1954): remove dual-read after legacy role:<slug> grants are backfilled.
 	// During the role-principal migration, reads include both the canonical
 	// role:<kind>:<uuid> principal and the legacy role:<slug> principal.
 	principals, err := RolePrincipals(roleSlug, rolePrincipalURN)
@@ -266,23 +275,6 @@ func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGran
 		}
 		grantRows = append(grantRows, Grant{
 			PrincipalUrn: row.PrincipalUrn.String(),
-			Scope:        Scope(row.Scope),
-			Selector:     selectors,
-		})
-	}
-
-	return GrantsToScopedGrants(grantRows), nil
-}
-
-func scopedGrantsFromRows(rolePrincipalURN string, rows []repo.ListPrincipalGrantsByOrgRow) ([]*ScopedGrant, error) {
-	grantRows := make([]Grant, 0, len(rows))
-	for _, row := range rows {
-		selectors, err := SelectorFromRow(row.Selectors)
-		if err != nil {
-			return nil, err
-		}
-		grantRows = append(grantRows, Grant{
-			PrincipalUrn: rolePrincipalURN,
 			Scope:        Scope(row.Scope),
 			Selector:     selectors,
 		})

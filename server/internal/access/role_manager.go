@@ -405,13 +405,17 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 		})
 	}
 
-	if _, err := repo.New(tx).MarkOrganizationRoleDeletedLocally(ctx, repo.MarkOrganizationRoleDeletedLocallyParams{
+	deletedCount, err := repo.New(tx).MarkOrganizationRoleDeletedLocally(ctx, repo.MarkOrganizationRoleDeletedLocallyParams{
 		OrganizationID:    gramOrgID,
 		WorkosSlug:        currentRole.Slug,
 		WorkosLastEventID: conv.ToPGTextEmpty(""),
-	}); err != nil {
+	})
+	if err != nil {
 		trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
 		return roleDeleteResult{}, oops.E(oops.CodeUnexpected, err, "mark local role record deleted").Log(ctx, r.logger)
+	}
+	if deletedCount == 0 {
+		return roleDeleteResult{}, oops.E(oops.CodeNotFound, nil, "role not found").Log(ctx, r.logger)
 	}
 
 	if err := authz.DeleteRoleGrants(ctx, repo.New(tx), gramOrgID, currentRole.Slug, currentRole.PrincipalURN); err != nil {
@@ -568,6 +572,7 @@ func (r *RoleManager) UpdateMemberRole(ctx context.Context, gramOrgID, userID, r
 	return result, nil
 }
 
+// MemberRolePrincipals returns role slug and principal URN for each role assigned to a WorkOS user in this org.
 func (r *RoleManager) MemberRolePrincipals(ctx context.Context, gramOrgID, workosUserID string) ([]repo.ListMemberRolePrincipalsByWorkosUserRow, error) {
 	if workosUserID == "" {
 		return nil, nil
@@ -633,43 +638,60 @@ type memberAssignmentTarget struct {
 	MembershipID string
 }
 
+// requestedMemberAssignment groups input IDs that resolve to the same WorkOS user.
+type requestedMemberAssignment struct {
+	InputIDs []string
+	UserID   string
+}
+
 func (r *RoleManager) memberAssignmentTargetsTx(ctx context.Context, dbtx repo.DBTX, gramOrgID string, memberIDs []string) ([]memberAssignmentTarget, error) {
 	if len(memberIDs) == 0 {
 		return nil, nil
-	}
-	requested := make(map[string]struct{}, len(memberIDs))
-	for _, id := range memberIDs {
-		requested[id] = struct{}{}
 	}
 
 	users, err := usersrepo.New(dbtx).GetUsersByIDs(ctx, memberIDs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve users by ids").Log(ctx, r.logger)
 	}
-	workosByGramID := make(map[string]string, len(users))
-	requestedByWorkosID := make(map[string]string, len(users))
+	usersByID := make(map[string]usersrepo.User, len(users))
 	for _, user := range users {
-		if user.WorkosID.Valid && user.WorkosID.String != "" {
-			workosByGramID[user.ID] = user.WorkosID.String
-			if _, ok := requested[user.ID]; ok {
-				requestedByWorkosID[user.WorkosID.String] = user.ID
-			}
-		}
+		usersByID[user.ID] = user
 	}
+
+	requestedInputs := make(map[string]struct{}, len(memberIDs))
+	requestedByWorkosID := make(map[string]requestedMemberAssignment, len(memberIDs))
 	workosIDs := make([]string, 0, len(memberIDs))
-	seenRequestedWorkosID := make(map[string]struct{}, len(memberIDs))
 	for _, id := range memberIDs {
+		if _, ok := requestedInputs[id]; ok {
+			continue
+		}
+		requestedInputs[id] = struct{}{}
+
 		workosID := id
-		if userWorkosID, ok := workosByGramID[id]; ok {
-			workosID = userWorkosID
+		userID := ""
+		if user, ok := usersByID[id]; ok {
+			userID = user.ID
+			if !user.WorkosID.Valid || user.WorkosID.String == "" {
+				return nil, oops.E(oops.CodeBadRequest, nil, "member %s is not linked to WorkOS", id).Log(ctx, r.logger)
+			}
+			workosID = user.WorkosID.String
 		}
 		if workosID == "" {
 			continue
 		}
-		if _, ok := seenRequestedWorkosID[workosID]; ok {
+		requested, ok := requestedByWorkosID[workosID]
+		if ok {
+			requested.InputIDs = append(requested.InputIDs, id)
+			if requested.UserID == "" {
+				requested.UserID = userID
+			}
+			requestedByWorkosID[workosID] = requested
 			continue
 		}
-		seenRequestedWorkosID[workosID] = struct{}{}
+		requestedByWorkosID[workosID] = requestedMemberAssignment{
+			InputIDs: []string{id},
+			UserID:   userID,
+		}
 		workosIDs = append(workosIDs, workosID)
 	}
 
@@ -682,44 +704,31 @@ func (r *RoleManager) memberAssignmentTargetsTx(ctx context.Context, dbtx repo.D
 	}
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSource("db"))
 	targets := make([]memberAssignmentTarget, 0, len(memberIDs))
-	resolved := make(map[string]struct{}, len(requested))
-	seenWorkosID := make(map[string]struct{}, len(memberIDs))
+	resolvedWorkosIDs := make(map[string]struct{}, len(requestedByWorkosID))
+	resolvedInputs := make(map[string]struct{}, len(requestedInputs))
 	for _, row := range assignmentRows {
+		requested, ok := requestedByWorkosID[row.WorkosUserID]
+		if !ok {
+			continue
+		}
+		if _, ok := resolvedWorkosIDs[row.WorkosUserID]; ok {
+			continue
+		}
 		userID := conv.FromPGTextOrEmpty[string](row.UserID)
-		membershipID := conv.FromPGTextOrEmpty[string](row.WorkosMembershipID)
-		requestedID := ""
-		if _, ok := requested[userID]; ok {
-			requestedID = userID
-		} else if gramID, ok := requestedByWorkosID[row.WorkosUserID]; ok {
-			requestedID = gramID
-			if userID == "" {
-				userID = gramID
-			}
-		} else if _, ok := requested[row.WorkosUserID]; ok {
-			requestedID = row.WorkosUserID
-		} else {
-			continue
+		if userID == "" {
+			userID = requested.UserID
 		}
-		workosID := row.WorkosUserID
-		if userWorkosID, ok := workosByGramID[userID]; ok {
-			workosID = userWorkosID
+		resolvedWorkosIDs[row.WorkosUserID] = struct{}{}
+		for _, inputID := range requested.InputIDs {
+			resolvedInputs[inputID] = struct{}{}
 		}
-		if workosID == "" || membershipID == "" {
-			continue
-		}
-		if _, ok := seenWorkosID[workosID]; ok {
-			resolved[requestedID] = struct{}{}
-			continue
-		}
-		seenWorkosID[workosID] = struct{}{}
-		resolved[requestedID] = struct{}{}
 		targets = append(targets, memberAssignmentTarget{
 			UserID:       userID,
-			WorkosUserID: workosID,
-			MembershipID: membershipID,
+			WorkosUserID: row.WorkosUserID,
+			MembershipID: conv.FromPGTextOrEmpty[string](row.WorkosMembershipID),
 		})
 	}
-	if len(resolved) != len(requested) {
+	if len(resolvedInputs) != len(requestedInputs) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "member role assignment not found; wait for WorkOS sync to complete").Log(ctx, r.logger)
 	}
 

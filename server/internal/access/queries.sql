@@ -243,6 +243,8 @@ LEFT JOIN organization_role_assignments AS ora
   AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
   AND ora.user_id IS NOT NULL
 GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
+-- Organization roles shadow global roles if a slug ever collides.
+ORDER BY active_roles.role_kind DESC
 LIMIT 1;
 
 -- name: GetOrganizationRoleByID :one
@@ -275,28 +277,9 @@ LEFT JOIN organization_role_assignments AS ora
   AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
   AND ora.user_id IS NOT NULL
 GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
+-- Organization roles shadow global roles if an ID ever collides.
+ORDER BY active_roles.role_kind DESC
 LIMIT 1;
-
--- name: ListOrganizationRoleAssignmentsForOrg :many
-SELECT
-  ora.user_id,
-  ora.workos_user_id,
-  ora.workos_membership_id,
-  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
-  ora.created_at
-FROM organization_role_assignments AS ora
-LEFT JOIN organization_roles
-  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
-  AND organization_roles.organization_id = ora.organization_id
-  AND organization_roles.deleted IS FALSE
-  AND organization_roles.workos_deleted IS FALSE
-LEFT JOIN global_roles
-  ON ora.role_urn = 'role:global:' || global_roles.id::text
-  AND global_roles.deleted IS FALSE
-  AND global_roles.workos_deleted IS FALSE
-WHERE ora.organization_id = @organization_id
-  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
-ORDER BY ora.workos_user_id, role_slug;
 
 -- name: ListOrganizationRoleAssignmentsBySlug :many
 SELECT
@@ -362,6 +345,7 @@ LEFT JOIN global_roles
   AND global_roles.workos_deleted IS FALSE
 WHERE ora.organization_id = @organization_id
   AND ora.workos_user_id = ANY(@workos_user_ids::text[])
+  AND ora.workos_membership_id IS NOT NULL
   AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
 ORDER BY ora.workos_user_id, role_slug;
 

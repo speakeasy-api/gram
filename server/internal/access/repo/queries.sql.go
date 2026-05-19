@@ -84,6 +84,7 @@ LEFT JOIN organization_role_assignments AS ora
   AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
   AND ora.user_id IS NOT NULL
 GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
+ORDER BY active_roles.role_kind DESC
 LIMIT 1
 `
 
@@ -103,6 +104,7 @@ type GetActiveOrganizationRoleBySlugRow struct {
 	MemberCount       int64
 }
 
+// Organization roles shadow global roles if a slug ever collides.
 func (q *Queries) GetActiveOrganizationRoleBySlug(ctx context.Context, arg GetActiveOrganizationRoleBySlugParams) (GetActiveOrganizationRoleBySlugRow, error) {
 	row := q.db.QueryRow(ctx, getActiveOrganizationRoleBySlug, arg.OrganizationID, arg.WorkosSlug)
 	var i GetActiveOrganizationRoleBySlugRow
@@ -229,6 +231,7 @@ LEFT JOIN organization_role_assignments AS ora
   AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
   AND ora.user_id IS NOT NULL
 GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name, active_roles.workos_description, active_roles.workos_created_at, active_roles.workos_updated_at
+ORDER BY active_roles.role_kind DESC
 LIMIT 1
 `
 
@@ -248,6 +251,7 @@ type GetOrganizationRoleByIDRow struct {
 	MemberCount       int64
 }
 
+// Organization roles shadow global roles if an ID ever collides.
 func (q *Queries) GetOrganizationRoleByID(ctx context.Context, arg GetOrganizationRoleByIDParams) (GetOrganizationRoleByIDRow, error) {
 	row := q.db.QueryRow(ctx, getOrganizationRoleByID, arg.OrganizationID, arg.ID)
 	var i GetOrganizationRoleByIDRow
@@ -715,6 +719,7 @@ LEFT JOIN global_roles
   AND global_roles.workos_deleted IS FALSE
 WHERE ora.organization_id = $1
   AND ora.workos_user_id = ANY($2::text[])
+  AND ora.workos_membership_id IS NOT NULL
   AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
 ORDER BY ora.workos_user_id, role_slug
 `
@@ -741,62 +746,6 @@ func (q *Queries) ListOrganizationRoleAssignmentsByWorkosUsers(ctx context.Conte
 	var items []ListOrganizationRoleAssignmentsByWorkosUsersRow
 	for rows.Next() {
 		var i ListOrganizationRoleAssignmentsByWorkosUsersRow
-		if err := rows.Scan(
-			&i.UserID,
-			&i.WorkosUserID,
-			&i.WorkosMembershipID,
-			&i.RoleSlug,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listOrganizationRoleAssignmentsForOrg = `-- name: ListOrganizationRoleAssignmentsForOrg :many
-SELECT
-  ora.user_id,
-  ora.workos_user_id,
-  ora.workos_membership_id,
-  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
-  ora.created_at
-FROM organization_role_assignments AS ora
-LEFT JOIN organization_roles
-  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
-  AND organization_roles.organization_id = ora.organization_id
-  AND organization_roles.deleted IS FALSE
-  AND organization_roles.workos_deleted IS FALSE
-LEFT JOIN global_roles
-  ON ora.role_urn = 'role:global:' || global_roles.id::text
-  AND global_roles.deleted IS FALSE
-  AND global_roles.workos_deleted IS FALSE
-WHERE ora.organization_id = $1
-  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
-ORDER BY ora.workos_user_id, role_slug
-`
-
-type ListOrganizationRoleAssignmentsForOrgRow struct {
-	UserID             pgtype.Text
-	WorkosUserID       string
-	WorkosMembershipID pgtype.Text
-	RoleSlug           string
-	CreatedAt          pgtype.Timestamptz
-}
-
-func (q *Queries) ListOrganizationRoleAssignmentsForOrg(ctx context.Context, organizationID string) ([]ListOrganizationRoleAssignmentsForOrgRow, error) {
-	rows, err := q.db.Query(ctx, listOrganizationRoleAssignmentsForOrg, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListOrganizationRoleAssignmentsForOrgRow
-	for rows.Next() {
-		var i ListOrganizationRoleAssignmentsForOrgRow
 		if err := rows.Scan(
 			&i.UserID,
 			&i.WorkosUserID,
