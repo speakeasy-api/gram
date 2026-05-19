@@ -18,7 +18,7 @@
     "openai": "^6.8.1"
   },
   "devDependencies": {
-    "@types/node": "^24.10.1",
+    "@types/node": "^24.12.2",
     "typescript": "catalog:"
   }
 }
