@@ -46,9 +46,11 @@ type Service interface {
 	ApproveShadowMCP(context.Context, *ApproveShadowMCPPayload) (res *types.ShadowMCPApproval, err error)
 	// Remove a previously-approved shadow-MCP server for a policy.
 	RevokeShadowMCPApproval(context.Context, *RevokeShadowMCPApprovalPayload) (err error)
-	// Manually trigger risk analysis for a policy, starting or signaling the drain
-	// workflow. Defaults to the most recent 100 unanalyzed messages; pass
-	// `limit=0` to backfill every unanalyzed message.
+	// Manually trigger risk analysis for a policy. Defaults to extending analysis
+	// to the most recent 100 messages not yet analyzed at the current policy
+	// version; pass `limit=0` to cover every message in scope. Pass
+	// `reanalyze=true` to bump the policy version and re-scan messages already
+	// analyzed at the current version (e.g. after a rule change).
 	TriggerRiskAnalysis(context.Context, *TriggerRiskAnalysisPayload) (err error)
 }
 
@@ -259,10 +261,13 @@ type TriggerRiskAnalysisPayload struct {
 	ProjectSlugInput *string
 	// The policy ID.
 	ID string
-	// Cap the backfill at the most recent N unanalyzed messages. Defaults to 100
-	// (the recent-N drain budget). Pass 0 to request a full backfill of every
-	// unanalyzed message.
+	// Cap the run at the most recent N messages. Defaults to 100 (the recent-N
+	// drain budget). Pass 0 to request every message in scope.
 	Limit int32
+	// When true, bump the policy version so messages already analyzed at the
+	// current version are re-scanned. When false (default), only messages with no
+	// analysis at the current version are scanned.
+	Reanalyze bool
 }
 
 // UpdateRiskPolicyPayload is the payload type of the risk service

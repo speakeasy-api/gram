@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: b61eda2f93c8dec88417e844cab111b7
+  docChecksum: ca03d536cd9f9d38604990ffa59a2551
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -891,7 +891,7 @@ trackedFiles:
   docs/models/components/triggerinstancestatus.md:
     last_write_checksum: sha1:7315b78cbccc915a21a8c1ec4ee7155d40a41b80
   docs/models/components/triggerriskanalysisrequestbody.md:
-    last_write_checksum: sha1:e1730432575c14fc1c66fbfa5e20e951bb04669b
+    last_write_checksum: sha1:30cf2aae1a8cf23eebd6edc93186b818ddb8760f
   docs/models/components/type.md:
     last_write_checksum: sha1:f3606d62bd77e8ac3c11011316949e80d0803890
   docs/models/components/typestoinclude.md:
@@ -2701,7 +2701,7 @@ trackedFiles:
   docs/sdks/plugins/README.md:
     last_write_checksum: sha1:1db1ff15e99af9efc38c654bdff23180d91827d8
   docs/sdks/policies/README.md:
-    last_write_checksum: sha1:cdd3f7dc142798bd13cfe0fb5c109301a47c5e16
+    last_write_checksum: sha1:c1004d4558b46251df6ff8930f65bd8003971e83
   docs/sdks/projects/README.md:
     last_write_checksum: sha1:69eaa9d9ecba768b0e979a00aa5e77ebe1a4e23b
   docs/sdks/remotemcp/README.md:
@@ -3283,7 +3283,7 @@ trackedFiles:
   src/funcs/riskPoliciesStatus.ts:
     last_write_checksum: sha1:cff2198821aa462a441354ca7bc5779bd8bd2e03
   src/funcs/riskPoliciesTrigger.ts:
-    last_write_checksum: sha1:899e5f614e8968b44a6793a0603de89eb5449b19
+    last_write_checksum: sha1:cdf58bfcefd606a8381cf6b183b59022d9b18d10
   src/funcs/riskPoliciesUpdate.ts:
     last_write_checksum: sha1:a837a34d87bcdc48af1ae9b78862c425fedf3bc2
   src/funcs/riskResultsByChat.ts:
@@ -4519,7 +4519,7 @@ trackedFiles:
   src/models/components/triggerinstance.ts:
     last_write_checksum: sha1:dceaf672ef4d6872f103f0339ec0849ffb8fbb9a
   src/models/components/triggerriskanalysisrequestbody.ts:
-    last_write_checksum: sha1:8a63ff3fe0087235a73b982cd99161a2aeed8376
+    last_write_checksum: sha1:d6626ff1a22ad6a681ffa87f65865ab788e0a458
   src/models/components/updateassistantform.ts:
     last_write_checksum: sha1:283f390810d1857e8c3c90505812e490b7c0e665
   src/models/components/updateenvironmentrequestbody.ts:
@@ -6171,7 +6171,7 @@ trackedFiles:
   src/react-query/riskPoliciesStatus.ts:
     last_write_checksum: sha1:db08364ccd265be6fe641f0433f79dace59b714b
   src/react-query/riskPoliciesTrigger.ts:
-    last_write_checksum: sha1:9fdb2d7fa8da575cb7647eea732f40b657ad21e6
+    last_write_checksum: sha1:150e6c80871b6bbded781982b03ab5b9a983733f
   src/react-query/riskPoliciesUpdate.ts:
     last_write_checksum: sha1:3a389d4b7dd4e40a405a444fec22905fa633bca1
   src/react-query/role.core.ts:
@@ -6503,7 +6503,7 @@ trackedFiles:
   src/sdk/plugins.ts:
     last_write_checksum: sha1:7028ca7dfba43671e325dd5f14920e007e88e378
   src/sdk/policies.ts:
-    last_write_checksum: sha1:7df5f8ff60b6ce77f41555f75e34a2364f53e9cf
+    last_write_checksum: sha1:11ba4dfb44b9ce596f60b7b0b5bd72a10dea5259
   src/sdk/projects.ts:
     id: 28088373a118
     last_write_checksum: sha1:a80e20f3e6686ec35437d4054d5f1ff74b78c346
@@ -8869,7 +8869,7 @@ examples:
   triggerRiskAnalysis:
     speakeasy-default-trigger-risk-analysis:
       requestBody:
-        application/json: {"id": "627f5b17-9f75-4837-81cc-2f7a2510ed27", "limit": 100}
+        application/json: {"id": "627f5b17-9f75-4837-81cc-2f7a2510ed27", "limit": 100, "reanalyze": false}
       responses:
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}

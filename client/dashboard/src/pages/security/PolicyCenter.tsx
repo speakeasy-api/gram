@@ -38,6 +38,7 @@ import {
   Shield,
   Ellipsis,
   Loader2,
+  ChevronDown,
   ChevronRight,
   RefreshCw,
 } from "lucide-react";
@@ -273,9 +274,9 @@ function PolicyCenterContent() {
     deleteMutation.mutate({ request: { id } });
   };
 
-  const handleTrigger = (id: string) => {
+  const handleTrigger = (id: string, limit?: number, reanalyze?: boolean) => {
     triggerMutation.mutate({
-      request: { triggerRiskAnalysisRequestBody: { id } },
+      request: { triggerRiskAnalysisRequestBody: { id, limit, reanalyze } },
     });
   };
 
@@ -385,7 +386,6 @@ function PolicyCenterContent() {
               <TableHead>Name</TableHead>
               <TableHead>Action</TableHead>
               <TableHead>Categories</TableHead>
-              <TableHead>Progress</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-[60px]" />
             </TableRow>
@@ -416,16 +416,6 @@ function PolicyCenterContent() {
                         </Badge>
                       ))}
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    {policy.pendingMessages > 0 ? (
-                      <span className="text-muted-foreground text-xs">
-                        {policy.totalMessages - policy.pendingMessages}/
-                        {policy.totalMessages} analyzed
-                      </span>
-                    ) : (
-                      <Badge variant="secondary">Complete</Badge>
-                    )}
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <Switch
@@ -534,7 +524,9 @@ function PolicyCenterContent() {
             {runPanelPolicy && (
               <RunPanel
                 policy={runPanelPolicy}
-                onTrigger={() => handleTrigger(runPanelPolicy.id)}
+                onTrigger={(limit, reanalyze) =>
+                  handleTrigger(runPanelPolicy.id, limit, reanalyze)
+                }
                 isTriggerPending={triggerMutation.isPending}
               />
             )}
@@ -794,17 +786,6 @@ function PolicySheetBody({
           />
         </div>
       )}
-
-      {/* Enabled toggle */}
-      <div className="flex items-center justify-between">
-        <div>
-          <Label className="text-sm font-medium">Enabled</Label>
-          <p className="text-muted-foreground text-xs">
-            Enable this policy to begin scanning messages.
-          </p>
-        </div>
-        <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
-      </div>
     </div>
   );
 }
@@ -813,15 +794,32 @@ function PolicySheetBody({
 /*  RunPanel                                                                  */
 /* -------------------------------------------------------------------------- */
 
+type BackfillMode = "recent" | "custom" | "all";
+
+function scopeToLimit(mode: BackfillMode, customLimit: string): number | null {
+  if (mode === "recent") return 1000;
+  if (mode === "all") return 0;
+  const n = parseInt(customLimit, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function scopeLabel(mode: BackfillMode, customLimit: string): string {
+  if (mode === "all") return "all messages";
+  const n = mode === "recent" ? 1000 : parseInt(customLimit, 10);
+  return `${(Number.isFinite(n) ? n : 0).toLocaleString()} recent messages`;
+}
+
 function RunPanel({
   policy,
   onTrigger,
   isTriggerPending,
 }: {
   policy: RiskPolicy;
-  onTrigger: () => void;
+  onTrigger: (limit?: number, reanalyze?: boolean) => void;
   isTriggerPending: boolean;
 }) {
+  const [backfillMode, setBackfillMode] = useState<BackfillMode>("recent");
+  const [customLimit, setCustomLimit] = useState<string>("1000");
   const {
     data: status,
     isLoading,
@@ -940,17 +938,82 @@ function RunPanel({
         ) : null}
       </div>
 
-      <SheetFooter className="border-border border-t px-6 py-4">
-        <Button
-          onClick={onTrigger}
-          disabled={isTriggerPending}
-          className="w-full"
+      <SheetFooter className="border-border flex-col gap-3 border-t px-6 py-4">
+        <RadioGroup
+          value={backfillMode}
+          onValueChange={(v) => setBackfillMode(v as BackfillMode)}
+          className="gap-2"
         >
-          {isTriggerPending && (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          )}
-          Trigger Analysis
-        </Button>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <RadioGroupItem value="recent" id="backfill-recent" />
+            Recent 1,000 messages
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <RadioGroupItem value="custom" id="backfill-custom" />
+            Custom amount
+            <Input
+              type="number"
+              min={1}
+              value={customLimit}
+              onChange={(value) => setCustomLimit(value)}
+              onFocus={() => setBackfillMode("custom")}
+              disabled={isTriggerPending}
+              className="ml-2 w-28"
+              aria-label="Custom backfill limit"
+            />
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <RadioGroupItem value="all" id="backfill-all" />
+            All messages
+          </label>
+        </RadioGroup>
+        <p className="text-muted-foreground text-xs">
+          Skips messages already analyzed at this policy version. Use{" "}
+          <em>Re-analyze</em> to re-scan them.
+        </p>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => {
+              const n = scopeToLimit(backfillMode, customLimit);
+              if (n !== null) onTrigger(n, false);
+            }}
+            disabled={
+              isTriggerPending ||
+              scopeToLimit(backfillMode, customLimit) === null
+            }
+            className="flex-1"
+          >
+            {isTriggerPending && (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            )}
+            Analyze new messages
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                disabled={
+                  isTriggerPending ||
+                  scopeToLimit(backfillMode, customLimit) === null
+                }
+              >
+                Re-analyze
+                <ChevronDown className="ml-1 h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onSelect={() => {
+                  const n = scopeToLimit(backfillMode, customLimit);
+                  if (n !== null) onTrigger(n, true);
+                }}
+              >
+                Re-analyze {scopeLabel(backfillMode, customLimit)}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </SheetFooter>
     </>
   );
