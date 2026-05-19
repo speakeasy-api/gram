@@ -171,8 +171,9 @@ func (s *Store) UpdateSyncLastPolledAt(ctx context.Context, configID uuid.UUID, 
 	if err := s.repo.UpdateSyncLastPolledAt(ctx, repo.UpdateSyncLastPolledAtParams{
 		AiIntegrationConfigID: configID,
 		LastPolledAt: pgtype.Timestamptz{
-			Time:  t.UTC(),
-			Valid: true,
+			Time:             t.UTC(),
+			InfinityModifier: pgtype.Finite,
+			Valid:            true,
 		},
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to update ai integration sync watermark")
@@ -198,15 +199,30 @@ func (s *Store) ListUsagePollCandidates(ctx context.Context, provider string, en
 	params := repo.ListUsagePollCandidatesParams{
 		Provider: provider,
 		LastPolledBefore: pgtype.Timestamptz{
-			Time:  endTime.UTC().Add(-time.Millisecond),
-			Valid: true,
+			Time:             endTime.UTC().Add(-time.Millisecond),
+			InfinityModifier: pgtype.Finite,
+			Valid:            true,
+		},
+		CursorLastPolledAt: pgtype.Timestamptz{
+			Time:             time.Time{},
+			InfinityModifier: pgtype.Finite,
+			Valid:            false,
+		},
+		CursorOrganizationID: pgtype.Text{
+			String: "",
+			Valid:  false,
+		},
+		CursorProvider: pgtype.Text{
+			String: "",
+			Valid:  false,
 		},
 		LimitCount: limit,
 	}
 	if cursor != nil {
 		params.CursorLastPolledAt = pgtype.Timestamptz{
-			Time:  cursor.LastPolledAt.UTC(),
-			Valid: true,
+			Time:             cursor.LastPolledAt.UTC(),
+			InfinityModifier: pgtype.Finite,
+			Valid:            true,
 		}
 		params.CursorOrganizationID = pgtype.Text{
 			String: cursor.OrganizationID,
@@ -243,8 +259,9 @@ func (s *Store) UpdateUsagePollWatermark(ctx context.Context, configID uuid.UUID
 	if err := s.repo.UpdateUsagePollWatermark(ctx, repo.UpdateUsagePollWatermarkParams{
 		AiIntegrationConfigID: configID,
 		LastPolledAt: pgtype.Timestamptz{
-			Time:  t.UTC(),
-			Valid: true,
+			Time:             t.UTC(),
+			InfinityModifier: pgtype.Finite,
+			Valid:            true,
 		},
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to update ai integration usage poll watermark")

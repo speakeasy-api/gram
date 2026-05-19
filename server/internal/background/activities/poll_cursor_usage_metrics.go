@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -12,11 +13,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/activity"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
@@ -47,12 +50,15 @@ type PollCursorUsageMetrics struct {
 	telemetryLogger *telemetry.Logger
 }
 
-func NewPollCursorUsageMetrics(logger *slog.Logger, db *pgxpool.Pool, encryptionClient *encryption.Client, telemetryLogger *telemetry.Logger) *PollCursorUsageMetrics {
+func NewPollCursorUsageMetrics(logger *slog.Logger, db *pgxpool.Pool, encryptionClient *encryption.Client, telemetryLogger *telemetry.Logger, guardianPolicy *guardian.Policy, tracerProvider trace.TracerProvider) *PollCursorUsageMetrics {
+	if guardianPolicy == nil {
+		guardianPolicy = guardian.NewDefaultPolicy(tracerProvider)
+	}
 	return &PollCursorUsageMetrics{
 		logger:          logger.With(attr.SlogComponent("poll_cursor_usage_metrics")),
 		db:              db,
 		integrations:    aiintegrations.NewStore(logger, db, encryptionClient),
-		apiClient:       cursorapi.New(),
+		apiClient:       cursorapi.New(guardianPolicy),
 		telemetryLogger: telemetryLogger,
 	}
 }
@@ -97,7 +103,7 @@ func (c *PollCursorUsageMetrics) ListAIIntegrationUsagePollCandidates(ctx contex
 	}
 	configs, err := c.integrations.ListUsagePollCandidates(ctx, input.Provider, input.EndTime, input.Limit, cursor)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list usage poll candidates: %w", err)
 	}
 
 	out := make([]AIIntegrationUsagePollConfig, 0, len(configs))
@@ -121,14 +127,14 @@ func (c *PollCursorUsageMetrics) SyncAIIntegrationUsage(ctx context.Context, inp
 
 	events, err := c.fetchCursorUsageWindow(ctx, input.Config, input.EndTime)
 	if err != nil {
-		return err
+		return fmt.Errorf("fetch cursor usage window: %w", err)
 	}
 
 	if err := ctx.Err(); err != nil {
-		return err
+		return fmt.Errorf("cursor usage sync canceled before write: %w", err)
 	}
 	if err := c.writeCursorUsageTelemetry(ctx, input.Config, events); err != nil {
-		return err
+		return fmt.Errorf("write cursor usage telemetry: %w", err)
 	}
 
 	id, err := uuid.Parse(input.Config.ID)
@@ -136,7 +142,7 @@ func (c *PollCursorUsageMetrics) SyncAIIntegrationUsage(ctx context.Context, inp
 		return oops.E(oops.CodeInvalid, err, "invalid ai integration config id")
 	}
 	if err := c.integrations.UpdateUsagePollWatermark(ctx, id, input.EndTime); err != nil {
-		return err
+		return fmt.Errorf("update usage poll watermark: %w", err)
 	}
 	return nil
 }
@@ -152,7 +158,7 @@ func (c *PollCursorUsageMetrics) fetchCursorUsageWindow(ctx context.Context, cfg
 			"page":      pageNum,
 		})
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("cursor usage fetch canceled: %w", err)
 		}
 
 		page, err := c.apiClient.FetchUsageEventsPage(ctx, cfg.APIKey, startTime, endTime, pageNum)
@@ -162,15 +168,15 @@ func (c *PollCursorUsageMetrics) fetchCursorUsageWindow(ctx context.Context, cfg
 				sleepFor := cursorRetryDelay(rateLimitErr.RetryAfter)
 				c.logger.InfoContext(ctx, "cursor usage request rate limited",
 					attr.SlogOrganizationID(cfg.OrganizationID),
-					"page", pageNum,
-					"retry_after", sleepFor.String(),
+					attr.SlogPaginationLimit(pageNum),
+					attr.SlogRetryWait(sleepFor),
 				)
 				if err := sleepWithActivityHeartbeat(ctx, sleepFor); err != nil {
-					return nil, err
+					return nil, fmt.Errorf("sleep after cursor rate limit: %w", err)
 				}
 				continue
 			}
-			return nil, err
+			return nil, fmt.Errorf("fetch cursor usage events page: %w", err)
 		}
 
 		for _, event := range page.Events {
@@ -276,7 +282,7 @@ func sleepWithActivityHeartbeat(ctx context.Context, d time.Duration) error {
 			if !timer.Stop() {
 				<-timer.C
 			}
-			return ctx.Err()
+			return fmt.Errorf("cursor usage heartbeat sleep canceled: %w", ctx.Err())
 		case <-timer.C:
 		}
 	}

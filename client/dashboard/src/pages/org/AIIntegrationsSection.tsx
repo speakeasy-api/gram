@@ -1,4 +1,5 @@
 import { RequireScope } from "@/components/require-scope";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { Button } from "@/components/ui/button";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -93,9 +94,10 @@ export function AIIntegrationsSection() {
   return (
     <Stack gap={4}>
       <div>
-        <Heading variant="h4" className="mb-2">
-          AI Integrations
-        </Heading>
+        <Stack direction="horizontal" gap={2} align="center" className="mb-2">
+          <Heading variant="h4">AI Integrations</Heading>
+          <ReleaseStageBadge stage="preview" />
+        </Stack>
         <Type muted small>
           Connect AI providers to Gram. Provider integrations can power usage
           and cost reporting, with room for more use cases as providers expose

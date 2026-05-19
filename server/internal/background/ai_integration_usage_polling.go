@@ -87,7 +87,11 @@ func syncUsageConfigs(ctx workflow.Context, activityCtx workflow.Context, a *Act
 	selector := workflow.NewSelector(ctx)
 	active := make([]*runningUsageSync, 0, aiIntegrationUsageSyncConcurrency)
 	ready := make([]*runningUsageSync, 0, aiIntegrationUsageSyncConcurrency)
-	pager := &usageSyncCandidatePager{}
+	pager := &usageSyncCandidatePager{
+		cursor:    nil,
+		buffer:    nil,
+		exhausted: false,
+	}
 
 	nextCandidate := func() (activities.AIIntegrationUsagePollConfig, bool, error) {
 		for len(pager.buffer) == 0 && !pager.exhausted {
@@ -113,7 +117,14 @@ func syncUsageConfigs(ctx workflow.Context, activityCtx workflow.Context, a *Act
 			pager.buffer = append(pager.buffer, configs...)
 		}
 		if len(pager.buffer) == 0 {
-			return activities.AIIntegrationUsagePollConfig{}, false, nil
+			return activities.AIIntegrationUsagePollConfig{
+				ID:             "",
+				OrganizationID: "",
+				Provider:       "",
+				ProjectID:      "",
+				APIKey:         "",
+				LastPolledAt:   time.Time{},
+			}, false, nil
 		}
 		cfg := pager.buffer[0]
 		pager.buffer = pager.buffer[1:]
@@ -136,7 +147,12 @@ func syncUsageConfigs(ctx workflow.Context, activityCtx workflow.Context, a *Act
 				WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 				WaitForCancellation:   true,
 			})
-			run := &runningUsageSync{config: cfg}
+			run := &runningUsageSync{
+				config: cfg,
+				child:  nil,
+				done:   false,
+				err:    nil,
+			}
 			run.child = workflow.ExecuteChildWorkflow(childCtx, AIIntegrationUsageSyncConfigWorkflow, AIIntegrationUsageSyncConfigInput{
 				Config:  cfg,
 				EndTime: endTime,
