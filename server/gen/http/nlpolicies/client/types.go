@@ -16,11 +16,11 @@ import (
 // CreatePolicyRequestBody is the type of the "nlpolicies" service
 // "createPolicy" endpoint HTTP request body.
 type CreatePolicyRequestBody struct {
-	Name         string  `form:"name" json:"name" xml:"name"`
-	Description  *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	NlPrompt     string  `form:"nl_prompt" json:"nl_prompt" xml:"nl_prompt"`
-	ScopePerCall *bool   `form:"scope_per_call,omitempty" json:"scope_per_call,omitempty" xml:"scope_per_call,omitempty"`
-	ScopeSession *bool   `form:"scope_session,omitempty" json:"scope_session,omitempty" xml:"scope_session,omitempty"`
+	Name        string  `form:"name" json:"name" xml:"name"`
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	NlPrompt    string  `form:"nl_prompt" json:"nl_prompt" xml:"nl_prompt"`
+	// Evaluation targets.
+	Targets []string `form:"targets" json:"targets" xml:"targets"`
 	// fail_open | fail_closed (default fail_open)
 	FailMode *string `form:"fail_mode,omitempty" json:"fail_mode,omitempty" xml:"fail_mode,omitempty"`
 	// JSON-encoded rules array (default "[]")
@@ -31,12 +31,12 @@ type CreatePolicyRequestBody struct {
 // "updatePolicy" endpoint HTTP request body.
 type UpdatePolicyRequestBody struct {
 	// The policy ID.
-	PolicyID     string  `form:"policy_id" json:"policy_id" xml:"policy_id"`
-	Name         *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	Description  *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	NlPrompt     *string `form:"nl_prompt,omitempty" json:"nl_prompt,omitempty" xml:"nl_prompt,omitempty"`
-	ScopePerCall *bool   `form:"scope_per_call,omitempty" json:"scope_per_call,omitempty" xml:"scope_per_call,omitempty"`
-	ScopeSession *bool   `form:"scope_session,omitempty" json:"scope_session,omitempty" xml:"scope_session,omitempty"`
+	PolicyID    string  `form:"policy_id" json:"policy_id" xml:"policy_id"`
+	Name        *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	NlPrompt    *string `form:"nl_prompt,omitempty" json:"nl_prompt,omitempty" xml:"nl_prompt,omitempty"`
+	// Evaluation targets.
+	Targets []string `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
 	// fail_open | fail_closed
 	FailMode *string `form:"fail_mode,omitempty" json:"fail_mode,omitempty" xml:"fail_mode,omitempty"`
 	// JSON-encoded rules array
@@ -88,10 +88,9 @@ type CreatePolicyResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The natural-language judge prompt.
 	NlPrompt *string `form:"nl_prompt,omitempty" json:"nl_prompt,omitempty" xml:"nl_prompt,omitempty"`
-	// Run inline on each tool call.
-	ScopePerCall *bool `form:"scope_per_call,omitempty" json:"scope_per_call,omitempty" xml:"scope_per_call,omitempty"`
-	// Run async over the rolling chat-session window.
-	ScopeSession *bool `form:"scope_session,omitempty" json:"scope_session,omitempty" xml:"scope_session,omitempty"`
+	// Evaluation targets (CheckScope values: user_messages | llm_responses |
+	// tool_arguments | tool_responses).
+	Targets []string `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
 	// audit | enforce | disabled.
 	Mode *string `form:"mode,omitempty" json:"mode,omitempty" xml:"mode,omitempty"`
 	// fail_open | fail_closed — judge error/timeout behavior in enforce mode.
@@ -125,10 +124,9 @@ type GetPolicyResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The natural-language judge prompt.
 	NlPrompt *string `form:"nl_prompt,omitempty" json:"nl_prompt,omitempty" xml:"nl_prompt,omitempty"`
-	// Run inline on each tool call.
-	ScopePerCall *bool `form:"scope_per_call,omitempty" json:"scope_per_call,omitempty" xml:"scope_per_call,omitempty"`
-	// Run async over the rolling chat-session window.
-	ScopeSession *bool `form:"scope_session,omitempty" json:"scope_session,omitempty" xml:"scope_session,omitempty"`
+	// Evaluation targets (CheckScope values: user_messages | llm_responses |
+	// tool_arguments | tool_responses).
+	Targets []string `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
 	// audit | enforce | disabled.
 	Mode *string `form:"mode,omitempty" json:"mode,omitempty" xml:"mode,omitempty"`
 	// fail_open | fail_closed — judge error/timeout behavior in enforce mode.
@@ -156,10 +154,9 @@ type UpdatePolicyResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The natural-language judge prompt.
 	NlPrompt *string `form:"nl_prompt,omitempty" json:"nl_prompt,omitempty" xml:"nl_prompt,omitempty"`
-	// Run inline on each tool call.
-	ScopePerCall *bool `form:"scope_per_call,omitempty" json:"scope_per_call,omitempty" xml:"scope_per_call,omitempty"`
-	// Run async over the rolling chat-session window.
-	ScopeSession *bool `form:"scope_session,omitempty" json:"scope_session,omitempty" xml:"scope_session,omitempty"`
+	// Evaluation targets (CheckScope values: user_messages | llm_responses |
+	// tool_arguments | tool_responses).
+	Targets []string `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
 	// audit | enforce | disabled.
 	Mode *string `form:"mode,omitempty" json:"mode,omitempty" xml:"mode,omitempty"`
 	// fail_open | fail_closed — judge error/timeout behavior in enforce mode.
@@ -187,10 +184,9 @@ type SetModeResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The natural-language judge prompt.
 	NlPrompt *string `form:"nl_prompt,omitempty" json:"nl_prompt,omitempty" xml:"nl_prompt,omitempty"`
-	// Run inline on each tool call.
-	ScopePerCall *bool `form:"scope_per_call,omitempty" json:"scope_per_call,omitempty" xml:"scope_per_call,omitempty"`
-	// Run async over the rolling chat-session window.
-	ScopeSession *bool `form:"scope_session,omitempty" json:"scope_session,omitempty" xml:"scope_session,omitempty"`
+	// Evaluation targets (CheckScope values: user_messages | llm_responses |
+	// tool_arguments | tool_responses).
+	Targets []string `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
 	// audit | enforce | disabled.
 	Mode *string `form:"mode,omitempty" json:"mode,omitempty" xml:"mode,omitempty"`
 	// fail_open | fail_closed — judge error/timeout behavior in enforce mode.
@@ -2516,10 +2512,9 @@ type NLPolicyResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The natural-language judge prompt.
 	NlPrompt *string `form:"nl_prompt,omitempty" json:"nl_prompt,omitempty" xml:"nl_prompt,omitempty"`
-	// Run inline on each tool call.
-	ScopePerCall *bool `form:"scope_per_call,omitempty" json:"scope_per_call,omitempty" xml:"scope_per_call,omitempty"`
-	// Run async over the rolling chat-session window.
-	ScopeSession *bool `form:"scope_session,omitempty" json:"scope_session,omitempty" xml:"scope_session,omitempty"`
+	// Evaluation targets (CheckScope values: user_messages | llm_responses |
+	// tool_arguments | tool_responses).
+	Targets []string `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
 	// audit | enforce | disabled.
 	Mode *string `form:"mode,omitempty" json:"mode,omitempty" xml:"mode,omitempty"`
 	// fail_open | fail_closed — judge error/timeout behavior in enforce mode.
@@ -2615,13 +2610,19 @@ type NLPolicyReplayResultResponseBody struct {
 // the "createPolicy" endpoint of the "nlpolicies" service.
 func NewCreatePolicyRequestBody(p *nlpolicies.CreatePolicyPayload) *CreatePolicyRequestBody {
 	body := &CreatePolicyRequestBody{
-		Name:         p.Name,
-		Description:  p.Description,
-		NlPrompt:     p.NlPrompt,
-		ScopePerCall: p.ScopePerCall,
-		ScopeSession: p.ScopeSession,
-		FailMode:     p.FailMode,
-		StaticRules:  p.StaticRules,
+		Name:        p.Name,
+		Description: p.Description,
+		NlPrompt:    p.NlPrompt,
+		FailMode:    p.FailMode,
+		StaticRules: p.StaticRules,
+	}
+	if p.Targets != nil {
+		body.Targets = make([]string, len(p.Targets))
+		for i, val := range p.Targets {
+			body.Targets[i] = val
+		}
+	} else {
+		body.Targets = []string{}
 	}
 	return body
 }
@@ -2630,14 +2631,18 @@ func NewCreatePolicyRequestBody(p *nlpolicies.CreatePolicyPayload) *CreatePolicy
 // the "updatePolicy" endpoint of the "nlpolicies" service.
 func NewUpdatePolicyRequestBody(p *nlpolicies.UpdatePolicyPayload) *UpdatePolicyRequestBody {
 	body := &UpdatePolicyRequestBody{
-		PolicyID:     p.PolicyID,
-		Name:         p.Name,
-		Description:  p.Description,
-		NlPrompt:     p.NlPrompt,
-		ScopePerCall: p.ScopePerCall,
-		ScopeSession: p.ScopeSession,
-		FailMode:     p.FailMode,
-		StaticRules:  p.StaticRules,
+		PolicyID:    p.PolicyID,
+		Name:        p.Name,
+		Description: p.Description,
+		NlPrompt:    p.NlPrompt,
+		FailMode:    p.FailMode,
+		StaticRules: p.StaticRules,
+	}
+	if p.Targets != nil {
+		body.Targets = make([]string, len(p.Targets))
+		for i, val := range p.Targets {
+			body.Targets[i] = val
+		}
 	}
 	return body
 }
@@ -2684,19 +2689,21 @@ func NewReplayRequestBody(p *nlpolicies.ReplayPayload) *ReplayRequestBody {
 // endpoint result from a HTTP "OK" response.
 func NewCreatePolicyNLPolicyOK(body *CreatePolicyResponseBody) *types.NLPolicy {
 	v := &types.NLPolicy{
-		ID:           *body.ID,
-		ProjectID:    body.ProjectID,
-		Name:         *body.Name,
-		Description:  body.Description,
-		NlPrompt:     *body.NlPrompt,
-		ScopePerCall: *body.ScopePerCall,
-		ScopeSession: *body.ScopeSession,
-		Mode:         *body.Mode,
-		FailMode:     *body.FailMode,
-		StaticRules:  *body.StaticRules,
-		Version:      *body.Version,
-		CreatedAt:    *body.CreatedAt,
-		UpdatedAt:    *body.UpdatedAt,
+		ID:          *body.ID,
+		ProjectID:   body.ProjectID,
+		Name:        *body.Name,
+		Description: body.Description,
+		NlPrompt:    *body.NlPrompt,
+		Mode:        *body.Mode,
+		FailMode:    *body.FailMode,
+		StaticRules: *body.StaticRules,
+		Version:     *body.Version,
+		CreatedAt:   *body.CreatedAt,
+		UpdatedAt:   *body.UpdatedAt,
+	}
+	v.Targets = make([]string, len(body.Targets))
+	for i, val := range body.Targets {
+		v.Targets[i] = val
 	}
 
 	return v
@@ -3022,19 +3029,21 @@ func NewListPoliciesGatewayError(body *ListPoliciesGatewayErrorResponseBody) *go
 // result from a HTTP "OK" response.
 func NewGetPolicyNLPolicyOK(body *GetPolicyResponseBody) *types.NLPolicy {
 	v := &types.NLPolicy{
-		ID:           *body.ID,
-		ProjectID:    body.ProjectID,
-		Name:         *body.Name,
-		Description:  body.Description,
-		NlPrompt:     *body.NlPrompt,
-		ScopePerCall: *body.ScopePerCall,
-		ScopeSession: *body.ScopeSession,
-		Mode:         *body.Mode,
-		FailMode:     *body.FailMode,
-		StaticRules:  *body.StaticRules,
-		Version:      *body.Version,
-		CreatedAt:    *body.CreatedAt,
-		UpdatedAt:    *body.UpdatedAt,
+		ID:          *body.ID,
+		ProjectID:   body.ProjectID,
+		Name:        *body.Name,
+		Description: body.Description,
+		NlPrompt:    *body.NlPrompt,
+		Mode:        *body.Mode,
+		FailMode:    *body.FailMode,
+		StaticRules: *body.StaticRules,
+		Version:     *body.Version,
+		CreatedAt:   *body.CreatedAt,
+		UpdatedAt:   *body.UpdatedAt,
+	}
+	v.Targets = make([]string, len(body.Targets))
+	for i, val := range body.Targets {
+		v.Targets[i] = val
 	}
 
 	return v
@@ -3194,19 +3203,21 @@ func NewGetPolicyGatewayError(body *GetPolicyGatewayErrorResponseBody) *goa.Serv
 // endpoint result from a HTTP "OK" response.
 func NewUpdatePolicyNLPolicyOK(body *UpdatePolicyResponseBody) *types.NLPolicy {
 	v := &types.NLPolicy{
-		ID:           *body.ID,
-		ProjectID:    body.ProjectID,
-		Name:         *body.Name,
-		Description:  body.Description,
-		NlPrompt:     *body.NlPrompt,
-		ScopePerCall: *body.ScopePerCall,
-		ScopeSession: *body.ScopeSession,
-		Mode:         *body.Mode,
-		FailMode:     *body.FailMode,
-		StaticRules:  *body.StaticRules,
-		Version:      *body.Version,
-		CreatedAt:    *body.CreatedAt,
-		UpdatedAt:    *body.UpdatedAt,
+		ID:          *body.ID,
+		ProjectID:   body.ProjectID,
+		Name:        *body.Name,
+		Description: body.Description,
+		NlPrompt:    *body.NlPrompt,
+		Mode:        *body.Mode,
+		FailMode:    *body.FailMode,
+		StaticRules: *body.StaticRules,
+		Version:     *body.Version,
+		CreatedAt:   *body.CreatedAt,
+		UpdatedAt:   *body.UpdatedAt,
+	}
+	v.Targets = make([]string, len(body.Targets))
+	for i, val := range body.Targets {
+		v.Targets[i] = val
 	}
 
 	return v
@@ -3366,19 +3377,21 @@ func NewUpdatePolicyGatewayError(body *UpdatePolicyGatewayErrorResponseBody) *go
 // from a HTTP "OK" response.
 func NewSetModeNLPolicyOK(body *SetModeResponseBody) *types.NLPolicy {
 	v := &types.NLPolicy{
-		ID:           *body.ID,
-		ProjectID:    body.ProjectID,
-		Name:         *body.Name,
-		Description:  body.Description,
-		NlPrompt:     *body.NlPrompt,
-		ScopePerCall: *body.ScopePerCall,
-		ScopeSession: *body.ScopeSession,
-		Mode:         *body.Mode,
-		FailMode:     *body.FailMode,
-		StaticRules:  *body.StaticRules,
-		Version:      *body.Version,
-		CreatedAt:    *body.CreatedAt,
-		UpdatedAt:    *body.UpdatedAt,
+		ID:          *body.ID,
+		ProjectID:   body.ProjectID,
+		Name:        *body.Name,
+		Description: body.Description,
+		NlPrompt:    *body.NlPrompt,
+		Mode:        *body.Mode,
+		FailMode:    *body.FailMode,
+		StaticRules: *body.StaticRules,
+		Version:     *body.Version,
+		CreatedAt:   *body.CreatedAt,
+		UpdatedAt:   *body.UpdatedAt,
+	}
+	v.Targets = make([]string, len(body.Targets))
+	for i, val := range body.Targets {
+		v.Targets[i] = val
 	}
 
 	return v
@@ -4701,11 +4714,8 @@ func ValidateCreatePolicyResponseBody(body *CreatePolicyResponseBody) (err error
 	if body.NlPrompt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("nl_prompt", "body"))
 	}
-	if body.ScopePerCall == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scope_per_call", "body"))
-	}
-	if body.ScopeSession == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scope_session", "body"))
+	if body.Targets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("targets", "body"))
 	}
 	if body.Mode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
@@ -4778,11 +4788,8 @@ func ValidateGetPolicyResponseBody(body *GetPolicyResponseBody) (err error) {
 	if body.NlPrompt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("nl_prompt", "body"))
 	}
-	if body.ScopePerCall == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scope_per_call", "body"))
-	}
-	if body.ScopeSession == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scope_session", "body"))
+	if body.Targets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("targets", "body"))
 	}
 	if body.Mode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
@@ -4839,11 +4846,8 @@ func ValidateUpdatePolicyResponseBody(body *UpdatePolicyResponseBody) (err error
 	if body.NlPrompt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("nl_prompt", "body"))
 	}
-	if body.ScopePerCall == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scope_per_call", "body"))
-	}
-	if body.ScopeSession == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scope_session", "body"))
+	if body.Targets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("targets", "body"))
 	}
 	if body.Mode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
@@ -4900,11 +4904,8 @@ func ValidateSetModeResponseBody(body *SetModeResponseBody) (err error) {
 	if body.NlPrompt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("nl_prompt", "body"))
 	}
-	if body.ScopePerCall == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scope_per_call", "body"))
-	}
-	if body.ScopeSession == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scope_session", "body"))
+	if body.Targets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("targets", "body"))
 	}
 	if body.Mode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
@@ -8020,11 +8021,8 @@ func ValidateNLPolicyResponseBody(body *NLPolicyResponseBody) (err error) {
 	if body.NlPrompt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("nl_prompt", "body"))
 	}
-	if body.ScopePerCall == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scope_per_call", "body"))
-	}
-	if body.ScopeSession == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scope_session", "body"))
+	if body.Targets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("targets", "body"))
 	}
 	if body.Mode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))

@@ -36,6 +36,10 @@ export type CreateRiskPolicyRequestBody = {
    */
   name?: string | undefined;
   /**
+   * LLM judge prompt for natural-language evaluation.
+   */
+  nlPrompt?: string | undefined;
+  /**
    * Presidio entity types to detect.
    */
   presidioEntities?: Array<string> | undefined;
@@ -47,6 +51,10 @@ export type CreateRiskPolicyRequestBody = {
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
+  /**
+   * Evaluation targets.
+   */
+  targets?: Array<string> | undefined;
   /**
    * Optional message shown to end users when this policy blocks an action or surfaces a flagged finding.
    */
@@ -64,9 +72,11 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   auto_name?: boolean | undefined;
   enabled?: boolean | undefined;
   name?: string | undefined;
+  nl_prompt?: string | undefined;
   presidio_entities?: Array<string> | undefined;
   prompt_injection_rules?: Array<string> | undefined;
   sources?: Array<string> | undefined;
+  targets?: Array<string> | undefined;
   user_message?: string | undefined;
 };
 
@@ -80,14 +90,17 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     autoName: z.optional(z.boolean()),
     enabled: z.optional(z.boolean()),
     name: z.optional(z.string()),
+    nlPrompt: z.optional(z.string()),
     presidioEntities: z.optional(z.array(z.string())),
     promptInjectionRules: z.optional(z.array(z.string())),
     sources: z.optional(z.array(z.string())),
+    targets: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       autoName: "auto_name",
+      nlPrompt: "nl_prompt",
       presidioEntities: "presidio_entities",
       promptInjectionRules: "prompt_injection_rules",
       userMessage: "user_message",

@@ -2947,19 +2947,21 @@ func DecodeListReplayResultsResponse(decoder func(*http.Response) goahttp.Decode
 // *types.NLPolicy from a value of type *NLPolicyResponseBody.
 func unmarshalNLPolicyResponseBodyToTypesNLPolicy(v *NLPolicyResponseBody) *types.NLPolicy {
 	res := &types.NLPolicy{
-		ID:           *v.ID,
-		ProjectID:    v.ProjectID,
-		Name:         *v.Name,
-		Description:  v.Description,
-		NlPrompt:     *v.NlPrompt,
-		ScopePerCall: *v.ScopePerCall,
-		ScopeSession: *v.ScopeSession,
-		Mode:         *v.Mode,
-		FailMode:     *v.FailMode,
-		StaticRules:  *v.StaticRules,
-		Version:      *v.Version,
-		CreatedAt:    *v.CreatedAt,
-		UpdatedAt:    *v.UpdatedAt,
+		ID:          *v.ID,
+		ProjectID:   v.ProjectID,
+		Name:        *v.Name,
+		Description: v.Description,
+		NlPrompt:    *v.NlPrompt,
+		Mode:        *v.Mode,
+		FailMode:    *v.FailMode,
+		StaticRules: *v.StaticRules,
+		Version:     *v.Version,
+		CreatedAt:   *v.CreatedAt,
+		UpdatedAt:   *v.UpdatedAt,
+	}
+	res.Targets = make([]string, len(v.Targets))
+	for i, val := range v.Targets {
+		res.Targets[i] = val
 	}
 
 	return res

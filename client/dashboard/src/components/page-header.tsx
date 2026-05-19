@@ -71,7 +71,7 @@ const breadcrumbSubstitutions = {
   "audit-logs": "Audit Logs",
   "admin-settings": "Admin Settings",
   "risk-overview": "Risk Overview",
-  "risk-policies": "Risk Policies",
+  "risk-policies": "Policies",
   // The URL segments `slack` and `clis` are preserved for backwards
   // compatibility, but the sidebar/route titles were rebranded — map them
   // here so breadcrumbs stay in sync with the rest of the UI.

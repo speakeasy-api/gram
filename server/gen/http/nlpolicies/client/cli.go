@@ -24,7 +24,13 @@ func BuildCreatePolicyPayload(nlpoliciesCreatePolicyBody string, nlpoliciesCreat
 	{
 		err = json.Unmarshal([]byte(nlpoliciesCreatePolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"fail_mode\": \"abc123\",\n      \"name\": \"abc123\",\n      \"nl_prompt\": \"abc123\",\n      \"scope_per_call\": false,\n      \"scope_session\": false,\n      \"static_rules\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"fail_mode\": \"abc123\",\n      \"name\": \"abc123\",\n      \"nl_prompt\": \"abc123\",\n      \"static_rules\": \"abc123\",\n      \"targets\": [\n         \"abc123\"\n      ]\n   }'")
+		}
+		if body.Targets == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("targets", "body"))
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var apikeyToken *string
@@ -46,13 +52,19 @@ func BuildCreatePolicyPayload(nlpoliciesCreatePolicyBody string, nlpoliciesCreat
 		}
 	}
 	v := &nlpolicies.CreatePolicyPayload{
-		Name:         body.Name,
-		Description:  body.Description,
-		NlPrompt:     body.NlPrompt,
-		ScopePerCall: body.ScopePerCall,
-		ScopeSession: body.ScopeSession,
-		FailMode:     body.FailMode,
-		StaticRules:  body.StaticRules,
+		Name:        body.Name,
+		Description: body.Description,
+		NlPrompt:    body.NlPrompt,
+		FailMode:    body.FailMode,
+		StaticRules: body.StaticRules,
+	}
+	if body.Targets != nil {
+		v.Targets = make([]string, len(body.Targets))
+		for i, val := range body.Targets {
+			v.Targets[i] = val
+		}
+	} else {
+		v.Targets = []string{}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -137,7 +149,7 @@ func BuildUpdatePolicyPayload(nlpoliciesUpdatePolicyBody string, nlpoliciesUpdat
 	{
 		err = json.Unmarshal([]byte(nlpoliciesUpdatePolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"fail_mode\": \"abc123\",\n      \"name\": \"abc123\",\n      \"nl_prompt\": \"abc123\",\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope_per_call\": false,\n      \"scope_session\": false,\n      \"static_rules\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"fail_mode\": \"abc123\",\n      \"name\": \"abc123\",\n      \"nl_prompt\": \"abc123\",\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"static_rules\": \"abc123\",\n      \"targets\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", body.PolicyID, goa.FormatUUID))
 		if err != nil {
@@ -163,14 +175,18 @@ func BuildUpdatePolicyPayload(nlpoliciesUpdatePolicyBody string, nlpoliciesUpdat
 		}
 	}
 	v := &nlpolicies.UpdatePolicyPayload{
-		PolicyID:     body.PolicyID,
-		Name:         body.Name,
-		Description:  body.Description,
-		NlPrompt:     body.NlPrompt,
-		ScopePerCall: body.ScopePerCall,
-		ScopeSession: body.ScopeSession,
-		FailMode:     body.FailMode,
-		StaticRules:  body.StaticRules,
+		PolicyID:    body.PolicyID,
+		Name:        body.Name,
+		Description: body.Description,
+		NlPrompt:    body.NlPrompt,
+		FailMode:    body.FailMode,
+		StaticRules: body.StaticRules,
+	}
+	if body.Targets != nil {
+		v.Targets = make([]string, len(body.Targets))
+		for i, val := range body.Targets {
+			v.Targets[i] = val
+		}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

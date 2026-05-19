@@ -103,6 +103,10 @@ type CreateRiskPolicyPayload struct {
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
 	// baseline (e.g. 'deberta-v3-classifier').
 	PromptInjectionRules []string
+	// LLM judge prompt for natural-language evaluation.
+	NlPrompt *string
+	// Evaluation targets.
+	Targets []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.
@@ -282,6 +286,10 @@ type UpdateRiskPolicyPayload struct {
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
 	// baseline (e.g. 'deberta-v3-classifier').
 	PromptInjectionRules []string
+	// LLM judge prompt for natural-language evaluation.
+	NlPrompt *string
+	// Evaluation targets.
+	Targets []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.

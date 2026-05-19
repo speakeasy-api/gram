@@ -29334,16 +29334,18 @@ components:
                     type: string
                 nl_prompt:
                     type: string
-                scope_per_call:
-                    type: boolean
-                scope_session:
-                    type: boolean
                 static_rules:
                     type: string
                     description: JSON-encoded rules array (default "[]")
+                targets:
+                    type: array
+                    items:
+                        type: string
+                    description: Evaluation targets.
             required:
                 - name
                 - nl_prompt
+                - targets
         CreatePortalSessionResult:
             type: object
             properties:
@@ -29620,6 +29622,9 @@ components:
                 name:
                     type: string
                     description: The policy name. If omitted, a name will be auto-generated.
+                nl_prompt:
+                    type: string
+                    description: LLM judge prompt for natural-language evaluation.
                 presidio_entities:
                     type: array
                     items:
@@ -29635,6 +29640,11 @@ components:
                     items:
                         type: string
                     description: Detection sources to enable.
+                targets:
+                    type: array
+                    items:
+                        type: string
+                    description: Evaluation targets.
                 user_message:
                     type: string
                     description: Optional message shown to end users when this policy blocks an action or surfaces a flagged finding.
@@ -33384,15 +33394,14 @@ components:
                     type: string
                     description: The project ID. Empty when org-wide.
                     format: uuid
-                scope_per_call:
-                    type: boolean
-                    description: Run inline on each tool call.
-                scope_session:
-                    type: boolean
-                    description: Run async over the rolling chat-session window.
                 static_rules:
                     type: string
                     description: JSON-encoded static rule list (see spec §6 grammar).
+                targets:
+                    type: array
+                    items:
+                        type: string
+                    description: 'Evaluation targets (CheckScope values: user_messages | llm_responses | tool_arguments | tool_responses).'
                 updated_at:
                     type: string
                     description: RFC3339 timestamp.
@@ -33405,8 +33414,7 @@ components:
                 - id
                 - name
                 - nl_prompt
-                - scope_per_call
-                - scope_session
+                - targets
                 - mode
                 - fail_mode
                 - static_rules
@@ -35657,6 +35665,9 @@ components:
                 name:
                     type: string
                     description: The policy name.
+                nl_prompt:
+                    type: string
+                    description: LLM judge prompt for natural-language evaluation. Present when nl_policy category is active.
                 pending_messages:
                     type: integer
                     description: Number of messages not yet analyzed at the current policy version.
@@ -35680,6 +35691,11 @@ components:
                     items:
                         type: string
                     description: Detection sources enabled for this policy.
+                targets:
+                    type: array
+                    items:
+                        type: string
+                    description: Evaluation targets. When empty, all scopes are evaluated.
                 total_messages:
                     type: integer
                     description: Total number of messages in the project.
@@ -38091,13 +38107,14 @@ components:
                     type: string
                     description: The policy ID.
                     format: uuid
-                scope_per_call:
-                    type: boolean
-                scope_session:
-                    type: boolean
                 static_rules:
                     type: string
                     description: JSON-encoded rules array
+                targets:
+                    type: array
+                    items:
+                        type: string
+                    description: Evaluation targets.
             required:
                 - policy_id
         UpdatePromptTemplateForm:
@@ -38262,6 +38279,9 @@ components:
                 name:
                     type: string
                     description: The policy name.
+                nl_prompt:
+                    type: string
+                    description: LLM judge prompt for natural-language evaluation.
                 presidio_entities:
                     type: array
                     items:
@@ -38277,6 +38297,11 @@ components:
                     items:
                         type: string
                     description: Detection sources to enable.
+                targets:
+                    type: array
+                    items:
+                        type: string
+                    description: Evaluation targets.
                 user_message:
                     type: string
                     description: Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.

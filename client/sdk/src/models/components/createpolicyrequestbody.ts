@@ -13,12 +13,14 @@ export type CreatePolicyRequestBody = {
   failMode?: string | undefined;
   name: string;
   nlPrompt: string;
-  scopePerCall?: boolean | undefined;
-  scopeSession?: boolean | undefined;
   /**
    * JSON-encoded rules array (default "[]")
    */
   staticRules?: string | undefined;
+  /**
+   * Evaluation targets.
+   */
+  targets: Array<string>;
 };
 
 /** @internal */
@@ -27,9 +29,8 @@ export type CreatePolicyRequestBody$Outbound = {
   fail_mode?: string | undefined;
   name: string;
   nl_prompt: string;
-  scope_per_call?: boolean | undefined;
-  scope_session?: boolean | undefined;
   static_rules?: string | undefined;
+  targets: Array<string>;
 };
 
 /** @internal */
@@ -42,16 +43,13 @@ export const CreatePolicyRequestBody$outboundSchema: z.ZodMiniType<
     failMode: z.optional(z.string()),
     name: z.string(),
     nlPrompt: z.string(),
-    scopePerCall: z.optional(z.boolean()),
-    scopeSession: z.optional(z.boolean()),
     staticRules: z.optional(z.string()),
+    targets: z.array(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       failMode: "fail_mode",
       nlPrompt: "nl_prompt",
-      scopePerCall: "scope_per_call",
-      scopeSession: "scope_session",
       staticRules: "static_rules",
     });
   }),

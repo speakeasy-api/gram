@@ -2945,19 +2945,25 @@ func EncodeListReplayResultsError(encoder func(context.Context, http.ResponseWri
 // *NLPolicyResponseBody from a value of type *types.NLPolicy.
 func marshalTypesNLPolicyToNLPolicyResponseBody(v *types.NLPolicy) *NLPolicyResponseBody {
 	res := &NLPolicyResponseBody{
-		ID:           v.ID,
-		ProjectID:    v.ProjectID,
-		Name:         v.Name,
-		Description:  v.Description,
-		NlPrompt:     v.NlPrompt,
-		ScopePerCall: v.ScopePerCall,
-		ScopeSession: v.ScopeSession,
-		Mode:         v.Mode,
-		FailMode:     v.FailMode,
-		StaticRules:  v.StaticRules,
-		Version:      v.Version,
-		CreatedAt:    v.CreatedAt,
-		UpdatedAt:    v.UpdatedAt,
+		ID:          v.ID,
+		ProjectID:   v.ProjectID,
+		Name:        v.Name,
+		Description: v.Description,
+		NlPrompt:    v.NlPrompt,
+		Mode:        v.Mode,
+		FailMode:    v.FailMode,
+		StaticRules: v.StaticRules,
+		Version:     v.Version,
+		CreatedAt:   v.CreatedAt,
+		UpdatedAt:   v.UpdatedAt,
+	}
+	if v.Targets != nil {
+		res.Targets = make([]string, len(v.Targets))
+		for i, val := range v.Targets {
+			res.Targets[i] = val
+		}
+	} else {
+		res.Targets = []string{}
 	}
 
 	return res

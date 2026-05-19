@@ -22,6 +22,11 @@ type RiskPolicy struct {
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
 	PromptInjectionRules []string
+	// LLM judge prompt for natural-language evaluation. Present when nl_policy
+	// category is active.
+	NlPrompt *string
+	// Evaluation targets. When empty, all scopes are evaluated.
+	Targets []string
 	// Whether the policy is active.
 	Enabled bool
 	// Policy action: flag (log only) or block (deny in real-time).

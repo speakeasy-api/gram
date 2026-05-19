@@ -47,6 +47,10 @@ export type RiskPolicy = {
    */
   name: string;
   /**
+   * LLM judge prompt for natural-language evaluation. Present when nl_policy category is active.
+   */
+  nlPrompt?: string | undefined;
+  /**
    * Number of messages not yet analyzed at the current policy version.
    */
   pendingMessages: number;
@@ -66,6 +70,10 @@ export type RiskPolicy = {
    * Detection sources enabled for this policy.
    */
   sources: Array<string>;
+  /**
+   * Evaluation targets. When empty, all scopes are evaluated.
+   */
+  targets?: Array<string> | undefined;
   /**
    * Total number of messages in the project.
    */
@@ -102,11 +110,13 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       enabled: z.boolean(),
       id: z.string(),
       name: z.string(),
+      nl_prompt: z.optional(z.string()),
       pending_messages: z.int(),
       presidio_entities: z.optional(z.array(z.string())),
       project_id: z.string(),
       prompt_injection_rules: z.optional(z.array(z.string())),
       sources: z.array(z.string()),
+      targets: z.optional(z.array(z.string())),
       total_messages: z.int(),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
@@ -119,6 +129,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       return remap$(v, {
         "auto_name": "autoName",
         "created_at": "createdAt",
+        "nl_prompt": "nlPrompt",
         "pending_messages": "pendingMessages",
         "presidio_entities": "presidioEntities",
         "project_id": "projectId",

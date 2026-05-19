@@ -86,8 +86,8 @@ type CreatePolicyPayload struct {
 	Name             string
 	Description      *string
 	NlPrompt         string
-	ScopePerCall     *bool
-	ScopeSession     *bool
+	// Evaluation targets.
+	Targets []string
 	// fail_open | fail_closed (default fail_open)
 	FailMode *string
 	// JSON-encoded rules array (default "[]")
@@ -247,12 +247,12 @@ type UpdatePolicyPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The policy ID.
-	PolicyID     string
-	Name         *string
-	Description  *string
-	NlPrompt     *string
-	ScopePerCall *bool
-	ScopeSession *bool
+	PolicyID    string
+	Name        *string
+	Description *string
+	NlPrompt    *string
+	// Evaluation targets.
+	Targets []string
 	// fail_open | fail_closed
 	FailMode *string
 	// JSON-encoded rules array

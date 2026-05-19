@@ -3056,6 +3056,7 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		ID:              v.ID,
 		ProjectID:       v.ProjectID,
 		Name:            v.Name,
+		NlPrompt:        v.NlPrompt,
 		Enabled:         v.Enabled,
 		Action:          v.Action,
 		AutoName:        v.AutoName,
@@ -3084,6 +3085,12 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		res.PromptInjectionRules = make([]string, len(v.PromptInjectionRules))
 		for i, val := range v.PromptInjectionRules {
 			res.PromptInjectionRules[i] = val
+		}
+	}
+	if v.Targets != nil {
+		res.Targets = make([]string, len(v.Targets))
+		for i, val := range v.Targets {
+			res.Targets[i] = val
 		}
 	}
 

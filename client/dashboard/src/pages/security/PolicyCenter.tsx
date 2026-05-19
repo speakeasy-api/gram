@@ -40,6 +40,7 @@ import {
   Loader2,
   ChevronRight,
   RefreshCw,
+  Settings,
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import { Outlet, useNavigate } from "react-router";
@@ -52,6 +53,8 @@ import {
   useRiskPoliciesTriggerMutation,
   invalidateAllRiskListPolicies,
   useNlPoliciesList,
+  invalidateAllNlPoliciesList,
+  useNlPoliciesSetModeMutation,
 } from "@gram/client/react-query/index.js";
 import {
   useRiskPoliciesStatus,
@@ -62,12 +65,14 @@ import { useRoutes } from "@/routes";
 import {
   RULE_CATEGORY_META,
   DETECTION_RULES,
+  CHECK_SCOPE_META,
   type RuleCategory,
   type PolicyAction,
+  type CheckScope,
 } from "./policy-data";
-import NLPolicyCreateForm from "./NLPolicyCreateForm";
 import { cn } from "@/lib/utils";
 import { ruleIdToPresidioEntity } from "./rule-ids";
+import NLPolicyCreateForm from "./NLPolicyCreateForm";
 
 export function PolicyCenterRoot() {
   return <Outlet />;
@@ -100,12 +105,14 @@ const ALL_CATEGORIES: RuleCategory[] = [
   "off_policy",
 ];
 
+export const ALL_CHECK_SCOPES = Object.keys(CHECK_SCOPE_META) as CheckScope[];
+
 /** Derive selected categories from a policy's sources + presidioEntities.
  *
  * DETECTION_RULES.id is the canonical `pii.<snake_case>` form; the wire format
  * stored on the policy is the UPPER_SNAKE entity name Presidio speaks. We
  * translate at this boundary so callers never see the wire format. */
-function policyToCategories(
+export function policyToCategories(
   sources: string[],
   presidioEntities?: string[],
 ): Set<RuleCategory> {
@@ -132,7 +139,7 @@ function policyToCategories(
  * empty here for backward compatibility with the policy schema.
  *
  * `presidioEntities` is translated to UPPER_SNAKE for Presidio's HTTP API. */
-function categoriesToPayload(cats: Set<RuleCategory>) {
+export function categoriesToPayload(cats: Set<RuleCategory>) {
   const sources: string[] = [];
   const presidioEntities: string[] = [];
   const promptInjectionRules: string[] = [];
@@ -152,7 +159,7 @@ function categoriesToPayload(cats: Set<RuleCategory>) {
 }
 
 /** Map sources to display categories for the table row badges. */
-function sourcesToCategories(
+export function sourcesToCategories(
   sources: string[],
   presidioEntities?: string[],
 ): RuleCategory[] {
@@ -179,7 +186,6 @@ function PolicyCenterContent() {
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [nlCreateOpen, setNlCreateOpen] = useState(false);
-  const [editingPolicy, setEditingPolicy] = useState<RiskPolicy | null>(null);
   const [formName, setFormName] = useState("");
   const [formEnabled, setFormEnabled] = useState(true);
   const [selectedCategories, setSelectedCategories] = useState<
@@ -188,6 +194,8 @@ function PolicyCenterContent() {
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
   const [formAutoName, setFormAutoName] = useState(true);
   const [formUserMessage, setFormUserMessage] = useState("");
+  const [formTargets, setFormTargets] =
+    useState<CheckScope[]>(ALL_CHECK_SCOPES);
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
@@ -197,9 +205,10 @@ function PolicyCenterContent() {
   }, [queryClient]);
 
   const createMutation = useRiskCreatePolicyMutation({
-    onSuccess: () => {
+    onSuccess: (policy) => {
       invalidate();
       setSheetOpen(false);
+      navigate(routes.policyCenter.riskDetail.href(policy.id));
     },
   });
 
@@ -218,27 +227,18 @@ function PolicyCenterContent() {
     onSuccess: invalidate,
   });
 
+  const setNlModeMutation = useNlPoliciesSetModeMutation({
+    onSuccess: () => invalidateAllNlPoliciesList(queryClient),
+  });
+
   const handleCreate = () => {
-    setEditingPolicy(null);
     setFormName("");
     setFormEnabled(true);
     setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
     setFormAction("flag");
     setFormAutoName(true);
     setFormUserMessage("");
-    setSheetOpen(true);
-  };
-
-  const handleEdit = (policy: RiskPolicy) => {
-    setEditingPolicy(policy);
-    setFormName(policy.name);
-    setFormEnabled(policy.enabled);
-    setSelectedCategories(
-      policyToCategories(policy.sources, policy.presidioEntities),
-    );
-    setFormAction((policy.action as PolicyAction) ?? "flag");
-    setFormAutoName(policy.autoName ?? true);
-    setFormUserMessage(policy.userMessage ?? "");
+    setFormTargets(ALL_CHECK_SCOPES);
     setSheetOpen(true);
   };
 
@@ -249,38 +249,21 @@ function PolicyCenterContent() {
       sources.includes("destructive_tool") && formAction === "block"
         ? "flag"
         : formAction;
-    if (editingPolicy) {
-      updateMutation.mutate({
-        request: {
-          updateRiskPolicyRequestBody: {
-            id: editingPolicy.id,
-            name: formName,
-            enabled: formEnabled,
-            sources,
-            presidioEntities,
-            promptInjectionRules,
-            action,
-            autoName: formAutoName,
-            userMessage: formUserMessage,
-          },
+    createMutation.mutate({
+      request: {
+        createRiskPolicyRequestBody: {
+          ...(formAutoName ? {} : { name: formName }),
+          enabled: formEnabled,
+          sources,
+          presidioEntities,
+          promptInjectionRules,
+          targets: formTargets,
+          action,
+          autoName: formAutoName,
+          ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
         },
-      });
-    } else {
-      createMutation.mutate({
-        request: {
-          createRiskPolicyRequestBody: {
-            ...(formAutoName ? {} : { name: formName }),
-            enabled: formEnabled,
-            sources,
-            presidioEntities,
-            promptInjectionRules,
-            action,
-            autoName: formAutoName,
-            ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
-          },
-        },
-      });
-    }
+      },
+    });
   };
 
   const handleDelete = (id: string) => {
@@ -300,6 +283,17 @@ function PolicyCenterContent() {
           id: policy.id,
           name: policy.name,
           enabled,
+        },
+      },
+    });
+  };
+
+  const handleNlToggle = (policyId: string, enabled: boolean) => {
+    setNlModeMutation.mutate({
+      request: {
+        setModeRequestBody: {
+          policyId,
+          mode: enabled ? "audit" : "disabled",
         },
       },
     });
@@ -335,60 +329,14 @@ function PolicyCenterContent() {
               No Policies Yet
             </Type>
             <Type small muted className="mb-4 max-w-md text-center">
-              Risk policies scan your chat messages for secrets and sensitive
-              data. Natural-language policies use an LLM judge to allow or block
-              tool calls. Create your first policy to get started.
+              Standard Risk Policies scan for known sensitive data and unsafe
+              behavior. LLM Judge Policies evaluate custom criteria with a
+              model.
             </Type>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button disabled={createMutation.isPending}>
-                  {createMutation.isPending ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Creating...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="mr-2 h-4 w-4" />
-                      New Policy
-                    </>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="center">
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onSelect={() => {
-                    const {
-                      sources,
-                      presidioEntities,
-                      promptInjectionRules,
-                    } = categoriesToPayload(
-                      new Set<RuleCategory>(["secrets", "pii"]),
-                    );
-                    createMutation.mutate({
-                      request: {
-                        createRiskPolicyRequestBody: {
-                          name: "Risk Scanner",
-                          enabled: true,
-                          sources,
-                          presidioEntities,
-                          promptInjectionRules,
-                        },
-                      },
-                    });
-                  }}
-                >
-                  Risk Policy
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onSelect={() => setTimeout(() => setNlCreateOpen(true), 0)}
-                >
-                  Natural Language Policy
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <NewPolicyMenu
+              onNewRisk={handleCreate}
+              onNewJudge={() => setNlCreateOpen(true)}
+            />
           </div>
           <NLPolicyCreateForm
             open={nlCreateOpen}
@@ -409,32 +357,14 @@ function PolicyCenterContent() {
           <div>
             <h2 className="text-lg font-semibold">Policies</h2>
             <p className="text-muted-foreground text-sm">
-              Configure risk analysis and natural-language policies that govern
-              chat messages and tool calls.
+              Configure Standard Risk Policies and LLM Judge Policies that
+              govern messages and tool activity.
             </p>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                New
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onSelect={() => setTimeout(() => handleCreate(), 0)}
-              >
-                Risk Policy
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onSelect={() => setTimeout(() => setNlCreateOpen(true), 0)}
-              >
-                Natural Language Policy
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <NewPolicyMenu
+            onNewRisk={handleCreate}
+            onNewJudge={() => setNlCreateOpen(true)}
+          />
         </div>
 
         <Table>
@@ -442,9 +372,10 @@ function PolicyCenterContent() {
             <TableRow>
               <TableHead className="w-[80px]">Type</TableHead>
               <TableHead>Name</TableHead>
-              <TableHead>Action</TableHead>
+              <TableHead>Behavior</TableHead>
               <TableHead>Categories</TableHead>
-              <TableHead>Progress</TableHead>
+              <TableHead>Policy Scope</TableHead>
+              <TableHead>Activity</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-[60px]" />
             </TableRow>
@@ -455,43 +386,61 @@ function PolicyCenterContent() {
                 policy.sources,
                 policy.presidioEntities,
               );
+              const targetBits = (
+                policy.targets?.length ? policy.targets : ALL_CHECK_SCOPES
+              ).map((t) => CHECK_SCOPE_META[t as CheckScope]?.label ?? t);
               return (
                 <TableRow
                   key={`risk-${policy.id}`}
                   className="cursor-pointer"
-                  onClick={() => handleEdit(policy)}
+                  onClick={() =>
+                    navigate(routes.policyCenter.riskDetail.href(policy.id))
+                  }
                 >
                   <TableCell>
                     <Badge variant="outline">Risk</Badge>
                   </TableCell>
                   <TableCell className="font-medium">{policy.name}</TableCell>
                   <TableCell>
-                    <ActionBadge
+                    <RiskBehaviorBadge
                       action={(policy.action as PolicyAction) ?? "flag"}
                     />
                   </TableCell>
                   <TableCell>
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap gap-1">
                       {categories.map((cat) => (
                         <Badge key={cat} variant="secondary">
                           {RULE_CATEGORY_META[cat].label}
                         </Badge>
                       ))}
-                      {policy.pendingMessages > 0 ? (
-                        <span className="text-muted-foreground text-xs">
-                          {policy.totalMessages - policy.pendingMessages}/
-                          {policy.totalMessages} analyzed
-                        </span>
-                      ) : null}
                     </div>
                   </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {targetBits.map((target) => (
+                        <Badge key={target} variant="outline">
+                          {target}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-xs">
+                    {policy.totalMessages > 0
+                      ? `${policy.totalMessages - policy.pendingMessages}/${policy.totalMessages} analyzed`
+                      : "No scans yet"}
+                  </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Switch
-                      checked={policy.enabled}
-                      onCheckedChange={(checked) =>
-                        handleToggle(policy, checked)
-                      }
-                    />
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={policy.enabled}
+                        onCheckedChange={(checked) =>
+                          handleToggle(policy, checked)
+                        }
+                      />
+                      <span className="text-muted-foreground text-xs">
+                        {policy.enabled ? "On" : "Off"}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
@@ -505,6 +454,16 @@ function PolicyCenterContent() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          className="cursor-pointer"
+                          onSelect={() =>
+                            navigate(
+                              routes.policyCenter.riskDetail.href(policy.id),
+                            )
+                          }
+                        >
+                          Configure
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           className="cursor-pointer"
                           onSelect={() =>
@@ -526,10 +485,9 @@ function PolicyCenterContent() {
               );
             })}
             {nlPolicies.map((p) => {
-              const scopeBits = [
-                p.scopePerCall ? "per-call" : null,
-                p.scopeSession ? "session" : null,
-              ].filter(Boolean);
+              const targetBits = (p.targets ?? []).map(
+                (t) => CHECK_SCOPE_META[t as CheckScope]?.label ?? t,
+              );
               return (
                 <TableRow
                   key={`nl-${p.id}`}
@@ -539,7 +497,7 @@ function PolicyCenterContent() {
                   }
                 >
                   <TableCell>
-                    <Badge variant="outline">NL</Badge>
+                    <Badge variant="outline">LLM Judge</Badge>
                   </TableCell>
                   <TableCell className="font-medium">
                     {p.name}
@@ -557,14 +515,21 @@ function PolicyCenterContent() {
                             : "secondary"
                       }
                     >
-                      {p.mode}
+                      {p.mode === "enforce"
+                        ? "Enforce"
+                        : p.mode === "audit"
+                          ? "Monitor"
+                          : "Disabled"}
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="flex gap-1">
-                      {scopeBits.map((s) => (
-                        <Badge key={s as string} variant="secondary">
-                          {s}
+                    <Badge variant="secondary">LLM Judge</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {targetBits.map((target) => (
+                        <Badge key={target} variant="outline">
+                          {target}
                         </Badge>
                       ))}
                     </div>
@@ -572,32 +537,46 @@ function PolicyCenterContent() {
                   <TableCell className="text-muted-foreground text-xs">
                     —
                   </TableCell>
-                  <TableCell className="text-muted-foreground text-xs">
-                    {p.mode === "disabled" ? "off" : "on"}
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={p.mode !== "disabled"}
+                        onCheckedChange={(checked) =>
+                          handleNlToggle(p.id, checked)
+                        }
+                        disabled={setNlModeMutation.isPending}
+                      />
+                      <span className="text-muted-foreground text-xs">
+                        {p.mode === "disabled" ? "Off" : "On"}
+                      </span>
+                    </div>
                   </TableCell>
-                  <TableCell />
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() =>
+                        navigate(routes.policyCenter.nlDetail.href(p.id))
+                      }
+                      tooltip="Configure"
+                    >
+                      <Settings className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               );
             })}
           </TableBody>
         </Table>
 
-        <NLPolicyCreateForm
-          open={nlCreateOpen}
-          onClose={() => setNlCreateOpen(false)}
-        />
-
         {/* Edit/Create Sheet */}
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
           <SheetContent className="flex flex-col overflow-y-auto sm:max-w-lg">
             <SheetHeader className="px-6 pt-6">
-              <SheetTitle>
-                {editingPolicy ? "Edit Policy" : "New Policy"}
-              </SheetTitle>
+              <SheetTitle>New Standard Risk Policy</SheetTitle>
               <SheetDescription>
-                {editingPolicy
-                  ? "Update the risk analysis policy configuration."
-                  : "Create a new risk analysis policy to scan chat messages."}
+                Create a new Standard Risk Policy to scan messages and tool
+                activity.
               </SheetDescription>
             </SheetHeader>
             <div className="flex-1 overflow-y-auto px-6">
@@ -614,6 +593,8 @@ function PolicyCenterContent() {
                 setFormAutoName={setFormAutoName}
                 formUserMessage={formUserMessage}
                 setFormUserMessage={setFormUserMessage}
+                formTargets={formTargets}
+                setFormTargets={setFormTargets}
               />
             </div>
             <SheetFooter className="px-6 pb-6">
@@ -621,6 +602,7 @@ function PolicyCenterContent() {
                 onClick={handleSave}
                 disabled={
                   (!formAutoName && !formName.trim()) ||
+                  formTargets.length === 0 ||
                   createMutation.isPending ||
                   updateMutation.isPending
                 }
@@ -630,8 +612,6 @@ function PolicyCenterContent() {
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Saving...
                   </>
-                ) : editingPolicy ? (
-                  "Update"
                 ) : (
                   "Create"
                 )}
@@ -657,8 +637,46 @@ function PolicyCenterContent() {
             )}
           </SheetContent>
         </Sheet>
+
+        <NLPolicyCreateForm
+          open={nlCreateOpen}
+          onClose={() => setNlCreateOpen(false)}
+        />
       </Page.Body>
     </Page>
+  );
+}
+
+function NewPolicyMenu({
+  onNewRisk,
+  onNewJudge,
+}: {
+  onNewRisk: () => void;
+  onNewJudge: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button>
+          <Plus className="mr-2 h-4 w-4" />
+          New Policy
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem
+          className="cursor-pointer"
+          onSelect={() => setTimeout(onNewRisk, 0)}
+        >
+          Standard Risk Policy
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="cursor-pointer"
+          onSelect={() => setTimeout(onNewJudge, 0)}
+        >
+          LLM Judge Policy
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -666,7 +684,7 @@ function PolicyCenterContent() {
 /*  PolicySheetBody                                                           */
 /* -------------------------------------------------------------------------- */
 
-function PolicySheetBody({
+export function PolicySheetBody({
   formName,
   setFormName,
   formEnabled,
@@ -679,6 +697,8 @@ function PolicySheetBody({
   setFormAutoName,
   formUserMessage,
   setFormUserMessage,
+  formTargets,
+  setFormTargets,
 }: {
   formName: string;
   setFormName: (v: string) => void;
@@ -692,6 +712,8 @@ function PolicySheetBody({
   setFormAutoName: (v: boolean) => void;
   formUserMessage: string;
   setFormUserMessage: (v: string) => void;
+  formTargets: CheckScope[];
+  setFormTargets: (v: CheckScope[]) => void;
 }) {
   const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
     null,
@@ -699,6 +721,133 @@ function PolicySheetBody({
   const destructiveToolsSelected = selectedCategories.has("destructive_tool");
   const actionValue =
     destructiveToolsSelected && formAction === "block" ? "flag" : formAction;
+  const renderPolicyTargets = () => (
+    <div className="space-y-2">
+      {ALL_CHECK_SCOPES.map((target) => {
+        const meta = CHECK_SCOPE_META[target];
+        return (
+          <label key={target} className="flex items-start gap-2 text-sm">
+            <Checkbox
+              checked={formTargets.includes(target)}
+              onCheckedChange={(checked) => {
+                const next = checked
+                  ? formTargets.includes(target)
+                    ? formTargets
+                    : [...formTargets, target]
+                  : formTargets.filter((value) => value !== target);
+                setFormTargets(next);
+              }}
+              className="mt-0.5"
+            />
+            <div>
+              <div className="font-medium">{meta.label}</div>
+              <div className="text-muted-foreground text-xs">
+                {meta.description}
+              </div>
+            </div>
+          </label>
+        );
+      })}
+    </div>
+  );
+  const renderCategory = (cat: RuleCategory) => {
+    const meta = RULE_CATEGORY_META[cat];
+    const isAvailable = AVAILABLE_CATEGORIES.has(cat);
+    const isExpanded = expandedCategory === cat;
+    const rules = DETECTION_RULES[cat];
+    const isExpandable = isAvailable && rules.length > 0;
+
+    return (
+      <div key={cat}>
+        <div
+          className={cn(
+            "flex items-center gap-3 px-4 py-3",
+            isExpandable && "cursor-pointer",
+          )}
+          onClick={() => {
+            if (isExpandable) {
+              setExpandedCategory(isExpanded ? null : cat);
+            }
+          }}
+        >
+          {isExpandable ? (
+            <ChevronRight
+              className={cn(
+                "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+                isExpanded && "rotate-90",
+              )}
+            />
+          ) : (
+            <div className="w-4 shrink-0" />
+          )}
+
+          <Icon
+            name={meta.icon as IconName}
+            className="text-muted-foreground size-4 shrink-0"
+          />
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">{meta.label}</span>
+              {!isAvailable && (
+                <Badge variant="outline" className="text-[10px]">
+                  Coming Soon
+                </Badge>
+              )}
+            </div>
+            <p className="text-muted-foreground text-xs">{meta.description}</p>
+          </div>
+
+          <Checkbox
+            checked={selectedCategories.has(cat)}
+            disabled={!isAvailable}
+            onCheckedChange={(checked) => {
+              const next = new Set(selectedCategories);
+              if (checked) {
+                next.add(cat);
+              } else {
+                next.delete(cat);
+              }
+              setSelectedCategories(next);
+              if (
+                checked &&
+                cat === "destructive_tool" &&
+                formAction === "block"
+              ) {
+                setFormAction("flag");
+              }
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+
+        {isAvailable && isExpanded && rules.length > 0 && (
+          <div className="bg-muted/30 border-border border-t px-4 py-2">
+            <div className="space-y-2 py-1">
+              {rules.map((rule) => (
+                <div
+                  key={rule.id}
+                  className="flex items-center gap-3 py-1 pl-8"
+                >
+                  <Checkbox
+                    id={rule.id}
+                    checked={selectedCategories.has(cat)}
+                    disabled
+                  />
+                  <label
+                    htmlFor={rule.id}
+                    className="text-muted-foreground text-xs"
+                  >
+                    {rule.title}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6 py-4">
@@ -729,119 +878,18 @@ function PolicySheetBody({
       <div className="space-y-3">
         <Label className="text-sm font-medium">Detection Rules</Label>
         <div className="border-border divide-border divide-y rounded-lg border">
-          {ALL_CATEGORIES.map((cat) => {
-            const meta = RULE_CATEGORY_META[cat];
-            const isAvailable = AVAILABLE_CATEGORIES.has(cat);
-            const isExpanded = expandedCategory === cat;
-            const rules = DETECTION_RULES[cat];
-            const isExpandable = isAvailable && rules.length > 0;
-
-            return (
-              <div key={cat}>
-                {/* Category header */}
-                <div
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-3",
-                    isExpandable && "cursor-pointer",
-                  )}
-                  onClick={() => {
-                    if (isExpandable) {
-                      setExpandedCategory(isExpanded ? null : cat);
-                    }
-                  }}
-                >
-                  {/* Expand chevron (only for categories with rules to expand) */}
-                  {isExpandable ? (
-                    <ChevronRight
-                      className={cn(
-                        "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
-                        isExpanded && "rotate-90",
-                      )}
-                    />
-                  ) : (
-                    <div className="w-4 shrink-0" />
-                  )}
-
-                  {/* Category icon */}
-                  <Icon
-                    name={meta.icon as IconName}
-                    className="text-muted-foreground size-4 shrink-0"
-                  />
-
-                  {/* Label & description */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{meta.label}</span>
-                      {!isAvailable && (
-                        <Badge variant="outline" className="text-[10px]">
-                          Coming Soon
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-muted-foreground text-xs">
-                      {meta.description}
-                    </p>
-                  </div>
-
-                  {/* Category checkbox */}
-                  <Checkbox
-                    checked={selectedCategories.has(cat)}
-                    disabled={!isAvailable}
-                    onCheckedChange={(checked) => {
-                      const next = new Set(selectedCategories);
-                      if (checked) {
-                        next.add(cat);
-                      } else {
-                        next.delete(cat);
-                      }
-                      setSelectedCategories(next);
-                      if (
-                        checked &&
-                        cat === "destructive_tool" &&
-                        formAction === "block"
-                      ) {
-                        setFormAction("flag");
-                      }
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </div>
-
-                {/* Expanded rules list — category-level toggle is the only
-                    user-facing control; sub-rules ride along with it. */}
-                {isAvailable && isExpanded && rules.length > 0 && (
-                  <div className="bg-muted/30 border-border border-t px-4 py-2">
-                    <div className="space-y-2 py-1">
-                      {rules.map((rule) => (
-                        <div
-                          key={rule.id}
-                          className="flex items-center gap-3 py-1 pl-8"
-                        >
-                          <Checkbox
-                            id={rule.id}
-                            checked={selectedCategories.has(cat)}
-                            disabled
-                          />
-                          <label
-                            htmlFor={rule.id}
-                            className="text-muted-foreground text-xs"
-                          >
-                            {rule.title}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {ALL_CATEGORIES.map(renderCategory)}
         </div>
       </div>
 
-      {/* Action */}
+      <div className="space-y-3">
+        <Label className="text-sm font-medium">Policy Scope</Label>
+        {renderPolicyTargets()}
+      </div>
+
+      {/* Behavior */}
       <div className="space-y-2">
-        <Label className="text-sm font-medium">Action</Label>
+        <Label className="text-sm font-medium">Behavior</Label>
         <RadioGroup
           value={actionValue}
           onValueChange={(v) => {
@@ -875,7 +923,7 @@ function PolicySheetBody({
                   />
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <ActionBadge action={opt.value} />
+                      <RiskBehaviorBadge action={opt.value} />
                     </div>
                     <div className="text-muted-foreground mt-1 text-xs">
                       {opt.description}
@@ -930,7 +978,7 @@ function PolicySheetBody({
 /*  RunPanel                                                                  */
 /* -------------------------------------------------------------------------- */
 
-function RunPanel({
+export function RunPanel({
   policy,
   onTrigger,
   isTriggerPending,
@@ -1074,21 +1122,22 @@ function RunPanel({
 }
 
 /* -------------------------------------------------------------------------- */
-/*  ActionBadge                                                               */
+/*  RiskBehaviorBadge                                                         */
 /* -------------------------------------------------------------------------- */
 
-const ACTION_BADGE_CONFIG: Record<
+const RISK_BEHAVIOR_BADGE_CONFIG: Record<
   PolicyAction,
   { label: string; variant: "secondary" | "destructive" }
 > = {
-  flag: { label: "Flag", variant: "secondary" },
-  block: { label: "Block", variant: "destructive" },
+  flag: { label: "Monitor", variant: "secondary" },
+  block: { label: "Enforce", variant: "destructive" },
 };
 
 const ACTION_OPTIONS: { value: PolicyAction; description: string }[] = [
   {
     value: "flag",
-    description: "Log findings for review without interrupting the session",
+    description:
+      "Flag matching activity for review without interrupting the session",
   },
   {
     value: "block",
@@ -1096,7 +1145,8 @@ const ACTION_OPTIONS: { value: PolicyAction; description: string }[] = [
   },
 ];
 
-function ActionBadge({ action }: { action: PolicyAction }) {
-  const config = ACTION_BADGE_CONFIG[action] ?? ACTION_BADGE_CONFIG.flag;
+export function RiskBehaviorBadge({ action }: { action: PolicyAction }) {
+  const config =
+    RISK_BEHAVIOR_BADGE_CONFIG[action] ?? RISK_BEHAVIOR_BADGE_CONFIG.flag;
   return <Badge variant={config.variant}>{config.label}</Badge>;
 }

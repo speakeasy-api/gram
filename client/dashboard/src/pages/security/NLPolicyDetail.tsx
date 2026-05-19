@@ -66,15 +66,19 @@ function NLPolicyDetailContent() {
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs
-          substitutions={{ [policy.id]: policy.name, nl: "NL" }}
+          substitutions={{ [policy.id]: policy.name, nl: "LLM Judge" }}
+          skipSegments={["nl"]}
         />
       </Page.Header>
       <Page.Body>
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold">{policy.name}</h2>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Badge variant="outline">LLM Judge</Badge>
+            </div>
             {policy.description ? (
-              <Type small muted>
+              <Type small muted className="mt-2">
                 {policy.description}
               </Type>
             ) : null}

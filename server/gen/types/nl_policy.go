@@ -19,10 +19,9 @@ type NLPolicy struct {
 	Description *string
 	// The natural-language judge prompt.
 	NlPrompt string
-	// Run inline on each tool call.
-	ScopePerCall bool
-	// Run async over the rolling chat-session window.
-	ScopeSession bool
+	// Evaluation targets (CheckScope values: user_messages | llm_responses |
+	// tool_arguments | tool_responses).
+	Targets []string
 	// audit | enforce | disabled.
 	Mode string
 	// fail_open | fail_closed — judge error/timeout behavior in enforce mode.

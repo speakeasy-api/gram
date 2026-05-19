@@ -19,6 +19,7 @@ import { useState } from "react";
 
 import NLPolicyModePromoteModal from "./NLPolicyModePromoteModal";
 import NLPolicyReplayModal from "./NLPolicyReplayModal";
+import { CHECK_SCOPE_META, type CheckScope } from "./policy-data";
 
 const TEMPLATES: { name: string; body: string }[] = [
   {
@@ -41,14 +42,16 @@ const TEMPLATES: { name: string; body: string }[] = [
 
 type FailMode = NLPolicy["failMode"];
 type Mode = NLPolicy["mode"];
+const ALL_CHECK_SCOPES = Object.keys(CHECK_SCOPE_META) as CheckScope[];
 
 export default function NLPolicyConfigureTab({ policy }: { policy: NLPolicy }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState(policy.name);
   const [description, setDescription] = useState(policy.description ?? "");
   const [nlPrompt, setNlPrompt] = useState(policy.nlPrompt);
-  const [scopePerCall, setScopePerCall] = useState(policy.scopePerCall);
-  const [scopeSession, setScopeSession] = useState(policy.scopeSession);
+  const [targets, setTargets] = useState<CheckScope[]>(
+    policy.targets as CheckScope[],
+  );
   const [failMode, setFailMode] = useState<FailMode>(policy.failMode);
   const [replayOpen, setReplayOpen] = useState(false);
   const [promoteOpen, setPromoteOpen] = useState(false);
@@ -73,8 +76,7 @@ export default function NLPolicyConfigureTab({ policy }: { policy: NLPolicy }) {
           name,
           description,
           nlPrompt,
-          scopePerCall,
-          scopeSession,
+          targets,
           failMode,
         },
       },
@@ -117,6 +119,7 @@ export default function NLPolicyConfigureTab({ policy }: { policy: NLPolicy }) {
           rows={8}
           value={nlPrompt}
           onChange={(v) => setNlPrompt(v)}
+          placeholder="Describe criteria to be matched by this policy"
           className="font-mono text-sm"
         />
         <div className="mt-2 flex items-center gap-2">
@@ -143,34 +146,33 @@ export default function NLPolicyConfigureTab({ policy }: { policy: NLPolicy }) {
       </div>
 
       <div className="space-y-2">
-        <Label>Scope</Label>
+        <Label>Policy Scope</Label>
         <div className="space-y-2">
-          <label className="flex items-start gap-2 text-sm">
-            <Checkbox
-              checked={scopePerCall}
-              onCheckedChange={(v) => setScopePerCall(v === true)}
-              className="mt-0.5"
-            />
-            <div>
-              <div className="font-medium">Per tool call</div>
-              <Type small muted>
-                Synchronous, blocks before execution.
-              </Type>
-            </div>
-          </label>
-          <label className="flex items-start gap-2 text-sm">
-            <Checkbox
-              checked={scopeSession}
-              onCheckedChange={(v) => setScopeSession(v === true)}
-              className="mt-0.5"
-            />
-            <div>
-              <div className="font-medium">Per session</div>
-              <Type small muted>
-                Async, can quarantine the session for future calls.
-              </Type>
-            </div>
-          </label>
+          {ALL_CHECK_SCOPES.map((target) => {
+            const meta = CHECK_SCOPE_META[target];
+            return (
+              <label key={target} className="flex items-start gap-2 text-sm">
+                <Checkbox
+                  checked={targets.includes(target)}
+                  onCheckedChange={(checked) => {
+                    const next = checked
+                      ? targets.includes(target)
+                        ? targets
+                        : [...targets, target]
+                      : targets.filter((value) => value !== target);
+                    setTargets(next);
+                  }}
+                  className="mt-0.5"
+                />
+                <div>
+                  <div className="font-medium">{meta.label}</div>
+                  <Type small muted>
+                    {meta.description}
+                  </Type>
+                </div>
+              </label>
+            );
+          })}
         </div>
       </div>
 
@@ -221,7 +223,7 @@ export default function NLPolicyConfigureTab({ policy }: { policy: NLPolicy }) {
         <Button variant="outline" onClick={() => setReplayOpen(true)}>
           Run replay against last 7d
         </Button>
-        <Button onClick={onSave} disabled={isSaving}>
+        <Button onClick={onSave} disabled={isSaving || targets.length === 0}>
           {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Save
         </Button>

@@ -25,6 +25,10 @@ type CreateRiskPolicyRequestBody struct {
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
 	// baseline (e.g. 'deberta-v3-classifier').
 	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
+	// LLM judge prompt for natural-language evaluation.
+	NlPrompt *string `form:"nl_prompt,omitempty" json:"nl_prompt,omitempty" xml:"nl_prompt,omitempty"`
+	// Evaluation targets.
+	Targets []string `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -50,6 +54,10 @@ type UpdateRiskPolicyRequestBody struct {
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
 	// baseline (e.g. 'deberta-v3-classifier').
 	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
+	// LLM judge prompt for natural-language evaluation.
+	NlPrompt *string `form:"nl_prompt,omitempty" json:"nl_prompt,omitempty" xml:"nl_prompt,omitempty"`
+	// Evaluation targets.
+	Targets []string `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -99,6 +107,11 @@ type CreateRiskPolicyResponseBody struct {
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
 	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
+	// LLM judge prompt for natural-language evaluation. Present when nl_policy
+	// category is active.
+	NlPrompt *string `form:"nl_prompt,omitempty" json:"nl_prompt,omitempty" xml:"nl_prompt,omitempty"`
+	// Evaluation targets. When empty, all scopes are evaluated.
+	Targets []string `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -151,6 +164,11 @@ type GetRiskPolicyResponseBody struct {
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
 	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
+	// LLM judge prompt for natural-language evaluation. Present when nl_policy
+	// category is active.
+	NlPrompt *string `form:"nl_prompt,omitempty" json:"nl_prompt,omitempty" xml:"nl_prompt,omitempty"`
+	// Evaluation targets. When empty, all scopes are evaluated.
+	Targets []string `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -189,6 +207,11 @@ type UpdateRiskPolicyResponseBody struct {
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
 	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
+	// LLM judge prompt for natural-language evaluation. Present when nl_policy
+	// category is active.
+	NlPrompt *string `form:"nl_prompt,omitempty" json:"nl_prompt,omitempty" xml:"nl_prompt,omitempty"`
+	// Evaluation targets. When empty, all scopes are evaluated.
+	Targets []string `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -2685,6 +2708,11 @@ type RiskPolicyResponseBody struct {
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
 	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
 	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
+	// LLM judge prompt for natural-language evaluation. Present when nl_policy
+	// category is active.
+	NlPrompt *string `form:"nl_prompt,omitempty" json:"nl_prompt,omitempty" xml:"nl_prompt,omitempty"`
+	// Evaluation targets. When empty, all scopes are evaluated.
+	Targets []string `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -2781,6 +2809,7 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 		ID:              res.ID,
 		ProjectID:       res.ProjectID,
 		Name:            res.Name,
+		NlPrompt:        res.NlPrompt,
 		Enabled:         res.Enabled,
 		Action:          res.Action,
 		AutoName:        res.AutoName,
@@ -2809,6 +2838,12 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 		body.PromptInjectionRules = make([]string, len(res.PromptInjectionRules))
 		for i, val := range res.PromptInjectionRules {
 			body.PromptInjectionRules[i] = val
+		}
+	}
+	if res.Targets != nil {
+		body.Targets = make([]string, len(res.Targets))
+		for i, val := range res.Targets {
+			body.Targets[i] = val
 		}
 	}
 	return body
@@ -2849,6 +2884,7 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 		ID:              res.ID,
 		ProjectID:       res.ProjectID,
 		Name:            res.Name,
+		NlPrompt:        res.NlPrompt,
 		Enabled:         res.Enabled,
 		Action:          res.Action,
 		AutoName:        res.AutoName,
@@ -2877,6 +2913,12 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 		body.PromptInjectionRules = make([]string, len(res.PromptInjectionRules))
 		for i, val := range res.PromptInjectionRules {
 			body.PromptInjectionRules[i] = val
+		}
+	}
+	if res.Targets != nil {
+		body.Targets = make([]string, len(res.Targets))
+		for i, val := range res.Targets {
+			body.Targets[i] = val
 		}
 	}
 	return body
@@ -2889,6 +2931,7 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 		ID:              res.ID,
 		ProjectID:       res.ProjectID,
 		Name:            res.Name,
+		NlPrompt:        res.NlPrompt,
 		Enabled:         res.Enabled,
 		Action:          res.Action,
 		AutoName:        res.AutoName,
@@ -2917,6 +2960,12 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 		body.PromptInjectionRules = make([]string, len(res.PromptInjectionRules))
 		for i, val := range res.PromptInjectionRules {
 			body.PromptInjectionRules[i] = val
+		}
+	}
+	if res.Targets != nil {
+		body.Targets = make([]string, len(res.Targets))
+		for i, val := range res.Targets {
+			body.Targets[i] = val
 		}
 	}
 	return body
@@ -4883,6 +4932,7 @@ func NewTriggerRiskAnalysisGatewayErrorResponseBody(res *goa.ServiceError) *Trig
 func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.CreateRiskPolicyPayload {
 	v := &risk.CreateRiskPolicyPayload{
 		Name:        body.Name,
+		NlPrompt:    body.NlPrompt,
 		Enabled:     body.Enabled,
 		AutoName:    body.AutoName,
 		UserMessage: body.UserMessage,
@@ -4906,6 +4956,12 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 		v.PromptInjectionRules = make([]string, len(body.PromptInjectionRules))
 		for i, val := range body.PromptInjectionRules {
 			v.PromptInjectionRules[i] = val
+		}
+	}
+	if body.Targets != nil {
+		v.Targets = make([]string, len(body.Targets))
+		for i, val := range body.Targets {
+			v.Targets[i] = val
 		}
 	}
 	if body.Action == nil {
@@ -4957,6 +5013,7 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *
 	v := &risk.UpdateRiskPolicyPayload{
 		ID:          *body.ID,
 		Name:        *body.Name,
+		NlPrompt:    body.NlPrompt,
 		Enabled:     body.Enabled,
 		Action:      body.Action,
 		AutoName:    body.AutoName,
@@ -4978,6 +5035,12 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *
 		v.PromptInjectionRules = make([]string, len(body.PromptInjectionRules))
 		for i, val := range body.PromptInjectionRules {
 			v.PromptInjectionRules[i] = val
+		}
+	}
+	if body.Targets != nil {
+		v.Targets = make([]string, len(body.Targets))
+		for i, val := range body.Targets {
+			v.Targets[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken

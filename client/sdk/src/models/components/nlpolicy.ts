@@ -68,17 +68,13 @@ export type NLPolicy = {
    */
   projectId?: string | undefined;
   /**
-   * Run inline on each tool call.
-   */
-  scopePerCall: boolean;
-  /**
-   * Run async over the rolling chat-session window.
-   */
-  scopeSession: boolean;
-  /**
    * JSON-encoded static rule list (see spec §6 grammar).
    */
   staticRules: string;
+  /**
+   * Evaluation targets (CheckScope values: user_messages | llm_responses | tool_arguments | tool_responses).
+   */
+  targets: Array<string>;
   /**
    * RFC3339 timestamp.
    */
@@ -111,9 +107,8 @@ export const NLPolicy$inboundSchema: z.ZodMiniType<NLPolicy, unknown> = z.pipe(
     name: z.string(),
     nl_prompt: z.string(),
     project_id: z.optional(z.string()),
-    scope_per_call: z.boolean(),
-    scope_session: z.boolean(),
     static_rules: z.string(),
+    targets: z.array(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -126,8 +121,6 @@ export const NLPolicy$inboundSchema: z.ZodMiniType<NLPolicy, unknown> = z.pipe(
       "fail_mode": "failMode",
       "nl_prompt": "nlPrompt",
       "project_id": "projectId",
-      "scope_per_call": "scopePerCall",
-      "scope_session": "scopeSession",
       "static_rules": "staticRules",
       "updated_at": "updatedAt",
     });

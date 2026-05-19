@@ -12,8 +12,7 @@ var NLPolicy = Type("NLPolicy", func() {
 	Attribute("name", String, "Policy name.")
 	Attribute("description", String, "Author-facing summary.")
 	Attribute("nl_prompt", String, "The natural-language judge prompt.")
-	Attribute("scope_per_call", Boolean, "Run inline on each tool call.")
-	Attribute("scope_session", Boolean, "Run async over the rolling chat-session window.")
+	Attribute("targets", ArrayOf(String), "Evaluation targets (CheckScope values: user_messages | llm_responses | tool_arguments | tool_responses).")
 	Attribute("mode", String, "audit | enforce | disabled.", func() {
 		Enum("audit", "enforce", "disabled")
 	})
@@ -29,7 +28,7 @@ var NLPolicy = Type("NLPolicy", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "name", "nl_prompt", "scope_per_call", "scope_session", "mode", "fail_mode", "static_rules", "version", "created_at", "updated_at")
+	Required("id", "name", "nl_prompt", "targets", "mode", "fail_mode", "static_rules", "version", "created_at", "updated_at")
 })
 
 var NLPolicyDecision = Type("NLPolicyDecision", func() {

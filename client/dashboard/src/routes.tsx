@@ -73,6 +73,7 @@ import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import SecurityOverview from "./pages/security/SecurityOverview";
 import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
 import NLPolicyDetail from "./pages/security/NLPolicyDetail";
+import RiskPolicyDetail from "./pages/security/RiskPolicyDetail";
 import Team from "./pages/team/Team";
 import SourceDetails from "./pages/sources/SourceDetails";
 import {
@@ -443,7 +444,7 @@ const ROUTE_STRUCTURE = {
     component: SecurityOverview,
   },
   policyCenter: {
-    title: "Risk Policies",
+    title: "Policies",
     url: "risk-policies",
     icon: "shield-check",
     stage: "beta",
@@ -451,9 +452,14 @@ const ROUTE_STRUCTURE = {
     indexComponent: PolicyCenter,
     subPages: {
       nlDetail: {
-        title: "NL Policy",
+        title: "LLM Judge Policy",
         url: "nl/:policyId",
         component: NLPolicyDetail,
+      },
+      riskDetail: {
+        title: "Risk Policy",
+        url: "risk/:policyId",
+        component: RiskPolicyDetail,
       },
     },
   },

@@ -52,12 +52,7 @@ func (s *Service) CreatePolicy(_ context.Context, p *gen.CreatePolicyPayload) (*
 		pol.Description = p.Description
 	}
 	pol.NlPrompt = p.NlPrompt
-	if p.ScopePerCall != nil {
-		pol.ScopePerCall = *p.ScopePerCall
-	}
-	if p.ScopeSession != nil {
-		pol.ScopeSession = *p.ScopeSession
-	}
+	pol.Targets = p.Targets
 	if p.FailMode != nil {
 		pol.FailMode = *p.FailMode
 	}
@@ -81,7 +76,12 @@ func (s *Service) GetPolicy(ctx context.Context, p *gen.GetPolicyPayload) (*type
 }
 
 func (s *Service) UpdatePolicy(ctx context.Context, p *gen.UpdatePolicyPayload) (*types.NLPolicy, error) {
-	pol, err := s.GetPolicy(ctx, &gen.GetPolicyPayload{PolicyID: p.PolicyID})
+	pol, err := s.GetPolicy(ctx, &gen.GetPolicyPayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		PolicyID:         p.PolicyID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -94,11 +94,8 @@ func (s *Service) UpdatePolicy(ctx context.Context, p *gen.UpdatePolicyPayload) 
 	if p.NlPrompt != nil {
 		pol.NlPrompt = *p.NlPrompt
 	}
-	if p.ScopePerCall != nil {
-		pol.ScopePerCall = *p.ScopePerCall
-	}
-	if p.ScopeSession != nil {
-		pol.ScopeSession = *p.ScopeSession
+	if p.Targets != nil {
+		pol.Targets = p.Targets
 	}
 	if p.FailMode != nil {
 		pol.FailMode = *p.FailMode
@@ -111,7 +108,12 @@ func (s *Service) UpdatePolicy(ctx context.Context, p *gen.UpdatePolicyPayload) 
 }
 
 func (s *Service) SetMode(ctx context.Context, p *gen.SetModePayload) (*types.NLPolicy, error) {
-	pol, err := s.GetPolicy(ctx, &gen.GetPolicyPayload{PolicyID: p.PolicyID})
+	pol, err := s.GetPolicy(ctx, &gen.GetPolicyPayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		PolicyID:         p.PolicyID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +133,7 @@ func (s *Service) ListDecisions(_ context.Context, p *gen.ListDecisionsPayload) 
 			out = append(out, d)
 		}
 	}
-	return &gen.ListDecisionsResult{Decisions: out}, nil
+	return &gen.ListDecisionsResult{Decisions: out, NextCursor: nil}, nil
 }
 
 func (s *Service) ListSessionVerdicts(_ context.Context, p *gen.ListSessionVerdictsPayload) (*gen.ListSessionVerdictsResult, error) {
@@ -142,7 +144,7 @@ func (s *Service) ListSessionVerdicts(_ context.Context, p *gen.ListSessionVerdi
 			out = append(out, v)
 		}
 	}
-	return &gen.ListSessionVerdictsResult{Verdicts: out}, nil
+	return &gen.ListSessionVerdictsResult{Verdicts: out, NextCursor: nil}, nil
 }
 
 func (s *Service) ClearSessionVerdict(ctx context.Context, p *gen.ClearSessionVerdictPayload) (*types.NLPolicySessionVerdict, error) {
@@ -181,11 +183,15 @@ func (s *Service) ListReplayResults(_ context.Context, _ *gen.ListReplayResultsP
 			decision = "JUDGE_ERROR"
 		}
 		results = append(results, &types.NLPolicyReplayResult{
-			ID:          uuid.New().String(),
-			ReplayRunID: "00000000-0000-4000-a000-00000000a8f2",
-			Decision:    decision,
-			CreatedAt:   now,
+			ID:             uuid.New().String(),
+			ReplayRunID:    "00000000-0000-4000-a000-00000000a8f2",
+			ChatMessageID:  nil,
+			ToolUrn:        nil,
+			Decision:       decision,
+			Reason:         nil,
+			JudgeLatencyMs: nil,
+			CreatedAt:      now,
 		})
 	}
-	return &gen.ListReplayResultsResult{Results: results}, nil
+	return &gen.ListReplayResultsResult{Results: results, NextCursor: nil}, nil
 }
