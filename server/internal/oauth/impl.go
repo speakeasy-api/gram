@@ -905,15 +905,19 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 	}
 
 	authMethod := pickProxyAuthMethod(req.TokenEndpointAuthMethodsSupported)
-	callbackURL := fmt.Sprintf("%s/oauth/callback", s.serverURL.String())
+	serverURL := s.serverURL.String()
+	redirectURIs := []string{
+		fmt.Sprintf("%s/oauth/callback", serverURL),
+		fmt.Sprintf("%s/mcp/remote_login_callback", serverURL),
+	}
 
 	dcrReq := DCRRequest{
-		RedirectURIs:            []string{callbackURL},
+		RedirectURIs:            redirectURIs,
 		TokenEndpointAuthMethod: authMethod,
 		GrantTypes:              []string{"authorization_code", "refresh_token"},
 		ResponseTypes:           []string{"code"},
-		ClientName:              "Gram",
-		ClientURI:               s.serverURL.String(),
+		ClientName:              "Speakeasy",
+		ClientURI:               serverURL,
 		Scope:                   strings.Join(req.ScopesSupported, " "),
 	}
 

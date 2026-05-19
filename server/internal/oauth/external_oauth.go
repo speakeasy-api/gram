@@ -1106,7 +1106,7 @@ func (s *ExternalOAuthService) getOrRegisterClient(
 		TokenEndpointAuthMethod: "none", // Public client with PKCE
 		GrantTypes:              []string{"authorization_code", "refresh_token"},
 		ResponseTypes:           []string{"code"},
-		ClientName:              "Gram",
+		ClientName:              "Speakeasy",
 		ClientURI:               s.serverURL.String(),
 		Scope:                   strings.Join(oauthConfig.ScopesSupported, " "),
 	}

@@ -566,7 +566,7 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 func registerClientViaDCR(ctx context.Context, policy *guardian.Policy, params dcrParams) (rfc7591Response, error) {
 	clientName := params.ClientName
 	if strings.TrimSpace(clientName) == "" {
-		clientName = "Gram"
+		clientName = "Speakeasy"
 	}
 	reqBody, err := json.Marshal(rfc7591Request{
 		ClientName:              clientName,
