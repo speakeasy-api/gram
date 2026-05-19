@@ -114,6 +114,8 @@ interactive_only mise run zero:melange
 interactive_only mise run zero:fly
 mise run zero:encryption
 mise run zero:tls
+mise run zero:hosts
+
 assistant_runtime_provider="$(mise env GRAM_ASSISTANT_RUNTIME_PROVIDER 2>/dev/null | sed -n 's/^export GRAM_ASSISTANT_RUNTIME_PROVIDER=//p')"
 assistant_runtime_provider="${assistant_runtime_provider:-local}"
 if [[ "$assistant_runtime_provider" == "local" ]]; then

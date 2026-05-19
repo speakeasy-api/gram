@@ -92,7 +92,7 @@ export default defineConfig(({ command }) => {
     },
     server: {
       host: true,
-      allowedHosts: ["localhost", "127.0.0.1", "devbox"],
+      allowedHosts: ["localhost", "127.0.0.1", "devbox", "setup.localhost"],
       https: key && cert ? { key, cert } : void 0,
       // Setting these up to side-step cors issues experienced during
       // development. Specifically, the Vercel AI SDK does not forward cookies
