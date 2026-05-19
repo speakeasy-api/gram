@@ -23,6 +23,8 @@ CREATE TABLE "ai_integration_syncs" (
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "ai_integration_config_id" uuid NOT NULL,
   "last_polled_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  "lease_owner" text NULL,
+  "lease_expires_at" timestamptz NULL,
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
   PRIMARY KEY ("id"),
   CONSTRAINT "ai_integration_syncs_config_id_fkey" FOREIGN KEY ("ai_integration_config_id") REFERENCES "ai_integration_configs" ("id") ON DELETE CASCADE

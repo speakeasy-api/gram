@@ -12,6 +12,112 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const claimUsagePolls = `-- name: ClaimUsagePolls :many
+WITH candidates AS (
+  SELECT s.ai_integration_config_id
+  FROM ai_integration_syncs s
+  JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
+  WHERE c.provider = $3
+    AND c.enabled IS TRUE
+    AND c.deleted IS FALSE
+    AND c.api_key_encrypted IS NOT NULL
+    AND s.last_polled_at < $4
+    AND (
+      s.lease_owner IS NULL
+      OR s.lease_expires_at < clock_timestamp()
+      OR s.lease_owner = $1
+    )
+  ORDER BY s.last_polled_at ASC, c.organization_id ASC, c.provider ASC
+  LIMIT $5
+  FOR UPDATE OF s SKIP LOCKED
+)
+UPDATE ai_integration_syncs s
+SET lease_owner = $1,
+    lease_expires_at = $2,
+    updated_at = clock_timestamp()
+FROM candidates
+JOIN ai_integration_configs c ON c.id = candidates.ai_integration_config_id
+WHERE s.ai_integration_config_id = candidates.ai_integration_config_id
+RETURNING
+    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.api_key_encrypted, c.enabled, c.id, c.deleted
+  , s.id AS sync_id
+  , s.last_polled_at
+  , s.lease_owner
+  , s.lease_expires_at
+  , s.created_at AS sync_created_at
+  , s.updated_at AS sync_updated_at
+`
+
+type ClaimUsagePollsParams struct {
+	LeaseOwner       pgtype.Text
+	LeaseExpiresAt   pgtype.Timestamptz
+	Provider         string
+	LastPolledBefore pgtype.Timestamptz
+	LimitCount       int32
+}
+
+type ClaimUsagePollsRow struct {
+	CreatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	OrganizationID  string
+	Provider        string
+	ProjectID       uuid.UUID
+	ApiKeyEncrypted pgtype.Text
+	Enabled         bool
+	ID              uuid.UUID
+	Deleted         bool
+	SyncID          uuid.UUID
+	LastPolledAt    pgtype.Timestamptz
+	LeaseOwner      pgtype.Text
+	LeaseExpiresAt  pgtype.Timestamptz
+	SyncCreatedAt   pgtype.Timestamptz
+	SyncUpdatedAt   pgtype.Timestamptz
+}
+
+func (q *Queries) ClaimUsagePolls(ctx context.Context, arg ClaimUsagePollsParams) ([]ClaimUsagePollsRow, error) {
+	rows, err := q.db.Query(ctx, claimUsagePolls,
+		arg.LeaseOwner,
+		arg.LeaseExpiresAt,
+		arg.Provider,
+		arg.LastPolledBefore,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ClaimUsagePollsRow
+	for rows.Next() {
+		var i ClaimUsagePollsRow
+		if err := rows.Scan(
+			&i.CreatedAt,
+			&i.DeletedAt,
+			&i.UpdatedAt,
+			&i.OrganizationID,
+			&i.Provider,
+			&i.ProjectID,
+			&i.ApiKeyEncrypted,
+			&i.Enabled,
+			&i.ID,
+			&i.Deleted,
+			&i.SyncID,
+			&i.LastPolledAt,
+			&i.LeaseOwner,
+			&i.LeaseExpiresAt,
+			&i.SyncCreatedAt,
+			&i.SyncUpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const ensureSync = `-- name: EnsureSync :one
 WITH inserted AS (
   INSERT INTO ai_integration_syncs (
@@ -20,12 +126,12 @@ WITH inserted AS (
     $1
   )
   ON CONFLICT (ai_integration_config_id) DO NOTHING
-  RETURNING created_at, updated_at, ai_integration_config_id, last_polled_at, id
+  RETURNING created_at, updated_at, ai_integration_config_id, last_polled_at, lease_owner, lease_expires_at, id
 )
-SELECT created_at, updated_at, ai_integration_config_id, last_polled_at, id
+SELECT created_at, updated_at, ai_integration_config_id, last_polled_at, lease_owner, lease_expires_at, id
 FROM inserted
 UNION ALL
-SELECT created_at, updated_at, ai_integration_config_id, last_polled_at, id
+SELECT created_at, updated_at, ai_integration_config_id, last_polled_at, lease_owner, lease_expires_at, id
 FROM ai_integration_syncs
 WHERE ai_integration_config_id = $1
 LIMIT 1
@@ -36,6 +142,8 @@ type EnsureSyncRow struct {
 	UpdatedAt             pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
 	LastPolledAt          pgtype.Timestamptz
+	LeaseOwner            pgtype.Text
+	LeaseExpiresAt        pgtype.Timestamptz
 	ID                    uuid.UUID
 }
 
@@ -47,6 +155,8 @@ func (q *Queries) EnsureSync(ctx context.Context, aiIntegrationConfigID uuid.UUI
 		&i.UpdatedAt,
 		&i.AiIntegrationConfigID,
 		&i.LastPolledAt,
+		&i.LeaseOwner,
+		&i.LeaseExpiresAt,
 		&i.ID,
 	)
 	return i, err
@@ -194,6 +304,25 @@ func (q *Queries) ListEnabledConfigsByProvider(ctx context.Context, provider str
 	return items, nil
 }
 
+const releaseUsagePollLease = `-- name: ReleaseUsagePollLease :exec
+UPDATE ai_integration_syncs
+SET lease_owner = NULL,
+    lease_expires_at = NULL,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = $1
+  AND lease_owner = $2
+`
+
+type ReleaseUsagePollLeaseParams struct {
+	AiIntegrationConfigID uuid.UUID
+	LeaseOwner            pgtype.Text
+}
+
+func (q *Queries) ReleaseUsagePollLease(ctx context.Context, arg ReleaseUsagePollLeaseParams) error {
+	_, err := q.db.Exec(ctx, releaseUsagePollLease, arg.AiIntegrationConfigID, arg.LeaseOwner)
+	return err
+}
+
 const softDeleteConfig = `-- name: SoftDeleteConfig :exec
 UPDATE ai_integration_configs
 SET deleted_at = clock_timestamp()
@@ -226,6 +355,25 @@ type UpdateSyncLastPolledAtParams struct {
 
 func (q *Queries) UpdateSyncLastPolledAt(ctx context.Context, arg UpdateSyncLastPolledAtParams) error {
 	_, err := q.db.Exec(ctx, updateSyncLastPolledAt, arg.LastPolledAt, arg.AiIntegrationConfigID)
+	return err
+}
+
+const updateUsagePollWatermark = `-- name: UpdateUsagePollWatermark :exec
+UPDATE ai_integration_syncs
+SET last_polled_at = $1,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = $2
+  AND lease_owner = $3
+`
+
+type UpdateUsagePollWatermarkParams struct {
+	LastPolledAt          pgtype.Timestamptz
+	AiIntegrationConfigID uuid.UUID
+	LeaseOwner            pgtype.Text
+}
+
+func (q *Queries) UpdateUsagePollWatermark(ctx context.Context, arg UpdateUsagePollWatermarkParams) error {
+	_, err := q.db.Exec(ctx, updateUsagePollWatermark, arg.LastPolledAt, arg.AiIntegrationConfigID, arg.LeaseOwner)
 	return err
 }
 

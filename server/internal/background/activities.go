@@ -43,7 +43,7 @@ import (
 
 type Activities struct {
 	collectPlatformUsageMetrics     *activities.CollectPlatformUsageMetrics
-	cursorUsageMetrics              *activities.CursorUsageMetrics
+	pollCursorUsageMetrics          *activities.PollCursorUsageMetrics
 	customDomainIngress             *activities.CustomDomainIngress
 	fallbackModelUsageTracking      *activities.FallbackModelUsageTracking
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
@@ -130,7 +130,7 @@ func NewActivities(
 
 	return &Activities{
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
-		cursorUsageMetrics:              activities.NewCursorUsageMetrics(logger, db, encryption, telemetryLogger, telemetryRepo),
+		pollCursorUsageMetrics:          activities.NewPollCursorUsageMetrics(logger, db, encryption, telemetryLogger),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
 		fallbackModelUsageTracking:      activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
@@ -247,20 +247,16 @@ func (a *Activities) FreeTierReportingUsageMetrics(ctx context.Context, orgIDs [
 	return a.freeTierReportingUsageMetrics.Do(ctx, orgIDs)
 }
 
-func (a *Activities) ListCursorAIIntegrationConfigs(ctx context.Context) ([]activities.CursorAIIntegrationConfig, error) {
-	return a.cursorUsageMetrics.ListCursorAIIntegrationConfigs(ctx)
+func (a *Activities) ClaimAIIntegrationUsagePolls(ctx context.Context, input activities.ClaimAIIntegrationUsagePollsInput) ([]activities.AIIntegrationUsagePollConfig, error) {
+	return a.pollCursorUsageMetrics.ClaimAIIntegrationUsagePolls(ctx, input)
 }
 
-func (a *Activities) PollCursorUsageEventsPage(ctx context.Context, input activities.PollCursorUsageEventsPageInput) (*activities.PollCursorUsageEventsPageOutput, error) {
-	return a.cursorUsageMetrics.PollCursorUsageEventsPage(ctx, input)
+func (a *Activities) ReleaseAIIntegrationUsagePollLease(ctx context.Context, input activities.ReleaseAIIntegrationUsagePollLeaseInput) error {
+	return a.pollCursorUsageMetrics.ReleaseAIIntegrationUsagePollLease(ctx, input)
 }
 
-func (a *Activities) DeduplicateAndWriteCursorEvents(ctx context.Context, input activities.DeduplicateAndWriteCursorEventsInput) error {
-	return a.cursorUsageMetrics.DeduplicateAndWriteCursorEvents(ctx, input)
-}
-
-func (a *Activities) UpdateCursorPollWatermark(ctx context.Context, input activities.UpdateCursorPollWatermarkInput) error {
-	return a.cursorUsageMetrics.UpdateCursorPollWatermark(ctx, input)
+func (a *Activities) SyncAIIntegrationUsage(ctx context.Context, input activities.SyncAIIntegrationUsageInput) error {
+	return a.pollCursorUsageMetrics.SyncAIIntegrationUsage(ctx, input)
 }
 
 func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) error {

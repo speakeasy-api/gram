@@ -266,10 +266,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FreeTierReportingUsageMetrics)
-	temporalWorker.RegisterActivity(activities.ListCursorAIIntegrationConfigs)
-	temporalWorker.RegisterActivity(activities.PollCursorUsageEventsPage)
-	temporalWorker.RegisterActivity(activities.DeduplicateAndWriteCursorEvents)
-	temporalWorker.RegisterActivity(activities.UpdateCursorPollWatermark)
+	temporalWorker.RegisterActivity(activities.ClaimAIIntegrationUsagePolls)
+	temporalWorker.RegisterActivity(activities.ReleaseAIIntegrationUsagePollLease)
+	temporalWorker.RegisterActivity(activities.SyncAIIntegrationUsage)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
@@ -317,7 +316,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
-	temporalWorker.RegisterWorkflow(CursorUsageMetricsWorkflow)
+	temporalWorker.RegisterWorkflow(AIIntegrationUsageSyncWorkflow)
+	temporalWorker.RegisterWorkflow(AIIntegrationUsageSyncConfigWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(FallbackModelUsageTrackingWorkflow)
@@ -355,9 +355,9 @@ func NewTemporalWorker(
 		}
 	}
 
-	if err := AddCursorUsageMetricsSchedule(context.Background(), env); err != nil {
+	if err := AddAIIntegrationUsageSyncSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add cursor usage metrics schedule", attr.SlogError(err))
+			logger.ErrorContext(context.Background(), "failed to add ai integration usage polling schedule", attr.SlogError(err))
 		}
 	}
 

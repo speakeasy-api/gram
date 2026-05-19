@@ -39,6 +39,12 @@ type Config struct {
 	UpdatedAt      time.Time
 }
 
+type ClaimedUsagePollConfig struct {
+	Config
+	LeaseOwner     string
+	LeaseExpiresAt time.Time
+}
+
 func NewStore(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client) *Store {
 	return &Store{
 		logger: logger.With(attr.SlogComponent("aiintegrations")),
@@ -180,6 +186,93 @@ func (s *Store) UpdateSyncLastPolledAt(ctx context.Context, configID uuid.UUID, 
 	return nil
 }
 
+func (s *Store) ClaimUsagePolls(ctx context.Context, provider string, endTime time.Time, limit int32, leaseOwner string, leaseExpiresAt time.Time) ([]ClaimedUsagePollConfig, error) {
+	provider, err := normalizeProvider(provider)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		return nil, nil
+	}
+	leaseOwner = strings.TrimSpace(leaseOwner)
+	if leaseOwner == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "lease_owner is required")
+	}
+
+	rows, err := s.repo.ClaimUsagePolls(ctx, repo.ClaimUsagePollsParams{
+		LeaseOwner: pgtype.Text{
+			String: leaseOwner,
+			Valid:  true,
+		},
+		LeaseExpiresAt: pgtype.Timestamptz{
+			Time:  leaseExpiresAt.UTC(),
+			Valid: true,
+		},
+		Provider: provider,
+		LastPolledBefore: pgtype.Timestamptz{
+			Time:  endTime.UTC().Add(-time.Millisecond),
+			Valid: true,
+		},
+		LimitCount: limit,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to claim ai integration usage poll configs")
+	}
+
+	configs := make([]ClaimedUsagePollConfig, 0, len(rows))
+	for _, row := range rows {
+		cfg, err := s.configFromClaimRow(row)
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to decrypt claimed ai integration config",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(row.OrganizationID),
+				attr.SlogProjectID(row.ProjectID.String()),
+			)
+			continue
+		}
+		configs = append(configs, cfg)
+	}
+	return configs, nil
+}
+
+func (s *Store) ReleaseUsagePollLease(ctx context.Context, configID uuid.UUID, leaseOwner string) error {
+	leaseOwner = strings.TrimSpace(leaseOwner)
+	if leaseOwner == "" {
+		return oops.E(oops.CodeInvalid, nil, "lease_owner is required")
+	}
+	if err := s.repo.ReleaseUsagePollLease(ctx, repo.ReleaseUsagePollLeaseParams{
+		AiIntegrationConfigID: configID,
+		LeaseOwner: pgtype.Text{
+			String: leaseOwner,
+			Valid:  true,
+		},
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to release ai integration usage poll lease")
+	}
+	return nil
+}
+
+func (s *Store) UpdateUsagePollWatermark(ctx context.Context, configID uuid.UUID, leaseOwner string, t time.Time) error {
+	leaseOwner = strings.TrimSpace(leaseOwner)
+	if leaseOwner == "" {
+		return oops.E(oops.CodeInvalid, nil, "lease_owner is required")
+	}
+	if err := s.repo.UpdateUsagePollWatermark(ctx, repo.UpdateUsagePollWatermarkParams{
+		AiIntegrationConfigID: configID,
+		LeaseOwner: pgtype.Text{
+			String: leaseOwner,
+			Valid:  true,
+		},
+		LastPolledAt: pgtype.Timestamptz{
+			Time:  t.UTC(),
+			Valid: true,
+		},
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to update ai integration usage poll watermark")
+	}
+	return nil
+}
+
 func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config, error) {
 	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
 	if err != nil {
@@ -213,6 +306,28 @@ func (s *Store) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Con
 		LastPolledAt:   row.LastPolledAt.Time,
 		CreatedAt:      row.CreatedAt.Time,
 		UpdatedAt:      row.UpdatedAt.Time,
+	}, nil
+}
+
+func (s *Store) configFromClaimRow(row repo.ClaimUsagePollsRow) (ClaimedUsagePollConfig, error) {
+	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+	if err != nil {
+		return ClaimedUsagePollConfig{Config: emptyConfig(row.OrganizationID, row.Provider)}, err
+	}
+	return ClaimedUsagePollConfig{
+		Config: Config{
+			ID:             row.ID,
+			OrganizationID: row.OrganizationID,
+			Provider:       row.Provider,
+			ProjectID:      row.ProjectID,
+			APIKey:         apiKey,
+			Enabled:        row.Enabled,
+			LastPolledAt:   row.LastPolledAt.Time,
+			CreatedAt:      row.CreatedAt.Time,
+			UpdatedAt:      row.UpdatedAt.Time,
+		},
+		LeaseOwner:     row.LeaseOwner.String,
+		LeaseExpiresAt: row.LeaseExpiresAt.Time,
 	}, nil
 }
 

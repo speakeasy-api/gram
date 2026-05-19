@@ -140,9 +140,21 @@ type InsertTelemetryLogParams struct {
 //
 //nolint:wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLogParams) error {
+	return q.InsertTelemetryLogs(ctx, []InsertTelemetryLogParams{arg})
+}
+
+// InsertTelemetryLogs inserts telemetry log records into ClickHouse in a single
+// synchronous statement.
+//
+//nolint:wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) InsertTelemetryLogs(ctx context.Context, args []InsertTelemetryLogParams) error {
+	if len(args) == 0 {
+		return nil
+	}
+
 	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
 
-	query, args, err := sq.Insert("telemetry_logs").
+	builder := sq.Insert("telemetry_logs").
 		Columns(
 			"id",
 			"time_unix_nano",
@@ -160,8 +172,10 @@ func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLog
 			"service_name",
 			"service_version",
 			"gram_chat_id",
-		).
-		Values(
+		)
+
+	for _, arg := range args {
+		builder = builder.Values(
 			arg.ID,
 			arg.TimeUnixNano,
 			arg.ObservedTimeUnixNano,
@@ -178,54 +192,16 @@ func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLog
 			arg.ServiceName,
 			arg.ServiceVersion,
 			arg.GramChatID,
-		).
+		)
+	}
+
+	query, queryArgs, err := builder.
 		ToSql()
 	if err != nil {
 		return fmt.Errorf("building insert query: %w", err)
 	}
 
-	return q.conn.Exec(ctx, query, args...)
-}
-
-// ListExistingCursorEventHashes returns already-ingested Cursor event hashes
-// for a narrow poll window so the usage polling workflow can avoid duplicate
-// telemetry rows after a retry.
-func (q *Queries) ListExistingCursorEventHashes(ctx context.Context, projectID string, startNano int64, endNano int64, hashes []string) ([]string, error) {
-	if len(hashes) == 0 {
-		return nil, nil
-	}
-
-	hashCol := "toString(attributes.cursor.event_hash)"
-	query, args, err := sq.Select(hashCol).
-		From("telemetry_logs").
-		Where(squirrel.Eq{"gram_project_id": projectID}).
-		Where(squirrel.GtOrEq{"time_unix_nano": startNano}).
-		Where(squirrel.LtOrEq{"time_unix_nano": endNano}).
-		Where(squirrel.Eq{"toString(attributes.gram.hook.source)": "cursor"}).
-		Where(squirrel.Eq{hashCol: hashes}).
-		ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("building existing cursor hashes query: %w", err)
-	}
-
-	rows, err := q.conn.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("query existing cursor hashes: %w", err)
-	}
-	defer rows.Close()
-
-	out := make([]string, 0, len(hashes))
-	for rows.Next() {
-		var hash string
-		if err := rows.Scan(&hash); err != nil {
-			return nil, fmt.Errorf("scan existing cursor hash: %w", err)
-		}
-		out = append(out, hash)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate existing cursor hashes: %w", err)
-	}
-	return out, nil
+	return q.conn.Exec(ctx, query, queryArgs...)
 }
 
 // ListTelemetryLogsParams contains the parameters for listing telemetry logs.

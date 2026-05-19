@@ -43,6 +43,8 @@ type AiIntegrationSync struct {
 	UpdatedAt             pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
 	LastPolledAt          pgtype.Timestamptz
+	LeaseOwner            pgtype.Text
+	LeaseExpiresAt        pgtype.Timestamptz
 	ID                    uuid.UUID
 }
 

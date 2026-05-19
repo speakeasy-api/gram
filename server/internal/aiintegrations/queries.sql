@@ -86,3 +86,53 @@ UPDATE ai_integration_syncs
 SET last_polled_at = @last_polled_at,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = @ai_integration_config_id;
+
+-- name: ClaimUsagePolls :many
+WITH candidates AS (
+  SELECT s.ai_integration_config_id
+  FROM ai_integration_syncs s
+  JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
+  WHERE c.provider = @provider
+    AND c.enabled IS TRUE
+    AND c.deleted IS FALSE
+    AND c.api_key_encrypted IS NOT NULL
+    AND s.last_polled_at < @last_polled_before
+    AND (
+      s.lease_owner IS NULL
+      OR s.lease_expires_at < clock_timestamp()
+      OR s.lease_owner = @lease_owner
+    )
+  ORDER BY s.last_polled_at ASC, c.organization_id ASC, c.provider ASC
+  LIMIT @limit_count
+  FOR UPDATE OF s SKIP LOCKED
+)
+UPDATE ai_integration_syncs s
+SET lease_owner = @lease_owner,
+    lease_expires_at = @lease_expires_at,
+    updated_at = clock_timestamp()
+FROM candidates
+JOIN ai_integration_configs c ON c.id = candidates.ai_integration_config_id
+WHERE s.ai_integration_config_id = candidates.ai_integration_config_id
+RETURNING
+    c.*
+  , s.id AS sync_id
+  , s.last_polled_at
+  , s.lease_owner
+  , s.lease_expires_at
+  , s.created_at AS sync_created_at
+  , s.updated_at AS sync_updated_at;
+
+-- name: ReleaseUsagePollLease :exec
+UPDATE ai_integration_syncs
+SET lease_owner = NULL,
+    lease_expires_at = NULL,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = @ai_integration_config_id
+  AND lease_owner = @lease_owner;
+
+-- name: UpdateUsagePollWatermark :exec
+UPDATE ai_integration_syncs
+SET last_polled_at = @last_polled_at,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = @ai_integration_config_id
+  AND lease_owner = @lease_owner;
