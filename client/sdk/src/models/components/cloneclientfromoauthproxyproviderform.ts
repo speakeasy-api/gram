@@ -33,6 +33,10 @@ export type CloneClientFromOAuthProxyProviderForm = {
    */
   remoteSessionIssuerId: string;
   /**
+   * Explicit upstream OAuth scopes the dance should request for the cloned client. Omit to fall back to the issuer's scopes_supported.
+   */
+  scope?: Array<string> | undefined;
+  /**
    * How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
    */
   tokenEndpointAuthMethod?: TokenEndpointAuthMethod | undefined;
@@ -51,6 +55,7 @@ export const TokenEndpointAuthMethod$outboundSchema: z.ZodMiniEnum<
 export type CloneClientFromOAuthProxyProviderForm$Outbound = {
   oauth_proxy_provider_id: string;
   remote_session_issuer_id: string;
+  scope?: Array<string> | undefined;
   token_endpoint_auth_method?: string | undefined;
   user_session_issuer_id: string;
 };
@@ -64,6 +69,7 @@ export const CloneClientFromOAuthProxyProviderForm$outboundSchema:
     z.object({
       oauthProxyProviderId: z.string(),
       remoteSessionIssuerId: z.string(),
+      scope: z.optional(z.array(z.string())),
       tokenEndpointAuthMethod: z.optional(
         TokenEndpointAuthMethod$outboundSchema,
       ),
