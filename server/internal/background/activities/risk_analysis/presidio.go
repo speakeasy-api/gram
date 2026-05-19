@@ -627,6 +627,7 @@ var ipv6ShortFormFP = regexp.MustCompile(`(?i)^[0-9a-f]{1,4}::$`)
 // would treat as noise. It currently drops:
 //   - the IPv6/IPv4 unspecified address in any spelling (`::`, `::0`,
 //     `0:0:0:0:0:0:0:0`, `0.0.0.0`), via net/netip;
+//   - loopback addresses (`127.0.0.0/8`, `::1`), via net/netip;
 //   - IPv6 short-form strings of shape "<hex>::" (e.g. "b::", "dead::"),
 //     which dominate Presidio's IP_ADDRESS noise on prod.
 func isPresidioFalsePositive(entityType, match string) bool {
@@ -634,8 +635,10 @@ func isPresidioFalsePositive(entityType, match string) bool {
 		return false
 	}
 	trimmed := strings.TrimSpace(match)
-	if addr, err := netip.ParseAddr(trimmed); err == nil && addr.IsUnspecified() {
-		return true
+	if addr, err := netip.ParseAddr(trimmed); err == nil {
+		if addr.IsUnspecified() || addr.IsLoopback() {
+			return true
+		}
 	}
 	if ipv6ShortFormFP.MatchString(trimmed) {
 		return true
