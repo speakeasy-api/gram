@@ -37,7 +37,7 @@ import {
   type DateRangePreset,
   getPresetRange,
 } from "@gram-ai/elements";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   BarElement,
   CategoryScale,
@@ -236,6 +236,7 @@ export function InsightsAgentsContent() {
         to,
         clientFilter !== "all" ? clientFilter : undefined,
       ),
+    placeholderData: keepPreviousData,
     throwOnError: false,
   });
 
