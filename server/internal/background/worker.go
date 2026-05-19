@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -67,6 +68,7 @@ type WorkerOptions struct {
 	MCPRegistryClient   *externalmcp.RegistryClient
 	TelemetryLogger     *telemetry.Logger
 	ClickhouseConn      clickhouse.Conn
+	TelemetryRepo       *telemetryrepo.Queries
 	TriggersApp         *bgtriggers.App
 	AssistantsCore      *assistants.ServiceCore
 	TemporalEnv         *tenv.Environment
@@ -110,6 +112,7 @@ func ForDeploymentProcessing(
 		RedisClient:         nil,
 		PosthogClient:       nil,
 		TelemetryLogger:     nil,
+		TelemetryRepo:       nil,
 		TriggersApp:         nil,
 		CacheAdapter:        nil,
 		AssistantsCore:      nil,
@@ -151,6 +154,7 @@ func NewTemporalWorker(
 		RagService:          nil,
 		MCPRegistryClient:   nil,
 		TelemetryLogger:     nil,
+		TelemetryRepo:       nil,
 		TriggersApp:         nil,
 		CacheAdapter:        nil,
 		AssistantsCore:      nil,
@@ -186,6 +190,7 @@ func NewTemporalWorker(
 			RagService:          conv.Default(o.RagService, opts.RagService),
 			MCPRegistryClient:   conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
 			TelemetryLogger:     conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
+			TelemetryRepo:       conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
 			TriggersApp:         conv.Default(o.TriggersApp, opts.TriggersApp),
 			CacheAdapter:        conv.Default(o.CacheAdapter, opts.CacheAdapter),
 			AssistantsCore:      conv.Default(o.AssistantsCore, opts.AssistantsCore),
@@ -240,6 +245,7 @@ func NewTemporalWorker(
 		opts.TemporalEnv,
 		opts.TelemetryLogger,
 		opts.ClickhouseConn,
+		opts.TelemetryRepo,
 		opts.TriggersApp,
 		opts.CacheAdapter,
 		opts.AssistantsCore,
@@ -268,6 +274,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FreeTierReportingUsageMetrics)
+	temporalWorker.RegisterActivity(activities.ListAIIntegrationUsagePollCandidates)
+	temporalWorker.RegisterActivity(activities.SyncAIIntegrationUsage)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
@@ -316,6 +324,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
 	temporalWorker.RegisterWorkflow(CollectOpenRouterCreditsMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
+	temporalWorker.RegisterWorkflow(AIIntegrationUsageSyncWorkflow)
+	temporalWorker.RegisterWorkflow(AIIntegrationUsageSyncConfigWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(FallbackModelUsageTrackingWorkflow)
@@ -356,6 +366,12 @@ func NewTemporalWorker(
 	if err := AddOpenRouterCreditsMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add openrouter credits metrics schedule", attr.SlogError(err))
+		}
+	}
+
+	if err := AddAIIntegrationUsageSyncSchedule(context.Background(), env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add ai integration usage polling schedule", attr.SlogError(err))
 		}
 	}
 

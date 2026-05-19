@@ -15,7 +15,15 @@ export function InsightsRoot() {
   const { userSlug } = useParams<{ userSlug: string }>();
   const { data: membersData } = useMembers();
   const substitutions = useMemo(() => {
-    if (!userSlug || !membersData?.members) return {};
+    if (!userSlug) return {};
+    const decodedUserSlug = decodeURIComponent(userSlug);
+    if (decodedUserSlug.includes("@")) {
+      return {
+        [userSlug]: decodedUserSlug,
+        [encodeURIComponent(decodedUserSlug)]: decodedUserSlug,
+      };
+    }
+    if (!membersData?.members) return {};
     const member = membersData.members.find(
       (m) => slugify(m.name) === userSlug,
     );

@@ -27,7 +27,9 @@ export default function Settings() {
             Manage your project configuration and perform administrative
             actions.
           </Type>
-          <SettingsDangerZone />
+          <div>
+            <SettingsDangerZone />
+          </div>
 
           {isAdmin && (
             <div className="mt-8 rounded-lg border border-red-500/20 bg-red-500/5 p-4">
