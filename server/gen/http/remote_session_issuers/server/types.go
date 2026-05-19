@@ -172,8 +172,11 @@ type RegisterRemoteSessionIssuerResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	CreatedAt               string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt               string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope     []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	CreatedAt string   `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string   `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateRemoteSessionIssuerResponseBody is the type of the
@@ -1717,6 +1720,12 @@ func NewRegisterRemoteSessionIssuerResponseBody(res *types.RemoteSessionClient) 
 		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
 		CreatedAt:               res.CreatedAt,
 		UpdatedAt:               res.UpdatedAt,
+	}
+	if res.Scope != nil {
+		body.Scope = make([]string, len(res.Scope))
+		for i, val := range res.Scope {
+			body.Scope[i] = val
+		}
 	}
 	return body
 }

@@ -172,8 +172,11 @@ type RegisterRemoteSessionIssuerResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	CreatedAt               *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt               *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope     []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateRemoteSessionIssuerResponseBody is the type of the
@@ -2127,6 +2130,12 @@ func NewRegisterRemoteSessionIssuerRemoteSessionClientOK(body *RegisterRemoteSes
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		CreatedAt:               *body.CreatedAt,
 		UpdatedAt:               *body.UpdatedAt,
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
 	}
 
 	return v

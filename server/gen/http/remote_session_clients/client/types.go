@@ -31,6 +31,9 @@ type CreateRemoteSessionClientRequestBody struct {
 	// How the client authenticates at the issuer's token endpoint. Omit to default
 	// to client_secret_basic.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance should request for this client.
+	// Omit to fall back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 }
 
 // CloneClientFromOAuthProxyProviderRequestBody is the type of the
@@ -47,6 +50,9 @@ type CloneClientFromOAuthProxyProviderRequestBody struct {
 	// How the cloned client authenticates at the issuer's token endpoint. Omit to
 	// default to client_secret_basic.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Explicit upstream OAuth scopes the dance should request for the cloned
+	// client. Omit to fall back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 }
 
 // UpdateRemoteSessionClientRequestBody is the type of the
@@ -61,6 +67,9 @@ type UpdateRemoteSessionClientRequestBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Replace the explicit upstream OAuth scopes for this client. Omit to leave
+	// unchanged.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 }
 
 // CreateRemoteSessionClientResponseBody is the type of the
@@ -84,8 +93,11 @@ type CreateRemoteSessionClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	CreatedAt               *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt               *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope     []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // CloneClientFromOAuthProxyProviderResponseBody is the type of the
@@ -109,8 +121,11 @@ type CloneClientFromOAuthProxyProviderResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	CreatedAt               *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt               *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope     []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateRemoteSessionClientResponseBody is the type of the
@@ -134,8 +149,11 @@ type UpdateRemoteSessionClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	CreatedAt               *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt               *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope     []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListRemoteSessionClientsResponseBody is the type of the
@@ -167,8 +185,11 @@ type GetRemoteSessionClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	CreatedAt               *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt               *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope     []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // CreateRemoteSessionClientUnauthorizedResponseBody is the type of the
@@ -1331,8 +1352,11 @@ type RemoteSessionClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	CreatedAt               *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt               *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope     []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // NewCreateRemoteSessionClientRequestBody builds the HTTP request body from
@@ -1347,6 +1371,12 @@ func NewCreateRemoteSessionClientRequestBody(p *remotesessionclients.CreateRemot
 		AutoRegister:            p.AutoRegister,
 		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
 	}
+	if p.Scope != nil {
+		body.Scope = make([]string, len(p.Scope))
+		for i, val := range p.Scope {
+			body.Scope[i] = val
+		}
+	}
 	return body
 }
 
@@ -1360,6 +1390,12 @@ func NewCloneClientFromOAuthProxyProviderRequestBody(p *remotesessionclients.Clo
 		UserSessionIssuerID:     p.UserSessionIssuerID,
 		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
 	}
+	if p.Scope != nil {
+		body.Scope = make([]string, len(p.Scope))
+		for i, val := range p.Scope {
+			body.Scope[i] = val
+		}
+	}
 	return body
 }
 
@@ -1372,6 +1408,12 @@ func NewUpdateRemoteSessionClientRequestBody(p *remotesessionclients.UpdateRemot
 		ClientSecret:            p.ClientSecret,
 		UserSessionIssuerID:     p.UserSessionIssuerID,
 		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
+	}
+	if p.Scope != nil {
+		body.Scope = make([]string, len(p.Scope))
+		for i, val := range p.Scope {
+			body.Scope[i] = val
+		}
 	}
 	return body
 }
@@ -1391,6 +1433,12 @@ func NewCreateRemoteSessionClientRemoteSessionClientOK(body *CreateRemoteSession
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		CreatedAt:               *body.CreatedAt,
 		UpdatedAt:               *body.UpdatedAt,
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
 	}
 
 	return v
@@ -1561,6 +1609,12 @@ func NewCloneClientFromOAuthProxyProviderRemoteSessionClientOK(body *CloneClient
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		CreatedAt:               *body.CreatedAt,
 		UpdatedAt:               *body.UpdatedAt,
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
 	}
 
 	return v
@@ -1735,6 +1789,12 @@ func NewUpdateRemoteSessionClientRemoteSessionClientOK(body *UpdateRemoteSession
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		CreatedAt:               *body.CreatedAt,
 		UpdatedAt:               *body.UpdatedAt,
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
 	}
 
 	return v
@@ -2073,6 +2133,12 @@ func NewGetRemoteSessionClientRemoteSessionClientOK(body *GetRemoteSessionClient
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		CreatedAt:               *body.CreatedAt,
 		UpdatedAt:               *body.UpdatedAt,
+	}
+	if body.Scope != nil {
+		v.Scope = make([]string, len(body.Scope))
+		for i, val := range body.Scope {
+			v.Scope[i] = val
+		}
 	}
 
 	return v
