@@ -15,7 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *url.URL) func(next http.Handler) http.Handler {
+func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *url.URL, setupSiteURL *url.URL) func(next http.Handler) http.Handler {
 	domainsRepo := domainsRepo.New(db)
 	logger = logger.With(attr.SlogComponent("custom_domains_middleware"))
 
@@ -46,6 +46,11 @@ func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *ur
 			}
 
 			if host == serverURL.Host {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			if setupSiteURL != nil && host == setupSiteURL.Host {
 				next.ServeHTTP(w, r)
 				return
 			}

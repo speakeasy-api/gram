@@ -926,7 +926,13 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
 			mux.Use(middleware.NewRecovery(logger))
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessionsManager))
-			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
+			var setupSiteURL *url.URL
+			if raw := c.String("setup-site-url"); raw != "" {
+				if parsed, err := url.Parse(raw); err == nil {
+					setupSiteURL = parsed
+				}
+			}
+			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL, setupSiteURL))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
 			mux.Use(middleware.RBACOverrideMiddleware())
