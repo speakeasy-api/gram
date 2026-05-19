@@ -12,10 +12,12 @@
 //! items through a nested agent loop on the same model. System + context items
 //! and the most recent few turns are preserved.
 //!
-//! The compactor's adapter is built without the `Gram-Chat-ID` default header
-//! so its calls bypass chat capture — capture runs a divergence check per
-//! chat_id and would otherwise persist the compactor's "summarise this
-//! transcript" turn, polluting the next replay.
+//! The compactor's adapter sends `Gram-Chat-ID` (the server's
+//! assistant-scope guard rejects any runner request without one) plus
+//! `Gram-Skip-Capture: 1`, which the chat handler honours by zeroing the
+//! ChatID on the downstream completion request. Capture sees no chat id
+//! and skips, so the compactor's "summarise this transcript" turn does
+//! not persist as divergence on the user's chat.
 
 use std::sync::Arc;
 

@@ -130,6 +130,7 @@ INSERT INTO risk_policies (
   , name
   , sources
   , presidio_entities
+  , prompt_injection_rules
   , enabled
   , action
   , auto_name
@@ -147,22 +148,24 @@ VALUES (
   , $8
   , $9
   , $10
+  , $11
   , 1
 )
 RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateRiskPolicyParams struct {
-	ID               uuid.UUID
-	ProjectID        uuid.UUID
-	OrganizationID   string
-	Name             string
-	Sources          []string
-	PresidioEntities []string
-	Enabled          bool
-	Action           string
-	AutoName         bool
-	UserMessage      pgtype.Text
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	OrganizationID       string
+	Name                 string
+	Sources              []string
+	PresidioEntities     []string
+	PromptInjectionRules []string
+	Enabled              bool
+	Action               string
+	AutoName             bool
+	UserMessage          pgtype.Text
 }
 
 func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyParams) (RiskPolicy, error) {
@@ -173,6 +176,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.Name,
 		arg.Sources,
 		arg.PresidioEntities,
+		arg.PromptInjectionRules,
 		arg.Enabled,
 		arg.Action,
 		arg.AutoName,
@@ -250,6 +254,7 @@ WHERE cm.project_id = $1
       AND rr.risk_policy_version = $3
     LIMIT 1
   )
+ORDER BY cm.id DESC
 LIMIT $4
 `
 
@@ -260,6 +265,13 @@ type FetchUnanalyzedMessageIDsParams struct {
 	BatchLimit        int32
 }
 
+// uuidv7 is k-sortable. The existing composite index
+// chat_messages_project_id_id_idx (project_id, id) lets Postgres satisfy
+// ORDER BY cm.id DESC with an Index Only Scan Backward, so we get
+// "most recent first" without a Sort node or any new index. Combined
+// with LIMIT this lets the planner stop scanning early when only the
+// recent tail is needed (verified via EXPLAIN ANALYZE: LIMIT 100 over a
+// 15k-message table scans ~2k rows in ~2ms).
 func (q *Queries) FetchUnanalyzedMessageIDs(ctx context.Context, arg FetchUnanalyzedMessageIDsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, fetchUnanalyzedMessageIDs,
 		arg.ProjectID,
@@ -388,6 +400,7 @@ type InsertRiskResultsParams struct {
 	EndPos            pgtype.Int4
 	Confidence        pgtype.Float8
 	Tags              []string
+	DeadLetterReason  pgtype.Text
 }
 
 const listEnabledEnforcingPoliciesByProject = `-- name: ListEnabledEnforcingPoliciesByProject :many
@@ -624,7 +637,7 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 }
 
 const listRiskResultsByChatFound = `-- name: ListRiskResultsByChatFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -632,16 +645,20 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND r
 WHERE cm.chat_id = $1
   AND rr.project_id = $2
   AND rr.found IS TRUE
-  AND ($3::uuid IS NULL OR rr.id <= $3::uuid)
-ORDER BY rr.id DESC
-LIMIT $4
+  AND (
+    $3::timestamptz IS NULL
+    OR (cm.created_at, rr.id) < ($3::timestamptz, $4::uuid)
+  )
+ORDER BY cm.created_at DESC, rr.id DESC
+LIMIT $5
 `
 
 type ListRiskResultsByChatFoundParams struct {
-	ChatID    uuid.UUID
-	ProjectID uuid.UUID
-	Cursor    uuid.NullUUID
-	PageLimit int32
+	ChatID                 uuid.UUID
+	ProjectID              uuid.UUID
+	CursorMessageCreatedAt pgtype.Timestamptz
+	CursorID               uuid.NullUUID
+	PageLimit              int32
 }
 
 type ListRiskResultsByChatFoundRow struct {
@@ -660,8 +677,10 @@ type ListRiskResultsByChatFoundRow struct {
 	EndPos            pgtype.Int4
 	Confidence        pgtype.Float8
 	Tags              []string
+	DeadLetterReason  pgtype.Text
 	CreatedAt         pgtype.Timestamptz
 	ChatID            uuid.UUID
+	MessageCreatedAt  pgtype.Timestamptz
 	ChatTitle         pgtype.Text
 	ChatUserID        pgtype.Text
 }
@@ -670,7 +689,8 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 	rows, err := q.db.Query(ctx, listRiskResultsByChatFound,
 		arg.ChatID,
 		arg.ProjectID,
-		arg.Cursor,
+		arg.CursorMessageCreatedAt,
+		arg.CursorID,
 		arg.PageLimit,
 	)
 	if err != nil {
@@ -696,8 +716,10 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 			&i.EndPos,
 			&i.Confidence,
 			&i.Tags,
+			&i.DeadLetterReason,
 			&i.CreatedAt,
 			&i.ChatID,
+			&i.MessageCreatedAt,
 			&i.ChatTitle,
 			&i.ChatUserID,
 		); err != nil {
@@ -712,7 +734,7 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 }
 
 const listRiskResultsByProjectAndPolicy = `-- name: ListRiskResultsByProjectAndPolicy :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -720,16 +742,20 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND r
 WHERE rr.project_id = $1
   AND rr.risk_policy_id = $2
   AND rr.found IS TRUE
-  AND ($3::uuid IS NULL OR rr.id <= $3::uuid)
-ORDER BY rr.id DESC
-LIMIT $4
+  AND (
+    $3::timestamptz IS NULL
+    OR (cm.created_at, rr.id) < ($3::timestamptz, $4::uuid)
+  )
+ORDER BY cm.created_at DESC, rr.id DESC
+LIMIT $5
 `
 
 type ListRiskResultsByProjectAndPolicyParams struct {
-	ProjectID    uuid.UUID
-	RiskPolicyID uuid.UUID
-	Cursor       uuid.NullUUID
-	PageLimit    int32
+	ProjectID              uuid.UUID
+	RiskPolicyID           uuid.UUID
+	CursorMessageCreatedAt pgtype.Timestamptz
+	CursorID               uuid.NullUUID
+	PageLimit              int32
 }
 
 type ListRiskResultsByProjectAndPolicyRow struct {
@@ -748,8 +774,10 @@ type ListRiskResultsByProjectAndPolicyRow struct {
 	EndPos            pgtype.Int4
 	Confidence        pgtype.Float8
 	Tags              []string
+	DeadLetterReason  pgtype.Text
 	CreatedAt         pgtype.Timestamptz
 	ChatID            uuid.UUID
+	MessageCreatedAt  pgtype.Timestamptz
 	ChatTitle         pgtype.Text
 	ChatUserID        pgtype.Text
 }
@@ -758,7 +786,8 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 	rows, err := q.db.Query(ctx, listRiskResultsByProjectAndPolicy,
 		arg.ProjectID,
 		arg.RiskPolicyID,
-		arg.Cursor,
+		arg.CursorMessageCreatedAt,
+		arg.CursorID,
 		arg.PageLimit,
 	)
 	if err != nil {
@@ -784,8 +813,10 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 			&i.EndPos,
 			&i.Confidence,
 			&i.Tags,
+			&i.DeadLetterReason,
 			&i.CreatedAt,
 			&i.ChatID,
+			&i.MessageCreatedAt,
 			&i.ChatTitle,
 			&i.ChatUserID,
 		); err != nil {
@@ -800,22 +831,26 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 }
 
 const listRiskResultsByProjectFound = `-- name: ListRiskResultsByProjectFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.created_at, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = $1
   AND rr.found IS TRUE
-  AND ($2::uuid IS NULL OR rr.id <= $2::uuid)
-ORDER BY rr.id DESC
-LIMIT $3
+  AND (
+    $2::timestamptz IS NULL
+    OR (cm.created_at, rr.id) < ($2::timestamptz, $3::uuid)
+  )
+ORDER BY cm.created_at DESC, rr.id DESC
+LIMIT $4
 `
 
 type ListRiskResultsByProjectFoundParams struct {
-	ProjectID uuid.UUID
-	Cursor    uuid.NullUUID
-	PageLimit int32
+	ProjectID              uuid.UUID
+	CursorMessageCreatedAt pgtype.Timestamptz
+	CursorID               uuid.NullUUID
+	PageLimit              int32
 }
 
 type ListRiskResultsByProjectFoundRow struct {
@@ -834,14 +869,27 @@ type ListRiskResultsByProjectFoundRow struct {
 	EndPos            pgtype.Int4
 	Confidence        pgtype.Float8
 	Tags              []string
+	DeadLetterReason  pgtype.Text
 	CreatedAt         pgtype.Timestamptz
 	ChatID            uuid.UUID
+	MessageCreatedAt  pgtype.Timestamptz
 	ChatTitle         pgtype.Text
 	ChatUserID        pgtype.Text
 }
 
+// Sort by the underlying chat message's created_at (the event time), NOT
+// rr.created_at (the scan time). The background drain workflow analyzes
+// historical messages in arbitrary order, so rr.created_at can put a
+// finding for an old message ahead of one for a recent message — which is
+// exactly the "random-seeming" order users see in Recent Findings.
+// Cursor is (cm.created_at, rr.id) for stable pagination.
 func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRiskResultsByProjectFoundParams) ([]ListRiskResultsByProjectFoundRow, error) {
-	rows, err := q.db.Query(ctx, listRiskResultsByProjectFound, arg.ProjectID, arg.Cursor, arg.PageLimit)
+	rows, err := q.db.Query(ctx, listRiskResultsByProjectFound,
+		arg.ProjectID,
+		arg.CursorMessageCreatedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -865,8 +913,10 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 			&i.EndPos,
 			&i.Confidence,
 			&i.Tags,
+			&i.DeadLetterReason,
 			&i.CreatedAt,
 			&i.ChatID,
+			&i.MessageCreatedAt,
 			&i.ChatTitle,
 			&i.ChatUserID,
 		); err != nil {
@@ -944,35 +994,38 @@ UPDATE risk_policies
 SET name = $1
   , sources = $2
   , presidio_entities = $3
-  , enabled = $4
-  , action = $5
-  , auto_name = $6
-  , user_message = $7
+  , prompt_injection_rules = $4
+  , enabled = $5
+  , action = $6
+  , auto_name = $7
+  , user_message = $8
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
-        OR enabled IS DISTINCT FROM $4
-        OR action IS DISTINCT FROM $5
+        OR prompt_injection_rules IS DISTINCT FROM $4
+        OR enabled IS DISTINCT FROM $5
+        OR action IS DISTINCT FROM $6
       THEN version + 1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $8
-  AND project_id = $9
+WHERE id = $9
+  AND project_id = $10
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRiskPolicyParams struct {
-	Name             string
-	Sources          []string
-	PresidioEntities []string
-	Enabled          bool
-	Action           string
-	AutoName         bool
-	UserMessage      pgtype.Text
-	ID               uuid.UUID
-	ProjectID        uuid.UUID
+	Name                 string
+	Sources              []string
+	PresidioEntities     []string
+	PromptInjectionRules []string
+	Enabled              bool
+	Action               string
+	AutoName             bool
+	UserMessage          pgtype.Text
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
 }
 
 func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyParams) (RiskPolicy, error) {
@@ -980,6 +1033,7 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.Name,
 		arg.Sources,
 		arg.PresidioEntities,
+		arg.PromptInjectionRules,
 		arg.Enabled,
 		arg.Action,
 		arg.AutoName,

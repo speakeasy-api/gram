@@ -2,9 +2,6 @@ package organizations_test
 
 import (
 	"testing"
-	"time"
-
-	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -12,9 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
-	"github.com/stretchr/testify/mock"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,57 +21,151 @@ func TestService_ListInvites(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	now := time.Now().UTC()
-	expiresAt := now.Add(7 * 24 * time.Hour).Format(time.RFC3339)
-	createdAt := now.Format(time.RFC3339)
-	updatedAt := now.Format(time.RFC3339)
-
-	const workosInviterUserID = "user_01WORKOS_INVITER"
-	require.NoError(t, userrepo.New(ti.conn).SetUserWorkosID(ctx, userrepo.SetUserWorkosIDParams{
-		ID:       authCtx.UserID,
-		WorkosID: conv.ToPGText(workosInviterUserID),
-	}))
-
-	expectWorkOSOrgAdminRole(t, ti.orgs)
-
-	ti.orgs.On("ListInvitations", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Invitation{
-		{
-			ID:             "test-invitation-id",
-			Email:          "test@example.com",
-			State:          thirdpartyworkos.InvitationStatePending,
-			OrganizationID: mockidp.MockOrgID,
-			InviterUserID:  workosInviterUserID,
-			ExpiresAt:      expiresAt,
-			CreatedAt:      createdAt,
-			UpdatedAt:      updatedAt,
-		},
-		{
-			ID:             "test-invitation-id-2",
-			Email:          "test2@example.com",
-			State:          thirdpartyworkos.InvitationStateAccepted,
-			OrganizationID: mockidp.MockOrgID,
-			InviterUserID:  workosInviterUserID,
-			ExpiresAt:      expiresAt,
-			CreatedAt:      createdAt,
-			UpdatedAt:      updatedAt,
-		},
-	}, nil).Once()
+	invite, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "invitee@example.com"})
+	require.NoError(t, err)
+	require.NotNil(t, invite)
 
 	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	require.Len(t, res.Invitations, 1)
 
-	inv0 := res.Invitations[0]
-	require.Equal(t, "test-invitation-id", inv0.ID)
-	require.Equal(t, "test@example.com", inv0.Email)
-	require.Equal(t, "pending", inv0.State)
-	require.NotNil(t, inv0.InviterUserID)
-	require.Equal(t, authCtx.UserID, *inv0.InviterUserID)
-	require.NotNil(t, inv0.ExpiresAt)
-	require.Equal(t, expiresAt, *inv0.ExpiresAt)
-	require.Equal(t, createdAt, inv0.CreatedAt)
-	require.Equal(t, updatedAt, inv0.UpdatedAt)
+	inv := res.Invitations[0]
+	require.Equal(t, invite.ID, inv.ID)
+	require.Equal(t, "invitee@example.com", inv.Email)
+	require.Equal(t, "pending", inv.State)
+	require.NotNil(t, inv.InviterUserID)
+	require.Equal(t, authCtx.UserID, *inv.InviterUserID)
+}
+
+func TestService_ListInvites_IncludesRoleSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	row, err := orgrepo.New(ti.conn).CreateInvitation(ctx, orgrepo.CreateInvitationParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Email:          "role@example.com",
+		TokenHash:      "rolehash",
+		InviterUserID:  conv.ToPGText(authCtx.UserID),
+		RoleSlug:       conv.ToPGText("member"),
+		ExpiresInDays:  7,
+	})
+	require.NoError(t, err)
+
+	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Invitations, 1)
+	require.Equal(t, row.ID.String(), res.Invitations[0].ID)
+	require.NotNil(t, res.Invitations[0].RoleSlug)
+	require.Equal(t, "member", *res.Invitations[0].RoleSlug)
+}
+
+func TestService_ListInvites_ExcludesAccepted(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// Create and accept an invitation directly in DB.
+	row, err := orgrepo.New(ti.conn).CreateInvitation(ctx, orgrepo.CreateInvitationParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Email:          "accepted@example.com",
+		TokenHash:      "deadbeef",
+		InviterUserID:  conv.ToPGText(authCtx.UserID),
+		ExpiresInDays:  7,
+	})
+	require.NoError(t, err)
+	affected, err := orgrepo.New(ti.conn).AcceptInvitation(ctx, row.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), affected)
+
+	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Empty(t, res.Invitations, "accepted invitations should not appear")
+}
+
+func TestService_ListInvites_ExcludesExpired(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// Create an invitation, then expire it by setting expires_at to the past.
+	row, err := orgrepo.New(ti.conn).CreateInvitation(ctx, orgrepo.CreateInvitationParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Email:          "expired@example.com",
+		TokenHash:      "expiredhash",
+		InviterUserID:  conv.ToPGText(authCtx.UserID),
+		ExpiresInDays:  7,
+	})
+	require.NoError(t, err)
+
+	err = orgrepo.New(ti.conn).ExpireInvitationForTest(ctx, row.ID)
+	require.NoError(t, err)
+
+	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Empty(t, res.Invitations, "expired invitations should not appear")
+}
+
+func TestAcceptInvitation_RevokedReturnsZeroRows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	row, err := orgrepo.New(ti.conn).CreateInvitation(ctx, orgrepo.CreateInvitationParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Email:          "race-revoked@example.com",
+		TokenHash:      "racerevokedhash",
+		InviterUserID:  conv.ToPGText(authCtx.UserID),
+		ExpiresInDays:  7,
+	})
+	require.NoError(t, err)
+
+	// Revoke first.
+	err = orgrepo.New(ti.conn).RevokeInvitation(ctx, row.ID)
+	require.NoError(t, err)
+
+	// Accept should affect 0 rows.
+	affected, err := orgrepo.New(ti.conn).AcceptInvitation(ctx, row.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), affected, "accepting a revoked invite should affect 0 rows")
+}
+
+func TestAcceptInvitation_ExpiredReturnsZeroRows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	row, err := orgrepo.New(ti.conn).CreateInvitation(ctx, orgrepo.CreateInvitationParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Email:          "race-expired@example.com",
+		TokenHash:      "raceexpiredhash",
+		InviterUserID:  conv.ToPGText(authCtx.UserID),
+		ExpiresInDays:  7,
+	})
+	require.NoError(t, err)
+
+	// Expire it manually.
+	err = orgrepo.New(ti.conn).ExpireInvitationForTest(ctx, row.ID)
+	require.NoError(t, err)
+
+	// Accept should affect 0 rows because expired.
+	affected, err := orgrepo.New(ti.conn).AcceptInvitation(ctx, row.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), affected, "accepting an expired invite should affect 0 rows")
 }
 
 func TestService_ListInvites_AllowsOrgReadGrant(t *testing.T) {
@@ -85,28 +174,8 @@ func TestService_ListInvites_AllowsOrgReadGrant(t *testing.T) {
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	require.NotNil(t, authCtx)
 
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)})
-
-	ti.orgs.On("ListInvitations", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Invitation{}, nil).Once()
-
-	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
-	require.NoError(t, err)
-	require.NotNil(t, res)
-}
-
-func TestService_ListInvites_AllowsOrgAdminGrantViaScopeHierarchy(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
-
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
-
-	ti.orgs.On("ListInvitations", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Invitation{}, nil).Once()
 
 	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
 	require.NoError(t, err)
@@ -131,19 +200,6 @@ func TestService_ListInvites_ForbiddenWithGrantForDifferentOrganization(t *testi
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, "org_other")})
-
-	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-	require.Nil(t, res)
-}
-
-func TestService_ListInvites_ForbiddenWhenNotOrgAdmin(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestOrganizationsService(t)
-	expectWorkOSOrgNonAdminRole(t, ti.orgs)
 
 	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
 	var oopsErr *oops.ShareableError

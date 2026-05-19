@@ -55,10 +55,12 @@ export default function Plugins() {
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
     useState(false);
   const [isDownloadingObservability, setIsDownloadingObservability] = useState<
-    "claude" | "cursor" | null
+    "claude" | "cursor" | "codex" | null
   >(null);
 
-  const handleObservabilityDownload = async (platform: "claude" | "cursor") => {
+  const handleObservabilityDownload = async (
+    platform: "claude" | "cursor" | "codex",
+  ) => {
     setIsObservabilityDownloadMenuOpen(false);
     setIsDownloadingObservability(platform);
     try {
@@ -164,11 +166,11 @@ export default function Plugins() {
   // effective and satisfies react-hooks/exhaustive-deps.
   const { mutate: publishMutate } = publishMutation;
   const handlePublish = useCallback(
-    (githubUsername?: string) => {
+    (githubUsernames: string[]) => {
       publishMutate({
         security: { sessionHeaderGramSession: "" },
         request: {
-          publishPluginsRequestBody: { githubUsername },
+          publishPluginsRequestBody: { githubUsernames },
         },
       });
     },
@@ -193,7 +195,7 @@ export default function Plugins() {
           <Page.Section.Title>Plugins</Page.Section.Title>
           <Page.Section.Description className={hasPlugins ? "w-3/4" : ""}>
             Create distributable plugin bundles that package MCP servers and
-            hooks together. Assign plugins to roles and publish them to Claude
+            skills together. Assign plugins to roles and publish them to Claude
             Code, Cursor, and Codex marketplaces via GitHub.
           </Page.Section.Description>
           <Page.Section.CTA>
@@ -214,7 +216,7 @@ export default function Plugins() {
                     ? "Publishing..."
                     : publishStatus.connected
                       ? "Re-publish"
-                      : "Publish to GitHub"}
+                      : "Publish Private Marketplace"}
                 </Button.Text>
               </Button>
             )}
@@ -269,11 +271,11 @@ export default function Plugins() {
           <Page.Section.Title>Observability hooks</Page.Section.Title>
           <Page.Section.Description className="w-3/4">
             The observability plugin forwards tool events from your team's
-            Claude Code and Cursor installs to your Gram dashboard. When you
-            publish to GitHub, it ships first in your marketplace marked
-            Required. You can also download a single-plugin ZIP per platform
-            here for direct install — each download mints a fresh hooks-scoped
-            API key.
+            Claude Code, Cursor and Codex installs to your project dashboard.
+            When you publish to GitHub, it ships first in your marketplace
+            marked Required. You can also download a single-plugin ZIP per
+            platform here for direct install — each download mints a fresh
+            hooks-scoped API key.
           </Page.Section.Description>
           <Page.Section.Body>
             <Stack direction="horizontal" gap={3} align="center">
@@ -323,6 +325,11 @@ export default function Plugins() {
                     onClick={() => handleObservabilityDownload("cursor")}
                   >
                     Cursor
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => handleObservabilityDownload("codex")}
+                  >
+                    Codex
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

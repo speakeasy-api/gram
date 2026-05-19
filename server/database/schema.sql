@@ -70,6 +70,12 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   CONSTRAINT organization_metadata_pkey PRIMARY KEY (id)
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_workos_id_key
+ON organization_metadata (workos_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_slug_key
+ON organization_metadata (slug);
+
 CREATE UNIQUE INDEX IF NOT EXISTS projects_organization_id_slug_key
 ON projects (organization_id, slug)
 WHERE deleted IS FALSE;
@@ -810,6 +816,94 @@ CREATE INDEX IF NOT EXISTS user_sessions_subject_idx
 ON user_sessions (subject_urn, user_session_issuer_id)
 WHERE deleted IS FALSE;
 
+-- Remote Session Issuers are references to external authorization servers
+-- that will mint tokens that can be passed on behalf of a Gram session to an
+-- MCP backend
+CREATE TABLE IF NOT EXISTS remote_session_issuers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  slug TEXT NOT NULL,
+  issuer TEXT NOT NULL,
+  authorization_endpoint TEXT,
+  token_endpoint TEXT,
+  registration_endpoint TEXT,
+  jwks_uri TEXT,
+
+  scopes_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  grant_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  response_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  token_endpoint_auth_methods_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+
+  oidc BOOLEAN NOT NULL DEFAULT FALSE,
+  passthrough BOOLEAN NOT NULL DEFAULT FALSE,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT remote_session_issuers_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_project_slug_key
+ON remote_session_issuers (project_id, slug)
+WHERE deleted IS FALSE;
+
+-- Remote Session Clients are records of Gram's client registrations with
+-- upstream authorization servers
+CREATE TABLE IF NOT EXISTS remote_session_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  remote_session_issuer_id uuid NOT NULL,
+  user_session_issuer_id uuid NOT NULL,
+
+  client_id TEXT NOT NULL,
+  client_secret_encrypted TEXT,
+  client_id_issued_at timestamptz,
+  client_secret_expires_at timestamptz,
+  token_endpoint_auth_method TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT remote_session_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_session_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT remote_session_clients_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE CASCADE,
+  CONSTRAINT remote_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
+);
+
+-- Remote sessions represent credentials for an external resource that have
+-- been granted to a single Gram subject
+CREATE TABLE IF NOT EXISTS remote_sessions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  subject_urn TEXT NOT NULL,
+  user_session_issuer_id uuid NOT NULL,
+  remote_session_client_id uuid NOT NULL,
+
+  access_token_encrypted TEXT NOT NULL,
+  access_expires_at timestamptz NOT NULL,
+  refresh_token_encrypted TEXT,
+  refresh_expires_at timestamptz,
+  scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT remote_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_sessions_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
+  CONSTRAINT remote_sessions_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_key
+ON remote_sessions (subject_urn, remote_session_client_id)
+WHERE deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS toolsets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
@@ -1046,6 +1140,11 @@ WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS assistant_runtimes (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  -- v1 rows pin one VM per thread and stamp the thread's id here. v2 rows
+  -- host every thread under one assistant and use uuid.Nil as a sentinel —
+  -- the foreign key to assistant_threads is intentionally absent so the
+  -- sentinel does not have to back to a real row, and so reaping a thread
+  -- does not cascade-delete the assistant's shared v2 runtime.
   assistant_thread_id uuid NOT NULL,
   assistant_id uuid NOT NULL,
   project_id uuid NOT NULL,
@@ -1056,6 +1155,7 @@ CREATE TABLE IF NOT EXISTS assistant_runtimes (
   last_heartbeat_at timestamptz,
   backend_metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   ended_at timestamptz,
+  runtime_version smallint NOT NULL DEFAULT 1,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1064,14 +1164,17 @@ CREATE TABLE IF NOT EXISTS assistant_runtimes (
   ended boolean NOT NULL GENERATED ALWAYS AS (ended_at IS NOT NULL) stored,
 
   CONSTRAINT assistant_runtimes_pkey PRIMARY KEY (id),
-  CONSTRAINT assistant_runtimes_assistant_thread_id_fkey FOREIGN KEY (assistant_thread_id) REFERENCES assistant_threads(id) ON DELETE CASCADE,
   CONSTRAINT assistant_runtimes_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants(id) ON DELETE CASCADE,
   CONSTRAINT assistant_runtimes_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS assistant_runtimes_assistant_thread_id_active_key
 ON assistant_runtimes (assistant_thread_id)
-WHERE deleted IS FALSE AND ended IS FALSE;
+WHERE deleted IS FALSE AND ended IS FALSE AND runtime_version = 1;
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_runtimes_v2_one_per_assistant
+ON assistant_runtimes (project_id, assistant_id)
+WHERE runtime_version = 2 AND deleted IS FALSE AND ended IS FALSE;
 
 CREATE INDEX IF NOT EXISTS assistant_runtimes_project_id_assistant_id_state_idx
 ON assistant_runtimes (project_id, assistant_id, state)
@@ -1554,7 +1657,7 @@ CREATE TABLE IF NOT EXISTS deployment_tag_history (
 CREATE TABLE IF NOT EXISTS organization_user_relationships (
   id BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY,
   organization_id TEXT NOT NULL,
-  user_id TEXT NOT NULL,
+  user_id TEXT,
   workos_user_id TEXT,
   workos_membership_id TEXT,
   workos_updated_at timestamptz,
@@ -1567,7 +1670,6 @@ CREATE TABLE IF NOT EXISTS organization_user_relationships (
 
   CONSTRAINT organization_user_relationships_pkey PRIMARY KEY (id),
   CONSTRAINT organization_user_relationships_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
-  CONSTRAINT organization_user_relationships_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL,
   CONSTRAINT organization_user_relationships_organization_id_user_id_key UNIQUE (organization_id, user_id)
 );
 
@@ -1578,6 +1680,34 @@ WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS organization_user_relationships_org_workos_user_idx
 ON organization_user_relationships (organization_id, workos_user_id)
 WHERE workos_user_id IS NOT NULL AND deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS organization_invitations (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  email TEXT NOT NULL CHECK (email <> ''),
+  token_hash TEXT NOT NULL CHECK (token_hash <> ''),
+  inviter_user_id TEXT,
+  role_slug TEXT,
+  state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'accepted', 'revoked', 'expired')),
+
+  expires_at timestamptz NOT NULL DEFAULT clock_timestamp() + INTERVAL '7 days',
+  accepted_at timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT organization_invitations_pkey PRIMARY KEY (id),
+  CONSTRAINT organization_invitations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT organization_invitations_inviter_user_id_fkey FOREIGN KEY (inviter_user_id) REFERENCES users (id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_invitations_token_hash_key
+ON organization_invitations (token_hash);
+
+-- Only one pending invite per email per org at a time.
+CREATE UNIQUE INDEX IF NOT EXISTS organization_invitations_org_email_pending_key
+ON organization_invitations (organization_id, email)
+WHERE state = 'pending';
 
 -- organization_role_assignments stores which roles each WorkOS user has within an org.
 -- role_urn encodes both the role type and ID: "role:global:<uuid>" or "role:organization:<uuid>".
@@ -1596,6 +1726,7 @@ CREATE TABLE IF NOT EXISTS organization_role_assignments (
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
 
   CONSTRAINT organization_role_assignments_pkey PRIMARY KEY (id),
   CONSTRAINT organization_role_assignments_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
@@ -1603,7 +1734,8 @@ CREATE TABLE IF NOT EXISTS organization_role_assignments (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_role_assignments_org_workos_user_role_key
-ON organization_role_assignments (organization_id, workos_user_id, role_urn);
+ON organization_role_assignments (organization_id, workos_user_id, role_urn)
+WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS organization_role_assignments_org_user_idx
 ON organization_role_assignments (organization_id, user_id)
@@ -2050,12 +2182,78 @@ CREATE TABLE IF NOT EXISTS hooks_server_name_overrides (
 
 CREATE INDEX IF NOT EXISTS hooks_server_name_overrides_project_id_display_name_idx ON hooks_server_name_overrides(project_id, display_name);
 
+-- OTEL forwarding configs: forward raw OTLP payloads received on
+-- /rpc/hooks.otel/v1/* to a customer-owned endpoint. project_id is nullable
+-- because v1 ships as org-wide config; the column is retained so future UX
+-- can add per-project overrides without a schema change.
+CREATE TABLE IF NOT EXISTS otel_forwarding_configs (
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  endpoint_url TEXT NOT NULL,
+  headers_encrypted TEXT,
+  organization_id TEXT NOT NULL,
+  project_id uuid,
+  enabled boolean NOT NULL DEFAULT true,
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT otel_forwarding_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+-- Only one org-wide row per org
+CREATE UNIQUE INDEX IF NOT EXISTS otel_forwarding_configs_org_key
+  ON otel_forwarding_configs (organization_id)
+  WHERE project_id IS NULL AND deleted IS FALSE;
+
+-- Only one per-project row per (org, project)
+CREATE UNIQUE INDEX IF NOT EXISTS otel_forwarding_configs_org_project_key
+  ON otel_forwarding_configs (organization_id, project_id)
+  WHERE project_id IS NOT NULL AND deleted IS FALSE;
+
+-- AI integration configs: encrypted provider credentials and activation
+-- metadata. Provider-specific sync state lives in ai_integration_syncs.
+CREATE TABLE IF NOT EXISTS ai_integration_configs (
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  organization_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  api_key_encrypted TEXT NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT ai_integration_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_configs_org_provider_key
+  ON ai_integration_configs (organization_id, provider)
+  WHERE deleted IS FALSE;
+
+-- AI integration syncs: provider-specific high-water marks and future sync
+-- metadata. Cursor usage polling uses last_polled_at as its watermark.
+CREATE TABLE IF NOT EXISTS ai_integration_syncs (
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  ai_integration_config_id uuid NOT NULL,
+  last_polled_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+
+  CONSTRAINT ai_integration_syncs_config_id_fkey FOREIGN KEY (ai_integration_config_id) REFERENCES ai_integration_configs (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_syncs_config_id_key
+  ON ai_integration_syncs (ai_integration_config_id);
+
 CREATE TABLE IF NOT EXISTS principal_grants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   principal_urn TEXT NOT NULL,
   principal_type TEXT NOT NULL GENERATED ALWAYS AS (split_part(principal_urn, ':', 1)) STORED,
   scope TEXT NOT NULL,
+  effect TEXT,
   drop_resource TEXT,
   selectors JSONB NOT NULL,
 
@@ -2064,7 +2262,8 @@ CREATE TABLE IF NOT EXISTS principal_grants (
 
   CONSTRAINT principal_grants_pkey PRIMARY KEY (id),
   CONSTRAINT principal_grants_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT principal_grants_selectors_check CHECK (jsonb_typeof(selectors) = 'object' AND selectors != '{}')
+  CONSTRAINT principal_grants_selectors_check CHECK (jsonb_typeof(selectors) = 'object' AND selectors != '{}'),
+  CONSTRAINT principal_grants_effect_check CHECK (effect IS NULL OR effect IN ('allow', 'deny'))
 );
 
 COMMENT ON TABLE principal_grants IS 'RBAC grants. Normalized: one row per (org, principal, scope). Selectors can further constrain applicability.';
@@ -2072,11 +2271,15 @@ COMMENT ON COLUMN principal_grants.organization_id IS 'The organization this gra
 COMMENT ON COLUMN principal_grants.principal_urn IS 'URN identifying the principal, e.g. "user:user_abc", "role:admin". Format is type:id.';
 COMMENT ON COLUMN principal_grants.principal_type IS 'Derived from principal_urn. The type prefix, e.g. "user", "role".';
 COMMENT ON COLUMN principal_grants.scope IS 'The scope being granted, e.g. "build:read". Validated in application code, not via FK.';
+COMMENT ON COLUMN principal_grants.effect IS 'Whether this grant allows or denies the scope. NULL = allow for backward compatibility.';
 COMMENT ON COLUMN principal_grants.drop_resource IS 'Deprecated. Formerly ''*'' = unrestricted. Nullable, scheduled for removal.';
 COMMENT ON COLUMN principal_grants.selectors IS 'JSON selector constraints attached to a grant. Must be a non-empty JSONB object. Wildcard/unrestricted grants use {"resource_kind":"*","resource_id":"*"}.';
 
 CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_selector_key
 ON principal_grants (organization_id, principal_urn, scope, selectors);
+
+CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_effect_selector_key
+ON principal_grants (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors);
 
 CREATE INDEX IF NOT EXISTS principal_grants_selectors_idx
 ON principal_grants
@@ -2197,8 +2400,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   slug TEXT CHECK (slug IS NULL OR slug <> ''),
 
   environment_id uuid,
-  external_oauth_server_id uuid,
-  oauth_proxy_server_id uuid,
+  user_session_issuer_id uuid,
   remote_mcp_server_id uuid,
   toolset_id uuid,
   visibility TEXT NOT NULL CHECK (visibility <> ''),
@@ -2211,8 +2413,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_pkey PRIMARY KEY (id),
   CONSTRAINT mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT mcp_servers_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL,
-  CONSTRAINT mcp_servers_external_oauth_server_id_fkey FOREIGN KEY (external_oauth_server_id) REFERENCES external_oauth_server_metadata (id) ON DELETE SET NULL,
-  CONSTRAINT mcp_servers_oauth_proxy_server_id_fkey FOREIGN KEY (oauth_proxy_server_id) REFERENCES oauth_proxy_servers (id) ON DELETE SET NULL,
+  CONSTRAINT mcp_servers_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
   CONSTRAINT mcp_servers_remote_mcp_server_id_fkey FOREIGN KEY (remote_mcp_server_id) REFERENCES remote_mcp_servers (id) ON DELETE RESTRICT,
   CONSTRAINT mcp_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
   -- Exactly one backend must be set: either a remote MCP server or a toolset.
@@ -2443,6 +2644,10 @@ CREATE TABLE IF NOT EXISTS risk_results (
   confidence DOUBLE PRECISION,
   tags TEXT[],
 
+  -- Populated on rows that represent a message the scanner could not analyze
+  -- after exhausting its retry budget
+  dead_letter_reason TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT risk_results_pkey PRIMARY KEY (id),
@@ -2516,9 +2721,9 @@ ON outbox (public_id);
 CREATE INDEX IF NOT EXISTS outbox_organization_id_id_idx
 ON outbox (organization_id, id);
 
--- Per-row Svix relay tracking. One row per outbox entry that has been
+-- Per-row relay tracking. One row per outbox entry that has been
 -- considered by the relay workflow. UPDATE-heavy: each retry rewrites the row.
-CREATE TABLE IF NOT EXISTS outbox_svix_relays (
+CREATE TABLE IF NOT EXISTS outbox_relays (
   outbox_id BIGINT NOT NULL,
 
   processed_at timestamptz,
@@ -2528,17 +2733,19 @@ CREATE TABLE IF NOT EXISTS outbox_svix_relays (
   svix_message_id TEXT,
   attempts INT NOT NULL DEFAULT 0,
   last_error TEXT,
+  retry_after timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT outbox_svix_relays_pkey PRIMARY KEY (outbox_id),
-  CONSTRAINT outbox_svix_relays_outbox_id_fkey FOREIGN KEY (outbox_id) REFERENCES outbox(id) ON DELETE CASCADE
+  CONSTRAINT outbox_relays_pkey PRIMARY KEY (outbox_id),
+  CONSTRAINT outbox_relays_outbox_id_fkey FOREIGN KEY (outbox_id) REFERENCES outbox(id) ON DELETE CASCADE
 ) WITH (
   fillfactor = 80,
   autovacuum_vacuum_scale_factor = 0.05,
   autovacuum_analyze_scale_factor = 0.05
 );
 
-CREATE INDEX IF NOT EXISTS outbox_svix_relays_pending_idx
-ON outbox_svix_relays (outbox_id) WHERE processed_at IS NULL AND dead_lettered IS FALSE;
+CREATE INDEX IF NOT EXISTS outbox_relays_pending_idx
+ON outbox_relays (outbox_id)
+WHERE processed_at IS NULL AND dead_lettered IS FALSE;

@@ -27,6 +27,11 @@ func (s *noopCache) Get(ctx context.Context, key string, value any) error {
 	return errors.New("no cache entry for key")
 }
 
+// GetAndDelete implements [Cache].
+func (s *noopCache) GetAndDelete(ctx context.Context, key string, value any) error {
+	return errors.New("no cache entry for key")
+}
+
 // ListAppend implements [Cache].
 func (s *noopCache) ListAppend(ctx context.Context, key string, value any, ttl time.Duration) error {
 	return nil
@@ -39,6 +44,11 @@ func (s *noopCache) ListRange(ctx context.Context, key string, start int64, stop
 
 // Set implements [Cache].
 func (s *noopCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	return nil
+}
+
+// Expire implements [Cache].
+func (s *noopCache) Expire(ctx context.Context, key string, ttl time.Duration) error {
 	return nil
 }
 

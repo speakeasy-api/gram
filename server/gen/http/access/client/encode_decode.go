@@ -3548,6 +3548,7 @@ func unmarshalRoleResponseBodyToAccessRole(v *RoleResponseBody) *access.Role {
 	res := &access.Role{
 		ID:          *v.ID,
 		Name:        *v.Name,
+		Slug:        *v.Slug,
 		Description: *v.Description,
 		IsSystem:    *v.IsSystem,
 		MemberCount: *v.MemberCount,
@@ -3571,6 +3572,12 @@ func unmarshalRoleResponseBodyToAccessRole(v *RoleResponseBody) *access.Role {
 func unmarshalRoleGrantResponseBodyToAccessRoleGrant(v *RoleGrantResponseBody) *access.RoleGrant {
 	res := &access.RoleGrant{
 		Scope: *v.Scope,
+	}
+	if v.Effect != nil {
+		res.Effect = *v.Effect
+	}
+	if v.Effect == nil {
+		res.Effect = "allow"
 	}
 	if v.Selectors != nil {
 		res.Selectors = make([]*access.Selector, len(v.Selectors))
@@ -3607,7 +3614,14 @@ func unmarshalSelectorResponseBodyToAccessSelector(v *SelectorResponseBody) *acc
 // *RoleGrantRequestBody from a value of type *access.RoleGrant.
 func marshalAccessRoleGrantToRoleGrantRequestBody(v *access.RoleGrant) *RoleGrantRequestBody {
 	res := &RoleGrantRequestBody{
-		Scope: v.Scope,
+		Scope:  v.Scope,
+		Effect: v.Effect,
+	}
+	{
+		var zero string
+		if res.Effect == zero {
+			res.Effect = "allow"
+		}
 	}
 	if v.Selectors != nil {
 		res.Selectors = make([]*SelectorRequestBody, len(v.Selectors))
@@ -3644,7 +3658,14 @@ func marshalAccessSelectorToSelectorRequestBody(v *access.Selector) *SelectorReq
 // *access.RoleGrant from a value of type *RoleGrantRequestBody.
 func marshalRoleGrantRequestBodyToAccessRoleGrant(v *RoleGrantRequestBody) *access.RoleGrant {
 	res := &access.RoleGrant{
-		Scope: v.Scope,
+		Scope:  v.Scope,
+		Effect: v.Effect,
+	}
+	{
+		var zero string
+		if res.Effect == zero {
+			res.Effect = "allow"
+		}
 	}
 	if v.Selectors != nil {
 		res.Selectors = make([]*access.Selector, len(v.Selectors))
@@ -3710,6 +3731,12 @@ func unmarshalAccessMemberResponseBodyToAccessAccessMember(v *AccessMemberRespon
 func unmarshalListRoleGrantResponseBodyToAccessListRoleGrant(v *ListRoleGrantResponseBody) *access.ListRoleGrant {
 	res := &access.ListRoleGrant{
 		Scope: *v.Scope,
+	}
+	if v.Effect != nil {
+		res.Effect = *v.Effect
+	}
+	if v.Effect == nil {
+		res.Effect = "allow"
 	}
 	if v.SubScopes != nil {
 		res.SubScopes = make([]string, len(v.SubScopes))

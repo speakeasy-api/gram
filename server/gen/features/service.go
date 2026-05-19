@@ -10,7 +10,6 @@ package features
 import (
 	"context"
 
-	featuresviews "github.com/speakeasy-api/gram/server/gen/features/views"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -18,7 +17,7 @@ import (
 // Manage product level feature controls.
 type Service interface {
 	// Get the current state of all product feature flags.
-	GetProductFeatures(context.Context, *GetProductFeaturesPayload) (res *GramProductFeatures, err error)
+	GetProductFeatures(context.Context, *GetProductFeaturesPayload) (res *GetProductFeaturesResult, err error)
 	// Enable or disable an organization feature flag.
 	SetProductFeature(context.Context, *SetProductFeaturePayload) (err error)
 }
@@ -51,9 +50,9 @@ type GetProductFeaturesPayload struct {
 	SessionToken *string
 }
 
-// GramProductFeatures is the result type of the features service
+// GetProductFeaturesResult is the result type of the features service
 // getProductFeatures method.
-type GramProductFeatures struct {
+type GetProductFeaturesResult struct {
 	// Whether logging is enabled
 	LogsEnabled bool
 	// Whether tool I/O logging is enabled
@@ -62,8 +61,8 @@ type GramProductFeatures struct {
 	SessionCaptureEnabled bool
 	// Whether authz challenge logging to ClickHouse is enabled
 	AuthzChallengeLoggingEnabled bool
-	// Whether assistant memory is enabled
-	AssistantMemoryEnabled bool
+	// Whether webhooks are enabled
+	Webhooks bool
 }
 
 // SetProductFeaturePayload is the payload type of the features service
@@ -124,53 +123,4 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
-}
-
-// NewGramProductFeatures initializes result type GramProductFeatures from
-// viewed result type GramProductFeatures.
-func NewGramProductFeatures(vres *featuresviews.GramProductFeatures) *GramProductFeatures {
-	return newGramProductFeatures(vres.Projected)
-}
-
-// NewViewedGramProductFeatures initializes viewed result type
-// GramProductFeatures from result type GramProductFeatures using the given
-// view.
-func NewViewedGramProductFeatures(res *GramProductFeatures, view string) *featuresviews.GramProductFeatures {
-	p := newGramProductFeaturesView(res)
-	return &featuresviews.GramProductFeatures{Projected: p, View: "default"}
-}
-
-// newGramProductFeatures converts projected type GramProductFeatures to
-// service type GramProductFeatures.
-func newGramProductFeatures(vres *featuresviews.GramProductFeaturesView) *GramProductFeatures {
-	res := &GramProductFeatures{}
-	if vres.LogsEnabled != nil {
-		res.LogsEnabled = *vres.LogsEnabled
-	}
-	if vres.ToolIoLogsEnabled != nil {
-		res.ToolIoLogsEnabled = *vres.ToolIoLogsEnabled
-	}
-	if vres.SessionCaptureEnabled != nil {
-		res.SessionCaptureEnabled = *vres.SessionCaptureEnabled
-	}
-	if vres.AuthzChallengeLoggingEnabled != nil {
-		res.AuthzChallengeLoggingEnabled = *vres.AuthzChallengeLoggingEnabled
-	}
-	if vres.AssistantMemoryEnabled != nil {
-		res.AssistantMemoryEnabled = *vres.AssistantMemoryEnabled
-	}
-	return res
-}
-
-// newGramProductFeaturesView projects result type GramProductFeatures to
-// projected type GramProductFeaturesView using the "default" view.
-func newGramProductFeaturesView(res *GramProductFeatures) *featuresviews.GramProductFeaturesView {
-	vres := &featuresviews.GramProductFeaturesView{
-		LogsEnabled:                  &res.LogsEnabled,
-		ToolIoLogsEnabled:            &res.ToolIoLogsEnabled,
-		SessionCaptureEnabled:        &res.SessionCaptureEnabled,
-		AuthzChallengeLoggingEnabled: &res.AuthzChallengeLoggingEnabled,
-		AssistantMemoryEnabled:       &res.AssistantMemoryEnabled,
-	}
-	return vres
 }

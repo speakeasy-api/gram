@@ -18,10 +18,6 @@ import (
 type CreateMcpServerRequestBody struct {
 	// The ID of the environment to associate with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
-	// The ID of the external OAuth server to associate with the server
-	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
-	// The ID of the OAuth proxy server to associate with the server
-	OauthProxyServerID *string `form:"oauth_proxy_server_id,omitempty" json:"oauth_proxy_server_id,omitempty" xml:"oauth_proxy_server_id,omitempty"`
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the toolset to use as the backend
@@ -37,10 +33,6 @@ type UpdateMcpServerRequestBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The ID of the environment to associate with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
-	// The ID of the external OAuth server to associate with the server
-	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
-	// The ID of the OAuth proxy server to associate with the server
-	OauthProxyServerID *string `form:"oauth_proxy_server_id,omitempty" json:"oauth_proxy_server_id,omitempty" xml:"oauth_proxy_server_id,omitempty"`
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the toolset to use as the backend
@@ -58,10 +50,6 @@ type CreateMcpServerResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
-	// The ID of the external OAuth server associated with the server
-	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
-	// The ID of the OAuth proxy server associated with the server
-	OauthProxyServerID *string `form:"oauth_proxy_server_id,omitempty" json:"oauth_proxy_server_id,omitempty" xml:"oauth_proxy_server_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
@@ -83,10 +71,6 @@ type GetMcpServerResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
-	// The ID of the external OAuth server associated with the server
-	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
-	// The ID of the OAuth proxy server associated with the server
-	OauthProxyServerID *string `form:"oauth_proxy_server_id,omitempty" json:"oauth_proxy_server_id,omitempty" xml:"oauth_proxy_server_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
@@ -114,10 +98,6 @@ type UpdateMcpServerResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
-	// The ID of the external OAuth server associated with the server
-	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
-	// The ID of the OAuth proxy server associated with the server
-	OauthProxyServerID *string `form:"oauth_proxy_server_id,omitempty" json:"oauth_proxy_server_id,omitempty" xml:"oauth_proxy_server_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
@@ -1062,10 +1042,6 @@ type McpServerResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
-	// The ID of the external OAuth server associated with the server
-	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
-	// The ID of the OAuth proxy server associated with the server
-	OauthProxyServerID *string `form:"oauth_proxy_server_id,omitempty" json:"oauth_proxy_server_id,omitempty" xml:"oauth_proxy_server_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
@@ -1082,16 +1058,14 @@ type McpServerResponseBody struct {
 // of the "createMcpServer" endpoint of the "mcpServers" service.
 func NewCreateMcpServerResponseBody(res *types.McpServer) *CreateMcpServerResponseBody {
 	body := &CreateMcpServerResponseBody{
-		ID:                    res.ID,
-		ProjectID:             res.ProjectID,
-		EnvironmentID:         res.EnvironmentID,
-		ExternalOauthServerID: res.ExternalOauthServerID,
-		OauthProxyServerID:    res.OauthProxyServerID,
-		RemoteMcpServerID:     res.RemoteMcpServerID,
-		ToolsetID:             res.ToolsetID,
-		Visibility:            string(res.Visibility),
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		EnvironmentID:     res.EnvironmentID,
+		RemoteMcpServerID: res.RemoteMcpServerID,
+		ToolsetID:         res.ToolsetID,
+		Visibility:        string(res.Visibility),
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
 	}
 	return body
 }
@@ -1100,16 +1074,14 @@ func NewCreateMcpServerResponseBody(res *types.McpServer) *CreateMcpServerRespon
 // the "getMcpServer" endpoint of the "mcpServers" service.
 func NewGetMcpServerResponseBody(res *types.McpServer) *GetMcpServerResponseBody {
 	body := &GetMcpServerResponseBody{
-		ID:                    res.ID,
-		ProjectID:             res.ProjectID,
-		EnvironmentID:         res.EnvironmentID,
-		ExternalOauthServerID: res.ExternalOauthServerID,
-		OauthProxyServerID:    res.OauthProxyServerID,
-		RemoteMcpServerID:     res.RemoteMcpServerID,
-		ToolsetID:             res.ToolsetID,
-		Visibility:            string(res.Visibility),
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		EnvironmentID:     res.EnvironmentID,
+		RemoteMcpServerID: res.RemoteMcpServerID,
+		ToolsetID:         res.ToolsetID,
+		Visibility:        string(res.Visibility),
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
 	}
 	return body
 }
@@ -1137,16 +1109,14 @@ func NewListMcpServersResponseBody(res *mcpservers.ListMcpServersResult) *ListMc
 // of the "updateMcpServer" endpoint of the "mcpServers" service.
 func NewUpdateMcpServerResponseBody(res *types.McpServer) *UpdateMcpServerResponseBody {
 	body := &UpdateMcpServerResponseBody{
-		ID:                    res.ID,
-		ProjectID:             res.ProjectID,
-		EnvironmentID:         res.EnvironmentID,
-		ExternalOauthServerID: res.ExternalOauthServerID,
-		OauthProxyServerID:    res.OauthProxyServerID,
-		RemoteMcpServerID:     res.RemoteMcpServerID,
-		ToolsetID:             res.ToolsetID,
-		Visibility:            string(res.Visibility),
-		CreatedAt:             res.CreatedAt,
-		UpdatedAt:             res.UpdatedAt,
+		ID:                res.ID,
+		ProjectID:         res.ProjectID,
+		EnvironmentID:     res.EnvironmentID,
+		RemoteMcpServerID: res.RemoteMcpServerID,
+		ToolsetID:         res.ToolsetID,
+		Visibility:        string(res.Visibility),
+		CreatedAt:         res.CreatedAt,
+		UpdatedAt:         res.UpdatedAt,
 	}
 	return body
 }
@@ -1868,12 +1838,10 @@ func NewDeleteMcpServerGatewayErrorResponseBody(res *goa.ServiceError) *DeleteMc
 // endpoint payload.
 func NewCreateMcpServerPayload(body *CreateMcpServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.CreateMcpServerPayload {
 	v := &mcpservers.CreateMcpServerPayload{
-		EnvironmentID:         body.EnvironmentID,
-		ExternalOauthServerID: body.ExternalOauthServerID,
-		OauthProxyServerID:    body.OauthProxyServerID,
-		RemoteMcpServerID:     body.RemoteMcpServerID,
-		ToolsetID:             body.ToolsetID,
-		Visibility:            types.McpServerVisibility(*body.Visibility),
+		EnvironmentID:     body.EnvironmentID,
+		RemoteMcpServerID: body.RemoteMcpServerID,
+		ToolsetID:         body.ToolsetID,
+		Visibility:        types.McpServerVisibility(*body.Visibility),
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -1911,13 +1879,11 @@ func NewListMcpServersPayload(remoteMcpServerID *string, toolsetID *string, sess
 // endpoint payload.
 func NewUpdateMcpServerPayload(body *UpdateMcpServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.UpdateMcpServerPayload {
 	v := &mcpservers.UpdateMcpServerPayload{
-		ID:                    *body.ID,
-		EnvironmentID:         body.EnvironmentID,
-		ExternalOauthServerID: body.ExternalOauthServerID,
-		OauthProxyServerID:    body.OauthProxyServerID,
-		RemoteMcpServerID:     body.RemoteMcpServerID,
-		ToolsetID:             body.ToolsetID,
-		Visibility:            types.McpServerVisibility(*body.Visibility),
+		ID:                *body.ID,
+		EnvironmentID:     body.EnvironmentID,
+		RemoteMcpServerID: body.RemoteMcpServerID,
+		ToolsetID:         body.ToolsetID,
+		Visibility:        types.McpServerVisibility(*body.Visibility),
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -1947,12 +1913,6 @@ func ValidateCreateMcpServerRequestBody(body *CreateMcpServerRequestBody) (err e
 	if body.EnvironmentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
 	}
-	if body.ExternalOauthServerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_oauth_server_id", *body.ExternalOauthServerID, goa.FormatUUID))
-	}
-	if body.OauthProxyServerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.oauth_proxy_server_id", *body.OauthProxyServerID, goa.FormatUUID))
-	}
 	if body.RemoteMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
 	}
@@ -1981,12 +1941,6 @@ func ValidateUpdateMcpServerRequestBody(body *UpdateMcpServerRequestBody) (err e
 	}
 	if body.EnvironmentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
-	}
-	if body.ExternalOauthServerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_oauth_server_id", *body.ExternalOauthServerID, goa.FormatUUID))
-	}
-	if body.OauthProxyServerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.oauth_proxy_server_id", *body.OauthProxyServerID, goa.FormatUUID))
 	}
 	if body.RemoteMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))

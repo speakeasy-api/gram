@@ -2617,6 +2617,245 @@ func DecodeDownloadObservabilityPluginResponse(decoder func(*http.Response) goah
 	}
 }
 
+// BuildDownloadCodexInstallScriptRequest instantiates a HTTP request object
+// with method and path set to call the "plugins" service
+// "downloadCodexInstallScript" endpoint
+func (c *Client) BuildDownloadCodexInstallScriptRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DownloadCodexInstallScriptPluginsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("plugins", "downloadCodexInstallScript", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDownloadCodexInstallScriptRequest returns an encoder for requests sent
+// to the plugins downloadCodexInstallScript server.
+func EncodeDownloadCodexInstallScriptRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*plugins.DownloadCodexInstallScriptPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("plugins", "downloadCodexInstallScript", "*plugins.DownloadCodexInstallScriptPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeDownloadCodexInstallScriptResponse returns a decoder for responses
+// returned by the plugins downloadCodexInstallScript endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeDownloadCodexInstallScriptResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDownloadCodexInstallScriptResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				contentType        string
+				contentDisposition string
+				err                error
+			)
+			contentTypeRaw := resp.Header.Get("Content-Type")
+			if contentTypeRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("content_type", "header"))
+			}
+			contentType = contentTypeRaw
+			contentDispositionRaw := resp.Header.Get("Content-Disposition")
+			if contentDispositionRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("content_disposition", "header"))
+			}
+			contentDisposition = contentDispositionRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadCodexInstallScript", err)
+			}
+			res := NewDownloadCodexInstallScriptResultOK(contentType, contentDisposition)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DownloadCodexInstallScriptUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadCodexInstallScript", err)
+			}
+			err = ValidateDownloadCodexInstallScriptUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadCodexInstallScript", err)
+			}
+			return nil, NewDownloadCodexInstallScriptUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DownloadCodexInstallScriptForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadCodexInstallScript", err)
+			}
+			err = ValidateDownloadCodexInstallScriptForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadCodexInstallScript", err)
+			}
+			return nil, NewDownloadCodexInstallScriptForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DownloadCodexInstallScriptBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadCodexInstallScript", err)
+			}
+			err = ValidateDownloadCodexInstallScriptBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadCodexInstallScript", err)
+			}
+			return nil, NewDownloadCodexInstallScriptBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DownloadCodexInstallScriptNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadCodexInstallScript", err)
+			}
+			err = ValidateDownloadCodexInstallScriptNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadCodexInstallScript", err)
+			}
+			return nil, NewDownloadCodexInstallScriptNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DownloadCodexInstallScriptConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadCodexInstallScript", err)
+			}
+			err = ValidateDownloadCodexInstallScriptConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadCodexInstallScript", err)
+			}
+			return nil, NewDownloadCodexInstallScriptConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DownloadCodexInstallScriptUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadCodexInstallScript", err)
+			}
+			err = ValidateDownloadCodexInstallScriptUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadCodexInstallScript", err)
+			}
+			return nil, NewDownloadCodexInstallScriptUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DownloadCodexInstallScriptInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadCodexInstallScript", err)
+			}
+			err = ValidateDownloadCodexInstallScriptInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadCodexInstallScript", err)
+			}
+			return nil, NewDownloadCodexInstallScriptInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DownloadCodexInstallScriptInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "downloadCodexInstallScript", err)
+				}
+				err = ValidateDownloadCodexInstallScriptInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "downloadCodexInstallScript", err)
+				}
+				return nil, NewDownloadCodexInstallScriptInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DownloadCodexInstallScriptUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "downloadCodexInstallScript", err)
+				}
+				err = ValidateDownloadCodexInstallScriptUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "downloadCodexInstallScript", err)
+				}
+				return nil, NewDownloadCodexInstallScriptUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("plugins", "downloadCodexInstallScript", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DownloadCodexInstallScriptGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadCodexInstallScript", err)
+			}
+			err = ValidateDownloadCodexInstallScriptGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadCodexInstallScript", err)
+			}
+			return nil, NewDownloadCodexInstallScriptGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("plugins", "downloadCodexInstallScript", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetPublishStatusRequest instantiates a HTTP request object with method
 // and path set to call the "plugins" service "getPublishStatus" endpoint
 func (c *Client) BuildGetPublishStatusRequest(ctx context.Context, v any) (*http.Request, error) {

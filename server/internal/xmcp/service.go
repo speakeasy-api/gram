@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
@@ -48,6 +49,7 @@ type Service struct {
 	db                                *pgxpool.Pool
 	enc                               *encryption.Client
 	authz                             *authz.Engine
+	shadowmcpClient                   *shadowmcp.Client
 	mcpService                        *mcp.Service
 	serverURL                         *url.URL
 	guardianPolicy                    *guardian.Policy
@@ -67,6 +69,7 @@ func NewService(
 	db *pgxpool.Pool,
 	enc *encryption.Client,
 	authzEngine *authz.Engine,
+	shadowmcpClient *shadowmcp.Client,
 	guardianPolicy *guardian.Policy,
 	posthogClient *posthog.Posthog,
 	billingRepo billing.Repository,
@@ -85,6 +88,7 @@ func NewService(
 		db:                                db,
 		enc:                               enc,
 		authz:                             authzEngine,
+		shadowmcpClient:                   shadowmcpClient,
 		mcpService:                        mcpService,
 		serverURL:                         serverURL,
 		guardianPolicy:                    guardianPolicy,

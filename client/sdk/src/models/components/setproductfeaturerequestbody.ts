@@ -14,7 +14,6 @@ export const FeatureName = {
   ToolIoLogs: "tool_io_logs",
   SessionCapture: "session_capture",
   AuthzChallengeLogging: "authz_challenge_logging",
-  AssistantMemory: "assistant_memory",
 } as const;
 /**
  * Name of the feature to update

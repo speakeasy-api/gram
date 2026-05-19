@@ -59,36 +59,22 @@ func handleOrganizationMembershipUpsert(ctx context.Context, logger *slog.Logger
 		return fmt.Errorf("get user by workos id %q: %w", payload.UserID, err)
 	}
 
-	if gramUserID != "" {
-		existing, err := orgrepo.New(dbtx).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
-			OrganizationID: org.ID,
-			UserID:         gramUserID,
-		})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-		case err != nil:
-			return fmt.Errorf("get organization membership %q: %w", payload.ID, err)
-		}
-		var lastEventID *string
-		if existing.WorkosLastEventID.Valid {
-			lastEventID = &existing.WorkosLastEventID.String
-		}
-		var rowUpdatedAt *time.Time
-		if existing.WorkosUpdatedAt.Valid {
-			rowUpdatedAt = &existing.WorkosUpdatedAt.Time
-		}
-		if !ShouldProcessEvent(lastEventID, rowUpdatedAt, event.ID, payload.UpdatedAt) {
-			return nil
-		}
-		if err := orgrepo.New(dbtx).UpsertOrganizationUserRelationshipFromWorkOS(ctx, orgrepo.UpsertOrganizationUserRelationshipFromWorkOSParams{
-			OrganizationID:     org.ID,
-			UserID:             gramUserID,
-			WorkosMembershipID: conv.ToPGText(payload.ID),
-			WorkosUpdatedAt:    conv.ToPGTimestamptz(payload.UpdatedAt),
-			WorkosLastEventID:  conv.ToPGText(event.ID),
-		}); err != nil {
-			return fmt.Errorf("upsert organization membership %q: %w", payload.ID, err)
-		}
+	lastEventID, rowUpdatedAt, err := getMembershipRelationshipCursor(ctx, orgrepo.New(dbtx), org.ID, gramUserID, payload.ID)
+	if err != nil {
+		return err
+	}
+	if !ShouldProcessEvent(lastEventID, rowUpdatedAt, event.ID, payload.UpdatedAt) {
+		return nil
+	}
+	if err := orgrepo.New(dbtx).UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
+		OrganizationID:     org.ID,
+		UserID:             conv.ToPGTextEmpty(gramUserID),
+		WorkosUserID:       conv.ToPGText(payload.UserID),
+		WorkosMembershipID: conv.ToPGText(payload.ID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(payload.UpdatedAt),
+		WorkosLastEventID:  conv.ToPGText(event.ID),
+	}); err != nil {
+		return fmt.Errorf("upsert organization membership %q: %w", payload.ID, err)
 	}
 
 	if err := orgrepo.New(dbtx).SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
@@ -130,46 +116,61 @@ func handleOrganizationMembershipDeleted(ctx context.Context, logger *slog.Logge
 		return fmt.Errorf("get user by workos id %q: %w", payload.UserID, err)
 	}
 
-	if gramUserID != "" {
-		existing, err := orgrepo.New(dbtx).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
-			OrganizationID: org.ID,
-			UserID:         gramUserID,
-		})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-		case err != nil:
-			return fmt.Errorf("get organization membership %q: %w", payload.ID, err)
-		}
-		var lastEventID *string
-		if existing.WorkosLastEventID.Valid {
-			lastEventID = &existing.WorkosLastEventID.String
-		}
-		var rowUpdatedAt *time.Time
-		if existing.WorkosUpdatedAt.Valid {
-			rowUpdatedAt = &existing.WorkosUpdatedAt.Time
-		}
-		if !ShouldProcessEvent(lastEventID, rowUpdatedAt, event.ID, payload.UpdatedAt) {
-			return nil
-		}
-		if err := orgrepo.New(dbtx).MarkOrganizationUserRelationshipAsDeleted(ctx, orgrepo.MarkOrganizationUserRelationshipAsDeletedParams{
-			OrganizationID:     org.ID,
-			UserID:             gramUserID,
-			WorkosMembershipID: conv.ToPGText(payload.ID),
-			WorkosUpdatedAt:    conv.ToPGTimestamptz(payload.UpdatedAt),
-			WorkosLastEventID:  conv.ToPGText(event.ID),
-		}); err != nil {
-			return fmt.Errorf("mark organization membership %q deleted: %w", payload.ID, err)
-		}
+	lastEventID, rowUpdatedAt, err := getMembershipRelationshipCursor(ctx, orgrepo.New(dbtx), org.ID, gramUserID, payload.ID)
+	if err != nil {
+		return err
+	}
+	if !ShouldProcessEvent(lastEventID, rowUpdatedAt, event.ID, payload.UpdatedAt) {
+		return nil
+	}
+	if err := orgrepo.New(dbtx).MarkWorkOSMembershipDeleted(ctx, orgrepo.MarkWorkOSMembershipDeletedParams{
+		OrganizationID:     org.ID,
+		UserID:             conv.ToPGTextEmpty(gramUserID),
+		WorkosUserID:       conv.ToPGText(payload.UserID),
+		WorkosMembershipID: conv.ToPGText(payload.ID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(payload.UpdatedAt),
+		WorkosLastEventID:  conv.ToPGText(event.ID),
+	}); err != nil {
+		return fmt.Errorf("mark organization membership %q deleted: %w", payload.ID, err)
 	}
 
-	if err := orgrepo.New(dbtx).DeleteOrganizationRoleAssignmentsByWorkosUser(ctx, orgrepo.DeleteOrganizationRoleAssignmentsByWorkosUserParams{
-		OrganizationID: org.ID,
-		WorkosUserID:   payload.UserID,
+	if err := orgrepo.New(dbtx).MarkRoleAssignmentsDeleted(ctx, orgrepo.MarkRoleAssignmentsDeletedParams{
+		OrganizationID:    org.ID,
+		WorkosUserID:      payload.UserID,
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(payload.UpdatedAt),
+		WorkosLastEventID: conv.ToPGText(event.ID),
 	}); err != nil {
-		return fmt.Errorf("delete role assignments for workos user %q: %w", payload.UserID, err)
+		return fmt.Errorf("mark role assignments for workos user %q deleted: %w", payload.UserID, err)
 	}
 
 	return nil
+}
+
+func getMembershipRelationshipCursor(ctx context.Context, repo *orgrepo.Queries, organizationID, gramUserID, workosMembershipID string) (*string, *time.Time, error) {
+	existing, err := repo.GetRelationshipByMembershipID(ctx, conv.ToPGText(workosMembershipID))
+	if errors.Is(err, pgx.ErrNoRows) && gramUserID != "" {
+		existing, err = repo.GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
+			OrganizationID: organizationID,
+			UserID:         conv.ToPGText(gramUserID),
+		})
+	}
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, nil, nil
+	case err != nil:
+		return nil, nil, fmt.Errorf("get organization membership %q: %w", workosMembershipID, err)
+	}
+
+	var lastEventID *string
+	if existing.WorkosLastEventID.Valid {
+		lastEventID = &existing.WorkosLastEventID.String
+	}
+	var rowUpdatedAt *time.Time
+	if existing.WorkosUpdatedAt.Valid {
+		rowUpdatedAt = &existing.WorkosUpdatedAt.Time
+	}
+
+	return lastEventID, rowUpdatedAt, nil
 }
 
 func decodeWorkOSMembershipPayload(event events.Event) (workosMembershipEventPayload, error) {

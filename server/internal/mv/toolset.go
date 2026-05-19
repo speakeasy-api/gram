@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/tools/security"
 	tsr "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsR "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	vr "github.com/speakeasy-api/gram/server/internal/variations/repo"
 	"golang.org/x/sync/errgroup"
 )
@@ -152,7 +153,7 @@ func DescribeToolsetEntry(
 			name := conv.Default(urnToVariedName[def.ToolUrn.String()], def.Name)
 
 			tool := &types.ToolEntry{
-				Type:        string(urn.ToolKindHTTP),
+				Type:        types.ToolType(urn.ToolKindHTTP),
 				ID:          def.ID.String(),
 				Name:        name,
 				ToolUrn:     def.ToolUrn.String(),
@@ -179,7 +180,7 @@ func DescribeToolsetEntry(
 		}
 		for _, tool := range funcTools {
 			tools = append(tools, &types.ToolEntry{
-				Type:        string(urn.ToolKindFunction),
+				Type:        types.ToolType(urn.ToolKindFunction),
 				ID:          tool.ID.String(),
 				Name:        tool.Name,
 				ToolUrn:     tool.ToolUrn.String(),
@@ -204,7 +205,7 @@ func DescribeToolsetEntry(
 
 		for _, pt := range promptTools {
 			tools = append(tools, &types.ToolEntry{
-				Type:        string(urn.ToolKindPrompt),
+				Type:        types.ToolType(urn.ToolKindPrompt),
 				ID:          pt.ID.String(),
 				Name:        pt.Name,
 				ToolUrn:     pt.ToolUrn.String(),
@@ -236,7 +237,7 @@ func DescribeToolsetEntry(
 				continue // Skip if not found
 			}
 			tools = append(tools, &types.ToolEntry{
-				Type:        string(urn.ToolKindExternalMCP),
+				Type:        types.ToolType(urn.ToolKindExternalMCP),
 				ID:          externalMCPTool.ID.String(),
 				Name:        externalMCPTool.Slug + ":proxy",
 				ToolUrn:     externalMCPTool.ToolUrn,
@@ -560,6 +561,29 @@ func DescribeToolset(
 		}
 	}
 
+	// Surface the linked user_session_issuer if the toolset has one. The link
+	// lives on the toolsets row (toolsets.user_session_issuer_id, ON DELETE
+	// SET NULL); a missing link is the common case and is not an error.
+	var userSessionIssuerID *string
+	var userSessionIssuerSlug *types.Slug
+	if toolset.UserSessionIssuerID.Valid {
+		usi, err := usersessionsR.New(tx).GetUserSessionIssuerByID(ctx, usersessionsR.GetUserSessionIssuerByIDParams{
+			ID:        toolset.UserSessionIssuerID.UUID,
+			ProjectID: pid,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// FK is dangling — treat as unlinked rather than erroring.
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load linked user session issuer").Log(ctx, logger)
+		default:
+			id := usi.ID.String()
+			slug := types.Slug(usi.Slug)
+			userSessionIssuerID = &id
+			userSessionIssuerSlug = &slug
+		}
+	}
+
 	result := &types.Toolset{
 		ID:                           toolset.ID.String(),
 		OrganizationID:               toolset.OrganizationID,
@@ -589,6 +613,8 @@ func DescribeToolset(
 		ResourceUrns:                 resourceUrns,
 		ExternalOauthServer:          externalOAuthServer,
 		OauthProxyServer:             oauthProxyServer,
+		UserSessionIssuerID:          userSessionIssuerID,
+		UserSessionIssuerSlug:        userSessionIssuerSlug,
 		OauthEnablementMetadata: &types.OAuthEnablementMetadata{
 			Oauth2SecurityCount: oauth2AuthCodeSecurityCount,
 		},
@@ -735,7 +761,7 @@ func GetToolsetsSummary(
 			name = variedName
 		}
 		projTools[toolURN] = &types.ToolEntry{
-			Type:        string(urn.ToolKindHTTP),
+			Type:        types.ToolType(urn.ToolKindHTTP),
 			ID:          def.ID.String(),
 			Name:        name,
 			ToolUrn:     toolURN,
@@ -754,7 +780,7 @@ func GetToolsetsSummary(
 			continue
 		}
 		projTools[toolURN] = &types.ToolEntry{
-			Type:        string(urn.ToolKindFunction),
+			Type:        types.ToolType(urn.ToolKindFunction),
 			ID:          def.ID.String(),
 			Name:        def.Name,
 			ToolUrn:     toolURN,
@@ -773,7 +799,7 @@ func GetToolsetsSummary(
 			continue
 		}
 		projTools[toolURN] = &types.ToolEntry{
-			Type:        string(urn.ToolKindPrompt),
+			Type:        types.ToolType(urn.ToolKindPrompt),
 			ID:          pt.ID.String(),
 			Name:        pt.Name,
 			ToolUrn:     toolURN,
@@ -807,10 +833,21 @@ func GetToolsetsSummary(
 		if _, exists := projTools[def.ToolUrn]; exists {
 			continue
 		}
+		// Naming convention doubles as the proxy-vs-direct signal: proxy entries
+		// always end in ":proxy"; direct entries end in ":<tool-name>". Surfaces
+		// like the RBAC scope picker rely on this suffix to filter out proxy
+		// tools (which aren't RBAC-compatible) without an extra API field.
+		var name string
+		switch {
+		case def.Type == "direct" && def.Name.Valid && def.Name.String != "":
+			name = def.Slug + ":" + def.Name.String
+		default:
+			name = def.Slug + ":proxy"
+		}
 		projTools[def.ToolUrn] = &types.ToolEntry{
-			Type:        string(urn.ToolKindExternalMCP),
+			Type:        types.ToolType(urn.ToolKindExternalMCP),
 			ID:          def.ID.String(),
-			Name:        def.Slug + ":proxy",
+			Name:        name,
 			ToolUrn:     def.ToolUrn,
 			Annotations: conv.AnnotationsFromColumns(def.ReadOnlyHint, def.DestructiveHint, def.IdempotentHint, def.OpenWorldHint),
 			HTTPMethod:  nil,
@@ -1228,7 +1265,8 @@ func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectI
 	for _, tool := range tools {
 		toolURN, err := conv.GetToolURN(*tool)
 		if err != nil || toolURN == nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
+			logger.WarnContext(ctx, "skipping variation lookup for tool with invalid urn", attr.SlogError(err))
+			continue
 		}
 		toolUrns = append(toolUrns, toolURN.String())
 	}
@@ -1269,7 +1307,7 @@ func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectI
 		}
 		toolURN, err := conv.GetToolURN(*tool)
 		if err != nil || toolURN == nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
+			continue
 		}
 
 		v, ok := urnToVariation[toolURN.String()]
@@ -1300,7 +1338,6 @@ func extractFunctionEnvVars(ctx context.Context, logger *slog.Logger, variableDa
 					AuthInputType: nil,
 				})
 			}
-
 		}
 	}
 

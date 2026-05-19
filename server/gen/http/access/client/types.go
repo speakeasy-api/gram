@@ -83,6 +83,8 @@ type GetRoleResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Stable WorkOS role slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Human-readable description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is a built-in system role that cannot be deleted.
@@ -102,6 +104,8 @@ type CreateRoleResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Stable WorkOS role slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Human-readable description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is a built-in system role that cannot be deleted.
@@ -121,6 +125,8 @@ type UpdateRoleResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Stable WorkOS role slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Human-readable description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is a built-in system role that cannot be deleted.
@@ -2926,6 +2932,8 @@ type RoleResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Stable WorkOS role slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Human-readable description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is a built-in system role that cannot be deleted.
@@ -2942,6 +2950,9 @@ type RoleResponseBody struct {
 type RoleGrantResponseBody struct {
 	// The scope slug this grant applies to.
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Whether this grant allows or denies the scope. Defaults to 'allow' when
+	// omitted.
+	Effect *string `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
 	// Selector constraints. Null means unrestricted.
 	Selectors []*SelectorResponseBody `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
 }
@@ -2965,6 +2976,9 @@ type SelectorResponseBody struct {
 type RoleGrantRequestBody struct {
 	// The scope slug this grant applies to.
 	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// Whether this grant allows or denies the scope. Defaults to 'allow' when
+	// omitted.
+	Effect string `form:"effect" json:"effect" xml:"effect"`
 	// Selector constraints. Null means unrestricted.
 	Selectors []*SelectorRequestBody `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
 }
@@ -3014,6 +3028,9 @@ type AccessMemberResponseBody struct {
 type ListRoleGrantResponseBody struct {
 	// The scope slug this grant applies to.
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Whether this grant allows or denies the scope. Defaults to 'allow' when
+	// omitted.
+	Effect *string `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
 	// The inherited scopes the primary scope grants.
 	SubScopes []string `form:"sub_scopes,omitempty" json:"sub_scopes,omitempty" xml:"sub_scopes,omitempty"`
 	// Selector constraints. Null means unrestricted.
@@ -3395,6 +3412,7 @@ func NewGetRoleRoleOK(body *GetRoleResponseBody) *access.Role {
 	v := &access.Role{
 		ID:          *body.ID,
 		Name:        *body.Name,
+		Slug:        *body.Slug,
 		Description: *body.Description,
 		IsSystem:    *body.IsSystem,
 		MemberCount: *body.MemberCount,
@@ -3565,6 +3583,7 @@ func NewCreateRoleRoleCreated(body *CreateRoleResponseBody) *access.Role {
 	v := &access.Role{
 		ID:          *body.ID,
 		Name:        *body.Name,
+		Slug:        *body.Slug,
 		Description: *body.Description,
 		IsSystem:    *body.IsSystem,
 		MemberCount: *body.MemberCount,
@@ -3739,6 +3758,7 @@ func NewUpdateRoleRoleOK(body *UpdateRoleResponseBody) *access.Role {
 	v := &access.Role{
 		ID:          *body.ID,
 		Name:        *body.Name,
+		Slug:        *body.Slug,
 		Description: *body.Description,
 		IsSystem:    *body.IsSystem,
 		MemberCount: *body.MemberCount,
@@ -5707,6 +5727,9 @@ func ValidateGetRoleResponseBody(body *GetRoleResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
 	}
@@ -5750,6 +5773,9 @@ func ValidateCreateRoleResponseBody(body *CreateRoleResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
 	}
@@ -5792,6 +5818,9 @@ func ValidateUpdateRoleResponseBody(body *UpdateRoleResponseBody) (err error) {
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
@@ -9570,6 +9599,9 @@ func ValidateRoleResponseBody(body *RoleResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
 	}
@@ -9615,6 +9647,11 @@ func ValidateRoleGrantResponseBody(body *RoleGrantResponseBody) (err error) {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write"}))
 		}
 	}
+	if body.Effect != nil {
+		if !(*body.Effect == "allow" || *body.Effect == "deny") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", *body.Effect, []any{"allow", "deny"}))
+		}
+	}
 	for _, e := range body.Selectors {
 		if e != nil {
 			if err2 := ValidateSelectorResponseBody(e); err2 != nil {
@@ -9652,6 +9689,9 @@ func ValidateSelectorResponseBody(body *SelectorResponseBody) (err error) {
 func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
 	if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write"}))
+	}
+	if !(body.Effect == "allow" || body.Effect == "deny") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", body.Effect, []any{"allow", "deny"}))
 	}
 	for _, e := range body.Selectors {
 		if e != nil {
@@ -9737,6 +9777,11 @@ func ValidateListRoleGrantResponseBody(body *ListRoleGrantResponseBody) (err err
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write"}))
 		}
 	}
+	if body.Effect != nil {
+		if !(*body.Effect == "allow" || *body.Effect == "deny") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", *body.Effect, []any{"allow", "deny"}))
+		}
+	}
 	for _, e := range body.SubScopes {
 		if !(e == "org:read" || e == "org:admin" || e == "project:read" || e == "project:write" || e == "mcp:read" || e == "mcp:write" || e == "mcp:connect" || e == "environment:read" || e == "environment:write") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sub_scopes[*]", e, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write"}))
@@ -9810,8 +9855,8 @@ func ValidateAuthzChallengeResponseBody(body *AuthzChallengeResponseBody) (err e
 		}
 	}
 	if body.Reason != nil {
-		if !(*body.Reason == "grant_matched" || *body.Reason == "no_grants" || *body.Reason == "scope_unsatisfied" || *body.Reason == "invalid_check" || *body.Reason == "rbac_skipped_apikey" || *body.Reason == "dev_override") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reason", *body.Reason, []any{"grant_matched", "no_grants", "scope_unsatisfied", "invalid_check", "rbac_skipped_apikey", "dev_override"}))
+		if !(*body.Reason == "grant_matched" || *body.Reason == "no_grants" || *body.Reason == "scope_unsatisfied" || *body.Reason == "deny_grant" || *body.Reason == "invalid_check" || *body.Reason == "rbac_skipped_apikey" || *body.Reason == "dev_override") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reason", *body.Reason, []any{"grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override"}))
 		}
 	}
 	if body.ResolvedAt != nil {
@@ -9895,8 +9940,8 @@ func ValidateChallengeBucketResponseBody(body *ChallengeBucketResponseBody) (err
 		}
 	}
 	if body.Reason != nil {
-		if !(*body.Reason == "grant_matched" || *body.Reason == "no_grants" || *body.Reason == "scope_unsatisfied" || *body.Reason == "invalid_check" || *body.Reason == "rbac_skipped_apikey" || *body.Reason == "dev_override") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reason", *body.Reason, []any{"grant_matched", "no_grants", "scope_unsatisfied", "invalid_check", "rbac_skipped_apikey", "dev_override"}))
+		if !(*body.Reason == "grant_matched" || *body.Reason == "no_grants" || *body.Reason == "scope_unsatisfied" || *body.Reason == "deny_grant" || *body.Reason == "invalid_check" || *body.Reason == "rbac_skipped_apikey" || *body.Reason == "dev_override") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reason", *body.Reason, []any{"grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override"}))
 		}
 	}
 	if body.ResolvedAt != nil {

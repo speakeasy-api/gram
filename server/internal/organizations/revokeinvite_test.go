@@ -2,21 +2,18 @@ package organizations_test
 
 import (
 	"testing"
-	"time"
-
-	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/stretchr/testify/mock"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/stretchr/testify/require"
 )
-
-const testWorkosOrgID = mockidp.MockOrgID
 
 func TestService_RevokeInvite(t *testing.T) {
 	t.Parallel()
@@ -26,46 +23,57 @@ func TestService_RevokeInvite(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	expectWorkOSOrgAdminRole(t, ti.orgs)
-
-	ti.orgs.On("GetInvitation", mock.Anything, "test-invitation-id").Return(&thirdpartyworkos.Invitation{
-		ID:             "test-invitation-id",
-		Email:          "test@example.com",
-		State:          thirdpartyworkos.InvitationStatePending,
-		OrganizationID: testWorkosOrgID,
-		InviterUserID:  authCtx.UserID,
-		ExpiresAt:      time.Now().UTC().Add(7 * 24 * time.Hour).Format(time.RFC3339),
-	}, nil).Once()
-
-	ti.orgs.On("RevokeInvitation", mock.Anything, "test-invitation-id").Return(&thirdpartyworkos.Invitation{
-		ID:             "test-invitation-id",
-		Email:          "test@example.com",
-		State:          thirdpartyworkos.InvitationStateRevoked,
-		OrganizationID: testWorkosOrgID,
-		InviterUserID:  authCtx.UserID,
-		ExpiresAt:      time.Now().UTC().Add(7 * 24 * time.Hour).Format(time.RFC3339),
-	}, nil).Once()
-
-	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{
-		InvitationID: "test-invitation-id",
-	})
+	invite, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "test@example.com"})
 	require.NoError(t, err)
+
+	err = ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{InvitationID: invite.ID})
+	require.NoError(t, err)
+
+	// Verify it no longer appears in pending list.
+	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
+	require.NoError(t, err)
+	require.Empty(t, res.Invitations)
+}
+
+func TestService_RevokeInvite_AuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+
+	invite, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "revoked-audit@example.com"})
+	require.NoError(t, err)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationInviteRevoke)
+	require.NoError(t, err)
+
+	err = ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{InvitationID: invite.ID})
+	require.NoError(t, err)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationInviteRevoke)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionOrganizationInviteRevoke)
+	require.NoError(t, err)
+	require.Equal(t, "organization_invitation", record.SubjectType)
+	require.Equal(t, "revoked-audit@example.com", record.SubjectDisplay)
+	require.Equal(t, "revoked-audit@example.com", record.SubjectSlug)
+
+	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, "pending", beforeSnapshot["State"])
+	require.Equal(t, "revoked", afterSnapshot["State"])
 }
 
 func TestService_RevokeInvite_NotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
-
-	expectWorkOSOrgAdminRole(t, ti.orgs)
-
-	ti.orgs.On("GetInvitation", mock.Anything, "test-invitation-id").Return(nil, &thirdpartyworkos.APIError{StatusCode: 404}).Once()
 
 	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{
-		InvitationID: "test-invitation-id",
+		InvitationID: "00000000-0000-0000-0000-000000000000",
 	})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -76,21 +84,27 @@ func TestService_RevokeInvite_WrongOrganization(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 
-	expectWorkOSOrgAdminRole(t, ti.orgs)
+	// Create a different org so the FK constraint is satisfied.
+	require.NoError(t, orgrepo.New(ti.conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   "org-other-id",
+		Name: "Other Org",
+		Slug: "other-org",
+	}))
 
-	ti.orgs.On("GetInvitation", mock.Anything, "other-org-invitation-id").Return(&thirdpartyworkos.Invitation{
-		ID:             "other-org-invitation-id",
+	// Insert an invitation for a different org directly in DB.
+	row, err := orgrepo.New(ti.conn).CreateInvitation(ctx, orgrepo.CreateInvitationParams{
+		OrganizationID: "org-other-id",
 		Email:          "victim@example.com",
-		State:          thirdpartyworkos.InvitationStatePending,
-		OrganizationID: "org_workos_someone_else",
-		InviterUserID:  "user_01OTHER",
-		ExpiresAt:      time.Now().UTC().Add(7 * 24 * time.Hour).Format(time.RFC3339),
-	}, nil).Once()
-
-	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{
-		InvitationID: "other-org-invitation-id",
+		TokenHash:      "otherhash",
+		InviterUserID:  conv.ToPGText(authCtx.UserID),
+		ExpiresInDays:  7,
 	})
+	require.NoError(t, err)
+
+	err = ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{InvitationID: row.ID.String()})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -102,22 +116,13 @@ func TestService_RevokeInvite_AllowsOrgAdminGrant(t *testing.T) {
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	require.NotNil(t, authCtx)
 
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
 
-	ti.orgs.On("GetInvitation", mock.Anything, "test-invitation-id").Return(&thirdpartyworkos.Invitation{
-		ID:             "test-invitation-id",
-		Email:          "test@example.com",
-		State:          thirdpartyworkos.InvitationStatePending,
-		OrganizationID: testWorkosOrgID,
-		ExpiresAt:      time.Now().UTC().Add(7 * 24 * time.Hour).Format(time.RFC3339),
-	}, nil).Once()
-	ti.orgs.On("RevokeInvitation", mock.Anything, "test-invitation-id").Return(&thirdpartyworkos.Invitation{
-		ID: "test-invitation-id", State: thirdpartyworkos.InvitationStateRevoked,
-	}, nil).Once()
+	invite, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "x@example.com"})
+	require.NoError(t, err)
 
-	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{InvitationID: "test-invitation-id"})
+	err = ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{InvitationID: invite.ID})
 	require.NoError(t, err)
 }
 
@@ -138,18 +143,6 @@ func TestService_RevokeInvite_ForbiddenWithGrantForDifferentOrganization(t *test
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, "org_other")})
-
-	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{InvitationID: "any-invitation-id"})
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-}
-
-func TestService_RevokeInvite_ForbiddenWhenNotOrgAdmin(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestOrganizationsService(t)
-	expectWorkOSOrgNonAdminRole(t, ti.orgs)
 
 	err := ti.service.RevokeInvite(ctx, &gen.RevokeInvitePayload{InvitationID: "any-invitation-id"})
 	var oopsErr *oops.ShareableError

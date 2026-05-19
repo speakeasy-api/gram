@@ -6,6 +6,7 @@ INSERT INTO risk_policies (
   , name
   , sources
   , presidio_entities
+  , prompt_injection_rules
   , enabled
   , action
   , auto_name
@@ -19,6 +20,7 @@ VALUES (
   , @name
   , @sources
   , @presidio_entities
+  , @prompt_injection_rules
   , @enabled
   , @action
   , @auto_name
@@ -53,6 +55,7 @@ UPDATE risk_policies
 SET name = @name
   , sources = @sources
   , presidio_entities = @presidio_entities
+  , prompt_injection_rules = @prompt_injection_rules
   , enabled = @enabled
   , action = @action
   , auto_name = @auto_name
@@ -60,6 +63,7 @@ SET name = @name
   , version = CASE
       WHEN sources IS DISTINCT FROM @sources
         OR presidio_entities IS DISTINCT FROM @presidio_entities
+        OR prompt_injection_rules IS DISTINCT FROM @prompt_injection_rules
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
       THEN version + 1
@@ -116,6 +120,13 @@ WHERE rr.project_id = @project_id
   AND rr.found IS TRUE;
 
 -- name: FetchUnanalyzedMessageIDs :many
+-- uuidv7 is k-sortable. The existing composite index
+-- chat_messages_project_id_id_idx (project_id, id) lets Postgres satisfy
+-- ORDER BY cm.id DESC with an Index Only Scan Backward, so we get
+-- "most recent first" without a Sort node or any new index. Combined
+-- with LIMIT this lets the planner stop scanning early when only the
+-- recent tail is needed (verified via EXPLAIN ANALYZE: LIMIT 100 over a
+-- 15k-message table scans ~2k rows in ~2ms).
 SELECT cm.id
 FROM chat_messages cm
 WHERE cm.project_id = @project_id
@@ -128,6 +139,7 @@ WHERE cm.project_id = @project_id
       AND rr.risk_policy_version = @risk_policy_version
     LIMIT 1
   )
+ORDER BY cm.id DESC
 LIMIT @batch_limit;
 
 -- name: GetMessageContentBatch :many
@@ -153,6 +165,7 @@ INSERT INTO risk_results (
   , end_pos
   , confidence
   , tags
+  , dead_letter_reason
 )
 VALUES (
     @id
@@ -170,6 +183,7 @@ VALUES (
   , @end_pos
   , @confidence
   , @tags
+  , @dead_letter_reason
 );
 
 -- name: DeleteRiskResultsForMessages :exec
@@ -179,19 +193,28 @@ WHERE risk_policy_id = @risk_policy_id
   AND chat_message_id = ANY(@message_ids::uuid[]);
 
 -- name: ListRiskResultsByProjectFound :many
-SELECT rr.*, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
+-- Sort by the underlying chat message's created_at (the event time), NOT
+-- rr.created_at (the scan time). The background drain workflow analyzes
+-- historical messages in arbitrary order, so rr.created_at can put a
+-- finding for an old message ahead of one for a recent message — which is
+-- exactly the "random-seeming" order users see in Recent Findings.
+-- Cursor is (cm.created_at, rr.id) for stable pagination.
+SELECT rr.*, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = @project_id
   AND rr.found IS TRUE
-  AND (sqlc.narg(cursor)::uuid IS NULL OR rr.id <= sqlc.narg(cursor)::uuid)
-ORDER BY rr.id DESC
+  AND (
+    sqlc.narg(cursor_message_created_at)::timestamptz IS NULL
+    OR (cm.created_at, rr.id) < (sqlc.narg(cursor_message_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
+  )
+ORDER BY cm.created_at DESC, rr.id DESC
 LIMIT @page_limit;
 
 -- name: ListRiskResultsByProjectAndPolicy :many
-SELECT rr.*, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
+SELECT rr.*, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -199,12 +222,15 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND r
 WHERE rr.project_id = @project_id
   AND rr.risk_policy_id = @risk_policy_id
   AND rr.found IS TRUE
-  AND (sqlc.narg(cursor)::uuid IS NULL OR rr.id <= sqlc.narg(cursor)::uuid)
-ORDER BY rr.id DESC
+  AND (
+    sqlc.narg(cursor_message_created_at)::timestamptz IS NULL
+    OR (cm.created_at, rr.id) < (sqlc.narg(cursor_message_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
+  )
+ORDER BY cm.created_at DESC, rr.id DESC
 LIMIT @page_limit;
 
 -- name: ListRiskResultsByChatFound :many
-SELECT rr.*, cm.chat_id, c.title AS chat_title, c.external_user_id AS chat_user_id
+SELECT rr.*, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -212,8 +238,11 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND r
 WHERE cm.chat_id = @chat_id
   AND rr.project_id = @project_id
   AND rr.found IS TRUE
-  AND (sqlc.narg(cursor)::uuid IS NULL OR rr.id <= sqlc.narg(cursor)::uuid)
-ORDER BY rr.id DESC
+  AND (
+    sqlc.narg(cursor_message_created_at)::timestamptz IS NULL
+    OR (cm.created_at, rr.id) < (sqlc.narg(cursor_message_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
+  )
+ORDER BY cm.created_at DESC, rr.id DESC
 LIMIT @page_limit;
 
 -- name: ListRiskResultsGroupedByChat :many

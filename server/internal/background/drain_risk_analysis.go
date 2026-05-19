@@ -19,26 +19,43 @@ import (
 )
 
 const (
-	// SignalRiskAnalysisRequested wakes the drain workflow on new messages or
-	// policy updates.
 	SignalRiskAnalysisRequested = "risk-analysis-requested"
 
-	// drainFetchLimit is how many unanalyzed message IDs to fetch per round.
+	drainBatchSize           = 100
+	perDrainBatchConcurrency = 1
+
+	// Presidio serializes per-call (~30 s worst-case) so a drainBatchSize
+	// batch can take up to ~50 min. On cancellation Temporal retries the
+	// whole activity per RetryPolicy below.
+	analyzeBatchStartToCloseTimeout = 50 * time.Minute
+)
+
+const (
 	drainFetchLimit int32 = 20_000
 
-	// drainBatchSize is how many messages each AnalyzeBatch activity processes.
-	drainBatchSize = 1_000
-
-	// Tuned 2026-05-01. Fleet-wide cap is perPodAnalyzeBatchConcurrency.
-	perDrainBatchConcurrency = 1
+	// DefaultRecentMessagesBudget caps the per-cycle drain triggered by
+	// new-message ingest and policy edits. Explicit user backfill
+	// (TriggerRiskAnalysis) can override this with a higher cap or 0
+	// (unbounded).
+	DefaultRecentMessagesBudget int32 = 100
 )
 
 // DrainRiskAnalysisParams identifies the policy this workflow drains.
-// Version and sources are read from the DB on each drain cycle so that
-// policy updates are picked up without restarting the workflow.
+// MaxMessages caps how many unanalyzed messages this run processes; 0
+// means unbounded. SignalWithStart ignores params for an existing run,
+// so SignalNewMessagesPayload.MaxMessages on the signal is what
+// escalates an in-flight run.
 type DrainRiskAnalysisParams struct {
 	ProjectID    uuid.UUID
 	RiskPolicyID uuid.UUID
+	MaxMessages  int32
+}
+
+// SignalNewMessagesPayload is delivered with SignalRiskAnalysisRequested.
+// The workflow takes the most-permissive value across all pending
+// signals (0 = unbounded wins over any positive cap).
+type SignalNewMessagesPayload struct {
+	MaxMessages int32
 }
 
 // DrainRiskAnalysisWorkflow is a perpetual "one-man queue" for a single risk
@@ -47,6 +64,14 @@ type DrainRiskAnalysisParams struct {
 func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisParams) error {
 	logger := workflow.GetLogger(ctx)
 	signalCh := workflow.GetSignalChannel(ctx, SignalRiskAnalysisRequested)
+
+	// SignalWithStart leaves the triggering signal in the channel for
+	// the new run. Drain it here so the end-of-cycle drain doesn't see
+	// our own start signal as "new work arrived" and ContinueAsNew
+	// forever with the same params. Any budget on the start signal
+	// merges into params.MaxMessages — `0` (unbounded) wins.
+	startSignals, _ := drainPendingSignalBudgets(signalCh)
+	budget := mergeBackfillBudget(params.MaxMessages, startSignals)
 
 	activityOpts := workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Minute,
@@ -60,10 +85,13 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOpts)
 
-	// AnalyzeBatch runs on a dedicated, capped queue derived from the
-	// workflow's own queue so each environment stays isolated.
+	// AnalyzeBatch runs on a dedicated, capped queue so each environment
+	// stays isolated. Per-batch timeouts allow ~50 min wall-clock plus a
+	// 2x heartbeat buffer over analyzeRequestTimeout (~30 s).
 	analyzeBatchOpts := activityOpts
 	analyzeBatchOpts.TaskQueue = RiskAnalysisTaskQueue(tenv.TaskQueueName(workflow.GetInfo(ctx).TaskQueueName))
+	analyzeBatchOpts.StartToCloseTimeout = analyzeBatchStartToCloseTimeout
+	analyzeBatchOpts.HeartbeatTimeout = 60 * time.Second
 	analyzeBatchCtx := workflow.WithActivityOptions(ctx, analyzeBatchOpts)
 
 	var a *Activities
@@ -71,11 +99,15 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 	// ── Fetch unanalyzed messages ──────────────────────────────────────
 	// Reads the current policy version from the DB each time, so version
 	// bumps (policy updates) are picked up automatically.
+	fetchLimit := drainFetchLimit
+	if budget > 0 && budget < fetchLimit {
+		fetchLimit = budget
+	}
 	var fetchResult risk_analysis.FetchUnanalyzedResult
 	err := workflow.ExecuteActivity(ctx, a.FetchUnanalyzedMessages, risk_analysis.FetchUnanalyzedArgs{
 		ProjectID:    params.ProjectID,
 		RiskPolicyID: params.RiskPolicyID,
-		BatchLimit:   drainFetchLimit,
+		BatchLimit:   fetchLimit,
 	}).Get(ctx, &fetchResult)
 	if err != nil {
 		logger.Error("fetch unanalyzed message IDs", "error", err.Error())
@@ -96,13 +128,14 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 			}
 
 			f := workflow.ExecuteActivity(analyzeBatchCtx, a.AnalyzeBatch, risk_analysis.AnalyzeBatchArgs{
-				ProjectID:        params.ProjectID,
-				OrganizationID:   fetchResult.OrganizationID,
-				RiskPolicyID:     params.RiskPolicyID,
-				PolicyVersion:    fetchResult.PolicyVersion,
-				MessageIDs:       batch,
-				Sources:          fetchResult.Sources,
-				PresidioEntities: fetchResult.PresidioEntities,
+				ProjectID:            params.ProjectID,
+				OrganizationID:       fetchResult.OrganizationID,
+				RiskPolicyID:         params.RiskPolicyID,
+				PolicyVersion:        fetchResult.PolicyVersion,
+				MessageIDs:           batch,
+				Sources:              fetchResult.Sources,
+				PresidioEntities:     fetchResult.PresidioEntities,
+				PromptInjectionRules: fetchResult.PromptInjectionRules,
 			})
 			pending = append(pending, f)
 		}
@@ -113,16 +146,28 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 			}
 		}
 
-		// More messages may remain — ContinueAsNew to process them.
-		drainSignals(signalCh)
-		return workflow.NewContinueAsNewError(ctx, DrainRiskAnalysisWorkflow, params)
+		// Bounded backfill stops here: this run was started with a cap
+		// and we already fetched up to that cap. Any signals that
+		// arrived during the drain may have requested a more permissive
+		// budget — pick it up via ContinueAsNew rather than dropping it.
+		signalBudgets, gotAny := drainPendingSignalBudgets(signalCh)
+		nextBudget := mergeBackfillBudget(params.MaxMessages, signalBudgets)
+		if budget > 0 && !gotAny {
+			return nil
+		}
+		nextParams := params
+		nextParams.MaxMessages = nextBudget
+		return workflow.NewContinueAsNewError(ctx, DrainRiskAnalysisWorkflow, nextParams)
 	}
 
 	// ── Complete ───────────────────────────────────────────────────────
 	// If signals arrived while we were draining, ContinueAsNew to process them.
 	// Otherwise just complete — SignalWithStart will start a new run when needed.
-	if drainSignals(signalCh) {
-		return workflow.NewContinueAsNewError(ctx, DrainRiskAnalysisWorkflow, params)
+	signalBudgets, gotAny := drainPendingSignalBudgets(signalCh)
+	if gotAny {
+		nextParams := params
+		nextParams.MaxMessages = mergeBackfillBudget(params.MaxMessages, signalBudgets)
+		return workflow.NewContinueAsNewError(ctx, DrainRiskAnalysisWorkflow, nextParams)
 	}
 
 	return nil
@@ -135,6 +180,43 @@ func drainSignals(ch workflow.ReceiveChannel) bool {
 		gotAny = true
 	}
 	return gotAny
+}
+
+// drainPendingSignalBudgets consumes all queued signal payloads and
+// returns the MaxMessages values they carried plus whether at least one
+// signal was consumed. Legacy nil payloads decode as zero-valued
+// SignalNewMessagesPayload (MaxMessages = 0, i.e. unbounded).
+func drainPendingSignalBudgets(ch workflow.ReceiveChannel) ([]int32, bool) {
+	var out []int32
+	gotAny := false
+	for {
+		var payload SignalNewMessagesPayload
+		if !ch.ReceiveAsync(&payload) {
+			return out, gotAny
+		}
+		gotAny = true
+		out = append(out, payload.MaxMessages)
+	}
+}
+
+// mergeBackfillBudget folds incoming signal budgets into the current
+// budget, picking the most-permissive value. 0 (unbounded) beats any
+// positive cap; among positive caps the larger wins so a "backfill last
+// 1000" arriving during a "last 100" run still gets honored.
+func mergeBackfillBudget(current int32, incoming []int32) int32 {
+	if current == 0 {
+		return 0
+	}
+	result := current
+	for _, v := range incoming {
+		if v == 0 {
+			return 0
+		}
+		if v > result {
+			result = v
+		}
+	}
+	return result
 }
 
 func chunkUUIDs(ids []uuid.UUID, size int) [][]uuid.UUID {
@@ -169,7 +251,7 @@ func (s *TemporalRiskAnalysisSignaler) SignalNewMessages(ctx context.Context, pa
 		ctx,
 		wfID,
 		SignalRiskAnalysisRequested,
-		nil,
+		SignalNewMessagesPayload{MaxMessages: params.MaxMessages},
 		client.StartWorkflowOptions{
 			ID:                    wfID,
 			TaskQueue:             string(s.TemporalEnv.Queue()),

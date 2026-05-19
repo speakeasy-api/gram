@@ -344,6 +344,9 @@ type ListMembersResult struct {
 type ListRoleGrant struct {
 	// The scope slug this grant applies to.
 	Scope string
+	// Whether this grant allows or denies the scope. Defaults to 'allow' when
+	// omitted.
+	Effect string
 	// The inherited scopes the primary scope grants.
 	SubScopes []string
 	// Selector constraints. Null means unrestricted.
@@ -422,6 +425,8 @@ type Role struct {
 	ID string
 	// Display name of the role.
 	Name string
+	// Stable WorkOS role slug.
+	Slug string
 	// Human-readable description.
 	Description string
 	// Whether this is a built-in system role that cannot be deleted.
@@ -437,6 +442,9 @@ type Role struct {
 type RoleGrant struct {
 	// The scope slug this grant applies to.
 	Scope string
+	// Whether this grant allows or denies the scope. Defaults to 'allow' when
+	// omitted.
+	Effect string
 	// Selector constraints. Null means unrestricted.
 	Selectors []*Selector
 }

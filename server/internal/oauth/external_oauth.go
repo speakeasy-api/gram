@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -41,7 +42,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 //go:embed hosted_external_oauth_success_page.html.tmpl
@@ -119,6 +122,7 @@ type ExternalOAuthService struct {
 	auth                 *auth.Auth
 	enc                  *encryption.Client
 	httpClient           *guardian.HTTPClient
+	remoteChallengeMgr   *remotesessions.ChallengeManager
 	successPageTmpl      *template.Template
 	successScriptHash    string
 	successScriptData    []byte
@@ -144,6 +148,7 @@ func NewExternalOAuthService(
 	cacheImpl cache.Cache,
 	auth *auth.Auth,
 	enc *encryption.Client,
+	remoteChallengeMgr *remotesessions.ChallengeManager,
 	cfg ExternalOAuthServiceConfig,
 ) *ExternalOAuthService {
 	stateStorage := cache.NewTypedObjectCache[ExternalOAuthState](
@@ -173,6 +178,7 @@ func NewExternalOAuthService(
 		auth:                 auth,
 		enc:                  enc,
 		httpClient:           guardianPolicy.Client(guardian.WithDefaultRetryConfig()),
+		remoteChallengeMgr:   remoteChallengeMgr,
 		successPageTmpl:      successPageTmpl,
 		successScriptHash:    scriptHashStr,
 		successScriptData:    externalOAuthSuccessScriptData,
@@ -188,6 +194,13 @@ func AttachExternalOAuth(mux goahttp.Muxer, service *ExternalOAuthService) {
 	// External OAuth authorization endpoint - initiates OAuth flow with external provider
 	o11y.AttachHandler(mux, "GET", "/oauth-external/authorize", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.withAuth(service.handleExternalAuthorize)).ServeHTTP(w, r)
+	})
+
+	// Issuer-gated MCP connect - drives the user_session_issuer / remote_sessions
+	// flow from the dashboard. Skips DCR + consent UI; writes remote_sessions
+	// keyed by the dashboard user's subject URN.
+	o11y.AttachHandler(mux, "GET", "/oauth-external/issuer-connect", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.withAuth(service.handleIssuerConnect)).ServeHTTP(w, r)
 	})
 
 	// Disconnect OAuth connection
@@ -378,6 +391,97 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 
 	// Redirect to external OAuth provider
 	http.Redirect(w, r, authURL.String(), http.StatusFound)
+	return nil
+}
+
+// handleIssuerConnect initiates the upstream OAuth flow for an issuer-gated
+// toolset. The dashboard user is the subject; the upstream callback at
+// /mcp/remote_login_callback writes remote_sessions keyed by that subject.
+//
+// Skips DCR + the consent UI: the dashboard owns its own redirect surface
+// (validated against the allowed-host list), and the user authenticating
+// against the dashboard already authorises the link.
+//
+// Requires the toolset's user_session_issuer to have exactly one bound
+// remote_session_client — the same invariant the runtime resolver enforces
+// at ResolveOneAccessToken time.
+func (s *ExternalOAuthService) handleIssuerConnect(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.E(oops.CodeUnauthorized, nil, "authentication required").Log(ctx, s.logger)
+	}
+
+	toolsetIDStr := r.URL.Query().Get("toolset_id")
+	if toolsetIDStr == "" {
+		return oops.E(oops.CodeBadRequest, nil, "toolset_id is required").Log(ctx, s.logger)
+	}
+	redirectURI := r.URL.Query().Get("redirect_uri")
+	if redirectURI == "" {
+		return oops.E(oops.CodeBadRequest, nil, "redirect_uri is required").Log(ctx, s.logger)
+	}
+
+	parsedRedirect, err := url.Parse(redirectURI)
+	if err != nil || parsedRedirect.Scheme == "" || parsedRedirect.Host == "" {
+		return oops.E(oops.CodeBadRequest, nil, "invalid redirect_uri").Log(ctx, s.logger)
+	}
+	if !s.isAllowedRedirectHost(parsedRedirect.Hostname()) {
+		return oops.E(oops.CodeBadRequest, nil, "redirect_uri hostname not allowed").Log(ctx, s.logger)
+	}
+	redirectQuery := parsedRedirect.Query()
+	redirectQuery.Set("issuer_connected", "1")
+	parsedRedirect.RawQuery = redirectQuery.Encode()
+
+	toolsetID, err := uuid.Parse(toolsetIDStr)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, s.logger)
+	}
+
+	toolset, err := s.toolsetsRepo.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
+		ID:        toolsetID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+	}
+
+	if !toolset.UserSessionIssuerID.Valid {
+		return oops.E(oops.CodeBadRequest, nil, "toolset is not issuer-gated").Log(ctx, s.logger)
+	}
+
+	mcpSlug := toolset.McpSlug.String
+	if mcpSlug == "" {
+		return oops.E(oops.CodeBadRequest, nil, "toolset has no mcp slug").Log(ctx, s.logger)
+	}
+
+	clients, err := s.remoteChallengeMgr.ListClients(ctx, toolset.ProjectID, toolset.UserSessionIssuerID.UUID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list remote session clients").Log(ctx, s.logger)
+	}
+	if len(clients) != 1 {
+		return oops.E(oops.CodeInvariantViolation, nil, "issuer-gated dashboard connect requires exactly one remote_session_client, found %d", len(clients)).Log(ctx, s.logger)
+	}
+
+	subject := urn.NewUserSubject(authCtx.UserID)
+	parent := remotesessions.ParentChallenge{
+		ID:                  "",
+		ProjectID:           toolset.ProjectID,
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		Subject:             &subject,
+		McpSlug:             mcpSlug,
+		FinalRedirectURI:    parsedRedirect.String(),
+	}
+	authURL, err := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, clients[0])
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build authorization URL").Log(ctx, s.logger)
+	}
+
+	s.logger.InfoContext(ctx, "redirecting to upstream issuer-gated OAuth provider",
+		attr.SlogUserID(authCtx.UserID),
+		attr.SlogToolsetID(toolset.ID.String()),
+	)
+	http.Redirect(w, r, authURL, http.StatusFound)
 	return nil
 }
 
@@ -575,11 +679,19 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 	}
 
 	// Load toolset to verify user has access
-	if _, err := s.toolsetsRepo.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
+	toolset, err := s.toolsetsRepo.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
 		ID:        toolsetID,
 		ProjectID: *authCtx.ProjectID,
-	}); err != nil {
+	})
+	if err != nil {
 		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+	}
+
+	// Issuer-gated toolsets store upstream tokens in remote_sessions keyed
+	// by the dashboard user's subject URN. The legacy user_oauth_tokens
+	// path is the wrong source for these.
+	if toolset.UserSessionIssuerID.Valid {
+		return s.writeIssuerGatedStatus(ctx, w, authCtx.UserID, toolset.ProjectID, toolset.UserSessionIssuerID.UUID)
 	}
 
 	// Check if user has a token for this toolset
@@ -632,6 +744,37 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
+		s.logger.ErrorContext(ctx, "failed to encode response", attr.SlogError(err))
+	}
+	return nil
+}
+
+// writeIssuerGatedStatus reports whether the dashboard user has a USABLE
+// remote_sessions row under the toolset's user_session_issuer. Mirrors the
+// runtime's ResolveOneAccessToken view: a row whose access token expired
+// without a workable refresh path resolves to "needs_auth", not
+// "authenticated" — otherwise the dashboard badge lies about a connection
+// that the next /mcp/{slug} call will 401 on.
+func (s *ExternalOAuthService) writeIssuerGatedStatus(ctx context.Context, w http.ResponseWriter, userID string, projectID, issuerID uuid.UUID) error {
+	subject := urn.NewUserSubject(userID)
+	token, err := s.remoteChallengeMgr.ResolveOneAccessToken(ctx, projectID, issuerID, subject)
+
+	status := "needs_auth"
+	switch {
+	case errors.Is(err, remotesessions.ErrNoValidToken):
+		// fall through with status="needs_auth"
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "resolve remote session").Log(ctx, s.logger)
+	case token != "":
+		status = "authenticated"
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(handleExternalStatusResponse{
+		Status:       status,
+		ExpiresAt:    nil,
+		ProviderName: nil,
+	}); err != nil {
 		s.logger.ErrorContext(ctx, "failed to encode response", attr.SlogError(err))
 	}
 	return nil

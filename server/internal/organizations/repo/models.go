@@ -9,6 +9,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type OrganizationInvitation struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Email          string
+	TokenHash      string
+	InviterUserID  pgtype.Text
+	RoleSlug       pgtype.Text
+	State          string
+	ExpiresAt      pgtype.Timestamptz
+	AcceptedAt     pgtype.Timestamptz
+	RevokedAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type OrganizationMetadatum struct {
 	ID                 string
 	Name               string
@@ -39,12 +54,13 @@ type OrganizationRoleAssignment struct {
 	WorkosLastEventID  pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
 }
 
 type OrganizationUserRelationship struct {
 	ID                 int64
 	OrganizationID     string
-	UserID             string
+	UserID             pgtype.Text
 	WorkosUserID       pgtype.Text
 	WorkosMembershipID pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz

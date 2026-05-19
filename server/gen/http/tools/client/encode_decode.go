@@ -64,6 +64,10 @@ func EncodeListToolsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 		if p.UrnPrefix != nil {
 			values.Add("urn_prefix", *p.UrnPrefix)
 		}
+		for _, value := range p.ToolTypes {
+			valueStr := string(value)
+			values.Add("tool_types", valueStr)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

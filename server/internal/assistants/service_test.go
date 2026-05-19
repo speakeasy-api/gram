@@ -18,6 +18,7 @@ import (
 
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -64,18 +65,199 @@ func TestServiceCoreAdmitPendingThreadsUsesFlyBackend(t *testing.T) {
 	require.Equal(t, runtimeBackendFlyIO, runtime.Backend)
 }
 
+func TestServiceCoreAdmitPendingThreadsCapsFanOut(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_admit_cap")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	assistantID, pending := seedAssistantWithPendingThreads(t, conn, "assistants-cap", 2, 3)
+	preActivateV2Runtime(t, conn, assistantID, pending[0])
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	admitted, err := core.AdmitPendingThreads(ctx, assistantID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{pending[0], pending[1]}, admitted.ThreadIDs, "admit must release threads up to MaxConcurrency (2)")
+}
+
+func TestServiceCoreAdmitPendingThreadsBlocksWhenActiveAtCap(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_admit_blocked")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	assistantID, active, pending := seedAssistantWithActiveAndPending(t, conn, "assistants-blocked", 2, 2, 1)
+	require.NotEmpty(t, pending)
+	preActivateV2Runtime(t, conn, assistantID, active[0])
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	admitted, err := core.AdmitPendingThreads(ctx, assistantID)
+	require.NoError(t, err)
+	require.Empty(t, admitted.ThreadIDs, "admit must hold the pending thread when existing-active siblings saturate the cap")
+	require.NotContains(t, admitted.ThreadIDs, pending[0], "the held-back pending thread must not slip through")
+}
+
+func TestServiceCoreAdmitPendingThreadsReleasesPartialHeadroom(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_admit_partial")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	assistantID, active, _ := seedAssistantWithActiveAndPending(t, conn, "assistants-partial", 2, 1, 2)
+	preActivateV2Runtime(t, conn, assistantID, active[0])
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	admitted, err := core.AdmitPendingThreads(ctx, assistantID)
+	require.NoError(t, err)
+	require.Len(t, admitted.ThreadIDs, 1, "cap=2 with 1 existing-active sibling leaves headroom for 1 pending admit")
+}
+
+func TestServiceCoreAdmitPendingThreadsBypassesCapForReservedStarter(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_admit_cold_cap_bypass")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	// MaxConcurrency=1, one warm sibling already counts against the cap,
+	// no live v2 runtime row → cold admit reserves a new one. The reserved
+	// starter must be admitted or the runtime stays in starting forever.
+	assistantID, _, pending := seedAssistantWithActiveAndPending(t, conn, "assistants-cold-bypass", 1, 1, 1)
+	require.NotEmpty(t, pending)
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	admitted, err := core.AdmitPendingThreads(ctx, assistantID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{pending[0]}, admitted.ThreadIDs, "cold-admit must release the starter even when active count is at the cap")
+}
+
+func seedAssistantWithPendingThreads(t *testing.T, conn *pgxpool.Pool, slug string, maxConcurrency int, pending int) (uuid.UUID, []uuid.UUID) {
+	t.Helper()
+	assistantID, _, pendingIDs := seedAssistantWithActiveAndPending(t, conn, slug, maxConcurrency, 0, pending)
+	return assistantID, pendingIDs
+}
+
+func seedAssistantWithActiveAndPending(t *testing.T, conn *pgxpool.Pool, slug string, maxConcurrency, active, pending int) (uuid.UUID, []uuid.UUID, []uuid.UUID) {
+	t.Helper()
+	assistantID, _ := seedAssistant(t, conn, slug, maxConcurrency)
+	activeIDs := make([]uuid.UUID, 0, active)
+	for i := range active {
+		activeIDs = append(activeIDs, seedThreadWithEvent(t, conn, assistantID, slug, fmt.Sprintf("active-%d", i), eventStatusCompleted))
+	}
+	pendingIDs := make([]uuid.UUID, 0, pending)
+	for i := range pending {
+		pendingIDs = append(pendingIDs, seedThreadWithEvent(t, conn, assistantID, slug, fmt.Sprintf("pending-%d", i), eventStatusPending))
+	}
+	return assistantID, activeIDs, pendingIDs
+}
+
+func seedAssistant(t *testing.T, conn *pgxpool.Pool, slug string, maxConcurrency int) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+	ctx := t.Context()
+	proj, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: "org-test",
+	})
+	require.NoError(t, err)
+	a, err := assistantsrepo.New(conn).CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{
+		ProjectID:       proj.ID,
+		OrganizationID:  "org-test",
+		CreatedByUserID: pgtype.Text{},
+		Name:            "Assistant",
+		Model:           "openai/gpt-4o-mini",
+		Instructions:    "",
+		WarmTtlSeconds:  300,
+		MaxConcurrency:  int64(maxConcurrency),
+		Status:          StatusActive,
+	})
+	require.NoError(t, err)
+	return a.ID, proj.ID
+}
+
+func seedThreadWithEvent(t *testing.T, conn *pgxpool.Pool, assistantID uuid.UUID, slugBase, correlation, status string) uuid.UUID {
+	t.Helper()
+	ctx := t.Context()
+	row, err := assistantsrepo.New(conn).GetAssistantForDispatch(ctx, assistantID)
+	require.NoError(t, err)
+	chatID := uuid.New()
+	require.NoError(t, assistantsrepo.New(conn).UpsertAssistantChat(ctx, assistantsrepo.UpsertAssistantChatParams{
+		ChatID:         chatID,
+		ProjectID:      row.ProjectID,
+		OrganizationID: "org-test",
+		Title:          pgtype.Text{},
+	}))
+	threadID, err := assistantsrepo.New(conn).UpsertAssistantThread(ctx, assistantsrepo.UpsertAssistantThreadParams{
+		AssistantID:   assistantID,
+		ProjectID:     row.ProjectID,
+		CorrelationID: correlation,
+		ChatID:        chatID,
+		SourceKind:    sourceKindSlack,
+		SourceRefJson: []byte("{}"),
+	})
+	require.NoError(t, err)
+	_, err = assistantsrepo.New(conn).InsertAssistantThreadEvent(ctx, assistantsrepo.InsertAssistantThreadEventParams{
+		AssistantThreadID:     threadID,
+		AssistantID:           assistantID,
+		ProjectID:             row.ProjectID,
+		TriggerInstanceID:     uuid.NullUUID{Valid: false},
+		EventID:               "evt-" + correlation,
+		CorrelationID:         correlation,
+		Status:                status,
+		NormalizedPayloadJson: []byte(`{"text":"hi"}`),
+		SourcePayloadJson:     []byte("{}"),
+	})
+	require.NoError(t, err)
+	return threadID
+}
+
+// preActivateV2Runtime reserves and then transitions the v2 runtime row to
+// `active` so admitPendingThreadsV2 bypasses the cold-start firstThreadOnly
+// guard and exercises the cap logic on its own. anchor must be a real
+// assistant_threads row id under this assistant (the column carries a
+// "who triggered cold admit" reference and is FK-checked).
+func preActivateV2Runtime(t *testing.T, conn *pgxpool.Pool, assistantID, anchor uuid.UUID) {
+	t.Helper()
+	ctx := t.Context()
+	row, err := assistantsrepo.New(conn).GetAssistantForDispatch(ctx, assistantID)
+	require.NoError(t, err)
+	require.NoError(t, assistantsrepo.New(conn).ReserveAssistantRuntimeV2(ctx, assistantsrepo.ReserveAssistantRuntimeV2Params{
+		AssistantThreadID: anchor,
+		AssistantID:       assistantID,
+		ProjectID:         row.ProjectID,
+		Backend:           runtimeBackendFlyIO,
+		State:             runtimeStateStarting,
+	}))
+	runtime, err := assistantsrepo.New(conn).LookupActiveAssistantRuntimeV2(ctx, assistantsrepo.LookupActiveAssistantRuntimeV2Params{
+		ProjectID:   row.ProjectID,
+		AssistantID: assistantID,
+	})
+	require.NoError(t, err)
+	require.NoError(t, assistantsrepo.New(conn).SetAssistantRuntimeActive(ctx, assistantsrepo.SetAssistantRuntimeActiveParams{
+		ActiveState: runtimeStateActive,
+		WarmUntil:   pgtype.Timestamptz{Time: time.Now().UTC().Add(10 * time.Minute), Valid: true},
+		RuntimeID:   runtime.ID,
+		ProjectID:   row.ProjectID,
+	}))
+}
+
 func TestWarmRemainingSecondsKeepsBusyRunnerAlive(t *testing.T) {
 	t.Parallel()
 
-	// The runner sends idle_seconds=0 while a turn is in flight (see
-	// agents/runner/src/wire.rs::RunnerStateResponse) and omits the field
-	// entirely only when never /configured. ExpireThreadRuntime must treat
-	// both shapes as "do not stop": the &0 case covers the production race,
-	// and the nil case is a defensive guard against an unconfigured backend
-	// row sneaking past the CAS.
+	// Idle is derived from min(threads.idle_seconds) — &0 marks any thread
+	// with a turn in flight, in which case ExpireThreadRuntime must revert
+	// to active. A nil idle means the runner reported zero live threads
+	// (fully idle VM) so Stop is correct.
 	zero := uint64(0)
 	require.Positive(t, warmRemainingSeconds(&zero, 300), "busy runner (idle=&0) must keep a positive warm window")
-	require.Positive(t, warmRemainingSeconds(nil, 300), "missing idle (never configured) must not collapse to a Stop decision")
+	require.Zero(t, warmRemainingSeconds(nil, 300), "no live threads must collapse to a Stop decision")
 }
 
 func TestServiceCoreExpireThreadRuntimeRevertsWhenTurnInFlight(t *testing.T) {
@@ -753,71 +935,6 @@ func TestServiceCoreProcessThreadEventsMarksRuntimeFailedOnUnhealthyTurn(t *test
 	require.Equal(t, eventStatusProcessing, event.Status, "unhealthy turn leaves the event in processing for the reaper")
 }
 
-func TestServiceCoreProcessThreadEventsDoesNotStopRuntimeOnConfigureFailure(t *testing.T) {
-	t.Parallel()
-
-	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_config_fail")
-	require.NoError(t, err)
-
-	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
-
-	var stopCalls atomic.Int64
-	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
-	backend := testRuntimeBackend{
-		backend: runtimeBackendFlyIO,
-		ensureResult: RuntimeBackendEnsureResult{
-			ColdStart:      true,
-			NeedsConfigure: true,
-			BackendMetadataJSON: []byte(`{
-				"app_name": "gram-asst-test",
-				"app_url": "https://gram-asst-test.fly.dev",
-				"machine_id": "machine-1",
-				"last_boot_id": "boot-1"
-			}`),
-		},
-		configureErr: errors.New("runtime Configure blew up"),
-		stopCalls:    &stopCalls,
-	}
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger), nil)
-
-	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
-	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{threadID}, admitted.ThreadIDs)
-
-	result, err := core.ProcessThreadEvents(t.Context(), projectID, threadID)
-	require.NoError(t, err)
-	require.True(t, result.RetryAdmission)
-	require.False(t, result.RuntimeActive)
-	require.Equal(t, int64(0), stopCalls.Load(), "configure failure should preserve the Fly app for reuse/recovery")
-
-	failedRuntime, err := assistantsrepo.New(conn).GetLatestAssistantRuntimeByThreadID(t.Context(), assistantsrepo.GetLatestAssistantRuntimeByThreadIDParams{AssistantThreadID: threadID, ProjectID: projectID})
-	require.NoError(t, err)
-	require.Equal(t, runtimeStateFailed, failedRuntime.State)
-	require.True(t, failedRuntime.Deleted)
-	require.JSONEq(t, string(backend.ensureResult.BackendMetadataJSON), string(failedRuntime.BackendMetadataJson))
-
-	hotAdmit, err := core.AdmitPendingThreads(t.Context(), assistantID)
-	require.NoError(t, err)
-	require.Empty(t, hotAdmit.ThreadIDs, "admission backoff must block re-admit immediately after a setup failure")
-
-	// Simulate the backoff window elapsing so the next admit is eligible.
-	err = assistantsrepo.New(conn).BackdateAssistantRuntimeUpdatedAt(t.Context(), assistantsrepo.BackdateAssistantRuntimeUpdatedAtParams{
-		UpdatedAt:         pgtype.Timestamptz{Time: time.Now().UTC().Add(-time.Hour), Valid: true},
-		AssistantThreadID: threadID,
-		State:             runtimeStateFailed,
-	})
-	require.NoError(t, err)
-
-	admittedAgain, err := core.AdmitPendingThreads(t.Context(), assistantID)
-	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{threadID}, admittedAgain.ThreadIDs)
-
-	nextRuntime, err := assistantsrepo.New(conn).GetActiveAssistantRuntimeByThreadID(t.Context(), assistantsrepo.GetActiveAssistantRuntimeByThreadIDParams{AssistantThreadID: threadID, ProjectID: projectID})
-	require.NoError(t, err)
-	require.JSONEq(t, string(backend.ensureResult.BackendMetadataJSON), string(nextRuntime.BackendMetadataJson))
-}
-
 // insertReapableProject inserts an isolated project + assistant + thread so a
 // single test can host several independent fixtures without colliding on the
 // project slug or the per-thread-active runtime unique index.
@@ -1151,17 +1268,18 @@ func TestServiceCoreReapInactiveAssistantRuntimesReapsSiblingsAcrossSweeps(t *te
 	require.EqualValues(t, 2, reapCalls.Load())
 }
 
-func TestServiceCoreReapInactiveAssistantRuntimesIgnoresActiveAndStarting(t *testing.T) {
+func TestServiceCoreReapInactiveAssistantRuntimesReapsStaleRowsRegardlessOfState(t *testing.T) {
 	t.Parallel()
 
-	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_inactive_state_filter")
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_inactive_state_agnostic")
 	require.NoError(t, err)
 
+	stale := time.Now().UTC().Add(-30 * 24 * time.Hour)
 	projectID, assistantID, threadID := insertReapableProject(t, conn, "active-state")
-	insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateActive, "gram-asst-active", time.Now().UTC().Add(-30*24*time.Hour))
+	insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateActive, "gram-asst-active", stale)
 
 	startingProject, startingAssistantID, startingThreadID := insertReapableProject(t, conn, "starting-state")
-	insertReapableRuntimeRow(t, conn, startingProject, startingAssistantID, startingThreadID, runtimeStateStarting, "gram-asst-starting", time.Now().UTC().Add(-30*24*time.Hour))
+	insertReapableRuntimeRow(t, conn, startingProject, startingAssistantID, startingThreadID, runtimeStateStarting, "gram-asst-starting", stale)
 
 	reapCalls := &atomic.Int64{}
 	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
@@ -1172,15 +1290,14 @@ func TestServiceCoreReapInactiveAssistantRuntimesIgnoresActiveAndStarting(t *tes
 		BatchSize:           10,
 	})
 	require.NoError(t, err)
-	require.Equal(t, 0, result.Reaped)
-	require.EqualValues(t, 0, reapCalls.Load())
+	require.Equal(t, 2, result.Reaped)
+	require.EqualValues(t, 2, reapCalls.Load())
 }
 
 type testRuntimeBackend struct {
 	backend      string
 	ensureResult RuntimeBackendEnsureResult
 	ensureErr    error
-	configureErr error
 	runTurnErr   error
 	statusResult RuntimeBackendStatus
 	statusErr    error
@@ -1198,6 +1315,10 @@ func (t testRuntimeBackend) SupportsBackend(backend string) bool {
 	return backend == t.backend
 }
 
+func (t testRuntimeBackend) ServerURL() *url.URL {
+	return &url.URL{Scheme: "https", Host: "gram.example.com"}
+}
+
 func (t testRuntimeBackend) Ensure(context.Context, assistantRuntimeRecord) (RuntimeBackendEnsureResult, error) {
 	if t.ensureErr != nil {
 		return RuntimeBackendEnsureResult{}, t.ensureErr
@@ -1205,20 +1326,8 @@ func (t testRuntimeBackend) Ensure(context.Context, assistantRuntimeRecord) (Run
 	return t.ensureResult, nil
 }
 
-func (t testRuntimeBackend) Configure(context.Context, assistantRuntimeRecord, runtimeStartupConfig) error {
-	return t.configureErr
-}
-
-func (t testRuntimeBackend) RunTurn(context.Context, assistantRuntimeRecord, string, string, string) error {
+func (t testRuntimeBackend) RunTurn(context.Context, assistantRuntimeRecord, uuid.UUID, string, string, string) error {
 	return t.runTurnErr
-}
-
-func (t testRuntimeBackend) ServerURL(context.Context, assistantRuntimeRecord, *url.URL) (*url.URL, error) {
-	parsed, err := url.Parse("https://gram.example.com")
-	if err != nil {
-		return nil, fmt.Errorf("parse test server url: %w", err)
-	}
-	return parsed, nil
 }
 
 func (t testRuntimeBackend) Status(context.Context, assistantRuntimeRecord) (RuntimeBackendStatus, error) {
@@ -1247,4 +1356,29 @@ func mustParseURLForServiceTest(t *testing.T, raw string) *url.URL {
 	parsed, err := url.Parse(raw)
 	require.NoError(t, err)
 	return parsed
+}
+
+func TestServiceCoreEnqueueTriggerTaskSkipsMissingAssistant(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_enqueue_missing")
+	require.NoError(t, err)
+
+	logger := testenv.NewLogger(t)
+	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, tokens, nil, telemetry.NewStub(logger), nil)
+
+	missing := uuid.New()
+	result, err := core.EnqueueTriggerTask(t.Context(), bgtriggers.Task{
+		TriggerInstanceID: uuid.New().String(),
+		DefinitionSlug:    sourceKindSlack,
+		TargetKind:        bgtriggers.TargetKindAssistant,
+		TargetRef:         missing.String(),
+		EventID:           "evt-missing",
+		CorrelationID:     "corr-missing",
+		EventJSON:         []byte(`{}`),
+	})
+	require.NoError(t, err)
+	require.False(t, result.EventCreated)
+	require.Equal(t, uuid.Nil, result.AssistantID)
 }

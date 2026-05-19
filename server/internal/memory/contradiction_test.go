@@ -23,19 +23,19 @@ type mockCompletionClient struct {
 func (m *mockCompletionClient) GetCompletion(ctx context.Context, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
 	args := m.Called(ctx, request)
 	resp, _ := args.Get(0).(*openrouter.CompletionResponse)
-	return resp, args.Error(1) //nolint:wrapcheck // mock pass-through
+	return resp, args.Error(1)
 }
 
 func (m *mockCompletionClient) GetCompletionStream(ctx context.Context, request openrouter.CompletionRequest) (openrouter.StreamReader, error) {
 	args := m.Called(ctx, request)
 	r, _ := args.Get(0).(openrouter.StreamReader)
-	return r, args.Error(1) //nolint:wrapcheck // mock pass-through
+	return r, args.Error(1)
 }
 
 func (m *mockCompletionClient) GetObjectCompletion(ctx context.Context, request openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error) {
 	args := m.Called(ctx, request)
 	resp, _ := args.Get(0).(*openrouter.CompletionResponse)
-	return resp, args.Error(1) //nolint:wrapcheck // mock pass-through
+	return resp, args.Error(1)
 }
 
 func (m *mockCompletionClient) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string, opts ...openrouter.EmbeddingOption) ([][]float32, error) {
@@ -45,7 +45,7 @@ func (m *mockCompletionClient) CreateEmbeddings(ctx context.Context, orgID strin
 	}
 	args := m.Called(ctx, orgID, model, inputs, resolved)
 	v, _ := args.Get(0).([][]float32)
-	return v, args.Error(1) //nolint:wrapcheck // mock pass-through
+	return v, args.Error(1)
 }
 
 func newAssistantTextResponse(text string) *openrouter.CompletionResponse {

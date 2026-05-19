@@ -1,14 +1,17 @@
 package authz
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
 	"slices"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -16,13 +19,38 @@ import (
 
 const WildcardResource = "*"
 
+// allScopeGrants returns wildcard grants for every defined scope. Used to give
+// superadmins (e.g. during org impersonation) unrestricted access.
+func allScopeGrants() []Grant {
+	scopes := []Scope{
+		ScopeOrgRead, ScopeOrgAdmin,
+		ScopeProjectRead, ScopeProjectWrite,
+		ScopeMCPRead, ScopeMCPWrite, ScopeMCPConnect,
+		ScopeEnvironmentRead, ScopeEnvironmentWrite,
+	}
+	grants := make([]Grant, 0, len(scopes))
+	for _, s := range scopes {
+		grants = append(grants, NewGrant(s, WildcardResource))
+	}
+	return grants
+}
+
 const (
 	SystemRoleAdmin  = "admin"
 	SystemRoleMember = "member"
 )
 
+// PolicyEffect determines whether a grant allows or denies the matched scope.
+type PolicyEffect string
+
+const (
+	PolicyEffectAllow PolicyEffect = "allow"
+	PolicyEffectDeny  PolicyEffect = "deny"
+)
+
 type RoleGrant struct {
 	Scope     string
+	Effect    PolicyEffect
 	Selectors []Selector
 }
 
@@ -63,11 +91,13 @@ func SeedSystemRoleGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.
 type Grant struct {
 	PrincipalUrn string
 	Scope        Scope
+	Effect       PolicyEffect
 	Selector     Selector
 }
 
 type ScopedGrant struct {
 	Scope     string
+	Effect    PolicyEffect
 	SubScopes []string
 	Selectors []Selector
 }
@@ -128,6 +158,7 @@ func SyncGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug st
 		}
 
 		scope := Scope(grant.Scope)
+		effect := effectOrDefault(grant.Effect)
 
 		// nil selectors = unrestricted (wildcard) access for this scope.
 		// Empty non-nil slice ([]Selector{}) = no grant rows (no access).
@@ -141,6 +172,7 @@ func SyncGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug st
 				OrganizationID: orgID,
 				PrincipalUrn:   principalURN,
 				Scope:          grant.Scope,
+				Effect:         effectToPgtype(effect),
 				Selectors:      selBytes,
 			}); err != nil {
 				return nil, fmt.Errorf("upsert unrestricted grant %q for role %q: %w", grant.Scope, roleSlug, err)
@@ -151,6 +183,7 @@ func SyncGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug st
 				grantRows = append(grantRows, Grant{
 					PrincipalUrn: principalURN.String(),
 					Scope:        scope,
+					Effect:       effect,
 					Selector:     sel,
 				})
 			}
@@ -170,6 +203,7 @@ func SyncGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug st
 				OrganizationID: orgID,
 				PrincipalUrn:   principalURN,
 				Scope:          grant.Scope,
+				Effect:         effectToPgtype(effect),
 				Selectors:      selBytes,
 			}); err != nil {
 				return nil, fmt.Errorf("upsert grant %q for role %q: %w", grant.Scope, roleSlug, err)
@@ -180,6 +214,7 @@ func SyncGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug st
 				grantRows = append(grantRows, Grant{
 					PrincipalUrn: principalURN.String(),
 					Scope:        scope,
+					Effect:       effect,
 					Selector:     sel,
 				})
 			}
@@ -276,6 +311,7 @@ func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGran
 		grantRows = append(grantRows, Grant{
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        Scope(row.Scope),
+			Effect:       effectFromNullable(row.Effect),
 			Selector:     selectors,
 		})
 	}
@@ -283,20 +319,55 @@ func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGran
 	return GrantsToScopedGrants(grantRows), nil
 }
 
+// effectOrDefault returns the effect, defaulting to allow for backward
+// compatibility with existing grants that have no explicit effect.
+func effectOrDefault(e PolicyEffect) PolicyEffect {
+	return conv.Default(e, PolicyEffectAllow)
+}
+
+// effectToPgtype converts a PolicyEffect to pgtype.Text for DB storage.
+// Allow maps to NULL (backward compatible with existing rows).
+// Deny maps to 'deny'.
+func effectToPgtype(e PolicyEffect) pgtype.Text {
+	effect := conv.Default(e, PolicyEffectAllow)
+	if effect == PolicyEffectAllow {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	return pgtype.Text{String: string(effect), Valid: true}
+}
+
+// effectFromNullable converts a nullable DB string to PolicyEffect.
+// NULL or empty → allow.
+func effectFromNullable(s pgtype.Text) PolicyEffect {
+	if !s.Valid {
+		return PolicyEffectAllow
+	}
+	return conv.Default(PolicyEffect(s.String), PolicyEffectAllow)
+}
+
+// scopeEffectKey groups grants by scope+effect for GrantsToScopedGrants.
+type scopeEffectKey struct {
+	scope  string
+	effect PolicyEffect
+}
+
 type scopeAgg struct {
 	unrestricted bool
 	selectors    []Selector
 }
 
-// GrantsToScopedGrants groups raw grants by scope, collapsing wildcards.
+// GrantsToScopedGrants groups raw grants by scope+effect, collapsing wildcards.
+// TODO: simplify — this method is getting complex; consider breaking into
+// smaller steps (grouping, wildcard collapsing, output building).
 func GrantsToScopedGrants(rows []Grant) []*ScopedGrant {
-	byScope := make(map[string]*scopeAgg)
+	byKey := make(map[scopeEffectKey]*scopeAgg)
 	for _, row := range rows {
-		scope := string(row.Scope)
-		agg, ok := byScope[scope]
+		effect := effectOrDefault(row.Effect)
+		key := scopeEffectKey{scope: string(row.Scope), effect: effect}
+		agg, ok := byKey[key]
 		if !ok {
 			agg = &scopeAgg{unrestricted: false, selectors: nil}
-			byScope[scope] = agg
+			byKey[key] = agg
 		}
 		resourceID := row.Selector.ResourceID()
 		if resourceID == WildcardResource && len(row.Selector) <= 2 {
@@ -310,18 +381,23 @@ func GrantsToScopedGrants(rows []Grant) []*ScopedGrant {
 		}
 	}
 
-	scopes := make([]string, 0, len(byScope))
-	for scope := range byScope {
-		scopes = append(scopes, scope)
+	keys := make([]scopeEffectKey, 0, len(byKey))
+	for k := range byKey {
+		keys = append(keys, k)
 	}
-	slices.Sort(scopes)
+	slices.SortFunc(keys, func(a, b scopeEffectKey) int {
+		if c := cmp.Compare(a.scope, b.scope); c != 0 {
+			return c
+		}
+		return cmp.Compare(string(a.effect), string(b.effect))
+	})
 
-	grants := make([]*ScopedGrant, 0, len(byScope))
-	for _, scope := range scopes {
-		agg := byScope[scope]
-		subScopes := CalculateSubScopes(Scope(scope))
+	grants := make([]*ScopedGrant, 0, len(byKey))
+	for _, key := range keys {
+		agg := byKey[key]
+		subScopes := CalculateSubScopes(Scope(key.scope))
 
-		grant := &ScopedGrant{Scope: scope, SubScopes: subScopes, Selectors: nil}
+		grant := &ScopedGrant{Scope: key.scope, Effect: key.effect, SubScopes: subScopes, Selectors: nil}
 		if !agg.unrestricted {
 			grant.Selectors = append([]Selector(nil), agg.selectors...)
 		}
@@ -331,17 +407,55 @@ func GrantsToScopedGrants(rows []Grant) []*ScopedGrant {
 	return grants
 }
 
-// findMatchingGrant compares a list of grants against a list of checks and returns
-// the first grant / check tuple that is satisfied.
-func findMatchingGrant(grants []Grant, checks []Check) (*Grant, *Check) {
-	for _, grant := range grants {
-		for _, check := range checks {
-			if grant.Scope == check.Scope && grant.Selector.Matches(check.selector()) {
-				g, c := grant, check
-				return &g, &c
+// evaluateGrants implements deny-wins semantics per the RFC:
+//
+//	permit(check) = at least one matching allow grant exists
+//	                AND no matching deny grant exists
+//
+// Returns the first matching allow grant+check pair if permitted, nil otherwise.
+// Also returns whether a deny was matched (for logging).
+func evaluateGrants(grants []Grant, checks []Check) (allowGrant *Grant, allowCheck *Check, denied bool) {
+	var firstAllow *Grant
+	var firstAllowCheck *Check
+
+	for i := range grants {
+		grant := &grants[i]
+		effect := effectOrDefault(grant.Effect)
+		for j := range checks {
+			check := &checks[j]
+			checkSel := check.selector()
+			if grant.Scope != check.Scope {
+				continue
+			}
+
+			if effect == PolicyEffectDeny {
+				// Deny only matches the original scope, not expanded parents.
+				// Uses StrictMatches: every dimension in the deny selector must
+				// be present in the check. This prevents a tool-scoped deny
+				// from blocking a dimensionless server-level connect probe.
+				if !check.expanded && grant.Selector.StrictMatches(checkSel) {
+					return nil, nil, true
+				}
+				continue
+			}
+
+			// Allow: permissive matching (skip missing dimensions).
+			if !grant.Selector.Matches(checkSel) {
+				continue
+			}
+			if firstAllow == nil {
+				firstAllow = grant
+				firstAllowCheck = check
 			}
 		}
 	}
 
-	return nil, nil
+	return firstAllow, firstAllowCheck, false
+}
+
+// findMatchingGrant compares a list of grants against a list of checks and returns
+// the first grant / check tuple that is satisfied. Deny grants block the match.
+func findMatchingGrant(grants []Grant, checks []Check) (*Grant, *Check) {
+	allow, check, _ := evaluateGrants(grants, checks)
+	return allow, check
 }

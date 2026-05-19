@@ -3304,6 +3304,7 @@ func marshalAccessRoleToRoleResponseBody(v *access.Role) *RoleResponseBody {
 	res := &RoleResponseBody{
 		ID:          v.ID,
 		Name:        v.Name,
+		Slug:        v.Slug,
 		Description: v.Description,
 		IsSystem:    v.IsSystem,
 		MemberCount: v.MemberCount,
@@ -3330,7 +3331,14 @@ func marshalAccessRoleToRoleResponseBody(v *access.Role) *RoleResponseBody {
 // *RoleGrantResponseBody from a value of type *access.RoleGrant.
 func marshalAccessRoleGrantToRoleGrantResponseBody(v *access.RoleGrant) *RoleGrantResponseBody {
 	res := &RoleGrantResponseBody{
-		Scope: v.Scope,
+		Scope:  v.Scope,
+		Effect: v.Effect,
+	}
+	{
+		var zero string
+		if res.Effect == zero {
+			res.Effect = "allow"
+		}
 	}
 	if v.Selectors != nil {
 		res.Selectors = make([]*SelectorResponseBody, len(v.Selectors))
@@ -3368,6 +3376,12 @@ func marshalAccessSelectorToSelectorResponseBody(v *access.Selector) *SelectorRe
 func unmarshalRoleGrantRequestBodyToAccessRoleGrant(v *RoleGrantRequestBody) *access.RoleGrant {
 	res := &access.RoleGrant{
 		Scope: *v.Scope,
+	}
+	if v.Effect != nil {
+		res.Effect = *v.Effect
+	}
+	if v.Effect == nil {
+		res.Effect = "allow"
 	}
 	if v.Selectors != nil {
 		res.Selectors = make([]*access.Selector, len(v.Selectors))
@@ -3432,7 +3446,14 @@ func marshalAccessAccessMemberToAccessMemberResponseBody(v *access.AccessMember)
 // *ListRoleGrantResponseBody from a value of type *access.ListRoleGrant.
 func marshalAccessListRoleGrantToListRoleGrantResponseBody(v *access.ListRoleGrant) *ListRoleGrantResponseBody {
 	res := &ListRoleGrantResponseBody{
-		Scope: v.Scope,
+		Scope:  v.Scope,
+		Effect: v.Effect,
+	}
+	{
+		var zero string
+		if res.Effect == zero {
+			res.Effect = "allow"
+		}
 	}
 	if v.SubScopes != nil {
 		res.SubScopes = make([]string, len(v.SubScopes))

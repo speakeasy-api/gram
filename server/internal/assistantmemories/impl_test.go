@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/memory/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -49,19 +48,9 @@ func (f *fakeMemory) DeleteByID(ctx context.Context, projectID, id uuid.UUID) er
 	return f.deleteFn(ctx, projectID, id)
 }
 
-type fakeFeatures struct {
-	enabled bool
-	err     error
-}
-
-func (f fakeFeatures) IsFeatureEnabled(context.Context, string, productfeatures.Feature) (bool, error) {
-	return f.enabled, f.err
-}
-
 type testHarness struct {
 	svc       *Service
 	mem       *fakeMemory
-	features  *fakeFeatures
 	projectID uuid.UUID
 	orgID     string
 }
@@ -73,17 +62,15 @@ func newTestHarness(t *testing.T) (*testHarness, context.Context) {
 	tracerProvider := testenv.NewTracerProvider(t)
 
 	mem := &fakeMemory{listFn: nil, getFn: nil, deleteFn: nil}
-	features := &fakeFeatures{enabled: true, err: nil}
 
 	authzEngine := authz.NewEngine(logger, nil, nil, authztest.RBACAlwaysDisabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	svc := &Service{
-		tracer:   tracerProvider.Tracer("test"),
-		logger:   logger,
-		auth:     nil,
-		authz:    authzEngine,
-		features: features,
-		memory:   mem,
+		tracer: tracerProvider.Tracer("test"),
+		logger: logger,
+		auth:   nil,
+		authz:  authzEngine,
+		memory: mem,
 	}
 
 	projectID := uuid.New()
@@ -111,7 +98,6 @@ func newTestHarness(t *testing.T) (*testHarness, context.Context) {
 	return &testHarness{
 		svc:       svc,
 		mem:       mem,
-		features:  features,
 		projectID: projectID,
 		orgID:     orgID,
 	}, ctx
@@ -141,24 +127,6 @@ func TestListAssistantMemories_MissingAuthContext(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeUnauthorized)
-}
-
-func TestListAssistantMemories_FeatureDisabled(t *testing.T) {
-	t.Parallel()
-
-	h, ctx := newTestHarness(t)
-	h.features.enabled = false
-
-	_, err := h.svc.ListAssistantMemories(ctx, &gen.ListAssistantMemoriesPayload{
-		AssistantID:      uuid.NewString(),
-		Tags:             nil,
-		IncludeDeleted:   false,
-		Cursor:           nil,
-		Limit:            50,
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-	})
-	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestListAssistantMemories_RBACDenied(t *testing.T) {
@@ -330,19 +298,6 @@ func TestGetAssistantMemory_MissingAuthContext(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeUnauthorized)
 }
 
-func TestGetAssistantMemory_FeatureDisabled(t *testing.T) {
-	t.Parallel()
-
-	h, ctx := newTestHarness(t)
-	h.features.enabled = false
-	_, err := h.svc.GetAssistantMemory(ctx, &gen.GetAssistantMemoryPayload{
-		ID:               uuid.NewString(),
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-	})
-	requireOopsCode(t, err, oops.CodeForbidden)
-}
-
 func TestGetAssistantMemory_RBACDenied(t *testing.T) {
 	t.Parallel()
 
@@ -412,19 +367,6 @@ func TestDeleteAssistantMemory_MissingAuthContext(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeUnauthorized)
-}
-
-func TestDeleteAssistantMemory_FeatureDisabled(t *testing.T) {
-	t.Parallel()
-
-	h, ctx := newTestHarness(t)
-	h.features.enabled = false
-	err := h.svc.DeleteAssistantMemory(ctx, &gen.DeleteAssistantMemoryPayload{
-		ID:               uuid.NewString(),
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-	})
-	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestDeleteAssistantMemory_RBACDenied(t *testing.T) {

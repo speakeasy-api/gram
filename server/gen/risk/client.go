@@ -16,29 +16,37 @@ import (
 
 // Client is the "risk" service client.
 type Client struct {
-	CreateRiskPolicyEndpoint      goa.Endpoint
-	ListRiskPoliciesEndpoint      goa.Endpoint
-	GetRiskPolicyEndpoint         goa.Endpoint
-	UpdateRiskPolicyEndpoint      goa.Endpoint
-	DeleteRiskPolicyEndpoint      goa.Endpoint
-	ListRiskResultsEndpoint       goa.Endpoint
-	ListRiskResultsByChatEndpoint goa.Endpoint
-	GetRiskPolicyStatusEndpoint   goa.Endpoint
-	TriggerRiskAnalysisEndpoint   goa.Endpoint
+	CreateRiskPolicyEndpoint        goa.Endpoint
+	ListRiskPoliciesEndpoint        goa.Endpoint
+	GetRiskCapabilitiesEndpoint     goa.Endpoint
+	GetRiskPolicyEndpoint           goa.Endpoint
+	UpdateRiskPolicyEndpoint        goa.Endpoint
+	DeleteRiskPolicyEndpoint        goa.Endpoint
+	ListRiskResultsEndpoint         goa.Endpoint
+	ListRiskResultsByChatEndpoint   goa.Endpoint
+	GetRiskPolicyStatusEndpoint     goa.Endpoint
+	ListShadowMCPApprovalsEndpoint  goa.Endpoint
+	ApproveShadowMCPEndpoint        goa.Endpoint
+	RevokeShadowMCPApprovalEndpoint goa.Endpoint
+	TriggerRiskAnalysisEndpoint     goa.Endpoint
 }
 
 // NewClient initializes a "risk" service client given the endpoints.
-func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsByChat, getRiskPolicyStatus, triggerRiskAnalysis goa.Endpoint) *Client {
+func NewClient(createRiskPolicy, listRiskPolicies, getRiskCapabilities, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsByChat, getRiskPolicyStatus, listShadowMCPApprovals, approveShadowMCP, revokeShadowMCPApproval, triggerRiskAnalysis goa.Endpoint) *Client {
 	return &Client{
-		CreateRiskPolicyEndpoint:      createRiskPolicy,
-		ListRiskPoliciesEndpoint:      listRiskPolicies,
-		GetRiskPolicyEndpoint:         getRiskPolicy,
-		UpdateRiskPolicyEndpoint:      updateRiskPolicy,
-		DeleteRiskPolicyEndpoint:      deleteRiskPolicy,
-		ListRiskResultsEndpoint:       listRiskResults,
-		ListRiskResultsByChatEndpoint: listRiskResultsByChat,
-		GetRiskPolicyStatusEndpoint:   getRiskPolicyStatus,
-		TriggerRiskAnalysisEndpoint:   triggerRiskAnalysis,
+		CreateRiskPolicyEndpoint:        createRiskPolicy,
+		ListRiskPoliciesEndpoint:        listRiskPolicies,
+		GetRiskCapabilitiesEndpoint:     getRiskCapabilities,
+		GetRiskPolicyEndpoint:           getRiskPolicy,
+		UpdateRiskPolicyEndpoint:        updateRiskPolicy,
+		DeleteRiskPolicyEndpoint:        deleteRiskPolicy,
+		ListRiskResultsEndpoint:         listRiskResults,
+		ListRiskResultsByChatEndpoint:   listRiskResultsByChat,
+		GetRiskPolicyStatusEndpoint:     getRiskPolicyStatus,
+		ListShadowMCPApprovalsEndpoint:  listShadowMCPApprovals,
+		ApproveShadowMCPEndpoint:        approveShadowMCP,
+		RevokeShadowMCPApprovalEndpoint: revokeShadowMCPApproval,
+		TriggerRiskAnalysisEndpoint:     triggerRiskAnalysis,
 	}
 }
 
@@ -84,6 +92,29 @@ func (c *Client) ListRiskPolicies(ctx context.Context, p *ListRiskPoliciesPayloa
 		return
 	}
 	return ires.(*ListRiskPoliciesResult), nil
+}
+
+// GetRiskCapabilities calls the "getRiskCapabilities" endpoint of the "risk"
+// service.
+// GetRiskCapabilities may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetRiskCapabilities(ctx context.Context, p *GetRiskCapabilitiesPayload) (res *RiskCapabilitiesResult, err error) {
+	var ires any
+	ires, err = c.GetRiskCapabilitiesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RiskCapabilitiesResult), nil
 }
 
 // GetRiskPolicy calls the "getRiskPolicy" endpoint of the "risk" service.
@@ -214,6 +245,70 @@ func (c *Client) GetRiskPolicyStatus(ctx context.Context, p *GetRiskPolicyStatus
 		return
 	}
 	return ires.(*types.RiskPolicyStatus), nil
+}
+
+// ListShadowMCPApprovals calls the "listShadowMCPApprovals" endpoint of the
+// "risk" service.
+// ListShadowMCPApprovals may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListShadowMCPApprovals(ctx context.Context, p *ListShadowMCPApprovalsPayload) (res *ListShadowMCPApprovalsResult, err error) {
+	var ires any
+	ires, err = c.ListShadowMCPApprovalsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListShadowMCPApprovalsResult), nil
+}
+
+// ApproveShadowMCP calls the "approveShadowMCP" endpoint of the "risk" service.
+// ApproveShadowMCP may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ApproveShadowMCP(ctx context.Context, p *ApproveShadowMCPPayload) (res *types.ShadowMCPApproval, err error) {
+	var ires any
+	ires, err = c.ApproveShadowMCPEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.ShadowMCPApproval), nil
+}
+
+// RevokeShadowMCPApproval calls the "revokeShadowMCPApproval" endpoint of the
+// "risk" service.
+// RevokeShadowMCPApproval may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RevokeShadowMCPApproval(ctx context.Context, p *RevokeShadowMCPApprovalPayload) (err error) {
+	_, err = c.RevokeShadowMCPApprovalEndpoint(ctx, p)
+	return
 }
 
 // TriggerRiskAnalysis calls the "triggerRiskAnalysis" endpoint of the "risk"

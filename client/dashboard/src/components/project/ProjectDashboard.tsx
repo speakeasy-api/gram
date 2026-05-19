@@ -7,18 +7,28 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
-import { useAuditLogs, useGetProjectOverview } from "@gram/client/react-query";
-import { useFeaturesGet } from "@gram/client/react-query/featuresGet";
+import {
+  useAuditLogs,
+  useGramContext,
+  useProductFeatures,
+} from "@gram/client/react-query";
+import { telemetryGetProjectOverview } from "@gram/client/funcs/telemetryGetProjectOverview";
+import { unwrapAsync } from "@gram/client/types/fp";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { subDays } from "date-fns";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { Badge, Button, Card, Icon } from "@speakeasy-api/moonshine";
+import { TimeRangePicker } from "@gram-ai/elements";
 import { Wand2 } from "lucide-react";
 import {
   INSIGHTS_AI_RAINBOW_CLASS,
   type InsightsConfigOptions,
 } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
+import {
+  formatDateRangeLabel,
+  useDateRangeFilter,
+} from "@/components/observe/useDateRangeFilter";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
 import { ProjectOnboardingBanner } from "./ProjectOnboarding";
 
@@ -28,22 +38,45 @@ export function ProjectDashboard() {
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
 
-  const to = useMemo(() => new Date(), []);
-  const from = useMemo(() => subDays(to, 7), [to]);
+  const {
+    dateRange,
+    customRange,
+    customRangeLabel,
+    from,
+    to,
+    setDateRangeParam,
+    setCustomRangeParam,
+    clearCustomRange,
+  } = useDateRangeFilter();
+
+  const rangeLabel = useMemo(
+    () => formatDateRangeLabel(dateRange, customRangeLabel),
+    [dateRange, customRangeLabel],
+  );
 
   const {
     data: featuresData,
     isPending: isFeaturesPending,
     isError: isFeaturesError,
-  } = useFeaturesGet();
+  } = useProductFeatures();
   const logsEnabled = featuresData?.logsEnabled === true;
 
-  const { data: overview, isPending: isOverviewPending } =
-    useGetProjectOverview(
-      { getProjectMetricsSummaryPayload: { from, to } },
-      undefined,
-      { enabled: logsEnabled },
-    );
+  // The SDK's useGetProjectOverview omits the request body from its query
+  // key, so changing the date range here would otherwise return cached data.
+  // Mirror the observe-page pattern: call useQuery directly with a key that
+  // includes the from/to ISO strings.
+  const client = useGramContext();
+  const { data: overview, isPending: isOverviewPending } = useQuery({
+    queryKey: ["project", "overview", from.toISOString(), to.toISOString()],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryGetProjectOverview(client, {
+          getProjectMetricsSummaryPayload: { from, to },
+        }),
+      ),
+    enabled: logsEnabled,
+    placeholderData: keepPreviousData,
+  });
 
   const featuresSettled = !isFeaturesPending || isFeaturesError;
   const isOverviewLoading =
@@ -106,7 +139,7 @@ export function ProjectDashboard() {
     return () => setInsightsOverride(null);
   }, [setInsightsOverride]);
 
-  const timeWindowContext = `The user is on the Project Overview dashboard. The selected period is the last 7 days (from ${from.toISOString()} to ${to.toISOString()}).`;
+  const timeWindowContext = `The user is on the Project Overview dashboard. The selected period is the ${rangeLabel} (from ${from.toISOString()} to ${to.toISOString()}).`;
 
   return (
     <Page.Section>
@@ -117,10 +150,15 @@ export function ProjectDashboard() {
         </Badge>
       </Page.Section.Description>
       <Page.Section.CTA>
-        {logsEnabled && !isProjectEmpty && (
-          <p className="text-muted text-xs">
-            Showing data from the last 7 days
-          </p>
+        {logsEnabled && (
+          <TimeRangePicker
+            preset={customRange ? null : dateRange}
+            customRange={customRange}
+            customRangeLabel={customRangeLabel}
+            onPresetChange={setDateRangeParam}
+            onCustomRangeChange={setCustomRangeParam}
+            onClearCustomRange={clearCustomRange}
+          />
         )}
       </Page.Section.CTA>
 
@@ -145,7 +183,7 @@ export function ProjectDashboard() {
                     title="Active Servers"
                     value={overview?.summary.activeServersCount ?? 0}
                     icon="server"
-                    tooltip="Unique MCP servers that received at least one tool call via hook telemetry in the selected period. Servers with no activity in the window are not counted."
+                    tooltip="Unique MCP servers used by project members that received at least one tool call in the selected period. Servers with no activity in the window are not counted."
                   />
                 )}
                 {isOverviewPending ? (
@@ -155,7 +193,7 @@ export function ProjectDashboard() {
                     title="Tool Calls"
                     value={overview?.summary.totalToolCalls ?? 0}
                     icon="wrench"
-                    tooltip="Total tool invocations recorded across all servers and sources (Elements, MCP, hooks, and the Gram SDK) in the selected period."
+                    tooltip="Total tool invocations recorded across all servers and sources in the selected period."
                   />
                 )}
                 {isOverviewPending ? (
@@ -165,7 +203,7 @@ export function ProjectDashboard() {
                     title="End Users"
                     value={overview?.summary.activeUsersCount ?? 0}
                     icon="users"
-                    tooltip="Unique end users identified during the selected period. When chat sessions exist they are counted from chat messages; otherwise they are counted from tool-call hook events."
+                    tooltip="Unique end users identified during the selected period. If agent sessions are captured they are counted from chat messages; otherwise they are counted from tool-call events."
                   />
                 )}
                 {isOverviewPending ? (
@@ -175,7 +213,7 @@ export function ProjectDashboard() {
                     title="Sessions"
                     value={overview?.summary.totalChats ?? 0}
                     icon="message-circle"
-                    tooltip="Chat sessions started in the selected period across Elements, MCP clients, hooks, and any other source that opens a Gram chat."
+                    tooltip="Agent sessions started in the selected period."
                   />
                 )}
               </div>
@@ -197,9 +235,8 @@ export function ProjectDashboard() {
                             suggestions: [
                               {
                                 title: "Top users & usage patterns",
-                                label: "Last 7 days",
-                                prompt:
-                                  "Who are my top 5 end users in the last 7 days, and what is each user's main usage pattern — tool calls, skill invocations, agent sessions, or a mix?",
+                                label: rangeLabel,
+                                prompt: `Who are my top 5 end users in the ${rangeLabel}, and what is each user's main usage pattern — tool calls, skill invocations, agent sessions, or a mix?`,
                               },
                             ],
                           })
@@ -228,7 +265,7 @@ export function ProjectDashboard() {
 
                 <DashboardCard
                   title="Top Servers"
-                  tooltip="Servers ranked by the number of tool calls they served in the selected period, based on logs captured in hook telemetry in addition to MCP servers hosted on Gram."
+                  tooltip="Servers ranked by the number of tool calls they served in the selected period, based on logs captured from user sessions in addition to MCP servers hosted in your project."
                   action={
                     <CardActions>
                       <ExploreWithAIButton
@@ -241,9 +278,8 @@ export function ProjectDashboard() {
                             suggestions: [
                               {
                                 title: "Top servers & hot tools",
-                                label: "Last 7 days",
-                                prompt:
-                                  "Which servers received the most tool calls in the last 7 days, and which specific tools on each server are driving that volume? Lets look at data from all logs including hooks telemetry.",
+                                label: rangeLabel,
+                                prompt: `Which servers received the most tool calls in the ${rangeLabel}, and which specific tools on each server are driving that volume? Lets look at data from all logs including hooks telemetry.`,
                               },
                             ],
                           })
@@ -275,7 +311,7 @@ export function ProjectDashboard() {
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <DashboardCard
                   title="Most Agent Sessions by User"
-                  tooltip="End users ranked by agent activity in the selected period. When chat sessions exist, activity counts chat messages; otherwise it counts tool calls from hook events."
+                  tooltip="End users ranked by agent activity in the selected period. When agent sessions exist, activity counts chat messages; otherwise it counts tool calls from tool events."
                   action={
                     <CardActions>
                       <ExploreWithAIButton
@@ -288,9 +324,8 @@ export function ProjectDashboard() {
                             suggestions: [
                               {
                                 title: "Power users & agent behavior",
-                                label: "Last 7 days",
-                                prompt:
-                                  "For the users with the most agent sessions in the last 7 days, what are the common prompts they send and which tools get invoked most often?",
+                                label: rangeLabel,
+                                prompt: `For the users with the most agent sessions in the ${rangeLabel}, what are the common prompts they send and which tools get invoked most often?`,
                               },
                             ],
                           })
@@ -349,8 +384,8 @@ export function ProjectDashboard() {
                 </DashboardCard>
 
                 <DashboardCard
-                  title="Most Used LLM Clients"
-                  tooltip="LLM clients (e.g. Claude, Cursor, Windsurf) ranked by activity volume in the selected period, identified from client metadata sent with each call."
+                  title="Most Used Agents"
+                  tooltip="Agents (e.g. Claude, Cursor, Codex) ranked by activity volume in the selected period, identified from client metadata sent with each call."
                   action={
                     <CardActions>
                       <ExploreWithAIButton
@@ -363,9 +398,8 @@ export function ProjectDashboard() {
                             suggestions: [
                               {
                                 title: "LLM clients & reliability",
-                                label: "Last 7 days",
-                                prompt:
-                                  "Break down tool-call activity by LLM client in the last 7 days and highlight any clients with unusually high error rates or latency.",
+                                label: rangeLabel,
+                                prompt: `Break down tool-call activity by LLM client in the ${rangeLabel} and highlight any clients with unusually high error rates or latency.`,
                               },
                             ],
                           })

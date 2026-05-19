@@ -10,6 +10,30 @@ ON CONFLICT (id) DO UPDATE SET
   updated_at = clock_timestamp()
 RETURNING *, (xmax = 0) AS was_created;
 
+-- name: UpsertSyncedUser :execrows
+INSERT INTO users (id, email, display_name, photo_url, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at)
+VALUES (@id, @email, @display_name, @photo_url, @workos_id, @workos_created_at, @workos_updated_at, NULL, NULL)
+ON CONFLICT (workos_id) DO UPDATE SET
+  email = EXCLUDED.email,
+  display_name = EXCLUDED.display_name,
+  photo_url = EXCLUDED.photo_url,
+  workos_id = COALESCE(users.workos_id, EXCLUDED.workos_id),
+  workos_created_at = COALESCE(users.workos_created_at, EXCLUDED.workos_created_at),
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  workos_deleted_at = NULL,
+  deleted_at = NULL,
+  updated_at = clock_timestamp()
+WHERE users.workos_updated_at IS NULL OR EXCLUDED.workos_updated_at >= users.workos_updated_at;
+
+-- name: DisableUser :exec
+UPDATE users
+SET workos_updated_at = @workos_updated_at,
+  workos_deleted_at = @workos_deleted_at,
+  deleted_at = COALESCE(deleted_at, clock_timestamp()),
+  updated_at = clock_timestamp()
+WHERE workos_id = @workos_id
+  AND (workos_updated_at IS NULL OR @workos_updated_at >= workos_updated_at);
+
 -- name: GetUser :one
 SELECT * FROM users
 WHERE id = $1;
@@ -47,8 +71,14 @@ SELECT * FROM users
 WHERE id = ANY(@ids::text[]);
 
 -- name: SetUserWorkosID :exec
-UPDATE users 
-SET workos_id = @workos_id, 
+UPDATE users
+SET workos_id = @workos_id,
   updated_at = clock_timestamp()
-WHERE id = @id AND 
+WHERE id = @id AND
   workos_id IS NULL;
+
+-- name: OverwriteUserWorkosID :exec
+UPDATE users
+SET workos_id = @workos_id,
+  updated_at = clock_timestamp()
+WHERE id = @id;

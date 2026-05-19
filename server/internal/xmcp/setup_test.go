@@ -39,11 +39,11 @@ import (
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
-	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
@@ -79,13 +80,14 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *xmcp.Service
-	mcpService     *mcp.Service
-	conn           *pgxpool.Pool
-	sessionManager *sessions.Manager
-	logger         *slog.Logger
-	enc            *encryption.Client
-	authzEngine    *authz.Engine
+	service         *xmcp.Service
+	mcpService      *mcp.Service
+	conn            *pgxpool.Pool
+	sessionManager  *sessions.Manager
+	logger          *slog.Logger
+	enc             *encryption.Client
+	authzEngine     *authz.Engine
+	shadowMCPClient *shadowmcp.Client
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -106,7 +108,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-xmcp-test"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-xmcp-test"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
@@ -122,7 +124,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
-	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, guardianPolicy)
+	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, nil, guardianPolicy)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, nil, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
@@ -139,18 +141,21 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine)
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter)
 	auditLogger := audit.NewLogger()
-	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil)
+	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
+	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, conn, enc, guardianPolicy, cacheAdapter, serverURL)
+	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr)
 
-	svc := xmcp.NewService(logger, tracerProvider, meterProvider, conn, enc, authzEngine, guardianPolicy, posthogClient, billingClient, billingClient, mcpService, serverURL)
+	svc := xmcp.NewService(logger, tracerProvider, meterProvider, conn, enc, authzEngine, shadowMCPClient, guardianPolicy, posthogClient, billingClient, billingClient, mcpService, serverURL)
 
 	return ctx, &testInstance{
-		service:        svc,
-		mcpService:     mcpService,
-		conn:           conn,
-		sessionManager: sessionManager,
-		logger:         logger,
-		enc:            enc,
-		authzEngine:    authzEngine,
+		service:         svc,
+		mcpService:      mcpService,
+		conn:            conn,
+		sessionManager:  sessionManager,
+		logger:          logger,
+		enc:             enc,
+		authzEngine:     authzEngine,
+		shadowMCPClient: shadowMCPClient,
 	}
 }
 
@@ -232,13 +237,11 @@ func seedRemoteMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 
 	remoteServer = seedRemoteMCPServer(t, ctx, ti, projectID, upstreamURL, headers...)
 	mcpServer, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ProjectID:             projectID,
-		EnvironmentID:         uuid.NullUUID{},
-		ExternalOauthServerID: uuid.NullUUID{},
-		OauthProxyServerID:    uuid.NullUUID{},
-		RemoteMcpServerID:     uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
-		ToolsetID:             uuid.NullUUID{},
-		Visibility:            visibility,
+		ProjectID:         projectID,
+		EnvironmentID:     uuid.NullUUID{},
+		RemoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		ToolsetID:         uuid.NullUUID{},
+		Visibility:        visibility,
 	})
 	require.NoError(t, err)
 
@@ -252,105 +255,6 @@ func seedRemoteMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 	require.NoError(t, err)
 
 	return slug, mcpServer, remoteServer
-}
-
-// seedExternalOAuthServer inserts a minimal external_oauth_server_metadata
-// row in the given project so that an mcp_server can reference it via
-// external_oauth_server_id.
-func seedExternalOAuthServer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID) uuid.UUID {
-	t.Helper()
-
-	row, err := oauthrepo.New(ti.conn).CreateExternalOAuthServerMetadata(ctx, oauthrepo.CreateExternalOAuthServerMetadataParams{
-		ProjectID: projectID,
-		Slug:      "ext-" + uuid.NewString()[:8],
-		Metadata:  []byte(`{}`),
-	})
-	require.NoError(t, err)
-	return row.ID
-}
-
-// seedRemoteMCPEndpointWithExternalOAuth wires up the same chain as
-// seedRemoteMCPEndpoint but additionally attaches an
-// external_oauth_server_id to the mcp_server, exercising the public +
-// external-OAuth runtime path where the caller's Authorization header is
-// expected to be forwarded to the upstream MCP server.
-func seedRemoteMCPEndpointWithExternalOAuth(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, upstreamURL string) (slug string) {
-	t.Helper()
-
-	remoteServer := seedRemoteMCPServer(t, ctx, ti, projectID, upstreamURL)
-	externalOAuthID := seedExternalOAuthServer(t, ctx, ti, projectID)
-
-	mcpServer, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ProjectID:             projectID,
-		EnvironmentID:         uuid.NullUUID{},
-		ExternalOauthServerID: uuid.NullUUID{UUID: externalOAuthID, Valid: true},
-		OauthProxyServerID:    uuid.NullUUID{},
-		RemoteMcpServerID:     uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
-		ToolsetID:             uuid.NullUUID{},
-		Visibility:            "public",
-	})
-	require.NoError(t, err)
-
-	slug = randomSlug()
-	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
-		ProjectID:      projectID,
-		CustomDomainID: uuid.NullUUID{},
-		McpServerID:    mcpServer.ID,
-		Slug:           slug,
-	})
-	require.NoError(t, err)
-
-	return slug
-}
-
-// seedOAuthProxyServer inserts a minimal oauth_proxy_servers row in the
-// given project so that an mcp_server can reference it via
-// oauth_proxy_server_id.
-func seedOAuthProxyServer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID) uuid.UUID {
-	t.Helper()
-
-	row, err := oauthrepo.New(ti.conn).UpsertOAuthProxyServer(ctx, oauthrepo.UpsertOAuthProxyServerParams{
-		ProjectID: projectID,
-		Slug:      "proxy-" + uuid.NewString()[:8],
-		Audience:  pgtype.Text{String: "https://example.invalid", Valid: true},
-	})
-	require.NoError(t, err)
-	return row.ID
-}
-
-// seedRemoteMCPEndpointWithOAuthProxy wires up a remote-backed mcp_server
-// configured for the OAuth-proxy token-swap flow. The proxy resolution
-// is currently stubbed in mcp.Service.ResolveOAuthProxyUpstreamToken
-// (returns ""), so this seeding is enough to drive the auth-switch
-// branch in xmcp; once the resolver is implemented it will exercise the
-// full token-swap path.
-func seedRemoteMCPEndpointWithOAuthProxy(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, upstreamURL string) (slug string) {
-	t.Helper()
-
-	remoteServer := seedRemoteMCPServer(t, ctx, ti, projectID, upstreamURL)
-	oauthProxyServerID := seedOAuthProxyServer(t, ctx, ti, projectID)
-
-	mcpServer, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ProjectID:             projectID,
-		EnvironmentID:         uuid.NullUUID{},
-		ExternalOauthServerID: uuid.NullUUID{},
-		OauthProxyServerID:    uuid.NullUUID{UUID: oauthProxyServerID, Valid: true},
-		RemoteMcpServerID:     uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
-		ToolsetID:             uuid.NullUUID{},
-		Visibility:            "public",
-	})
-	require.NoError(t, err)
-
-	slug = randomSlug()
-	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
-		ProjectID:      projectID,
-		CustomDomainID: uuid.NullUUID{},
-		McpServerID:    mcpServer.ID,
-		Slug:           slug,
-	})
-	require.NoError(t, err)
-
-	return slug
 }
 
 // seedToolsetMCPEndpoint wires up a full /x/mcp/{slug} resolution chain for
@@ -372,13 +276,11 @@ func seedToolsetMCPEndpointOnDomain(t *testing.T, ctx context.Context, ti *testI
 	t.Helper()
 
 	mcpServer, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ProjectID:             projectID,
-		EnvironmentID:         uuid.NullUUID{},
-		ExternalOauthServerID: uuid.NullUUID{},
-		OauthProxyServerID:    uuid.NullUUID{},
-		RemoteMcpServerID:     uuid.NullUUID{},
-		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		Visibility:            visibility,
+		ProjectID:         projectID,
+		EnvironmentID:     uuid.NullUUID{},
+		RemoteMcpServerID: uuid.NullUUID{},
+		ToolsetID:         uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		Visibility:        visibility,
 	})
 	require.NoError(t, err)
 

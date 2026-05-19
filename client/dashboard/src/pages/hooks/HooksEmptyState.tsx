@@ -52,11 +52,17 @@ function ProviderCard({
   );
 }
 
-export function HooksEmptyState() {
+export function HooksEmptyState({
+  title = "No logs captured",
+  subtitle = "Install Observability plugin in your AI agent to start capturing tool execution logs",
+}: {
+  title?: string;
+  subtitle?: string;
+} = {}) {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
-  const [setupProvider, setSetupProvider] = useState<"claude" | "cursor">(
-    "claude",
-  );
+  const [setupProvider, setSetupProvider] = useState<
+    "claude" | "cursor" | "codex"
+  >("claude");
   const [showFeatureRequestModal, setShowFeatureRequestModal] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<string>("");
 
@@ -67,7 +73,7 @@ export function HooksEmptyState() {
       return;
     }
 
-    setSetupProvider(provider as "claude" | "cursor");
+    setSetupProvider(provider as "claude" | "cursor" | "codex");
     setShowSetupDialog(true);
   };
 
@@ -81,10 +87,9 @@ export function HooksEmptyState() {
               <Icon name="workflow" className="text-muted-foreground size-8" />
             </div>
             <div>
-              <h2 className="mb-2 text-xl font-semibold">No Hook Logs Yet</h2>
+              <h2 className="mb-2 text-xl font-semibold">{title}</h2>
               <p className="text-muted-foreground mx-auto max-w-md text-sm">
-                Install Gram Hooks in your AI coding assistant to start
-                capturing tool execution logs
+                {subtitle}
               </p>
             </div>
           </div>
@@ -110,8 +115,8 @@ export function HooksEmptyState() {
               <ProviderCard
                 name="Codex"
                 icon={CodexIcon}
-                status="coming-soon"
-                onInstall={() => handleProviderClick("codex", "coming-soon")}
+                status="available"
+                onInstall={() => handleProviderClick("codex", "available")}
               />
               <ProviderCard
                 name="Copilot"

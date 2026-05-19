@@ -14,6 +14,21 @@ import (
 	organizations "github.com/speakeasy-api/gram/server/gen/organizations"
 )
 
+// BuildGetPayload builds the payload for the organizations get endpoint from
+// CLI flags.
+func BuildGetPayload(organizationsGetSessionToken string) (*organizations.GetPayload, error) {
+	var sessionToken *string
+	{
+		if organizationsGetSessionToken != "" {
+			sessionToken = &organizationsGetSessionToken
+		}
+	}
+	v := &organizations.GetPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildSendInvitePayload builds the payload for the organizations sendInvite
 // endpoint from CLI flags.
 func BuildSendInvitePayload(organizationsSendInviteBody string, organizationsSendInviteSessionToken string) (*organizations.SendInvitePayload, error) {
@@ -22,7 +37,7 @@ func BuildSendInvitePayload(organizationsSendInviteBody string, organizationsSen
 	{
 		err = json.Unmarshal([]byte(organizationsSendInviteBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"abc123\",\n      \"role_slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"abc123\",\n      \"role_id\": \"abc123\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -32,8 +47,8 @@ func BuildSendInvitePayload(organizationsSendInviteBody string, organizationsSen
 		}
 	}
 	v := &organizations.SendInvitePayload{
-		Email:    body.Email,
-		RoleSlug: body.RoleSlug,
+		Email:  body.Email,
+		RoleID: body.RoleID,
 	}
 	v.SessionToken = sessionToken
 
@@ -60,6 +75,32 @@ func BuildRevokeInvitePayload(organizationsRevokeInviteInvitationID string, orga
 	return v, nil
 }
 
+// BuildUpdateInviteRolePayload builds the payload for the organizations
+// updateInviteRole endpoint from CLI flags.
+func BuildUpdateInviteRolePayload(organizationsUpdateInviteRoleBody string, organizationsUpdateInviteRoleSessionToken string) (*organizations.UpdateInviteRolePayload, error) {
+	var err error
+	var body UpdateInviteRoleRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationsUpdateInviteRoleBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"invitation_id\": \"abc123\",\n      \"role_id\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationsUpdateInviteRoleSessionToken != "" {
+			sessionToken = &organizationsUpdateInviteRoleSessionToken
+		}
+	}
+	v := &organizations.UpdateInviteRolePayload{
+		InvitationID: body.InvitationID,
+		RoleID:       body.RoleID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListInvitesPayload builds the payload for the organizations listInvites
 // endpoint from CLI flags.
 func BuildListInvitesPayload(organizationsListInvitesSessionToken string) (*organizations.ListInvitesPayload, error) {
@@ -71,19 +112,6 @@ func BuildListInvitesPayload(organizationsListInvitesSessionToken string) (*orga
 	}
 	v := &organizations.ListInvitesPayload{}
 	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildGetInviteByTokenPayload builds the payload for the organizations
-// getInviteByToken endpoint from CLI flags.
-func BuildGetInviteByTokenPayload(organizationsGetInviteByTokenToken string) (*organizations.GetInviteByTokenPayload, error) {
-	var token string
-	{
-		token = organizationsGetInviteByTokenToken
-	}
-	v := &organizations.GetInviteByTokenPayload{}
-	v.Token = token
 
 	return v, nil
 }
@@ -118,6 +146,51 @@ func BuildRemoveUserPayload(organizationsRemoveUserUserID string, organizationsR
 	}
 	v := &organizations.RemoveUserPayload{}
 	v.UserID = userID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildEnableWebhooksPayload builds the payload for the organizations
+// enableWebhooks endpoint from CLI flags.
+func BuildEnableWebhooksPayload(organizationsEnableWebhooksSessionToken string) (*organizations.EnableWebhooksPayload, error) {
+	var sessionToken *string
+	{
+		if organizationsEnableWebhooksSessionToken != "" {
+			sessionToken = &organizationsEnableWebhooksSessionToken
+		}
+	}
+	v := &organizations.EnableWebhooksPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildDisableWebhooksPayload builds the payload for the organizations
+// disableWebhooks endpoint from CLI flags.
+func BuildDisableWebhooksPayload(organizationsDisableWebhooksSessionToken string) (*organizations.DisableWebhooksPayload, error) {
+	var sessionToken *string
+	{
+		if organizationsDisableWebhooksSessionToken != "" {
+			sessionToken = &organizationsDisableWebhooksSessionToken
+		}
+	}
+	v := &organizations.DisableWebhooksPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildCreatePortalSessionPayload builds the payload for the organizations
+// createPortalSession endpoint from CLI flags.
+func BuildCreatePortalSessionPayload(organizationsCreatePortalSessionSessionToken string) (*organizations.CreatePortalSessionPayload, error) {
+	var sessionToken *string
+	{
+		if organizationsCreatePortalSessionSessionToken != "" {
+			sessionToken = &organizationsCreatePortalSessionSessionToken
+		}
+	}
+	v := &organizations.CreatePortalSessionPayload{}
 	v.SessionToken = sessionToken
 
 	return v, nil

@@ -18,6 +18,7 @@ const (
 	CodeGatewayError        Code = "gateway_error"
 	CodeNotImplemented      Code = "not_implemented"
 	CodeInsufficientCredits Code = "insufficient_credits"
+	CodeRateLimitExceeded   Code = "rate_limit_exceeded"
 )
 
 var StatusCodes = map[Code]int{
@@ -34,6 +35,7 @@ var StatusCodes = map[Code]int{
 	CodeGatewayError:        http.StatusBadGateway,
 	CodeNotImplemented:      http.StatusNotImplemented,
 	CodeInsufficientCredits: http.StatusPaymentRequired,
+	CodeRateLimitExceeded:   http.StatusTooManyRequests,
 }
 
 func (c Code) UserMessage() string {
@@ -58,6 +60,8 @@ func (c Code) UserMessage() string {
 		return "requested feature is not implemented"
 	case CodeInsufficientCredits:
 		return "token balance exhausted"
+	case CodeRateLimitExceeded:
+		return "rate limit exceeded"
 	default:
 		return "an unexpected error occurred"
 	}

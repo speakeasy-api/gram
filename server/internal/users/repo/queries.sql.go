@@ -11,6 +11,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const disableUser = `-- name: DisableUser :exec
+UPDATE users
+SET workos_updated_at = $1,
+  workos_deleted_at = $2,
+  deleted_at = COALESCE(deleted_at, clock_timestamp()),
+  updated_at = clock_timestamp()
+WHERE workos_id = $3
+  AND (workos_updated_at IS NULL OR $1 >= workos_updated_at)
+`
+
+type DisableUserParams struct {
+	WorkosUpdatedAt pgtype.Timestamptz
+	WorkosDeletedAt pgtype.Timestamptz
+	WorkosID        pgtype.Text
+}
+
+func (q *Queries) DisableUser(ctx context.Context, arg DisableUserParams) error {
+	_, err := q.db.Exec(ctx, disableUser, arg.WorkosUpdatedAt, arg.WorkosDeletedAt, arg.WorkosID)
+	return err
+}
+
 const getConnectedUserByEmail = `-- name: GetConnectedUserByEmail :one
 SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
@@ -236,11 +257,28 @@ func (q *Queries) GetUsersByWorkosIDs(ctx context.Context, workosIds []string) (
 	return items, nil
 }
 
-const setUserWorkosID = `-- name: SetUserWorkosID :exec
-UPDATE users 
-SET workos_id = $1, 
+const overwriteUserWorkosID = `-- name: OverwriteUserWorkosID :exec
+UPDATE users
+SET workos_id = $1,
   updated_at = clock_timestamp()
-WHERE id = $2 AND 
+WHERE id = $2
+`
+
+type OverwriteUserWorkosIDParams struct {
+	WorkosID pgtype.Text
+	ID       string
+}
+
+func (q *Queries) OverwriteUserWorkosID(ctx context.Context, arg OverwriteUserWorkosIDParams) error {
+	_, err := q.db.Exec(ctx, overwriteUserWorkosID, arg.WorkosID, arg.ID)
+	return err
+}
+
+const setUserWorkosID = `-- name: SetUserWorkosID :exec
+UPDATE users
+SET workos_id = $1,
+  updated_at = clock_timestamp()
+WHERE id = $2 AND
   workos_id IS NULL
 `
 
@@ -252,6 +290,48 @@ type SetUserWorkosIDParams struct {
 func (q *Queries) SetUserWorkosID(ctx context.Context, arg SetUserWorkosIDParams) error {
 	_, err := q.db.Exec(ctx, setUserWorkosID, arg.WorkosID, arg.ID)
 	return err
+}
+
+const upsertSyncedUser = `-- name: UpsertSyncedUser :execrows
+INSERT INTO users (id, email, display_name, photo_url, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, NULL)
+ON CONFLICT (workos_id) DO UPDATE SET
+  email = EXCLUDED.email,
+  display_name = EXCLUDED.display_name,
+  photo_url = EXCLUDED.photo_url,
+  workos_id = COALESCE(users.workos_id, EXCLUDED.workos_id),
+  workos_created_at = COALESCE(users.workos_created_at, EXCLUDED.workos_created_at),
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  workos_deleted_at = NULL,
+  deleted_at = NULL,
+  updated_at = clock_timestamp()
+WHERE users.workos_updated_at IS NULL OR EXCLUDED.workos_updated_at >= users.workos_updated_at
+`
+
+type UpsertSyncedUserParams struct {
+	ID              string
+	Email           string
+	DisplayName     string
+	PhotoUrl        pgtype.Text
+	WorkosID        pgtype.Text
+	WorkosCreatedAt pgtype.Timestamptz
+	WorkosUpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertSyncedUser(ctx context.Context, arg UpsertSyncedUserParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertSyncedUser,
+		arg.ID,
+		arg.Email,
+		arg.DisplayName,
+		arg.PhotoUrl,
+		arg.WorkosID,
+		arg.WorkosCreatedAt,
+		arg.WorkosUpdatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const upsertUser = `-- name: UpsertUser :one

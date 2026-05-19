@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -75,7 +77,7 @@ func assistantLogContextFrom(ctx context.Context) (assistantLogContext, bool) {
 // telemetryRuntimeBackend wraps a concrete RuntimeBackend to emit one
 // telemetry log per operation. Correlation ids, assistant ids and event ids
 // are pulled from context so the interface stays unchanged and any backend
-// (local firecracker, fly, future remotes) inherits the same instrumentation.
+// inherits the same instrumentation.
 type telemetryRuntimeBackend struct {
 	inner  RuntimeBackend
 	logger *telemetry.Logger
@@ -93,6 +95,10 @@ func (t *telemetryRuntimeBackend) SupportsBackend(backend string) bool {
 	return t.inner.SupportsBackend(backend)
 }
 
+func (t *telemetryRuntimeBackend) ServerURL() *url.URL {
+	return t.inner.ServerURL()
+}
+
 func (t *telemetryRuntimeBackend) Ensure(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendEnsureResult, error) {
 	result, err := t.inner.Ensure(ctx, runtime)
 	if err != nil {
@@ -107,37 +113,21 @@ func (t *telemetryRuntimeBackend) Ensure(ctx context.Context, runtime assistantR
 	return result, nil
 }
 
-func (t *telemetryRuntimeBackend) Configure(ctx context.Context, runtime assistantRuntimeRecord, config runtimeStartupConfig) error {
-	if err := t.inner.Configure(ctx, runtime, config); err != nil {
-		t.emit(ctx, runtime, "runtime_configure", "runtime configure failed", "ERROR", err)
-		return fmt.Errorf("runtime configure: %w", err)
-	}
-	t.emit(ctx, runtime, "runtime_configure", "runtime configured", "INFO", nil)
-	return nil
-}
-
 func (t *telemetryRuntimeBackend) RunTurn(
 	ctx context.Context,
 	runtime assistantRuntimeRecord,
+	threadID uuid.UUID,
 	idempotencyKey string,
 	authToken string,
 	prompt string,
 ) error {
 	t.emit(ctx, runtime, "runtime_turn", "runtime turn dispatched", "INFO", nil)
-	if err := t.inner.RunTurn(ctx, runtime, idempotencyKey, authToken, prompt); err != nil {
+	if err := t.inner.RunTurn(ctx, runtime, threadID, idempotencyKey, authToken, prompt); err != nil {
 		t.emit(ctx, runtime, "runtime_turn", "runtime turn errored", "ERROR", err)
 		return fmt.Errorf("runtime run turn: %w", err)
 	}
 	t.emit(ctx, runtime, "runtime_turn", "runtime turn ok", "INFO", nil)
 	return nil
-}
-
-func (t *telemetryRuntimeBackend) ServerURL(ctx context.Context, runtime assistantRuntimeRecord, raw *url.URL) (*url.URL, error) {
-	u, err := t.inner.ServerURL(ctx, runtime, raw)
-	if err != nil {
-		return nil, fmt.Errorf("runtime server url: %w", err)
-	}
-	return u, nil
 }
 
 func (t *telemetryRuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {

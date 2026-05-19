@@ -59,6 +59,26 @@ export default function ExternalMCPDetails() {
       (mcp) => mcp.slug === sourceSlug,
     );
   }, [deployment, sourceSlug]);
+  const sourceOrigin = useMemo(() => {
+    if (source?.organizationMcpCollectionRegistryId) {
+      return {
+        id: source.organizationMcpCollectionRegistryId,
+        label: "Collection",
+      };
+    }
+
+    if (source?.registryId) {
+      return {
+        id: source.registryId,
+        label: "Catalog",
+      };
+    }
+
+    return {
+      id: undefined,
+      label: "External MCP",
+    };
+  }, [source]);
 
   const { data: toolsets, isLoading: isLoadingToolsets } = useListToolsets();
 
@@ -186,8 +206,8 @@ export default function ExternalMCPDetails() {
           {/* Overview Tab */}
           <TabsContent value="overview" className="mt-0 flex-1">
             <div className="mx-auto w-full max-w-[1270px] space-y-6 px-8 py-8">
-              {/* Row 1: Name, Registry ID */}
-              <div className="flex gap-16">
+              {/* Row 1: Name, Origin, Origin ID */}
+              <div className="flex flex-wrap gap-x-16 gap-y-6">
                 <div>
                   <Type muted small className="mb-1">
                     Name
@@ -196,9 +216,19 @@ export default function ExternalMCPDetails() {
                 </div>
                 <div>
                   <Type muted small className="mb-1">
-                    Registry ID
+                    Created from
                   </Type>
-                  <Type className="font-mono">{source?.registryId || "—"}</Type>
+                  <Badge variant="neutral">
+                    <Badge.Text>{sourceOrigin.label}</Badge.Text>
+                  </Badge>
+                </div>
+                <div>
+                  <Type muted small className="mb-1">
+                    Origin ID
+                  </Type>
+                  <Type className="font-mono break-all">
+                    {sourceOrigin.id || "—"}
+                  </Type>
                 </div>
               </div>
 

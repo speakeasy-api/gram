@@ -63,6 +63,7 @@ import {
   type PolicyAction,
 } from "./policy-data";
 import { cn } from "@/lib/utils";
+import { ruleIdToPresidioEntity } from "./rule-ids";
 
 /** Presidio-backed categories */
 const PRESIDIO_CATEGORIES: RuleCategory[] = [
@@ -87,12 +88,15 @@ const ALL_CATEGORIES: RuleCategory[] = [
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
   "destructive_tool",
-  "prompt_attacks",
   "prompt_injection",
   "off_policy",
 ];
 
-/** Derive selected categories from a policy's sources + presidioEntities. */
+/** Derive selected categories from a policy's sources + presidioEntities.
+ *
+ * DETECTION_RULES.id is the canonical `pii.<snake_case>` form; the wire format
+ * stored on the policy is the UPPER_SNAKE entity name Presidio speaks. We
+ * translate at this boundary so callers never see the wire format. */
 function policyToCategories(
   sources: string[],
   presidioEntities?: string[],
@@ -103,18 +107,27 @@ function policyToCategories(
   if (sources.includes("destructive_tool")) cats.add("destructive_tool");
   if (sources.includes("prompt_injection")) cats.add("prompt_injection");
   for (const cat of PRESIDIO_CATEGORIES) {
-    const catEntityIds = DETECTION_RULES[cat].map((r) => r.id);
-    if (catEntityIds.some((id) => presidioEntities?.includes(id))) {
+    const wireEntities = DETECTION_RULES[cat].map((r) =>
+      ruleIdToPresidioEntity(r.id),
+    );
+    if (wireEntities.some((id) => presidioEntities?.includes(id))) {
       cats.add(cat);
     }
   }
   return cats;
 }
 
-/** Derive sources + presidioEntities from selected categories. */
+/** Derive sources, presidioEntities, and promptInjectionRules from selected
+ * categories. Prompt-injection is a single category-level toggle; the
+ * detection engine (deberta classifier vs L0 regex) is chosen per-org via
+ * a feature flag, not by the policy author. promptInjectionRules is left
+ * empty here for backward compatibility with the policy schema.
+ *
+ * `presidioEntities` is translated to UPPER_SNAKE for Presidio's HTTP API. */
 function categoriesToPayload(cats: Set<RuleCategory>) {
   const sources: string[] = [];
   const presidioEntities: string[] = [];
+  const promptInjectionRules: string[] = [];
   if (cats.has("secrets")) sources.push("gitleaks");
   if (cats.has("shadow_mcp")) sources.push("shadow_mcp");
   if (cats.has("destructive_tool")) sources.push("destructive_tool");
@@ -122,12 +135,12 @@ function categoriesToPayload(cats: Set<RuleCategory>) {
   for (const cat of PRESIDIO_CATEGORIES) {
     if (cats.has(cat)) {
       for (const rule of DETECTION_RULES[cat]) {
-        presidioEntities.push(rule.id);
+        presidioEntities.push(ruleIdToPresidioEntity(rule.id));
       }
     }
   }
   if (presidioEntities.length > 0) sources.push("presidio");
-  return { sources, presidioEntities };
+  return { sources, presidioEntities, promptInjectionRules };
 }
 
 /** Map sources to display categories for the table row badges. */
@@ -216,7 +229,7 @@ function PolicyCenterContent() {
   };
 
   const handleSave = () => {
-    const { sources, presidioEntities } =
+    const { sources, presidioEntities, promptInjectionRules } =
       categoriesToPayload(selectedCategories);
     const action =
       sources.includes("destructive_tool") && formAction === "block"
@@ -231,6 +244,7 @@ function PolicyCenterContent() {
             enabled: formEnabled,
             sources,
             presidioEntities,
+            promptInjectionRules,
             action,
             autoName: formAutoName,
             userMessage: formUserMessage,
@@ -245,6 +259,7 @@ function PolicyCenterContent() {
             enabled: formEnabled,
             sources,
             presidioEntities,
+            promptInjectionRules,
             action,
             autoName: formAutoName,
             ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
@@ -311,9 +326,10 @@ function PolicyCenterContent() {
             </Type>
             <Button
               onClick={() => {
-                const { sources, presidioEntities } = categoriesToPayload(
-                  new Set<RuleCategory>(["secrets", "pii"]),
-                );
+                const { sources, presidioEntities, promptInjectionRules } =
+                  categoriesToPayload(
+                    new Set<RuleCategory>(["secrets", "pii"]),
+                  );
                 createMutation.mutate({
                   request: {
                     createRiskPolicyRequestBody: {
@@ -321,6 +337,7 @@ function PolicyCenterContent() {
                       enabled: true,
                       sources,
                       presidioEntities,
+                      promptInjectionRules,
                     },
                   },
                 });
@@ -353,7 +370,7 @@ function PolicyCenterContent() {
             <h2 className="text-lg font-semibold">Risk Policies</h2>
             <p className="text-muted-foreground text-sm">
               Configure risk analysis rules to detect secrets and sensitive
-              information in chat messages.
+              information in agent session interactions.
             </p>
           </div>
           <Button onClick={handleCreate}>
@@ -673,7 +690,8 @@ function PolicySheetBody({
                   />
                 </div>
 
-                {/* Expanded rules list */}
+                {/* Expanded rules list — category-level toggle is the only
+                    user-facing control; sub-rules ride along with it. */}
                 {isAvailable && isExpanded && rules.length > 0 && (
                   <div className="bg-muted/30 border-border border-t px-4 py-2">
                     <div className="space-y-2 py-1">
@@ -685,7 +703,7 @@ function PolicySheetBody({
                           <Checkbox
                             id={rule.id}
                             checked={selectedCategories.has(cat)}
-                            disabled={true}
+                            disabled
                           />
                           <label
                             htmlFor={rule.id}
@@ -758,21 +776,24 @@ function PolicySheetBody({
         </RadioGroup>
       </div>
 
-      {/* Custom message */}
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">Custom Message</Label>
-        <p className="text-muted-foreground text-xs">
-          {formAction === "block"
-            ? "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message."
-            : "Shown alongside flagged findings in the dashboard. Leave blank to use the default message."}
-        </p>
-        <TextArea
-          value={formUserMessage}
-          onChange={setFormUserMessage}
-          placeholder="e.g. This action was blocked by your organization's security policy. Contact your admin for help."
-          rows={3}
-        />
-      </div>
+      {/* Custom message — only relevant for block-action policies that
+          surface a user-facing reason at deny time. Flag-action policies
+          record findings silently, so no message is needed. */}
+      {formAction === "block" && (
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Custom Message</Label>
+          <p className="text-muted-foreground text-xs">
+            Shown to the user when this policy blocks a tool call or prompt.
+            Leave blank to use the default message.
+          </p>
+          <TextArea
+            value={formUserMessage}
+            onChange={setFormUserMessage}
+            placeholder="e.g. This action was blocked by your organization's security policy. Contact your admin for help."
+            rows={3}
+          />
+        </div>
+      )}
 
       {/* Enabled toggle */}
       <div className="flex items-center justify-between">

@@ -140,6 +140,7 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 	now := time.Now().UTC().Format(time.RFC3339)
 	createdRow, err := repo.New(tx).UpsertOrganizationRole(ctx, organizationRoleParams(gramOrgID, workos.Role{
 		ID:          "",
+		Type:        "",
 		Name:        payload.Name,
 		Slug:        roleSlug,
 		Description: payload.Description,
@@ -274,6 +275,7 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 		localRecord.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 		updatedRow, err := repo.New(tx).UpsertOrganizationRole(ctx, organizationRoleParams(gramOrgID, workos.Role{
 			ID:          "",
+			Type:        "",
 			Name:        localRecord.Name,
 			Slug:        localRecord.Slug,
 			Description: localRecord.Description,
@@ -835,6 +837,7 @@ func (r *RoleManager) roleViewFromLocalRole(ctx context.Context, organizationID 
 	return &gen.Role{
 		ID:          role.ID,
 		Name:        role.Name,
+		Slug:        role.Slug,
 		Description: role.Description,
 		IsSystem:    isSystemRole(role.Slug),
 		Grants:      genGrants,
@@ -848,6 +851,7 @@ func roleViewFromLocalRoleAndGrants(role localRole, grants []*gen.RoleGrant) *ge
 	return &gen.Role{
 		ID:          role.ID,
 		Name:        role.Name,
+		Slug:        role.Slug,
 		Description: role.Description,
 		IsSystem:    isSystemRole(role.Slug),
 		Grants:      grants,

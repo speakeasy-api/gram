@@ -23,6 +23,9 @@ type Service interface {
 	// afterAgentResponse, afterAgentThought, preToolUse, postToolUse,
 	// postToolUseFailure, beforeMCPExecution, and afterMCPExecution.
 	Cursor(context.Context, *CursorPayload) (res *CursorHookResult, err error)
+	// Endpoint for Codex hook events. Handles SessionStart, PreToolUse,
+	// PermissionRequest, PostToolUse, UserPromptSubmit, and Stop.
+	Codex(context.Context, *CodexPayload) (res *CodexHookResult, err error)
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
 	// authentication.
 	Logs(context.Context, *LogsPayload) (err error)
@@ -51,7 +54,7 @@ const ServiceName = "hooks"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"claude", "cursor", "logs", "metrics"}
+var MethodNames = [5]string{"claude", "cursor", "codex", "logs", "metrics"}
 
 // ClaudeHookResult is the result type of the hooks service claude method.
 type ClaudeHookResult struct {
@@ -114,6 +117,40 @@ type ClaudePayload struct {
 	Message *string
 	// Notification title (Notification only)
 	Title *string
+}
+
+// CodexHookResult is the result type of the hooks service codex method.
+type CodexHookResult struct {
+	// Permission decision for blocking events: allow or deny
+	Decision *string
+	// Reason for the decision, shown to the user
+	Reason *string
+}
+
+// CodexPayload is the payload type of the hooks service codex method.
+type CodexPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The type of hook event
+	HookEventName string
+	// The Codex session ID
+	SessionID *string
+	// Path to the conversation transcript file
+	TranscriptPath *string
+	// The working directory when the event fired
+	Cwd *string
+	// The model identifier
+	Model *string
+	// The name of the tool
+	ToolName *string
+	// The input to the tool (PreToolUse only)
+	ToolInput any
+	// The output from the tool (PostToolUse only)
+	ToolOutput any
+	// The type of permission being requested (PermissionRequest only)
+	PermissionType *string
+	// The user's prompt text (UserPromptSubmit only)
+	Prompt *string
 }
 
 // CursorHookResult is the result type of the hooks service cursor method.

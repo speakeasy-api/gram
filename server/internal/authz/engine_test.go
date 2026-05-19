@@ -99,68 +99,6 @@ func TestEngineRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 }
 
-func TestResolveRoleSlugs_readsLocalAssignmentsOnly(t *testing.T) {
-	t.Parallel()
-
-	ctx := enterpriseTestCtx(t.Context())
-	conn := newTestDB(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
-
-	seedOrganization(t, ctx, conn, authCtx.ActiveOrganizationID)
-	seedConnectedUser(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, "test@example.com", "Test User", "user_workos_test", "membership_test")
-
-	membership := &countingMembershipFetcher{}
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, staticRBAC(true), staticChallengeLogging(true), membership)
-
-	rolePrincipals, err := engine.resolveRolePrincipals(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
-	require.NoError(t, err)
-	require.Empty(t, rolePrincipals)
-
-	rolePrincipals, err = engine.resolveRolePrincipals(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
-	require.NoError(t, err)
-	require.Empty(t, rolePrincipals)
-	require.Equal(t, 0, membership.calls)
-}
-
-func TestResolveRolePrincipals_returnsAllLocalAssignments(t *testing.T) {
-	t.Parallel()
-
-	ctx := enterpriseTestCtx(t.Context())
-	conn := newTestDB(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
-
-	seedOrganization(t, ctx, conn, authCtx.ActiveOrganizationID)
-	seedConnectedUser(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, "test@example.com", "Test User", "user_workos_test", "membership_test")
-	seedRole(t, ctx, conn, authCtx.ActiveOrganizationID, "custom-alpha")
-	seedRole(t, ctx, conn, authCtx.ActiveOrganizationID, "custom-beta")
-	seedRoleAssignment(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, "user_workos_test", "membership_test", "custom-alpha")
-	seedRoleAssignment(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, "user_workos_test", "membership_test", "custom-beta")
-
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, staticRBAC(true), staticChallengeLogging(true), &countingMembershipFetcher{})
-
-	rolePrincipals, err := engine.resolveRolePrincipals(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
-	require.NoError(t, err)
-	roleSlugs := make([]string, 0, len(rolePrincipals))
-	principalURNs := make([]string, 0, len(rolePrincipals))
-	for _, role := range rolePrincipals {
-		roleSlugs = append(roleSlugs, role.RoleSlug)
-		principalURNs = append(principalURNs, role.PrincipalUrn)
-	}
-	require.ElementsMatch(t, []string{"custom-alpha", "custom-beta"}, roleSlugs)
-	require.Len(t, principalURNs, 2)
-	for _, principalURN := range principalURNs {
-		require.Contains(t, principalURN, "role:organization:")
-	}
-}
-
 func TestEngineRequireAny_mapsDeniedToForbidden(t *testing.T) {
 	t.Parallel()
 
@@ -310,6 +248,109 @@ func TestEngineFilter_skipsLogWhenNoChecks(t *testing.T) {
 	var count uint64
 	require.NoError(t, rows.Scan(&count))
 	require.Equal(t, uint64(0), count)
+}
+
+// --- Engine deny-wins tests ---
+
+func TestEngineRequire_denyGrantBlocksAccess(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeProjectRead, WildcardResource),
+		NewDenyGrant(ScopeProjectRead, "proj_secret"),
+	})
+
+	// Allowed resource — should pass.
+	err = engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj_normal"})
+	require.NoError(t, err)
+
+	// Denied resource — should be forbidden.
+	err = engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj_secret"})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestEngineRequireAny_denySkipsToNextCheck(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeMCPConnect, WildcardResource),
+		NewDenyGrant(ScopeMCPConnect, "tool_blocked"),
+	})
+
+	// One denied, one allowed — RequireAny should succeed via the allowed one.
+	err = engine.RequireAny(ctx,
+		Check{Scope: ScopeMCPConnect, ResourceID: "tool_blocked"},
+		Check{Scope: ScopeMCPConnect, ResourceID: "tool_ok"},
+	)
+	require.NoError(t, err)
+}
+
+func TestEngineRequireAny_allDeniedReturnsForbidden(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeMCPConnect, WildcardResource),
+		NewDenyGrant(ScopeMCPConnect, WildcardResource),
+	})
+
+	err = engine.RequireAny(ctx,
+		Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"},
+		Check{Scope: ScopeMCPConnect, ResourceID: "tool_b"},
+	)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestEngineFilter_denyExcludesResources(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeProjectRead, WildcardResource),
+		NewDenyGrant(ScopeProjectRead, "proj_secret"),
+	})
+
+	resourceIDs, err := engine.Filter(ctx, []Check{
+		{Scope: ScopeProjectRead, ResourceID: "proj_normal"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_secret"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_other"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"proj_normal", "proj_other"}, resourceIDs)
+}
+
+func TestEngineFindMatched_denyReturnsFalse(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeMCPConnect, WildcardResource),
+		NewDenyGrant(ScopeMCPConnect, "tool_blocked"),
+	})
+
+	matched, err := engine.FindMatched(ctx, []Check{
+		{Scope: ScopeMCPConnect, ResourceID: "tool_ok"},
+		{Scope: ScopeMCPConnect, ResourceID: "tool_blocked"},
+		{Scope: ScopeMCPConnect, ResourceID: "tool_also_ok"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []bool{true, false, true}, matched)
 }
 
 func TestEngineFilter_withDimensions(t *testing.T) {
@@ -570,13 +611,181 @@ func TestEngineFilter_skipsForNonEnterpriseAccount(t *testing.T) {
 	require.Equal(t, []string{"proj_123", "proj_456"}, resourceIDs)
 }
 
-type countingMembershipFetcher struct {
-	calls int
+func TestEngineFindMatched_returnsParallelBools(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, "proj_123")})
+
+	matched, err := engine.FindMatched(ctx, []Check{
+		{Scope: ScopeProjectRead, ResourceID: "proj_123"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_456"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []bool{true, false}, matched, "result must align with input order")
 }
 
-func (c *countingMembershipFetcher) GetOrgMembership(context.Context, string, string) (*workos.Member, error) {
-	c.calls++
-	return nil, nil
+func TestEngineFindMatched_preservesOrderAcrossMixedMatches(t *testing.T) {
+	t.Parallel()
+
+	// Grants allow proj_b and proj_d. Input ordering puts allowed entries
+	// at index 1 and 3 — the returned bools must reflect those positions
+	// exactly, with no implicit reordering.
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeProjectRead, "proj_b"),
+		NewGrant(ScopeProjectRead, "proj_d"),
+	})
+
+	matched, err := engine.FindMatched(ctx, []Check{
+		{Scope: ScopeProjectRead, ResourceID: "proj_a"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_b"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_c"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_d"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []bool{false, true, false, true}, matched)
+}
+
+func TestEngineFindMatched_returnsAllTrueWhenEnforcementDisabled(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	sessionID := "session_123"
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID:  "org_123",
+		UserID:                "user_123",
+		ExternalUserID:        "",
+		APIKeyID:              "",
+		SessionID:             &sessionID,
+		ProjectID:             nil,
+		OrganizationSlug:      "",
+		Email:                 nil,
+		AccountType:           "pro",
+		HasActiveSubscription: false,
+		Whitelisted:           false,
+		ProjectSlug:           nil,
+		APIKeyScopes:          nil,
+	})
+
+	matched, err := engine.FindMatched(ctx, []Check{
+		{Scope: ScopeProjectRead, ResourceID: "proj_123"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_456"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []bool{true, true}, matched, "non-enforcing mode mirrors Filter's permissive behavior — every check passes")
+}
+
+func TestEngineFindMatched_emptyInputReturnsEmptySlice(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org_" + uuid.NewString()
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
+
+	matched, err := engine.FindMatched(ctx, nil)
+	require.NoError(t, err)
+	require.Empty(t, matched)
+
+	// Empty input must not emit a challenge log entry.
+	time.Sleep(500 * time.Millisecond)
+	rows, err := chConn.Query(t.Context(), `
+		SELECT count() FROM authz_challenges WHERE organization_id = ? AND operation = 'filter'
+	`, orgID)
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+	require.True(t, rows.Next())
+	var count uint64
+	require.NoError(t, rows.Scan(&count))
+	require.Zero(t, count, "empty input must skip challenge logging")
+}
+
+func TestEngineFindMatched_missingGrantsReturnsError(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+
+	_, err = engine.FindMatched(enterpriseSessionCtx(t), []Check{
+		{Scope: ScopeProjectRead, ResourceID: "proj_123"},
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
+	require.ErrorIs(t, err, ErrMissingGrants)
+}
+
+func TestEngineFindMatched_rejectsInvalidCheck(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
+
+	_, err = engine.FindMatched(ctx, []Check{{Scope: ScopeProjectRead, ResourceID: ""}})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
+	require.ErrorIs(t, err, ErrInvalidCheck)
+}
+
+func TestEngineFindMatched_logsSingleAggregateChallenge(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org_" + uuid.NewString()
+	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, "proj_allowed")})
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+
+	matched, err := engine.FindMatched(ctx, []Check{
+		{Scope: ScopeProjectRead, ResourceID: "proj_allowed"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_denied"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_other"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []bool{true, false, false}, matched)
+
+	// A batched FindMatched must emit exactly one challenge log entry for
+	// the whole input, not N per check — the per-check granularity lives in
+	// the returned slice, not in the log table.
+	require.Eventually(t, func() bool {
+		rows, err := chConn.Query(t.Context(), `
+			SELECT count(), any(outcome), any(reason),
+			       any(filter_candidate_count), any(filter_allowed_count)
+			FROM authz_challenges
+			WHERE organization_id = ? AND operation = 'filter'
+		`, orgID)
+		if err != nil {
+			return false
+		}
+		defer func() { _ = rows.Close() }()
+		if !rows.Next() {
+			return false
+		}
+		var (
+			count                    uint64
+			outcome, reason          string
+			candidateCnt, allowedCnt uint32
+		)
+		if err := rows.Scan(&count, &outcome, &reason, &candidateCnt, &allowedCnt); err != nil {
+			return false
+		}
+		return count == 1 &&
+			outcome == string(authzrepo.OutcomeAllow) &&
+			reason == string(authzrepo.ReasonGrantMatched) &&
+			candidateCnt == 3 && allowedCnt == 1
+	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func enterpriseSessionCtx(t *testing.T) context.Context {
@@ -627,6 +836,49 @@ func scopeOverrideCtx(t *testing.T, isAdmin bool, accountType string) context.Co
 	return contextvalues.SetRBACScopeOverride(ctx, "project:read")
 }
 
+// TestPrepareContext_adminImpersonationGrantsAllScopes verifies that when a
+// Speakeasy admin impersonates a customer org (IsAdmin + AdminOverride), the
+// engine injects wildcard grants for every scope so that Require() calls
+// succeed. Without this, the admin has no WorkOS membership in the target org
+// and every endpoint returns 403.
+func TestPrepareContext_adminImpersonationGrantsAllScopes(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+
+	// Build a context that looks like admin impersonation: enterprise account,
+	// IsAdmin flag, and AdminOverride pointing at the target org.
+	sessionID := "session_admin"
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: "org_customer",
+		UserID:               "user_admin",
+		SessionID:            &sessionID,
+		AccountType:          "enterprise",
+		IsAdmin:              true,
+	})
+	ctx = contextvalues.SetAdminOverrideInContext(ctx, "org_customer")
+
+	ctx, err = engine.PrepareContext(ctx)
+	require.NoError(t, err)
+
+	grants, ok := GrantsFromContext(ctx)
+	require.True(t, ok, "grants should be present in context after PrepareContext")
+	require.NotEmpty(t, grants, "admin impersonation should produce non-empty grants")
+
+	// Every scope should be satisfiable via Require.
+	for _, scope := range []Scope{
+		ScopeOrgRead, ScopeOrgAdmin,
+		ScopeProjectRead, ScopeProjectWrite,
+		ScopeMCPRead, ScopeMCPWrite, ScopeMCPConnect,
+		ScopeEnvironmentRead, ScopeEnvironmentWrite,
+	} {
+		err := engine.Require(ctx, Check{Scope: scope, ResourceID: "org_customer"})
+		require.NoError(t, err, "admin impersonation should satisfy scope %s", scope)
+	}
+}
+
 func TestCanUseOverride_devPlusAdmin(t *testing.T) {
 	t.Parallel()
 	chConn, err := newClickhouseClient(t)
@@ -673,4 +925,49 @@ func TestCanUseOverride_prodPlusNonAdmin(t *testing.T) {
 	enforce, err := engine.ShouldEnforce(ctx)
 	require.NoError(t, err)
 	require.False(t, enforce)
+}
+
+// TestSyncGrants_denyEffectSurvivesDBRoundTrip verifies that deny grants
+// written via SyncGrants are read back with the correct effect by GrantsForRole.
+func TestSyncGrants_denyEffectSurvivesDBRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	conn := newTestDB(t)
+	ctx := t.Context()
+	orgID := "org_deny_roundtrip"
+	roleSlug := "deny-test-role"
+	rolePrincipalURN := "role:organization:" + uuid.NewString()
+
+	seedOrganization(t, ctx, conn, orgID)
+
+	grants := []*RoleGrant{
+		{Scope: string(ScopeMCPConnect)}, // allow wildcard
+		{Scope: string(ScopeMCPConnect), Effect: PolicyEffectDeny, Selectors: []Selector{NewSelector(ScopeMCPConnect, "server_blocked")}}, // deny specific
+	}
+
+	err := SyncGrants(ctx, testenv.NewLogger(t), conn, orgID, roleSlug, rolePrincipalURN, grants)
+	require.NoError(t, err)
+
+	scoped, err := GrantsForRole(ctx, testenv.NewLogger(t), conn, orgID, roleSlug, rolePrincipalURN)
+	require.NoError(t, err)
+
+	var allowGrant, denyGrant *ScopedGrant
+	for _, sg := range scoped {
+		if sg.Scope != string(ScopeMCPConnect) {
+			continue
+		}
+		switch sg.Effect {
+		case PolicyEffectAllow:
+			allowGrant = sg
+		case PolicyEffectDeny:
+			denyGrant = sg
+		}
+	}
+
+	require.NotNil(t, allowGrant, "expected allow grant for mcp:connect")
+	require.Nil(t, allowGrant.Selectors, "wildcard allow should have nil selectors")
+
+	require.NotNil(t, denyGrant, "expected deny grant for mcp:connect")
+	require.Len(t, denyGrant.Selectors, 1)
+	require.Equal(t, "server_blocked", denyGrant.Selectors[0].ResourceID())
 }

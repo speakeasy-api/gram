@@ -11,7 +11,6 @@ import (
 	"unicode/utf8"
 
 	features "github.com/speakeasy-api/gram/server/gen/features"
-	featuresviews "github.com/speakeasy-api/gram/server/gen/features/views"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -35,8 +34,8 @@ type GetProductFeaturesResponseBody struct {
 	SessionCaptureEnabled bool `form:"session_capture_enabled" json:"session_capture_enabled" xml:"session_capture_enabled"`
 	// Whether authz challenge logging to ClickHouse is enabled
 	AuthzChallengeLoggingEnabled bool `form:"authz_challenge_logging_enabled" json:"authz_challenge_logging_enabled" xml:"authz_challenge_logging_enabled"`
-	// Whether assistant memory is enabled
-	AssistantMemoryEnabled bool `form:"assistant_memory_enabled" json:"assistant_memory_enabled" xml:"assistant_memory_enabled"`
+	// Whether webhooks are enabled
+	Webhooks bool `form:"webhooks" json:"webhooks" xml:"webhooks"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -414,13 +413,13 @@ type SetProductFeatureGatewayErrorResponseBody struct {
 
 // NewGetProductFeaturesResponseBody builds the HTTP response body from the
 // result of the "getProductFeatures" endpoint of the "features" service.
-func NewGetProductFeaturesResponseBody(res *featuresviews.GramProductFeaturesView) *GetProductFeaturesResponseBody {
+func NewGetProductFeaturesResponseBody(res *features.GetProductFeaturesResult) *GetProductFeaturesResponseBody {
 	body := &GetProductFeaturesResponseBody{
-		LogsEnabled:                  *res.LogsEnabled,
-		ToolIoLogsEnabled:            *res.ToolIoLogsEnabled,
-		SessionCaptureEnabled:        *res.SessionCaptureEnabled,
-		AuthzChallengeLoggingEnabled: *res.AuthzChallengeLoggingEnabled,
-		AssistantMemoryEnabled:       *res.AssistantMemoryEnabled,
+		LogsEnabled:                  res.LogsEnabled,
+		ToolIoLogsEnabled:            res.ToolIoLogsEnabled,
+		SessionCaptureEnabled:        res.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled: res.AuthzChallengeLoggingEnabled,
+		Webhooks:                     res.Webhooks,
 	}
 	return body
 }
@@ -749,8 +748,8 @@ func ValidateSetProductFeatureRequestBody(body *SetProductFeatureRequestBody) (e
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.FeatureName != nil {
-		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "assistant_memory") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "assistant_memory"}))
+		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging"}))
 		}
 	}
 	if body.FeatureName != nil {

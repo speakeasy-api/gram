@@ -83,11 +83,21 @@ function DotBackground() {
   );
 }
 
-function AuthLayout({ children }: { children: React.ReactNode }) {
+export function AuthLayout({
+  children,
+  topRight,
+}: {
+  children: React.ReactNode;
+  topRight?: React.ReactNode;
+}) {
   return (
     <div className="login-right-pane relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#FAFAFA] p-8 md:w-1/2 md:p-16">
       {/* Moving dot background — scrolls on hover */}
       <DotBackground />
+
+      {topRight && (
+        <div className="absolute top-6 right-6 z-10">{topRight}</div>
+      )}
 
       <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-8">
         <div className="flex flex-col items-center gap-4">
@@ -104,8 +114,7 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
           <div className="flex flex-col gap-2 text-center text-sm dark:text-black">
             <p>Securely scale AI usage across your organization.</p>
             <p className="text-[#8B8684]">
-              Control plane for distribution of MCP, Skills, Assistants and
-              more.
+              Control plane to govern MCP, Skills, and Assistants
             </p>
           </div>
           <FeatureBadges />

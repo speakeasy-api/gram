@@ -5,13 +5,15 @@ import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
 import { MCPTableRow, MCPTableRowSkeleton } from "@/components/mcp/MCPTableRow";
 import { Page } from "@/components/page-layout";
 import { DotTable } from "@/components/ui/dot-table";
+import { SearchBar } from "@/components/ui/search-bar";
+import { Type } from "@/components/ui/type";
 import { ViewToggle } from "@/components/ui/view-toggle";
 import { useViewMode } from "@/components/ui/use-view-mode";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { Button } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useToolsets } from "../toolsets/useToolsets";
@@ -56,6 +58,24 @@ export function MCPOverview() {
   const [viewMode, setViewMode] = useViewMode();
   const [newMcpDialogOpen, setNewMcpDialogOpen] = useState(false);
   const [newMcpServerName, setNewMcpServerName] = useState("");
+  const [search, setSearch] = useState("");
+
+  const filteredToolsets = useMemo(() => {
+    const query = search.toLowerCase();
+    return [...toolsets]
+      .filter((toolset) => {
+        if (!query) return true;
+        return (
+          toolset.name.toLowerCase().includes(query) ||
+          toolset.slug.toLowerCase().includes(query)
+        );
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [toolsets, search]);
+
+  const showSearch = !isLoading && toolsets.length > 6;
+  const showNoMatches =
+    !isLoading && search !== "" && filteredToolsets.length === 0;
 
   const handleCreateMcpServerSubmit = async () => {
     const result = await client.toolsets.create({
@@ -142,12 +162,24 @@ export function MCPOverview() {
         </Page.Section.CTA>
         <Page.Section.CTA>{newMcpServerButton}</Page.Section.CTA>
         <Page.Section.Description className="max-w-2xl">
-          Each source is exposed as an MCP server. First-party sources like
-          functions and OpenAPI specs are private by default, while catalog
-          servers are public.
+          Sources exposed as MCP servers. These include all types of sources
+          such as OpenAPI, functions, third-party servers from the catalog, and
+          custom remote MCPs imported by URL.
         </Page.Section.Description>
         <Page.Section.Body>
-          {viewMode === "grid" ? (
+          {showSearch && (
+            <SearchBar
+              value={search}
+              onChange={setSearch}
+              placeholder="Search MCP servers..."
+              className="mb-4"
+            />
+          )}
+          {showNoMatches ? (
+            <Type muted className="py-8 text-center">
+              No MCP servers matching &ldquo;{search}&rdquo;
+            </Type>
+          ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               {isLoading ? (
                 <>
@@ -155,7 +187,7 @@ export function MCPOverview() {
                   <MCPCardSkeleton />
                 </>
               ) : (
-                toolsets.map((toolset) => (
+                filteredToolsets.map((toolset) => (
                   <MCPCard key={toolset.id} toolset={toolset} />
                 ))
               )}
@@ -175,7 +207,7 @@ export function MCPOverview() {
                   <MCPTableRowSkeleton />
                 </>
               ) : (
-                toolsets.map((toolset) => (
+                filteredToolsets.map((toolset) => (
                   <MCPTableRow key={toolset.id} toolset={toolset} />
                 ))
               )}

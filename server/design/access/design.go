@@ -478,6 +478,12 @@ var RoleGrantModel = Type("RoleGrant", func() {
 		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write")
 	})
 
+	Attribute("effect", String, func() {
+		Description("Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.")
+		Enum("allow", "deny")
+		Default("allow")
+	})
+
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
 		Description("Selector constraints. Null means unrestricted.")
 	})
@@ -491,6 +497,13 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 		Description("The scope slug this grant applies to.")
 		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write")
 	})
+
+	Attribute("effect", String, func() {
+		Description("Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.")
+		Enum("allow", "deny")
+		Default("allow")
+	})
+
 	Attribute("sub_scopes", ArrayOf(String), func() {
 		Description("The inherited scopes the primary scope grants.")
 		Elem(func() {
@@ -504,10 +517,11 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 })
 
 var RoleModel = Type("Role", func() {
-	Required("id", "name", "description", "is_system", "grants", "member_count", "created_at", "updated_at")
+	Required("id", "name", "slug", "description", "is_system", "grants", "member_count", "created_at", "updated_at")
 
 	Attribute("id", String, "Unique role identifier.")
 	Attribute("name", String, "Display name of the role.")
+	Attribute("slug", String, "Stable WorkOS role slug.")
 	Attribute("description", String, "Human-readable description.")
 	Attribute("is_system", Boolean, "Whether this is a built-in system role that cannot be deleted.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants assigned to this role.")
@@ -625,7 +639,7 @@ var AuthzChallengeModel = Type("AuthzChallenge", func() {
 		Enum("allow", "deny", "error")
 	})
 	Attribute("reason", String, func() {
-		Enum("grant_matched", "no_grants", "scope_unsatisfied", "invalid_check", "rbac_skipped_apikey", "dev_override")
+		Enum("grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override")
 	})
 	Attribute("scope", String, "Scope that was checked.")
 	Attribute("resource_kind", String, "Resource kind of the check.")
@@ -685,7 +699,7 @@ var ChallengeBucketModel = Type("ChallengeBucket", func() {
 		Enum("allow", "deny", "error")
 	})
 	Attribute("reason", String, func() {
-		Enum("grant_matched", "no_grants", "scope_unsatisfied", "invalid_check", "rbac_skipped_apikey", "dev_override")
+		Enum("grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override")
 	})
 	Attribute("scope", String, "Scope that was checked.")
 	Attribute("resource_kind", String, "Resource kind of the check.")

@@ -1,4 +1,8 @@
 import { useSdkClient } from "@/contexts/Sdk";
+import {
+  onboardExternalMcpToUserSessions as onboardToolsetToUserSessions,
+  resolveExternalMcpUserSessionOAuthConfig,
+} from "@/lib/externalMcpUserSessions";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import {
   useDeployment,
@@ -53,6 +57,7 @@ export interface ServerToolsetStatus {
 
 interface WorkflowBase {
   projectSlug?: string;
+  isInstallStateLoading: boolean;
   isServerAlreadyInstalled: (server: PulseMCPServer) => boolean;
   reset: () => void;
 }
@@ -116,6 +121,7 @@ export type ExternalMcpReleaseWorkflow =
 interface UseExternalMcpReleaseWorkflowOptions {
   servers: PulseMCPServer[];
   projectSlug?: string;
+  onboardExternalMcpToUserSessions?: boolean;
 }
 
 function buildInitialToolsetStatuses(
@@ -158,14 +164,14 @@ function buildForkPrefillName(server: PulseMCPServer): string {
 export function useExternalMcpReleaseWorkflow({
   servers,
   projectSlug,
+  onboardExternalMcpToUserSessions = false,
 }: UseExternalMcpReleaseWorkflowOptions): ExternalMcpReleaseWorkflow {
   const client = useSdkClient();
-  const { data: toolsetsResult } = useListToolsets(
+  const { data: toolsetsResult, isLoading: toolsetsLoading } = useListToolsets(
     projectSlug ? { gramProject: projectSlug } : undefined,
   );
-  const { data: latestDeploymentResult } = useLatestDeployment(
-    projectSlug ? { gramProject: projectSlug } : undefined,
-  );
+  const { data: latestDeploymentResult, isLoading: latestDeploymentLoading } =
+    useLatestDeployment(projectSlug ? { gramProject: projectSlug } : undefined);
   const latestDeployment = latestDeploymentResult?.deployment;
 
   const existingSpecifiers = useMemo(
@@ -371,7 +377,7 @@ export function useExternalMcpReleaseWorkflow({
               slug: toolset.slug,
               updateToolsetRequestBody: {
                 mcpEnabled: true,
-                mcpIsPublic: true,
+                mcpIsPublic: !onboardExternalMcpToUserSessions,
               },
             },
             undefined,
@@ -383,6 +389,31 @@ export function useExternalMcpReleaseWorkflow({
             undefined,
             reqOpts,
           );
+
+          if (onboardExternalMcpToUserSessions) {
+            const oauth =
+              resolveExternalMcpUserSessionOAuthConfig(updatedToolset);
+            if (oauth) {
+              await onboardToolsetToUserSessions({
+                client,
+                toolsetSlug: updatedToolset.slug,
+                toolsetName: updatedToolset.name,
+                oauth,
+                options: reqOpts,
+              });
+            } else {
+              await client.toolsets.updateBySlug(
+                {
+                  slug: toolset.slug,
+                  updateToolsetRequestBody: {
+                    mcpIsPublic: true,
+                  },
+                },
+                undefined,
+                reqOpts,
+              );
+            }
+          }
 
           setToolsetStatuses((prev) =>
             prev.map((s, idx) =>
@@ -635,6 +666,7 @@ export function useExternalMcpReleaseWorkflow({
 
   const base: WorkflowBase = {
     projectSlug,
+    isInstallStateLoading: toolsetsLoading || latestDeploymentLoading,
     isServerAlreadyInstalled,
     reset,
   };

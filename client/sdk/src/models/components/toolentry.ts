@@ -13,6 +13,9 @@ import {
   ToolAnnotations$inboundSchema,
 } from "./toolannotations.js";
 
+/**
+ * The type of tool
+ */
 export const ToolEntryType = {
   Http: "http",
   Prompt: "prompt",
@@ -20,6 +23,9 @@ export const ToolEntryType = {
   Platform: "platform",
   Externalmcp: "externalmcp",
 } as const;
+/**
+ * The type of tool
+ */
 export type ToolEntryType = ClosedEnum<typeof ToolEntryType>;
 
 export type ToolEntry = {
@@ -43,6 +49,9 @@ export type ToolEntry = {
    * The URN of the tool
    */
   toolUrn: string;
+  /**
+   * The type of tool
+   */
   type: ToolEntryType;
 };
 

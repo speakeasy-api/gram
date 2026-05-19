@@ -6,6 +6,7 @@ import {
   InsightsProvider,
 } from "@/components/insights-sidebar";
 import { Page } from "@/components/page-layout";
+import { Heading } from "@/components/ui/heading";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -91,6 +92,62 @@ function getSubjectLabel(log: AuditLog) {
   return log.subjectDisplayName || log.subjectSlug || log.subjectId;
 }
 
+function recordString(value: unknown, key: string): string | undefined {
+  if (value == null || typeof value !== "object") return undefined;
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "string" && field !== "" ? field : undefined;
+}
+
+function formatRoleSlug(roleSlug: string) {
+  return roleSlug.replace(/[-_]/g, " ");
+}
+
+function inviteCreatedRole(log: AuditLog): string | undefined {
+  return recordString(log.metadata, "role_slug");
+}
+
+function inviteRoleBefore(log: AuditLog): string | undefined {
+  return (
+    recordString(log.beforeSnapshot, "RoleSlug") ??
+    recordString(log.beforeSnapshot, "role_slug")
+  );
+}
+
+function inviteRoleAfter(log: AuditLog): string | undefined {
+  return (
+    recordString(log.afterSnapshot, "RoleSlug") ??
+    recordString(log.afterSnapshot, "role_slug")
+  );
+}
+
+function inviteSubjectText(log: AuditLog) {
+  const subject = getSubjectLabel(log);
+
+  if (log.action === "organization_invitation:create") {
+    const role = inviteCreatedRole(log);
+    return role ? `${subject} as ${formatRoleSlug(role)}` : subject;
+  }
+
+  if (log.action === "organization_invitation:update_role") {
+    const before = inviteRoleBefore(log);
+    const after = inviteRoleAfter(log);
+    let roleText = "";
+    if (before && after && before !== after) {
+      roleText = ` from ${formatRoleSlug(before)} to ${formatRoleSlug(after)}`;
+    } else if (after) {
+      roleText = ` to ${formatRoleSlug(after)}`;
+    }
+
+    return `${subject}${roleText}`;
+  }
+
+  return subject;
+}
+
+function renderInviteSubject(log: AuditLog, monoClass: string) {
+  return <span className={monoClass}>{inviteSubjectText(log)}</span>;
+}
+
 function truncateMiddle(value: string, start = 18, end = 16) {
   if (value.length <= start + end + 1) {
     return value;
@@ -112,6 +169,11 @@ function getResourceLabel(resource: string) {
       return "environment";
     case "mcp_metadata":
       return "MCP metadata";
+    case "otel_forwarding":
+    case "otel_forwarding_config":
+      return "OpenTelemetry forwarding";
+    case "organization_invitation":
+      return "organization invitation";
     case "plugin":
       return "plugin";
     case "project":
@@ -138,6 +200,10 @@ function formatAuditAction(action: string) {
 
 function renderSubject(log: AuditLog, orgSlug: string) {
   const monoClass = "font-mono text-xs text-muted-foreground";
+
+  if (log.subjectType === "organization_invitation") {
+    return renderInviteSubject(log, monoClass);
+  }
 
   if (log.subjectType === "deployment" && log.projectSlug) {
     return (
@@ -210,7 +276,80 @@ function renderSubject(log: AuditLog, orgSlug: string) {
     );
   }
 
+  if (
+    log.action === "organization:webhooks_enabled" ||
+    log.action === "organization:webhooks_disabled"
+  ) {
+    return null;
+  }
+
+  if (log.subjectType === "otel_forwarding_config") {
+    // The subject ID is a UUID with no human-meaningful slug or display name.
+    // The verb text is self-contained (e.g., "enabled OpenTelemetry forwarding
+    // to otel.example.com"), so we omit the subject column entirely.
+    return null;
+  }
+
   return <span className={monoClass}>{getSubjectLabel(log)}</span>;
+}
+
+function endpointHost(raw: unknown): string {
+  if (typeof raw !== "string" || raw === "") return "";
+  try {
+    return new URL(raw).host || raw;
+  } catch {
+    return raw;
+  }
+}
+
+function describeOtelForwardingUpsert(log: AuditLog): string {
+  const before = log.beforeSnapshot as Record<string, unknown> | undefined;
+  const after = log.afterSnapshot as Record<string, unknown> | undefined;
+  if (!after) return "updated OpenTelemetry forwarding configuration";
+
+  const afterHost = endpointHost(after["endpoint_url"]);
+  const afterEnabled = Boolean(after["enabled"]);
+  const afterHeaders = Array.isArray(after["header_names"])
+    ? (after["header_names"] as string[])
+    : [];
+
+  if (!before) {
+    return afterEnabled
+      ? `enabled OpenTelemetry forwarding${afterHost ? ` to ${afterHost}` : ""}`
+      : `configured OpenTelemetry forwarding${afterHost ? ` to ${afterHost}` : ""} (disabled)`;
+  }
+
+  const beforeHost = endpointHost(before["endpoint_url"]);
+  const beforeEnabled = Boolean(before["enabled"]);
+  const beforeHeaders = Array.isArray(before["header_names"])
+    ? (before["header_names"] as string[])
+    : [];
+
+  const enabledChanged = beforeEnabled !== afterEnabled;
+  const endpointChanged = beforeHost !== afterHost;
+  const headersChanged =
+    JSON.stringify([...beforeHeaders].sort()) !==
+    JSON.stringify([...afterHeaders].sort());
+
+  const changedCount = [enabledChanged, endpointChanged, headersChanged].filter(
+    Boolean,
+  ).length;
+
+  if (changedCount === 1) {
+    if (enabledChanged) {
+      return afterEnabled
+        ? "enabled OpenTelemetry forwarding"
+        : "disabled OpenTelemetry forwarding";
+    }
+    if (endpointChanged) {
+      return `changed OpenTelemetry forwarding endpoint to ${afterHost || "(unset)"}`;
+    }
+    if (headersChanged) {
+      return "updated OpenTelemetry forwarding headers";
+    }
+  }
+
+  return "updated OpenTelemetry forwarding configuration";
 }
 
 function describeToolsetUpdate(log: AuditLog): string {
@@ -300,6 +439,10 @@ function renderVerb(log: AuditLog): string {
       return "deleted custom domain";
     case "mcp_metadata:update":
       return "updated MCP metadata for";
+    case "otel_forwarding:upsert":
+      return describeOtelForwardingUpsert(log);
+    case "otel_forwarding:delete":
+      return "removed OpenTelemetry forwarding configuration";
     case "asset:create":
       return "uploaded asset";
     case "plugin:create":
@@ -318,6 +461,16 @@ function renderVerb(log: AuditLog): string {
       return "updated plugin access assignments";
     case "plugin:publish":
       return "published plugins";
+    case "organization:webhooks_enabled":
+      return "enabled webhooks delivery";
+    case "organization:webhooks_disabled":
+      return "disabled webhooks delivery";
+    case "organization_invitation:create":
+      return "invited";
+    case "organization_invitation:revoke":
+      return "revoked invite for";
+    case "organization_invitation:update_role":
+      return "changed invite role for";
     default: {
       const [resource = "activity", verb = "updated"] = log.action.split(":");
       return `${verb.replace(/_/g, " ")} ${getResourceLabel(resource)}`;
@@ -392,10 +545,10 @@ function AuditLogRow({
         <span>
           <StrongName>
             {highlightMatch ? highlightMatch(actorLabel) : actorLabel}
-          </StrongName>
-          <span className="text-muted-foreground mx-1.5">
+          </StrongName>{" "}
+          <span className="text-muted-foreground">
             {highlightMatch ? highlightMatch(verbText) : verbText}
-          </span>
+          </span>{" "}
           {renderSubject(log, orgSlug)}
         </span>
         {showDiff && (
@@ -805,7 +958,10 @@ export function OrgAuditLogsInner() {
     const actor = getActorLabel(log);
     const action = formatAuditAction(log.action);
     const verb = renderVerb(log);
-    const subject = getSubjectLabel(log);
+    const subject =
+      log.subjectType === "organization_invitation"
+        ? inviteSubjectText(log)
+        : getSubjectLabel(log);
     return `${actor} ${action} ${verb} ${subject}`;
   }, []);
 
@@ -1022,10 +1178,12 @@ export function OrgAuditLogsInner() {
     <div className="flex w-full flex-col gap-4">
       <InsightsConfig contextInfo={insightsContext} />
       <div>
-        <Type className="font-medium">Recent activity across Gram</Type>
+        <Heading variant="h4" className="mb-2">
+          Recent activity across your organization
+        </Heading>
         <Type muted small className="mt-1">
           Review organization-wide and project-level actions in chronological
-          order.
+          order. Search by project, actions, or actor.
         </Type>
       </div>
 

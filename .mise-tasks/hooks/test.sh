@@ -69,12 +69,12 @@ else
 fi
 echo ""
 
-if [ "${usage_local:-}" = "true" ] || ! git diff --quiet HEAD -- hooks/; then
+if [ "${usage_local:-}" = "true" ] || ! git diff --quiet main -- hooks/; then
   echo "Using local plugin directory: ./hooks/plugin-claude-test"
   echo ""
   exec claude --plugin-dir ./hooks/plugin-claude-test --debug
 else
-  echo "No local changes in hooks/ — using published plugin"
+  echo "No branch changes in hooks/ vs main — using published plugin"
   echo ""
   exec claude --debug
 fi

@@ -429,8 +429,13 @@ func roleGrantPayloads(grants []*gen.RoleGrant) []*authz.RoleGrant {
 			selectors = append(selectors, genSelectorToAuthz(s))
 		}
 
+		effect := authz.PolicyEffect(grant.Effect)
+		if effect == "" {
+			effect = authz.PolicyEffectAllow
+		}
 		out = append(out, &authz.RoleGrant{
 			Scope:     grant.Scope,
+			Effect:    effect,
 			Selectors: selectors,
 		})
 	}
@@ -480,7 +485,7 @@ func scopedGrantToGenRoleGrant(g *authz.ScopedGrant) *gen.RoleGrant {
 	for _, sel := range g.Selectors {
 		selectors = append(selectors, authzSelectorToGen(sel))
 	}
-	return &gen.RoleGrant{Scope: g.Scope, Selectors: selectors}
+	return &gen.RoleGrant{Scope: g.Scope, Effect: string(g.Effect), Selectors: selectors}
 }
 
 // allScopesGrants returns unrestricted grants for every known scope.
@@ -507,7 +512,7 @@ func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 		for _, sel := range g.Selectors {
 			selectors = append(selectors, authzSelectorToGen(sel))
 		}
-		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, SubScopes: g.SubScopes, Selectors: selectors})
+		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, Effect: string(g.Effect), SubScopes: g.SubScopes, Selectors: selectors})
 	}
 	return out
 }
@@ -515,7 +520,7 @@ func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 func connectedUser(ctx context.Context, db database.DBTX, organizationID string, userID string) (usersrepo.User, error) {
 	hasRelationship, err := orgrepo.New(db).HasOrganizationUserRelationship(ctx, orgrepo.HasOrganizationUserRelationshipParams{
 		OrganizationID: organizationID,
-		UserID:         userID,
+		UserID:         conv.ToPGText(userID),
 	})
 	if err != nil {
 		return usersrepo.User{}, fmt.Errorf("check organization user relationship: %w", err)

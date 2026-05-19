@@ -44,12 +44,19 @@ function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
       <Type small muted className="mb-4 max-w-md text-center">
         Create an assistant to wire a model up to your MCP servers.
       </Type>
-      <Button onClick={onCreate}>
-        <Button.LeftIcon>
-          <Plus className="h-4 w-4" />
-        </Button.LeftIcon>
-        <Button.Text>Create Assistant</Button.Text>
-      </Button>
+      <RequireScope
+        scope={["project:write", "mcp:write"]}
+        all
+        level="component"
+        reason="You don't have permission to create assistants."
+      >
+        <Button onClick={onCreate}>
+          <Button.LeftIcon>
+            <Plus className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Create Assistant</Button.Text>
+        </Button>
+      </RequireScope>
     </div>
   );
 }
@@ -70,17 +77,26 @@ export default function AssistantsIndex() {
       />
     ) : (
       <Page.Section>
-        <Page.Section.Title>Assistants</Page.Section.Title>
+        <Page.Section.Title stage="preview">Assistants</Page.Section.Title>
         <Page.Section.Description>
-          Configure model, instructions, and MCP servers for each assistant.
+          Claude Code-inspired secure Assistants. Every assistant connects
+          through the MCPs and Skills your org already uses, with identity,
+          guardrails, and audit built in. Deployed to Slack.
         </Page.Section.Description>
         <Page.Section.CTA>
-          <Button onClick={() => routes.assistants.newAssistant.goTo()}>
-            <Button.LeftIcon>
-              <Plus className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>New Assistant</Button.Text>
-          </Button>
+          <RequireScope
+            scope={["project:write", "mcp:write"]}
+            all
+            level="component"
+            reason="You don't have permission to create assistants."
+          >
+            <Button onClick={() => routes.assistants.newAssistant.goTo()}>
+              <Button.LeftIcon>
+                <Plus className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>New Assistant</Button.Text>
+            </Button>
+          </RequireScope>
         </Page.Section.CTA>
         <Page.Section.Body>
           {isLoading ? (
@@ -107,8 +123,8 @@ export default function AssistantsIndex() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <UsageSection />
         {content}
+        <UsageSection />
       </Page.Body>
     </Page>
   );

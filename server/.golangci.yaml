@@ -148,6 +148,8 @@ linters:
               disabled: false
             audit-event-urn-typing:
               disabled: false
+            audit-action-naming:
+              disabled: true
     gosec:
       excludes:
         # Temporarily ignore this lint rule because it needs to be a separate
@@ -324,10 +326,12 @@ linters:
         - "go.temporal.io/sdk/temporal.NewApplicationErrorWithCause("
         - "go.temporal.io/sdk/temporal.NewNonRetryableApplicationError("
         - "go.temporal.io/sdk/workflow.NewContinueAsNewError("
+        - "go.temporal.io/sdk/workflow.Sleep("
         - "(go.temporal.io/sdk/client.Client).ExecuteWorkflow("
         - "(go.temporal.io/sdk/internal.WorkflowInboundInterceptor).ExecuteWorkflow("
         - "(go.temporal.io/sdk/internal.ActivityInboundInterceptor).ExecuteActivity("
         - "(go.temporal.io/sdk/internal.Future).Get("
+        - "(github.com/stretchr/testify/mock.Arguments).Error("
 
         - "github.com/speakeasy-api/gram/server/internal/oops.C("
         - "github.com/speakeasy-api/gram/server/internal/oops.E("

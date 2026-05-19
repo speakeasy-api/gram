@@ -44,6 +44,7 @@ type RiskScanner interface {
 type ShadowMCPPolicy struct {
 	ID          string
 	Name        string
+	Version     int64
 	UserMessage *string // nil/empty means "render the default message"
 }
 
@@ -104,22 +105,28 @@ var _ RiskScanner = (*Scanner)(nil)
 type Scanner struct {
 	logger     *slog.Logger
 	repo       *repo.Queries
-	gitleaksMu sync.Mutex       // DetectString is not concurrent-safe
-	detector   *detect.Detector // pre-created, reused across scans
-	piiScanner ra.PIIScanner    // nil if Presidio is unavailable
+	gitleaksMu sync.Mutex                 // DetectString is not concurrent-safe
+	detector   *detect.Detector           // pre-created, reused across scans
+	piiScanner ra.PIIScanner              // nil if Presidio is unavailable
+	piScanner  *ra.PromptInjectionScanner // never nil; stub-classifier when L1 disabled
 	metrics    *scannerMetrics
 }
 
 // NewScanner creates a RiskScanner. piiScanner may be nil if Presidio
-// is not available in the server process. Pre-creates a gitleaks detector
-// to avoid per-scan rule compilation on the real-time hook path; returns
-// an error if the detector cannot be built (init relies on viper global
-// state and should never realistically fail, but propagating the error
-// keeps startup honest).
-func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner, meterProvider metric.MeterProvider) (*Scanner, error) {
+// is not available in the server process. piScanner must be non-nil; pass a
+// scanner wrapping ra.StubClassifier{} when --pi-classifier-url is empty.
+// Pre-creates a gitleaks detector to avoid per-scan rule compilation on the
+// real-time hook path; returns an error if the detector cannot be built
+// (init relies on viper global state and should never realistically fail,
+// but propagating the error keeps startup honest).
+func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner, piScanner *ra.PromptInjectionScanner, meterProvider metric.MeterProvider) (*Scanner, error) {
 	det, err := ra.SharedDetector()
 	if err != nil {
 		return nil, fmt.Errorf("create gitleaks detector: %w", err)
+	}
+
+	if piScanner == nil {
+		piScanner = ra.NewPromptInjectionScanner(logger, ra.StubClassifier{}, nil)
 	}
 
 	return &Scanner{
@@ -128,6 +135,7 @@ func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner,
 		gitleaksMu: sync.Mutex{},
 		detector:   det,
 		piiScanner: piiScanner,
+		piScanner:  piScanner,
 		metrics:    newScannerMetrics(meterProvider, logger),
 	}, nil
 }
@@ -205,6 +213,7 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, projectID u
 			return &ShadowMCPPolicy{
 				ID:          p.ID.String(),
 				Name:        p.Name,
+				Version:     p.Version,
 				UserMessage: conv.FromPGText[string](p.UserMessage),
 			}, nil
 		}
@@ -281,7 +290,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 				}, nil
 			}
 		case ra.SourcePromptInjection:
-			findings, err := ra.DetectPromptInjection(ctx, text)
+			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID)
 			if err != nil {
 				return nil, fmt.Errorf("prompt injection scan: %w", err)
 			}

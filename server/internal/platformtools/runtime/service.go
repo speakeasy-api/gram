@@ -19,7 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
@@ -103,11 +103,21 @@ func NewService(
 // svc. Pass the same slice to every consumer so dispatch and listing share
 // one set of executor instances.
 func MemoryExternalTools(svc *memory.MemoryService) []platformtools.ExternalTool {
-	feature := string(productfeatures.FeatureAssistantMemory)
 	return []platformtools.ExternalTool{
-		{Executor: platformmemory.NewRememberTool(svc), RequiredFeature: feature},
-		{Executor: platformmemory.NewRecallTool(svc), RequiredFeature: feature},
-		{Executor: platformmemory.NewForgetTool(svc), RequiredFeature: feature},
+		{Executor: platformmemory.NewRememberTool(svc), RequiredFeature: ""},
+		{Executor: platformmemory.NewRecallTool(svc), RequiredFeature: ""},
+		{Executor: platformmemory.NewForgetTool(svc), RequiredFeature: ""},
+	}
+}
+
+// TriggerExternalTools returns the assistant self-config trigger tools
+// (list + configure). Both variants pin target_kind/target_ref to the calling
+// assistant principal and strip those fields from the schema so the LLM
+// cannot redirect a trigger at a sibling assistant in the same project.
+func TriggerExternalTools(db *pgxpool.Pool, app *bgtriggers.App, auditLogger *audit.Logger) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformtriggers.NewAssistantListTriggersTool(db, app), RequiredFeature: ""},
+		{Executor: platformtriggers.NewAssistantConfigureTriggerTool(db, app, auditLogger), RequiredFeature: ""},
 	}
 }
 

@@ -27,10 +27,14 @@ import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
 import { Organizations } from "./organizations.js";
+import { OtelForwarding } from "./otelforwarding.js";
 import { Packages } from "./packages.js";
 import { Plugins } from "./plugins.js";
 import { Projects } from "./projects.js";
 import { RemoteMcp } from "./remotemcp.js";
+import { RemoteSessionClients } from "./remotesessionclients.js";
+import { RemoteSessionIssuers } from "./remotesessionissuers.js";
+import { RemoteSessions } from "./remotesessions.js";
 import { Resources } from "./resources.js";
 import { Risk } from "./risk.js";
 import { Slack } from "./slack.js";
@@ -162,6 +166,11 @@ export class Gram extends ClientSDK {
     return (this._organizations ??= new Organizations(this._options));
   }
 
+  private _otelForwarding?: OtelForwarding;
+  get otelForwarding(): OtelForwarding {
+    return (this._otelForwarding ??= new OtelForwarding(this._options));
+  }
+
   private _packages?: Packages;
   get packages(): Packages {
     return (this._packages ??= new Packages(this._options));
@@ -185,6 +194,25 @@ export class Gram extends ClientSDK {
   private _remoteMcp?: RemoteMcp;
   get remoteMcp(): RemoteMcp {
     return (this._remoteMcp ??= new RemoteMcp(this._options));
+  }
+
+  private _remoteSessionClients?: RemoteSessionClients;
+  get remoteSessionClients(): RemoteSessionClients {
+    return (this._remoteSessionClients ??= new RemoteSessionClients(
+      this._options,
+    ));
+  }
+
+  private _remoteSessionIssuers?: RemoteSessionIssuers;
+  get remoteSessionIssuers(): RemoteSessionIssuers {
+    return (this._remoteSessionIssuers ??= new RemoteSessionIssuers(
+      this._options,
+    ));
+  }
+
+  private _remoteSessions?: RemoteSessions;
+  get remoteSessions(): RemoteSessions {
+    return (this._remoteSessions ??= new RemoteSessions(this._options));
   }
 
   private _resources?: Resources;

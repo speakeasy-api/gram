@@ -120,6 +120,16 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		return ctx, nil
 	}
 
+	// Admins impersonating a customer org have no WorkOS membership in that
+	// org, so the normal role-resolution path would yield zero grants and
+	// every Require() call would 403. Grant all scopes — matching the
+	// carve-out in access.ListGrants.
+	if authCtx.IsAdmin {
+		if _, ok := contextvalues.GetAdminOverrideFromContext(ctx); ok {
+			return GrantsToContext(ctx, allScopeGrants()), nil
+		}
+	}
+
 	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)}
 
 	rolePrincipals, err := e.resolveRolePrincipals(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
@@ -215,10 +225,13 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 
 		expanded := check.expand()
 
-		matchedGrant, matchedCheck := findMatchingGrant(grants, expanded)
+		matchedGrant, matchedCheck, denied := evaluateGrants(grants, expanded)
 		if matchedGrant == nil {
 			reason := authzrepo.ReasonScopeUnsatisfied
-			if len(grants) == 0 {
+			switch {
+			case denied:
+				reason = authzrepo.ReasonDenyGrant
+			case len(grants) == 0:
 				reason = authzrepo.ReasonNoGrants
 			}
 			challengeLogger{
@@ -285,8 +298,14 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		}
 	}
 
+	anyDenied := false
 	for _, check := range checks {
-		if matchedGrant, matchedCheck := findMatchingGrant(grants, check.expand()); matchedGrant != nil {
+		matchedGrant, matchedCheck, denied := evaluateGrants(grants, check.expand())
+		if denied {
+			anyDenied = true
+			continue
+		}
+		if matchedGrant != nil {
 			challengeLogger{
 				Operation:            authzrepo.OperationRequireAny,
 				Outcome:              authzrepo.OutcomeAllow,
@@ -303,7 +322,10 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 	}
 
 	reason := authzrepo.ReasonScopeUnsatisfied
-	if len(grants) == 0 {
+	switch {
+	case anyDenied:
+		reason = authzrepo.ReasonDenyGrant
+	case len(grants) == 0:
 		reason = authzrepo.ReasonNoGrants
 	}
 	challengeLogger{
@@ -343,6 +365,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 
 	allowed := make([]string, 0, len(checks))
 	matches := make([]grantMatch, 0, len(checks))
+	anyDenied := false
 	for _, c := range checks {
 		if err := validateInput(c); err != nil {
 			focus := c
@@ -360,7 +383,11 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 			return nil, e.mapError(ctx, err)
 		}
 
-		if matchedGrant, matchedCheck := findMatchingGrant(grants, c.expand()); matchedGrant != nil {
+		matchedGrant, matchedCheck, denied := evaluateGrants(grants, c.expand())
+		if denied {
+			anyDenied = true
+		}
+		if matchedGrant != nil {
 			allowed = append(allowed, c.ResourceID)
 			matches = append(matches, grantMatch{Grant: *matchedGrant, ViaCheck: *matchedCheck})
 		}
@@ -373,6 +400,8 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 		case len(allowed) > 0:
 			outcome = authzrepo.OutcomeAllow
 			reason = authzrepo.ReasonGrantMatched
+		case anyDenied:
+			reason = authzrepo.ReasonDenyGrant
 		case len(grants) == 0:
 			reason = authzrepo.ReasonNoGrants
 		}
@@ -390,6 +419,97 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	}
 
 	return allowed, nil
+}
+
+// FindMatched evaluates each check and returns a parallel slice of match
+// indicators aligned with the input order — matched[i] is true when checks[i]
+// is authorized for the caller. It exists alongside [Filter] for cases where
+// the caller needs per-check granularity that the ResourceID-keyed Filter
+// return can't express — for example, filtering an MCP tools/list response
+// where every check carries the same toolset/server ResourceID and per-tool
+// granularity lives in the Tool dimension.
+//
+// When RBAC is not enforced every entry is true. An empty input returns an
+// empty slice, no log. A single challenge-log entry is emitted for the batch
+// (same as [Filter]); per-check logs are intentionally avoided so callers can
+// safely use this with large input sets like a full tools/list.
+func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error) {
+	enforce, err := e.ShouldEnforce(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if !enforce {
+		out := make([]bool, len(checks))
+		for i := range out {
+			out[i] = true
+		}
+		return out, nil
+	}
+
+	grants, ok := GrantsFromContext(ctx)
+	if !ok {
+		return nil, e.mapError(ctx, ErrMissingGrants)
+	}
+
+	matched := make([]bool, len(checks))
+	matches := make([]grantMatch, 0, len(checks))
+	allowedCount := 0
+	anyDenied := false
+	for i, c := range checks {
+		if err := validateInput(c); err != nil {
+			focus := c
+			challengeLogger{
+				Operation:            authzrepo.OperationFilter,
+				Outcome:              authzrepo.OutcomeError,
+				Reason:               authzrepo.ReasonInvalidCheck,
+				Checks:               checks,
+				Focus:                &focus,
+				Matches:              nil,
+				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
+				FilterAllowedCount:   0,
+			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			return nil, e.mapError(ctx, err)
+		}
+
+		matchedGrant, matchedCheck, denied := evaluateGrants(grants, c.expand())
+		if denied {
+			anyDenied = true
+		}
+		if matchedGrant != nil {
+			matched[i] = true
+			matches = append(matches, grantMatch{Grant: *matchedGrant, ViaCheck: *matchedCheck})
+			allowedCount++
+		}
+	}
+
+	if len(checks) > 0 {
+		outcome := authzrepo.OutcomeDeny
+		reason := authzrepo.ReasonScopeUnsatisfied
+		switch {
+		case allowedCount > 0:
+			outcome = authzrepo.OutcomeAllow
+			reason = authzrepo.ReasonGrantMatched
+		case anyDenied:
+			reason = authzrepo.ReasonDenyGrant
+		case len(grants) == 0:
+			reason = authzrepo.ReasonNoGrants
+		}
+		challengeLogger{
+			Operation:            authzrepo.OperationFilter,
+			Outcome:              outcome,
+			Reason:               reason,
+			Checks:               checks,
+			Focus:                nil,
+			Matches:              matches,
+			EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+			FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
+			FilterAllowedCount:   uint32(allowedCount),
+		}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+	}
+
+	return matched, nil
 }
 
 func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {

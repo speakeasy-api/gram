@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -33,6 +34,23 @@ func (r *RedisCacheAdapter) Get(ctx context.Context, key string, value any) erro
 	return r.cache.Get(ctx, key, value)
 }
 
+// GetAndDelete uses Redis GETDEL to read + delete the key in a single
+// round-trip. The two ops execute server-side as one atomic command, so no
+// other client can read the same value between them.
+func (r *RedisCacheAdapter) GetAndDelete(ctx context.Context, key string, value any) error {
+	raw, err := r.client.GetDel(ctx, key).Bytes()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return redisCache.ErrCacheMiss
+		}
+		return fmt.Errorf("getdel %s: %w", key, err)
+	}
+	if err := r.cache.Unmarshal(raw, value); err != nil {
+		return fmt.Errorf("unmarshal %s: %w", key, err)
+	}
+	return nil
+}
+
 func (r *RedisCacheAdapter) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
 	//nolint:wrapcheck // Wrapping happens in the typed cache implementation
 	return r.cache.Set(&redisCache.Item{
@@ -60,6 +78,16 @@ func (r *RedisCacheAdapter) Update(ctx context.Context, key string, value any) e
 		Value: value,
 		TTL:   ttl,
 	})
+}
+
+func (r *RedisCacheAdapter) Expire(ctx context.Context, key string, ttl time.Duration) error {
+	// Redis EXPIRE returns 0 if the key doesn't exist; we treat that as a
+	// no-op rather than an error so callers can refresh-or-skip without
+	// pre-checking existence.
+	if err := r.client.Expire(ctx, key, ttl).Err(); err != nil {
+		return fmt.Errorf("expire: %w", err)
+	}
+	return nil
 }
 
 func (r *RedisCacheAdapter) Delete(ctx context.Context, key string) error {

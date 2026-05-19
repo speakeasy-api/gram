@@ -217,7 +217,8 @@ export function RolesTab() {
           </Badge>
           <Type variant="body" className="text-muted-foreground text-sm">
             The default role for most users. Grants read access across the
-            organization and the ability to connect to MCP servers.
+            organization and projects. Gives the ability to connect to MCP
+            servers and other resources.
           </Type>
         </div>
         <div className="mt-2 flex items-start gap-3 text-sm">
@@ -230,7 +231,7 @@ export function RolesTab() {
           </Badge>
           <Type variant="body" className="text-muted-foreground text-sm">
             Full access to all organization settings, billing, member
-            management, and every project and MCP server.
+            management, every project, MCP server, skills and assistants.
           </Type>
         </div>
       </div>

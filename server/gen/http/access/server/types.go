@@ -83,6 +83,8 @@ type GetRoleResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
+	// Stable WorkOS role slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Human-readable description.
 	Description string `form:"description" json:"description" xml:"description"`
 	// Whether this is a built-in system role that cannot be deleted.
@@ -102,6 +104,8 @@ type CreateRoleResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
+	// Stable WorkOS role slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Human-readable description.
 	Description string `form:"description" json:"description" xml:"description"`
 	// Whether this is a built-in system role that cannot be deleted.
@@ -121,6 +125,8 @@ type UpdateRoleResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
+	// Stable WorkOS role slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Human-readable description.
 	Description string `form:"description" json:"description" xml:"description"`
 	// Whether this is a built-in system role that cannot be deleted.
@@ -2926,6 +2932,8 @@ type RoleResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
+	// Stable WorkOS role slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Human-readable description.
 	Description string `form:"description" json:"description" xml:"description"`
 	// Whether this is a built-in system role that cannot be deleted.
@@ -2942,6 +2950,9 @@ type RoleResponseBody struct {
 type RoleGrantResponseBody struct {
 	// The scope slug this grant applies to.
 	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// Whether this grant allows or denies the scope. Defaults to 'allow' when
+	// omitted.
+	Effect string `form:"effect" json:"effect" xml:"effect"`
 	// Selector constraints. Null means unrestricted.
 	Selectors []*SelectorResponseBody `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
 }
@@ -2991,6 +3002,9 @@ type AccessMemberResponseBody struct {
 type ListRoleGrantResponseBody struct {
 	// The scope slug this grant applies to.
 	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// Whether this grant allows or denies the scope. Defaults to 'allow' when
+	// omitted.
+	Effect string `form:"effect" json:"effect" xml:"effect"`
 	// The inherited scopes the primary scope grants.
 	SubScopes []string `form:"sub_scopes,omitempty" json:"sub_scopes,omitempty" xml:"sub_scopes,omitempty"`
 	// Selector constraints. Null means unrestricted.
@@ -3118,6 +3132,9 @@ type ChallengeResolutionResponseBody struct {
 type RoleGrantRequestBody struct {
 	// The scope slug this grant applies to.
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Whether this grant allows or denies the scope. Defaults to 'allow' when
+	// omitted.
+	Effect *string `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
 	// Selector constraints. Null means unrestricted.
 	Selectors []*SelectorRequestBody `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
 }
@@ -3162,6 +3179,7 @@ func NewGetRoleResponseBody(res *access.Role) *GetRoleResponseBody {
 	body := &GetRoleResponseBody{
 		ID:          res.ID,
 		Name:        res.Name,
+		Slug:        res.Slug,
 		Description: res.Description,
 		IsSystem:    res.IsSystem,
 		MemberCount: res.MemberCount,
@@ -3189,6 +3207,7 @@ func NewCreateRoleResponseBody(res *access.Role) *CreateRoleResponseBody {
 	body := &CreateRoleResponseBody{
 		ID:          res.ID,
 		Name:        res.Name,
+		Slug:        res.Slug,
 		Description: res.Description,
 		IsSystem:    res.IsSystem,
 		MemberCount: res.MemberCount,
@@ -3216,6 +3235,7 @@ func NewUpdateRoleResponseBody(res *access.Role) *UpdateRoleResponseBody {
 	body := &UpdateRoleResponseBody{
 		ID:          res.ID,
 		Name:        res.Name,
+		Slug:        res.Slug,
 		Description: res.Description,
 		IsSystem:    res.IsSystem,
 		MemberCount: res.MemberCount,
@@ -5780,6 +5800,11 @@ func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
 	if body.Scope != nil {
 		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write"}))
+		}
+	}
+	if body.Effect != nil {
+		if !(*body.Effect == "allow" || *body.Effect == "deny") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", *body.Effect, []any{"allow", "deny"}))
 		}
 	}
 	for _, e := range body.Selectors {
