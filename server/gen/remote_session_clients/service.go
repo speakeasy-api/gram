@@ -78,6 +78,9 @@ type CloneClientFromOAuthProxyProviderPayload struct {
 	// How the cloned client authenticates at the issuer's token endpoint. Omit to
 	// default to client_secret_basic.
 	TokenEndpointAuthMethod *string
+	// Explicit upstream OAuth scopes the dance should request for the cloned
+	// client. Omit to fall back to the issuer's scopes_supported.
+	Scope []string
 }
 
 // CreateRemoteSessionClientPayload is the payload type of the
@@ -97,6 +100,9 @@ type CreateRemoteSessionClientPayload struct {
 	// How the client authenticates at the issuer's token endpoint. Omit to default
 	// to client_secret_basic.
 	TokenEndpointAuthMethod *string
+	// Explicit upstream OAuth scopes the dance should request for this client.
+	// Omit to fall back to the issuer's scopes_supported.
+	Scope []string
 }
 
 // DeleteRemoteSessionClientPayload is the payload type of the
@@ -157,6 +163,9 @@ type UpdateRemoteSessionClientPayload struct {
 	UserSessionIssuerID *string
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string
+	// Replace the explicit upstream OAuth scopes for this client. Omit to leave
+	// unchanged.
+	Scope []string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

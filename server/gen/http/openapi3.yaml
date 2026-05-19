@@ -27428,6 +27428,11 @@ components:
                     type: string
                     description: The remote_session_issuer the new client is registered with.
                     format: uuid
+                scope:
+                    type: array
+                    items:
+                        type: string
+                    description: Explicit upstream OAuth scopes the dance should request for the cloned client. Omit to fall back to the issuer's scopes_supported.
                 token_endpoint_auth_method:
                     type: string
                     description: How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
@@ -27939,6 +27944,11 @@ components:
                     type: string
                     description: The owning remote_session_issuer id.
                     format: uuid
+                scope:
+                    type: array
+                    items:
+                        type: string
+                    description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
                 token_endpoint_auth_method:
                     type: string
                     description: How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
@@ -33442,6 +33452,11 @@ components:
                     type: string
                     description: The owning remote_session_issuer id.
                     format: uuid
+                scope:
+                    type: array
+                    items:
+                        type: string
+                    description: Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.
                 token_endpoint_auth_method:
                     type: string
                     description: How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
@@ -36244,6 +36259,11 @@ components:
                     type: string
                     description: The remote_session_client id.
                     format: uuid
+                scope:
+                    type: array
+                    items:
+                        type: string
+                    description: Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.
                 token_endpoint_auth_method:
                     type: string
                     description: Change how the client authenticates at the issuer's token endpoint.

@@ -27,6 +27,9 @@ type RemoteSessionClient struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string
-	CreatedAt               string
-	UpdatedAt               string
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope     []string
+	CreatedAt string
+	UpdatedAt string
 }
