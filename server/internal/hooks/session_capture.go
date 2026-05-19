@@ -100,6 +100,15 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.Claud
 			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
+			s.logger.InfoContext(ctx, "claude UserPromptSubmit denied by policy",
+				attr.SlogEvent("claude_prompt_denied"),
+				attr.SlogHookSource("claude"),
+				attr.SlogHookEvent(payload.HookEventName),
+				attr.SlogGenAIConversationID(*payload.SessionID),
+				attr.SlogHookBlockReason(auditReason),
+				attr.SlogRiskPolicyID(scanResult.PolicyID),
+				attr.SlogRiskPolicyName(scanResult.PolicyName),
+			)
 			return nil, oops.E(oops.CodeForbidden, nil, "%s", userReason)
 		}
 	}

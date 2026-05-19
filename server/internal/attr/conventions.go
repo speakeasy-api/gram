@@ -227,6 +227,7 @@ const (
 	RiskPolicyCountKey              = attribute.Key("gram.risk.policy_count")
 	RiskPolicyIDKey                 = attribute.Key("gram.risk.policy_id")
 	RiskPolicyNameKey               = attribute.Key("gram.risk.policy_name")
+	RiskMatchedKey                  = attribute.Key("gram.risk.matched")
 	RiskRuleIDKey                   = attribute.Key("gram.risk.rule_id")
 	RiskSourceKey                   = attribute.Key("gram.risk.source")
 	RiskScanAttemptKey              = attribute.Key("gram.risk.scan.attempt")
@@ -238,6 +239,8 @@ const (
 	SecuritySchemeKey               = attribute.Key("gram.security.scheme")
 	SecurityTypeKey                 = attribute.Key("gram.security.type")
 	SessionIDKey                    = attribute.Key("gram.session.id")
+	SessionHasCachedMetadataKey     = attribute.Key("gram.session.has_cached_metadata")
+	SessionHasAuthCtxKey            = attribute.Key("gram.session.has_auth_ctx")
 	SlackEventFullKey               = attribute.Key("gram.slack.event.full")
 	SlackEventTypeKey               = attribute.Key("gram.slack.event.type")
 	SlackTeamIDKey                  = attribute.Key("gram.slack.team.id")
@@ -1042,6 +1045,9 @@ func SlogRiskPolicyName(v string) slog.Attr      { return slog.String(string(Ris
 func RiskRuleID(v string) attribute.KeyValue { return RiskRuleIDKey.String(v) }
 func SlogRiskRuleID(v string) slog.Attr      { return slog.String(string(RiskRuleIDKey), v) }
 
+func RiskMatched(v bool) attribute.KeyValue { return RiskMatchedKey.Bool(v) }
+func SlogRiskMatched(v bool) slog.Attr      { return slog.Bool(string(RiskMatchedKey), v) }
+
 func RiskSource(v string) attribute.KeyValue { return RiskSourceKey.String(v) }
 func SlogRiskSource(v string) slog.Attr      { return slog.String(string(RiskSourceKey), v) }
 
@@ -1074,6 +1080,16 @@ func SlogSecurityType(v string) slog.Attr      { return slog.String(string(Secur
 
 func SessionID(v string) attribute.KeyValue { return SessionIDKey.String(v) }
 func SlogSessionID(v string) slog.Attr      { return slog.String(string(SessionIDKey), v) }
+
+func SessionHasCachedMetadata(v bool) attribute.KeyValue {
+	return SessionHasCachedMetadataKey.Bool(v)
+}
+func SlogSessionHasCachedMetadata(v bool) slog.Attr {
+	return slog.Bool(string(SessionHasCachedMetadataKey), v)
+}
+
+func SessionHasAuthCtx(v bool) attribute.KeyValue { return SessionHasAuthCtxKey.Bool(v) }
+func SlogSessionHasAuthCtx(v bool) slog.Attr      { return slog.Bool(string(SessionHasAuthCtxKey), v) }
 
 func SlackEventFull(v any) attribute.KeyValue { return SlackEventFullKey.String(fmt.Sprintf("%v", v)) }
 func SlogSlackEventFull(v any) slog.Attr      { return slog.Any(string(SlackEventFullKey), v) }
