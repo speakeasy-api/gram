@@ -137,8 +137,6 @@ type InsertTelemetryLogParams struct {
 //
 // Original SQL reference:
 // INSERT INTO telemetry_logs (id, time_unix_nano, ...) VALUES (?, ?, ...)
-//
-//nolint:wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLogParams) error {
 	return q.InsertTelemetryLogs(ctx, []InsertTelemetryLogParams{arg})
 }
