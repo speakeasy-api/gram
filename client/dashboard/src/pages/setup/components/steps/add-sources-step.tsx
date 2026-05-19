@@ -85,7 +85,7 @@ export function AddSourcesStep({ onComplete, onBack }: AddSourcesStepProps) {
             <Input
               placeholder="Search sources..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(value) => setSearchQuery(value)}
               className="pl-9"
             />
           </div>

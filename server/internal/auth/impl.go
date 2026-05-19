@@ -203,7 +203,7 @@ type cookieDomainWriter struct {
 }
 
 func (w *cookieDomainWriter) WriteHeader(statusCode int) {
-	headers := w.ResponseWriter.Header()
+	headers := w.Header()
 	cookies := headers.Values("Set-Cookie")
 	if len(cookies) > 0 {
 		headers.Del("Set-Cookie")
