@@ -1,13 +1,24 @@
 package gateway
 
 import (
+	"context"
 	"errors"
+	"io"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+// PlatformDirectExecutor lets a caller pin a specific executor to a plan so
+// the runtime skips URN resolution. Used where the caller's matching context
+// (e.g. a platform toolset slice) is more authoritative than the URN-keyed
+// registry — multiple scoped variants of one tool can share a URN.
+type PlatformDirectExecutor interface {
+	Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error
+}
 
 type FilterType string
 
@@ -135,6 +146,9 @@ type PlatformToolCallPlan struct {
 	OwnerKind   string `json:"owner_kind" yaml:"owner_kind"`
 	OwnerID     string `json:"owner_id" yaml:"owner_id"`
 	InputSchema []byte `json:"input_schema" yaml:"input_schema"`
+	// Executor, when set, bypasses URN resolution in the platform runtime.
+	// In-process only; never serialized.
+	Executor PlatformDirectExecutor `json:"-" yaml:"-"`
 }
 
 // ExternalMCPToolCallPlan is an alias for externalmcp.ToolCallPlan.
