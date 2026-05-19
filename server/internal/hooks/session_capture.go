@@ -132,6 +132,11 @@ func constructBlockResponse(hookEventName, reason string) *gen.ClaudeHookResult 
 			output.PermissionDecision = &deny
 			output.PermissionDecisionReason = &reason
 		}
+		// systemMessage renders as a warning in the user's terminal;
+		// permissionDecisionReason is what Claude itself sees and may quote
+		// back. Set both so the user gets visible feedback regardless of how
+		// the client renders the deny.
+		result.SystemMessage = &reason
 		return result
 	}
 	block := "block"
