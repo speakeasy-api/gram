@@ -116,7 +116,7 @@ func (q *Queries) GetOrganizationRoleBySlug(ctx context.Context, arg GetOrganiza
 }
 
 const getPrincipalGrants = `-- name: GetPrincipalGrants :many
-SELECT principal_urn, scope, selectors
+SELECT principal_urn, scope, effect, selectors
 FROM principal_grants
 WHERE organization_id = $1
   AND principal_urn = ANY($2::text[])
@@ -130,6 +130,7 @@ type GetPrincipalGrantsParams struct {
 type GetPrincipalGrantsRow struct {
 	PrincipalUrn urn.Principal
 	Scope        string
+	Effect       pgtype.Text
 	Selectors    []byte
 }
 
@@ -144,7 +145,12 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	var items []GetPrincipalGrantsRow
 	for rows.Next() {
 		var i GetPrincipalGrantsRow
-		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.Effect,
+			&i.Selectors,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -356,7 +362,7 @@ func (q *Queries) ListOrganizationRolesByOrg(ctx context.Context, organizationID
 
 const listPrincipalGrantsByOrg = `-- name: ListPrincipalGrantsByOrg :many
 
-SELECT id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
+SELECT id, organization_id, principal_urn, principal_type, scope, effect, selectors, created_at, updated_at
 FROM principal_grants
 WHERE organization_id = $1
   AND ($2::text = '' OR principal_urn = $2)
@@ -374,6 +380,7 @@ type ListPrincipalGrantsByOrgRow struct {
 	PrincipalUrn   urn.Principal
 	PrincipalType  string
 	Scope          string
+	Effect         pgtype.Text
 	Selectors      []byte
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
@@ -397,6 +404,7 @@ func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipa
 			&i.PrincipalUrn,
 			&i.PrincipalType,
 			&i.Scope,
+			&i.Effect,
 			&i.Selectors,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -571,17 +579,18 @@ func (q *Queries) UpsertOrganizationRole(ctx context.Context, arg UpsertOrganiza
 }
 
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one
-INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (organization_id, principal_urn, scope, selectors)
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors)
 DO UPDATE SET updated_at = clock_timestamp()
-RETURNING id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
+RETURNING id, organization_id, principal_urn, principal_type, scope, effect, selectors, created_at, updated_at
 `
 
 type UpsertPrincipalGrantParams struct {
 	OrganizationID string
 	PrincipalUrn   urn.Principal
 	Scope          string
+	Effect         pgtype.Text
 	Selectors      []byte
 }
 
@@ -591,18 +600,20 @@ type UpsertPrincipalGrantRow struct {
 	PrincipalUrn   urn.Principal
 	PrincipalType  string
 	Scope          string
+	Effect         pgtype.Text
 	Selectors      []byte
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }
 
-// Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
-// the updated_at is refreshed.
+// Creates or updates a single grant row. On conflict (same org/principal/scope/effect/selectors),
+// the updated_at is refreshed. Uses COALESCE to match the functional unique index.
 func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalGrantParams) (UpsertPrincipalGrantRow, error) {
 	row := q.db.QueryRow(ctx, upsertPrincipalGrant,
 		arg.OrganizationID,
 		arg.PrincipalUrn,
 		arg.Scope,
+		arg.Effect,
 		arg.Selectors,
 	)
 	var i UpsertPrincipalGrantRow
@@ -612,6 +623,7 @@ func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalG
 		&i.PrincipalUrn,
 		&i.PrincipalType,
 		&i.Scope,
+		&i.Effect,
 		&i.Selectors,
 		&i.CreatedAt,
 		&i.UpdatedAt,

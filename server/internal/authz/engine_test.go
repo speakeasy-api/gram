@@ -281,6 +281,109 @@ func TestEngineFilter_skipsLogWhenNoChecks(t *testing.T) {
 	require.Equal(t, uint64(0), count)
 }
 
+// --- Engine deny-wins tests ---
+
+func TestEngineRequire_denyGrantBlocksAccess(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeProjectRead, WildcardResource),
+		NewDenyGrant(ScopeProjectRead, "proj_secret"),
+	})
+
+	// Allowed resource — should pass.
+	err = engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj_normal"})
+	require.NoError(t, err)
+
+	// Denied resource — should be forbidden.
+	err = engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj_secret"})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestEngineRequireAny_denySkipsToNextCheck(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeMCPConnect, WildcardResource),
+		NewDenyGrant(ScopeMCPConnect, "tool_blocked"),
+	})
+
+	// One denied, one allowed — RequireAny should succeed via the allowed one.
+	err = engine.RequireAny(ctx,
+		Check{Scope: ScopeMCPConnect, ResourceID: "tool_blocked"},
+		Check{Scope: ScopeMCPConnect, ResourceID: "tool_ok"},
+	)
+	require.NoError(t, err)
+}
+
+func TestEngineRequireAny_allDeniedReturnsForbidden(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeMCPConnect, WildcardResource),
+		NewDenyGrant(ScopeMCPConnect, WildcardResource),
+	})
+
+	err = engine.RequireAny(ctx,
+		Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"},
+		Check{Scope: ScopeMCPConnect, ResourceID: "tool_b"},
+	)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestEngineFilter_denyExcludesResources(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeProjectRead, WildcardResource),
+		NewDenyGrant(ScopeProjectRead, "proj_secret"),
+	})
+
+	resourceIDs, err := engine.Filter(ctx, []Check{
+		{Scope: ScopeProjectRead, ResourceID: "proj_normal"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_secret"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_other"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"proj_normal", "proj_other"}, resourceIDs)
+}
+
+func TestEngineFindMatched_denyReturnsFalse(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeMCPConnect, WildcardResource),
+		NewDenyGrant(ScopeMCPConnect, "tool_blocked"),
+	})
+
+	matched, err := engine.FindMatched(ctx, []Check{
+		{Scope: ScopeMCPConnect, ResourceID: "tool_ok"},
+		{Scope: ScopeMCPConnect, ResourceID: "tool_blocked"},
+		{Scope: ScopeMCPConnect, ResourceID: "tool_also_ok"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []bool{true, false, true}, matched)
+}
+
 func TestEngineFilter_withDimensions(t *testing.T) {
 	t.Parallel()
 
@@ -928,4 +1031,48 @@ func TestCanUseOverride_prodPlusNonAdmin(t *testing.T) {
 	enforce, err := engine.ShouldEnforce(ctx)
 	require.NoError(t, err)
 	require.False(t, enforce)
+}
+
+// TestSyncGrants_denyEffectSurvivesDBRoundTrip verifies that deny grants
+// written via SyncGrants are read back with the correct effect by GrantsForRole.
+func TestSyncGrants_denyEffectSurvivesDBRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	conn := newTestDB(t)
+	ctx := t.Context()
+	orgID := "org_deny_roundtrip"
+	roleSlug := "deny-test-role"
+
+	seedOrganization(t, ctx, conn, orgID)
+
+	grants := []*RoleGrant{
+		{Scope: string(ScopeMCPConnect)}, // allow wildcard
+		{Scope: string(ScopeMCPConnect), Effect: PolicyEffectDeny, Selectors: []Selector{NewSelector(ScopeMCPConnect, "server_blocked")}}, // deny specific
+	}
+
+	err := SyncGrants(ctx, testenv.NewLogger(t), conn, orgID, roleSlug, grants)
+	require.NoError(t, err)
+
+	scoped, err := GrantsForRole(ctx, testenv.NewLogger(t), conn, orgID, roleSlug)
+	require.NoError(t, err)
+
+	var allowGrant, denyGrant *ScopedGrant
+	for _, sg := range scoped {
+		if sg.Scope != string(ScopeMCPConnect) {
+			continue
+		}
+		switch sg.Effect {
+		case PolicyEffectAllow:
+			allowGrant = sg
+		case PolicyEffectDeny:
+			denyGrant = sg
+		}
+	}
+
+	require.NotNil(t, allowGrant, "expected allow grant for mcp:connect")
+	require.Nil(t, allowGrant.Selectors, "wildcard allow should have nil selectors")
+
+	require.NotNil(t, denyGrant, "expected deny grant for mcp:connect")
+	require.Len(t, denyGrant.Selectors, 1)
+	require.Equal(t, "server_blocked", denyGrant.Selectors[0].ResourceID())
 }

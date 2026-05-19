@@ -26916,6 +26916,7 @@ components:
             - grant_matched
             - no_grants
             - scope_unsatisfied
+            - deny_grant
             - invalid_check
             - rbac_skipped_apikey
             - dev_override
@@ -27201,6 +27202,7 @@ components:
             - grant_matched
             - no_grants
             - scope_unsatisfied
+            - deny_grant
             - invalid_check
             - rbac_skipped_apikey
             - dev_override
@@ -31463,6 +31465,13 @@ components:
     ListRoleGrant:
       type: object
       properties:
+        effect:
+          type: string
+          description: Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
+          default: allow
+          enum:
+            - allow
+            - deny
         scope:
           type: string
           description: The scope slug this grant applies to.
@@ -34299,6 +34308,13 @@ components:
     RoleGrant:
       type: object
       properties:
+        effect:
+          type: string
+          description: Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
+          default: allow
+          enum:
+            - allow
+            - deny
         scope:
           type: string
           description: The scope slug this grant applies to.

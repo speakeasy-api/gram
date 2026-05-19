@@ -297,10 +297,13 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 
 		expanded := check.expand()
 
-		matchedGrant, matchedCheck := findMatchingGrant(grants, expanded)
+		matchedGrant, matchedCheck, denied := evaluateGrants(grants, expanded)
 		if matchedGrant == nil {
 			reason := authzrepo.ReasonScopeUnsatisfied
-			if len(grants) == 0 {
+			switch {
+			case denied:
+				reason = authzrepo.ReasonDenyGrant
+			case len(grants) == 0:
 				reason = authzrepo.ReasonNoGrants
 			}
 			challengeLogger{
@@ -367,8 +370,14 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		}
 	}
 
+	anyDenied := false
 	for _, check := range checks {
-		if matchedGrant, matchedCheck := findMatchingGrant(grants, check.expand()); matchedGrant != nil {
+		matchedGrant, matchedCheck, denied := evaluateGrants(grants, check.expand())
+		if denied {
+			anyDenied = true
+			continue
+		}
+		if matchedGrant != nil {
 			challengeLogger{
 				Operation:            authzrepo.OperationRequireAny,
 				Outcome:              authzrepo.OutcomeAllow,
@@ -385,7 +394,10 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 	}
 
 	reason := authzrepo.ReasonScopeUnsatisfied
-	if len(grants) == 0 {
+	switch {
+	case anyDenied:
+		reason = authzrepo.ReasonDenyGrant
+	case len(grants) == 0:
 		reason = authzrepo.ReasonNoGrants
 	}
 	challengeLogger{
@@ -425,6 +437,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 
 	allowed := make([]string, 0, len(checks))
 	matches := make([]grantMatch, 0, len(checks))
+	anyDenied := false
 	for _, c := range checks {
 		if err := validateInput(c); err != nil {
 			focus := c
@@ -442,7 +455,11 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 			return nil, e.mapError(ctx, err)
 		}
 
-		if matchedGrant, matchedCheck := findMatchingGrant(grants, c.expand()); matchedGrant != nil {
+		matchedGrant, matchedCheck, denied := evaluateGrants(grants, c.expand())
+		if denied {
+			anyDenied = true
+		}
+		if matchedGrant != nil {
 			allowed = append(allowed, c.ResourceID)
 			matches = append(matches, grantMatch{Grant: *matchedGrant, ViaCheck: *matchedCheck})
 		}
@@ -455,6 +472,8 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 		case len(allowed) > 0:
 			outcome = authzrepo.OutcomeAllow
 			reason = authzrepo.ReasonGrantMatched
+		case anyDenied:
+			reason = authzrepo.ReasonDenyGrant
 		case len(grants) == 0:
 			reason = authzrepo.ReasonNoGrants
 		}
@@ -508,6 +527,7 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 	matched := make([]bool, len(checks))
 	matches := make([]grantMatch, 0, len(checks))
 	allowedCount := 0
+	anyDenied := false
 	for i, c := range checks {
 		if err := validateInput(c); err != nil {
 			focus := c
@@ -525,7 +545,11 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 			return nil, e.mapError(ctx, err)
 		}
 
-		if matchedGrant, matchedCheck := findMatchingGrant(grants, c.expand()); matchedGrant != nil {
+		matchedGrant, matchedCheck, denied := evaluateGrants(grants, c.expand())
+		if denied {
+			anyDenied = true
+		}
+		if matchedGrant != nil {
 			matched[i] = true
 			matches = append(matches, grantMatch{Grant: *matchedGrant, ViaCheck: *matchedCheck})
 			allowedCount++
@@ -539,6 +563,8 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 		case allowedCount > 0:
 			outcome = authzrepo.OutcomeAllow
 			reason = authzrepo.ReasonGrantMatched
+		case anyDenied:
+			reason = authzrepo.ReasonDenyGrant
 		case len(grants) == 0:
 			reason = authzrepo.ReasonNoGrants
 		}

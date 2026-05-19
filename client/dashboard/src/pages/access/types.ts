@@ -43,9 +43,14 @@ export type ActivePanel =
   | "tools"
   | "collection";
 
+/** Policy effect for a grant: allow (default) or deny. */
+export type PolicyEffect = "allow" | "deny";
+
 /** A single grant within a role: a scope + optional selector constraints. */
 export interface RoleGrant {
   scope: Scope;
+  /** Whether this grant allows or denies the scope. Defaults to 'allow'. */
+  effect?: PolicyEffect;
   /** null = unrestricted; Selector[] = constrained by selectors */
   selectors: Selector[] | null;
   /** Selected annotation hints for auto-group matching (MCP scopes only) */
