@@ -20,6 +20,7 @@ import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
+import { DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import {
   Popover,
   PopoverContent,
@@ -1023,11 +1024,23 @@ export function ChatDetailPanel({
   }, [riskResults]);
 
   if (chatLoading) {
-    return <div className="p-8">Loading chat details...</div>;
+    return (
+      <div className="p-8">
+        <DrawerTitle>Loading</DrawerTitle>
+        <DrawerDescription>Fetching chat session details...</DrawerDescription>
+      </div>
+    );
   }
 
   if (!chat) {
-    return <div className="p-8">Chat not found</div>;
+    return (
+      <div className="p-8">
+        <DrawerTitle>Not found</DrawerTitle>
+        <DrawerDescription>
+          The selected chat session could not be found.
+        </DrawerDescription>
+      </div>
+    );
   }
 
   const status = getOverallResolutionStatus(resolutions);
@@ -1058,7 +1071,7 @@ export function ChatDetailPanel({
       <div className="border-b p-6">
         <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold">{getTraceId(chatId)}</h2>
+            <DrawerTitle className="text-xl">{getTraceId(chatId)}</DrawerTitle>
             {status !== "unresolved" && (
               <Badge
                 variant={
@@ -1118,7 +1131,7 @@ export function ChatDetailPanel({
         <div className="text-muted-foreground mb-3 font-mono text-sm">
           {format(new Date(chat.createdAt), "yyyy-MM-dd HH:mm:ss")}
         </div>
-        <div className="text-sm">{chat.title}</div>
+        <DrawerDescription className="text-sm">{chat.title}</DrawerDescription>
       </div>
 
       {/* Tabs */}
