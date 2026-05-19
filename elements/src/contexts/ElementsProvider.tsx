@@ -20,6 +20,7 @@ import {
   type FrontendTool,
 } from "@/lib/tools";
 import { compactForModel } from "@/lib/contextCompaction";
+import { describeStreamError } from "@/lib/streamErrorMessage";
 import { cn } from "@/lib/utils";
 import { recommended } from "@/plugins";
 import { ElementsConfig, Model } from "@/types";
@@ -465,11 +466,22 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           // fresh random messageId into every `start` chunk. On auto-resume that mismatches the
           // prior assistant message's id, so useChat pushes a new UIMessage carrying the snapshot
           // of the prior turn's parts — duplicating text and tool_calls into storage.
+          //
+          // The `onError` here is what controls the message users actually see — the AI SDK
+          // masks errors to a generic "An error occurred." by default, which is what caused
+          // credit-exhausted chats to silently stop without any explanation. We swap in the
+          // graceful credits message when the stream fails with a 402 / insufficient_credits.
           return createUIMessageStream({
             execute: ({ writer }) => {
               writer.merge(result.toUIMessageStream());
             },
             originalMessages: messages,
+            onError: (error) => {
+              const friendly = describeStreamError(error);
+              if (friendly) return friendly;
+              if (error instanceof Error) return error.message;
+              return "An error occurred while generating a response.";
+            },
           });
         } catch (error) {
           console.error("Error creating stream:", error);

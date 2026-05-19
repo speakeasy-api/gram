@@ -854,7 +854,11 @@ const MessageError: FC = () => {
   return (
     <MessagePrimitive.Error>
       <ErrorPrimitive.Root className="aui-message-error-root mt-2 rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive dark:bg-destructive/5 dark:text-red-200">
-        <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2" />
+        {/* No line-clamp — a graceful credits-exhausted message needs to render
+            in full so the user actually sees the prompt to click Get Support.
+            Wraps naturally; assistant-ui re-renders this for any stream error
+            surfaced via createUIMessageStream.onError. */}
+        <ErrorPrimitive.Message className="aui-message-error-message whitespace-pre-wrap" />
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
   );

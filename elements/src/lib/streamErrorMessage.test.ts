@@ -1,0 +1,67 @@
+import { describe, expect, it } from "vitest";
+import {
+  CREDITS_EXHAUSTED_MESSAGE,
+  describeStreamError,
+} from "./streamErrorMessage";
+
+describe("describeStreamError", () => {
+  it("matches Gram goa 402 with name=insufficient_credits at top-level", () => {
+    const error = {
+      name: "insufficient_credits",
+      message: "token balance exhausted",
+      statusCode: 402,
+    };
+    expect(describeStreamError(error)).toBe(CREDITS_EXHAUSTED_MESSAGE);
+  });
+
+  it("matches Gram error packed into responseBody JSON", () => {
+    const error = {
+      responseBody: JSON.stringify({
+        name: "insufficient_credits",
+        message: "token balance exhausted",
+      }),
+    };
+    expect(describeStreamError(error)).toBe(CREDITS_EXHAUSTED_MESSAGE);
+  });
+
+  it("matches OpenRouter-shaped 'requires more credits' message", () => {
+    const error = {
+      responseBody: JSON.stringify({
+        error: { message: "This request requires more credits to complete" },
+      }),
+    };
+    expect(describeStreamError(error)).toBe(CREDITS_EXHAUSTED_MESSAGE);
+  });
+
+  it("matches raw 402 status without a body fingerprint", () => {
+    const error = { statusCode: 402, message: "Payment required" };
+    expect(describeStreamError(error)).toBe(CREDITS_EXHAUSTED_MESSAGE);
+  });
+
+  it("matches a thrown Error whose message carries the fingerprint", () => {
+    const error = new Error(
+      "AI_APICallError: token balance exhausted for organization",
+    );
+    expect(describeStreamError(error)).toBe(CREDITS_EXHAUSTED_MESSAGE);
+  });
+
+  it("descends into nested .cause for AI SDK call-wrapped errors", () => {
+    const cause = new Error("token balance exhausted");
+    const wrapped = Object.assign(new Error("Stream failed"), { cause });
+    expect(describeStreamError(wrapped)).toBe(CREDITS_EXHAUSTED_MESSAGE);
+  });
+
+  it("returns undefined for unrelated stream errors", () => {
+    expect(describeStreamError(new Error("network down"))).toBeUndefined();
+    expect(describeStreamError({ statusCode: 500 })).toBeUndefined();
+    expect(
+      describeStreamError({ responseBody: '{"error":{"message":"oops"}}' }),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined for nullish / non-object errors", () => {
+    expect(describeStreamError(undefined)).toBeUndefined();
+    expect(describeStreamError(null)).toBeUndefined();
+    expect(describeStreamError(42)).toBeUndefined();
+  });
+});

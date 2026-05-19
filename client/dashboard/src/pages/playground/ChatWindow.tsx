@@ -415,13 +415,18 @@ function ChatInner({
             displayMessage +=
               " Please start a new chat history and consider enabling *Auto-Summarize* for your tool or revise your prompt.";
           }
-          if (displayMessage.includes("requires more credits")) {
+          // Credit-exhausted: surface the same graceful prompt across both
+          // upstream shapes (OpenRouter "requires more credits" and Gram's
+          // own 402 "token balance exhausted") and point the user at the
+          // Get Support button in the top header — Pylon is the channel we
+          // actually want them to use for upgrade requests.
+          if (
+            displayMessage.includes("requires more credits") ||
+            displayMessage.includes("token balance exhausted") ||
+            displayMessage.includes("insufficient_credits")
+          ) {
             displayMessage =
-              "You have reached your monthly credit limit. Reach out to the Speakeasy team to upgrade your account.";
-          }
-          if (displayMessage.includes("token balance exhausted")) {
-            displayMessage =
-              "Your token balance is exhausted. [Top up credits](/billing) to keep chatting.";
+              'You\'ve reached the chat credit limit for this account. Click the "Get Support" button at the top of the page to reach out about upgrading.';
           }
           appendDisplayOnlyMessage(`**Model Error:** *${displayMessage}*`);
         }
