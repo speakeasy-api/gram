@@ -107,7 +107,7 @@ func UsageCommands() []string {
 		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|register-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-by-chat|get-risk-policy-status|list-shadow-mcp-approvals|approve-shadow-mcp|revoke-shadow-mcp-approval|trigger-risk-analysis)",
+		"risk (create-risk-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-by-chat|get-risk-overview|get-risk-policy-status|list-shadow-mcp-approvals|approve-shadow-mcp|revoke-shadow-mcp-approval|trigger-risk-analysis)",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -1233,6 +1233,13 @@ func ParseEndpoint(
 		riskListRiskResultsByChatSessionTokenFlag     = riskListRiskResultsByChatFlags.String("session-token", "", "")
 		riskListRiskResultsByChatProjectSlugInputFlag = riskListRiskResultsByChatFlags.String("project-slug-input", "", "")
 
+		riskGetRiskOverviewFlags                = flag.NewFlagSet("get-risk-overview", flag.ExitOnError)
+		riskGetRiskOverviewFromFlag             = riskGetRiskOverviewFlags.String("from", "", "")
+		riskGetRiskOverviewToFlag               = riskGetRiskOverviewFlags.String("to", "", "")
+		riskGetRiskOverviewApikeyTokenFlag      = riskGetRiskOverviewFlags.String("apikey-token", "", "")
+		riskGetRiskOverviewSessionTokenFlag     = riskGetRiskOverviewFlags.String("session-token", "", "")
+		riskGetRiskOverviewProjectSlugInputFlag = riskGetRiskOverviewFlags.String("project-slug-input", "", "")
+
 		riskGetRiskPolicyStatusFlags                = flag.NewFlagSet("get-risk-policy-status", flag.ExitOnError)
 		riskGetRiskPolicyStatusIDFlag               = riskGetRiskPolicyStatusFlags.String("id", "REQUIRED", "")
 		riskGetRiskPolicyStatusApikeyTokenFlag      = riskGetRiskPolicyStatusFlags.String("apikey-token", "", "")
@@ -1943,6 +1950,7 @@ func ParseEndpoint(
 	riskDeleteRiskPolicyFlags.Usage = riskDeleteRiskPolicyUsage
 	riskListRiskResultsFlags.Usage = riskListRiskResultsUsage
 	riskListRiskResultsByChatFlags.Usage = riskListRiskResultsByChatUsage
+	riskGetRiskOverviewFlags.Usage = riskGetRiskOverviewUsage
 	riskGetRiskPolicyStatusFlags.Usage = riskGetRiskPolicyStatusUsage
 	riskListShadowMCPApprovalsFlags.Usage = riskListShadowMCPApprovalsUsage
 	riskApproveShadowMCPFlags.Usage = riskApproveShadowMCPUsage
@@ -2881,6 +2889,9 @@ func ParseEndpoint(
 
 			case "list-risk-results-by-chat":
 				epf = riskListRiskResultsByChatFlags
+
+			case "get-risk-overview":
+				epf = riskGetRiskOverviewFlags
 
 			case "get-risk-policy-status":
 				epf = riskGetRiskPolicyStatusFlags
@@ -3898,6 +3909,9 @@ func ParseEndpoint(
 			case "list-risk-results-by-chat":
 				endpoint = c.ListRiskResultsByChat()
 				data, err = riskc.BuildListRiskResultsByChatPayload(*riskListRiskResultsByChatCursorFlag, *riskListRiskResultsByChatLimitFlag, *riskListRiskResultsByChatApikeyTokenFlag, *riskListRiskResultsByChatSessionTokenFlag, *riskListRiskResultsByChatProjectSlugInputFlag)
+			case "get-risk-overview":
+				endpoint = c.GetRiskOverview()
+				data, err = riskc.BuildGetRiskOverviewPayload(*riskGetRiskOverviewFromFlag, *riskGetRiskOverviewToFlag, *riskGetRiskOverviewApikeyTokenFlag, *riskGetRiskOverviewSessionTokenFlag, *riskGetRiskOverviewProjectSlugInputFlag)
 			case "get-risk-policy-status":
 				endpoint = c.GetRiskPolicyStatus()
 				data, err = riskc.BuildGetRiskPolicyStatusPayload(*riskGetRiskPolicyStatusIDFlag, *riskGetRiskPolicyStatusApikeyTokenFlag, *riskGetRiskPolicyStatusSessionTokenFlag, *riskGetRiskPolicyStatusProjectSlugInputFlag)
@@ -8818,6 +8832,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    delete-risk-policy: Delete a risk analysis policy.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results: List risk analysis results for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-by-chat: List risk results grouped by chat session for the current project.`)
+	fmt.Fprintln(os.Stderr, `    get-risk-overview: Get risk overview metrics and trend data for the current project.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-policy-status: Get the analysis status of a risk policy including progress and workflow state.`)
 	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-approvals: List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.`)
 	fmt.Fprintln(os.Stderr, `    approve-shadow-mcp: Approve a shadow-MCP server so the named policy stops blocking calls to it. `+"`"+`match`+"`"+` is the same opaque server identifier surfaced in `+"`"+`RiskResult.match`+"`"+` — typically a server URL, stdio command, or `+"`"+`mcp__<server>__`+"`"+` prefix.`)
@@ -9021,6 +9036,32 @@ func riskListRiskResultsByChatUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results-by-chat --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskGetRiskOverviewUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk get-risk-overview", os.Args[0])
+	fmt.Fprint(os.Stderr, " -from STRING")
+	fmt.Fprint(os.Stderr, " -to STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get risk overview metrics and trend data for the current project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -from STRING: `)
+	fmt.Fprintln(os.Stderr, `    -to STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk get-risk-overview --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskGetRiskPolicyStatusUsage() {

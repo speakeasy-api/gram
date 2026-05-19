@@ -335,6 +335,55 @@ func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageCont
 	return items, nil
 }
 
+const getRiskOverviewCounts = `-- name: GetRiskOverviewCounts :one
+SELECT
+    COUNT(DISTINCT rr.chat_message_id)::BIGINT AS messages_scanned
+  , (COUNT(*) FILTER (
+      WHERE rr.found IS TRUE
+    ))::BIGINT AS findings
+  , (COUNT(DISTINCT cm.chat_id) FILTER (
+      WHERE rr.found IS TRUE
+        AND cm.chat_id IS NOT NULL
+    ))::BIGINT AS flagged_sessions
+  , (
+      SELECT COUNT(*)::BIGINT
+      FROM risk_policies active_rp
+      WHERE active_rp.project_id = $1
+        AND enabled IS TRUE
+        AND deleted IS FALSE
+    ) AS active_policies
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+WHERE rr.project_id = $1
+  AND rr.created_at >= $2
+  AND rr.created_at < $3
+`
+
+type GetRiskOverviewCountsParams struct {
+	ProjectID uuid.UUID
+	FromTime  pgtype.Timestamptz
+	ToTime    pgtype.Timestamptz
+}
+
+type GetRiskOverviewCountsRow struct {
+	MessagesScanned int64
+	Findings        int64
+	FlaggedSessions int64
+	ActivePolicies  int64
+}
+
+func (q *Queries) GetRiskOverviewCounts(ctx context.Context, arg GetRiskOverviewCountsParams) (GetRiskOverviewCountsRow, error) {
+	row := q.db.QueryRow(ctx, getRiskOverviewCounts, arg.ProjectID, arg.FromTime, arg.ToTime)
+	var i GetRiskOverviewCountsRow
+	err := row.Scan(
+		&i.MessagesScanned,
+		&i.Findings,
+		&i.FlaggedSessions,
+		&i.ActivePolicies,
+	)
+	return i, err
+}
+
 const getRiskPolicy = `-- name: GetRiskPolicy :one
 SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
@@ -581,6 +630,178 @@ func (q *Queries) ListEnabledToolIdentityPoliciesByProject(ctx context.Context, 
 			&i.DeletedAt,
 			&i.Deleted,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRiskOverviewTimeSeriesFindings = `-- name: ListRiskOverviewTimeSeriesFindings :many
+WITH buckets AS (
+  SELECT generate_series(
+      date_trunc('hour', $1::timestamptz)
+    , date_trunc('hour', ($2::timestamptz - INTERVAL '1 microsecond'))
+    , INTERVAL '1 hour'
+  )::timestamptz AS bucket_start
+),
+categorized AS (
+  SELECT
+      date_trunc('hour', rr.created_at)::timestamptz AS bucket_start
+    , CASE
+        WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
+        WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
+        WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
+        WHEN rr.rule_id IN (
+            'pii.us_ssn'
+          , 'pii.us_passport'
+          , 'pii.us_driver_license'
+          , 'pii.us_itin'
+          , 'pii.uk_nhs'
+          , 'pii.uk_nino'
+          , 'pii.uk_passport'
+          , 'pii.es_nif'
+          , 'pii.it_fiscal_code'
+          , 'pii.au_tfn'
+          , 'pii.in_pan'
+          , 'pii.in_aadhaar'
+          , 'pii.sg_nric_fin'
+        ) THEN 'government_ids'
+        WHEN rr.rule_id IN (
+            'pii.medical_license'
+          , 'pii.us_mbi'
+          , 'pii.us_npi'
+          , 'pii.medical_disease_disorder'
+          , 'pii.medical_medication'
+          , 'pii.medical_therapeutic_procedure'
+          , 'pii.medical_clinical_event'
+          , 'pii.medical_biological_attribute'
+          , 'pii.medical_family_history'
+        ) THEN 'healthcare'
+        WHEN rr.rule_id IN (
+            'pii.harmful_content_request'
+          , 'pii.policy_violation'
+          , 'pii.unauthorized_action'
+          , 'pii.topic_boundary_violation'
+        ) THEN 'off_policy'
+        WHEN rr.rule_id LIKE 'pii.%' THEN 'pii'
+        ELSE 'custom'
+      END AS category
+  FROM risk_results rr
+  WHERE rr.project_id = $3::uuid
+    AND rr.found IS TRUE
+    AND rr.created_at >= $1
+    AND rr.created_at < $2
+),
+categories AS (
+  SELECT DISTINCT category
+  FROM categorized
+),
+findings_by_bucket AS (
+  SELECT
+      bucket_start
+    , category
+    , COUNT(*)::BIGINT AS findings
+  FROM categorized
+  GROUP BY bucket_start, category
+)
+SELECT
+    buckets.bucket_start
+  , categories.category
+  , COALESCE(findings_by_bucket.findings, 0)::BIGINT AS findings
+FROM buckets
+CROSS JOIN categories
+LEFT JOIN findings_by_bucket ON findings_by_bucket.bucket_start = buckets.bucket_start AND findings_by_bucket.category = categories.category
+ORDER BY buckets.bucket_start ASC, categories.category ASC
+`
+
+type ListRiskOverviewTimeSeriesFindingsParams struct {
+	FromTime  pgtype.Timestamptz
+	ToTime    pgtype.Timestamptz
+	ProjectID uuid.UUID
+}
+
+type ListRiskOverviewTimeSeriesFindingsRow struct {
+	BucketStart pgtype.Timestamptz
+	Category    string
+	Findings    int64
+}
+
+func (q *Queries) ListRiskOverviewTimeSeriesFindings(ctx context.Context, arg ListRiskOverviewTimeSeriesFindingsParams) ([]ListRiskOverviewTimeSeriesFindingsRow, error) {
+	rows, err := q.db.Query(ctx, listRiskOverviewTimeSeriesFindings, arg.FromTime, arg.ToTime, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRiskOverviewTimeSeriesFindingsRow
+	for rows.Next() {
+		var i ListRiskOverviewTimeSeriesFindingsRow
+		if err := rows.Scan(&i.BucketStart, &i.Category, &i.Findings); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRiskOverviewTopUsers = `-- name: ListRiskOverviewTopUsers :many
+WITH user_findings AS (
+  SELECT
+    COALESCE(
+      NULLIF(u.email, ''),
+      CASE WHEN cm.external_user_id LIKE '%@%' THEN cm.external_user_id END,
+      CASE WHEN c.external_user_id LIKE '%@%' THEN c.external_user_id END,
+      'Unknown user'
+    )::TEXT AS email
+  FROM risk_results rr
+  JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+  LEFT JOIN users u ON u.id = COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''))
+  WHERE rr.project_id = $2
+    AND rr.found IS TRUE
+    AND rr.created_at >= $3
+    AND rr.created_at < $4
+)
+SELECT email, COUNT(*)::BIGINT AS findings
+FROM user_findings
+GROUP BY email
+ORDER BY findings DESC, email ASC
+LIMIT $1
+`
+
+type ListRiskOverviewTopUsersParams struct {
+	RowLimit  int32
+	ProjectID uuid.UUID
+	FromTime  pgtype.Timestamptz
+	ToTime    pgtype.Timestamptz
+}
+
+type ListRiskOverviewTopUsersRow struct {
+	Email    string
+	Findings int64
+}
+
+func (q *Queries) ListRiskOverviewTopUsers(ctx context.Context, arg ListRiskOverviewTopUsersParams) ([]ListRiskOverviewTopUsersRow, error) {
+	rows, err := q.db.Query(ctx, listRiskOverviewTopUsers,
+		arg.RowLimit,
+		arg.ProjectID,
+		arg.FromTime,
+		arg.ToTime,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRiskOverviewTopUsersRow
+	for rows.Next() {
+		var i ListRiskOverviewTopUsersRow
+		if err := rows.Scan(&i.Email, &i.Findings); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
