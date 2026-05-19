@@ -45,6 +45,7 @@ import (
 type Activities struct {
 	collectOpenRouterCreditsMetrics *activities.CollectOpenRouterCreditsMetrics
 	collectPlatformUsageMetrics     *activities.CollectPlatformUsageMetrics
+	pollCursorUsageMetrics          *activities.PollCursorUsageMetrics
 	customDomainIngress             *activities.CustomDomainIngress
 	fallbackModelUsageTracking      *activities.FallbackModelUsageTracking
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
@@ -117,6 +118,7 @@ func NewActivities(
 	temporalEnv *tenv.Environment,
 	telemetryLogger *telemetry.Logger,
 	chConn clickhouse.Conn,
+	telemetryRepo *telemetryrepo.Queries,
 	triggerApp *bgtriggers.App,
 	cacheAdapter cache.Cache,
 	assistantsCore *assistants.ServiceCore,
@@ -133,6 +135,7 @@ func NewActivities(
 	return &Activities{
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
+		pollCursorUsageMetrics:          activities.NewPollCursorUsageMetrics(logger, db, encryption, telemetryLogger),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
 		fallbackModelUsageTracking:      activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
@@ -256,6 +259,14 @@ func (a *Activities) FireOpenRouterCreditsMetrics(ctx context.Context, metrics [
 
 func (a *Activities) FreeTierReportingUsageMetrics(ctx context.Context, orgIDs []string) error {
 	return a.freeTierReportingUsageMetrics.Do(ctx, orgIDs)
+}
+
+func (a *Activities) ListAIIntegrationUsagePollCandidates(ctx context.Context, input activities.ListAIIntegrationUsagePollCandidatesInput) ([]activities.AIIntegrationUsagePollConfig, error) {
+	return a.pollCursorUsageMetrics.ListAIIntegrationUsagePollCandidates(ctx, input)
+}
+
+func (a *Activities) SyncAIIntegrationUsage(ctx context.Context, input activities.SyncAIIntegrationUsageInput) error {
+	return a.pollCursorUsageMetrics.SyncAIIntegrationUsage(ctx, input)
 }
 
 func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) error {

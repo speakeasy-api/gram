@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: b61eda2f93c8dec88417e844cab111b7
+  docChecksum: 7fd97149dbc97029551c26bcad934e5f
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -92,6 +92,8 @@ trackedFiles:
     last_write_checksum: sha1:331ddbc24f5b29df56a4bd3fb3299f1f0f7b128f
   docs/models/components/addpluginserverform.md:
     last_write_checksum: sha1:a2726c1edb39bdb417e5a9e65fc695f7a5abb9f2
+  docs/models/components/aiintegrationconfig.md:
+    last_write_checksum: sha1:454bd9051895cf58dba396adc3879c95db443da3
   docs/models/components/allowedorigin.md:
     last_write_checksum: sha1:962b6ed2e5fe2e57c01511a764dbef975efd6289
   docs/models/components/allowedoriginstatus.md:
@@ -252,6 +254,8 @@ trackedFiles:
     last_write_checksum: sha1:bd57d178784c1f505ca00b2d9f1c502a136c5f06
   docs/models/components/customdomain.md:
     last_write_checksum: sha1:408cf80dec9f85399ba97808d4742548dc857798
+  docs/models/components/deleteconfigrequestbody.md:
+    last_write_checksum: sha1:b7d30e226bbd0def8b7ab29a6f109f459e5c382a
   docs/models/components/deleteglobaltoolvariationresult.md:
     last_write_checksum: sha1:04dce9a78844146d01af0010e5af8cd64c155a00
   docs/models/components/deleterequestbody.md:
@@ -977,7 +981,9 @@ trackedFiles:
   docs/models/components/upsertallowedoriginresult.md:
     last_write_checksum: sha1:13b8ea35470e5018a12d1a922ae28f08c7b5d0b0
   docs/models/components/upsertconfigrequestbody.md:
-    last_write_checksum: sha1:1946346b1e71cdf998ff6c3b2b0db1bca36ff575
+    last_write_checksum: sha1:b708566a1d788be6df11b3e50b14043ea2614e01
+  docs/models/components/upsertconfigrequestbody2.md:
+    last_write_checksum: sha1:d2e1a48c016d0ec091b4e4f0944738ddc014e1db
   docs/models/components/upsertglobaltoolvariationform.md:
     last_write_checksum: sha1:dbc2f90b2e889c10e3377a2cdb711d68db82683d
   docs/models/components/upsertglobaltoolvariationresult.md:
@@ -1266,6 +1272,10 @@ trackedFiles:
     last_write_checksum: sha1:eaa94fcf4ef23006c97c713b3293908fd83c8fac
   docs/models/operations/creditusagesecurity.md:
     last_write_checksum: sha1:33a0215e6ac9b82eec6ae3968984d4b32fa9658e
+  docs/models/operations/deleteaiintegrationconfigrequest.md:
+    last_write_checksum: sha1:6b2d94936bab5bb858fcfab010834cd7fa490af6
+  docs/models/operations/deleteaiintegrationconfigsecurity.md:
+    last_write_checksum: sha1:c297e08b894149282d230905d152eeb2bde18f6c
   docs/models/operations/deleteassistantmemoryrequest.md:
     last_write_checksum: sha1:a3090955464c3c694878b2dc2ed4674c1cef232b
   docs/models/operations/deleteassistantmemorysecurity.md:
@@ -1496,6 +1506,10 @@ trackedFiles:
     last_write_checksum: sha1:3b9c1d2f5fb3ca86a3125c43ac2d0aa971813584
   docs/models/operations/getactivedeploymentsecurityoption2.md:
     last_write_checksum: sha1:b7a794e93f52ba73fc4513ff0ecd10c2aede8eaf
+  docs/models/operations/getaiintegrationconfigrequest.md:
+    last_write_checksum: sha1:00ad81e47fbcfa1d92adcc7cc0007eaacef17a26
+  docs/models/operations/getaiintegrationconfigsecurity.md:
+    last_write_checksum: sha1:c1bbc8cb3561261c8b17890598cea4549365feee
   docs/models/operations/getassistantmemoryrequest.md:
     last_write_checksum: sha1:6de216af4d10cc781042954734b3a2aef3d2e7e4
   docs/models/operations/getassistantmemorysecurity.md:
@@ -2602,6 +2616,10 @@ trackedFiles:
     last_write_checksum: sha1:22a6c65338851e761ffe63718798ef2e29d10ed7
   docs/models/operations/uploadopenapiv3assetsecurityoption2.md:
     last_write_checksum: sha1:3700fc4e4dfe6f922af53452c3d268f7d3667439
+  docs/models/operations/upsertaiintegrationconfigrequest.md:
+    last_write_checksum: sha1:f59122f41881b32a5f32b59823608ad32292395b
+  docs/models/operations/upsertaiintegrationconfigsecurity.md:
+    last_write_checksum: sha1:ba9b501cc999a9c90d560127df6b983d6cbfdebb
   docs/models/operations/upsertallowedoriginrequest.md:
     last_write_checksum: sha1:6caf6b3ebafbf611ba9b5022b836630558336769
   docs/models/operations/upsertallowedoriginsecurity.md:
@@ -2619,7 +2637,7 @@ trackedFiles:
   docs/models/operations/upsertglobalvariationsecurityoption2.md:
     last_write_checksum: sha1:804fdcf23b07e58cfc27080a650e5ef375e74276
   docs/models/operations/upsertotelforwardingconfigrequest.md:
-    last_write_checksum: sha1:ad247111ae67464a68a1c396cdf0506d70538cbe
+    last_write_checksum: sha1:f0b6187580c7488b7244f91b770cb1be05a5044e
   docs/models/operations/upsertotelforwardingconfigsecurity.md:
     last_write_checksum: sha1:a2bfe1e877ac020db2255b7d2f97db3bbfba5efd
   docs/models/operations/upsertservernameoverriderequest.md:
@@ -2644,6 +2662,8 @@ trackedFiles:
     last_write_checksum: sha1:d7327bb7bc7d90ea3fb3593531e041e6c9fc4f9e
   docs/sdks/access/README.md:
     last_write_checksum: sha1:c50ea3f9ce0e29ef04c31c8a4e4ef695d0c2fa30
+  docs/sdks/aiintegrations/README.md:
+    last_write_checksum: sha1:f38d3ea40bf078b1524a4a33683699f6b36b956a
   docs/sdks/approvals/README.md:
     last_write_checksum: sha1:db8e7e38d1bb7b98ece0f26752fc0b25cc20c5d0
   docs/sdks/assets/README.md:
@@ -2695,7 +2715,7 @@ trackedFiles:
   docs/sdks/organizations/README.md:
     last_write_checksum: sha1:c6dfb016efc31136253cfc3b3d9afd259886ecbd
   docs/sdks/otelforwarding/README.md:
-    last_write_checksum: sha1:9599fbb87a1e733dbaf6180a1602c3ed20e46953
+    last_write_checksum: sha1:b84a6bc78da3559cebe49c3aaf83e14702c3d05c
   docs/sdks/packages/README.md:
     last_write_checksum: sha1:630727b17ae78739629705da27f894236bba7ad0
   docs/sdks/plugins/README.md:
@@ -2800,6 +2820,12 @@ trackedFiles:
     last_write_checksum: sha1:76240cb7550931e33b9dc1fc7c4cc911fd45baf4
   src/funcs/accessUpdateRole.ts:
     last_write_checksum: sha1:193098018d2aeb87f22b9fc4df35fa5465244b29
+  src/funcs/aiIntegrationsDeleteConfig.ts:
+    last_write_checksum: sha1:625158ee4690f523f48d2019135e6a990ffd430c
+  src/funcs/aiIntegrationsGetConfig.ts:
+    last_write_checksum: sha1:0b6ddcfe7950f7daf39b1b952fa13b0218433763
+  src/funcs/aiIntegrationsUpsertConfig.ts:
+    last_write_checksum: sha1:7721e16b5f21d8683683cd95823aea374cd7a33a
   src/funcs/assetsCreateSignedChatAttachmentURL.ts:
     id: "300548193214"
     last_write_checksum: sha1:3d035997a6286016bda1c8498bda8bf64f6071d8
@@ -3139,7 +3165,7 @@ trackedFiles:
   src/funcs/otelForwardingGetConfig.ts:
     last_write_checksum: sha1:bf3940fc41218fe94872cbc619ccaeafbc809935
   src/funcs/otelForwardingUpsertConfig.ts:
-    last_write_checksum: sha1:6b3343da024de56e004c7d8ad9d390115d9cec6d
+    last_write_checksum: sha1:bdb131a0c61f3a670be7e4e81d4f6f9ee727cec3
   src/funcs/packagesCreate.ts:
     id: b7d4f4a09722
     last_write_checksum: sha1:e5c93edada4390f85a419c6edcefdecdead1e808
@@ -3594,6 +3620,8 @@ trackedFiles:
     pristine_git_object: cf22b996b9d6794f9d401b6d2de9e8905049d8ef
   src/models/components/addpluginserverform.ts:
     last_write_checksum: sha1:6af5998e0f14002028123f6a8c26896c1d1f4ed8
+  src/models/components/aiintegrationconfig.ts:
+    last_write_checksum: sha1:4cb1ba6b0f9197e6ec1145c6fd4c7c1be028990b
   src/models/components/allowedorigin.ts:
     id: 99b4f40f1f9c
     last_write_checksum: sha1:09b19b8524236e2c90452d0539edff8f12f26872
@@ -3772,6 +3800,8 @@ trackedFiles:
     id: 0931e77e04a5
     last_write_checksum: sha1:8793582a898d08c48da8a062952def456132e664
     pristine_git_object: 525b19a5bfc890afabcef24db102709e77cb6372
+  src/models/components/deleteconfigrequestbody.ts:
+    last_write_checksum: sha1:a76bfbf1e3b7e2c53bc38c95b77e1e4f0b814f84
   src/models/components/deleteglobaltoolvariationresult.ts:
     id: 3156d841fa22
     last_write_checksum: sha1:b1b651c14d4f90bf88183b9936c52d9e01bf42c8
@@ -3954,7 +3984,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:05eddf536eb64b08a92f4ea18ba79865dc091335
+    last_write_checksum: sha1:72553715c677d8ecc7a9b832ff8e4f3977f83ad2
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -4603,7 +4633,9 @@ trackedFiles:
     last_write_checksum: sha1:c48aff42abab09c988e5e74d728e289e892ea611
     pristine_git_object: d55d8dabb1ae77cf59092a48037dbdf0bc10efff
   src/models/components/upsertconfigrequestbody.ts:
-    last_write_checksum: sha1:0a8d3232de3a3e8b69293591b4b0fdeb6459463c
+    last_write_checksum: sha1:174313f7c7e134bbaf4090a1ada416e937dc0886
+  src/models/components/upsertconfigrequestbody2.ts:
+    last_write_checksum: sha1:7a7468132c5c5666749da655e8d741cc42ca4de3
   src/models/components/upsertglobaltoolvariationform.ts:
     id: 9199a7e2105e
     last_write_checksum: sha1:732b0af909bd1838e4024b93b7bf4ccf5a78f08c
@@ -4792,6 +4824,8 @@ trackedFiles:
     id: 553123ea26e3
     last_write_checksum: sha1:17e374e04f0720acafb5de880f0b4ec96d5cac43
     pristine_git_object: 1f53b334fc0e5e0231ecf7fd7e0c4027b64250fd
+  src/models/operations/deleteaiintegrationconfig.ts:
+    last_write_checksum: sha1:96b08f303a8a85775e6d7f0b5bcdf9a92608fdd5
   src/models/operations/deleteassistant.ts:
     last_write_checksum: sha1:e700ebdad6aad75340d6960840ac3ef0fe2ec61f
   src/models/operations/deleteassistantmemory.ts:
@@ -4894,6 +4928,8 @@ trackedFiles:
     id: 6387c7686988
     last_write_checksum: sha1:72ccae6acaa06ae73373ceba82c1bb4d2a5686d4
     pristine_git_object: dcaae83aaf9635a59c38a08419173ddc804ae7e8
+  src/models/operations/getaiintegrationconfig.ts:
+    last_write_checksum: sha1:4bd7cc4f21d4bcc4c5f95dec28626092e5210b32
   src/models/operations/getassistant.ts:
     last_write_checksum: sha1:71ff220b50fdf314f7e422b5593f46f5ed8c96bb
   src/models/operations/getassistantmemory.ts:
@@ -5008,7 +5044,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:d84a109f21d99733a9bdc990211df14db537379a
+    last_write_checksum: sha1:b065bafd43d8df8e6a8821512b713fb98aa12567
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -5366,6 +5402,8 @@ trackedFiles:
     id: 6e40980b6f02
     last_write_checksum: sha1:39507981b9d4d17f707c860f61a1b22ecfaaee7b
     pristine_git_object: f8c97d700d28af1ee5e5b55c1e850404c9514262
+  src/models/operations/upsertaiintegrationconfig.ts:
+    last_write_checksum: sha1:9515b88640ab06d65d266706ae6c0ae3090e56f0
   src/models/operations/upsertallowedorigin.ts:
     id: 396834dc668a
     last_write_checksum: sha1:59139e842d2de5e05872b7bd955ddc918816de5d
@@ -5375,7 +5413,7 @@ trackedFiles:
     last_write_checksum: sha1:e314995a441474665de807eba706ee2d29fe942f
     pristine_git_object: 005a793681df8849f9d50d6fa0d1ef3d1204c519
   src/models/operations/upsertotelforwardingconfig.ts:
-    last_write_checksum: sha1:771e4ec2a465461259acdf1e78240fde23fbb1d2
+    last_write_checksum: sha1:0b8ecaad66b8254038313b0dde8af15ba7352325
   src/models/operations/upsertservernameoverride.ts:
     last_write_checksum: sha1:ebbd1b550a1d979debb64fa14b7ed06b868b0102
   src/models/operations/validateapikey.ts:
@@ -5410,6 +5448,10 @@ trackedFiles:
     pristine_git_object: 0bf3bb05f484a17fa1fc468fe71685a0cb10538b
   src/react-query/addPluginServer.ts:
     last_write_checksum: sha1:2e4aa5ad010f25fdf16b1de1c7a8a6ee060bd643
+  src/react-query/aiIntegrationConfig.core.ts:
+    last_write_checksum: sha1:8e5a3952bc3754bbe88360fe8e27fa8c48a0a484
+  src/react-query/aiIntegrationConfig.ts:
+    last_write_checksum: sha1:802cba0c1052c4326c366639c2f029735b36a01a
   src/react-query/assistantMemoriesDelete.ts:
     last_write_checksum: sha1:5e124634109c90b0d8cd289d8f4ce4a21bdb5edf
   src/react-query/assistantsCreate.ts:
@@ -5554,6 +5596,8 @@ trackedFiles:
     last_write_checksum: sha1:16eb6b63cfa6691d7c713e90f4f59d315b61b764
   src/react-query/createUserSessionIssuer.ts:
     last_write_checksum: sha1:7d2351e9bc15d5fb47e7dce949cfb6cff6cb02f0
+  src/react-query/deleteAIIntegrationConfig.ts:
+    last_write_checksum: sha1:a2fb22362efe0b9c7e58141b0c44eb7c50600c5d
   src/react-query/deleteDomain.ts:
     id: 247dd372ac28
     last_write_checksum: sha1:349a21aebe7c278a176b9320bc9989ddc864ec94
@@ -5776,7 +5820,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:9fb68bbb8147570970259553ee191414f7385702
+    last_write_checksum: sha1:76cc6882623d801ee2aa7ef7114c8bf60e73f0c2
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -6368,6 +6412,8 @@ trackedFiles:
     id: f739e9d52e44
     last_write_checksum: sha1:4cd472c8ac2e20c85b0390790d49c25133c22fef
     pristine_git_object: f021c101e71d5b8f9a5af1c65b2baaa5f4020aa0
+  src/react-query/upsertAIIntegrationConfig.ts:
+    last_write_checksum: sha1:3e8217a8cccd927fe34a260dd64c05add889ea82
   src/react-query/upsertAllowedOrigin.ts:
     id: 6d1b90765707
     last_write_checksum: sha1:1ec702479ebbf29896aa37866f6a944d8abcac59
@@ -6414,6 +6460,8 @@ trackedFiles:
     last_write_checksum: sha1:7a8b3ee3d721701d3b98ec26f6b6f3b1b1a27bd9
   src/sdk/access.ts:
     last_write_checksum: sha1:37c912101f3dc622efcec2d90e0c48035f557057
+  src/sdk/aiintegrations.ts:
+    last_write_checksum: sha1:3e48a983553920eb58c08bb83e89f01b28d95e1a
   src/sdk/approvals.ts:
     last_write_checksum: sha1:68c71e868a290b10f34b3d86602af6ff6eda4da6
   src/sdk/assets.ts:
@@ -6526,7 +6574,7 @@ trackedFiles:
     last_write_checksum: sha1:be77693c3ad1fead906ed32052a6395f6d2cd130
   src/sdk/sdk.ts:
     id: 784571af2f69
-    last_write_checksum: sha1:13bae5fb1873ba74f7cc2211435078fdb2683f6d
+    last_write_checksum: sha1:dba1ca3ccee2d91f3fa3a776a51a6951944e81bb
     pristine_git_object: 02357477f876788c1d5316789aca538a95c1070a
   src/sdk/slack.ts:
     id: bbd98c55f3c0
@@ -9760,6 +9808,38 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  deleteAIIntegrationConfig:
+    speakeasy-default-delete-AI-integration-config:
+      requestBody:
+        application/json: {"provider": "<value>"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getAIIntegrationConfig:
+    speakeasy-default-get-AI-integration-config:
+      parameters:
+        query:
+          provider: "<value>"
+      responses:
+        "200":
+          application/json: {"enabled": true, "has_api_key": false, "organization_id": "<id>", "provider": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  upsertAIIntegrationConfig:
+    speakeasy-default-upsert-AI-integration-config:
+      requestBody:
+        application/json: {"api_key": "<value>", "enabled": false, "provider": "<value>"}
+      responses:
+        "200":
+          application/json: {"enabled": true, "has_api_key": false, "organization_id": "<id>", "provider": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

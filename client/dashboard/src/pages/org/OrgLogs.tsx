@@ -8,6 +8,7 @@ import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Eye, FileText, Monitor } from "lucide-react";
 import { useState } from "react";
+import { AIIntegrationsSection } from "./AIIntegrationsSection";
 import { OtelForwardingSection } from "./OtelForwardingSection";
 import { useProductFeatures } from "@gram/client/react-query";
 
@@ -205,6 +206,10 @@ export function OrgLogsInner() {
             )}
           </Stack>
         </Stack>
+      </div>
+
+      <div className="mt-8">
+        <AIIntegrationsSection />
       </div>
 
       <div className="mt-8">

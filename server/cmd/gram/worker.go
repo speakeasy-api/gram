@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
@@ -720,6 +721,7 @@ func newWorkerCommand() *cli.Command {
 				MCPRegistryClient:   mcpRegistryClient,
 				TelemetryLogger:     telemetryLogger,
 				ClickhouseConn:      chDB,
+				TelemetryRepo:       telemetryrepo.New(chDB),
 				TriggersApp:         triggerApp,
 				CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
 				AssistantsCore:      assistantsCore,

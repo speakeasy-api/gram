@@ -62,12 +62,18 @@ export function InsightsEmployeeDetailContent() {
     isLoading: membersLoading,
     error: membersError,
   } = useMembers();
+  const routeUser = useMemo(
+    () => (userSlug ? decodeURIComponent(userSlug) : ""),
+    [userSlug],
+  );
   const members = useMemo(() => membersData?.members ?? [], [membersData]);
   const member = useMemo(
-    () => members.find((m) => slugify(m.name) === userSlug),
-    [members, userSlug],
+    () =>
+      members.find(
+        (m) => slugify(m.name) === userSlug || m.email === routeUser,
+      ),
+    [members, routeUser, userSlug],
   );
-  const userId = member?.id;
 
   const { from, to, timeRangeMs } = useMemo(() => {
     const end = new Date();
@@ -76,17 +82,32 @@ export function InsightsEmployeeDetailContent() {
     return { from: start, to: end, timeRangeMs: LOOKBACK_DAYS * 86_400_000 };
   }, []);
 
+  const fallbackUserQuery = useQuery({
+    queryKey: [
+      "insights",
+      "employee-detail",
+      "fallback-user",
+      routeUser,
+      from.toISOString(),
+      to.toISOString(),
+    ],
+    queryFn: () => fetchMatchingUserSummary(client, from, to, routeUser),
+    enabled: member == null && routeUser !== "",
+    throwOnError: false,
+  });
+  const resolvedUserId = member?.id ?? fallbackUserQuery.data?.userId;
+
   const summaryQuery = useQuery({
     queryKey: [
       "insights",
       "employee-detail",
       "summary",
-      userId,
+      resolvedUserId,
       from.toISOString(),
       to.toISOString(),
     ],
-    queryFn: () => fetchUserSummary(client, from, to, userId!),
-    enabled: userId != null,
+    queryFn: () => fetchUserSummary(client, from, to, resolvedUserId!),
+    enabled: resolvedUserId != null,
     throwOnError: false,
   });
 
@@ -95,12 +116,12 @@ export function InsightsEmployeeDetailContent() {
       "insights",
       "employee-detail",
       "metrics",
-      userId,
+      resolvedUserId,
       from.toISOString(),
       to.toISOString(),
     ],
-    queryFn: () => fetchUserMetrics(client, from, to, userId!),
-    enabled: userId != null,
+    queryFn: () => fetchUserMetrics(client, from, to, resolvedUserId!),
+    enabled: resolvedUserId != null,
     throwOnError: false,
   });
 
@@ -109,28 +130,34 @@ export function InsightsEmployeeDetailContent() {
       "insights",
       "employee-detail",
       "overview",
-      userId,
+      resolvedUserId,
       from.toISOString(),
       to.toISOString(),
     ],
-    queryFn: () => fetchUserOverview(client, from, to, userId!),
-    enabled: userId != null,
+    queryFn: () => fetchUserOverview(client, from, to, resolvedUserId!),
+    enabled: resolvedUserId != null,
     throwOnError: false,
   });
 
-  const summary = summaryQuery.data ?? null;
+  const summary = summaryQuery.data ?? fallbackUserQuery.data ?? null;
   const metrics = metricsQuery.data;
   const overview = overviewQuery.data;
   const timeSeries = overview?.timeSeries ?? [];
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
 
-  const displayName = member?.name ?? userSlug ?? "Employee";
-  const displayEmail = member?.email ?? "Unknown email";
+  const displayName =
+    member?.name ?? fallbackUserQuery.data?.userId ?? routeUser ?? "Employee";
+  const displayEmail =
+    member?.email ??
+    (resolvedUserId?.includes("@") ? resolvedUserId : "Unknown email");
 
   const totalTokens = getTotalTokens(summary);
+  const totalCost = summary?.totalCost ?? 0;
   const isLoading =
-    membersLoading || (userId != null && summaryQuery.isLoading);
-  const error = summaryQuery.error ?? membersError;
+    membersLoading ||
+    (member == null && fallbackUserQuery.isLoading) ||
+    (resolvedUserId != null && summaryQuery.isLoading);
+  const error = summaryQuery.error ?? fallbackUserQuery.error ?? membersError;
 
   return (
     <>
@@ -182,7 +209,7 @@ export function InsightsEmployeeDetailContent() {
                   "grid gap-4 transition-all duration-300",
                   isInsightsOpen
                     ? "grid-cols-1 md:grid-cols-2"
-                    : "grid-cols-1 md:grid-cols-3",
+                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
                 )}
               >
                 <FirstActivityCard
@@ -192,6 +219,17 @@ export function InsightsEmployeeDetailContent() {
                   title="Total Tokens"
                   value={totalTokens}
                   icon="gauge"
+                />
+                <MetricCard
+                  title="Total Cost"
+                  value={totalCost}
+                  format="currency"
+                  icon="credit-card"
+                  subtext={
+                    totalCost > 0
+                      ? `Last ${LOOKBACK_DAYS} days`
+                      : "No cost data reported"
+                  }
                 />
                 <MetricCard
                   title="Tool Calls"
@@ -333,10 +371,10 @@ function DetailLoadingState({ isInsightsOpen }: { isInsightsOpen: boolean }) {
           "grid gap-4 transition-all duration-300",
           isInsightsOpen
             ? "grid-cols-1 md:grid-cols-2"
-            : "grid-cols-1 md:grid-cols-3",
+            : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
         )}
       >
-        {Array.from({ length: 3 }).map((_, index) => (
+        {Array.from({ length: 4 }).map((_, index) => (
           <div key={index} className="bg-card rounded-lg border p-5">
             <Skeleton className="mb-4 h-4 w-28" />
             <Skeleton className="h-9 w-20" />
@@ -531,6 +569,40 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
+async function fetchMatchingUserSummary(
+  client: Parameters<typeof telemetrySearchUsers>[0],
+  from: Date,
+  to: Date,
+  identifier: string,
+): Promise<UserSummary | null> {
+  let cursor: string | undefined;
+  do {
+    const result = await unwrapAsync(
+      telemetrySearchUsers(client, {
+        searchUsersPayload: {
+          cursor,
+          filter: {
+            from,
+            to,
+          },
+          limit: 1000,
+          sort: "desc",
+          userType: "internal",
+        },
+      }),
+    );
+
+    const match = result.users.find(
+      (user) =>
+        user.userId === identifier || slugify(user.userId) === identifier,
+    );
+    if (match) return match;
+    cursor = result.nextCursor;
+  } while (cursor);
+
+  return null;
+}
+
 async function fetchUserSummary(
   client: Parameters<typeof telemetrySearchUsers>[0],
   from: Date,
@@ -543,7 +615,6 @@ async function fetchUserSummary(
         filter: {
           from,
           to,
-          eventSource: "hook",
           userIds: [userId],
         },
         limit: 1,
@@ -568,7 +639,6 @@ async function fetchUserMetrics(
         from,
         to,
         userId,
-        eventSource: "hook",
       },
     }),
   );
@@ -589,7 +659,6 @@ async function fetchUserOverview(
         to,
         includeTimeSeries: true,
         userId,
-        eventSource: "hook",
       },
     }),
   );

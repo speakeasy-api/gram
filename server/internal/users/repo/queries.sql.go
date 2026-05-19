@@ -67,6 +67,53 @@ func (q *Queries) GetConnectedUserByEmail(ctx context.Context, arg GetConnectedU
 	return i, err
 }
 
+const getConnectedUsersByEmails = `-- name: GetConnectedUsersByEmails :many
+SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
+JOIN organization_user_relationships our ON our.user_id = u.id
+WHERE u.email = ANY($1::text[])
+  AND our.organization_id = $2
+  AND our.deleted_at IS NULL
+`
+
+type GetConnectedUsersByEmailsParams struct {
+	Emails         []string
+	OrganizationID string
+}
+
+func (q *Queries) GetConnectedUsersByEmails(ctx context.Context, arg GetConnectedUsersByEmailsParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, getConnectedUsersByEmails, arg.Emails, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.PhotoUrl,
+			&i.Admin,
+			&i.LastLogin,
+			&i.WorkosID,
+			&i.WorkosCreatedAt,
+			&i.WorkosUpdatedAt,
+			&i.WorkosDeletedAt,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getConnectedUsersByWorkosIDs = `-- name: GetConnectedUsersByWorkosIDs :many
 SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
