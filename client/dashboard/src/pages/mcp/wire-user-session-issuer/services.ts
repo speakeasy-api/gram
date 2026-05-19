@@ -1,8 +1,9 @@
 import type { Gram } from "@gram/client";
-import type {
-  RemoteSessionClient,
-  RemoteSessionIssuer,
-  UserSessionIssuer,
+import {
+  CreateRemoteSessionClientFormTokenEndpointAuthMethod,
+  type RemoteSessionClient,
+  type RemoteSessionIssuer,
+  type UserSessionIssuer,
 } from "@gram/client/models/components";
 import {
   buildCloneClientFromOAuthProxyProviderMutation,
@@ -10,12 +11,14 @@ import {
   buildCreateRemoteSessionIssuerMutation,
   buildCreateUserSessionIssuerMutation,
   buildDiscoverRemoteSessionIssuerMutation,
-  buildRegisterRemoteSessionIssuerMutation,
   buildSetToolsetUserSessionIssuerMutation,
 } from "@gram/client/react-query";
 import { fromPromise } from "xstate";
 
-import { remoteLoginCallbackURL } from "@/lib/externalMcpUserSessions";
+import {
+  type AuthedFetch,
+  proxyRegisterUpstreamClient,
+} from "@/lib/proxyRegisterUpstreamClient";
 
 import type {
   CreateRemoteSessionClientInput,
@@ -33,9 +36,26 @@ const fetchOptions = ({ signal }: SignalArg) => ({
   options: { fetchOptions: { signal } },
 });
 
+function narrowTokenEndpointAuthMethod(
+  value: string | null | undefined,
+): CreateRemoteSessionClientFormTokenEndpointAuthMethod | undefined {
+  if (
+    value ===
+      CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretBasic ||
+    value ===
+      CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretPost
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
 export type GramClient = Gram;
 
-export function createMigrationServices(client: GramClient) {
+export function createMigrationServices(
+  client: GramClient,
+  authedFetch: AuthedFetch,
+) {
   const resolveUserSessionIssuer = fromPromise<
     UserSessionIssuer | null,
     ResolveUserSessionIssuerInput
@@ -232,15 +252,26 @@ export function createMigrationServices(client: GramClient) {
             );
           }
 
-          const { mutationFn } =
-            buildRegisterRemoteSessionIssuerMutation(client);
+          const proxyRegistered = await proxyRegisterUpstreamClient(
+            authedFetch,
+            {
+              registrationEndpoint:
+                input.remoteSessionIssuer.registrationEndpoint,
+            },
+            { signal },
+          );
+
+          const { mutationFn } = buildCreateRemoteSessionClientMutation(client);
           return await mutationFn({
             request: {
-              registerRemoteSessionIssuerForm: {
+              createRemoteSessionClientForm: {
                 remoteSessionIssuerId: input.remoteSessionIssuer.id,
                 userSessionIssuerId: input.userSessionIssuerId,
-                clientName: input.manualClientName || "Speakeasy",
-                redirectUris: [remoteLoginCallbackURL()],
+                clientId: proxyRegistered.clientId,
+                clientSecret: proxyRegistered.clientSecret || undefined,
+                tokenEndpointAuthMethod: narrowTokenEndpointAuthMethod(
+                  proxyRegistered.tokenEndpointAuthMethod,
+                ),
               },
             },
             ...fetchOptions({ signal }),
