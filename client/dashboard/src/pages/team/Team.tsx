@@ -771,25 +771,29 @@ export function TeamInner() {
             />
           </div>
 
-          <Table
-            columns={memberColumns}
-            data={visibleMembers}
-            rowKey={(row) => row.userId}
-            className="min-h-fit"
-            noResultsMessage={
-              <Stack
-                gap={2}
-                className="bg-background h-full p-8"
-                align="center"
-                justify="center"
-              >
-                <Users className="text-muted-foreground h-12 w-12" />
-                <Type variant="body" className="text-muted-foreground">
-                  No team members yet
-                </Type>
-              </Stack>
-            }
-          />
+          <div className="min-h-[580px]">
+            <Table
+              columns={memberColumns}
+              data={visibleMembers}
+              rowKey={(row) => row.userId}
+              className="min-h-fit"
+              noResultsMessage={
+                <Stack
+                  gap={2}
+                  className="bg-background h-full p-8"
+                  align="center"
+                  justify="center"
+                >
+                  <Users className="text-muted-foreground h-12 w-12" />
+                  <Type variant="body" className="text-muted-foreground">
+                    {search
+                      ? "No members matching your search"
+                      : "No team members yet"}
+                  </Type>
+                </Stack>
+              }
+            />
+          </div>
           {totalPages > 1 && (
             <div className="flex items-center justify-between border-t px-4 py-3">
               <Type variant="body" className="text-muted-foreground text-sm">
