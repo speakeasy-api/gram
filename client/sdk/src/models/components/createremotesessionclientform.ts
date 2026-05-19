@@ -37,6 +37,10 @@ export type CreateRemoteSessionClientForm = {
    */
   remoteSessionIssuerId: string;
   /**
+   * Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+   */
+  scope?: Array<string> | undefined;
+  /**
    * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
    */
   tokenEndpointAuthMethod?:
@@ -58,6 +62,7 @@ export type CreateRemoteSessionClientForm$Outbound = {
   client_id: string;
   client_secret?: string | undefined;
   remote_session_issuer_id: string;
+  scope?: Array<string> | undefined;
   token_endpoint_auth_method?: string | undefined;
   user_session_issuer_id: string;
 };
@@ -71,6 +76,7 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
     clientId: z.string(),
     clientSecret: z.optional(z.string()),
     remoteSessionIssuerId: z.string(),
+    scope: z.optional(z.array(z.string())),
     tokenEndpointAuthMethod: z.optional(
       CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema,
     ),
