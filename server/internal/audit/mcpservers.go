@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -52,7 +53,7 @@ func (l *Logger) LogMcpServerCreate(ctx context.Context, dbtx repo.DBTX, event L
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServer})
 }
 
 type LogMcpServerUpdateEvent struct {
@@ -102,7 +103,7 @@ func (l *Logger) LogMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, event L
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServer})
 }
 
 type LogMcpServerDeleteEvent struct {
@@ -139,5 +140,5 @@ func (l *Logger) LogMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event L
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServer})
 }

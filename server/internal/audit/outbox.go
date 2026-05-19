@@ -10,8 +10,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 )
 
-func appendToOutbox(ctx context.Context, dbtx repo.DBTX, input repo.InsertAuditLogParams, result repo.InsertAuditLogRow) error {
-	if _, err := outbox.Append(ctx, dbtx, result.OrganizationID, events.AuditLogCreated, events.AuditLogCreatedPayload{
+func appendToOutbox(ctx context.Context, dbtx repo.DBTX, entry auditEntry, result repo.InsertAuditLogRow) error {
+	input := entry.Params
+	if _, err := outbox.Append(ctx, dbtx, result.OrganizationID, entry.OutboxEvent, events.AuditLogCreatedPayload{
 		ID:                 result.ID,
 		OrganizationID:     result.OrganizationID,
 		ProjectID:          input.ProjectID,
