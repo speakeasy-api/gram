@@ -51,7 +51,6 @@ import {
   ChevronRight,
   Ellipsis,
   RefreshCw,
-  Trash2,
   UserPlus,
   Users,
   X,
