@@ -1021,7 +1021,7 @@ func (s *ExternalOAuthService) getExternalMcpOauthConfigHint(ctx context.Context
 // DCRRequest represents the Dynamic Client Registration request per RFC 7591
 type DCRRequest struct {
 	RedirectURIs            []string `json:"redirect_uris"`
-	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
+	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method,omitempty"`
 	GrantTypes              []string `json:"grant_types"`
 	ResponseTypes           []string `json:"response_types"`
 	ClientName              string   `json:"client_name"`

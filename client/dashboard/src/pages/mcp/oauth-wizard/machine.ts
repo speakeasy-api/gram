@@ -87,11 +87,6 @@ function discoveredRegistrationEndpoint(
   return typeof v === "string" && v.length > 0 ? v : null;
 }
 
-function discoveredAuthMethods(d: DiscoveredOAuth | null): string[] {
-  const v = d?.metadata.token_endpoint_auth_methods_supported;
-  return Array.isArray(v) ? (v as string[]) : [];
-}
-
 export function canAutoConfigureFromDiscovered(
   d: DiscoveredOAuth | null,
 ): boolean {
@@ -345,13 +340,6 @@ export const oauthWizardMachine = setup({
             input: ({ context }): RegisterClientInput => ({
               registrationEndpoint:
                 discoveredRegistrationEndpoint(context.discovered) ?? "",
-              scopesSupported: context.proxy.scopes
-                .split(",")
-                .map((s) => s.trim())
-                .filter((s) => s.length > 0),
-              tokenEndpointAuthMethodsSupported: discoveredAuthMethods(
-                context.discovered,
-              ),
             }),
             onDone: {
               target: "submitting",

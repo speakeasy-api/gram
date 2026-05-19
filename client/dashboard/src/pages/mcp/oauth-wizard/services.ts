@@ -47,8 +47,6 @@ export type DeleteEnvironmentInput = { envSlug: string };
 
 export type RegisterClientInput = {
   registrationEndpoint: string;
-  scopesSupported: string[];
-  tokenEndpointAuthMethodsSupported: string[];
 };
 
 export type RegisterClientOutput = {
@@ -174,9 +172,6 @@ export function createWizardServices(
         credentials: "include",
         body: JSON.stringify({
           registration_endpoint: input.registrationEndpoint,
-          scopes_supported: input.scopesSupported,
-          token_endpoint_auth_methods_supported:
-            input.tokenEndpointAuthMethodsSupported,
         }),
         signal,
       });
