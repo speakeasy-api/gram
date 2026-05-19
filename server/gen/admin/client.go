@@ -15,18 +15,32 @@ import (
 
 // Client is the "admin" service client.
 type Client struct {
-	PokeEndpoint goa.Endpoint
+	LoginEndpoint                    goa.Endpoint
+	CallbackEndpoint                 goa.Endpoint
+	LogoutEndpoint                   goa.Endpoint
+	GetProjectEndpoint               goa.Endpoint
+	UpdateOrganizationEndpoint       goa.Endpoint
+	GetOrganizationEndpoint          goa.Endpoint
+	ListOrganizationProjectsEndpoint goa.Endpoint
+	ListOrganizationsEndpoint        goa.Endpoint
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(poke goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getProject, updateOrganization, getOrganization, listOrganizationProjects, listOrganizations goa.Endpoint) *Client {
 	return &Client{
-		PokeEndpoint: poke,
+		LoginEndpoint:                    login,
+		CallbackEndpoint:                 callback,
+		LogoutEndpoint:                   logout,
+		GetProjectEndpoint:               getProject,
+		UpdateOrganizationEndpoint:       updateOrganization,
+		GetOrganizationEndpoint:          getOrganization,
+		ListOrganizationProjectsEndpoint: listOrganizationProjects,
+		ListOrganizationsEndpoint:        listOrganizations,
 	}
 }
 
-// Poke calls the "poke" endpoint of the "admin" service.
-// Poke may return the following errors:
+// Login calls the "login" endpoint of the "admin" service.
+// Login may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -38,11 +52,164 @@ func NewClient(poke goa.Endpoint) *Client {
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) Poke(ctx context.Context) (res *PokeResult, err error) {
+func (c *Client) Login(ctx context.Context, p *LoginPayload) (res *LoginResult, err error) {
 	var ires any
-	ires, err = c.PokeEndpoint(ctx, nil)
+	ires, err = c.LoginEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*PokeResult), nil
+	return ires.(*LoginResult), nil
+}
+
+// Callback calls the "callback" endpoint of the "admin" service.
+// Callback may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Callback(ctx context.Context, p *CallbackPayload) (res *CallbackResult, err error) {
+	var ires any
+	ires, err = c.CallbackEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*CallbackResult), nil
+}
+
+// Logout calls the "logout" endpoint of the "admin" service.
+// Logout may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Logout(ctx context.Context, p *LogoutPayload) (err error) {
+	_, err = c.LogoutEndpoint(ctx, p)
+	return
+}
+
+// GetProject calls the "getProject" endpoint of the "admin" service.
+// GetProject may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetProject(ctx context.Context, p *GetProjectPayload) (res *AdminProjectDetail, err error) {
+	var ires any
+	ires, err = c.GetProjectEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminProjectDetail), nil
+}
+
+// UpdateOrganization calls the "updateOrganization" endpoint of the "admin"
+// service.
+// UpdateOrganization may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateOrganization(ctx context.Context, p *UpdateOrganizationPayload) (res *AdminOrganization, err error) {
+	var ires any
+	ires, err = c.UpdateOrganizationEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOrganization), nil
+}
+
+// GetOrganization calls the "getOrganization" endpoint of the "admin" service.
+// GetOrganization may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetOrganization(ctx context.Context, p *GetOrganizationPayload) (res *AdminOrganization, err error) {
+	var ires any
+	ires, err = c.GetOrganizationEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOrganization), nil
+}
+
+// ListOrganizationProjects calls the "listOrganizationProjects" endpoint of
+// the "admin" service.
+// ListOrganizationProjects may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListOrganizationProjects(ctx context.Context, p *ListOrganizationProjectsPayload) (res *AdminListOrganizationProjectsResult, err error) {
+	var ires any
+	ires, err = c.ListOrganizationProjectsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminListOrganizationProjectsResult), nil
+}
+
+// ListOrganizations calls the "listOrganizations" endpoint of the "admin"
+// service.
+// ListOrganizations may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListOrganizations(ctx context.Context, p *ListOrganizationsPayload) (res *AdminListOrganizationsResult, err error) {
+	var ires any
+	ires, err = c.ListOrganizationsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminListOrganizationsResult), nil
 }

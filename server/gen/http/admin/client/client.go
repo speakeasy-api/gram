@@ -17,8 +17,35 @@ import (
 
 // Client lists the admin service endpoint HTTP clients.
 type Client struct {
-	// Poke Doer is the HTTP client used to make requests to the poke endpoint.
-	PokeDoer goahttp.Doer
+	// Login Doer is the HTTP client used to make requests to the login endpoint.
+	LoginDoer goahttp.Doer
+
+	// Callback Doer is the HTTP client used to make requests to the callback
+	// endpoint.
+	CallbackDoer goahttp.Doer
+
+	// Logout Doer is the HTTP client used to make requests to the logout endpoint.
+	LogoutDoer goahttp.Doer
+
+	// GetProject Doer is the HTTP client used to make requests to the getProject
+	// endpoint.
+	GetProjectDoer goahttp.Doer
+
+	// UpdateOrganization Doer is the HTTP client used to make requests to the
+	// updateOrganization endpoint.
+	UpdateOrganizationDoer goahttp.Doer
+
+	// GetOrganization Doer is the HTTP client used to make requests to the
+	// getOrganization endpoint.
+	GetOrganizationDoer goahttp.Doer
+
+	// ListOrganizationProjects Doer is the HTTP client used to make requests to
+	// the listOrganizationProjects endpoint.
+	ListOrganizationProjectsDoer goahttp.Doer
+
+	// ListOrganizations Doer is the HTTP client used to make requests to the
+	// listOrganizations endpoint.
+	ListOrganizationsDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -40,29 +67,209 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		PokeDoer:            doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		LoginDoer:                    doer,
+		CallbackDoer:                 doer,
+		LogoutDoer:                   doer,
+		GetProjectDoer:               doer,
+		UpdateOrganizationDoer:       doer,
+		GetOrganizationDoer:          doer,
+		ListOrganizationProjectsDoer: doer,
+		ListOrganizationsDoer:        doer,
+		RestoreResponseBody:          restoreBody,
+		scheme:                       scheme,
+		host:                         host,
+		decoder:                      dec,
+		encoder:                      enc,
 	}
 }
 
-// Poke returns an endpoint that makes HTTP requests to the admin service poke
-// server.
-func (c *Client) Poke() goa.Endpoint {
+// Login returns an endpoint that makes HTTP requests to the admin service
+// login server.
+func (c *Client) Login() goa.Endpoint {
 	var (
-		decodeResponse = DecodePokeResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeLoginRequest(c.encoder)
+		decodeResponse = DecodeLoginResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildPokeRequest(ctx, v)
+		req, err := c.BuildLoginRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.PokeDoer.Do(req)
+		err = encodeRequest(req, v)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("admin", "poke", err)
+			return nil, err
+		}
+		resp, err := c.LoginDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "login", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Callback returns an endpoint that makes HTTP requests to the admin service
+// callback server.
+func (c *Client) Callback() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCallbackRequest(c.encoder)
+		decodeResponse = DecodeCallbackResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCallbackRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CallbackDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "callback", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Logout returns an endpoint that makes HTTP requests to the admin service
+// logout server.
+func (c *Client) Logout() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeLogoutRequest(c.encoder)
+		decodeResponse = DecodeLogoutResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildLogoutRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.LogoutDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "logout", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetProject returns an endpoint that makes HTTP requests to the admin service
+// getProject server.
+func (c *Client) GetProject() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetProjectRequest(c.encoder)
+		decodeResponse = DecodeGetProjectResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetProjectRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetProjectDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getProject", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateOrganization returns an endpoint that makes HTTP requests to the admin
+// service updateOrganization server.
+func (c *Client) UpdateOrganization() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateOrganizationRequest(c.encoder)
+		decodeResponse = DecodeUpdateOrganizationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateOrganizationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateOrganizationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "updateOrganization", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetOrganization returns an endpoint that makes HTTP requests to the admin
+// service getOrganization server.
+func (c *Client) GetOrganization() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetOrganizationRequest(c.encoder)
+		decodeResponse = DecodeGetOrganizationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetOrganizationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetOrganizationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getOrganization", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListOrganizationProjects returns an endpoint that makes HTTP requests to the
+// admin service listOrganizationProjects server.
+func (c *Client) ListOrganizationProjects() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListOrganizationProjectsRequest(c.encoder)
+		decodeResponse = DecodeListOrganizationProjectsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListOrganizationProjectsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListOrganizationProjectsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listOrganizationProjects", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListOrganizations returns an endpoint that makes HTTP requests to the admin
+// service listOrganizations server.
+func (c *Client) ListOrganizations() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListOrganizationsRequest(c.encoder)
+		decodeResponse = DecodeListOrganizationsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListOrganizationsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListOrganizationsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listOrganizations", err)
 		}
 		return decodeResponse(resp)
 	}

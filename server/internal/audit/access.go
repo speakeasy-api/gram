@@ -238,5 +238,9 @@ func (l *Logger) LogAccessChallengeResolve(ctx context.Context, dbtx repo.DBTX, 
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
+		return fmt.Errorf("log %s: %w", action, err)
+	}
+
+	return nil
 }

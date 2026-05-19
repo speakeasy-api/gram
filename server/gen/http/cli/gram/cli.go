@@ -74,7 +74,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-role|get-rbac-status|enable-rbac|disable-rbac|list-challenges|list-challenge-buckets|resolve-challenge)",
-		"admin poke",
+		"admin (login|callback|logout|get-project|update-organization|get-organization|list-organization-projects|list-organizations)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant)",
@@ -128,7 +128,7 @@ func UsageExamples() string {
 	return os.Args[0] + " " + "external receive-work-os-webhook --workos-signature \"abc123\" --stream \"goa.png\"" + "\n" +
 		os.Args[0] + " " + "about openapi" + "\n" +
 		os.Args[0] + " " + "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
-		os.Args[0] + " " + "admin poke" + "\n" +
+		os.Args[0] + " " + "admin login --return-to \"abc123\"" + "\n" +
 		os.Args[0] + " " + "assets serve-image --id \"abc123\"" + "\n" +
 		""
 }
@@ -235,7 +235,40 @@ func ParseEndpoint(
 
 		adminFlags = flag.NewFlagSet("admin", flag.ContinueOnError)
 
-		adminPokeFlags = flag.NewFlagSet("poke", flag.ExitOnError)
+		adminLoginFlags        = flag.NewFlagSet("login", flag.ExitOnError)
+		adminLoginReturnToFlag = adminLoginFlags.String("return-to", "", "")
+
+		adminCallbackFlags           = flag.NewFlagSet("callback", flag.ExitOnError)
+		adminCallbackCodeFlag        = adminCallbackFlags.String("code", "REQUIRED", "")
+		adminCallbackStateParamFlag  = adminCallbackFlags.String("state-param", "REQUIRED", "")
+		adminCallbackStateCookieFlag = adminCallbackFlags.String("state-cookie", "", "")
+
+		adminLogoutFlags         = flag.NewFlagSet("logout", flag.ExitOnError)
+		adminLogoutSessionIDFlag = adminLogoutFlags.String("session-id", "", "")
+
+		adminGetProjectFlags                 = flag.NewFlagSet("get-project", flag.ExitOnError)
+		adminGetProjectIDOrSlugFlag          = adminGetProjectFlags.String("id-or-slug", "REQUIRED", "")
+		adminGetProjectAdminSessionTokenFlag = adminGetProjectFlags.String("admin-session-token", "", "")
+
+		adminUpdateOrganizationFlags                 = flag.NewFlagSet("update-organization", flag.ExitOnError)
+		adminUpdateOrganizationBodyFlag              = adminUpdateOrganizationFlags.String("body", "REQUIRED", "")
+		adminUpdateOrganizationAdminSessionTokenFlag = adminUpdateOrganizationFlags.String("admin-session-token", "", "")
+
+		adminGetOrganizationFlags                 = flag.NewFlagSet("get-organization", flag.ExitOnError)
+		adminGetOrganizationIDOrSlugFlag          = adminGetOrganizationFlags.String("id-or-slug", "REQUIRED", "")
+		adminGetOrganizationAdminSessionTokenFlag = adminGetOrganizationFlags.String("admin-session-token", "", "")
+
+		adminListOrganizationProjectsFlags                 = flag.NewFlagSet("list-organization-projects", flag.ExitOnError)
+		adminListOrganizationProjectsOrganizationIDFlag    = adminListOrganizationProjectsFlags.String("organization-id", "REQUIRED", "")
+		adminListOrganizationProjectsAdminSessionTokenFlag = adminListOrganizationProjectsFlags.String("admin-session-token", "", "")
+
+		adminListOrganizationsFlags                 = flag.NewFlagSet("list-organizations", flag.ExitOnError)
+		adminListOrganizationsQFlag                 = adminListOrganizationsFlags.String("q", "", "")
+		adminListOrganizationsAccountTypeFlag       = adminListOrganizationsFlags.String("account-type", "", "")
+		adminListOrganizationsIncludeDisabledFlag   = adminListOrganizationsFlags.String("include-disabled", "", "")
+		adminListOrganizationsCursorFlag            = adminListOrganizationsFlags.String("cursor", "", "")
+		adminListOrganizationsLimitFlag             = adminListOrganizationsFlags.String("limit", "", "")
+		adminListOrganizationsAdminSessionTokenFlag = adminListOrganizationsFlags.String("admin-session-token", "", "")
 
 		assetsFlags = flag.NewFlagSet("assets", flag.ContinueOnError)
 
@@ -1705,7 +1738,14 @@ func ParseEndpoint(
 	accessResolveChallengeFlags.Usage = accessResolveChallengeUsage
 
 	adminFlags.Usage = adminUsage
-	adminPokeFlags.Usage = adminPokeUsage
+	adminLoginFlags.Usage = adminLoginUsage
+	adminCallbackFlags.Usage = adminCallbackUsage
+	adminLogoutFlags.Usage = adminLogoutUsage
+	adminGetProjectFlags.Usage = adminGetProjectUsage
+	adminUpdateOrganizationFlags.Usage = adminUpdateOrganizationUsage
+	adminGetOrganizationFlags.Usage = adminGetOrganizationUsage
+	adminListOrganizationProjectsFlags.Usage = adminListOrganizationProjectsUsage
+	adminListOrganizationsFlags.Usage = adminListOrganizationsUsage
 
 	assetsFlags.Usage = assetsUsage
 	assetsServeImageFlags.Usage = assetsServeImageUsage
@@ -2234,8 +2274,29 @@ func ParseEndpoint(
 
 		case "admin":
 			switch epn {
-			case "poke":
-				epf = adminPokeFlags
+			case "login":
+				epf = adminLoginFlags
+
+			case "callback":
+				epf = adminCallbackFlags
+
+			case "logout":
+				epf = adminLogoutFlags
+
+			case "get-project":
+				epf = adminGetProjectFlags
+
+			case "update-organization":
+				epf = adminUpdateOrganizationFlags
+
+			case "get-organization":
+				epf = adminGetOrganizationFlags
+
+			case "list-organization-projects":
+				epf = adminListOrganizationProjectsFlags
+
+			case "list-organizations":
+				epf = adminListOrganizationsFlags
 
 			}
 
@@ -3239,8 +3300,30 @@ func ParseEndpoint(
 		case "admin":
 			c := adminc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
-			case "poke":
-				endpoint = c.Poke()
+			case "login":
+				endpoint = c.Login()
+				data, err = adminc.BuildLoginPayload(*adminLoginReturnToFlag)
+			case "callback":
+				endpoint = c.Callback()
+				data, err = adminc.BuildCallbackPayload(*adminCallbackCodeFlag, *adminCallbackStateParamFlag, *adminCallbackStateCookieFlag)
+			case "logout":
+				endpoint = c.Logout()
+				data, err = adminc.BuildLogoutPayload(*adminLogoutSessionIDFlag)
+			case "get-project":
+				endpoint = c.GetProject()
+				data, err = adminc.BuildGetProjectPayload(*adminGetProjectIDOrSlugFlag, *adminGetProjectAdminSessionTokenFlag)
+			case "update-organization":
+				endpoint = c.UpdateOrganization()
+				data, err = adminc.BuildUpdateOrganizationPayload(*adminUpdateOrganizationBodyFlag, *adminUpdateOrganizationAdminSessionTokenFlag)
+			case "get-organization":
+				endpoint = c.GetOrganization()
+				data, err = adminc.BuildGetOrganizationPayload(*adminGetOrganizationIDOrSlugFlag, *adminGetOrganizationAdminSessionTokenFlag)
+			case "list-organization-projects":
+				endpoint = c.ListOrganizationProjects()
+				data, err = adminc.BuildListOrganizationProjectsPayload(*adminListOrganizationProjectsOrganizationIDFlag, *adminListOrganizationProjectsAdminSessionTokenFlag)
+			case "list-organizations":
+				endpoint = c.ListOrganizations()
+				data, err = adminc.BuildListOrganizationsPayload(*adminListOrganizationsQFlag, *adminListOrganizationsAccountTypeFlag, *adminListOrganizationsIncludeDisabledFlag, *adminListOrganizationsCursorFlag, *adminListOrganizationsLimitFlag, *adminListOrganizationsAdminSessionTokenFlag)
 			}
 		case "assets":
 			c := assetsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -4592,28 +4675,185 @@ func accessResolveChallengeUsage() {
 
 // adminUsage displays the usage of the admin command and its subcommands.
 func adminUsage() {
-	fmt.Fprintln(os.Stderr, `Operational endpoints for administrative tasks.`)
+	fmt.Fprintln(os.Stderr, `Operations supporting admin tasks, protected by Google workspace auth.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] admin COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    poke: Poke implements poke.`)
+	fmt.Fprintln(os.Stderr, `    login: Login implements login.`)
+	fmt.Fprintln(os.Stderr, `    callback: Callback implements callback.`)
+	fmt.Fprintln(os.Stderr, `    logout: Logout implements logout.`)
+	fmt.Fprintln(os.Stderr, `    get-project: Returns full admin details for a project by id or slug, including aggregated counts of child resources.`)
+	fmt.Fprintln(os.Stderr, `    update-organization: Updates admin-managed fields on an organization. At least one of account_type or whitelisted must be supplied.`)
+	fmt.Fprintln(os.Stderr, `    get-organization: Returns full admin details for a single organization by id or slug.`)
+	fmt.Fprintln(os.Stderr, `    list-organization-projects: Lists projects belonging to an organization (admin view, no auth scoping).`)
+	fmt.Fprintln(os.Stderr, `    list-organizations: Lists organizations for admin operations with optional search and filters.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
 }
-func adminPokeUsage() {
+func adminLoginUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin poke", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] admin login", os.Args[0])
+	fmt.Fprint(os.Stderr, " -return-to STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Poke implements poke.`)
+	fmt.Fprintln(os.Stderr, `Login implements login.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -return-to STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin poke")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin login --return-to \"abc123\"")
+}
+
+func adminCallbackUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin callback", os.Args[0])
+	fmt.Fprint(os.Stderr, " -code STRING")
+	fmt.Fprint(os.Stderr, " -state-param STRING")
+	fmt.Fprint(os.Stderr, " -state-cookie STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Callback implements callback.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -code STRING: `)
+	fmt.Fprintln(os.Stderr, `    -state-param STRING: `)
+	fmt.Fprintln(os.Stderr, `    -state-cookie STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin callback --code \"abc123\" --state-param \"abc123\" --state-cookie \"abc123\"")
+}
+
+func adminLogoutUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin logout", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-id STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Logout implements logout.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-id STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin logout --session-id \"abc123\"")
+}
+
+func adminGetProjectUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-project", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id-or-slug STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns full admin details for a project by id or slug, including aggregated counts of child resources.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id-or-slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-project --id-or-slug \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminUpdateOrganizationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin update-organization", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Updates admin-managed fields on an organization. At least one of account_type or whitelisted must be supplied.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-organization --body '{\n      \"account_type\": \"abc123\",\n      \"id\": \"abc123\",\n      \"whitelisted\": false\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminGetOrganizationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-organization", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id-or-slug STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns full admin details for a single organization by id or slug.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id-or-slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-organization --id-or-slug \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminListOrganizationProjectsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-organization-projects", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Lists projects belonging to an organization (admin view, no auth scoping).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organization-projects --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminListOrganizationsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-organizations", os.Args[0])
+	fmt.Fprint(os.Stderr, " -q STRING")
+	fmt.Fprint(os.Stderr, " -account-type STRING")
+	fmt.Fprint(os.Stderr, " -include-disabled BOOL")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Lists organizations for admin operations with optional search and filters.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -q STRING: `)
+	fmt.Fprintln(os.Stderr, `    -account-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -include-disabled BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organizations --q \"abc123\" --account-type \"abc123\" --include-disabled false --cursor \"abc123\" --limit 1 --admin-session-token \"abc123\"")
 }
 
 // assetsUsage displays the usage of the assets command and its subcommands.

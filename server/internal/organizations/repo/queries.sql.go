@@ -178,6 +178,77 @@ func (q *Queries) CreateOrganizationMetadata(ctx context.Context, arg CreateOrga
 	return err
 }
 
+const createOrganizationMetadataFixture = `-- name: CreateOrganizationMetadataFixture :exec
+INSERT INTO organization_metadata (
+    id,
+    name,
+    slug,
+    gram_account_type,
+    workos_id,
+    whitelisted,
+    free_trial_started_at,
+    free_trial_ends_at,
+    disabled_at
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5::text,
+    $6,
+    $7,
+    $8,
+    $9::timestamptz
+)
+`
+
+type CreateOrganizationMetadataFixtureParams struct {
+	ID                 string
+	Name               string
+	Slug               string
+	GramAccountType    string
+	WorkosID           pgtype.Text
+	Whitelisted        bool
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	DisabledAt         pgtype.Timestamptz
+}
+
+// Test-only fixture that lets seeders populate every column on
+// organization_metadata. Prefer this over CreateOrganizationMetadata when a
+// test needs to exercise filters that depend on account type, workos linkage,
+// disabled state, whitelist flag, or trial window.
+func (q *Queries) CreateOrganizationMetadataFixture(ctx context.Context, arg CreateOrganizationMetadataFixtureParams) error {
+	_, err := q.db.Exec(ctx, createOrganizationMetadataFixture,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.GramAccountType,
+		arg.WorkosID,
+		arg.Whitelisted,
+		arg.FreeTrialStartedAt,
+		arg.FreeTrialEndsAt,
+		arg.DisabledAt,
+	)
+	return err
+}
+
+const createOrganizationUserRelationshipFixture = `-- name: CreateOrganizationUserRelationshipFixture :exec
+INSERT INTO organization_user_relationships (organization_id, user_id)
+VALUES ($1, $2::text)
+`
+
+type CreateOrganizationUserRelationshipFixtureParams struct {
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
+// Test-only fixture for seeding membership counts.
+func (q *Queries) CreateOrganizationUserRelationshipFixture(ctx context.Context, arg CreateOrganizationUserRelationshipFixtureParams) error {
+	_, err := q.db.Exec(ctx, createOrganizationUserRelationshipFixture, arg.OrganizationID, arg.UserID)
+	return err
+}
+
 const deleteOrganizationUserRelationship = `-- name: DeleteOrganizationUserRelationship :exec
 UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp()

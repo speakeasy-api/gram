@@ -87,6 +87,7 @@ type Activities struct {
 	backfillWorkOSGlobalRoles       *activities.BackfillWorkOSGlobalRoles
 	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
 	processWorkOSGlobalRoleEvents   *activities.ProcessWorkOSGlobalRoleEvents
+	processWorkOSMembershipEvents   *activities.ProcessWorkOSMembershipEvents
 	processWorkOSUserEvents         *activities.ProcessWorkOSUserEvents
 	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
 	outboxRelay                     *outbox_relay.Relay
@@ -175,6 +176,7 @@ func NewActivities(
 		backfillWorkOSGlobalRoles:       activities.NewBackfillWorkOSGlobalRoles(logger, db, workosClient),
 		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient),
 		processWorkOSGlobalRoleEvents:   activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient),
+		processWorkOSMembershipEvents:   activities.NewProcessWorkOSMembershipEvents(logger, db, workosClient),
 		processWorkOSUserEvents:         activities.NewProcessWorkOSUserEvents(logger, db, workosClient),
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
@@ -200,6 +202,10 @@ func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params
 
 func (a *Activities) ProcessWorkOSGlobalRoleEvents(ctx context.Context, params activities.ProcessWorkOSGlobalRoleEventsParams) (*activities.ProcessWorkOSGlobalRoleEventsResult, error) {
 	return a.processWorkOSGlobalRoleEvents.Do(ctx, params)
+}
+
+func (a *Activities) ProcessWorkOSMembershipEvents(ctx context.Context, params activities.ProcessWorkOSMembershipEventsParams) (*activities.ProcessWorkOSMembershipEventsResult, error) {
+	return a.processWorkOSMembershipEvents.Do(ctx, params)
 }
 
 func (a *Activities) ProcessWorkOSUserEvents(ctx context.Context, params activities.ProcessWorkOSUserEventsParams) (*activities.ProcessWorkOSUserEventsResult, error) {
