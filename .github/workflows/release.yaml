@@ -102,7 +102,7 @@ jobs:
           # Reference: https://github.com/actions/setup-go/issues/495
           cache: false
       - name: Install cosign
-        uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Generate GitHub App Token for Gram Bot
         id: bot-token
         uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
