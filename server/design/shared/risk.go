@@ -94,6 +94,47 @@ var RiskResult = Type("RiskResult", func() {
 	Required("id", "policy_id", "policy_version", "chat_message_id", "source", "created_at")
 })
 
+// RiskResultRedacted mirrors RiskResult but replaces the raw `match` content
+// with an opaque length+SHA256-prefix fingerprint. Designed for agent / MCP
+// consumption so secret content from gitleaks-, presidio-, or
+// prompt-injection-class findings never reaches the model context.
+//
+// For shadow_mcp findings the original match value is a server URL / stdio
+// command identifier that the dashboard already renders unmasked — that
+// passthrough is preserved here so agents can correlate findings to servers
+// without losing signal.
+var RiskResultRedacted = Type("RiskResultRedacted", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("id", String, "The result ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("policy_id", String, "The risk policy ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("policy_version", Int64, "Policy version when this result was produced.")
+	Attribute("chat_message_id", String, "The chat message that was scanned.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("chat_id", String, "The chat session containing the message.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("chat_title", String, "Title of the chat session.")
+	Attribute("user_id", String, "The user who owns the chat session.")
+	Attribute("source", String, "Detection source (e.g. gitleaks, presidio, shadow_mcp).")
+	Attribute("rule_id", String, "The matched rule identifier.")
+	Attribute("description", String, "Human-readable description of the finding.")
+	Attribute("match_redacted", String, "Opaque fingerprint of the original match in the form `<redacted len=N sha=XXXXXXXX>` where N is the byte length of the original match and XXXXXXXX is the first 8 hex characters of sha256(match). For shadow_mcp findings the original match value (a non-sensitive server URL or command identifier) is passed through verbatim.")
+	Attribute("position_known", Boolean, "Whether the original finding carried byte-position information within the source message. Exact positions are intentionally not exposed to avoid reconstruction attacks.")
+	Attribute("confidence", Float64, "Confidence score for this finding.")
+	Attribute("tags", ArrayOf(String), "Tags from the detection rule.")
+	Attribute("created_at", String, "When this result was created.", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("id", "policy_id", "policy_version", "chat_message_id", "source", "created_at", "match_redacted", "position_known")
+})
+
 var RiskChatSummary = Type("RiskChatSummary", func() {
 	Meta("struct:pkg:path", "types")
 

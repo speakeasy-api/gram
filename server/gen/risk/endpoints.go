@@ -23,6 +23,7 @@ type Endpoints struct {
 	UpdateRiskPolicy        goa.Endpoint
 	DeleteRiskPolicy        goa.Endpoint
 	ListRiskResults         goa.Endpoint
+	ListRiskResultsForAgent goa.Endpoint
 	ListRiskResultsByChat   goa.Endpoint
 	GetRiskPolicyStatus     goa.Endpoint
 	ListShadowMCPApprovals  goa.Endpoint
@@ -43,6 +44,7 @@ func NewEndpoints(s Service) *Endpoints {
 		UpdateRiskPolicy:        NewUpdateRiskPolicyEndpoint(s, a.APIKeyAuth),
 		DeleteRiskPolicy:        NewDeleteRiskPolicyEndpoint(s, a.APIKeyAuth),
 		ListRiskResults:         NewListRiskResultsEndpoint(s, a.APIKeyAuth),
+		ListRiskResultsForAgent: NewListRiskResultsForAgentEndpoint(s, a.APIKeyAuth),
 		ListRiskResultsByChat:   NewListRiskResultsByChatEndpoint(s, a.APIKeyAuth),
 		GetRiskPolicyStatus:     NewGetRiskPolicyStatusEndpoint(s, a.APIKeyAuth),
 		ListShadowMCPApprovals:  NewListShadowMCPApprovalsEndpoint(s, a.APIKeyAuth),
@@ -61,6 +63,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateRiskPolicy = m(e.UpdateRiskPolicy)
 	e.DeleteRiskPolicy = m(e.DeleteRiskPolicy)
 	e.ListRiskResults = m(e.ListRiskResults)
+	e.ListRiskResultsForAgent = m(e.ListRiskResultsForAgent)
 	e.ListRiskResultsByChat = m(e.ListRiskResultsByChat)
 	e.GetRiskPolicyStatus = m(e.GetRiskPolicyStatus)
 	e.ListShadowMCPApprovals = m(e.ListShadowMCPApprovals)
@@ -479,6 +482,65 @@ func NewListRiskResultsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.ListRiskResults(ctx, p)
+	}
+}
+
+// NewListRiskResultsForAgentEndpoint returns an endpoint function that calls
+// the method "listRiskResultsForAgent" of service "risk".
+func NewListRiskResultsForAgentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListRiskResultsForAgentPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListRiskResultsForAgent(ctx, p)
 	}
 }
 

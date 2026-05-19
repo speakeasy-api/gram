@@ -4,6 +4,7 @@
 
 import { riskResultsByChat } from "../funcs/riskResultsByChat.js";
 import { riskResultsList } from "../funcs/riskResultsList.js";
+import { riskResultsListForAgent } from "../funcs/riskResultsListForAgent.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -41,6 +42,25 @@ export class Results extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListRiskResultsResult> {
     return unwrapAsync(riskResultsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listRiskResultsForAgent risk
+   *
+   * @remarks
+   * List risk analysis results with the `match` field redacted to an opaque length+sha256-prefix fingerprint. Matches the payload and pagination semantics of listRiskResults. Designed for AI assistant / MCP consumption so secret content (gitleaks captures, presidio entities, prompt-injection payloads) never reaches the model context. For shadow_mcp findings the `match` value — a non-sensitive server URL or command identifier — is passed through verbatim.
+   */
+  async listForAgent(
+    request?: operations.ListRiskResultsForAgentRequest | undefined,
+    security?: operations.ListRiskResultsForAgentSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListRiskResultsForAgentResult> {
+    return unwrapAsync(riskResultsListForAgent(
       this,
       request,
       security,

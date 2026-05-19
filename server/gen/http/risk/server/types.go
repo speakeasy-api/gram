@@ -222,6 +222,17 @@ type ListRiskResultsResponseBody struct {
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
+// ListRiskResultsForAgentResponseBody is the type of the "risk" service
+// "listRiskResultsForAgent" endpoint HTTP response body.
+type ListRiskResultsForAgentResponseBody struct {
+	// The list of risk results with match content redacted to opaque fingerprints.
+	Results []*RiskResultRedactedResponseBody `form:"results" json:"results" xml:"results"`
+	// Total number of findings across all enabled policies.
+	TotalCount int64 `form:"total_count" json:"total_count" xml:"total_count"`
+	// Cursor for the next page of results.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
 // ListRiskResultsByChatResponseBody is the type of the "risk" service
 // "listRiskResultsByChat" endpoint HTTP response body.
 type ListRiskResultsByChatResponseBody struct {
@@ -1551,6 +1562,196 @@ type ListRiskResultsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListRiskResultsForAgentUnauthorizedResponseBody is the type of the "risk"
+// service "listRiskResultsForAgent" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListRiskResultsForAgentUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskResultsForAgentForbiddenResponseBody is the type of the "risk"
+// service "listRiskResultsForAgent" endpoint HTTP response body for the
+// "forbidden" error.
+type ListRiskResultsForAgentForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskResultsForAgentBadRequestResponseBody is the type of the "risk"
+// service "listRiskResultsForAgent" endpoint HTTP response body for the
+// "bad_request" error.
+type ListRiskResultsForAgentBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskResultsForAgentNotFoundResponseBody is the type of the "risk"
+// service "listRiskResultsForAgent" endpoint HTTP response body for the
+// "not_found" error.
+type ListRiskResultsForAgentNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskResultsForAgentConflictResponseBody is the type of the "risk"
+// service "listRiskResultsForAgent" endpoint HTTP response body for the
+// "conflict" error.
+type ListRiskResultsForAgentConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskResultsForAgentUnsupportedMediaResponseBody is the type of the
+// "risk" service "listRiskResultsForAgent" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListRiskResultsForAgentUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskResultsForAgentInvalidResponseBody is the type of the "risk" service
+// "listRiskResultsForAgent" endpoint HTTP response body for the "invalid"
+// error.
+type ListRiskResultsForAgentInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskResultsForAgentInvariantViolationResponseBody is the type of the
+// "risk" service "listRiskResultsForAgent" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListRiskResultsForAgentInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskResultsForAgentUnexpectedResponseBody is the type of the "risk"
+// service "listRiskResultsForAgent" endpoint HTTP response body for the
+// "unexpected" error.
+type ListRiskResultsForAgentUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRiskResultsForAgentGatewayErrorResponseBody is the type of the "risk"
+// service "listRiskResultsForAgent" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListRiskResultsForAgentGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListRiskResultsByChatUnauthorizedResponseBody is the type of the "risk"
 // service "listRiskResultsByChat" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -2743,6 +2944,47 @@ type RiskResultResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
+// RiskResultRedactedResponseBody is used to define fields on response body
+// types.
+type RiskResultRedactedResponseBody struct {
+	// The result ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The risk policy ID.
+	PolicyID string `form:"policy_id" json:"policy_id" xml:"policy_id"`
+	// Policy version when this result was produced.
+	PolicyVersion int64 `form:"policy_version" json:"policy_version" xml:"policy_version"`
+	// The chat message that was scanned.
+	ChatMessageID string `form:"chat_message_id" json:"chat_message_id" xml:"chat_message_id"`
+	// The chat session containing the message.
+	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
+	// Title of the chat session.
+	ChatTitle *string `form:"chat_title,omitempty" json:"chat_title,omitempty" xml:"chat_title,omitempty"`
+	// The user who owns the chat session.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// Detection source (e.g. gitleaks, presidio, shadow_mcp).
+	Source string `form:"source" json:"source" xml:"source"`
+	// The matched rule identifier.
+	RuleID *string `form:"rule_id,omitempty" json:"rule_id,omitempty" xml:"rule_id,omitempty"`
+	// Human-readable description of the finding.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Opaque fingerprint of the original match in the form `<redacted len=N
+	// sha=XXXXXXXX>` where N is the byte length of the original match and XXXXXXXX
+	// is the first 8 hex characters of sha256(match). For shadow_mcp findings the
+	// original match value (a non-sensitive server URL or command identifier) is
+	// passed through verbatim.
+	MatchRedacted string `form:"match_redacted" json:"match_redacted" xml:"match_redacted"`
+	// Whether the original finding carried byte-position information within the
+	// source message. Exact positions are intentionally not exposed to avoid
+	// reconstruction attacks.
+	PositionKnown bool `form:"position_known" json:"position_known" xml:"position_known"`
+	// Confidence score for this finding.
+	Confidence *float64 `form:"confidence,omitempty" json:"confidence,omitempty" xml:"confidence,omitempty"`
+	// Tags from the detection rule.
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+	// When this result was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
 // RiskChatSummaryResponseBody is used to define fields on response body types.
 type RiskChatSummaryResponseBody struct {
 	// The chat session ID.
@@ -2940,6 +3182,28 @@ func NewListRiskResultsResponseBody(res *risk.ListRiskResultsResult) *ListRiskRe
 		}
 	} else {
 		body.Results = []*RiskResultResponseBody{}
+	}
+	return body
+}
+
+// NewListRiskResultsForAgentResponseBody builds the HTTP response body from
+// the result of the "listRiskResultsForAgent" endpoint of the "risk" service.
+func NewListRiskResultsForAgentResponseBody(res *risk.ListRiskResultsForAgentResult) *ListRiskResultsForAgentResponseBody {
+	body := &ListRiskResultsForAgentResponseBody{
+		TotalCount: res.TotalCount,
+		NextCursor: res.NextCursor,
+	}
+	if res.Results != nil {
+		body.Results = make([]*RiskResultRedactedResponseBody, len(res.Results))
+		for i, val := range res.Results {
+			if val == nil {
+				body.Results[i] = nil
+				continue
+			}
+			body.Results[i] = marshalTypesRiskResultRedactedToRiskResultRedactedResponseBody(val)
+		}
+	} else {
+		body.Results = []*RiskResultRedactedResponseBody{}
 	}
 	return body
 }
@@ -4002,6 +4266,156 @@ func NewListRiskResultsGatewayErrorResponseBody(res *goa.ServiceError) *ListRisk
 	return body
 }
 
+// NewListRiskResultsForAgentUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listRiskResultsForAgent" endpoint of the "risk"
+// service.
+func NewListRiskResultsForAgentUnauthorizedResponseBody(res *goa.ServiceError) *ListRiskResultsForAgentUnauthorizedResponseBody {
+	body := &ListRiskResultsForAgentUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskResultsForAgentForbiddenResponseBody builds the HTTP response
+// body from the result of the "listRiskResultsForAgent" endpoint of the "risk"
+// service.
+func NewListRiskResultsForAgentForbiddenResponseBody(res *goa.ServiceError) *ListRiskResultsForAgentForbiddenResponseBody {
+	body := &ListRiskResultsForAgentForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskResultsForAgentBadRequestResponseBody builds the HTTP response
+// body from the result of the "listRiskResultsForAgent" endpoint of the "risk"
+// service.
+func NewListRiskResultsForAgentBadRequestResponseBody(res *goa.ServiceError) *ListRiskResultsForAgentBadRequestResponseBody {
+	body := &ListRiskResultsForAgentBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskResultsForAgentNotFoundResponseBody builds the HTTP response body
+// from the result of the "listRiskResultsForAgent" endpoint of the "risk"
+// service.
+func NewListRiskResultsForAgentNotFoundResponseBody(res *goa.ServiceError) *ListRiskResultsForAgentNotFoundResponseBody {
+	body := &ListRiskResultsForAgentNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskResultsForAgentConflictResponseBody builds the HTTP response body
+// from the result of the "listRiskResultsForAgent" endpoint of the "risk"
+// service.
+func NewListRiskResultsForAgentConflictResponseBody(res *goa.ServiceError) *ListRiskResultsForAgentConflictResponseBody {
+	body := &ListRiskResultsForAgentConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskResultsForAgentUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listRiskResultsForAgent" endpoint of
+// the "risk" service.
+func NewListRiskResultsForAgentUnsupportedMediaResponseBody(res *goa.ServiceError) *ListRiskResultsForAgentUnsupportedMediaResponseBody {
+	body := &ListRiskResultsForAgentUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskResultsForAgentInvalidResponseBody builds the HTTP response body
+// from the result of the "listRiskResultsForAgent" endpoint of the "risk"
+// service.
+func NewListRiskResultsForAgentInvalidResponseBody(res *goa.ServiceError) *ListRiskResultsForAgentInvalidResponseBody {
+	body := &ListRiskResultsForAgentInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskResultsForAgentInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listRiskResultsForAgent" endpoint of
+// the "risk" service.
+func NewListRiskResultsForAgentInvariantViolationResponseBody(res *goa.ServiceError) *ListRiskResultsForAgentInvariantViolationResponseBody {
+	body := &ListRiskResultsForAgentInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskResultsForAgentUnexpectedResponseBody builds the HTTP response
+// body from the result of the "listRiskResultsForAgent" endpoint of the "risk"
+// service.
+func NewListRiskResultsForAgentUnexpectedResponseBody(res *goa.ServiceError) *ListRiskResultsForAgentUnexpectedResponseBody {
+	body := &ListRiskResultsForAgentUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRiskResultsForAgentGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listRiskResultsForAgent" endpoint of the "risk"
+// service.
+func NewListRiskResultsForAgentGatewayErrorResponseBody(res *goa.ServiceError) *ListRiskResultsForAgentGatewayErrorResponseBody {
+	body := &ListRiskResultsForAgentGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListRiskResultsByChatUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "listRiskResultsByChat" endpoint of the "risk"
 // service.
@@ -5003,6 +5417,21 @@ func NewDeleteRiskPolicyPayload(id string, apikeyToken *string, sessionToken *st
 // payload.
 func NewListRiskResultsPayload(policyID *string, chatID *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
 	v := &risk.ListRiskResultsPayload{}
+	v.PolicyID = policyID
+	v.ChatID = chatID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListRiskResultsForAgentPayload builds a risk service
+// listRiskResultsForAgent endpoint payload.
+func NewListRiskResultsForAgentPayload(policyID *string, chatID *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsForAgentPayload {
+	v := &risk.ListRiskResultsForAgentPayload{}
 	v.PolicyID = policyID
 	v.ChatID = chatID
 	v.Cursor = cursor
