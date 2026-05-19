@@ -144,7 +144,10 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 	if len(logParams) == 0 {
 		return nil
 	}
-	return chRepo.InsertTelemetryLogs(shutdownCtx, logParams)
+	if err := chRepo.InsertTelemetryLogs(shutdownCtx, logParams); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "insert telemetry logs")
+	}
+	return nil
 }
 
 // buildTelemetryLogParams constructs InsertTelemetryLogParams from attributes.
