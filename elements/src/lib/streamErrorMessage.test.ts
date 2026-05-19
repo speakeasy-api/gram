@@ -51,6 +51,35 @@ describe("describeStreamError", () => {
     expect(describeStreamError(wrapped)).toBe(CREDITS_EXHAUSTED_MESSAGE);
   });
 
+  it("matches AI_RetryError carrying a 402 on lastError (bare-status path)", () => {
+    // This is the real-world shape that produces the 'Failed to load
+    // resource: status 402 ()' console line — empty body, only the status
+    // survives, and the AI SDK has wrapped the APICallError in a RetryError.
+    const apiError = {
+      name: "AI_APICallError",
+      message: "Failed to call /chat/completions",
+      statusCode: 402,
+      responseBody: "",
+    };
+    const retryError = {
+      name: "AI_RetryError",
+      message: "Failed after 1 attempts",
+      reason: "errorNotRetryable",
+      lastError: apiError,
+      errors: [apiError],
+    };
+    expect(describeStreamError(retryError)).toBe(CREDITS_EXHAUSTED_MESSAGE);
+  });
+
+  it("matches a 402 reported via the older response.status shape", () => {
+    const error = {
+      name: "FetchError",
+      message: "Request failed",
+      response: { status: 402 },
+    };
+    expect(describeStreamError(error)).toBe(CREDITS_EXHAUSTED_MESSAGE);
+  });
+
   it("returns undefined for unrelated stream errors", () => {
     expect(describeStreamError(new Error("network down"))).toBeUndefined();
     expect(describeStreamError({ statusCode: 500 })).toBeUndefined();

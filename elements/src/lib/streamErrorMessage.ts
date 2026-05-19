@@ -51,6 +51,16 @@ const isCreditsError = (error: unknown): boolean => {
     responseBody?: unknown;
     cause?: unknown;
     error?: unknown;
+    // AI_RetryError shape — wraps the underlying AI_APICallError (which is
+    // where statusCode actually lives) on `lastError` and/or `errors[]`. In
+    // production we usually only see a bare 402 with an empty body, so we
+    // have to descend through these to reach it.
+    lastError?: unknown;
+    errors?: unknown;
+    // Older / alternate transport shape: `response.status`.
+    response?: unknown;
+    // Fetch-style `Response` object occasionally surfaces via `cause` or as
+    // a raw value; we don't bother with that path since AI SDK normalizes.
   };
 
   if (typeof obj.name === "string" && obj.name === "insufficient_credits") {
@@ -68,6 +78,14 @@ const isCreditsError = (error: unknown): boolean => {
         : undefined;
   if (status === 402) return true;
 
+  if (
+    obj.response &&
+    typeof obj.response === "object" &&
+    (obj.response as { status?: unknown }).status === 402
+  ) {
+    return true;
+  }
+
   if (typeof obj.message === "string" && hasCreditHint(obj.message)) {
     return true;
   }
@@ -80,6 +98,13 @@ const isCreditsError = (error: unknown): boolean => {
 
   if (obj.error && isCreditsError(obj.error)) return true;
   if (obj.cause && isCreditsError(obj.cause)) return true;
+  if (obj.lastError && isCreditsError(obj.lastError)) return true;
+
+  if (Array.isArray(obj.errors)) {
+    for (const inner of obj.errors) {
+      if (isCreditsError(inner)) return true;
+    }
+  }
 
   return false;
 };
