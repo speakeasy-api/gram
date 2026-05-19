@@ -26,7 +26,16 @@ import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, ChevronRight, Info, Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Ban,
+  ChevronRight,
+  Info,
+  Loader2,
+  Plus,
+  X,
+} from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -37,12 +46,38 @@ import { ScopePickerPopover } from "./ScopePickerPopover";
 import type {
   AnnotationHint,
   CustomTab,
+  ResourceType,
   RoleGrant,
   Scope,
-  Selector,
 } from "./types";
+import type { Selector } from "./types";
 import { DISPOSITION_TO_ANNOTATION } from "./types";
 import { isSaveDisabled } from "./roleDialogState";
+
+/** Derive a short label for a grant's current selector state. */
+function computeGrantLabel(
+  grant: Pick<RoleGrant, "selectors">,
+  resourceType: ResourceType,
+): string {
+  const { selectors } = grant;
+  if (selectors === null) {
+    return resourceType === "project" ? "All projects" : "All servers";
+  }
+  if (selectors.length === 0) return "Select…";
+  const hasTools = selectors.some((s) => s.tool);
+  if (hasTools) {
+    const count = selectors.filter((s) => s.tool).length;
+    return `${count} tool${count === 1 ? "" : "s"}`;
+  }
+  const hasProjects = selectors.some((s) => s.projectId);
+  if (hasProjects) {
+    const count = selectors.filter((s) => s.projectId).length;
+    return `${count} project${count === 1 ? "" : "s"}`;
+  }
+  const count = selectors.length;
+  const noun = resourceType === "project" ? "project" : "server";
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
 
 interface CreateRoleDialogProps {
   open: boolean;
@@ -53,8 +88,19 @@ interface CreateRoleDialogProps {
 
 function grantsFromRole(role: Role): Record<string, RoleGrant> {
   const result: Record<string, RoleGrant> = {};
+  // First pass: collect allow grants
   for (const g of role.grants) {
+    if (g.effect === "deny") continue;
     result[g.scope] = { scope: g.scope, selectors: g.selectors ?? null };
+  }
+  // Second pass: fold deny grants into exclusions on matching allow grants
+  for (const g of role.grants) {
+    if (g.effect !== "deny") continue;
+    if (!result[g.scope]) {
+      // Deny without allow in same role — create unrestricted allow to pair with
+      result[g.scope] = { scope: g.scope, selectors: null };
+    }
+    result[g.scope].exclusions = g.selectors ?? [];
   }
   return result;
 }
@@ -106,6 +152,14 @@ export function CreateRoleDialog({
   const [showMembers, setShowMembers] = useState(false);
   const [showPermissions, setShowPermissions] = useState(true);
   const [initialized, setInitialized] = useState(false);
+
+  // Slide navigation: "form" = main role editor, "scope-picker" = configuring a specific scope
+  type DialogStep = "form" | "scope-picker";
+  const [dialogStep, setDialogStep] = useState<DialogStep>("form");
+  const [editingScopeSlug, setEditingScopeSlug] = useState<string | null>(null);
+  const [editingScopeEffect, setEditingScopeEffect] = useState<
+    "allow" | "deny"
+  >("allow");
 
   const queryClient = useQueryClient();
   const { data: membersData } = useMembers();
@@ -240,6 +294,35 @@ export function CreateRoleDialog({
     }));
   };
 
+  const setGrantExclusions = (scope: Scope, exclusions: Selector[]) => {
+    setGrants((prev) => ({
+      ...prev,
+      [scope]: { ...prev[scope], scope, exclusions },
+    }));
+  };
+
+  const removeGrantExclusions = (scope: Scope) => {
+    setGrants((prev) => {
+      const { exclusions: _, ...rest } = prev[scope] ?? { scope };
+      return { ...prev, [scope]: rest as RoleGrant };
+    });
+  };
+
+  const openScopePicker = (slug: string, effect: "allow" | "deny") => {
+    setEditingScopeSlug(slug);
+    setEditingScopeEffect(effect);
+    setDialogStep("scope-picker");
+  };
+
+  const closeScopePicker = () => {
+    setDialogStep("form");
+    // Keep editingScopeSlug around during the transition so the panel doesn't unmount mid-slide
+    setTimeout(() => {
+      setEditingScopeSlug(null);
+      setEditingScopeEffect("allow");
+    }, 300);
+  };
+
   const toggleGroup = (label: string) => {
     setExpandedGroups((prev) => {
       const next = new Set(prev);
@@ -301,15 +384,29 @@ export function CreateRoleDialog({
   };
 
   const handleSubmit = () => {
-    const sdkGrants = Object.values(grants)
+    const sdkGrants: {
+      scope: string;
+      effect?: "allow" | "deny";
+      selectors?: any[];
+    }[] = [];
+    for (const g of Object.values(grants)) {
       // Drop scopes with an empty selector list — the user switched to
       // "specific" but didn't select anything, so there's nothing to grant.
-      .filter((g) => g.selectors === null || g.selectors.length > 0)
-      .map((g) => ({
+      if (g.selectors !== null && g.selectors.length === 0) continue;
+      // Allow grant
+      sdkGrants.push({
         scope: g.scope,
-        // Local type uses null for unrestricted; SDK uses undefined
         selectors: g.selectors === null ? undefined : g.selectors,
-      }));
+      });
+      // Deny grant from exclusions
+      if (g.exclusions && g.exclusions.length > 0) {
+        sdkGrants.push({
+          scope: g.scope,
+          effect: "deny",
+          selectors: g.exclusions,
+        });
+      }
+    }
 
     if (isEditing) {
       updateRole.mutate({
@@ -355,107 +452,416 @@ export function CreateRoleDialog({
     setShowMembers(false);
     setShowPermissions(true);
     setInitialized(false);
+    setDialogStep("form");
+    setEditingScopeSlug(null);
+    setEditingScopeEffect("allow");
     onOpenChange(false);
   };
+
+  // Resolve the scope definition for the currently editing scope
+  const editingScopeDef = editingScopeSlug
+    ? scopeGroups
+        .flatMap((g) => g.scopes)
+        .find((s) => s.slug === editingScopeSlug)
+    : null;
+  const editingGrant = editingScopeSlug ? grants[editingScopeSlug] : null;
+
+  const stepOffset =
+    dialogStep === "form" ? "translate-x-0" : "-translate-x-full";
 
   return (
     <Sheet open={open} onOpenChange={handleClose}>
       <SheetContent
         side="right"
-        className="flex w-full flex-col overflow-hidden sm:max-w-lg"
+        className={cn(
+          "flex w-full flex-col overflow-hidden transition-[max-width] duration-300",
+          dialogStep === "scope-picker" ? "sm:max-w-2xl" : "sm:max-w-lg",
+        )}
       >
         <SheetHeader>
-          <SheetTitle>{isEditing ? "Edit Role" : "Create Role"}</SheetTitle>
+          <SheetTitle>
+            {dialogStep === "scope-picker" && editingScopeDef ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={closeScopePicker}
+                  className="text-muted-foreground hover:text-foreground -ml-1 rounded-sm p-1 transition-colors"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+                <span>
+                  {editingScopeEffect === "deny" ? "Deny" : "Configure"}{" "}
+                  <code className="bg-muted rounded px-1 font-mono text-sm">
+                    {editingScopeSlug}
+                  </code>
+                </span>
+              </div>
+            ) : isEditing ? (
+              "Edit Role"
+            ) : (
+              "Create Role"
+            )}
+          </SheetTitle>
         </SheetHeader>
 
-        <div className="flex-1 space-y-4 overflow-y-auto px-4">
-          <InputField
-            label="Name"
-            placeholder="e.g., Project Manager"
-            required
-            autoFocus
-            disabled={editingRole?.isSystem}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-
-          <AnyField
-            label="Description"
-            render={(props) => (
-              <textarea
-                {...props}
-                rows={2}
-                required
-                disabled={editingRole?.isSystem}
-                placeholder="Describe what this role can do..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-              />
+        <div className="relative flex-1 overflow-hidden">
+          <div
+            className={cn(
+              "flex h-full transition-transform duration-300 ease-in-out",
+              stepOffset,
             )}
-          />
+          >
+            {/* Panel 1: Role form */}
+            <div className="w-full shrink-0 space-y-4 overflow-y-auto px-4">
+              <InputField
+                label="Name"
+                placeholder="e.g., Project Manager"
+                required
+                autoFocus
+                disabled={editingRole?.isSystem}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
 
-          {/* Permissions / Grants */}
-          <div className="border-border border-t pt-4">
-            <button
-              type="button"
-              onClick={() => setShowPermissions(!showPermissions)}
-              className="flex w-full items-center gap-1 text-left"
-            >
-              <ChevronRight
-                className={cn(
-                  "h-4 w-4 transition-transform",
-                  showPermissions && "rotate-90",
+              <AnyField
+                label="Description"
+                render={(props) => (
+                  <textarea
+                    {...props}
+                    rows={2}
+                    required
+                    disabled={editingRole?.isSystem}
+                    placeholder="Describe what this role can do..."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  />
                 )}
               />
-              <Type variant="body" className="font-medium">
-                Permissions
-              </Type>
-              <Type variant="body" className="text-muted-foreground ml-1">
-                ({grantCount} selected)
-              </Type>
-            </button>
 
-            {showPermissions && (
-              <div className="mt-3 space-y-3">
-                {isSystemRole && (
-                  <div className="bg-muted/60 text-muted-foreground flex items-center gap-2 rounded-md px-3 py-2 text-xs">
-                    <Info className="h-3.5 w-3.5 shrink-0" />
-                    System role permissions are managed by Gram and cannot be
-                    changed.
+              {/* Permissions / Grants */}
+              <div className="border-border border-t pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowPermissions(!showPermissions)}
+                  className="flex w-full items-center gap-1 text-left"
+                >
+                  <ChevronRight
+                    className={cn(
+                      "h-4 w-4 transition-transform",
+                      showPermissions && "rotate-90",
+                    )}
+                  />
+                  <Type variant="body" className="font-medium">
+                    Permissions
+                  </Type>
+                  <Type variant="body" className="text-muted-foreground ml-1">
+                    ({grantCount} selected)
+                  </Type>
+                </button>
+
+                {showPermissions && (
+                  <div className="mt-3 space-y-3">
+                    {isSystemRole && (
+                      <div className="bg-muted/60 text-muted-foreground flex items-center gap-2 rounded-md px-3 py-2 text-xs">
+                        <Info className="h-3.5 w-3.5 shrink-0" />
+                        System role permissions are managed by Gram and cannot
+                        be changed.
+                      </div>
+                    )}
+                    {scopeGroups.map((group) => {
+                      const selectedInGroup = group.scopes.filter(
+                        (s) => grants[s.slug],
+                      ).length;
+                      const isExpanded = expandedGroups.has(group.label);
+                      const allSelected =
+                        group.scopes.length > 0 &&
+                        group.scopes.every((s) => grants[s.slug]);
+                      const someSelected = selectedInGroup > 0 && !allSelected;
+
+                      return (
+                        <div
+                          key={group.label}
+                          className="border-border rounded-md border"
+                        >
+                          {/* Group header */}
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => toggleGroup(group.label)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                toggleGroup(group.label);
+                              }
+                            }}
+                            className="hover:bg-muted/50 flex w-full cursor-pointer items-center justify-between rounded-t-md px-3 py-2"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                disabled={isSystemRole}
+                                checked={
+                                  allSelected
+                                    ? true
+                                    : someSelected
+                                      ? "indeterminate"
+                                      : false
+                                }
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleGroupCheckbox(group.label);
+                                }}
+                                className="cursor-pointer"
+                              />
+                              <Type
+                                variant="body"
+                                className="text-sm font-medium"
+                              >
+                                {group.label}
+                              </Type>
+                              <Type
+                                variant="body"
+                                className="text-muted-foreground text-sm"
+                              >
+                                ({selectedInGroup}/{group.scopes.length})
+                              </Type>
+                            </div>
+                            <ChevronRight
+                              className={cn(
+                                "text-muted-foreground h-3.5 w-3.5 transition-transform",
+                                isExpanded && "rotate-90",
+                              )}
+                            />
+                          </div>
+
+                          {/* Expanded scope rows */}
+                          {isExpanded && (
+                            <div className="border-border bg-muted/40 border-t">
+                              {group.scopes.map((scopeDef) => {
+                                const grant = grants[scopeDef.slug];
+                                const isChecked = !!grant;
+                                const hasDenyRow =
+                                  isChecked &&
+                                  !isSystemRole &&
+                                  grant.exclusions !== undefined;
+                                const canAddException =
+                                  isChecked &&
+                                  !isSystemRole &&
+                                  scopeDef.resourceType !== "org" &&
+                                  scopeDef.resourceType !== "environment" &&
+                                  grant.exclusions === undefined;
+
+                                const row = (
+                                  <div key={scopeDef.slug}>
+                                    <div
+                                      className={cn(
+                                        "hover:bg-muted/50 flex items-start gap-3 px-3 py-2.5",
+                                        isSystemRole && "cursor-default",
+                                      )}
+                                    >
+                                      <label
+                                        className={cn(
+                                          "flex min-w-0 flex-1 items-start gap-3",
+                                          isSystemRole
+                                            ? "cursor-default"
+                                            : "cursor-pointer",
+                                        )}
+                                      >
+                                        <Checkbox
+                                          disabled={isSystemRole}
+                                          checked={isChecked}
+                                          onCheckedChange={() =>
+                                            toggleScope(scopeDef.slug)
+                                          }
+                                          className="bg-background mt-0.5"
+                                        />
+                                        <div className="min-w-0 flex-1">
+                                          <Type
+                                            variant="body"
+                                            className="font-mono text-sm font-medium"
+                                          >
+                                            {scopeDef.slug}
+                                          </Type>
+                                          <Type
+                                            variant="body"
+                                            className="text-muted-foreground text-xs"
+                                          >
+                                            {scopeDef.description}
+                                          </Type>
+                                        </div>
+                                      </label>
+
+                                      <div className="flex shrink-0 items-center justify-end gap-1">
+                                        {isChecked &&
+                                          !isSystemRole &&
+                                          scopeDef.resourceType !== "org" &&
+                                          scopeDef.resourceType !==
+                                            "environment" && (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.preventDefault();
+                                                openScopePicker(
+                                                  scopeDef.slug,
+                                                  "allow",
+                                                );
+                                              }}
+                                              className="border-input bg-background inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs shadow-xs transition-colors hover:bg-white/80"
+                                            >
+                                              <span className="max-w-[120px] truncate">
+                                                {computeGrantLabel(
+                                                  grant,
+                                                  scopeDef.resourceType,
+                                                )}
+                                              </span>
+                                              <ChevronRight className="h-3 w-3 shrink-0 opacity-50" />
+                                            </button>
+                                          )}
+                                        {isChecked &&
+                                          !isSystemRole &&
+                                          (scopeDef.resourceType === "org" ||
+                                            scopeDef.resourceType ===
+                                              "environment") && (
+                                            <span className="border-input text-muted-foreground inline-flex h-7 items-center rounded-md border bg-transparent px-2 py-1 text-xs">
+                                              {scopeDef.resourceType ===
+                                              "environment"
+                                                ? "All in project"
+                                                : "All"}
+                                            </span>
+                                          )}
+                                      </div>
+                                    </div>
+
+                                    {/* Deny row — nested under the allow grant */}
+                                    {hasDenyRow && (
+                                      <div className="bg-destructive/5 border-destructive/20 mr-3 mb-1 ml-8 flex items-center gap-2 rounded-md border px-2.5 py-2">
+                                        <Ban className="text-destructive h-3.5 w-3.5 shrink-0" />
+                                        <Type
+                                          variant="body"
+                                          className="text-destructive text-xs font-medium"
+                                        >
+                                          deny
+                                        </Type>
+                                        <div className="flex flex-1 justify-end">
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              openScopePicker(
+                                                scopeDef.slug,
+                                                "deny",
+                                              )
+                                            }
+                                            className="border-input bg-background inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs shadow-xs transition-colors hover:bg-white/80"
+                                          >
+                                            <span className="max-w-[120px] truncate">
+                                              {computeGrantLabel(
+                                                {
+                                                  ...grant,
+                                                  selectors:
+                                                    grant.exclusions ?? [],
+                                                },
+                                                scopeDef.resourceType,
+                                              )}
+                                            </span>
+                                            <ChevronRight className="h-3 w-3 shrink-0 opacity-50" />
+                                          </button>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            removeGrantExclusions(scopeDef.slug)
+                                          }
+                                          className="text-muted-foreground hover:text-destructive ml-1 shrink-0"
+                                        >
+                                          <X className="h-3.5 w-3.5" />
+                                        </button>
+                                      </div>
+                                    )}
+
+                                    {/* Add exception button */}
+                                    {canAddException && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setGrantExclusions(scopeDef.slug, [])
+                                        }
+                                        className="text-muted-foreground hover:text-foreground mb-1 ml-8 flex items-center gap-1 px-2.5 py-1 text-xs transition-colors"
+                                      >
+                                        <Plus className="h-3 w-3" />
+                                        Add exception
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+
+                                if (isSystemRole) {
+                                  return (
+                                    <Tooltip key={scopeDef.slug}>
+                                      <TooltipTrigger asChild>
+                                        {row}
+                                      </TooltipTrigger>
+                                      <TooltipContent
+                                        side="right"
+                                        className="max-w-48"
+                                      >
+                                        Cannot edit system role permissions
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  );
+                                }
+
+                                return row;
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
-                {scopeGroups.map((group) => {
-                  const selectedInGroup = group.scopes.filter(
-                    (s) => grants[s.slug],
-                  ).length;
-                  const isExpanded = expandedGroups.has(group.label);
-                  const allSelected =
-                    group.scopes.length > 0 &&
-                    group.scopes.every((s) => grants[s.slug]);
-                  const someSelected = selectedInGroup > 0 && !allSelected;
+              </div>
 
-                  return (
-                    <div
-                      key={group.label}
-                      className="border-border rounded-md border"
-                    >
-                      {/* Group header */}
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => toggleGroup(group.label)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            toggleGroup(group.label);
-                          }
-                        }}
-                        className="hover:bg-muted/50 flex w-full cursor-pointer items-center justify-between rounded-t-md px-3 py-2"
-                      >
-                        <div className="flex items-center gap-2">
+              {/* Assign Members */}
+              <div className="border-border border-t pt-4 pb-4">
+                <button
+                  type="button"
+                  onClick={() => setShowMembers(!showMembers)}
+                  className="flex w-full items-center gap-1 text-left"
+                >
+                  <ChevronRight
+                    className={cn(
+                      "h-4 w-4 transition-transform",
+                      showMembers && "rotate-90",
+                    )}
+                  />
+                  <Type variant="body" className="font-medium">
+                    Assign Members
+                  </Type>
+                  <Type variant="body" className="text-muted-foreground ml-1">
+                    (optional, {selectedMembers.size} selected)
+                  </Type>
+                </button>
+
+                {showMembers && (
+                  <div className="border-border divide-border mt-3 divide-y rounded-md border">
+                    {/* Select-all header */}
+                    {(() => {
+                      const selectableMembers = members.filter(
+                        (m) => !(isEditing && m.roleId === editingRole?.id),
+                      );
+                      const allSelected =
+                        selectableMembers.length > 0 &&
+                        selectableMembers.every((m) =>
+                          selectedMembers.has(m.id),
+                        );
+                      const someSelected =
+                        !allSelected &&
+                        selectableMembers.some((m) =>
+                          selectedMembers.has(m.id),
+                        );
+                      return (
+                        <label className="bg-muted/60 flex cursor-pointer items-center gap-3 px-3 py-2">
                           <Checkbox
-                            disabled={isSystemRole}
                             checked={
                               allSelected
                                 ? true
@@ -463,301 +869,179 @@ export function CreateRoleDialog({
                                   ? "indeterminate"
                                   : false
                             }
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleGroupCheckbox(group.label);
-                            }}
-                            className="cursor-pointer"
+                            onCheckedChange={() => toggleAllMembers()}
                           />
-                          <Type variant="body" className="text-sm font-medium">
-                            {group.label}
-                          </Type>
                           <Type
                             variant="body"
-                            className="text-muted-foreground text-sm"
+                            className="text-muted-foreground text-sm font-medium"
                           >
-                            ({selectedInGroup}/{group.scopes.length})
+                            Select all
                           </Type>
-                        </div>
-                        <ChevronRight
+                        </label>
+                      );
+                    })()}
+                    {members.map((member) => {
+                      const alreadyHasRole =
+                        isEditing && member.roleId === editingRole?.id;
+                      return (
+                        <label
+                          key={member.id}
                           className={cn(
-                            "text-muted-foreground h-3.5 w-3.5 transition-transform",
-                            isExpanded && "rotate-90",
+                            "hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5",
+                            alreadyHasRole && "cursor-default opacity-50",
                           )}
-                        />
-                      </div>
-
-                      {/* Expanded scope rows */}
-                      {isExpanded && (
-                        <div className="border-border bg-muted/40 border-t">
-                          {group.scopes.map((scopeDef) => {
-                            const grant = grants[scopeDef.slug];
-                            const isChecked = !!grant;
-
-                            const row = (
-                              <div
-                                key={scopeDef.slug}
-                                className={cn(
-                                  "hover:bg-muted/50 flex items-start gap-3 px-3 py-2.5",
-                                  isSystemRole && "cursor-default",
-                                )}
-                              >
-                                <label
-                                  className={cn(
-                                    "flex min-w-0 flex-1 items-start gap-3",
-                                    isSystemRole
-                                      ? "cursor-default"
-                                      : "cursor-pointer",
-                                  )}
-                                >
-                                  <Checkbox
-                                    disabled={isSystemRole}
-                                    checked={isChecked}
-                                    onCheckedChange={() =>
-                                      toggleScope(scopeDef.slug)
-                                    }
-                                    className="bg-background mt-0.5"
-                                  />
-                                  <div className="min-w-0 flex-1">
-                                    <Type
-                                      variant="body"
-                                      className="font-mono text-sm font-medium"
-                                    >
-                                      {scopeDef.slug}
-                                    </Type>
-                                    <Type
-                                      variant="body"
-                                      className="text-muted-foreground text-xs"
-                                    >
-                                      {scopeDef.description}
-                                    </Type>
-                                  </div>
-                                </label>
-
-                                <div className="flex w-[110px] shrink-0 justify-end">
-                                  {isChecked && !isSystemRole && (
-                                    <ScopePickerPopover
-                                      resourceType={scopeDef.resourceType}
-                                      scope={scopeDef.slug}
-                                      selectors={grant.selectors}
-                                      onChangeSelectors={(selectors) =>
-                                        setGrantSelectors(
-                                          scopeDef.slug,
-                                          selectors,
-                                        )
-                                      }
-                                      annotations={grant.annotations}
-                                      onChangeAnnotations={(annotations) =>
-                                        setGrantAnnotations(
-                                          scopeDef.slug,
-                                          annotations,
-                                        )
-                                      }
-                                      customTab={grant.customTab}
-                                      onCustomTabChange={(tab) =>
-                                        setGrants((prev) => ({
-                                          ...prev,
-                                          [scopeDef.slug]: {
-                                            ...prev[scopeDef.slug]!,
-                                            customTab: tab,
-                                          },
-                                        }))
-                                      }
-                                    />
-                                  )}
-                                </div>
-                              </div>
-                            );
-
-                            if (isSystemRole) {
-                              return (
-                                <Tooltip key={scopeDef.slug}>
-                                  <TooltipTrigger asChild>{row}</TooltipTrigger>
-                                  <TooltipContent
-                                    side="right"
-                                    className="max-w-48"
-                                  >
-                                    Cannot edit system role permissions
-                                  </TooltipContent>
-                                </Tooltip>
-                              );
+                        >
+                          <Checkbox
+                            checked={
+                              alreadyHasRole || selectedMembers.has(member.id)
                             }
-
-                            return row;
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Assign Members */}
-          <div className="border-border border-t pt-4 pb-4">
-            <button
-              type="button"
-              onClick={() => setShowMembers(!showMembers)}
-              className="flex w-full items-center gap-1 text-left"
-            >
-              <ChevronRight
-                className={cn(
-                  "h-4 w-4 transition-transform",
-                  showMembers && "rotate-90",
-                )}
-              />
-              <Type variant="body" className="font-medium">
-                Assign Members
-              </Type>
-              <Type variant="body" className="text-muted-foreground ml-1">
-                (optional, {selectedMembers.size} selected)
-              </Type>
-            </button>
-
-            {showMembers && (
-              <div className="border-border divide-border mt-3 divide-y rounded-md border">
-                {/* Select-all header */}
-                {(() => {
-                  const selectableMembers = members.filter(
-                    (m) => !(isEditing && m.roleId === editingRole?.id),
-                  );
-                  const allSelected =
-                    selectableMembers.length > 0 &&
-                    selectableMembers.every((m) => selectedMembers.has(m.id));
-                  const someSelected =
-                    !allSelected &&
-                    selectableMembers.some((m) => selectedMembers.has(m.id));
-                  return (
-                    <label className="bg-muted/60 flex cursor-pointer items-center gap-3 px-3 py-2">
-                      <Checkbox
-                        checked={
-                          allSelected
-                            ? true
-                            : someSelected
-                              ? "indeterminate"
-                              : false
-                        }
-                        onCheckedChange={() => toggleAllMembers()}
-                      />
-                      <Type
-                        variant="body"
-                        className="text-muted-foreground text-sm font-medium"
-                      >
-                        Select all
-                      </Type>
-                    </label>
-                  );
-                })()}
-                {members.map((member) => {
-                  const alreadyHasRole =
-                    isEditing && member.roleId === editingRole?.id;
-                  return (
-                    <label
-                      key={member.id}
-                      className={cn(
-                        "hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5",
-                        alreadyHasRole && "cursor-default opacity-50",
-                      )}
-                    >
-                      <Checkbox
-                        checked={
-                          alreadyHasRole || selectedMembers.has(member.id)
-                        }
-                        disabled={alreadyHasRole}
-                        onCheckedChange={() =>
-                          !alreadyHasRole && toggleMember(member.id)
-                        }
-                      />
-                      <Avatar className="h-7 w-7">
-                        {member.photoUrl && (
-                          <AvatarImage
-                            src={member.photoUrl}
-                            alt={member.name}
+                            disabled={alreadyHasRole}
+                            onCheckedChange={() =>
+                              !alreadyHasRole && toggleMember(member.id)
+                            }
                           />
-                        )}
-                        <AvatarFallback className="text-xs">
-                          {member.name
-                            .split(" ")
-                            .map((n) => n[0])
-                            .join("")
-                            .toUpperCase()
-                            .slice(0, 2)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 flex-1 space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <Type variant="body" className="text-sm font-medium">
-                            {member.name}
-                          </Type>
-                          {member.roleId && roleNameById.get(member.roleId) && (
-                            <div className="flex items-center gap-1">
-                              <Badge
-                                variant="outline"
-                                size="sm"
-                                className={cn(
-                                  "font-mono text-[10px] uppercase",
-                                  selectedMembers.has(member.id) &&
-                                    member.roleId !== editingRole?.id &&
-                                    name.trim() &&
-                                    "line-through opacity-60",
-                                )}
+                          <Avatar className="h-7 w-7">
+                            {member.photoUrl && (
+                              <AvatarImage
+                                src={member.photoUrl}
+                                alt={member.name}
+                              />
+                            )}
+                            <AvatarFallback className="text-xs">
+                              {member.name
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")
+                                .toUpperCase()
+                                .slice(0, 2)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <Type
+                                variant="body"
+                                className="text-sm font-medium"
                               >
-                                {roleNameById.get(member.roleId)}
-                              </Badge>
-                              {selectedMembers.has(member.id) &&
-                                member.roleId !== editingRole?.id &&
-                                name.trim() && (
-                                  <>
-                                    <ArrowRight className="text-muted-foreground h-3 w-3 shrink-0" />
+                                {member.name}
+                              </Type>
+                              {member.roleId &&
+                                roleNameById.get(member.roleId) && (
+                                  <div className="flex items-center gap-1">
                                     <Badge
                                       variant="outline"
                                       size="sm"
-                                      className="border-primary text-primary font-mono text-[10px] uppercase"
+                                      className={cn(
+                                        "font-mono text-[10px] uppercase",
+                                        selectedMembers.has(member.id) &&
+                                          member.roleId !== editingRole?.id &&
+                                          name.trim() &&
+                                          "line-through opacity-60",
+                                      )}
                                     >
-                                      {name}
+                                      {roleNameById.get(member.roleId)}
                                     </Badge>
-                                  </>
+                                    {selectedMembers.has(member.id) &&
+                                      member.roleId !== editingRole?.id &&
+                                      name.trim() && (
+                                        <>
+                                          <ArrowRight className="text-muted-foreground h-3 w-3 shrink-0" />
+                                          <Badge
+                                            variant="outline"
+                                            size="sm"
+                                            className="border-primary text-primary font-mono text-[10px] uppercase"
+                                          >
+                                            {name}
+                                          </Badge>
+                                        </>
+                                      )}
+                                  </div>
                                 )}
                             </div>
-                          )}
-                        </div>
-                        <Type
-                          variant="body"
-                          className="text-muted-foreground text-xs"
-                        >
-                          {member.email}
-                        </Type>
-                      </div>
-                    </label>
-                  );
-                })}
+                            <Type
+                              variant="body"
+                              className="text-muted-foreground text-xs"
+                            >
+                              {member.email}
+                            </Type>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
+
+            {/* Panel 2: Scope picker (slides in from right) */}
+            <div className="flex w-full shrink-0 flex-col overflow-hidden">
+              {editingScopeDef && editingGrant && (
+                <ScopePickerPopover
+                  variant="panel"
+                  resourceType={editingScopeDef.resourceType}
+                  scope={editingScopeSlug!}
+                  selectors={
+                    editingScopeEffect === "deny"
+                      ? (editingGrant.exclusions ?? [])
+                      : editingGrant.selectors
+                  }
+                  onChangeSelectors={(sels) => {
+                    if (editingScopeEffect === "deny") {
+                      setGrantExclusions(editingScopeSlug!, sels ?? []);
+                    } else {
+                      setGrantSelectors(editingScopeSlug!, sels);
+                    }
+                  }}
+                  annotations={
+                    editingScopeEffect === "allow"
+                      ? editingGrant.annotations
+                      : undefined
+                  }
+                  onChangeAnnotations={
+                    editingScopeEffect === "allow"
+                      ? (annotations) =>
+                          setGrantAnnotations(editingScopeSlug!, annotations)
+                      : undefined
+                  }
+                  customTab={editingGrant.customTab}
+                  onCustomTabChange={(tab) =>
+                    setGrants((prev) => ({
+                      ...prev,
+                      [editingScopeSlug!]: {
+                        ...prev[editingScopeSlug!]!,
+                        customTab: tab,
+                      },
+                    }))
+                  }
+                  hideAllOption={editingScopeEffect === "deny"}
+                />
+              )}
+            </div>
           </div>
         </div>
 
-        <SheetFooter className="border-border flex-row justify-end border-t">
-          <Button variant="secondary" onClick={handleClose}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={saveDisabled}>
-            {isMutating && (
-              <Button.LeftIcon>
-                <Loader2 className="h-4 w-4 animate-spin" />
-              </Button.LeftIcon>
-            )}
-            <Button.Text>
-              {isMutating
-                ? isEditing
-                  ? "Saving…"
-                  : "Creating…"
-                : isEditing
-                  ? "Save Changes"
-                  : "Create Role"}
-            </Button.Text>
-          </Button>
-        </SheetFooter>
+        {dialogStep === "form" && (
+          <SheetFooter className="border-border flex-row justify-end border-t">
+            <Button variant="secondary" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} disabled={saveDisabled}>
+              {isMutating && (
+                <Button.LeftIcon>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </Button.LeftIcon>
+              )}
+              <Button.Text>
+                {isMutating
+                  ? isEditing
+                    ? "Saving…"
+                    : "Creating…"
+                  : isEditing
+                    ? "Save Changes"
+                    : "Create Role"}
+              </Button.Text>
+            </Button>
+          </SheetFooter>
+        )}
       </SheetContent>
     </Sheet>
   );

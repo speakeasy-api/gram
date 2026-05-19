@@ -40,9 +40,16 @@ export function membersHaveChanged(
   return false;
 }
 
-/** Sorted, comma-joined grant keys for cheap equality check */
+/** Sorted, comma-joined grant keys for cheap equality check.
+ *  Includes exclusion counts so adding/removing exceptions marks dirty. */
 export function grantKeysString(grants: Record<string, RoleGrant>): string {
-  return Object.keys(grants).sort().join(",");
+  return Object.entries(grants)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, g]) => {
+      const exCount = g.exclusions?.length ?? 0;
+      return exCount > 0 ? `${key}:ex${exCount}` : key;
+    })
+    .join(",");
 }
 
 /** Whether any field has changed from the initial state */

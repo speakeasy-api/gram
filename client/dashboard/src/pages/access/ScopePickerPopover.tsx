@@ -57,6 +57,11 @@ interface ScopePickerPopoverProps {
   /** Which custom tab is active */
   customTab?: CustomTab;
   onCustomTabChange?: (tab: CustomTab) => void;
+  /** Hide the "All" option — used for deny pickers where unrestricted deny is nonsensical */
+  hideAllOption?: boolean;
+  /** "popover" (default) = floating popover with trigger button.
+   *  "panel" = inline content that fills its parent container (for sheet slide panels). */
+  variant?: "popover" | "panel";
 }
 
 interface ServerTool {
@@ -145,6 +150,8 @@ export function ScopePickerPopover({
   onChangeAnnotations,
   customTab,
   onCustomTabChange,
+  hideAllOption,
+  variant = "popover",
 }: ScopePickerPopoverProps) {
   const organization = useOrganization();
   const mcpServers = useMCPServers(resourceType === "mcp");
@@ -298,11 +305,13 @@ export function ScopePickerPopover({
     includeCollection: boolean;
   }) => (
     <div className="shrink-0 pb-1.5">
-      <ScopeOption
-        label={resourceType === "project" ? "All projects" : "All servers"}
-        selected={activePanel === "all"}
-        onClick={() => switchPanel("all")}
-      />
+      {!hideAllOption && (
+        <ScopeOption
+          label={resourceType === "project" ? "All projects" : "All servers"}
+          selected={activePanel === "all"}
+          onClick={() => switchPanel("all")}
+        />
+      )}
       {resourceType === "mcp" && (
         <ScopeOption
           label="Specific projects"
@@ -584,6 +593,55 @@ export function ScopePickerPopover({
     </div>
   );
 
+  // Shared content used by both popover and panel variants
+  const pickerContent = (
+    <>
+      {renderScopeOptions({ includeCollection: variant === "popover" })}
+      {resourceList}
+      {projectPickerList}
+      {activePanel === "tools" && (
+        <div
+          className={cn(
+            "flex flex-col",
+            variant === "popover"
+              ? "-mx-1.5 -mb-1.5 max-h-[min(420px,60vh)]"
+              : "min-h-0 flex-1",
+          )}
+        >
+          {customTabs(
+            variant === "popover" ? "max-h-[min(340px,50vh)]" : undefined,
+          )}
+          {variant === "popover" && (customTab ?? "select") === "select" && (
+            <div className="bg-background border-border shrink-0 rounded-b-lg border-t">
+              <button
+                type="button"
+                onClick={() => {
+                  setPopoverOpen(false);
+                  setExpanded(true);
+                }}
+                className="text-muted-foreground hover:text-foreground hover:bg-muted/50 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-b-lg px-3 py-2.5 text-xs transition-colors"
+              >
+                <Maximize2 className="h-3 w-3" />
+                Open in full screen
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {activePanel === "collection" && collectionPanel}
+    </>
+  );
+
+  // Panel variant: render inline, filling the parent container
+  if (variant === "panel") {
+    return (
+      <div className="flex flex-1 flex-col overflow-y-auto p-1.5">
+        {pickerContent}
+      </div>
+    );
+  }
+
+  // Popover variant (default): trigger button + floating popover + fullscreen dialog
   return (
     <>
       <Popover modal={false} open={popoverOpen} onOpenChange={setPopoverOpen}>
@@ -613,30 +671,7 @@ export function ScopePickerPopover({
             transitionTimingFunction: "cubic-bezier(0.32, 0.72, 0, 1)",
           }}
         >
-          {renderScopeOptions({ includeCollection: true })}
-          {resourceList}
-          {projectPickerList}
-          {activePanel === "tools" && (
-            <div className="-mx-1.5 -mb-1.5 flex max-h-[min(420px,60vh)] flex-col">
-              {customTabs("max-h-[min(340px,50vh)]")}
-              {(customTab ?? "select") === "select" && (
-                <div className="bg-background border-border shrink-0 rounded-b-lg border-t">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPopoverOpen(false);
-                      setExpanded(true);
-                    }}
-                    className="text-muted-foreground hover:text-foreground hover:bg-muted/50 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-b-lg px-3 py-2.5 text-xs transition-colors"
-                  >
-                    <Maximize2 className="h-3 w-3" />
-                    Open in full screen
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-          {activePanel === "collection" && collectionPanel}
+          {pickerContent}
         </PopoverContent>
       </Popover>
 

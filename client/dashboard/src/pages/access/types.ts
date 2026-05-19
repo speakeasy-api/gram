@@ -53,6 +53,9 @@ export interface RoleGrant {
   effect?: PolicyEffect;
   /** null = unrestricted; Selector[] = constrained by selectors */
   selectors: Selector[] | null;
+  /** Resources to explicitly deny — generates separate deny grants on submit.
+   *  Only meaningful when selectors is null (unrestricted allow + targeted deny). */
+  exclusions?: Selector[];
   /** Selected annotation hints for auto-group matching (MCP scopes only) */
   annotations?: AnnotationHint[];
   /** Which custom tab was last active (UI-only, not persisted to backend) */
