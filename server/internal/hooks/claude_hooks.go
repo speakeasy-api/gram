@@ -428,6 +428,7 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 	}
 
 	var entries []MCPServerEntry
+	var variant string
 	switch {
 	case payload.AdditionalData["mcp_inventory_claude_code"] != nil:
 		raw, ok := payload.AdditionalData["mcp_inventory_claude_code"].(string)
@@ -435,8 +436,10 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 			return
 		}
 		entries = ParseClaudeMCPList(raw)
+		variant = agentVariantClaudeCode
 	case payload.AdditionalData["mcp_inventory_cowork"] != nil:
 		entries = ParseCoworkMCPInventory(payload.AdditionalData["mcp_inventory_cowork"])
+		variant = agentVariantCowork
 	default:
 		return
 	}
@@ -448,6 +451,14 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 			attr.SlogError(err),
 		)
 		return
+	}
+
+	variantKey := sessionAgentVariantCacheKey(*payload.SessionID)
+	if err := s.cache.Set(ctx, variantKey, variant, sessionMCPListTTL); err != nil {
+		s.logger.WarnContext(ctx, "failed to cache session agent variant",
+			attr.SlogEvent("claude_hook_agent_variant_cache_set_failed"),
+			attr.SlogError(err),
+		)
 	}
 }
 
@@ -461,6 +472,12 @@ func (s *Service) refreshMCPListTTL(ctx context.Context, sessionID string) {
 	if err := s.cache.Expire(ctx, sessionMCPListCacheKey(sessionID), sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to refresh MCP list TTL",
 			attr.SlogEvent("claude_hook_mcp_list_ttl_refresh_failed"),
+			attr.SlogError(err),
+		)
+	}
+	if err := s.cache.Expire(ctx, sessionAgentVariantCacheKey(sessionID), sessionMCPListTTL); err != nil {
+		s.logger.WarnContext(ctx, "failed to refresh session agent variant TTL",
+			attr.SlogEvent("claude_hook_agent_variant_ttl_refresh_failed"),
 			attr.SlogError(err),
 		)
 	}

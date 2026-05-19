@@ -16,7 +16,6 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
@@ -47,6 +46,30 @@ func isConversationEvent(eventName string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// defaultChatTitleForSession picks the default chat title based on the
+// session's agent variant stamped by SessionStart. If the variant is
+// unknown (no SessionStart cached yet, or stamped with an unrecognized
+// value) we fall back to the ambiguous "Claude Session" title rather than
+// assuming claude-code — the title generator will replace it with a real
+// one once enough conversation is on file.
+func (s *Service) defaultChatTitleForSession(ctx context.Context, sessionID string) string {
+	if sessionID == "" {
+		return activities.DefaultClaudeAmbiguous
+	}
+	var variant string
+	if err := s.cache.Get(ctx, sessionAgentVariantCacheKey(sessionID), &variant); err != nil {
+		return activities.DefaultClaudeAmbiguous
+	}
+	switch variant {
+	case agentVariantCowork:
+		return activities.DefaultCoworkChatTitle
+	case agentVariantClaudeCode:
+		return activities.DefaultClaudeChatTitle
+	default:
+		return activities.DefaultClaudeAmbiguous
 	}
 }
 
@@ -88,8 +111,11 @@ func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
 }
 
 // handleUserPromptSubmit captures the user's prompt text as a chat message.
-// When a blocking risk policy matches, it denies the prompt with HTTP 403.
-// The send_hook.sh script converts 4xx responses to exit code 2 (block).
+// When a blocking risk policy matches, it returns a hook result with
+// continue=false and stopReason set; Claude Code reads those fields from the
+// JSON body and surfaces stopReason to the user. Returning 200 with a shaped
+// body (instead of 4xx) is what makes the block reason actually visible —
+// stderr-only blocks via exit code 2 don't render stopReason at all.
 func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	if s.riskScanner != nil && payload.Prompt != nil && payload.SessionID != nil {
 		if scanResult := s.scanClaudeForEnforcement(ctx, payload); scanResult != nil {
@@ -100,7 +126,11 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.Claud
 			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
-			return nil, oops.E(oops.CodeForbidden, nil, "%s", userReason)
+			result := makeHookResult(payload.HookEventName)
+			cont := false
+			result.Continue = &cont
+			result.StopReason = &userReason
+			return result, nil
 		}
 	}
 	return makeHookResult(payload.HookEventName), nil
@@ -231,7 +261,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		Generation:       0,
 	}
 
-	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultClaudeChatTitle); err != nil {
+	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, conv.PtrValOr(payload.SessionID, ""))); err != nil {
 		return err
 	}
 
@@ -300,7 +330,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultClaudeChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, conv.PtrValOr(payload.SessionID, "")))
 }
 
 // writeToolCallResultToPG writes a tool result message to PostgreSQL.
@@ -354,7 +384,7 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 	// If this was an error, we could optionally set tool_outcome based on isError
 	_ = isError
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultClaudeChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, conv.PtrValOr(payload.SessionID, "")))
 }
 
 // marshalToJSON converts any value to a JSON string.
