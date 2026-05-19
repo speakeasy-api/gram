@@ -3,11 +3,7 @@
 //
 // Typical usage from a service handler:
 //
-//	id, err := outbox.NewWriter(db).Insert(ctx, tx, outbox.InsertParams{
-//	    OrganizationID: orgID,
-//	    EventType:      "audit_log:created",
-//	    Payload:        payloadJSON,
-//	})
+//	id, err := outbox.AppendEvent(ctx, tx, orgID, events.AuditLogCreated, payload)
 //	if err != nil { ... }
 //	// commit the caller's tx, then:
 //	signaler.SignalRelay(ctx, orgID)
@@ -30,44 +26,37 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox/repo"
 )
 
+// DBTX is the minimal database interface required by AppendEvent. Callers can
+// pass a transaction or a pool; bulk operations require repo.DBTX (see
+// AppendBatchEvents).
 type DBTX interface {
 	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
 	Query(context.Context, string, ...any) (pgx.Rows, error)
 	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
-type EventType string
-
-const (
-	EventTypeAuditLogCreated    EventType = "audit_log.created"
-	EventTypeRiskFindingCreated EventType = "risk_finding.created"
-)
-
-// AppendParams is the producer-facing payload for queuing an event.
-type AppendParams struct {
-	OrganizationID string
-	EventType      EventType
-	Payload        any
-}
-
-// AppendResult identifies the inserted row.
+// AppendResult identifies the inserted outbox row.
 type AppendResult struct {
 	ID             int64
 	OrganizationID string
 }
 
-// Append inserts a new outbox event for an organization.
+// AppendBatchResult is returned by AppendBatchEvents.
+type AppendBatchResult struct {
+	Count int64
+}
+
+// Append inserts a single typed outbox event within a transaction.
 //
 // THIS METHOD MUST BE CALLED WITHIN A TRANSACTION.
-func Append(ctx context.Context, dbtx DBTX, p AppendParams) (AppendResult, error) {
-	jsonPayload, err := json.Marshal(p.Payload)
+func Append[T any](ctx context.Context, dbtx DBTX, orgID string, def *EventDef[T], payload T) (AppendResult, error) {
+	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
 		return AppendResult{}, fmt.Errorf("marshal outbox payload: %w", err)
 	}
-
 	row, err := repo.New(noopCopyFromDBTX{DBTX: dbtx}).InsertOutboxEntry(ctx, repo.InsertOutboxEntryParams{
-		OrganizationID: p.OrganizationID,
-		EventType:      string(p.EventType),
+		OrganizationID: orgID,
+		EventType:      string(def.EventType()),
 		Payload:        jsonPayload,
 	})
 	if err != nil {
@@ -75,39 +64,31 @@ func Append(ctx context.Context, dbtx DBTX, p AppendParams) (AppendResult, error
 	}
 	return AppendResult{
 		ID:             row.ID,
-		OrganizationID: p.OrganizationID,
+		OrganizationID: orgID,
 	}, nil
 }
 
-type AppendBatchResult struct {
-	Count int64
-}
-
-// AppendBatch inserts multiple outbox events for an organization and returns
-// the count of inserted rows. This is a much more efficient alternative to
-// multiple calls to Append when queuing many events at once.
+// AppendBatch inserts multiple events of the same type within a transaction.
+// This is much more efficient than repeated AppendEvent calls for large batches.
 //
 // THIS METHOD MUST BE CALLED WITHIN A TRANSACTION.
-func AppendBatch(ctx context.Context, dbtx repo.DBTX, ps []AppendParams) (AppendBatchResult, error) {
-	var empty AppendBatchResult
-	entries := make([]repo.BulkInsertOutboxEntriesParams, 0, len(ps))
-	for _, p := range ps {
-		jsonPayload, err := json.Marshal(p.Payload)
+func AppendBatch[T any](ctx context.Context, dbtx repo.DBTX, orgID string, def *EventDef[T], payloads []T) (AppendBatchResult, error) {
+	entries := make([]repo.BulkInsertOutboxEntriesParams, 0, len(payloads))
+	for _, p := range payloads {
+		jsonPayload, err := json.Marshal(p)
 		if err != nil {
-			return empty, fmt.Errorf("marshal outbox payload: %w", err)
+			return AppendBatchResult{}, fmt.Errorf("marshal outbox payload: %w", err)
 		}
 		entries = append(entries, repo.BulkInsertOutboxEntriesParams{
-			OrganizationID: p.OrganizationID,
-			EventType:      string(p.EventType),
+			OrganizationID: orgID,
+			EventType:      string(def.EventType()),
 			Payload:        jsonPayload,
 		})
 	}
-
 	n, err := repo.New(dbtx).BulkInsertOutboxEntries(ctx, entries)
 	if err != nil {
-		return empty, fmt.Errorf("bulk insert outbox entries: %w", err)
+		return AppendBatchResult{}, fmt.Errorf("bulk insert outbox entries: %w", err)
 	}
-
 	return AppendBatchResult{Count: n}, nil
 }
 
