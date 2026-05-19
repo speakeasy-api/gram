@@ -200,6 +200,7 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 	Attribute("client_id", String, "client_id supplied by the caller.")
 	Attribute("client_secret", String, "client_secret supplied by the caller. Gram encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
+	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
 
 	Required("remote_session_issuer_id", "user_session_issuer_id", "client_id")
 })
@@ -217,6 +218,7 @@ var CloneClientFromOAuthProxyProviderForm = Type("CloneClientFromOAuthProxyProvi
 		Format(FormatUUID)
 	})
 	Attribute("token_endpoint_auth_method", String, "How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
+	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance should request for the cloned client. Omit to fall back to the issuer's scopes_supported.")
 
 	Required("oauth_proxy_provider_id", "remote_session_issuer_id", "user_session_issuer_id")
 })
@@ -232,6 +234,7 @@ var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func()
 		Format(FormatUUID)
 	})
 	Attribute("token_endpoint_auth_method", String, "Change how the client authenticates at the issuer's token endpoint.", tokenEndpointAuthMethodEnum)
+	Attribute("scope", ArrayOf(String), "Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.")
 
 	Required("id")
 })
@@ -261,6 +264,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.", tokenEndpointAuthMethodEnum)
+	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})

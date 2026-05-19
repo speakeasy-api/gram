@@ -1457,6 +1457,12 @@ func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.R
 		CreatedAt:               v.CreatedAt,
 		UpdatedAt:               v.UpdatedAt,
 	}
+	if v.Scope != nil {
+		res.Scope = make([]string, len(v.Scope))
+		for i, val := range v.Scope {
+			res.Scope[i] = val
+		}
+	}
 
 	return res
 }
