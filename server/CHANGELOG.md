@@ -1,5 +1,41 @@
 # server
 
+## 0.55.0
+
+### Minor Changes
+
+- ecdd727: support remote mcp interceptor payload mutation; implement shadowmcp and mcp:connect interceptors
+- a8cf1e0: Emit audit log entries for collection mutations: `mcp_collection:create`, `:update`, `:delete`, `:attach_server`, and `:detach_server`. Update/AttachServer/DetachServer now run in a transaction alongside the audit insert, and a new `urn.McpCollection` identifier (prefix `mcp_collection`) is used as the audit subject.
+- 4ea14f3: Enforce RBAC on the collections API. `List` and `ListServers` now require `org:read`; `Create`, `Update`, `Delete`, `AttachServer`, and `DetachServer` require `org:admin`. The dashboard's sidebar, collections list, and detail pages open up to `org:read` members, while create/edit/delete and server attach/detach controls stay behind `org:admin`.
+- 5dcb8aa: `RiskResult.rule_id` and `RiskResult.description` now follow a consistent shape across every detection source.
+
+  `rule_id` is lowercase, snake_case, with an optional dot-separated category prefix:
+
+  - `secret.<rule>` for credentials and secrets (e.g. `secret.anthropic_api_key`)
+  - `pii.<rule>` for personal, financial, and medical data (e.g. `pii.credit_card`, `pii.medical_license`)
+  - `shadow_mcp` for unverified MCP tool calls
+  - `destructive.tool` for MCP tool calls flagged as destructive
+  - `destructive.<category>.<name>` for destructive shell, git, database, and cloud commands (e.g. `destructive.shell.rm_rf`, `destructive.git.push_force`)
+  - `prompt_injection` for prompt injection findings
+
+  `(source, rule_id)` is the stable identifier downstream consumers should match on. The dotted prefix alone is enough to bucket findings by risk category.
+
+  `description` is a short human-readable sentence describing the finding. It never echoes the matched value and is safe to display verbatim.
+
+  Historical rows written before this release keep their original `rule_id` and `description` values; a follow-up migration will rewrite them.
+
+- 4eadd44: Show assigned roles on pending organization invites and allow org admins to change the role before acceptance. Invite creation and invite role changes now emit audit log entries.
+- 95e1458: The webhooks feature now generates a catalog of event types and schemas for them. This is emitted as an OpenAPI 3.1 document that is synced to svix.
+- 376a74b: Added granular webhook event types for audit log entries — each auditable subject (deployments, projects, MCP servers, API keys, toolsets, risk policies, sessions, and more) now emits its own typed webhook event (e.g. audit_log.deployment_event_v1), enabling subscribers to filter by subject domain rather than receiving all audit activity under a single event type.
+
+### Patch Changes
+
+- bede6e6: Exclude per-request plugin download API key creation from the audit log to prevent flooding with `api_key:create` events.
+- 4aceb60: skip WorkOS reads when org already linked locally
+- 4eadd44: Invite acceptance now uses Gram invite tokens plus WorkOS User Management Magic Auth codes.
+  The server validates the invite token, creates and consumes the Magic Auth code for the invited email, verifies the email match, and completes provisioning.
+- 1562656: Drop Presidio IP_ADDRESS false positives produced from short-form IPv6 strings (`b::`, `dead::`, `1::`, …) and IPv4 unspecified `0.0.0.0`. Analysis of prod risk_results showed these single-hex-group `<hex>::` matches dominated IP_ADDRESS noise alongside the existing `::` filter; they're now dropped before becoming findings.
+
 ## 0.54.0
 
 ### Minor Changes
