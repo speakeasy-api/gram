@@ -6,14 +6,16 @@ This package owns organization-level AI provider configuration and usage sync st
 
 AI integrations are split across two Postgres tables:
 
-- `ai_integration_configs` stores provider configuration: organization, provider, telemetry project, encrypted API key, enabled flag, and soft-delete metadata.
+- `ai_integration_configs` stores provider configuration: organization, provider, encrypted API key, enabled flag, soft-delete metadata, and the telemetry project Gram writes usage rows to.
 - `ai_integration_syncs` stores usage polling state: the completed inclusive watermark (`last_polled_at`).
 
 Configuration and sync state are separate because provider credentials are user-managed settings, while polling metadata is operational state owned by background workers.
 
+Cursor setup is organization-level. Today Gram attaches each integration to the organization's first-created project automatically, and polling starts forward from the moment the key is saved rather than backfilling historical usage.
+
 ## Cursor Usage Polling
 
-Cursor usage metrics come from Cursor's Admin API, not from hooks or OTEL. The background pipeline polls Cursor's hourly usage event endpoint, transforms each event into the shared `telemetry_logs` schema, and writes token/cost data with `gram.hook.source = "cursor"` and `gram.event.source = "polling"`.
+Cursor usage metrics come from Cursor's Admin API, not from hooks or OTEL. The background pipeline polls Cursor's hourly usage event endpoint, transforms each event into the shared `telemetry_logs` schema, and writes token/cost data with `gram.hook.source = "cursor"`, `gram.event.source = "polling"`, and `resource.urn = "cursor:usage:metrics"`.
 
 The polling workflow is implemented in `internal/background/ai_integration_usage_polling.go`; the Cursor-specific API, mapping, dedupe, and persistence logic lives in `internal/background/activities/poll_cursor_usage_metrics.go`.
 
@@ -46,7 +48,7 @@ Coordinator rolling pool, max N children:
            v                            v                            v
 +----------------------+     +----------------------+     +----------------------+
 | AIIntegrationUsage   |     | AIIntegrationUsage   |     | AIIntegrationUsage   |
-| PollWorkflow         |     | PollWorkflow         |     | PollWorkflow         |
+| SyncConfigWorkflow   |     | SyncConfigWorkflow   |     | SyncConfigWorkflow   |
 +----------+-----------+     +----------+-----------+     +----------+-----------+
            |                            |                            |
            v                            v                            v
@@ -86,7 +88,7 @@ Candidate listing is read-only. `ListUsagePollCandidates` returns enabled, non-d
 
 Cursor windows are non-overlapping. Cursor includes both request bounds, so each request starts at `last_polled_at + 1ms` and ends at the coordinator's shared `endTime`. The watermark is only advanced to `endTime` after the bulk ClickHouse write succeeds.
 
-ClickHouse and Postgres are not updated atomically. The pipeline is at-least-once across the ClickHouse insert and Postgres watermark update. Each row includes `cursor.event_hash` so dashboard queries can dedupe polled Cursor rows before summing if needed.
+ClickHouse and Postgres are not updated atomically. The pipeline is at-least-once across the ClickHouse insert and Postgres watermark update. Each row includes `cursor.event_hash`; dashboard queries that sum polled Cursor rows should dedupe by `(gram_project_id, cursor.event_hash)` first.
 
 Cost fields are intentionally separate. `gen_ai.usage.cost` currently uses `tokenUsage.totalCents / 100`. Cursor's charged amount is also stored as `cursor.charged_cents` and `cursor.charged_usd` so billing semantics can be adjusted later without losing data.
 
