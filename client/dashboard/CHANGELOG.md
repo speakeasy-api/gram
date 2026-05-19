@@ -1,5 +1,21 @@
 # dashboard
 
+## 0.55.0
+
+### Minor Changes
+
+- 129e642: Add "Install All" button to collection detail page for bulk server installation
+- 4ea14f3: Enforce RBAC on the collections API. `List` and `ListServers` now require `org:read`; `Create`, `Update`, `Delete`, `AttachServer`, and `DetachServer` require `org:admin`. The dashboard's sidebar, collections list, and detail pages open up to `org:read` members, while create/edit/delete and server attach/detach controls stay behind `org:admin`.
+- 4eadd44: Show assigned roles on pending organization invites and allow org admins to change the role before acceptance. Invite creation and invite role changes now emit audit log entries.
+- b8ed614: Adds filtering and clearer presentation for trace entries
+
+### Patch Changes
+
+- 7a82597: Filter the plugin "Add Server" dialog to exclude toolsets already attached to the plugin, preventing duplicate entries.
+- fb40041: Show a graceful message in AI Insights and the Playground when an organization runs out of chat credits. Previously the chat would silently stop streaming on a 402 from the gateway because the AI SDK masks stream errors by default. The thread now renders `You've reached the chat credit limit for this account. Click the "Get Support" button at the top of the page to reach out about upgrading.` and the new `describeStreamError` / `CREDITS_EXHAUSTED_MESSAGE` exports are available on `@gram-ai/elements` for downstream consumers that want to react to the same condition.
+- Updated dependencies [fb40041]
+  - @gram-ai/elements@1.33.0
+
 ## 0.54.0
 
 ### Minor Changes
