@@ -1,6 +1,6 @@
 import { useSession } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
-import { buildLoginRedirectURL } from "@/lib/utils";
+import { buildLoginRedirectURL, isSetupDomain } from "@/lib/utils";
 import { JourneyDemo } from "./components/journey-demo";
 import { LoginSection } from "./components/login-section";
 import { useSearchParams, useNavigate } from "react-router";
@@ -24,6 +24,11 @@ export default function Login() {
       // round-trip even when a session already exists.
       if (disposition && redirectTo) {
         window.location.href = buildLoginRedirectURL(redirectTo);
+        return;
+      }
+      // On setup domain, always navigate to the setup wizard after auth
+      if (isSetupDomain()) {
+        navigate("/", { replace: true });
         return;
       }
       if (redirectTo) {

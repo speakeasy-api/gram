@@ -29,6 +29,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { orgRoutePaths } from "@/routes";
+import { isSetupDomain } from "@/lib/utils";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -149,7 +150,20 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   // Handle initial navigation
   const redirectParam = searchParams.get("redirect");
+
+  // On the setup subdomain, always funnel authenticated users to the setup wizard
+  if (isSetupDomain() && session.organization) {
+    const setupPath = `/${session.organization.slug}/setup`;
+    if (!location.pathname.startsWith(setupPath)) {
+      return <Navigate to={setupPath} replace />;
+    }
+  }
+
   if (redirectParam) {
+    // On setup domain, ignore redirect params that would leave the setup flow
+    if (isSetupDomain() && session.organization) {
+      return <Navigate to={`/${session.organization.slug}/setup`} replace />;
+    }
     return <Navigate to={redirectParam} replace />;
   } else if (isSlugExempt) {
     // Fall through to render children
