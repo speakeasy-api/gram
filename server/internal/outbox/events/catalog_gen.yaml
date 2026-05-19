@@ -274,6 +274,60 @@ webhooks:
                                 - subject_type
                             type: object
                 required: true
+    audit_log.assistant_wake_event_v1:
+        post:
+            description: Emitted when an assistant wake is scheduled or canceled
+            operationId: audit_log.assistant_wake_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
     audit_log.created:
         post:
             description: An audit log entry was recorded

@@ -11,10 +11,6 @@ import (
 )
 
 func appendToOutbox(ctx context.Context, dbtx repo.DBTX, entry auditEntry, result repo.InsertAuditLogRow) error {
-	if entry.OutboxEvent == nil {
-		return nil
-	}
-
 	input := entry.Params
 	if _, err := outbox.Append(ctx, dbtx, result.OrganizationID, entry.OutboxEvent, events.AuditLogCreatedPayload{
 		ID:                 result.ID,

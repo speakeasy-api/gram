@@ -279,7 +279,7 @@ func (l *Logger) logWakeEvent(ctx context.Context, dbtx repo.DBTX, action Action
 		Metadata:       metadata,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: nil})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AssistantWake})
 }
 
 func (l *Logger) LogWakeCancelled(ctx context.Context, dbtx repo.DBTX, event LogWakeEvent) error {

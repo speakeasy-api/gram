@@ -11,6 +11,7 @@ var All = []outbox.EventRegistration{
 	AccessMember,
 	AccessRole,
 	Asset,
+	AssistantWake,
 	AuditLogCreated,
 	CustomDomain,
 	Deployment,

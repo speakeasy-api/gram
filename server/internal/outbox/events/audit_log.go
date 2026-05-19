@@ -20,6 +20,7 @@ var (
 	AccessRole           = outbox.NewEventDef[AuditLogCreatedPayload]("audit_log.access_role_event_v1", "Emitted when changes to roles are made")
 	APIKey               = outbox.NewEventDef[AuditLogCreatedPayload]("audit_log.api_key_event_v1", "Emitted when changes to API keys are made")
 	Asset                = outbox.NewEventDef[AuditLogCreatedPayload]("audit_log.asset_event_v1", "Emitted when changes to assets are made")
+	AssistantWake        = outbox.NewEventDef[AuditLogCreatedPayload]("audit_log.assistant_wake_event_v1", "Emitted when an assistant wake is scheduled or canceled")
 	CustomDomain         = outbox.NewEventDef[AuditLogCreatedPayload]("audit_log.custom_domain_event_v1", "Emitted when changes to custom domains are made")
 	Deployment           = outbox.NewEventDef[AuditLogCreatedPayload]("audit_log.deployment_event_v1", "Emitted when changes to deployments are made")
 	Environment          = outbox.NewEventDef[AuditLogCreatedPayload]("audit_log.environment_event_v1", "Emitted when changes to environments are made")
