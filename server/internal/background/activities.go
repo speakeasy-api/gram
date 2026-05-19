@@ -135,7 +135,7 @@ func NewActivities(
 	return &Activities{
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
-		pollCursorUsageMetrics:          activities.NewPollCursorUsageMetrics(logger, db, encryption, telemetryLogger),
+		pollCursorUsageMetrics:          activities.NewPollCursorUsageMetrics(logger, db, encryption, telemetryLogger, guardianPolicy, tracerProvider),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
 		fallbackModelUsageTracking:      activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
@@ -262,11 +262,18 @@ func (a *Activities) FreeTierReportingUsageMetrics(ctx context.Context, orgIDs [
 }
 
 func (a *Activities) ListAIIntegrationUsagePollCandidates(ctx context.Context, input activities.ListAIIntegrationUsagePollCandidatesInput) ([]activities.AIIntegrationUsagePollConfig, error) {
-	return a.pollCursorUsageMetrics.ListAIIntegrationUsagePollCandidates(ctx, input)
+	configs, err := a.pollCursorUsageMetrics.ListAIIntegrationUsagePollCandidates(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("list ai integration usage poll candidates: %w", err)
+	}
+	return configs, nil
 }
 
 func (a *Activities) SyncAIIntegrationUsage(ctx context.Context, input activities.SyncAIIntegrationUsageInput) error {
-	return a.pollCursorUsageMetrics.SyncAIIntegrationUsage(ctx, input)
+	if err := a.pollCursorUsageMetrics.SyncAIIntegrationUsage(ctx, input); err != nil {
+		return fmt.Errorf("sync ai integration usage: %w", err)
+	}
+	return nil
 }
 
 func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) error {

@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestFetchUsageEventsPaginates(t *testing.T) {
@@ -15,41 +18,57 @@ func TestFetchUsageEventsPaginates(t *testing.T) {
 
 	var pages []int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/teams/filtered-usage-events", r.URL.Path)
+		if r.URL.Path != "/teams/filtered-usage-events" {
+			t.Errorf("expected path /teams/filtered-usage-events, got %s", r.URL.Path)
+		}
 		user, pass, ok := r.BasicAuth()
-		require.True(t, ok)
-		require.Equal(t, "cursor-key", user)
-		require.Equal(t, "", pass)
+		if !ok {
+			t.Errorf("expected basic auth")
+		}
+		if user != "cursor-key" {
+			t.Errorf("expected basic auth user cursor-key, got %s", user)
+		}
+		if pass != "" {
+			t.Errorf("expected empty basic auth password, got %s", pass)
+		}
 
 		var req filteredUsageEventsRequest
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
 		pages = append(pages, req.Page)
-		require.Equal(t, int64(1710720000000), req.StartDate)
-		require.Equal(t, int64(1710723600000), req.EndDate)
-		require.Equal(t, 2, req.PageSize)
+		if req.StartDate != int64(1710720000000) {
+			t.Errorf("expected start date 1710720000000, got %d", req.StartDate)
+		}
+		if req.EndDate != int64(1710723600000) {
+			t.Errorf("expected end date 1710723600000, got %d", req.EndDate)
+		}
+		if req.PageSize != 2 {
+			t.Errorf("expected page size 2, got %d", req.PageSize)
+		}
 
 		resp := filteredUsageEventsResponse{
+			TotalUsageEventsCount: 2,
 			Pagination: pagination{
-				NumPages:    2,
-				CurrentPage: req.Page,
-				PageSize:    req.PageSize,
-				HasNextPage: req.Page == 1,
+				NumPages:        2,
+				CurrentPage:     req.Page,
+				PageSize:        req.PageSize,
+				HasNextPage:     req.Page == 1,
+				HasPreviousPage: req.Page > 1,
 			},
 			UsageEvents: []UsageEvent{
-				{
-					Timestamp:    "1710720000000",
-					Model:        "claude",
-					Kind:         "Usage-based",
-					ChargedCents: float64(req.Page),
-					UserEmail:    "dev@example.com",
-				},
+				testUsageEvent(float64(req.Page)),
 			},
 		}
-		require.NoError(t, json.NewEncoder(w).Encode(resp))
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("encode response: %v", err)
+		}
 	}))
 	t.Cleanup(server.Close)
 
-	client := New(WithBaseURL(server.URL), WithPageSize(2))
+	client := New(testGuardianPolicy(t), WithBaseURL(server.URL), WithPageSize(2))
 	events, err := client.FetchUsageEvents(
 		t.Context(),
 		"cursor-key",
@@ -59,8 +78,8 @@ func TestFetchUsageEventsPaginates(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []int{1, 2}, pages)
 	require.Len(t, events, 2)
-	require.Equal(t, float64(1), events[0].ChargedCents)
-	require.Equal(t, float64(2), events[1].ChargedCents)
+	require.InDelta(t, float64(1), events[0].ChargedCents, 0.000001)
+	require.InDelta(t, float64(2), events[1].ChargedCents, 0.000001)
 }
 
 func TestFetchUsageEventsPage(t *testing.T) {
@@ -68,25 +87,38 @@ func TestFetchUsageEventsPage(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req filteredUsageEventsRequest
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
-		require.Equal(t, 3, req.Page)
-		require.Equal(t, 2, req.PageSize)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if req.Page != 3 {
+			t.Errorf("expected page 3, got %d", req.Page)
+		}
+		if req.PageSize != 2 {
+			t.Errorf("expected page size 2, got %d", req.PageSize)
+		}
 
 		resp := filteredUsageEventsResponse{
+			TotalUsageEventsCount: 1,
 			Pagination: pagination{
-				CurrentPage: req.Page,
-				PageSize:    req.PageSize,
-				HasNextPage: true,
+				NumPages:        4,
+				CurrentPage:     req.Page,
+				PageSize:        req.PageSize,
+				HasNextPage:     true,
+				HasPreviousPage: true,
 			},
 			UsageEvents: []UsageEvent{
-				{Timestamp: "1710720000000", ChargedCents: 3},
+				testUsageEvent(3),
 			},
 		}
-		require.NoError(t, json.NewEncoder(w).Encode(resp))
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("encode response: %v", err)
+		}
 	}))
 	t.Cleanup(server.Close)
 
-	client := New(WithBaseURL(server.URL), WithPageSize(2))
+	client := New(testGuardianPolicy(t), WithBaseURL(server.URL), WithPageSize(2))
 	page, err := client.FetchUsageEventsPage(
 		t.Context(),
 		"cursor-key",
@@ -97,7 +129,7 @@ func TestFetchUsageEventsPage(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, page.HasNextPage)
 	require.Len(t, page.Events, 1)
-	require.Equal(t, float64(3), page.Events[0].ChargedCents)
+	require.InDelta(t, float64(3), page.Events[0].ChargedCents, 0.000001)
 }
 
 func TestFetchUsageEventsReturnsRateLimitError(t *testing.T) {
@@ -109,7 +141,7 @@ func TestFetchUsageEventsReturnsRateLimitError(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	client := New(WithBaseURL(server.URL))
+	client := New(testGuardianPolicy(t), WithBaseURL(server.URL))
 	_, err := client.FetchUsageEvents(
 		t.Context(),
 		"cursor-key",
@@ -127,7 +159,35 @@ func TestFetchUsageEventsReturnsRateLimitError(t *testing.T) {
 func TestTimestampTime(t *testing.T) {
 	t.Parallel()
 
-	ts, err := UsageEvent{Timestamp: "1710720000123"}.TimestampTime()
+	ts, err := testUsageEvent(0).TimestampTime()
 	require.NoError(t, err)
 	require.Equal(t, int64(1710720000123), ts.UnixMilli())
+}
+
+func testGuardianPolicy(t *testing.T) *guardian.Policy {
+	t.Helper()
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	return policy
+}
+
+func testUsageEvent(chargedCents float64) UsageEvent {
+	return UsageEvent{
+		Timestamp:        "1710720000123",
+		Model:            "claude",
+		Kind:             "Usage-based",
+		ChargedCents:     chargedCents,
+		MaxMode:          false,
+		IsHeadless:       false,
+		IsTokenBasedCall: true,
+		TokenUsage: TokenUsage{
+			InputTokens:      1,
+			OutputTokens:     2,
+			CacheReadTokens:  3,
+			CacheWriteTokens: 4,
+			TotalCents:       chargedCents,
+		},
+		UserEmail: "dev@example.com",
+	}
 }
