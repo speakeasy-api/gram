@@ -255,6 +255,7 @@ func (s *Service) RegisterRemoteSessionIssuer(ctx context.Context, payload *gen.
 		ClientIDIssuedAt:        issuedAt,
 		ClientSecretExpiresAt:   expiresAt,
 		TokenEndpointAuthMethod: pgtype.Text{String: "", Valid: false},
+		Scope:                   nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").Log(ctx, logger)

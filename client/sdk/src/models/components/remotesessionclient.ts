@@ -50,6 +50,10 @@ export type RemoteSessionClient = {
    */
   remoteSessionIssuerId: string;
   /**
+   * Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.
+   */
+  scope?: Array<string> | undefined;
+  /**
    * How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
    */
   tokenEndpointAuthMethod?:
@@ -89,6 +93,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
     id: z.string(),
     project_id: z.string(),
     remote_session_issuer_id: z.string(),
+    scope: z.optional(z.array(z.string())),
     token_endpoint_auth_method: z.optional(
       RemoteSessionClientTokenEndpointAuthMethod$inboundSchema,
     ),

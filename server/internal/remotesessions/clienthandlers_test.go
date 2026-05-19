@@ -438,6 +438,108 @@ func TestUpdateRemoteSessionClient_SwitchAuthMethod(t *testing.T) {
 	require.Equal(t, "client_secret_post", *updated.TokenEndpointAuthMethod)
 }
 
+func TestCreateRemoteSessionClient_PersistsScopeOverride(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-scope-create", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-scope-create").String()
+
+	clientID := "scope-create-client-id"
+	scope := []string{"read:tools", "write:tools"}
+
+	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID:   issuerID,
+		UserSessionIssuerID:     userIssuerID,
+		ClientID:                &clientID,
+		ClientSecret:            nil,
+		AutoRegister:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   scope,
+		SessionToken:            nil,
+		ApikeyToken:             nil,
+		ProjectSlugInput:        nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, scope, result.Scope)
+
+	fetched, err := ti.service.GetRemoteSessionClient(ctx, &clientsgen.GetRemoteSessionClientPayload{
+		ID:               result.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, scope, fetched.Scope)
+}
+
+func TestCreateRemoteSessionClient_ScopeOmittedStaysNil(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-scope-omit", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-scope-omit").String()
+
+	clientID := "scope-omit-client-id"
+	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID:   issuerID,
+		UserSessionIssuerID:     userIssuerID,
+		ClientID:                &clientID,
+		ClientSecret:            nil,
+		AutoRegister:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		SessionToken:            nil,
+		ApikeyToken:             nil,
+		ProjectSlugInput:        nil,
+	})
+	require.NoError(t, err)
+	// Absent means "fall back to the issuer's scopes_supported in the OAuth
+	// dance"; the API surface keeps that distinct from the empty array.
+	require.Nil(t, result.Scope)
+}
+
+func TestUpdateRemoteSessionClient_SetsScope(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-scope-update", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-scope-update").String()
+	clientID := "scope-update-client-id"
+
+	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID:   issuerID,
+		UserSessionIssuerID:     userIssuerID,
+		ClientID:                &clientID,
+		ClientSecret:            nil,
+		AutoRegister:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		SessionToken:            nil,
+		ApikeyToken:             nil,
+		ProjectSlugInput:        nil,
+	})
+	require.NoError(t, err)
+	require.Nil(t, created.Scope)
+
+	scope := []string{"read:tools"}
+	updated, err := ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{
+		ID:                      created.ID,
+		ClientSecret:            nil,
+		UserSessionIssuerID:     nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   scope,
+		SessionToken:            nil,
+		ApikeyToken:             nil,
+		ProjectSlugInput:        nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, scope, updated.Scope)
+}
+
 func TestDeleteRemoteSessionClient(t *testing.T) {
 	t.Parallel()
 
