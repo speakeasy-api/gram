@@ -9,11 +9,6 @@ import type { Gram } from "@gram/client";
 import type { QueryClient } from "@tanstack/react-query";
 import { fromPromise } from "xstate";
 
-import {
-  type ExternalMcpUserSessionOAuthConfig,
-  onboardExternalMcpToUserSessions,
-} from "@/lib/externalMcpUserSessions";
-
 import { parseScopes } from "./machine-types";
 
 type SignalArg = { signal: AbortSignal };
@@ -62,12 +57,6 @@ export type RegisterClientOutput = {
   tokenAuthMethod: string | null;
 };
 
-export type ConfigureUserSessionsInput = {
-  toolsetSlug: string;
-  toolsetName: string;
-  oauth: ExternalMcpUserSessionOAuthConfig;
-};
-
 export type AuthedFetch = (
   endpoint: string,
   opts: RequestInit,
@@ -84,9 +73,6 @@ export type WizardServices = {
   >;
   registerClient: ReturnType<
     typeof fromPromise<RegisterClientOutput, RegisterClientInput>
-  >;
-  configureUserSessions: ReturnType<
-    typeof fromPromise<void, ConfigureUserSessionsInput>
   >;
 };
 
@@ -185,6 +171,7 @@ export function createWizardServices(
       const response = await authedFetch("/oauth/proxy-register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           registration_endpoint: input.registrationEndpoint,
           scopes_supported: input.scopesSupported,
@@ -216,25 +203,12 @@ export function createWizardServices(
     },
   );
 
-  const configureUserSessions = fromPromise<void, ConfigureUserSessionsInput>(
-    async ({ input, signal }) => {
-      await onboardExternalMcpToUserSessions({
-        client,
-        toolsetSlug: input.toolsetSlug,
-        toolsetName: input.toolsetName,
-        oauth: input.oauth,
-        options: { fetchOptions: { signal } },
-      });
-    },
-  );
-
   return {
     addExternalOAuth,
     createEnvironment,
     addOAuthProxy,
     deleteEnvironment,
     registerClient,
-    configureUserSessions,
   };
 }
 

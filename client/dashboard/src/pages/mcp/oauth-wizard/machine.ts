@@ -1,8 +1,6 @@
 import { createActorContext } from "@xstate/react";
 import { assign, fromPromise, setup, type SnapshotFrom } from "xstate";
 
-import { externalMcpUserSessionOAuthConfigFromMetadata } from "@/lib/externalMcpUserSessions";
-
 import { checkCreds, checkExternal, checkProxyMeta } from "./guards";
 import {
   type Context,
@@ -13,7 +11,6 @@ import {
 import {
   type AddExternalOAuthInput,
   type AddOAuthProxyInput,
-  type ConfigureUserSessionsInput,
   type CreateEnvironmentInput,
   type CreateEnvironmentOutput,
   type DeleteEnvironmentInput,
@@ -48,7 +45,6 @@ function initialContext(input: Input): Context {
     toolsetSlug: input.toolsetSlug,
     toolsetName: input.toolsetName,
     activeOrganizationId: input.activeOrganizationId,
-    onboardToUserSessions: input.onboardToUserSessions ?? false,
   };
 }
 
@@ -109,15 +105,6 @@ export function canAutoConfigureFromDiscovered(
   );
 }
 
-function userSessionOAuthConfigFromDiscovered(d: DiscoveredOAuth | null) {
-  if (!d) return null;
-  return externalMcpUserSessionOAuthConfigFromMetadata({
-    slug: d.slug,
-    name: d.name,
-    metadata: d.metadata,
-  });
-}
-
 function placeholder<TInput, TOutput = void>(name: string) {
   return fromPromise<TOutput, TInput>(async () => {
     throw new Error(
@@ -144,9 +131,6 @@ export const oauthWizardMachine = setup({
     registerClient: placeholder<RegisterClientInput, RegisterClientOutput>(
       "registerClient",
     ),
-    configureUserSessions: placeholder<ConfigureUserSessionsInput>(
-      "configureUserSessions",
-    ),
   },
   guards: {
     validExternal: ({ context }) => checkExternal(context).ok,
@@ -154,17 +138,12 @@ export const oauthWizardMachine = setup({
     validCreds: ({ context }) => checkCreds(context).ok,
     canAutoConfigure: ({ context }) =>
       canAutoConfigureFromDiscovered(context.discovered),
-    shouldAutoConfigureUserSessions: ({ context }) =>
-      context.onboardToUserSessions &&
-      userSessionOAuthConfigFromDiscovered(context.discovered) !== null,
   },
   actions: {
     invalidateOnExternalSuccess: () => {},
     invalidateOnProxyCreate: () => {},
     captureExternalSuccess: () => {},
     captureProxyCreateSuccess: () => {},
-    captureUserSessionsCreateSuccess: () => {},
-    invalidateOnUserSessionsCreate: () => {},
   },
 }).createMachine({
   id: "oauthWizard",
@@ -198,22 +177,6 @@ export const oauthWizardMachine = setup({
         },
         SELECT_PROXY_AUTO: [
           {
-            guard: "shouldAutoConfigureUserSessions",
-            target: "userSessions.submitting",
-            actions: assign({
-              proxy: ({ context }) =>
-                context.discovered
-                  ? {
-                      ...context.proxy,
-                      ...proxyFieldsFromDiscovered(context.discovered),
-                      prefilled: true,
-                    }
-                  : context.proxy,
-              autoRegistering: () => true,
-              error: () => null,
-            }),
-          },
-          {
             guard: "canAutoConfigure",
             target: "proxy.registering",
             actions: assign({
@@ -230,54 +193,6 @@ export const oauthWizardMachine = setup({
             }),
           },
         ],
-      },
-    },
-
-    userSessions: {
-      initial: "submitting",
-      states: {
-        submitting: {
-          meta: { title: "Configure User Sessions" },
-          invoke: {
-            src: "configureUserSessions",
-            input: ({ context }): ConfigureUserSessionsInput => {
-              const oauth = userSessionOAuthConfigFromDiscovered(
-                context.discovered,
-              );
-              if (!oauth) {
-                throw new Error("registration_endpoint metadata is required");
-              }
-              return {
-                toolsetSlug: context.toolsetSlug,
-                toolsetName: context.toolsetName,
-                oauth,
-              };
-            },
-            onDone: {
-              target: "#oauthWizard.result.success",
-              actions: [
-                assign({
-                  result: () => ({
-                    success: true,
-                    message: "User sessions have been configured successfully.",
-                  }),
-                }),
-                "captureUserSessionsCreateSuccess",
-                "invalidateOnUserSessionsCreate",
-              ],
-            },
-            onError: {
-              target: "#oauthWizard.proxy.autoRegisterFailed",
-              actions: assign({
-                error: ({ event }) =>
-                  errorMessage(
-                    event.error,
-                    "Failed to configure user sessions",
-                  ),
-              }),
-            },
-          },
-        },
       },
     },
 
