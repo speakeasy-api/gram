@@ -518,4 +518,3 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 
 	return nil
 }
-

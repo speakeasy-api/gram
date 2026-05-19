@@ -141,8 +141,24 @@ type Client struct {
 	IssuerURL             string
 	AuthorizationEndpoint string
 	TokenEndpoint         string
-	Scopes                []string
+	// ClientScope is the optional explicit override stored on the
+	// remote_session_client. When non-empty the OAuth dance prefers it to
+	// IssuerScopesSupported.
+	ClientScope []string
+	// IssuerScopesSupported is the issuer's advertised scopes_supported.
+	// Used as the fallback scope set when ClientScope is empty.
+	IssuerScopesSupported []string
 	Passthrough           bool
+}
+
+// resolveScopes returns the scope set the OAuth dance should request:
+// an explicit client-level override if one is configured, otherwise the
+// issuer's advertised scopes_supported.
+func (c Client) resolveScopes() []string {
+	if len(c.ClientScope) > 0 {
+		return c.ClientScope
+	}
+	return c.IssuerScopesSupported
 }
 
 // ListClients returns the joined client + issuer rows linked to a user
@@ -170,7 +186,8 @@ func (m *ChallengeManager) ListClients(
 			IssuerURL:             r.IssuerUrl,
 			AuthorizationEndpoint: conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
 			TokenEndpoint:         conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
-			Scopes:                r.ScopesSupported,
+			ClientScope:           r.ClientScope,
+			IssuerScopesSupported: r.ScopesSupported,
 			Passthrough:           r.Passthrough,
 		})
 	}
@@ -265,8 +282,8 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	q.Set("state", stateID)
 	q.Set("code_challenge", codeChallenge)
 	q.Set("code_challenge_method", "S256")
-	if len(client.Scopes) > 0 {
-		q.Set("scope", strings.Join(client.Scopes, " "))
+	if scopes := client.resolveScopes(); len(scopes) > 0 {
+		q.Set("scope", strings.Join(scopes, " "))
 	}
 	u.RawQuery = q.Encode()
 	return u.String(), nil
