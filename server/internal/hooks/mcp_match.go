@@ -138,15 +138,19 @@ func isGramHostedMCPURL(rawURL string, additionalTrustedHosts ...string) bool {
 }
 
 // isGramHostedMCPURLForOrg checks if a URL is a Gram-managed MCP server for
-// the given organization. It checks against the canonical host plus any
-// verified and activated custom domain for the org.
+// the given organization. It checks against the canonical host first (no DB
+// hit), then falls back to checking the org's custom domain if needed.
 func (s *Service) isGramHostedMCPURLForOrg(ctx context.Context, rawURL, orgID string) bool {
+	// Fast path: check canonical host first to avoid DB lookup for app.getgram.ai URLs
+	if isGramHostedMCPURL(rawURL) {
+		return true
+	}
 	if rawURL == "" || orgID == "" {
-		return isGramHostedMCPURL(rawURL)
+		return false
 	}
 	customDomain, err := repo.New(s.db).GetCustomDomainByOrganization(ctx, orgID)
 	if err != nil || !customDomain.Verified || !customDomain.Activated {
-		return isGramHostedMCPURL(rawURL)
+		return false
 	}
 	return isGramHostedMCPURL(rawURL, customDomain.Domain)
 }
