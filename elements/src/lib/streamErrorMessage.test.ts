@@ -88,6 +88,15 @@ describe("describeStreamError", () => {
     ).toBeUndefined();
   });
 
+  it("survives circular error references without infinite recursion", () => {
+    // AI SDK normalization mostly prevents this, but a defensive cycle guard
+    // means a malformed error tree can't take down the chat with a stack
+    // overflow on top of whatever already failed.
+    const circular: Record<string, unknown> = { name: "Boom" };
+    circular.cause = circular;
+    expect(describeStreamError(circular)).toBeUndefined();
+  });
+
   it("returns undefined for nullish / non-object errors", () => {
     expect(describeStreamError(undefined)).toBeUndefined();
     expect(describeStreamError(null)).toBeUndefined();

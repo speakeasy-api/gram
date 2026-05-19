@@ -26,6 +26,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { extractStreamError } from "@/lib/chat-error";
 import { CustomChatTransport } from "@/lib/CustomChatTransport";
+import { describeStreamError } from "@gram-ai/elements";
 import {
   asTools,
   filterFunctionTools,
@@ -404,6 +405,11 @@ function ChatInner({
         };
       },
       onError: (event: { error: unknown }) => {
+        const credits = describeStreamError(event.error);
+        if (credits) {
+          appendDisplayOnlyMessage(`**Model Error:** *${credits}*`);
+          return;
+        }
         let displayMessage = extractStreamError(event);
         if (displayMessage) {
           if (displayMessage.includes("maximum context length")) {
@@ -414,19 +420,6 @@ function ChatInner({
             }
             displayMessage +=
               " Please start a new chat history and consider enabling *Auto-Summarize* for your tool or revise your prompt.";
-          }
-          // Credit-exhausted: surface the same graceful prompt across both
-          // upstream shapes (OpenRouter "requires more credits" and Gram's
-          // own 402 "token balance exhausted") and point the user at the
-          // Get Support button in the top header — Pylon is the channel we
-          // actually want them to use for upgrade requests.
-          if (
-            displayMessage.includes("requires more credits") ||
-            displayMessage.includes("token balance exhausted") ||
-            displayMessage.includes("insufficient_credits")
-          ) {
-            displayMessage =
-              'You\'ve reached the chat credit limit for this account. Click the "Get Support" button at the top of the page to reach out about upgrading.';
           }
           appendDisplayOnlyMessage(`**Model Error:** *${displayMessage}*`);
         }

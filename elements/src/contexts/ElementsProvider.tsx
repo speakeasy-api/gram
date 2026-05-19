@@ -467,21 +467,16 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           // prior assistant message's id, so useChat pushes a new UIMessage carrying the snapshot
           // of the prior turn's parts — duplicating text and tool_calls into storage.
           //
-          // The `onError` here is what controls the message users actually see — the AI SDK
-          // masks errors to a generic "An error occurred." by default, which is what caused
-          // credit-exhausted chats to silently stop without any explanation. We swap in the
-          // graceful credits message when the stream fails with a 402 / insufficient_credits.
+          // onError: AI SDK masks errors by default; surface the friendly
+          // credits prompt for 402, otherwise keep the masking intact.
           return createUIMessageStream({
             execute: ({ writer }) => {
               writer.merge(result.toUIMessageStream());
             },
             originalMessages: messages,
-            onError: (error) => {
-              const friendly = describeStreamError(error);
-              if (friendly) return friendly;
-              if (error instanceof Error) return error.message;
-              return "An error occurred while generating a response.";
-            },
+            onError: (error) =>
+              describeStreamError(error) ??
+              "An error occurred while generating a response.",
           });
         } catch (error) {
           console.error("Error creating stream:", error);

@@ -1,16 +1,12 @@
-// Friendly client-visible message produced when the LLM gateway reports the
-// account has exhausted its chat credit allowance. The "Get Support" wording
-// matches the existing button label rendered by the dashboard top header, so
-// the user can act on the prompt without leaving the page.
+// Shown verbatim in the chat thread when the gateway rejects a request for
+// lack of chat credits. The "Get Support" wording matches the dashboard's
+// top-header button label so the prompt is directly actionable.
 export const CREDITS_EXHAUSTED_MESSAGE =
   'You\'ve reached the chat credit limit for this account. Click the "Get Support" button at the top of the page to reach out about upgrading.';
 
-// Common credit-exhaustion fingerprints across the two error shapes we see:
-// - Gram (goa) ServiceError with name="insufficient_credits" (HTTP 402)
-// - OpenRouter upstream error containing "requires more credits"
-// Both can arrive either as a string in `responseBody` or directly on the
-// error object's `message`. We sniff defensively so a tweak to either provider
-// doesn't reintroduce the silent "messages just stop" failure mode.
+// Lowercase substrings that identify credit exhaustion across providers:
+// Gram goa ServiceError ("insufficient_credits", "token balance exhausted"),
+// OpenRouter ("requires more credits"), and casual-prose variants.
 const CREDIT_HINTS = [
   "insufficient_credits",
   "token balance exhausted",
@@ -20,7 +16,7 @@ const CREDIT_HINTS = [
 
 const hasCreditHint = (text: string): boolean => {
   const lower = text.toLowerCase();
-  return CREDIT_HINTS.some((hint) => lower.includes(hint.toLowerCase()));
+  return CREDIT_HINTS.some((hint) => lower.includes(hint));
 };
 
 const tryParseJson = (raw: string): unknown => {
@@ -31,45 +27,44 @@ const tryParseJson = (raw: string): unknown => {
   }
 };
 
-// extractCreditSignals walks the bag of fields the AI SDK / OpenRouter / Gram
-// throw together on a stream error and returns true if any of them carry one
-// of our credit-exhaustion fingerprints.
-const isCreditsError = (error: unknown): boolean => {
+type ErrorBag = {
+  name?: unknown;
+  message?: unknown;
+  statusCode?: unknown;
+  status?: unknown;
+  responseBody?: unknown;
+  cause?: unknown;
+  error?: unknown;
+  // AI_RetryError wraps the underlying AI_APICallError (which is where
+  // statusCode lives) on `lastError` and `errors[]`. Production typically
+  // returns a bare 402 with empty body, so we must descend through these.
+  lastError?: unknown;
+  errors?: unknown;
+  // Older transport shape — fetch-wrapper errors sometimes attach the raw
+  // Response on `.response`.
+  response?: unknown;
+};
+
+const CHILD_FIELDS: ReadonlyArray<keyof ErrorBag> = [
+  "error",
+  "cause",
+  "lastError",
+];
+
+// Tracks objects already visited so circular references (`err.cause === err`)
+// don't recurse forever. WeakSet so we don't pin the error tree alive.
+const walk = (error: unknown, seen: WeakSet<object>): boolean => {
   if (!error) return false;
 
-  if (typeof error === "string") {
-    return hasCreditHint(error);
-  }
-
+  if (typeof error === "string") return hasCreditHint(error);
   if (typeof error !== "object") return false;
+  if (seen.has(error)) return false;
+  seen.add(error);
 
-  const obj = error as {
-    name?: unknown;
-    message?: unknown;
-    statusCode?: unknown;
-    status?: unknown;
-    responseBody?: unknown;
-    cause?: unknown;
-    error?: unknown;
-    // AI_RetryError shape — wraps the underlying AI_APICallError (which is
-    // where statusCode actually lives) on `lastError` and/or `errors[]`. In
-    // production we usually only see a bare 402 with an empty body, so we
-    // have to descend through these to reach it.
-    lastError?: unknown;
-    errors?: unknown;
-    // Older / alternate transport shape: `response.status`.
-    response?: unknown;
-    // Fetch-style `Response` object occasionally surfaces via `cause` or as
-    // a raw value; we don't bother with that path since AI SDK normalizes.
-  };
+  const obj = error as ErrorBag;
 
-  if (typeof obj.name === "string" && obj.name === "insufficient_credits") {
-    return true;
-  }
+  if (obj.name === "insufficient_credits") return true;
 
-  // 402 Payment Required is the canonical signal from Gram and most LLM
-  // gateways for credit exhaustion. The AI SDK surfaces this on either
-  // `statusCode` or `status` depending on the transport.
   const status =
     typeof obj.statusCode === "number"
       ? obj.statusCode
@@ -86,34 +81,29 @@ const isCreditsError = (error: unknown): boolean => {
     return true;
   }
 
-  if (typeof obj.message === "string" && hasCreditHint(obj.message)) {
+  if (typeof obj.message === "string" && hasCreditHint(obj.message))
     return true;
-  }
 
   if (typeof obj.responseBody === "string") {
     if (hasCreditHint(obj.responseBody)) return true;
     const parsed = tryParseJson(obj.responseBody);
-    if (parsed && isCreditsError(parsed)) return true;
+    if (parsed && walk(parsed, seen)) return true;
   }
 
-  if (obj.error && isCreditsError(obj.error)) return true;
-  if (obj.cause && isCreditsError(obj.cause)) return true;
-  if (obj.lastError && isCreditsError(obj.lastError)) return true;
+  for (const field of CHILD_FIELDS) {
+    if (walk(obj[field], seen)) return true;
+  }
 
   if (Array.isArray(obj.errors)) {
     for (const inner of obj.errors) {
-      if (isCreditsError(inner)) return true;
+      if (walk(inner, seen)) return true;
     }
   }
 
   return false;
 };
 
-// describeStreamError maps a stream error into the string we want surfaced to
-// the user. Returns the friendly credits message for credit exhaustion;
-// otherwise returns undefined so callers can fall back to the AI SDK's
-// default error rendering.
 export const describeStreamError = (error: unknown): string | undefined => {
-  if (isCreditsError(error)) return CREDITS_EXHAUSTED_MESSAGE;
+  if (walk(error, new WeakSet())) return CREDITS_EXHAUSTED_MESSAGE;
   return undefined;
 };
