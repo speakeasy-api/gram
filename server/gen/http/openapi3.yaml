@@ -27509,8 +27509,14 @@ components:
                 continue:
                     type: boolean
                     description: Whether to continue (SessionStart only)
+                decision:
+                    type: string
+                    description: Top-level block decision for UserPromptSubmit / PostToolUse / Stop / SubagentStop. Use 'block' to halt processing.
                 hookSpecificOutput:
                     description: Hook-specific output as JSON object
+                reason:
+                    type: string
+                    description: Reason accompanying decision; shown to the user (UserPromptSubmit) or Claude (PostToolUse/Stop).
                 stopReason:
                     type: string
                     description: Reason if blocked (SessionStart only)

@@ -376,27 +376,42 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 	s.recordHook(ctx, payload)
 
 	// Route to appropriate handler based on hook type
+	var (
+		result *gen.ClaudeHookResult
+		err    error
+	)
 	switch payload.HookEventName {
 	case "SessionStart":
-		return s.handleSessionStart(ctx, payload)
+		result, err = s.handleSessionStart(ctx, payload)
 	case "PreToolUse":
-		return s.handlePreToolUse(ctx, payload)
+		result, err = s.handlePreToolUse(ctx, payload)
 	case "PostToolUse":
-		return s.handlePostToolUse(ctx, payload)
+		result, err = s.handlePostToolUse(ctx, payload)
 	case "PostToolUseFailure":
-		return s.handlePostToolUseFailure(ctx, payload)
+		result, err = s.handlePostToolUseFailure(ctx, payload)
 	case "UserPromptSubmit":
-		return s.handleUserPromptSubmit(ctx, payload)
+		result, err = s.handleUserPromptSubmit(ctx, payload)
 	case "Stop":
-		return s.handleStop(ctx, payload)
+		result, err = s.handleStop(ctx, payload)
 	case "SessionEnd":
-		return s.handleSessionEnd(ctx, payload)
+		result, err = s.handleSessionEnd(ctx, payload)
 	case "Notification":
-		return s.handleNotification(ctx, payload)
+		result, err = s.handleNotification(ctx, payload)
 	default:
 		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
-		return makeHookResult(payload.HookEventName), nil
+		result = makeHookResult(payload.HookEventName)
 	}
+
+	// Debug: log the JSON body we're about to send so we can confirm the
+	// shape (continue / stopReason / hookSpecificOutput) the agent will see.
+	if body, jerr := json.Marshal(result); jerr == nil {
+		logger.InfoContext(ctx, "claude hook response body",
+			attr.SlogEvent("claude_hook_response_body"),
+			slog.String("response_body", string(body)),
+		)
+	}
+
+	return result, err
 }
 
 func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
@@ -588,33 +603,19 @@ func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (Ses
 func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	if s.riskScanner != nil && payload.SessionID != nil {
 		if scanResult := s.scanClaudeForEnforcement(ctx, payload); scanResult != nil {
-			result := makeHookResult(payload.HookEventName)
-			output, _ := result.HookSpecificOutput.(*HookSpecificOutput)
-			deny := "deny"
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
-			// systemMessage renders as a warning in the user's terminal;
-			// permissionDecisionReason is what Claude itself sees and may quote
-			// back to the user. Send the same self-branded message in both so
-			// the user sees feedback regardless of how Claude chooses to render
-			// the deny — matches the shadow-MCP guard deny path below.
-			result.SystemMessage = &userReason
-			if output != nil {
-				output.PermissionDecision = &deny
-				output.PermissionDecisionReason = &userReason
-			}
 			// Surface the block reason on the trace summary so the dashboard
 			// shows why the call was denied. Always store the technical reason
 			// — the user_message override is for the agent-facing response only.
 			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
-			return result, nil
+			return constructBlockResponse(payload.HookEventName, userReason), nil
 		}
 	}
 
 	allow := "allow"
-	deny := "deny"
 	result := makeHookResult(payload.HookEventName)
 	output, _ := result.HookSpecificOutput.(*HookSpecificOutput)
 
@@ -720,12 +721,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			attr.SlogRiskPolicyName(policy.Name),
 		)
 		s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
-		result.SystemMessage = &userReason
-		if output != nil {
-			output.PermissionDecision = &deny
-			output.PermissionDecisionReason = &userReason
-		}
-		return result, nil
+		return constructBlockResponse(payload.HookEventName, userReason), nil
 	}
 
 	matched := matchCachedMCPEntry(entries, serverPrefix)
@@ -818,15 +814,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		// policy" actions against the URL itself.
 		s.recordShadowMCPBlockFinding(ctx, payload, &metadata, policy, matched, serverPrefix, detail)
 
-		// systemMessage renders as a warning in the user's terminal;
-		// permissionDecisionReason is what Claude itself sees and may quote
-		// back to the user, so we send the same self-branded message in both.
-		result.SystemMessage = &userReason
-		if output != nil {
-			output.PermissionDecision = &deny
-			output.PermissionDecisionReason = &userReason
-		}
-		return result, nil
+		return constructBlockResponse(payload.HookEventName, userReason), nil
 	}
 
 	if output != nil {

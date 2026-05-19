@@ -98,6 +98,8 @@ func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
 		StopReason:         nil,
 		SuppressOutput:     nil,
 		SystemMessage:      nil,
+		Decision:           nil,
+		Reason:             nil,
 	}
 	if hookEventName == "PreToolUse" {
 		result.HookSpecificOutput = &HookSpecificOutput{
@@ -110,12 +112,42 @@ func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
 	return result
 }
 
+// constructBlockResponse builds a hook result that blocks the current event
+// using the JSON shape Claude Code expects for the given hook. Per
+// https://code.claude.com/docs/en/hooks#decision-control:
+//
+//   - UserPromptSubmit / PostToolUse / Stop / SubagentStop: top-level
+//     `decision: "block"` + free-text `reason`. The reason is surfaced to
+//     the user (UserPromptSubmit) or to Claude (PostToolUse / Stop).
+//   - PreToolUse: nested `hookSpecificOutput.permissionDecision: "deny"`
+//     + `permissionDecisionReason`. Top-level `decision` is rejected.
+//
+// Other events (SessionStart, SessionEnd, Notification, PostToolUseFailure)
+// cannot block at all and must not be passed in.
+func constructBlockResponse(hookEventName, reason string) *gen.ClaudeHookResult {
+	result := makeHookResult(hookEventName)
+	if hookEventName == "PreToolUse" {
+		deny := "deny"
+		if output, ok := result.HookSpecificOutput.(*HookSpecificOutput); ok {
+			output.PermissionDecision = &deny
+			output.PermissionDecisionReason = &reason
+		}
+		return result
+	}
+	block := "block"
+	result.Decision = &block
+	result.Reason = &reason
+	return result
+}
+
 // handleUserPromptSubmit captures the user's prompt text as a chat message.
-// When a blocking risk policy matches, it returns a hook result with
-// continue=false and stopReason set; Claude Code reads those fields from the
-// JSON body and surfaces stopReason to the user. Returning 200 with a shaped
-// body (instead of 4xx) is what makes the block reason actually visible —
-// stderr-only blocks via exit code 2 don't render stopReason at all.
+// When a blocking risk policy matches, it returns 200 with a top-level
+// `decision: "block"` + `reason`, the shape Claude Code documents for
+// UserPromptSubmit. Claude Code erases the prompt from context and surfaces
+// the reason to the user. Returning 200 with a shaped body (instead of 4xx
+// or exit-code-2) is what makes the block reason render — stderr-only
+// blocks don't carry the reason field at all.
+// https://code.claude.com/docs/en/hooks#decision-control
 func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	if s.riskScanner != nil && payload.Prompt != nil && payload.SessionID != nil {
 		if scanResult := s.scanClaudeForEnforcement(ctx, payload); scanResult != nil {
@@ -126,11 +158,7 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.Claud
 			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
-			result := makeHookResult(payload.HookEventName)
-			cont := false
-			result.Continue = &cont
-			result.StopReason = &userReason
-			return result, nil
+			return constructBlockResponse(payload.HookEventName, userReason), nil
 		}
 	}
 	return makeHookResult(payload.HookEventName), nil

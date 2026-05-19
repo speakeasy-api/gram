@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: b61eda2f93c8dec88417e844cab111b7
+  docChecksum: 11ed131b1863de49e0dbd372487ea809
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -157,7 +157,7 @@ trackedFiles:
   docs/models/components/claudehookpayload.md:
     last_write_checksum: sha1:9aeeb4a542ec059884f17b4d64a4200ea5f462f5
   docs/models/components/claudehookresult.md:
-    last_write_checksum: sha1:e29f7febd8b2bebbe3c91639ce9b538e22f23356
+    last_write_checksum: sha1:48bbaddb1a28d048fde786eb05649b89fed1f3fd
   docs/models/components/cloneclientfromoauthproxyproviderform.md:
     last_write_checksum: sha1:8b7c704d386943adb2fe3410a94ba2391201a7b2
   docs/models/components/cloneenvironmentrequestbody.md:
@@ -3655,7 +3655,7 @@ trackedFiles:
   src/models/components/claudehookpayload.ts:
     last_write_checksum: sha1:f990486e8333c922eb2244e05361ba69c4c472b7
   src/models/components/claudehookresult.ts:
-    last_write_checksum: sha1:d72da8680ef447c6322a6f1162d87dfeca8bf1ca
+    last_write_checksum: sha1:efd4bc197c346a55142b1b3f65194d6c497e554c
   src/models/components/cloneclientfromoauthproxyproviderform.ts:
     last_write_checksum: sha1:436daac86b753fad5eb848aeeeedc26456ac4a5c
   src/models/components/cloneenvironmentrequestbody.ts:
