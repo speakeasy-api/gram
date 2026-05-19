@@ -20,7 +20,7 @@ func MCPToolCallCheck(toolsetID string, dims MCPToolCallDimensions) Check {
 	if dims.ProjectID != "" {
 		dimensions["project_id"] = dims.ProjectID
 	}
-	return Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: toolsetID, Dimensions: dimensions}
+	return Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: toolsetID, Dimensions: dimensions, expanded: false}
 }
 
 // MCPCheck builds a Check for an MCP scope (read/write/connect) with project_id
@@ -30,5 +30,5 @@ func MCPCheck(scope Scope, resourceID, projectID string) Check {
 	if projectID != "" {
 		dimensions = map[string]string{"project_id": projectID}
 	}
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions}
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, expanded: false}
 }
