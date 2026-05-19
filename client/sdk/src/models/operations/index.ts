@@ -109,6 +109,7 @@ export * from "./getremotemcpserver.js";
 export * from "./getremotesessionclient.js";
 export * from "./getremotesessionissuer.js";
 export * from "./getriskcapabilities.js";
+export * from "./getriskoverview.js";
 export * from "./getriskpolicy.js";
 export * from "./getriskpolicystatus.js";
 export * from "./getrole.js";

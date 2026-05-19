@@ -47,6 +47,11 @@ func ListRiskResultsByChatRiskPath() string {
 	return "/rpc/risk.results.byChat"
 }
 
+// GetRiskOverviewRiskPath returns the URL path to the risk service getRiskOverview HTTP endpoint.
+func GetRiskOverviewRiskPath() string {
+	return "/rpc/risk.overview.get"
+}
+
 // GetRiskPolicyStatusRiskPath returns the URL path to the risk service getRiskPolicyStatus HTTP endpoint.
 func GetRiskPolicyStatusRiskPath() string {
 	return "/rpc/risk.policies.status"

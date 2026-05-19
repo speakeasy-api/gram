@@ -18252,6 +18252,122 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: RiskCapabilities
+  /rpc/risk.overview.get:
+    get:
+      description: Get risk overview metrics and trend data for the current project.
+      operationId: getRiskOverview
+      parameters:
+        - allowEmptyValue: true
+          description: Inclusive start of the overview window. Defaults to the start of the 7-day calendar window ending at to.
+          in: query
+          name: from
+          schema:
+            description: Inclusive start of the overview window. Defaults to the start of the 7-day calendar window ending at to.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Exclusive end of the overview window. Defaults to now.
+          in: query
+          name: to
+          schema:
+            description: Exclusive end of the overview window. Defaults to now.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskOverviewResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getRiskOverview risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.overview
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: RiskOverview
   /rpc/risk.policies.create:
     post:
       description: Create a new risk analysis policy for the current project.
@@ -34064,6 +34180,102 @@ components:
         - chat_id
         - findings_count
         - latest_detected
+    RiskOverviewCategory:
+      type: object
+      properties:
+        category:
+          type: string
+          description: Policy category key.
+        findings:
+          type: integer
+          description: Finding count for this category.
+          format: int64
+      required:
+        - category
+        - findings
+    RiskOverviewResult:
+      type: object
+      properties:
+        active_policies:
+          type: integer
+          description: Enabled risk policies for the current project.
+          format: int64
+        findings:
+          type: integer
+          description: Policy findings in the window.
+          format: int64
+        flagged_sessions:
+          type: integer
+          description: Chat sessions with at least one finding in the window.
+          format: int64
+        from:
+          type: string
+          description: Inclusive start of the overview window.
+          format: date-time
+        messages_scanned:
+          type: integer
+          description: Messages analyzed by risk policies in the window.
+          format: int64
+        time_series_findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskOverviewTimeSeriesFinding'
+          description: Time-series finding counts by category in the window.
+        to:
+          type: string
+          description: Exclusive end of the overview window.
+          format: date-time
+        top_categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskOverviewCategory'
+          description: Top policy categories by finding count.
+        top_users:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskOverviewUser'
+          description: Top users by finding count.
+      required:
+        - from
+        - to
+        - messages_scanned
+        - findings
+        - flagged_sessions
+        - active_policies
+        - top_categories
+        - top_users
+        - time_series_findings
+    RiskOverviewTimeSeriesFinding:
+      type: object
+      properties:
+        bucket_start:
+          type: string
+          description: Time bucket start.
+          format: date-time
+        category:
+          type: string
+          description: Policy category key.
+        findings:
+          type: integer
+          description: Finding count for this category and time bucket.
+          format: int64
+      required:
+        - bucket_start
+        - category
+        - findings
+    RiskOverviewUser:
+      type: object
+      properties:
+        email:
+          type: string
+          description: User email, or Unknown user when unavailable.
+        findings:
+          type: integer
+          description: Finding count for this user.
+          format: int64
+      required:
+        - email
+        - findings
     RiskPolicy:
       type: object
       properties:
