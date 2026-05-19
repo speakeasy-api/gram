@@ -33,6 +33,10 @@ export type UpdateRemoteSessionClientForm = {
    */
   id: string;
   /**
+   * Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.
+   */
+  scope?: Array<string> | undefined;
+  /**
    * Change how the client authenticates at the issuer's token endpoint.
    */
   tokenEndpointAuthMethod?:
@@ -53,6 +57,7 @@ export const UpdateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema
 export type UpdateRemoteSessionClientForm$Outbound = {
   client_secret?: string | undefined;
   id: string;
+  scope?: Array<string> | undefined;
   token_endpoint_auth_method?: string | undefined;
   user_session_issuer_id?: string | undefined;
 };
@@ -65,6 +70,7 @@ export const UpdateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
   z.object({
     clientSecret: z.optional(z.string()),
     id: z.string(),
+    scope: z.optional(z.array(z.string())),
     tokenEndpointAuthMethod: z.optional(
       UpdateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema,
     ),
