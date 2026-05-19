@@ -6,6 +6,7 @@ import { Heading } from "@/components/ui/heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
+import { attachmentToURNPrefix } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import {
   useLatestDeployment,
@@ -82,12 +83,16 @@ export default function ExternalMCPDetails() {
 
   const { data: toolsets, isLoading: isLoadingToolsets } = useListToolsets();
 
-  // Find ALL toolsets that use this external MCP source (could be multiple)
+  // Find ALL toolsets that use this external MCP source (could be multiple).
+  // A catalog-imported source contributes one URN per registry tool
+  // (`tools:externalmcp:<slug>:<toolName>`); only the no-tools fallback uses
+  // `:proxy`. Match the source-scoped prefix so both shapes are detected.
   const associatedToolsets = useMemo(() => {
     if (!toolsets?.toolsets || !source) return [];
 
+    const urnPrefix = attachmentToURNPrefix("externalmcp", source.slug);
     return toolsets.toolsets.filter((t) =>
-      t.toolUrns?.includes(`tools:externalmcp:${source.slug}:proxy`),
+      t.toolUrns?.some((urn) => urn.startsWith(urnPrefix)),
     );
   }, [toolsets, source]);
 
