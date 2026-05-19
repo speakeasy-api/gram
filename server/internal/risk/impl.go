@@ -1,6 +1,7 @@
 package risk
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -716,6 +717,162 @@ func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRi
 	}
 
 	return &gen.ListRiskResultsByChatResult{Chats: chats, NextCursor: nextCursor}, nil
+}
+
+func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverviewPayload) (*gen.RiskOverviewResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	from, to, err := resolveRiskOverviewWindow(payload.From, payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid overview window").Log(ctx, s.logger)
+	}
+
+	window := riskOverviewWindowParams(from, to)
+	counts, err := s.repo.GetRiskOverviewCounts(ctx, repo.GetRiskOverviewCountsParams{
+		ProjectID: *authCtx.ProjectID,
+		FromTime:  window.from,
+		ToTime:    window.to,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview counts").Log(ctx, s.logger)
+	}
+
+	userRows, err := s.repo.ListRiskOverviewTopUsers(ctx, repo.ListRiskOverviewTopUsersParams{
+		ProjectID: *authCtx.ProjectID,
+		FromTime:  window.from,
+		ToTime:    window.to,
+		RowLimit:  10,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview top users").Log(ctx, s.logger)
+	}
+
+	timeSeriesRows, err := s.repo.ListRiskOverviewTimeSeriesFindings(ctx, repo.ListRiskOverviewTimeSeriesFindingsParams{
+		ProjectID: *authCtx.ProjectID,
+		FromTime:  window.from,
+		ToTime:    window.to,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview time series findings").Log(ctx, s.logger)
+	}
+
+	topCategories := riskOverviewTopCategories(timeSeriesRows, 10)
+
+	topUsers := make([]*gen.RiskOverviewUser, 0, len(userRows))
+	for _, row := range userRows {
+		topUsers = append(topUsers, &gen.RiskOverviewUser{
+			Email:    row.Email,
+			Findings: row.Findings,
+		})
+	}
+
+	timeSeriesFindings := make([]*gen.RiskOverviewTimeSeriesFinding, 0, len(timeSeriesRows))
+	for _, row := range timeSeriesRows {
+		timeSeriesFindings = append(timeSeriesFindings, &gen.RiskOverviewTimeSeriesFinding{
+			BucketStart: row.BucketStart.Time.UTC().Format(time.RFC3339),
+			Category:    row.Category,
+			Findings:    row.Findings,
+		})
+	}
+
+	return &gen.RiskOverviewResult{
+		From:               from.UTC().Format(time.RFC3339),
+		To:                 to.UTC().Format(time.RFC3339),
+		MessagesScanned:    counts.MessagesScanned,
+		Findings:           counts.Findings,
+		FlaggedSessions:    counts.FlaggedSessions,
+		ActivePolicies:     counts.ActivePolicies,
+		TopCategories:      topCategories,
+		TopUsers:           topUsers,
+		TimeSeriesFindings: timeSeriesFindings,
+	}, nil
+}
+
+type riskOverviewWindow struct {
+	from pgtype.Timestamptz
+	to   pgtype.Timestamptz
+}
+
+const maxRiskOverviewWindow = 31 * 24 * time.Hour
+
+func resolveRiskOverviewWindow(rawFrom, rawTo *string) (time.Time, time.Time, error) {
+	to := time.Now().UTC()
+	if rawTo != nil && strings.TrimSpace(*rawTo) != "" {
+		parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(*rawTo))
+		if err != nil {
+			return time.Time{}, time.Time{}, fmt.Errorf("parse to: %w", err)
+		}
+		to = parsed.UTC()
+	}
+
+	toYear, toMonth, toDay := to.Date()
+	from := time.Date(toYear, toMonth, toDay, 0, 0, 0, 0, time.UTC).AddDate(0, 0, -6)
+	if rawFrom != nil && strings.TrimSpace(*rawFrom) != "" {
+		parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(*rawFrom))
+		if err != nil {
+			return time.Time{}, time.Time{}, fmt.Errorf("parse from: %w", err)
+		}
+		from = parsed.UTC()
+	}
+
+	if !from.Before(to) {
+		return time.Time{}, time.Time{}, fmt.Errorf("from must be before to")
+	}
+	if to.Sub(from) > maxRiskOverviewWindow {
+		return time.Time{}, time.Time{}, fmt.Errorf("window must be %s or less", maxRiskOverviewWindow)
+	}
+
+	return from, to, nil
+}
+
+func riskOverviewWindowParams(from, to time.Time) riskOverviewWindow {
+	return riskOverviewWindow{
+		from: pgtype.Timestamptz{Time: from, InfinityModifier: pgtype.Finite, Valid: true},
+		to:   pgtype.Timestamptz{Time: to, InfinityModifier: pgtype.Finite, Valid: true},
+	}
+}
+
+func riskOverviewTopCategories(rows []repo.ListRiskOverviewTimeSeriesFindingsRow, limit int) []*gen.RiskOverviewCategory {
+	if limit <= 0 {
+		return nil
+	}
+
+	counts := make(map[string]int64)
+	for _, row := range rows {
+		counts[row.Category] += row.Findings
+	}
+
+	categories := make([]*gen.RiskOverviewCategory, 0, len(counts))
+	for category, findings := range counts {
+		if findings == 0 {
+			continue
+		}
+		categories = append(categories, &gen.RiskOverviewCategory{
+			Category: category,
+			Findings: findings,
+		})
+	}
+
+	slices.SortFunc(categories, func(a, b *gen.RiskOverviewCategory) int {
+		if a.Findings != b.Findings {
+			return cmp.Compare(b.Findings, a.Findings)
+		}
+
+		return cmp.Compare(a.Category, b.Category)
+	})
+
+	if len(categories) > limit {
+		categories = categories[:limit]
+	}
+
+	return categories
 }
 
 // paginateResults trims the over-fetched extra row and, if present, encodes

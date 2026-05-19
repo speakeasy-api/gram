@@ -33,6 +33,8 @@ type Service interface {
 	ListRiskResults(context.Context, *ListRiskResultsPayload) (res *ListRiskResultsResult, err error)
 	// List risk results grouped by chat session for the current project.
 	ListRiskResultsByChat(context.Context, *ListRiskResultsByChatPayload) (res *ListRiskResultsByChatResult, err error)
+	// Get risk overview metrics and trend data for the current project.
+	GetRiskOverview(context.Context, *GetRiskOverviewPayload) (res *RiskOverviewResult, err error)
 	// Get the analysis status of a risk policy including progress and workflow
 	// state.
 	GetRiskPolicyStatus(context.Context, *GetRiskPolicyStatusPayload) (res *types.RiskPolicyStatus, err error)
@@ -72,7 +74,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis"}
+var MethodNames = [14]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskOverview", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis"}
 
 // ApproveShadowMCPPayload is the payload type of the risk service
 // approveShadowMCP method.
@@ -130,6 +132,19 @@ type GetRiskCapabilitiesPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
+}
+
+// GetRiskOverviewPayload is the payload type of the risk service
+// getRiskOverview method.
+type GetRiskOverviewPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Inclusive start of the overview window. Defaults to the start of the 7-day
+	// calendar window ending at to.
+	From *string
+	// Exclusive end of the overview window. Defaults to now.
+	To *string
 }
 
 // GetRiskPolicyPayload is the payload type of the risk service getRiskPolicy
@@ -249,6 +264,52 @@ type RevokeShadowMCPApprovalPayload struct {
 type RiskCapabilitiesResult struct {
 	// Whether the prompt-injection ML classifier is configured on this server.
 	PiClassifierEnabled bool
+}
+
+type RiskOverviewCategory struct {
+	// Policy category key.
+	Category string
+	// Finding count for this category.
+	Findings int64
+}
+
+// RiskOverviewResult is the result type of the risk service getRiskOverview
+// method.
+type RiskOverviewResult struct {
+	// Inclusive start of the overview window.
+	From string
+	// Exclusive end of the overview window.
+	To string
+	// Messages analyzed by risk policies in the window.
+	MessagesScanned int64
+	// Policy findings in the window.
+	Findings int64
+	// Chat sessions with at least one finding in the window.
+	FlaggedSessions int64
+	// Enabled risk policies for the current project.
+	ActivePolicies int64
+	// Top policy categories by finding count.
+	TopCategories []*RiskOverviewCategory
+	// Top users by finding count.
+	TopUsers []*RiskOverviewUser
+	// Time-series finding counts by category in the window.
+	TimeSeriesFindings []*RiskOverviewTimeSeriesFinding
+}
+
+type RiskOverviewTimeSeriesFinding struct {
+	// Time bucket start.
+	BucketStart string
+	// Policy category key.
+	Category string
+	// Finding count for this category and time bucket.
+	Findings int64
+}
+
+type RiskOverviewUser struct {
+	// User email, or Unknown user when unavailable.
+	Email string
+	// Finding count for this user.
+	Findings int64
 }
 
 // TriggerRiskAnalysisPayload is the payload type of the risk service
