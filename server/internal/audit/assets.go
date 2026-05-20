@@ -59,5 +59,5 @@ func (l *Logger) LogAssetCreate(ctx context.Context, dbtx repo.DBTX, event LogAs
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Asset})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AssetV1})
 }

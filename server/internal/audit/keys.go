@@ -62,7 +62,7 @@ func (l *Logger) LogKeyCreate(ctx context.Context, dbtx repo.DBTX, event LogKeyC
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.APIKey})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.APIKeyV1})
 }
 
 type LogKeyRevokeEvent struct {
@@ -110,5 +110,5 @@ func (l *Logger) LogKeyRevoke(ctx context.Context, dbtx repo.DBTX, event LogKeyR
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.APIKey})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.APIKeyV1})
 }

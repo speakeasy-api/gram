@@ -17,7 +17,7 @@ func NewLogger() *Logger {
 
 type auditEntry struct {
 	Params      repo.InsertAuditLogParams
-	OutboxEvent *outbox.EventDef[events.AuditLogCreatedPayload]
+	OutboxEvent *outbox.EventDef[events.AuditLogCreatedPayloadV1]
 }
 
 func (l *Logger) log(ctx context.Context, dbtx repo.DBTX, entry auditEntry) error {

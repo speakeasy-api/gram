@@ -55,7 +55,7 @@ func (l *Logger) LogRemoteSessionIssuerCreate(ctx context.Context, dbtx repo.DBT
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionIssuer})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionIssuerV1})
 }
 
 type LogRemoteSessionIssuerUpdateEvent struct {
@@ -108,7 +108,7 @@ func (l *Logger) LogRemoteSessionIssuerUpdate(ctx context.Context, dbtx repo.DBT
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionIssuer})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionIssuerV1})
 }
 
 type LogRemoteSessionIssuerDeleteEvent struct {
@@ -147,5 +147,5 @@ func (l *Logger) LogRemoteSessionIssuerDelete(ctx context.Context, dbtx repo.DBT
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionIssuer})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionIssuerV1})
 }

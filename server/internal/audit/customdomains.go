@@ -51,7 +51,7 @@ func (l *Logger) LogCustomDomainCreate(ctx context.Context, dbtx repo.DBTX, even
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.CustomDomain})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.CustomDomainV1})
 }
 
 type LogCustomDomainDeleteEvent struct {
@@ -89,5 +89,5 @@ func (l *Logger) LogCustomDomainDelete(ctx context.Context, dbtx repo.DBTX, even
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.CustomDomain})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.CustomDomainV1})
 }

@@ -53,7 +53,7 @@ func (l *Logger) LogMcpServerCreate(ctx context.Context, dbtx repo.DBTX, event L
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServer})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServerV1})
 }
 
 type LogMcpServerUpdateEvent struct {
@@ -103,7 +103,7 @@ func (l *Logger) LogMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, event L
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServer})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServerV1})
 }
 
 type LogMcpServerDeleteEvent struct {
@@ -140,5 +140,5 @@ func (l *Logger) LogMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event L
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServer})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServerV1})
 }

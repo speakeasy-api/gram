@@ -54,7 +54,7 @@ func (l *Logger) LogRemoteMcpServerCreate(ctx context.Context, dbtx repo.DBTX, e
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteMcpServer})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteMcpServerV1})
 }
 
 type LogRemoteMcpServerUpdateEvent struct {
@@ -105,7 +105,7 @@ func (l *Logger) LogRemoteMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, e
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteMcpServer})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteMcpServerV1})
 }
 
 type LogRemoteMcpServerDeleteEvent struct {
@@ -143,5 +143,5 @@ func (l *Logger) LogRemoteMcpServerDelete(ctx context.Context, dbtx repo.DBTX, e
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteMcpServer})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteMcpServerV1})
 }

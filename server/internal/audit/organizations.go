@@ -63,7 +63,7 @@ func (l *Logger) LogOrganizationInviteCreate(ctx context.Context, dbtx repo.DBTX
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationInvite})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationInviteV1})
 }
 
 type LogOrganizationInviteRevokeEvent struct {
@@ -114,7 +114,7 @@ func (l *Logger) LogOrganizationInviteRevoke(ctx context.Context, dbtx repo.DBTX
 		AfterSnapshot:  afterSnapshot,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationInvite})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationInviteV1})
 }
 
 type LogOrganizationInviteRoleUpdateEvent struct {
@@ -165,7 +165,7 @@ func (l *Logger) LogOrganizationInviteRoleUpdate(ctx context.Context, dbtx repo.
 		AfterSnapshot:  afterSnapshot,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationInvite})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationInviteV1})
 }
 
 type LogOrganizationWebhooksToggledEvent struct {
@@ -210,5 +210,5 @@ func (l *Logger) LogOrganizationWebhooksToggled(ctx context.Context, dbtx repo.D
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationWebhooks})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationWebhooksV1})
 }

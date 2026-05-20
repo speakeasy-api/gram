@@ -73,7 +73,7 @@ func (l *Logger) LogOtelForwardingUpsert(ctx context.Context, dbtx repo.DBTX, ev
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OtelForwarding})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OtelForwardingV1})
 }
 
 type LogOtelForwardingDeleteEvent struct {
@@ -110,5 +110,5 @@ func (l *Logger) LogOtelForwardingDelete(ctx context.Context, dbtx repo.DBTX, ev
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OtelForwarding})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OtelForwardingV1})
 }
