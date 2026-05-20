@@ -1,0 +1,2 @@
+-- Modify "ai_integration_syncs" table
+ALTER TABLE "ai_integration_syncs" DROP COLUMN "last_polled_at", ADD COLUMN "poll_watermark_at" timestamptz NOT NULL DEFAULT clock_timestamp(), ADD COLUMN "next_poll_after" timestamptz NOT NULL DEFAULT clock_timestamp(), ADD COLUMN "last_poll_error" text NULL, ADD COLUMN "last_poll_failed_at" timestamptz NULL, ADD COLUMN "last_poll_success_at" timestamptz NULL, ADD COLUMN "consecutive_failures" integer NOT NULL DEFAULT 0;
