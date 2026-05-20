@@ -27420,6 +27420,9 @@ components:
         CloneClientFromOAuthProxyProviderForm:
             type: object
             properties:
+                audience:
+                    type: string
+                    description: Optional upstream OAuth audience to send on the authorize redirect and token exchange for the cloned client.
                 oauth_proxy_provider_id:
                     type: string
                     description: The oauth_proxy_provider to read client_id / client_secret from. Must live in the caller's project.
@@ -27934,6 +27937,9 @@ components:
         CreateRemoteSessionClientForm:
             type: object
             properties:
+                audience:
+                    type: string
+                    description: Optional upstream OAuth audience to send on the authorize redirect and token exchange.
                 client_id:
                     type: string
                     description: client_id supplied by the caller.
@@ -33427,6 +33433,9 @@ components:
         RemoteSessionClient:
             type: object
             properties:
+                audience:
+                    type: string
+                    description: Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.
                 client_id:
                     type: string
                     description: The client_id used to identify this client at the issuer's token and authorization endpoints.
@@ -36252,6 +36261,9 @@ components:
         UpdateRemoteSessionClientForm:
             type: object
             properties:
+                audience:
+                    type: string
+                    description: Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.
                 client_secret:
                     type: string
                     description: Rotate the client secret. Gram re-encrypts before persisting.
