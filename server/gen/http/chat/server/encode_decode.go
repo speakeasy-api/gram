@@ -913,6 +913,7 @@ func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http
 		var (
 			search            *string
 			externalUserID    *string
+			assistantID       *string
 			resolutionStatus  *string
 			hasRisk           *string
 			from              *string
@@ -934,6 +935,13 @@ func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http
 		externalUserIDRaw := qp.Get("external_user_id")
 		if externalUserIDRaw != "" {
 			externalUserID = &externalUserIDRaw
+		}
+		assistantIDRaw := qp.Get("assistant_id")
+		if assistantIDRaw != "" {
+			assistantID = &assistantIDRaw
+		}
+		if assistantID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", *assistantID, goa.FormatUUID))
 		}
 		resolutionStatusRaw := qp.Get("resolution_status")
 		if resolutionStatusRaw != "" {
@@ -1026,7 +1034,7 @@ func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListChatsWithResolutionsPayload(search, externalUserID, resolutionStatus, hasRisk, from, to, limit, offset, sortBy, sortOrder, sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewListChatsWithResolutionsPayload(search, externalUserID, assistantID, resolutionStatus, hasRisk, from, to, limit, offset, sortBy, sortOrder, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

@@ -116,6 +116,7 @@ export function setListChatsWithResolutionsData(
     parameters: {
       search?: string | undefined;
       externalUserId?: string | undefined;
+      assistantId?: string | undefined;
       resolutionStatus?: string | undefined;
       hasRisk?: operations.HasRisk | undefined;
       from?: Date | undefined;
@@ -142,6 +143,7 @@ export function invalidateListChatsWithResolutions(
     [parameters: {
       search?: string | undefined;
       externalUserId?: string | undefined;
+      assistantId?: string | undefined;
       resolutionStatus?: string | undefined;
       hasRisk?: operations.HasRisk | undefined;
       from?: Date | undefined;

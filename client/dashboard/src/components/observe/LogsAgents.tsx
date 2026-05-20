@@ -13,8 +13,10 @@ import {
   useListChatsWithResolutions,
   useChatDeleteMutation,
   invalidateAllListChatsWithResolutions,
+  useAssistantsGet,
 } from "@gram/client/react-query";
-import { Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/badge";
+import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router";
@@ -112,6 +114,7 @@ export function LogsAgentsContent() {
   const urlSearch = searchParams.get("search");
   const urlChatId = searchParams.get("chatId");
   const urlHasRisk = searchParams.get("has_risk");
+  const urlAssistantId = searchParams.get("assistantId");
   const urlSort = searchParams.get("sort") as SortField | null;
   const urlOrder = searchParams.get("order") as SortOrder | null;
 
@@ -134,6 +137,18 @@ export function LogsAgentsContent() {
   }, [urlFrom, urlTo]);
 
   const searchQuery = urlSearch ?? "";
+  const assistantId = urlAssistantId ?? "";
+
+  const { data: filteredAssistant } = useAssistantsGet(
+    { id: assistantId },
+    undefined,
+    {
+      enabled: !!assistantId,
+      retry: false,
+      throwOnError: false,
+      refetchOnWindowFocus: false,
+    },
+  );
 
   const timeRange = useMemo(() => {
     if (customRange) {
@@ -196,6 +211,10 @@ export function LogsAgentsContent() {
     [updateSearchParams],
   );
 
+  const clearAssistantFilter = useCallback(() => {
+    updateSearchParams({ assistantId: null });
+  }, [updateSearchParams]);
+
   const setSortField = useCallback(
     (value: SortField) => {
       updateSearchParams({ sort: value === "chronological" ? null : value });
@@ -220,6 +239,7 @@ export function LogsAgentsContent() {
         {
           search: searchQuery || undefined,
           hasRisk: toApiHasRisk(hasRisk),
+          assistantId: assistantId || undefined,
           from: timeRange.from,
           to: timeRange.to,
           sortBy: toApiSortBy(sortField),
@@ -285,8 +305,12 @@ export function LogsAgentsContent() {
       });
     return `Viewing logs from ${formatDate(timeRange.from)} to ${formatDate(timeRange.to)}${
       searchQuery ? ` Search query: "${searchQuery}"` : ""
+    }${
+      filteredAssistant
+        ? `. Scoped to assistant "${filteredAssistant.name}".`
+        : ""
     }`;
-  }, [timeRange.from, timeRange.to, searchQuery]);
+  }, [timeRange.from, timeRange.to, searchQuery, filteredAssistant]);
 
   return (
     <>
@@ -327,6 +351,9 @@ export function LogsAgentsContent() {
         setSearchQuery={setSearchQuery}
         hasRisk={hasRisk}
         setHasRisk={setHasRisk}
+        assistantName={filteredAssistant?.name ?? null}
+        hasAssistantFilter={!!assistantId}
+        clearAssistantFilter={clearAssistantFilter}
         sortField={sortField}
         setSortField={setSortField}
         sortOrder={sortOrder}
@@ -359,6 +386,9 @@ function AgentSessionsPageContent({
   setSearchQuery,
   hasRisk,
   setHasRisk,
+  assistantName,
+  hasAssistantFilter,
+  clearAssistantFilter,
   sortField,
   setSortField,
   sortOrder,
@@ -386,6 +416,9 @@ function AgentSessionsPageContent({
   setSearchQuery: (value: string) => void;
   hasRisk: string;
   setHasRisk: (value: string) => void;
+  assistantName: string | null;
+  hasAssistantFilter: boolean;
+  clearAssistantFilter: () => void;
   sortField: SortField;
   setSortField: (value: SortField) => void;
   sortOrder: SortOrder;
@@ -438,6 +471,28 @@ function AgentSessionsPageContent({
               members in this project
             </p>
           </div>
+          {hasAssistantFilter && (
+            <Badge
+              variant="secondary"
+              className="w-fit gap-1.5 px-2.5 py-1 text-xs"
+            >
+              <Icon name="bot" className="size-3" />
+              <span>
+                Assistant:{" "}
+                <span className="font-medium">
+                  {assistantName ?? "Loading…"}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={clearAssistantFilter}
+                aria-label="Clear assistant filter"
+                className="hover:bg-muted-foreground/20 -mr-1 ml-0.5 flex size-4 items-center justify-center rounded"
+              >
+                <Icon name="x" className="size-3" />
+              </button>
+            </Badge>
+          )}
           <div className="flex items-center gap-3">
             <ChatLogsFilters
               searchQuery={searchQuery}
