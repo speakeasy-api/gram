@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -88,11 +89,13 @@ type testInstance struct {
 	mcpService      *mcp.Service
 	conn            *pgxpool.Pool
 	sessionManager  *sessions.Manager
+	tracerProvider  trace.TracerProvider
 	logger          *slog.Logger
 	enc             *encryption.Client
 	authzEngine     *authz.Engine
 	shadowMCPClient *shadowmcp.Client
 	cacheAdapter    cache.Cache
+	serverURL       *url.URL
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -157,11 +160,13 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		mcpService:      mcpService,
 		conn:            conn,
 		sessionManager:  sessionManager,
+		tracerProvider:  tracerProvider,
 		logger:          logger,
 		enc:             enc,
 		authzEngine:     authzEngine,
 		shadowMCPClient: shadowMCPClient,
 		cacheAdapter:    cacheAdapter,
+		serverURL:       serverURL,
 	}
 }
 
@@ -468,6 +473,22 @@ func seedIssuerGatedRemoteMCPEndpoint(
 	upstreamURL, visibility string,
 ) (slug string, mcpServer mcpserversrepo.McpServer, issuerID uuid.UUID) {
 	t.Helper()
+	return seedIssuerGatedRemoteMCPEndpointOnDomain(t, ctx, ti, projectID, upstreamURL, visibility, uuid.NullUUID{})
+}
+
+// seedIssuerGatedRemoteMCPEndpointOnDomain is the custom-domain-aware
+// variant of seedIssuerGatedRemoteMCPEndpoint. Pass a Valid customDomainID
+// to scope the resulting mcp_endpoint to that domain so it resolves only
+// when a request arrives with a matching customdomains.Context.
+func seedIssuerGatedRemoteMCPEndpointOnDomain(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	projectID uuid.UUID,
+	upstreamURL, visibility string,
+	customDomainID uuid.NullUUID,
+) (slug string, mcpServer mcpserversrepo.McpServer, issuerID uuid.UUID) {
+	t.Helper()
 
 	issuerID = seedUserSessionIssuer(t, ctx, ti, projectID)
 	remoteServer := seedRemoteMCPServer(t, ctx, ti, projectID, upstreamURL)
@@ -490,7 +511,7 @@ func seedIssuerGatedRemoteMCPEndpoint(
 	slug = randomSlug()
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      projectID,
-		CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CustomDomainID: customDomainID,
 		McpServerID:    mcpServer.ID,
 		Slug:           slug,
 	})
