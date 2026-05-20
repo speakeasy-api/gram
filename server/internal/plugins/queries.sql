@@ -159,3 +159,18 @@ ON CONFLICT (project_id) DO UPDATE
       marketplace_token = COALESCE(plugin_github_connections.marketplace_token, EXCLUDED.marketplace_token),
       updated_at = clock_timestamp()
 RETURNING *;
+
+-- name: GetMarketplaceSettings :one
+SELECT *
+FROM project_marketplace_settings
+WHERE project_id = @project_id;
+
+-- name: UpsertMarketplaceSettings :one
+-- Sets the marketplace name override for a project. Pass NULL to clear the
+-- override and fall back to the server-side default.
+INSERT INTO project_marketplace_settings (project_id, marketplace_name)
+VALUES (@project_id, sqlc.narg('marketplace_name'))
+ON CONFLICT (project_id) DO UPDATE
+  SET marketplace_name = EXCLUDED.marketplace_name,
+      updated_at = clock_timestamp()
+RETURNING *;

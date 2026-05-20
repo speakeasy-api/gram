@@ -8,12 +8,14 @@ import { pluginsDeletePlugin } from "../funcs/pluginsDeletePlugin.js";
 import { pluginsDownloadCodexInstallScript } from "../funcs/pluginsDownloadCodexInstallScript.js";
 import { pluginsDownloadObservabilityPlugin } from "../funcs/pluginsDownloadObservabilityPlugin.js";
 import { pluginsDownloadPluginPackage } from "../funcs/pluginsDownloadPluginPackage.js";
+import { pluginsGetMarketplaceSettings } from "../funcs/pluginsGetMarketplaceSettings.js";
 import { pluginsGetPlugin } from "../funcs/pluginsGetPlugin.js";
 import { pluginsGetPublishStatus } from "../funcs/pluginsGetPublishStatus.js";
 import { pluginsListPlugins } from "../funcs/pluginsListPlugins.js";
 import { pluginsPublishPlugins } from "../funcs/pluginsPublishPlugins.js";
 import { pluginsRemovePluginServer } from "../funcs/pluginsRemovePluginServer.js";
 import { pluginsSetPluginAssignments } from "../funcs/pluginsSetPluginAssignments.js";
+import { pluginsUpdateMarketplaceSettings } from "../funcs/pluginsUpdateMarketplaceSettings.js";
 import { pluginsUpdatePlugin } from "../funcs/pluginsUpdatePlugin.js";
 import { pluginsUpdatePluginServer } from "../funcs/pluginsUpdatePluginServer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -137,6 +139,25 @@ export class Plugins extends ClientSDK {
   }
 
   /**
+   * getMarketplaceSettings plugins
+   *
+   * @remarks
+   * Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.
+   */
+  async getMarketplaceSettings(
+    request?: operations.GetMarketplaceSettingsRequest | undefined,
+    security?: operations.GetMarketplaceSettingsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.MarketplaceSettingsResult> {
+    return unwrapAsync(pluginsGetMarketplaceSettings(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getPlugin plugins
    *
    * @remarks
@@ -243,6 +264,25 @@ export class Plugins extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.SetPluginAssignmentsResponseBody> {
     return unwrapAsync(pluginsSetPluginAssignments(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateMarketplaceSettings plugins
+   *
+   * @remarks
+   * Update the marketplace settings for the current project. If a marketplace is already published, the updated settings are pushed to GitHub before the call returns.
+   */
+  async updateMarketplaceSettings(
+    request: operations.UpdateMarketplaceSettingsRequest,
+    security?: operations.UpdateMarketplaceSettingsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.UpdateMarketplaceSettingsResult> {
+    return unwrapAsync(pluginsUpdateMarketplaceSettings(
       this,
       request,
       security,

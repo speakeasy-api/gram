@@ -13832,6 +13832,96 @@ paths:
       tags:
         - plugins
       x-speakeasy-name-override: downloadPluginPackage
+  /rpc/plugins.getMarketplaceSettings:
+    get:
+      description: Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.
+      operationId: getMarketplaceSettings
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketplaceSettingsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getMarketplaceSettings plugins
+      tags:
+        - plugins
+      x-speakeasy-name-override: getMarketplaceSettings
+      x-speakeasy-react-hook:
+        name: MarketplaceSettings
   /rpc/plugins.getPlugin:
     get:
       description: Get a plugin with its servers and assignments.
@@ -14403,6 +14493,102 @@ paths:
       x-speakeasy-name-override: setPluginAssignments
       x-speakeasy-react-hook:
         name: SetPluginAssignments
+  /rpc/plugins.updateMarketplaceSettings:
+    post:
+      description: Update the marketplace settings for the current project. If a marketplace is already published, the updated settings are pushed to GitHub before the call returns.
+      operationId: updateMarketplaceSettings
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMarketplaceSettingsRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateMarketplaceSettingsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: updateMarketplaceSettings plugins
+      tags:
+        - plugins
+      x-speakeasy-name-override: updateMarketplaceSettings
+      x-speakeasy-react-hook:
+        name: UpdateMarketplaceSettings
   /rpc/plugins.updatePlugin:
     put:
       description: Update plugin metadata.
@@ -31860,6 +32046,21 @@ components:
         - id
         - name
         - url
+    MarketplaceSettingsResult:
+      type: object
+      properties:
+        default_name:
+          type: string
+          description: The default marketplace name used when no override is configured.
+        effective_name:
+          type: string
+          description: The marketplace name that will be used at publish time (override if set, otherwise default).
+        marketplace_name:
+          type: string
+          description: User-provided override for the marketplace name. Absent when no override is configured.
+      required:
+        - default_name
+        - effective_name
     McpEndpoint:
       type: object
       properties:
@@ -36387,6 +36588,23 @@ components:
       required:
         - invitation_id
         - role_id
+    UpdateMarketplaceSettingsRequestBody:
+      type: object
+      properties:
+        marketplace_name:
+          type: string
+          description: Override for the marketplace name (the identifier users type as `<plugin>@<marketplace>`). Pass an empty string or omit to clear the override and fall back to the default.
+    UpdateMarketplaceSettingsResult:
+      type: object
+      properties:
+        republished:
+          type: boolean
+          description: Whether the marketplace was automatically republished to GitHub as part of this update.
+        settings:
+          $ref: '#/components/schemas/MarketplaceSettingsResult'
+      required:
+        - settings
+        - republished
     UpdateMcpEndpointForm:
       type: object
       properties:

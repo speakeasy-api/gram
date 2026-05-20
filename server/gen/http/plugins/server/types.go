@@ -72,6 +72,15 @@ type PublishPluginsRequestBody struct {
 	GithubUsernames []string `form:"github_usernames,omitempty" json:"github_usernames,omitempty" xml:"github_usernames,omitempty"`
 }
 
+// UpdateMarketplaceSettingsRequestBody is the type of the "plugins" service
+// "updateMarketplaceSettings" endpoint HTTP request body.
+type UpdateMarketplaceSettingsRequestBody struct {
+	// Override for the marketplace name (the identifier users type as
+	// `<plugin>@<marketplace>`). Pass an empty string or omit to clear the
+	// override and fall back to the default.
+	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
+}
+
 // ListPluginsResponseBody is the type of the "plugins" service "listPlugins"
 // endpoint HTTP response body.
 type ListPluginsResponseBody struct {
@@ -212,6 +221,29 @@ type GetPublishStatusResponseBody struct {
 type PublishPluginsResponseBody struct {
 	// The URL of the published GitHub repository.
 	RepoURL string `form:"repo_url" json:"repo_url" xml:"repo_url"`
+}
+
+// GetMarketplaceSettingsResponseBody is the type of the "plugins" service
+// "getMarketplaceSettings" endpoint HTTP response body.
+type GetMarketplaceSettingsResponseBody struct {
+	// User-provided override for the marketplace name. Absent when no override is
+	// configured.
+	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
+	// The default marketplace name used when no override is configured.
+	DefaultName string `form:"default_name" json:"default_name" xml:"default_name"`
+	// The marketplace name that will be used at publish time (override if set,
+	// otherwise default).
+	EffectiveName string `form:"effective_name" json:"effective_name" xml:"effective_name"`
+}
+
+// UpdateMarketplaceSettingsResponseBody is the type of the "plugins" service
+// "updateMarketplaceSettings" endpoint HTTP response body.
+type UpdateMarketplaceSettingsResponseBody struct {
+	// The updated marketplace settings.
+	Settings *MarketplaceSettingsResultResponseBody `form:"settings" json:"settings" xml:"settings"`
+	// Whether the marketplace was automatically republished to GitHub as part of
+	// this update.
+	Republished bool `form:"republished" json:"republished" xml:"republished"`
 }
 
 // ListPluginsUnauthorizedResponseBody is the type of the "plugins" service
@@ -2800,6 +2832,386 @@ type PublishPluginsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetMarketplaceSettingsUnauthorizedResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetMarketplaceSettingsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMarketplaceSettingsForbiddenResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "forbidden" error.
+type GetMarketplaceSettingsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMarketplaceSettingsBadRequestResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "bad_request" error.
+type GetMarketplaceSettingsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMarketplaceSettingsNotFoundResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "not_found" error.
+type GetMarketplaceSettingsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMarketplaceSettingsConflictResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "conflict" error.
+type GetMarketplaceSettingsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMarketplaceSettingsUnsupportedMediaResponseBody is the type of the
+// "plugins" service "getMarketplaceSettings" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetMarketplaceSettingsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMarketplaceSettingsInvalidResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "invalid" error.
+type GetMarketplaceSettingsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMarketplaceSettingsInvariantViolationResponseBody is the type of the
+// "plugins" service "getMarketplaceSettings" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetMarketplaceSettingsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMarketplaceSettingsUnexpectedResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "unexpected" error.
+type GetMarketplaceSettingsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMarketplaceSettingsGatewayErrorResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetMarketplaceSettingsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateMarketplaceSettingsUnauthorizedResponseBody is the type of the
+// "plugins" service "updateMarketplaceSettings" endpoint HTTP response body
+// for the "unauthorized" error.
+type UpdateMarketplaceSettingsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateMarketplaceSettingsForbiddenResponseBody is the type of the "plugins"
+// service "updateMarketplaceSettings" endpoint HTTP response body for the
+// "forbidden" error.
+type UpdateMarketplaceSettingsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateMarketplaceSettingsBadRequestResponseBody is the type of the "plugins"
+// service "updateMarketplaceSettings" endpoint HTTP response body for the
+// "bad_request" error.
+type UpdateMarketplaceSettingsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateMarketplaceSettingsNotFoundResponseBody is the type of the "plugins"
+// service "updateMarketplaceSettings" endpoint HTTP response body for the
+// "not_found" error.
+type UpdateMarketplaceSettingsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateMarketplaceSettingsConflictResponseBody is the type of the "plugins"
+// service "updateMarketplaceSettings" endpoint HTTP response body for the
+// "conflict" error.
+type UpdateMarketplaceSettingsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateMarketplaceSettingsUnsupportedMediaResponseBody is the type of the
+// "plugins" service "updateMarketplaceSettings" endpoint HTTP response body
+// for the "unsupported_media" error.
+type UpdateMarketplaceSettingsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateMarketplaceSettingsInvalidResponseBody is the type of the "plugins"
+// service "updateMarketplaceSettings" endpoint HTTP response body for the
+// "invalid" error.
+type UpdateMarketplaceSettingsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateMarketplaceSettingsInvariantViolationResponseBody is the type of the
+// "plugins" service "updateMarketplaceSettings" endpoint HTTP response body
+// for the "invariant_violation" error.
+type UpdateMarketplaceSettingsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateMarketplaceSettingsUnexpectedResponseBody is the type of the "plugins"
+// service "updateMarketplaceSettings" endpoint HTTP response body for the
+// "unexpected" error.
+type UpdateMarketplaceSettingsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateMarketplaceSettingsGatewayErrorResponseBody is the type of the
+// "plugins" service "updateMarketplaceSettings" endpoint HTTP response body
+// for the "gateway_error" error.
+type UpdateMarketplaceSettingsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // PluginResponseBody is used to define fields on response body types.
 type PluginResponseBody struct {
 	// Unique plugin identifier.
@@ -2844,6 +3256,19 @@ type PluginAssignmentResponseBody struct {
 	// Principal URN (e.g. role:engineering, user:id, or *).
 	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	CreatedAt    string `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
+// MarketplaceSettingsResultResponseBody is used to define fields on response
+// body types.
+type MarketplaceSettingsResultResponseBody struct {
+	// User-provided override for the marketplace name. Absent when no override is
+	// configured.
+	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
+	// The default marketplace name used when no override is configured.
+	DefaultName string `form:"default_name" json:"default_name" xml:"default_name"`
+	// The marketplace name that will be used at publish time (override if set,
+	// otherwise default).
+	EffectiveName string `form:"effective_name" json:"effective_name" xml:"effective_name"`
 }
 
 // NewListPluginsResponseBody builds the HTTP response body from the result of
@@ -3039,6 +3464,30 @@ func NewGetPublishStatusResponseBody(res *plugins.PublishStatusResult) *GetPubli
 func NewPublishPluginsResponseBody(res *plugins.PublishPluginsResult) *PublishPluginsResponseBody {
 	body := &PublishPluginsResponseBody{
 		RepoURL: res.RepoURL,
+	}
+	return body
+}
+
+// NewGetMarketplaceSettingsResponseBody builds the HTTP response body from the
+// result of the "getMarketplaceSettings" endpoint of the "plugins" service.
+func NewGetMarketplaceSettingsResponseBody(res *plugins.MarketplaceSettingsResult) *GetMarketplaceSettingsResponseBody {
+	body := &GetMarketplaceSettingsResponseBody{
+		MarketplaceName: res.MarketplaceName,
+		DefaultName:     res.DefaultName,
+		EffectiveName:   res.EffectiveName,
+	}
+	return body
+}
+
+// NewUpdateMarketplaceSettingsResponseBody builds the HTTP response body from
+// the result of the "updateMarketplaceSettings" endpoint of the "plugins"
+// service.
+func NewUpdateMarketplaceSettingsResponseBody(res *plugins.UpdateMarketplaceSettingsResult) *UpdateMarketplaceSettingsResponseBody {
+	body := &UpdateMarketplaceSettingsResponseBody{
+		Republished: res.Republished,
+	}
+	if res.Settings != nil {
+		body.Settings = marshalPluginsMarketplaceSettingsResultToMarketplaceSettingsResultResponseBody(res.Settings)
 	}
 	return body
 }
@@ -5061,6 +5510,306 @@ func NewPublishPluginsGatewayErrorResponseBody(res *goa.ServiceError) *PublishPl
 	return body
 }
 
+// NewGetMarketplaceSettingsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getMarketplaceSettings" endpoint of the
+// "plugins" service.
+func NewGetMarketplaceSettingsUnauthorizedResponseBody(res *goa.ServiceError) *GetMarketplaceSettingsUnauthorizedResponseBody {
+	body := &GetMarketplaceSettingsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMarketplaceSettingsForbiddenResponseBody builds the HTTP response body
+// from the result of the "getMarketplaceSettings" endpoint of the "plugins"
+// service.
+func NewGetMarketplaceSettingsForbiddenResponseBody(res *goa.ServiceError) *GetMarketplaceSettingsForbiddenResponseBody {
+	body := &GetMarketplaceSettingsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMarketplaceSettingsBadRequestResponseBody builds the HTTP response
+// body from the result of the "getMarketplaceSettings" endpoint of the
+// "plugins" service.
+func NewGetMarketplaceSettingsBadRequestResponseBody(res *goa.ServiceError) *GetMarketplaceSettingsBadRequestResponseBody {
+	body := &GetMarketplaceSettingsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMarketplaceSettingsNotFoundResponseBody builds the HTTP response body
+// from the result of the "getMarketplaceSettings" endpoint of the "plugins"
+// service.
+func NewGetMarketplaceSettingsNotFoundResponseBody(res *goa.ServiceError) *GetMarketplaceSettingsNotFoundResponseBody {
+	body := &GetMarketplaceSettingsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMarketplaceSettingsConflictResponseBody builds the HTTP response body
+// from the result of the "getMarketplaceSettings" endpoint of the "plugins"
+// service.
+func NewGetMarketplaceSettingsConflictResponseBody(res *goa.ServiceError) *GetMarketplaceSettingsConflictResponseBody {
+	body := &GetMarketplaceSettingsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMarketplaceSettingsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getMarketplaceSettings" endpoint of
+// the "plugins" service.
+func NewGetMarketplaceSettingsUnsupportedMediaResponseBody(res *goa.ServiceError) *GetMarketplaceSettingsUnsupportedMediaResponseBody {
+	body := &GetMarketplaceSettingsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMarketplaceSettingsInvalidResponseBody builds the HTTP response body
+// from the result of the "getMarketplaceSettings" endpoint of the "plugins"
+// service.
+func NewGetMarketplaceSettingsInvalidResponseBody(res *goa.ServiceError) *GetMarketplaceSettingsInvalidResponseBody {
+	body := &GetMarketplaceSettingsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMarketplaceSettingsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getMarketplaceSettings" endpoint of
+// the "plugins" service.
+func NewGetMarketplaceSettingsInvariantViolationResponseBody(res *goa.ServiceError) *GetMarketplaceSettingsInvariantViolationResponseBody {
+	body := &GetMarketplaceSettingsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMarketplaceSettingsUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getMarketplaceSettings" endpoint of the
+// "plugins" service.
+func NewGetMarketplaceSettingsUnexpectedResponseBody(res *goa.ServiceError) *GetMarketplaceSettingsUnexpectedResponseBody {
+	body := &GetMarketplaceSettingsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMarketplaceSettingsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getMarketplaceSettings" endpoint of the
+// "plugins" service.
+func NewGetMarketplaceSettingsGatewayErrorResponseBody(res *goa.ServiceError) *GetMarketplaceSettingsGatewayErrorResponseBody {
+	body := &GetMarketplaceSettingsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateMarketplaceSettingsUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "updateMarketplaceSettings" endpoint of
+// the "plugins" service.
+func NewUpdateMarketplaceSettingsUnauthorizedResponseBody(res *goa.ServiceError) *UpdateMarketplaceSettingsUnauthorizedResponseBody {
+	body := &UpdateMarketplaceSettingsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateMarketplaceSettingsForbiddenResponseBody builds the HTTP response
+// body from the result of the "updateMarketplaceSettings" endpoint of the
+// "plugins" service.
+func NewUpdateMarketplaceSettingsForbiddenResponseBody(res *goa.ServiceError) *UpdateMarketplaceSettingsForbiddenResponseBody {
+	body := &UpdateMarketplaceSettingsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateMarketplaceSettingsBadRequestResponseBody builds the HTTP response
+// body from the result of the "updateMarketplaceSettings" endpoint of the
+// "plugins" service.
+func NewUpdateMarketplaceSettingsBadRequestResponseBody(res *goa.ServiceError) *UpdateMarketplaceSettingsBadRequestResponseBody {
+	body := &UpdateMarketplaceSettingsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateMarketplaceSettingsNotFoundResponseBody builds the HTTP response
+// body from the result of the "updateMarketplaceSettings" endpoint of the
+// "plugins" service.
+func NewUpdateMarketplaceSettingsNotFoundResponseBody(res *goa.ServiceError) *UpdateMarketplaceSettingsNotFoundResponseBody {
+	body := &UpdateMarketplaceSettingsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateMarketplaceSettingsConflictResponseBody builds the HTTP response
+// body from the result of the "updateMarketplaceSettings" endpoint of the
+// "plugins" service.
+func NewUpdateMarketplaceSettingsConflictResponseBody(res *goa.ServiceError) *UpdateMarketplaceSettingsConflictResponseBody {
+	body := &UpdateMarketplaceSettingsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateMarketplaceSettingsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "updateMarketplaceSettings" endpoint of
+// the "plugins" service.
+func NewUpdateMarketplaceSettingsUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateMarketplaceSettingsUnsupportedMediaResponseBody {
+	body := &UpdateMarketplaceSettingsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateMarketplaceSettingsInvalidResponseBody builds the HTTP response
+// body from the result of the "updateMarketplaceSettings" endpoint of the
+// "plugins" service.
+func NewUpdateMarketplaceSettingsInvalidResponseBody(res *goa.ServiceError) *UpdateMarketplaceSettingsInvalidResponseBody {
+	body := &UpdateMarketplaceSettingsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateMarketplaceSettingsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "updateMarketplaceSettings" endpoint of
+// the "plugins" service.
+func NewUpdateMarketplaceSettingsInvariantViolationResponseBody(res *goa.ServiceError) *UpdateMarketplaceSettingsInvariantViolationResponseBody {
+	body := &UpdateMarketplaceSettingsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateMarketplaceSettingsUnexpectedResponseBody builds the HTTP response
+// body from the result of the "updateMarketplaceSettings" endpoint of the
+// "plugins" service.
+func NewUpdateMarketplaceSettingsUnexpectedResponseBody(res *goa.ServiceError) *UpdateMarketplaceSettingsUnexpectedResponseBody {
+	body := &UpdateMarketplaceSettingsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateMarketplaceSettingsGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "updateMarketplaceSettings" endpoint of
+// the "plugins" service.
+func NewUpdateMarketplaceSettingsGatewayErrorResponseBody(res *goa.ServiceError) *UpdateMarketplaceSettingsGatewayErrorResponseBody {
+	body := &UpdateMarketplaceSettingsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListPluginsPayload builds a plugins service listPlugins endpoint payload.
 func NewListPluginsPayload(sessionToken *string, projectSlugInput *string) *plugins.ListPluginsPayload {
 	v := &plugins.ListPluginsPayload{}
@@ -5252,6 +6001,28 @@ func NewPublishPluginsPayload(body *PublishPluginsRequestBody, sessionToken *str
 		for i, val := range body.GithubUsernames {
 			v.GithubUsernames[i] = val
 		}
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetMarketplaceSettingsPayload builds a plugins service
+// getMarketplaceSettings endpoint payload.
+func NewGetMarketplaceSettingsPayload(sessionToken *string, projectSlugInput *string) *plugins.GetMarketplaceSettingsPayload {
+	v := &plugins.GetMarketplaceSettingsPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewUpdateMarketplaceSettingsPayload builds a plugins service
+// updateMarketplaceSettings endpoint payload.
+func NewUpdateMarketplaceSettingsPayload(body *UpdateMarketplaceSettingsRequestBody, sessionToken *string, projectSlugInput *string) *plugins.UpdateMarketplaceSettingsPayload {
+	v := &plugins.UpdateMarketplaceSettingsPayload{
+		MarketplaceName: body.MarketplaceName,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

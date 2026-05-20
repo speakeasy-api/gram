@@ -192,6 +192,24 @@ func (q *Queries) GetGitHubConnectionByMarketplaceToken(ctx context.Context, mar
 	return i, err
 }
 
+const getMarketplaceSettings = `-- name: GetMarketplaceSettings :one
+SELECT project_id, marketplace_name, created_at, updated_at
+FROM project_marketplace_settings
+WHERE project_id = $1
+`
+
+func (q *Queries) GetMarketplaceSettings(ctx context.Context, projectID uuid.UUID) (ProjectMarketplaceSetting, error) {
+	row := q.db.QueryRow(ctx, getMarketplaceSettings, projectID)
+	var i ProjectMarketplaceSetting
+	err := row.Scan(
+		&i.ProjectID,
+		&i.MarketplaceName,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getOrganizationName = `-- name: GetOrganizationName :one
 SELECT name FROM organization_metadata WHERE id = $1
 `
@@ -620,6 +638,34 @@ func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubCo
 		&i.RepoOwner,
 		&i.RepoName,
 		&i.MarketplaceToken,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertMarketplaceSettings = `-- name: UpsertMarketplaceSettings :one
+INSERT INTO project_marketplace_settings (project_id, marketplace_name)
+VALUES ($1, $2)
+ON CONFLICT (project_id) DO UPDATE
+  SET marketplace_name = EXCLUDED.marketplace_name,
+      updated_at = clock_timestamp()
+RETURNING project_id, marketplace_name, created_at, updated_at
+`
+
+type UpsertMarketplaceSettingsParams struct {
+	ProjectID       uuid.UUID
+	MarketplaceName pgtype.Text
+}
+
+// Sets the marketplace name override for a project. Pass NULL to clear the
+// override and fall back to the server-side default.
+func (q *Queries) UpsertMarketplaceSettings(ctx context.Context, arg UpsertMarketplaceSettingsParams) (ProjectMarketplaceSetting, error) {
+	row := q.db.QueryRow(ctx, upsertMarketplaceSettings, arg.ProjectID, arg.MarketplaceName)
+	var i ProjectMarketplaceSetting
+	err := row.Scan(
+		&i.ProjectID,
+		&i.MarketplaceName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

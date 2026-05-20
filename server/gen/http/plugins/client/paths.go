@@ -76,3 +76,13 @@ func GetPublishStatusPluginsPath() string {
 func PublishPluginsPluginsPath() string {
 	return "/rpc/plugins.publishPlugins"
 }
+
+// GetMarketplaceSettingsPluginsPath returns the URL path to the plugins service getMarketplaceSettings HTTP endpoint.
+func GetMarketplaceSettingsPluginsPath() string {
+	return "/rpc/plugins.getMarketplaceSettings"
+}
+
+// UpdateMarketplaceSettingsPluginsPath returns the URL path to the plugins service updateMarketplaceSettings HTTP endpoint.
+func UpdateMarketplaceSettingsPluginsPath() string {
+	return "/rpc/plugins.updateMarketplaceSettings"
+}

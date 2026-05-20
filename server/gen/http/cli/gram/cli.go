@@ -99,7 +99,7 @@ func UsageCommands() []string {
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
-		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins)",
+		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|verify-url|delete-server)",
@@ -985,6 +985,15 @@ func ParseEndpoint(
 		pluginsPublishPluginsBodyFlag             = pluginsPublishPluginsFlags.String("body", "REQUIRED", "")
 		pluginsPublishPluginsSessionTokenFlag     = pluginsPublishPluginsFlags.String("session-token", "", "")
 		pluginsPublishPluginsProjectSlugInputFlag = pluginsPublishPluginsFlags.String("project-slug-input", "", "")
+
+		pluginsGetMarketplaceSettingsFlags                = flag.NewFlagSet("get-marketplace-settings", flag.ExitOnError)
+		pluginsGetMarketplaceSettingsSessionTokenFlag     = pluginsGetMarketplaceSettingsFlags.String("session-token", "", "")
+		pluginsGetMarketplaceSettingsProjectSlugInputFlag = pluginsGetMarketplaceSettingsFlags.String("project-slug-input", "", "")
+
+		pluginsUpdateMarketplaceSettingsFlags                = flag.NewFlagSet("update-marketplace-settings", flag.ExitOnError)
+		pluginsUpdateMarketplaceSettingsBodyFlag             = pluginsUpdateMarketplaceSettingsFlags.String("body", "REQUIRED", "")
+		pluginsUpdateMarketplaceSettingsSessionTokenFlag     = pluginsUpdateMarketplaceSettingsFlags.String("session-token", "", "")
+		pluginsUpdateMarketplaceSettingsProjectSlugInputFlag = pluginsUpdateMarketplaceSettingsFlags.String("project-slug-input", "", "")
 
 		featuresFlags = flag.NewFlagSet("features", flag.ContinueOnError)
 
@@ -1890,6 +1899,8 @@ func ParseEndpoint(
 	pluginsDownloadCodexInstallScriptFlags.Usage = pluginsDownloadCodexInstallScriptUsage
 	pluginsGetPublishStatusFlags.Usage = pluginsGetPublishStatusUsage
 	pluginsPublishPluginsFlags.Usage = pluginsPublishPluginsUsage
+	pluginsGetMarketplaceSettingsFlags.Usage = pluginsGetMarketplaceSettingsUsage
+	pluginsUpdateMarketplaceSettingsFlags.Usage = pluginsUpdateMarketplaceSettingsUsage
 
 	featuresFlags.Usage = featuresUsage
 	featuresGetProductFeaturesFlags.Usage = featuresGetProductFeaturesUsage
@@ -2734,6 +2745,12 @@ func ParseEndpoint(
 
 			case "publish-plugins":
 				epf = pluginsPublishPluginsFlags
+
+			case "get-marketplace-settings":
+				epf = pluginsGetMarketplaceSettingsFlags
+
+			case "update-marketplace-settings":
+				epf = pluginsUpdateMarketplaceSettingsFlags
 
 			}
 
@@ -3751,6 +3768,12 @@ func ParseEndpoint(
 			case "publish-plugins":
 				endpoint = c.PublishPlugins()
 				data, err = pluginsc.BuildPublishPluginsPayload(*pluginsPublishPluginsBodyFlag, *pluginsPublishPluginsSessionTokenFlag, *pluginsPublishPluginsProjectSlugInputFlag)
+			case "get-marketplace-settings":
+				endpoint = c.GetMarketplaceSettings()
+				data, err = pluginsc.BuildGetMarketplaceSettingsPayload(*pluginsGetMarketplaceSettingsSessionTokenFlag, *pluginsGetMarketplaceSettingsProjectSlugInputFlag)
+			case "update-marketplace-settings":
+				endpoint = c.UpdateMarketplaceSettings()
+				data, err = pluginsc.BuildUpdateMarketplaceSettingsPayload(*pluginsUpdateMarketplaceSettingsBodyFlag, *pluginsUpdateMarketplaceSettingsSessionTokenFlag, *pluginsUpdateMarketplaceSettingsProjectSlugInputFlag)
 			}
 		case "features":
 			c := featuresc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -7664,6 +7687,8 @@ func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `    download-codex-install-script: Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.`)
 	fmt.Fprintln(os.Stderr, `    get-publish-status: Check whether GitHub publishing is configured and connected for this project.`)
 	fmt.Fprintln(os.Stderr, `    publish-plugins: Generate and publish all plugin packages to a GitHub repository.`)
+	fmt.Fprintln(os.Stderr, `    get-marketplace-settings: Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.`)
+	fmt.Fprintln(os.Stderr, `    update-marketplace-settings: Update the marketplace settings for the current project. If a marketplace is already published, the updated settings are pushed to GitHub before the call returns.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s plugins COMMAND --help\n", os.Args[0])
@@ -7972,6 +7997,48 @@ func pluginsPublishPluginsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins publish-plugins --body '{\n      \"github_usernames\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func pluginsGetMarketplaceSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins get-marketplace-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins get-marketplace-settings --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func pluginsUpdateMarketplaceSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins update-marketplace-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update the marketplace settings for the current project. If a marketplace is already published, the updated settings are pushed to GitHub before the call returns.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins update-marketplace-settings --body '{\n      \"marketplace_name\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // featuresUsage displays the usage of the features command and its subcommands.

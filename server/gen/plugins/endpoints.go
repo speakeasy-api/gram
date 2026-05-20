@@ -31,6 +31,8 @@ type Endpoints struct {
 	DownloadCodexInstallScript  goa.Endpoint
 	GetPublishStatus            goa.Endpoint
 	PublishPlugins              goa.Endpoint
+	GetMarketplaceSettings      goa.Endpoint
+	UpdateMarketplaceSettings   goa.Endpoint
 }
 
 // DownloadPluginPackageResponseData holds both the result and the HTTP
@@ -79,6 +81,8 @@ func NewEndpoints(s Service) *Endpoints {
 		DownloadCodexInstallScript:  NewDownloadCodexInstallScriptEndpoint(s, a.APIKeyAuth),
 		GetPublishStatus:            NewGetPublishStatusEndpoint(s, a.APIKeyAuth),
 		PublishPlugins:              NewPublishPluginsEndpoint(s, a.APIKeyAuth),
+		GetMarketplaceSettings:      NewGetMarketplaceSettingsEndpoint(s, a.APIKeyAuth),
+		UpdateMarketplaceSettings:   NewUpdateMarketplaceSettingsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -98,6 +102,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.DownloadCodexInstallScript = m(e.DownloadCodexInstallScript)
 	e.GetPublishStatus = m(e.GetPublishStatus)
 	e.PublishPlugins = m(e.PublishPlugins)
+	e.GetMarketplaceSettings = m(e.GetMarketplaceSettings)
+	e.UpdateMarketplaceSettings = m(e.UpdateMarketplaceSettings)
 }
 
 // NewListPluginsEndpoint returns an endpoint function that calls the method
@@ -599,5 +605,75 @@ func NewPublishPluginsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			return nil, err
 		}
 		return s.PublishPlugins(ctx, p)
+	}
+}
+
+// NewGetMarketplaceSettingsEndpoint returns an endpoint function that calls
+// the method "getMarketplaceSettings" of service "plugins".
+func NewGetMarketplaceSettingsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetMarketplaceSettingsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetMarketplaceSettings(ctx, p)
+	}
+}
+
+// NewUpdateMarketplaceSettingsEndpoint returns an endpoint function that calls
+// the method "updateMarketplaceSettings" of service "plugins".
+func NewUpdateMarketplaceSettingsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateMarketplaceSettingsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateMarketplaceSettings(ctx, p)
 	}
 }

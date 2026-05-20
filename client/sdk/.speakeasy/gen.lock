@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 685e6ca8056e0e2249cff88565b7f98c
+  docChecksum: b6ba899e43a0cc5d7d406c06ca7be74a
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -528,6 +528,8 @@ trackedFiles:
     last_write_checksum: sha1:9b0363b6659fb3dd3349ff1328d88626c137d02c
   docs/models/components/logfilter.md:
     last_write_checksum: sha1:75e4bc1e15c55b45ef8563219a13501c70b813f6
+  docs/models/components/marketplacesettingsresult.md:
+    last_write_checksum: sha1:e35e9c15e4d0df9581b5ff7a65f20e72c027dc81
   docs/models/components/mcpcollection.md:
     last_write_checksum: sha1:5d519bf3e0615f3acd1d6b303d8fc9fe62f2da75
   docs/models/components/mcpendpoint.md:
@@ -908,6 +910,10 @@ trackedFiles:
     last_write_checksum: sha1:857f7719ac65c86650daee98bc50a523abc12b5e
   docs/models/components/updateinviterolerequestbody.md:
     last_write_checksum: sha1:6a0ff93617aad49c4b73dc1108e6245b5daf5b7b
+  docs/models/components/updatemarketplacesettingsrequestbody.md:
+    last_write_checksum: sha1:2dd393a27344598529b9f1db5dfdafbf9f336a79
+  docs/models/components/updatemarketplacesettingsresult.md:
+    last_write_checksum: sha1:d4aa3026b5efa07c8e8adde5a68baf4da4a892ff
   docs/models/components/updatemcpendpointform.md:
     last_write_checksum: sha1:7d4267078a8a386af4b78120b307357baddac459
   docs/models/components/updatemcpserverform.md:
@@ -1566,6 +1572,10 @@ trackedFiles:
     last_write_checksum: sha1:d360509c0300e049d2d0a950456d092904dfb221
   docs/models/operations/getlatestdeploymentsecurityoption2.md:
     last_write_checksum: sha1:9a349a20d3dcb9352cd21b943f208eba9dd11942
+  docs/models/operations/getmarketplacesettingsrequest.md:
+    last_write_checksum: sha1:df0d400956c95c73f187a98de66c40e350a6ce1a
+  docs/models/operations/getmarketplacesettingssecurity.md:
+    last_write_checksum: sha1:486f8f345dc3742baf8772997ea6753c81934b4c
   docs/models/operations/getmcpendpointrequest.md:
     last_write_checksum: sha1:a5bb458e840fbd663a9b7f9c98185e8eefdc63f0
   docs/models/operations/getmcpendpointsecurity.md:
@@ -2460,6 +2470,10 @@ trackedFiles:
     last_write_checksum: sha1:8ba64ffb9aebd46a909d18916a10e1a45f44653f
   docs/models/operations/updateinviterolesecurity.md:
     last_write_checksum: sha1:72f9c6c75880c43084b6e852d132392ce4721942
+  docs/models/operations/updatemarketplacesettingsrequest.md:
+    last_write_checksum: sha1:0355ffff78a046392404931a342eb8b2f946dc07
+  docs/models/operations/updatemarketplacesettingssecurity.md:
+    last_write_checksum: sha1:b9d8298c0a2220b003f17f88d79e53980e3b7387
   docs/models/operations/updatemcpendpointrequest.md:
     last_write_checksum: sha1:9ec70eab34bb1f921bd43a611e6f01cfa8f50906
   docs/models/operations/updatemcpendpointsecurity.md:
@@ -2705,7 +2719,7 @@ trackedFiles:
   docs/sdks/packages/README.md:
     last_write_checksum: sha1:630727b17ae78739629705da27f894236bba7ad0
   docs/sdks/plugins/README.md:
-    last_write_checksum: sha1:1db1ff15e99af9efc38c654bdff23180d91827d8
+    last_write_checksum: sha1:f26e17bff67b759d1ea69f79457189e994c2cb80
   docs/sdks/policies/README.md:
     last_write_checksum: sha1:cdd3f7dc142798bd13cfe0fb5c109301a47c5e16
   docs/sdks/projects/README.md:
@@ -3180,6 +3194,8 @@ trackedFiles:
     last_write_checksum: sha1:a7c037029deec0a733d31633a335b9b77371da73
   src/funcs/pluginsDownloadPluginPackage.ts:
     last_write_checksum: sha1:2137a0829b969e414ea39e7f81f13e50f1148c35
+  src/funcs/pluginsGetMarketplaceSettings.ts:
+    last_write_checksum: sha1:e32d427d98fa5a8e195bc922c4168387400feb7d
   src/funcs/pluginsGetPlugin.ts:
     last_write_checksum: sha1:d87a722162678b54cd9078a33c16f0af86e1eb00
   src/funcs/pluginsGetPublishStatus.ts:
@@ -3192,6 +3208,8 @@ trackedFiles:
     last_write_checksum: sha1:c484f5f824296ec7a63c6010f60559361dee0077
   src/funcs/pluginsSetPluginAssignments.ts:
     last_write_checksum: sha1:b904ab0dd4c3a440863367a84608529cabba9b17
+  src/funcs/pluginsUpdateMarketplaceSettings.ts:
+    last_write_checksum: sha1:8b3d8bf36c631a2ee0215a1004416b855c274011
   src/funcs/pluginsUpdatePlugin.ts:
     last_write_checksum: sha1:3e01a530b3a9f0f3b21303a70524873c5f9551c9
   src/funcs/pluginsUpdatePluginServer.ts:
@@ -3960,7 +3978,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:cbdd01d6e2d4e02b7533289744fef5148a028d2a
+    last_write_checksum: sha1:9960678f04ef13c45012a86fe0024bd35b02797a
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -4136,6 +4154,8 @@ trackedFiles:
     last_write_checksum: sha1:caaebf7fc32bd8692bdd81b3f6178f0d817cd191
   src/models/components/logfilter.ts:
     last_write_checksum: sha1:1d27649ded3de34c5f360c77f2c17201810dae99
+  src/models/components/marketplacesettingsresult.ts:
+    last_write_checksum: sha1:d912e2809cf42b2fc4dc957eddc9cee452796fee
   src/models/components/mcpcollection.ts:
     last_write_checksum: sha1:532c1722ccbc4c4b1687e8301880b10bc15fb13b
   src/models/components/mcpendpoint.ts:
@@ -4532,6 +4552,10 @@ trackedFiles:
     pristine_git_object: 3e15e3d02ae85bf6332035aed3be013620771c6c
   src/models/components/updateinviterolerequestbody.ts:
     last_write_checksum: sha1:d7972b1bd3b73f8ef6b81bcbc7dac9540bb854f9
+  src/models/components/updatemarketplacesettingsrequestbody.ts:
+    last_write_checksum: sha1:28b550ffe49dfb3ba696581c38c3388a732d9c08
+  src/models/components/updatemarketplacesettingsresult.ts:
+    last_write_checksum: sha1:fdfa788dea55a291f77a3a74105b868ccaf5b33a
   src/models/components/updatemcpendpointform.ts:
     last_write_checksum: sha1:2051b085948e4af650466d7dedc524979979e7d1
   src/models/components/updatemcpserverform.ts:
@@ -4926,6 +4950,8 @@ trackedFiles:
     id: 30c24354b615
     last_write_checksum: sha1:14645332c9374d7e925b4d32b800b809001c5ea1
     pristine_git_object: 6fa1245097420d70646440c32809099b2d8f1e82
+  src/models/operations/getmarketplacesettings.ts:
+    last_write_checksum: sha1:0c6c08266f16158048bbe5fd80138b2bced488d7
   src/models/operations/getmcpendpoint.ts:
     last_write_checksum: sha1:a8b091414afe67bb1773027969decc834c2cb323
   src/models/operations/getmcpmetadata.ts:
@@ -5014,7 +5040,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:ed903182d0b45a2b77f3524a14466d76b6e7950a
+    last_write_checksum: sha1:31e69d3185013178a762d7c211be697962590277
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -5314,6 +5340,8 @@ trackedFiles:
     pristine_git_object: 022db0e1885a00ab0839de0a69e1e973f770d22f
   src/models/operations/updateinviterole.ts:
     last_write_checksum: sha1:67f390dc18fd425bd956902bf48bcb665b362225
+  src/models/operations/updatemarketplacesettings.ts:
+    last_write_checksum: sha1:98e27b900cd43aa62bb27427f1e2600f97d15f53
   src/models/operations/updatemcpendpoint.ts:
     last_write_checksum: sha1:1e0a5be4ef8752d5b5c1e632fe4f57fb74d0b174
   src/models/operations/updatemcpserver.ts:
@@ -5784,7 +5812,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:4a23ddbcce75b258ab2cea717f19b8ad32f200c3
+    last_write_checksum: sha1:efbe3cec7a8b6b34f30ad7cf8ff468cf6fc6c79a
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -5982,6 +6010,10 @@ trackedFiles:
     id: 1cb3cee40e26
     last_write_checksum: sha1:d46d30106fcd1382025cb3e0c44c91b0790e0257
     pristine_git_object: 765450e6d2e584db7fe12922c5a23a5b3e042519
+  src/react-query/marketplaceSettings.core.ts:
+    last_write_checksum: sha1:e020db9dc101278b32a2441750ef82f6998bd1d8
+  src/react-query/marketplaceSettings.ts:
+    last_write_checksum: sha1:7be0c5daa2ae62bae7b779bac6e8e59ced994254
   src/react-query/mcpEndpoints.core.ts:
     last_write_checksum: sha1:0aab6773948147d8e18f4c56bc2b1459c3bf44a2
   src/react-query/mcpEndpoints.ts:
@@ -6320,6 +6352,8 @@ trackedFiles:
     pristine_git_object: 2cf356c08feca9a3e7c51a8c3549076780ac8ea5
   src/react-query/updateInviteRole.ts:
     last_write_checksum: sha1:db1dfc83bd99e1ae8d9caec711da9bca94dd6679
+  src/react-query/updateMarketplaceSettings.ts:
+    last_write_checksum: sha1:73092400f2752f7d8ace500f7fd2c02343974f14
   src/react-query/updateMcpEndpoint.ts:
     last_write_checksum: sha1:a76a7bdb241bc50dcb08db286be135e6e64436ec
   src/react-query/updateMcpServer.ts:
@@ -6507,7 +6541,7 @@ trackedFiles:
     last_write_checksum: sha1:cd45c1746ab2a619fb53b913e0398d80731df1dc
     pristine_git_object: 4f4b87d5502ff940f4b04c82bd1907cf070e0f1c
   src/sdk/plugins.ts:
-    last_write_checksum: sha1:7028ca7dfba43671e325dd5f14920e007e88e378
+    last_write_checksum: sha1:bfe285a752487469863871b54f77c7675a13ac90
   src/sdk/policies.ts:
     last_write_checksum: sha1:7df5f8ff60b6ce77f41555f75e34a2364f53e9cf
   src/sdk/projects.ts:
@@ -9778,6 +9812,26 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getMarketplaceSettings:
+    speakeasy-default-get-marketplace-settings:
+      responses:
+        "200":
+          application/json: {"default_name": "<value>", "effective_name": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  updateMarketplaceSettings:
+    speakeasy-default-update-marketplace-settings:
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"republished": true, "settings": {"default_name": "<value>", "effective_name": "<value>"}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

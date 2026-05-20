@@ -20,6 +20,11 @@ import {
 } from "@gram/client/react-query/publishStatus";
 import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
 import {
+  invalidateAllMarketplaceSettings,
+  useMarketplaceSettingsSuspense,
+} from "@gram/client/react-query/marketplaceSettings";
+import { useUpdateMarketplaceSettingsMutation } from "@gram/client/react-query/updateMarketplaceSettings";
+import {
   Button,
   DropdownMenu,
   DropdownMenuContent,
@@ -51,6 +56,7 @@ export default function Plugins() {
 
   const { data } = usePluginsSuspense();
   const { data: publishStatus } = usePublishStatusSuspense();
+  const { data: marketplaceSettings } = useMarketplaceSettingsSuspense();
   const { fetch: authFetch } = useFetcher();
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
     useState(false);
@@ -177,6 +183,44 @@ export default function Plugins() {
     [publishMutate],
   );
 
+  const [marketplaceNameInput, setMarketplaceNameInput] = useState(
+    marketplaceSettings.marketplaceName ?? "",
+  );
+  const updateMarketplaceSettingsMutation =
+    useUpdateMarketplaceSettingsMutation({
+      onSuccess: async (data) => {
+        await Promise.all([
+          invalidateAllMarketplaceSettings(queryClient),
+          invalidateAllPublishStatus(queryClient),
+        ]);
+        setMarketplaceNameInput(data.settings.marketplaceName ?? "");
+        toast.success(
+          data.republished
+            ? "Marketplace name updated and republished"
+            : "Marketplace name saved",
+        );
+      },
+      onError: () => {
+        toast.error("Failed to update marketplace name");
+      },
+    });
+
+  const trimmedMarketplaceName = marketplaceNameInput.trim();
+  const currentMarketplaceName = marketplaceSettings.marketplaceName ?? "";
+  const marketplaceNameDirty =
+    trimmedMarketplaceName !== currentMarketplaceName.trim();
+
+  const handleSaveMarketplaceName = () => {
+    updateMarketplaceSettingsMutation.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: {
+        updateMarketplaceSettingsRequestBody: {
+          marketplaceName: trimmedMarketplaceName || undefined,
+        },
+      },
+    });
+  };
+
   const createCard = (
     <CreateResourceCard
       title="New Plugin"
@@ -264,6 +308,63 @@ export default function Plugins() {
                 createCard={createCard}
               />
             </Stack>
+          </Page.Section.Body>
+        </Page.Section>
+
+        <Page.Section>
+          <Page.Section.Title>Marketplace settings</Page.Section.Title>
+          <Page.Section.Description className="w-3/4">
+            The marketplace name is the identifier your team types after the
+            plugin slug ({"<plugin>@<marketplace>"}) when installing from Claude
+            Code or Codex. Leave blank to use the default ({" "}
+            <code>{marketplaceSettings.defaultName}</code>). Applies to all
+            plugins in this project.
+          </Page.Section.Description>
+          <Page.Section.Body>
+            <form
+              className="flex max-w-md flex-col gap-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveMarketplaceName();
+              }}
+            >
+              <InputField
+                label="Marketplace name"
+                name="marketplace_name"
+                value={marketplaceNameInput}
+                onChange={(e) => setMarketplaceNameInput(e.target.value)}
+                placeholder={marketplaceSettings.defaultName}
+                pattern="^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$"
+                title="Lowercase letters, digits, and hyphens. May not start or end with a hyphen."
+              />
+              <Type small muted>
+                Will publish as{" "}
+                <code>
+                  {trimmedMarketplaceName || marketplaceSettings.defaultName}
+                </code>
+                .{" "}
+                {publishStatus?.connected
+                  ? "Saving will regenerate the marketplace and push to GitHub."
+                  : "Will take effect on your next publish."}
+              </Type>
+              <Stack direction="horizontal" gap={2}>
+                <Button
+                  type="submit"
+                  disabled={
+                    !marketplaceNameDirty ||
+                    updateMarketplaceSettingsMutation.isPending
+                  }
+                >
+                  <Button.Text>
+                    {updateMarketplaceSettingsMutation.isPending
+                      ? publishStatus?.connected
+                        ? "Republishing..."
+                        : "Saving..."
+                      : "Save"}
+                  </Button.Text>
+                </Button>
+              </Stack>
+            </form>
           </Page.Section.Body>
         </Page.Section>
 

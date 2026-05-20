@@ -54,3 +54,10 @@ type PluginServer struct {
 	DeletedAt   pgtype.Timestamptz
 	Deleted     bool
 }
+
+type ProjectMarketplaceSetting struct {
+	ProjectID       uuid.UUID
+	MarketplaceName pgtype.Text
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
