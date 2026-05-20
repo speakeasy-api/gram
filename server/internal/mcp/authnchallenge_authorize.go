@@ -20,6 +20,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -101,8 +103,13 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	}
 	var subject *urn.SessionSubject
 	if endpoint.IsPublic {
-		sub := urn.NewAnonymousSubject(uuid.NewString())
-		subject = &sub
+		if uid, ok := s.tryIdentifyGramUser(ctx, r, endpoint); ok {
+			sub := urn.NewUserSubject(uid)
+			subject = &sub
+		} else {
+			sub := urn.NewAnonymousSubject(uuid.NewString())
+			subject = &sub
+		}
 	}
 
 	baseURL := s.BaseURLForRequest(r)
@@ -149,6 +156,51 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	}
 	http.Redirect(w, r, consentURL, http.StatusFound)
 	return nil
+}
+
+// tryIdentifyGramUser best-effort resolves a Gram user_id from the request's
+// session cookie / Gram-Session header or a Bearer user-session JWT scoped
+// to this endpoint's audience. Returns ("", false) if neither yields a
+// user:<id>; failures never propagate. Caller falls back to anonymous.
+//
+// Uses a cache-only session lookup (sessions.GetSession) rather than a full
+// Authenticate to keep this off the org/billing/admin path — UserID is the
+// only field we need.
+func (s *Service) tryIdentifyGramUser(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint) (string, bool) {
+	if uid, ok := s.identifyByGramSession(ctx, r); ok {
+		return uid, true
+	}
+	return s.identifyByUserSessionJWT(ctx, r, endpoint)
+}
+
+func (s *Service) identifyByGramSession(ctx context.Context, r *http.Request) (string, bool) {
+	token := r.Header.Get(constants.SessionHeader)
+	if token == "" {
+		token, _ = contextvalues.GetSessionTokenFromContext(ctx)
+	}
+	if token == "" {
+		return "", false
+	}
+	session, err := s.sessions.GetSession(ctx, token)
+	if err != nil || session.UserID == "" {
+		return "", false
+	}
+	return session.UserID, true
+}
+
+func (s *Service) identifyByUserSessionJWT(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint) (string, bool) {
+	token := AuthorizationBearerToken(r)
+	if token == "" {
+		return "", false
+	}
+	subject, _, err := s.userSessionSigner.ValidateBearer(ctx, token, endpoint.AudienceURN, s.chatSessionsManager)
+	if err != nil {
+		return "", false
+	}
+	if subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
+		return "", false
+	}
+	return subject.ID, true
 }
 
 // writeAuthorizeOAuthError unwraps a *usersessions.OAuthError to its code +

@@ -13,11 +13,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -120,6 +122,165 @@ func TestIDPCallback_StaticRouteResolvesToolsetFromChallengeState(t *testing.T) 
 	require.Equal(t, clientRedirectURI, loc.Scheme+"://"+loc.Host+loc.Path)
 	require.Equal(t, "access_denied", loc.Query().Get("error"))
 	require.Equal(t, "client-state", loc.Query().Get("state"))
+}
+
+func TestAuthorize_PublicToolsetStampsSubject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "auth-public-" + uuid.New().String()[:8]
+	toolset, issuer := createPublicIssuerGatedToolset(t, ctx, ti, authCtx, slug)
+	clientID := "public-client"
+	insertUserSessionClient(t, ctx, ti.conn, issuer.ID, clientID)
+
+	sessionToken := ti.getSessionToken(ctx, t)
+	bearerUserID := uuid.NewString()
+	bearerUserToken := mintUserSessionBearerForSubject(t, ti, toolset, urn.NewUserSubject(bearerUserID))
+	anonBearerSubject := urn.NewAnonymousSubject(uuid.NewString())
+	anonBearerToken := mintUserSessionBearerForSubject(t, ti, toolset, anonBearerSubject)
+
+	cases := []struct {
+		name      string
+		setupCtx  func() context.Context
+		mutate    func(*http.Request)
+		wantKind  urn.SessionSubjectKind
+		wantID    string
+		notWantID string
+	}{
+		{
+			name: "gram_session_header",
+			mutate: func(r *http.Request) {
+				r.Header.Set(constants.SessionHeader, sessionToken)
+			},
+			wantKind: urn.SessionSubjectKindUser,
+			wantID:   authCtx.UserID,
+		},
+		{
+			name: "session_token_in_context",
+			setupCtx: func() context.Context {
+				return contextvalues.SetSessionTokenInContext(context.Background(), sessionToken)
+			},
+			wantKind: urn.SessionSubjectKindUser,
+			wantID:   authCtx.UserID,
+		},
+		{
+			name:     "no_auth",
+			wantKind: urn.SessionSubjectKindAnonymous,
+		},
+		{
+			name: "invalid_session_header",
+			mutate: func(r *http.Request) {
+				r.Header.Set(constants.SessionHeader, "not-a-real-session-token")
+			},
+			wantKind: urn.SessionSubjectKindAnonymous,
+		},
+		{
+			name: "user_bearer_jwt",
+			mutate: func(r *http.Request) {
+				r.Header.Set("Authorization", "Bearer "+bearerUserToken)
+			},
+			wantKind: urn.SessionSubjectKindUser,
+			wantID:   bearerUserID,
+		},
+		{
+			// A JWT whose subject is already anonymous shouldn't be honoured —
+			// we'd just convert one anonymous URN into another. Re-mints fresh.
+			name: "anonymous_bearer_jwt",
+			mutate: func(r *http.Request) {
+				r.Header.Set("Authorization", "Bearer "+anonBearerToken)
+			},
+			wantKind:  urn.SessionSubjectKindAnonymous,
+			notWantID: anonBearerSubject.ID,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var requestCtx context.Context
+			if tc.setupCtx != nil {
+				requestCtx = tc.setupCtx()
+			}
+			stored := drivePublicAuthorize(t, ctx, ti, toolset, clientID, requestCtx, tc.mutate)
+			require.NotNil(t, stored.Subject)
+			require.Equal(t, tc.wantKind, stored.Subject.Kind)
+			if tc.wantID != "" {
+				require.Equal(t, tc.wantID, stored.Subject.ID)
+			}
+			if tc.notWantID != "" {
+				require.NotEqual(t, tc.notWantID, stored.Subject.ID)
+			}
+		})
+	}
+}
+
+func drivePublicAuthorize(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	toolset toolsets_repo.Toolset,
+	clientID string,
+	requestCtx context.Context,
+	mutate func(*http.Request),
+) mcp.AuthnChallengeState {
+	t.Helper()
+
+	if requestCtx == nil {
+		requestCtx = context.Background()
+	}
+
+	q := url.Values{}
+	q.Set("response_type", "code")
+	q.Set("client_id", clientID)
+	q.Set("redirect_uri", "http://example.com/cb")
+	q.Set("state", "state-"+uuid.NewString()[:8])
+	q.Set("code_challenge", "challenge")
+	q.Set("code_challenge_method", "S256")
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+toolset.McpSlug.String+"/authorize?"+q.Encode(), nil)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	req = req.WithContext(context.WithValue(requestCtx, chi.RouteCtxKey, rctx))
+
+	if mutate != nil {
+		mutate(req)
+	}
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleAuthorize(w, req))
+	require.Equal(t, http.StatusFound, w.Code)
+
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Contains(t, loc.Path, "/connect", "public toolset must redirect directly to consent, not the IDP")
+
+	stored, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+loc.Query().Get("state"))
+	require.NoError(t, err)
+	return stored
+}
+
+func createPublicIssuerGatedToolset(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	authCtx *contextvalues.AuthContext,
+	slug string,
+) (toolsets_repo.Toolset, usersessions_repo.UserSessionIssuer) {
+	t.Helper()
+
+	toolset, issuer := createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, slug)
+	require.NoError(t, toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	}))
+	toolset.McpIsPublic = true
+	return toolset, issuer
 }
 
 func createPrivateIssuerGatedToolset(
