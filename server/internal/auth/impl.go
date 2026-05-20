@@ -264,7 +264,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrInit, err)
 	}
 
-	if idpUser.OrganizationID != "" {
+	if idpUser.Sub != "" {
 		if err := s.identity.SyncMembershipsFromWorkOS(ctx, userID, idpUser.Sub); err != nil {
 			return redirectWithError(authErrInit, err)
 		}
