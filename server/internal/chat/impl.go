@@ -825,6 +825,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	if r.Header.Get("Gram-Skip-Capture") == "1" {
 		completionChatID = uuid.Nil
 	}
+	reasoning := chatRequest.Reasoning
+	if reasoning == nil {
+		reasoning = &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil}
+	}
+
 	completionReq := openrouter.CompletionRequest{
 		OrgID:          orgID,
 		ProjectID:      authCtx.ProjectID.String(),
@@ -845,6 +850,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		},
 		APIKeyID:                  authCtx.APIKeyID,
 		JSONSchema:                jsonSchema,
+		Reasoning:                 reasoning,
 		NormalizeOutboundMessages: r.URL.Query().Get("unstable_normalizeOutboundMessages") == "1",
 	}
 

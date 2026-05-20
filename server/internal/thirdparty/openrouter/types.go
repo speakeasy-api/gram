@@ -169,6 +169,21 @@ type OpenAIChatRequest struct {
 	Tools          []Tool             `json:"tools,omitempty"`
 	Temperature    float32            `json:"temperature,omitempty"`
 	ResponseFormat *or.ResponseFormat `json:"response_format,omitempty"`
+	Reasoning      *Reasoning         `json:"reasoning,omitempty"`
+}
+
+// Reasoning mirrors OpenRouter's `reasoning` request parameter. Callers set
+// this to override the upstream default — typically to suppress reasoning
+// generation on routes that would otherwise emit billable reasoning tokens.
+//
+// `Effort = "none"` disables reasoning generation outright. `Exclude = true`
+// only hides reasoning from the response and still incurs token cost.
+// `Effort` and `MaxTokens` are mutually exclusive per OpenRouter docs.
+type Reasoning struct {
+	Effort    string `json:"effort,omitempty"`
+	MaxTokens *int   `json:"max_tokens,omitempty"`
+	Exclude   *bool  `json:"exclude,omitempty"`
+	Enabled   *bool  `json:"enabled,omitempty"`
 }
 
 // ToolCallFunction represents the function part of a tool call
