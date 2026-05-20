@@ -29412,6 +29412,9 @@ components:
                 id:
                     type: string
                     description: Gram relationship row ID.
+                logging_excluded:
+                    type: boolean
+                    description: Whether this user is excluded from session capture for the active organization.
                 name:
                     type: string
                     description: User display name.
@@ -29438,6 +29441,7 @@ components:
                 - email
                 - created_at
                 - updated_at
+                - logging_excluded
         Package:
             type: object
             properties:

@@ -1,5 +1,6 @@
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
+import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
@@ -197,9 +198,20 @@ export function TeamInner() {
             </div>
           )}
           <Stack direction="vertical" gap={0}>
-            <Type variant="body" className="font-medium">
-              {member.name}
-            </Type>
+            <Stack direction="horizontal" align="center" gap={2}>
+              <Type variant="body" className="font-medium">
+                {member.name}
+              </Type>
+              {member.loggingExcluded && (
+                <Badge
+                  variant="secondary"
+                  size="sm"
+                  tooltip="Agent sessions for this member are excluded from session capture."
+                >
+                  Logging exclusion
+                </Badge>
+              )}
+            </Stack>
             <Type variant="body" className="text-muted-foreground text-sm">
               {member.email}
             </Type>

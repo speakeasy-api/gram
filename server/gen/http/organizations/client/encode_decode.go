@@ -1414,6 +1414,7 @@ func unmarshalOrganizationUserResponseBodyToOrganizationsOrganizationUser(v *Org
 		WorkosMembershipID: v.WorkosMembershipID,
 		CreatedAt:          *v.CreatedAt,
 		UpdatedAt:          *v.UpdatedAt,
+		LoggingExcluded:    *v.LoggingExcluded,
 	}
 
 	return res

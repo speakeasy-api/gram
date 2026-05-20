@@ -7,10 +7,7 @@ import { Type } from "@/components/ui/type";
 import { FeatureName } from "@gram/client/models/components";
 import { useFeaturesGet } from "@gram/client/react-query/featuresGet";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
-import {
-  invalidateAllMembers,
-  useMembers,
-} from "@gram/client/react-query/members";
+import { invalidateAllListOrganizationUsers } from "@gram/client/react-query/listOrganizationUsers";
 import {
   invalidateAllMembers,
   useMembers,
@@ -80,11 +77,13 @@ export function OrgLogsInner() {
   const { mutate: setExclusions, status: exclusionsMutationStatus } =
     useSetSessionCaptureExclusionsMutation({
       onSuccess: async () => {
-        // Members table renders the "Logging exclusion" badge from the same
-        // shared response, so invalidate it together with the exclusions query.
+        // Both the Roles & Permissions members tab and the Team page surface
+        // the "Logging exclusion" badge from their respective list responses,
+        // so invalidate them alongside the exclusions query itself.
         await Promise.all([
           invalidateAllSessionCaptureExclusions(queryClient),
           invalidateAllMembers(queryClient),
+          invalidateAllListOrganizationUsers(queryClient),
         ]);
       },
     });

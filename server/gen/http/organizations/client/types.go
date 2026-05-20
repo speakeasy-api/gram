@@ -1220,6 +1220,9 @@ type OrganizationUserResponseBody struct {
 	WorkosMembershipID *string `form:"workos_membership_id,omitempty" json:"workos_membership_id,omitempty" xml:"workos_membership_id,omitempty"`
 	CreatedAt          *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt          *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Whether this user is excluded from session capture for the active
+	// organization.
+	LoggingExcluded *bool `form:"logging_excluded,omitempty" json:"logging_excluded,omitempty" xml:"logging_excluded,omitempty"`
 }
 
 // NewSendInviteRequestBody builds the HTTP request body from the payload of
@@ -3795,6 +3798,9 @@ func ValidateOrganizationUserResponseBody(body *OrganizationUserResponseBody) (e
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.LoggingExcluded == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("logging_excluded", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

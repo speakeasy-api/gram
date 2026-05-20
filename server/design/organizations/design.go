@@ -60,8 +60,9 @@ var OrganizationUser = Type("OrganizationUser", func() {
 	Attribute("updated_at", String, func() {
 		Format(FormatDateTime)
 	})
+	Attribute("logging_excluded", Boolean, "Whether this user is excluded from session capture for the active organization.")
 
-	Required("id", "organization_id", "user_id", "name", "email", "created_at", "updated_at")
+	Required("id", "organization_id", "user_id", "name", "email", "created_at", "updated_at", "logging_excluded")
 })
 
 var ListInvitesResult = Type("ListInvitesResult", func() {

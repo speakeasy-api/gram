@@ -140,6 +140,9 @@ type OrganizationUser struct {
 	WorkosMembershipID *string
 	CreatedAt          string
 	UpdatedAt          string
+	// Whether this user is excluded from session capture for the active
+	// organization.
+	LoggingExcluded bool
 }
 
 // RemoveUserPayload is the payload type of the organizations service
