@@ -135,6 +135,7 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		Tools:          req.Tools,
 		Temperature:    temp,
 		ResponseFormat: nil,
+		Reasoning:      req.Reasoning,
 	}
 
 	// Add JSON schema if provided
@@ -426,6 +427,7 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		JSONSchema:                req.JSONSchema,
 		ChatID:                    uuid.Nil,
 		APIKeyID:                  "",
+		Reasoning:                 &Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
 		NormalizeOutboundMessages: false,
 	}
 

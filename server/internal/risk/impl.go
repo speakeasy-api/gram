@@ -1033,6 +1033,7 @@ func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID strin
 		HTTPMetadata:              nil,
 		APIKeyID:                  "",
 		JSONSchema:                nil,
+		Reasoning:                 &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
 		NormalizeOutboundMessages: false,
 	})
 	if err != nil {

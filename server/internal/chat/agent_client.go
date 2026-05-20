@@ -204,6 +204,7 @@ func (c *Client) AgentChat(
 			HTTPMetadata:              nil,
 			APIKeyID:                  "",
 			JSONSchema:                nil,
+			Reasoning:                 &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
 			NormalizeOutboundMessages: false,
 		}
 

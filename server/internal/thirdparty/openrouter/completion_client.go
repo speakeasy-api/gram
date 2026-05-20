@@ -76,6 +76,12 @@ type CompletionRequest struct {
 
 	JSONSchema *or.ChatJSONSchemaConfig // For structured output mode
 
+	// Reasoning, when set, is forwarded verbatim to OpenRouter on the
+	// outbound `/chat/completions` body. Callers use it to disable or shape
+	// reasoning generation on routes (e.g. Anthropic) that would otherwise
+	// produce billable reasoning tokens.
+	Reasoning *Reasoning
+
 	// NormalizeOutboundMessages drops narrative text from assistant messages
 	// that also carry tool_calls before forwarding to OpenRouter. Opt-in via
 	// the `unstable_normalizeOutboundMessages=1` query string on the proxy.

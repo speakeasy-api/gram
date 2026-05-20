@@ -300,11 +300,8 @@ async fn spawn_thread(
         .default_headers(chat_headers)
         .build()?;
 
-    // `effort: "none"` suppresses reasoning generation; `exclude: true` would
-    // only hide the output while still billing for it.
     let openrouter_config = OpenRouterConfig::new(String::new(), bootstrap.model.clone())
-        .with_base_url(bootstrap.completions_url.clone())
-        .with_extra_body_value("reasoning", serde_json::json!({ "effort": "none" }));
+        .with_base_url(bootstrap.completions_url.clone());
     let provider = OpenRouterProvider::from(openrouter_config);
 
     let completions_http = build_http(thread_http_client.clone(), tokens.clone());
