@@ -50,5 +50,5 @@ func (l *Logger) LogRemoteSessionDelete(ctx context.Context, dbtx repo.DBTX, eve
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSession})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionV1})
 }

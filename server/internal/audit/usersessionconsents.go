@@ -50,5 +50,5 @@ func (l *Logger) LogUserSessionConsentRevoke(ctx context.Context, dbtx repo.DBTX
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.UserSessionConsent})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.UserSessionConsentV1})
 }

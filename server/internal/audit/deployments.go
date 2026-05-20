@@ -54,7 +54,7 @@ func (l *Logger) LogDeploymentCreate(ctx context.Context, dbtx repo.DBTX, event 
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Deployment})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.DeploymentV1})
 }
 
 type LogDeploymentEvolveEvent struct {
@@ -109,7 +109,7 @@ func (l *Logger) LogDeploymentEvolve(ctx context.Context, dbtx repo.DBTX, event 
 		AfterSnapshot:  afterSnapshot,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Deployment})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.DeploymentV1})
 }
 
 type LogDeploymentRedeployEvent struct {
@@ -156,5 +156,5 @@ func (l *Logger) LogDeploymentRedeploy(ctx context.Context, dbtx repo.DBTX, even
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Deployment})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.DeploymentV1})
 }

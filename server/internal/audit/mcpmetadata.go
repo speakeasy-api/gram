@@ -71,5 +71,5 @@ func (l *Logger) LogMCPMetadataUpdate(ctx context.Context, dbtx repo.DBTX, event
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Toolset})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ToolsetV1})
 }

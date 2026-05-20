@@ -51,5 +51,5 @@ func (l *Logger) LogUserSessionRevoke(ctx context.Context, dbtx repo.DBTX, event
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.UserSession})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.UserSessionV1})
 }

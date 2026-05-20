@@ -1732,3 +1732,57 @@ webhooks:
                                 - created_at
                             type: object
                 required: true
+    risk_finding.created_v1:
+        post:
+            description: A potential risk was detected in a LLM message or tool call
+            operationId: risk_finding.created_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                chat_message_id:
+                                    format: uuid
+                                    type: string
+                                confidence:
+                                    type: number
+                                created_at:
+                                    type: string
+                                description:
+                                    type: string
+                                id:
+                                    format: uuid
+                                    type: string
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type: string
+                                risk_policy_id:
+                                    format: uuid
+                                    type: string
+                                risk_policy_version:
+                                    type: integer
+                                rule_id:
+                                    type: string
+                                tags:
+                                    items:
+                                        type: string
+                                    type:
+                                        - "null"
+                                        - array
+                            required:
+                                - id
+                                - project_id
+                                - organization_id
+                                - risk_policy_id
+                                - risk_policy_version
+                                - chat_message_id
+                                - rule_id
+                                - description
+                                - confidence
+                                - tags
+                                - created_at
+                            type: object
+                required: true

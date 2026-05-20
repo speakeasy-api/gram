@@ -57,7 +57,7 @@ func (l *Logger) LogAccessRoleCreate(ctx context.Context, dbtx repo.DBTX, event 
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessRole})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessRoleV1})
 }
 
 type LogAccessRoleUpdateEvent struct {
@@ -109,7 +109,7 @@ func (l *Logger) LogAccessRoleUpdate(ctx context.Context, dbtx repo.DBTX, event 
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessRole})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessRoleV1})
 }
 
 type LogAccessRoleDeleteEvent struct {
@@ -147,7 +147,7 @@ func (l *Logger) LogAccessRoleDelete(ctx context.Context, dbtx repo.DBTX, event 
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessRole})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessRoleV1})
 }
 
 type LogAccessMemberRoleUpdateEvent struct {
@@ -199,7 +199,7 @@ func (l *Logger) LogAccessMemberRoleUpdate(ctx context.Context, dbtx repo.DBTX, 
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessMember})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessMemberV1})
 }
 
 type LogAccessChallengeResolveEvent struct {
@@ -239,5 +239,5 @@ func (l *Logger) LogAccessChallengeResolve(ctx context.Context, dbtx repo.DBTX, 
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessChallenge})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessChallengeV1})
 }

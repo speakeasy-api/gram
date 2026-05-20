@@ -12,7 +12,7 @@ import (
 
 func appendToOutbox(ctx context.Context, dbtx repo.DBTX, entry auditEntry, result repo.InsertAuditLogRow) error {
 	input := entry.Params
-	if _, err := outbox.Append(ctx, dbtx, result.OrganizationID, entry.OutboxEvent, events.AuditLogCreatedPayload{
+	if _, err := outbox.Append(ctx, dbtx, result.OrganizationID, entry.OutboxEvent, events.AuditLogCreatedPayloadV1{
 		ID:                 result.ID,
 		OrganizationID:     result.OrganizationID,
 		ProjectID:          input.ProjectID,

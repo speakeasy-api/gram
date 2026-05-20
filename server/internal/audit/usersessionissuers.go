@@ -54,7 +54,7 @@ func (l *Logger) LogUserSessionIssuerCreate(ctx context.Context, dbtx repo.DBTX,
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.UserSessionIssuer})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.UserSessionIssuerV1})
 }
 
 type LogUserSessionIssuerUpdateEvent struct {
@@ -105,7 +105,7 @@ func (l *Logger) LogUserSessionIssuerUpdate(ctx context.Context, dbtx repo.DBTX,
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.UserSessionIssuer})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.UserSessionIssuerV1})
 }
 
 type LogUserSessionIssuerDeleteEvent struct {
@@ -143,5 +143,5 @@ func (l *Logger) LogUserSessionIssuerDelete(ctx context.Context, dbtx repo.DBTX,
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.UserSessionIssuer})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.UserSessionIssuerV1})
 }
