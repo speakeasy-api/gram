@@ -9,6 +9,7 @@ import (
 )
 
 // AuditLogCreated is the event emitted after every audit log entry is written.
+//
 // Deprecated: use the subject-scoped events like ProjectV1 and DeploymentV1
 var AuditLogCreated = outbox.NewEventDef[AuditLogCreatedPayloadV1](
 	"audit_log.created",
