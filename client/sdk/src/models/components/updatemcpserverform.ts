@@ -46,6 +46,10 @@ export type UpdateMcpServerForm = {
    */
   toolsetId?: string | undefined;
   /**
+   * The ID of the user session issuer that gates OAuth-based MCP client authentication. Omit to disable issuer-gated OAuth.
+   */
+  userSessionIssuerId?: string | undefined;
+  /**
    * The visibility of an MCP server
    */
   visibility: UpdateMcpServerFormVisibility;
@@ -63,6 +67,7 @@ export type UpdateMcpServerForm$Outbound = {
   name?: string | undefined;
   remote_mcp_server_id?: string | undefined;
   toolset_id?: string | undefined;
+  user_session_issuer_id?: string | undefined;
   visibility: string;
 };
 
@@ -77,6 +82,7 @@ export const UpdateMcpServerForm$outboundSchema: z.ZodMiniType<
     name: z.optional(z.string()),
     remoteMcpServerId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),
+    userSessionIssuerId: z.optional(z.string()),
     visibility: UpdateMcpServerFormVisibility$outboundSchema,
   }),
   z.transform((v) => {
@@ -84,6 +90,7 @@ export const UpdateMcpServerForm$outboundSchema: z.ZodMiniType<
       environmentId: "environment_id",
       remoteMcpServerId: "remote_mcp_server_id",
       toolsetId: "toolset_id",
+      userSessionIssuerId: "user_session_issuer_id",
     });
   }),
 );

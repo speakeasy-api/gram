@@ -19,6 +19,7 @@ INSERT INTO mcp_servers (
     name,
     slug,
     environment_id,
+    user_session_issuer_id,
     remote_mcp_server_id,
     toolset_id,
     visibility
@@ -31,20 +32,22 @@ VALUES (
     $5,
     $6,
     $7,
-    $8
+    $8,
+    $9
 )
 RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateMCPServerParams struct {
-	ID                uuid.UUID
-	ProjectID         uuid.UUID
-	Name              pgtype.Text
-	Slug              pgtype.Text
-	EnvironmentID     uuid.NullUUID
-	RemoteMcpServerID uuid.NullUUID
-	ToolsetID         uuid.NullUUID
-	Visibility        string
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	Name                pgtype.Text
+	Slug                pgtype.Text
+	EnvironmentID       uuid.NullUUID
+	UserSessionIssuerID uuid.NullUUID
+	RemoteMcpServerID   uuid.NullUUID
+	ToolsetID           uuid.NullUUID
+	Visibility          string
 }
 
 func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams) (McpServer, error) {
@@ -54,6 +57,7 @@ func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams
 		arg.Name,
 		arg.Slug,
 		arg.EnvironmentID,
+		arg.UserSessionIssuerID,
 		arg.RemoteMcpServerID,
 		arg.ToolsetID,
 		arg.Visibility,
@@ -230,23 +234,25 @@ SET
     name = $1,
     slug = $2,
     environment_id = $3,
-    remote_mcp_server_id = $4,
-    toolset_id = $5,
-    visibility = $6,
+    user_session_issuer_id = $4,
+    remote_mcp_server_id = $5,
+    toolset_id = $6,
+    visibility = $7,
     updated_at = clock_timestamp()
-WHERE id = $7 AND project_id = $8 AND deleted IS FALSE
+WHERE id = $8 AND project_id = $9 AND deleted IS FALSE
 RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateMCPServerParams struct {
-	Name              pgtype.Text
-	Slug              pgtype.Text
-	EnvironmentID     uuid.NullUUID
-	RemoteMcpServerID uuid.NullUUID
-	ToolsetID         uuid.NullUUID
-	Visibility        string
-	ID                uuid.UUID
-	ProjectID         uuid.UUID
+	Name                pgtype.Text
+	Slug                pgtype.Text
+	EnvironmentID       uuid.NullUUID
+	UserSessionIssuerID uuid.NullUUID
+	RemoteMcpServerID   uuid.NullUUID
+	ToolsetID           uuid.NullUUID
+	Visibility          string
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
 }
 
 func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams) (McpServer, error) {
@@ -254,6 +260,7 @@ func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams
 		arg.Name,
 		arg.Slug,
 		arg.EnvironmentID,
+		arg.UserSessionIssuerID,
 		arg.RemoteMcpServerID,
 		arg.ToolsetID,
 		arg.Visibility,

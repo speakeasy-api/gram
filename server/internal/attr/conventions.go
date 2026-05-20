@@ -166,6 +166,7 @@ const (
 	HTTPStatusCodePatternKey       = attribute.Key("gram.http.status_code_pattern")
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
 	McpMethodKey                   = attribute.Key("gram.mcp.method")
+	McpServerIDKey                 = attribute.Key("gram.mcp_server.id")
 	McpURLKey                      = attribute.Key("gram.mcp.url")
 	MetricNameKey                  = attribute.Key("gram.metric.name")
 	MimeTypeKey                    = attribute.Key("mime.type")
@@ -1128,6 +1129,9 @@ func SlogResourceURN(v string) slog.Attr      { return slog.String(string(Resour
 
 func ResourceURI(v string) attribute.KeyValue { return ResourceURIKey.String(v) }
 func SlogResourceURI(v string) slog.Attr      { return slog.String(string(ResourceURIKey), v) }
+
+func McpServerID(v string) attribute.KeyValue { return McpServerIDKey.String(v) }
+func SlogMcpServerID(v string) slog.Attr      { return slog.String(string(McpServerIDKey), v) }
 
 func ToolsetID(v string) attribute.KeyValue { return ToolsetIDKey.String(v) }
 func SlogToolsetID(v string) slog.Attr      { return slog.String(string(ToolsetIDKey), v) }

@@ -27880,6 +27880,10 @@ components:
                     type: string
                     description: The ID of the toolset to use as the backend
                     format: uuid
+                user_session_issuer_id:
+                    type: string
+                    description: The ID of the user session issuer that gates OAuth-based MCP client authentication. When set, MCP clients are required to authenticate against this issuer before connecting.
+                    format: uuid
                 visibility:
                     type: string
                     description: The visibility of an MCP server
@@ -31881,6 +31885,10 @@ components:
                     type: string
                     description: When the MCP server was last updated
                     format: date-time
+                user_session_issuer_id:
+                    type: string
+                    description: The ID of the user session issuer that gates OAuth-based MCP client authentication for this server, if any.
+                    format: uuid
                 visibility:
                     type: string
                     description: The visibility of an MCP server
@@ -36186,6 +36194,10 @@ components:
                 toolset_id:
                     type: string
                     description: The ID of the toolset to use as the backend
+                    format: uuid
+                user_session_issuer_id:
+                    type: string
+                    description: The ID of the user session issuer that gates OAuth-based MCP client authentication. Omit to disable issuer-gated OAuth.
                     format: uuid
                 visibility:
                     type: string

@@ -3,6 +3,7 @@ package mcpservers_test
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
@@ -27,14 +28,14 @@ func TestCreateMcpServer_RemoteMcpBackend(t *testing.T) {
 	require.NoError(t, err)
 
 	result, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-		Name:                  "test mcp server",
-		EnvironmentID:         nil,
-		RemoteMcpServerID:     &serverID,
-		ToolsetID:             nil,
-		Visibility:            types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "test mcp server",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &serverID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -66,14 +67,14 @@ func TestCreateMcpServer_RejectsEmptyName(t *testing.T) {
 	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-		Name:                  "",
-		EnvironmentID:         nil,
-		RemoteMcpServerID:     &serverID,
-		ToolsetID:             nil,
-		Visibility:            types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &serverID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
@@ -89,14 +90,14 @@ func TestCreateMcpServer_RejectsWhitespaceName(t *testing.T) {
 	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-		Name:                  "   ",
-		EnvironmentID:         nil,
-		RemoteMcpServerID:     &serverID,
-		ToolsetID:             nil,
-		Visibility:            types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "   ",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &serverID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
@@ -107,14 +108,14 @@ func TestCreateMcpServer_MissingBackend(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-		Name:                  "test mcp server",
-		EnvironmentID:         nil,
-		RemoteMcpServerID:     nil,
-		ToolsetID:             nil,
-		Visibility:            types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "test mcp server",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: nil,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
@@ -131,14 +132,67 @@ func TestCreateMcpServer_BothBackends(t *testing.T) {
 	toolsetID := "00000000-0000-0000-0000-000000000001"
 
 	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-		Name:                  "test mcp server",
-		EnvironmentID:         nil,
-		RemoteMcpServerID:     &serverID,
-		ToolsetID:             &toolsetID,
-		Visibility:            types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "test mcp server",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &serverID,
+		ToolsetID:         &toolsetID,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func TestCreateMcpServer_WithUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	result, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "with issuer",
+		EnvironmentID:       nil,
+		UserSessionIssuerID: &issuerID,
+		RemoteMcpServerID:   &serverID,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.UserSessionIssuerID)
+	require.Equal(t, issuerID, *result.UserSessionIssuerID)
+}
+
+func TestCreateMcpServer_InvalidUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	// Issuer UUID that does not exist in this project.
+	bogusIssuerID := uuid.NewString()
+
+	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "bogus issuer",
+		EnvironmentID:       nil,
+		UserSessionIssuerID: &bogusIssuerID,
+		RemoteMcpServerID:   &serverID,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("disabled"),
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
@@ -157,14 +211,14 @@ func TestCreateMcpServer_RBACForbidden(t *testing.T) {
 	ctx = withExactAuthzGrants(t, ctx, ti.conn)
 
 	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-		Name:                  "test mcp server",
-		EnvironmentID:         nil,
-		RemoteMcpServerID:     &serverID,
-		ToolsetID:             nil,
-		Visibility:            types.McpServerVisibility("disabled"),
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "test mcp server",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &serverID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }

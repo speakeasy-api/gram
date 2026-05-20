@@ -904,6 +904,7 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 	redirectURIs := []string{
 		fmt.Sprintf("%s/oauth/callback", serverURL),
 		fmt.Sprintf("%s/mcp/remote_login_callback", serverURL),
+		fmt.Sprintf("%s/x/mcp/remote_login_callback", serverURL),
 	}
 
 	dcrReq := DCRRequest{

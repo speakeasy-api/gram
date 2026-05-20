@@ -5,6 +5,7 @@ INSERT INTO mcp_servers (
     name,
     slug,
     environment_id,
+    user_session_issuer_id,
     remote_mcp_server_id,
     toolset_id,
     visibility
@@ -15,6 +16,7 @@ VALUES (
     @name,
     @slug,
     @environment_id,
+    @user_session_issuer_id,
     @remote_mcp_server_id,
     @toolset_id,
     @visibility
@@ -46,6 +48,7 @@ SET
     name = @name,
     slug = @slug,
     environment_id = @environment_id,
+    user_session_issuer_id = @user_session_issuer_id,
     remote_mcp_server_id = @remote_mcp_server_id,
     toolset_id = @toolset_id,
     visibility = @visibility,

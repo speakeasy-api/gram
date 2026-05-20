@@ -24,10 +24,13 @@ func BuildCreateMcpServerPayload(mcpServersCreateMcpServerBody string, mcpServer
 	{
 		err = json.Unmarshal([]byte(mcpServersCreateMcpServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
 		}
 		if body.EnvironmentID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
+		}
+		if body.UserSessionIssuerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 		}
 		if body.RemoteMcpServerID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
@@ -61,11 +64,12 @@ func BuildCreateMcpServerPayload(mcpServersCreateMcpServerBody string, mcpServer
 		}
 	}
 	v := &mcpservers.CreateMcpServerPayload{
-		Name:              body.Name,
-		EnvironmentID:     body.EnvironmentID,
-		RemoteMcpServerID: body.RemoteMcpServerID,
-		ToolsetID:         body.ToolsetID,
-		Visibility:        types.McpServerVisibility(body.Visibility),
+		Name:                body.Name,
+		EnvironmentID:       body.EnvironmentID,
+		UserSessionIssuerID: body.UserSessionIssuerID,
+		RemoteMcpServerID:   body.RemoteMcpServerID,
+		ToolsetID:           body.ToolsetID,
+		Visibility:          types.McpServerVisibility(body.Visibility),
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -182,11 +186,14 @@ func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServer
 	{
 		err = json.Unmarshal([]byte(mcpServersUpdateMcpServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.EnvironmentID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
+		}
+		if body.UserSessionIssuerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 		}
 		if body.RemoteMcpServerID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
@@ -220,12 +227,13 @@ func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServer
 		}
 	}
 	v := &mcpservers.UpdateMcpServerPayload{
-		ID:                body.ID,
-		Name:              body.Name,
-		EnvironmentID:     body.EnvironmentID,
-		RemoteMcpServerID: body.RemoteMcpServerID,
-		ToolsetID:         body.ToolsetID,
-		Visibility:        types.McpServerVisibility(body.Visibility),
+		ID:                  body.ID,
+		Name:                body.Name,
+		EnvironmentID:       body.EnvironmentID,
+		UserSessionIssuerID: body.UserSessionIssuerID,
+		RemoteMcpServerID:   body.RemoteMcpServerID,
+		ToolsetID:           body.ToolsetID,
+		Visibility:          types.McpServerVisibility(body.Visibility),
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

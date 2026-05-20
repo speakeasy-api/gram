@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 86bbe131f2396d34aa7c95de8a5098a2
+  docChecksum: b0bc590b9af3c65e5761da98873e1d27
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -187,7 +187,7 @@ trackedFiles:
   docs/models/components/createmcpendpointform.md:
     last_write_checksum: sha1:ec1eb9804dd7a98d81f5dc06d0a657f02548a128
   docs/models/components/createmcpserverform.md:
-    last_write_checksum: sha1:af293d58761c74f2d971c7ad19d30d18063e7aa5
+    last_write_checksum: sha1:ed14a9735da1100fe4045fd2b590c5457e87aba5
   docs/models/components/createmcpserverformvisibility.md:
     last_write_checksum: sha1:a75c05e8b8f0d0bd19a21755e3425a63cd4788fb
   docs/models/components/createpackageform.md:
@@ -549,7 +549,7 @@ trackedFiles:
   docs/models/components/mcpregistry.md:
     last_write_checksum: sha1:fb0e91780ba5dfb14024c1c29f06167a3d6da339
   docs/models/components/mcpserver.md:
-    last_write_checksum: sha1:9468239af317131032093e8ced357fc463291d18
+    last_write_checksum: sha1:24d79c6af37621c4c16183628073d55cd2532632
   docs/models/components/mcpservervisibility.md:
     last_write_checksum: sha1:5b92f014430fc0fd3cc9d90c3f5e007e0edc5e10
   docs/models/components/metricsmode.md:
@@ -911,7 +911,7 @@ trackedFiles:
   docs/models/components/updatemcpendpointform.md:
     last_write_checksum: sha1:7d4267078a8a386af4b78120b307357baddac459
   docs/models/components/updatemcpserverform.md:
-    last_write_checksum: sha1:f82bc8410591809da5903e85ed8efbffce4e5171
+    last_write_checksum: sha1:6ee81fcb0d2881ca3e9d848097797d283b25f130
   docs/models/components/updatemcpserverformvisibility.md:
     last_write_checksum: sha1:c533d738ab4fc273f9930d0c2c696a622af7ad79
   docs/models/components/updatememberroleform.md:
@@ -3697,7 +3697,7 @@ trackedFiles:
   src/models/components/createmcpendpointform.ts:
     last_write_checksum: sha1:ea00ac9a2ec7800f2da800b94d7b30f4cad1993b
   src/models/components/createmcpserverform.ts:
-    last_write_checksum: sha1:797aece3203e5901a98aa2f0936c18193d575ca3
+    last_write_checksum: sha1:4d338cba0441c47bda04c556d34ddd1c43593ce8
   src/models/components/createpackageform.ts:
     id: dd89d7ed01c5
     last_write_checksum: sha1:7388e08e207a0244cd85e7152b8dd171e8023fc1
@@ -4159,7 +4159,7 @@ trackedFiles:
   src/models/components/mcpregistry.ts:
     last_write_checksum: sha1:78224741968880f86a10b5ed9aeecac079504722
   src/models/components/mcpserver.ts:
-    last_write_checksum: sha1:4e461a35a9b556b7fbd92edd1c34ea9095281835
+    last_write_checksum: sha1:207b40280f81eb19adf260cfa883bb52896d4d6c
   src/models/components/modelusage.ts:
     last_write_checksum: sha1:7b01fb688a987bbb0683cf595f3e7ab1d25ce9cb
   src/models/components/notmodified.ts:
@@ -4535,7 +4535,7 @@ trackedFiles:
   src/models/components/updatemcpendpointform.ts:
     last_write_checksum: sha1:2051b085948e4af650466d7dedc524979979e7d1
   src/models/components/updatemcpserverform.ts:
-    last_write_checksum: sha1:8452c4976066b4769fe6c9798d01201b1c2c99e3
+    last_write_checksum: sha1:b62874997065998668a43cf016e273a5dc835e00
   src/models/components/updatememberroleform.ts:
     last_write_checksum: sha1:51b48e1eae3b41468a844cd4bc9c761d42afa0db
   src/models/components/updateoauthproxyserverrequestbody.ts:
