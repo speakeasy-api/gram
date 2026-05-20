@@ -1,5 +1,15 @@
 amends "package://github.com/jdx/hk/releases/download/v1.38.0/hk@1.38.0#/Config.pkl"
 import "package://github.com/jdx/hk/releases/download/v1.38.0/hk@1.38.0#/Builtins.pkl"
+import "pkl:json"
+
+// Source the oxfmt step's exclude list from `.oxfmtrc.json` so the two stay in sync.
+// Strip the leading `/` that .oxfmtrc.json uses for repo-root anchoring; hk globs are root-relative.
+local oxfmtIgnorePatterns: List<String> =
+  new json.Parser {}
+    .parse(read(".oxfmtrc.json"))
+    .getProperty("ignorePatterns")
+    .toList()
+    .map((p) -> let (s = p as String) if (s.startsWith("/")) s.substring(1, s.length) else s)
 
 local linters = new Mapping<String, Step> {
   ["pkleval"] = Builtins.pkl
@@ -48,14 +58,7 @@ local linters = new Mapping<String, Step> {
         "**/*.markdown.mdx",
         "**/*.md",
       )
-    exclude =
-      List(
-        ".speakeasy/**",
-        "server/gen/**",
-        "server/**/*_gen.yaml",
-        "client/sdk/**",
-        "pnpm-lock.yaml",
-      )
+    exclude = oxfmtIgnorePatterns
     check = "pnpm oxfmt --check {{files}}"
     fix = "pnpm oxfmt --write {{files}}"
   }
