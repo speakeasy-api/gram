@@ -84,9 +84,7 @@ func (slackAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 func (slackAdapter) OutputChannelGuidance() string {
 	return `## Slack output preferences
 
-When relaying an "assistant_mcp_auth_required" AuthURL, call platform_slack_post_ephemeral so only the user who needs to authenticate sees it. Address it to the UserID of the user whose most recent request triggered the auth flow; set channel_id to the conversation ChannelID and thread_ts to the conversation ThreadID so the prompt anchors in the active thread. Render the AuthURL as a single Block Kit actions block containing one primary-style button labelled "Authenticate" whose url is the AuthURL verbatim; keep any surrounding section text short and never include the AuthURL itself in plain text.
-
-For all other outbound replies, prefer platform_slack_send_message in the active thread.`
+When relaying an "assistant_mcp_auth_required" AuthURL, prefer platform_slack_post_ephemeral so only the requesting user sees it, and render the AuthURL as a Block Kit actions block containing a single primary button rather than as plain text.`
 }
 
 func (slackAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {
