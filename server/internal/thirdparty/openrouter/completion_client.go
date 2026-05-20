@@ -82,6 +82,8 @@ type CompletionRequest struct {
 	// produce billable reasoning tokens.
 	Reasoning *Reasoning
 
+	CacheControl *or.AnthropicCacheControlDirective
+
 	// NormalizeOutboundMessages drops narrative text from assistant messages
 	// that also carry tool_calls before forwarding to OpenRouter. Opt-in via
 	// the `unstable_normalizeOutboundMessages=1` query string on the proxy.

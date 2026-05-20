@@ -163,13 +163,14 @@ func GetToolCallID(msg or.ChatMessages) *string {
 
 // OpenAIChatRequest represents the request structure for OpenAI chat completions
 type OpenAIChatRequest struct {
-	Model          string             `json:"model"`
-	Messages       []or.ChatMessages  `json:"messages"`
-	Stream         bool               `json:"stream"`
-	Tools          []Tool             `json:"tools,omitempty"`
-	Temperature    float32            `json:"temperature,omitempty"`
-	ResponseFormat *or.ResponseFormat `json:"response_format,omitempty"`
-	Reasoning      *Reasoning         `json:"reasoning,omitempty"`
+	Model          string                             `json:"model"`
+	Messages       []or.ChatMessages                  `json:"messages"`
+	Stream         bool                               `json:"stream"`
+	Tools          []Tool                             `json:"tools,omitempty"`
+	Temperature    float32                            `json:"temperature,omitempty"`
+	ResponseFormat *or.ResponseFormat                 `json:"response_format,omitempty"`
+	Reasoning      *Reasoning                         `json:"reasoning,omitempty"`
+	CacheControl   *or.AnthropicCacheControlDirective `json:"cache_control,omitempty"`
 }
 
 // Reasoning mirrors OpenRouter's `reasoning` request parameter. Callers set
@@ -202,8 +203,9 @@ type ToolCall struct {
 
 // Tool defines a function tool available to the model
 type Tool struct {
-	Type     string              `json:"type"` // always "function"
-	Function *FunctionDefinition `json:"function"`
+	Type         string                      `json:"type"` // always "function"
+	Function     *FunctionDefinition         `json:"function"`
+	CacheControl *or.ChatContentCacheControl `json:"cache_control,omitempty"`
 }
 
 // FunctionDefinition defines a callable function's name and input schema

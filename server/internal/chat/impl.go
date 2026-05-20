@@ -851,6 +851,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		APIKeyID:                  authCtx.APIKeyID,
 		JSONSchema:                jsonSchema,
 		Reasoning:                 reasoning,
+		CacheControl:              chatRequest.CacheControl,
 		NormalizeOutboundMessages: r.URL.Query().Get("unstable_normalizeOutboundMessages") == "1",
 	}
 
