@@ -719,7 +719,6 @@ func newStartCommand() *cli.Command {
 				captureStrategy,
 				chat.NewDefaultUsageTrackingStrategy(db, logger, openRouter, billingTracker, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
-				&background.TemporalDelayedChatResolutionAnalyzer{TemporalEnv: temporalEnv},
 				telemLogger,
 			)
 

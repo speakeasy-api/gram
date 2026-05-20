@@ -126,7 +126,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, nil, guardianPolicy)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
-	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, nil, nil, nil, nil, nil)
+	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }

@@ -1,14 +1,10 @@
 package background
 
 import (
-	"context"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
-	"go.temporal.io/api/enums/v1"
-	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -23,57 +19,6 @@ type DelayedChatResolutionAnalysisParams struct {
 	ProjectID uuid.UUID
 	OrgID     string
 	APIKeyID  string
-}
-
-// TemporalDelayedChatResolutionAnalyzer schedules delayed chat resolution analysis with inactivity detection.
-type TemporalDelayedChatResolutionAnalyzer struct {
-	TemporalEnv *tenv.Environment
-}
-
-func (t *TemporalDelayedChatResolutionAnalyzer) ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error {
-	workflowID := fmt.Sprintf("v1:delayed-chat-resolution-analysis:%s", chatID.String())
-
-	// First, try to signal an existing workflow to reset the timer
-	err := t.TemporalEnv.Client().SignalWorkflow(ctx, workflowID, "", SignalResetTimer, nil)
-	if err == nil {
-		// Successfully reset the timer on existing workflow
-		return nil
-	}
-
-	// Workflow doesn't exist yet, start a new one
-	_, err = ExecuteDelayedChatResolutionAnalysisWorkflow(ctx, t.TemporalEnv, DelayedChatResolutionAnalysisParams{
-		ChatID:    chatID,
-		ProjectID: projectID,
-		OrgID:     orgID,
-		APIKeyID:  apiKeyID,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to start delayed analysis workflow: %w", err)
-	}
-
-	return nil
-}
-
-func (t *TemporalDelayedChatResolutionAnalyzer) ResolveImmediately(ctx context.Context, chatID uuid.UUID) error {
-	workflowID := fmt.Sprintf("v1:delayed-chat-resolution-analysis:%s", chatID.String())
-
-	// Signal the workflow to resolve immediately
-	err := t.TemporalEnv.Client().SignalWorkflow(ctx, workflowID, "", SignalResolveImmediately, nil)
-	if err != nil {
-		return fmt.Errorf("failed to signal immediate resolution: %w", err)
-	}
-
-	return nil
-}
-
-func ExecuteDelayedChatResolutionAnalysisWorkflow(ctx context.Context, env *tenv.Environment, params DelayedChatResolutionAnalysisParams) (client.WorkflowRun, error) {
-	id := fmt.Sprintf("v1:delayed-chat-resolution-analysis:%s", params.ChatID.String())
-	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                    id,
-		TaskQueue:             string(env.Queue()),
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowRunTimeout:    24 * time.Hour, // Max time to wait for inactivity
-	}, DelayedChatResolutionAnalysisWorkflow, params)
 }
 
 func DelayedChatResolutionAnalysisWorkflow(ctx workflow.Context, params DelayedChatResolutionAnalysisParams) error {
