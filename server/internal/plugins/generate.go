@@ -64,14 +64,19 @@ type GenerateConfig struct {
 	MarketplaceName string
 }
 
-// DefaultMarketplaceName is the marketplace identifier used when no
-// per-project override is configured. Shows up as the `name` field in the
-// generated Claude/Cursor/Codex marketplace.json and as the marketplace half
-// of `<plugin>@<marketplace>` install strings.
-const DefaultMarketplaceName = "speakeasy"
+// DefaultMarketplaceName returns the marketplace identifier used when no
+// per-project override is configured: the slugified org name with a
+// "-speakeasy" suffix. Shows up as the `name` field in the generated
+// Claude/Cursor/Codex marketplace.json and as the marketplace half of
+// `<plugin>@<marketplace>` install strings. Suffixing by org keeps the
+// default unique across customers so Claude Code installs from two Gram
+// orgs don't collide on the marketplace identifier.
+func DefaultMarketplaceName(orgName string) string {
+	return conv.ToSlug(orgName) + "-speakeasy"
+}
 
 func resolveMarketplaceName(cfg GenerateConfig) string {
-	return conv.Default(cfg.MarketplaceName, DefaultMarketplaceName)
+	return conv.Default(cfg.MarketplaceName, DefaultMarketplaceName(cfg.OrgName))
 }
 
 // pluginManifestVersion returns the version to stamp into generated

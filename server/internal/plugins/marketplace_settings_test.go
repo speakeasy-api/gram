@@ -1,27 +1,34 @@
 package plugins_test
 
 import (
+	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
 func TestPluginsService_GetMarketplaceSettings_DefaultsWhenUnset(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestPluginsService(t)
+	expectedDefault := defaultMarketplaceNameForTest(t, ctx, ti)
 
 	result, err := ti.service.GetMarketplaceSettings(ctx, &gen.GetMarketplaceSettingsPayload{})
 	require.NoError(t, err)
 	require.Nil(t, result.MarketplaceName)
-	require.Equal(t, plugins.DefaultMarketplaceName, result.DefaultName)
-	require.Equal(t, plugins.DefaultMarketplaceName, result.EffectiveName)
+	require.Equal(t, expectedDefault, result.DefaultName)
+	require.Equal(t, expectedDefault, result.EffectiveName)
+	require.True(t, strings.HasSuffix(expectedDefault, "-speakeasy"),
+		"default %q must carry the -speakeasy suffix so two orgs at default don't collide", expectedDefault)
 }
 
 func TestPluginsService_UpdateMarketplaceSettings_SetsOverrideWithoutRepublish(t *testing.T) {
@@ -62,7 +69,20 @@ func TestPluginsService_UpdateMarketplaceSettings_EmptyClearsOverride(t *testing
 	result, err := ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{MarketplaceName: &empty})
 	require.NoError(t, err)
 	require.Nil(t, result.Settings.MarketplaceName, "empty input must clear the override")
-	require.Equal(t, plugins.DefaultMarketplaceName, result.Settings.EffectiveName)
+	require.Equal(t, defaultMarketplaceNameForTest(t, ctx, ti), result.Settings.EffectiveName)
+}
+
+// defaultMarketplaceNameForTest computes the expected default marketplace name
+// for the org used by a given test, mirroring the impl's resolution path.
+func defaultMarketplaceNameForTest(t *testing.T, ctx context.Context, ti *testInstance) string {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgName, err := pluginsrepo.New(ti.conn).GetOrganizationName(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		orgName = authCtx.OrganizationSlug
+	}
+	return plugins.DefaultMarketplaceName(orgName)
 }
 
 func TestPluginsService_UpdateMarketplaceSettings_RejectsInvalidName(t *testing.T) {

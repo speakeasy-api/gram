@@ -1222,14 +1222,16 @@ func (s *Service) GetMarketplaceSettings(ctx context.Context, payload *gen.GetMa
 		return nil, oops.E(oops.CodeUnexpected, err, "get marketplace settings").Log(ctx, s.logger)
 	}
 
+	defaultName := s.resolveDefaultMarketplaceName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
+
 	effective := override
 	if effective == "" {
-		effective = DefaultMarketplaceName
+		effective = defaultName
 	}
 
 	return &gen.MarketplaceSettingsResult{
 		MarketplaceName: conv.PtrEmpty(override),
-		DefaultName:     DefaultMarketplaceName,
+		DefaultName:     defaultName,
 		EffectiveName:   effective,
 	}, nil
 }
@@ -1277,19 +1279,41 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 		}
 	}
 
+	defaultName := s.resolveDefaultMarketplaceName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
+
 	effective := override
 	if effective == "" {
-		effective = DefaultMarketplaceName
+		effective = defaultName
 	}
 
 	return &gen.UpdateMarketplaceSettingsResult{
 		Settings: &gen.MarketplaceSettingsResult{
 			MarketplaceName: conv.PtrEmpty(override),
-			DefaultName:     DefaultMarketplaceName,
+			DefaultName:     defaultName,
 			EffectiveName:   effective,
 		},
 		Republished: republished,
 	}, nil
+}
+
+// resolveDefaultMarketplaceName mirrors generateConfig's org-name resolution:
+// prefer the human-readable org name from organization_metadata so the
+// displayed default matches what the publish flow actually generates, falling
+// back to the org slug from the auth context if the lookup fails.
+func (s *Service) resolveDefaultMarketplaceName(ctx context.Context, orgID, orgSlug string) string {
+	orgName := orgSlug
+	switch fetched, err := s.repo.GetOrganizationName(ctx, orgID); {
+	case err == nil:
+		orgName = fetched
+	case errors.Is(err, pgx.ErrNoRows):
+		// Use the slug from auth context.
+	default:
+		s.logger.WarnContext(ctx, "failed to fetch organization name, falling back to slug",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
+	}
+	return DefaultMarketplaceName(orgName)
 }
 
 // pluginAPIKeyCandidate is the in-memory shape of a generated plugin API key

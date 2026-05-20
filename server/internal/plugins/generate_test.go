@@ -405,7 +405,7 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 	err = json.Unmarshal(files[".claude-plugin/marketplace.json"], &claudeManifest)
 	require.NoError(t, err)
 
-	require.Equal(t, DefaultMarketplaceName, claudeManifest.Name)
+	require.Equal(t, "acme-speakeasy", claudeManifest.Name)
 	require.Equal(t, "Acme", claudeManifest.Owner.Name)
 	require.Len(t, claudeManifest.Plugins, 2)
 	require.Equal(t, "./a", claudeManifest.Plugins[0].Source)
@@ -415,7 +415,7 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 	err = json.Unmarshal(files[".cursor-plugin/marketplace.json"], &cursorManifest)
 	require.NoError(t, err)
 
-	require.Equal(t, DefaultMarketplaceName, cursorManifest.Name)
+	require.Equal(t, "acme-speakeasy", cursorManifest.Name)
 	require.Len(t, cursorManifest.Plugins, 2)
 	require.Equal(t, "./a-cursor", cursorManifest.Plugins[0].Source)
 	require.Equal(t, "./b-cursor", cursorManifest.Plugins[1].Source)
