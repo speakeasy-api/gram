@@ -1,5 +1,11 @@
 # server
 
+## 0.55.1
+
+### Patch Changes
+
+- cb50037: Allow client_secret_post as an optional auth method in remote session negotiation
+
 ## 0.55.0
 
 ### Minor Changes
