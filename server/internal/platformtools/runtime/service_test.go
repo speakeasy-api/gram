@@ -56,6 +56,7 @@ func TestService_ExecuteTool_RequiresProjectAuthContext(t *testing.T) {
 			ProjectID: projectID.String(),
 			URN:       urn.NewTool(urn.ToolKindPlatform, "logs", "search_logs"),
 		},
+		Platform: &gateway.PlatformToolCallPlan{},
 	}, toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
@@ -82,6 +83,7 @@ func TestService_ExecuteTool_RejectsMismatchedProjectAuthContext(t *testing.T) {
 			ProjectID: descriptorProjectID.String(),
 			URN:       urn.NewTool(urn.ToolKindPlatform, "logs", "search_logs"),
 		},
+		Platform: &gateway.PlatformToolCallPlan{},
 	}, toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
