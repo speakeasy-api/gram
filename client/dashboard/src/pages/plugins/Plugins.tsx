@@ -205,20 +205,34 @@ export default function Plugins() {
       },
     });
 
+  const [isMarketplaceSettingsDialogOpen, setIsMarketplaceSettingsDialogOpen] =
+    useState(false);
+
   const trimmedMarketplaceName = marketplaceNameInput.trim();
   const currentMarketplaceName = marketplaceSettings.marketplaceName ?? "";
   const marketplaceNameDirty =
     trimmedMarketplaceName !== currentMarketplaceName.trim();
 
+  const handleOpenMarketplaceSettings = () => {
+    // Reset the input to the persisted value so reopening discards unsaved edits.
+    setMarketplaceNameInput(marketplaceSettings.marketplaceName ?? "");
+    setIsMarketplaceSettingsDialogOpen(true);
+  };
+
   const handleSaveMarketplaceName = () => {
-    updateMarketplaceSettingsMutation.mutate({
-      security: { sessionHeaderGramSession: "" },
-      request: {
-        updateMarketplaceSettingsRequestBody: {
-          marketplaceName: trimmedMarketplaceName || undefined,
+    updateMarketplaceSettingsMutation.mutate(
+      {
+        security: { sessionHeaderGramSession: "" },
+        request: {
+          updateMarketplaceSettingsRequestBody: {
+            marketplaceName: trimmedMarketplaceName || undefined,
+          },
         },
       },
-    });
+      {
+        onSuccess: () => setIsMarketplaceSettingsDialogOpen(false),
+      },
+    );
   };
 
   const createCard = (
@@ -243,27 +257,39 @@ export default function Plugins() {
             Code, Cursor, and Codex marketplaces via GitHub.
           </Page.Section.Description>
           <Page.Section.CTA>
-            {publishStatus?.configured && (
+            <Stack direction="horizontal" gap={2} align="center">
               <Button
-                variant="secondary"
-                onClick={() => setIsPublishDialogOpen(true)}
-                disabled={publishMutation.isPending}
+                variant="tertiary"
+                onClick={handleOpenMarketplaceSettings}
+                aria-label="Marketplace settings"
+                title="Marketplace settings"
               >
                 <Button.LeftIcon>
-                  <Icon
-                    name={publishStatus.connected ? "refresh-cw" : "upload"}
-                    className="h-4 w-4"
-                  />
+                  <Icon name="settings" className="h-4 w-4" />
                 </Button.LeftIcon>
-                <Button.Text>
-                  {publishMutation.isPending
-                    ? "Publishing..."
-                    : publishStatus.connected
-                      ? "Re-publish"
-                      : "Publish Private Marketplace"}
-                </Button.Text>
               </Button>
-            )}
+              {publishStatus?.configured && (
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsPublishDialogOpen(true)}
+                  disabled={publishMutation.isPending}
+                >
+                  <Button.LeftIcon>
+                    <Icon
+                      name={publishStatus.connected ? "refresh-cw" : "upload"}
+                      className="h-4 w-4"
+                    />
+                  </Button.LeftIcon>
+                  <Button.Text>
+                    {publishMutation.isPending
+                      ? "Publishing..."
+                      : publishStatus.connected
+                        ? "Re-publish"
+                        : "Publish Private Marketplace"}
+                  </Button.Text>
+                </Button>
+              )}
+            </Stack>
           </Page.Section.CTA>
           <Page.Section.Body>
             <Stack direction="vertical" gap={4}>
@@ -308,63 +334,6 @@ export default function Plugins() {
                 createCard={createCard}
               />
             </Stack>
-          </Page.Section.Body>
-        </Page.Section>
-
-        <Page.Section>
-          <Page.Section.Title>Marketplace settings</Page.Section.Title>
-          <Page.Section.Description className="w-3/4">
-            The marketplace name is the identifier your team types after the
-            plugin slug ({"<plugin>@<marketplace>"}) when installing from Claude
-            Code or Codex. Leave blank to use the default ({" "}
-            <code>{marketplaceSettings.defaultName}</code>). Applies to all
-            plugins in this project.
-          </Page.Section.Description>
-          <Page.Section.Body>
-            <form
-              className="flex max-w-md flex-col gap-3"
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSaveMarketplaceName();
-              }}
-            >
-              <InputField
-                label="Marketplace name"
-                name="marketplace_name"
-                value={marketplaceNameInput}
-                onChange={(e) => setMarketplaceNameInput(e.target.value)}
-                placeholder={marketplaceSettings.defaultName}
-                pattern="^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$"
-                title="Lowercase letters, digits, and hyphens. May not start or end with a hyphen."
-              />
-              <Type small muted>
-                Will publish as{" "}
-                <code>
-                  {trimmedMarketplaceName || marketplaceSettings.defaultName}
-                </code>
-                .{" "}
-                {publishStatus?.connected
-                  ? "Saving will regenerate the marketplace and push to GitHub."
-                  : "Will take effect on your next publish."}
-              </Type>
-              <Stack direction="horizontal" gap={2}>
-                <Button
-                  type="submit"
-                  disabled={
-                    !marketplaceNameDirty ||
-                    updateMarketplaceSettingsMutation.isPending
-                  }
-                >
-                  <Button.Text>
-                    {updateMarketplaceSettingsMutation.isPending
-                      ? publishStatus?.connected
-                        ? "Republishing..."
-                        : "Saving..."
-                      : "Save"}
-                  </Button.Text>
-                </Button>
-              </Stack>
-            </form>
           </Page.Section.Body>
         </Page.Section>
 
@@ -503,6 +472,77 @@ export default function Plugins() {
           onPublish={handlePublish}
           isPending={publishMutation.isPending}
         />
+
+        {/* Marketplace Settings Dialog */}
+        <Dialog
+          open={isMarketplaceSettingsDialogOpen}
+          onOpenChange={setIsMarketplaceSettingsDialogOpen}
+        >
+          <Dialog.Content>
+            <Dialog.Header>
+              <Dialog.Title>Marketplace settings</Dialog.Title>
+              <Dialog.Description>
+                The marketplace name is the identifier your team types after the
+                plugin slug ({"<plugin>@<marketplace>"}) when installing from
+                Claude Code or Codex. Leave blank to use the default (
+                <code>{marketplaceSettings.defaultName}</code>
+                ). Applies to all plugins in this project.
+              </Dialog.Description>
+            </Dialog.Header>
+            <form
+              className="flex flex-col gap-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveMarketplaceName();
+              }}
+            >
+              <InputField
+                label="Marketplace name"
+                name="marketplace_name"
+                value={marketplaceNameInput}
+                onChange={(e) => setMarketplaceNameInput(e.target.value)}
+                placeholder={marketplaceSettings.defaultName}
+                pattern="^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$"
+                title="Lowercase letters, digits, and hyphens. May not start or end with a hyphen."
+                autoFocus
+              />
+              <Type small muted>
+                Will publish as{" "}
+                <code>
+                  {trimmedMarketplaceName || marketplaceSettings.defaultName}
+                </code>
+                .{" "}
+                {publishStatus?.connected
+                  ? "Saving will regenerate the marketplace and push to GitHub."
+                  : "Will take effect on your next publish."}
+              </Type>
+              <Dialog.Footer>
+                <Button
+                  variant="secondary"
+                  type="button"
+                  onClick={() => setIsMarketplaceSettingsDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={
+                    !marketplaceNameDirty ||
+                    updateMarketplaceSettingsMutation.isPending
+                  }
+                >
+                  <Button.Text>
+                    {updateMarketplaceSettingsMutation.isPending
+                      ? publishStatus?.connected
+                        ? "Republishing..."
+                        : "Saving..."
+                      : "Save"}
+                  </Button.Text>
+                </Button>
+              </Dialog.Footer>
+            </form>
+          </Dialog.Content>
+        </Dialog>
       </Page.Body>
     </Page>
   );
