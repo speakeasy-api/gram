@@ -1,6 +1,5 @@
 ---
 "dashboard": patch
-"@gram/client": patch
 "@gram-ai/elements": patch
 "server": patch
 ---
