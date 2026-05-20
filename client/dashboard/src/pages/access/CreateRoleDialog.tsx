@@ -52,7 +52,6 @@ import type {
   ActivePanel,
   AnnotationHint,
   PolicyEffect,
-  ResourceType,
   RoleGrant,
   Scope,
   ScopeRule,
@@ -472,7 +471,7 @@ export function CreateRoleDialog({
     const sdkGrants: {
       scope: string;
       effect?: "allow" | "deny";
-      selectors?: any[];
+      selectors?: Selector[];
     }[] = [];
 
     for (const grant of Object.values(grants)) {
