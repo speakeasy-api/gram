@@ -470,97 +470,98 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 
 	deploymentID := conv.PtrValOr(payload.Filter.DeploymentID, "")
 
-	// Fetch all per-user costs (no pagination — we need all users to aggregate by role).
-	items, err := s.chRepo.SearchUsers(ctx, repo.SearchUsersParams{
-		GramProjectID:    params.projectID,
-		TimeStart:        params.timeStart,
-		TimeEnd:          params.timeEnd,
-		GramDeploymentID: deploymentID,
-		EventSource:      conv.PtrValOr(payload.Filter.EventSource, ""),
-		HookSource:       conv.PtrValOr(payload.Filter.HookSource, ""),
-		GroupBy:          "user_id",
-		UserIDs:          payload.Filter.UserIds,
-		SortOrder:        "desc",
-		Cursor:           "",
-		Limit:            10001, // Upper bound; orgs rarely have >10k users
+	// Fetch per-user costs from ClickHouse and role assignments from Postgres
+	// concurrently — the two queries are independent.
+	var items []repo.UserSummary
+	var assignments []orgsRepo.ListActiveRoleAssignmentsByOrganizationRow
+
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		var fetchErr error
+		items, fetchErr = s.chRepo.SearchUsers(egCtx, repo.SearchUsersParams{
+			GramProjectID:    params.projectID,
+			TimeStart:        params.timeStart,
+			TimeEnd:          params.timeEnd,
+			GramDeploymentID: deploymentID,
+			EventSource:      conv.PtrValOr(payload.Filter.EventSource, ""),
+			HookSource:       conv.PtrValOr(payload.Filter.HookSource, ""),
+			GroupBy:          "user_id",
+			UserIDs:          payload.Filter.UserIds,
+			SortOrder:        "desc",
+			Cursor:           "",
+			Limit:            10001, // Upper bound; orgs rarely have >10k users
+		})
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error searching users for role aggregation")
+		}
+		return nil
 	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error searching users for role aggregation")
+	eg.Go(func() error {
+		var fetchErr error
+		assignments, fetchErr = s.orgsRepo.ListActiveRoleAssignmentsByOrganization(egCtx, params.organizationID)
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error fetching role assignments")
+		}
+		return nil
+	})
+	if err := eg.Wait(); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching role usage data")
 	}
 
-	// Fetch user→role mapping from Postgres.
-	assignments, err := s.orgsRepo.ListActiveRoleAssignmentsByOrganization(ctx, params.organizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error fetching role assignments")
-	}
-
-	// Build user_id → role_id map. Extract the role ID from the URN
-	// (format: "role:organization:<id>" or "role:global:<id>").
-	// A user may have multiple roles; we use the first one found.
+	// Build user_id → role_id map. A user may have multiple role assignments;
+	// we take the first one encountered.
 	userToRoleID := make(map[string]string, len(assignments))
 	for _, a := range assignments {
-		if !a.UserID.Valid {
-			continue
+		if a.UserID.Valid {
+			if _, exists := userToRoleID[a.UserID.String]; !exists {
+				userToRoleID[a.UserID.String] = roleIDFromURN(a.RoleUrn)
+			}
 		}
-		if _, exists := userToRoleID[a.UserID.String]; exists {
-			continue
-		}
-		userToRoleID[a.UserID.String] = roleIDFromURN(a.RoleUrn)
 	}
 
-	// Aggregate per-user costs by role.
+	// Single pass: aggregate per-user costs by role and build the response.
 	type roleAgg struct {
-		userCount         int
-		totalCost         float64
-		totalInputTokens  int64
-		totalOutputTokens int64
-		totalTokens       int64
-		totalChats        uint64
+		summary *telem_gen.RoleSummary
 	}
-	aggByRole := make(map[string]*roleAgg)
+	aggByRole := make(map[string]*roleAgg, len(userToRoleID))
 
 	const unassignedRoleID = "unassigned"
 	for _, item := range items {
-		roleID, ok := userToRoleID[item.UserID]
-		if !ok {
-			roleID = unassignedRoleID
+		roleID := unassignedRoleID
+		if id, ok := userToRoleID[item.UserID]; ok {
+			roleID = id
 		}
 		agg, exists := aggByRole[roleID]
 		if !exists {
-			agg = &roleAgg{
-				userCount:         0,
-				totalCost:         0,
-				totalInputTokens:  0,
-				totalOutputTokens: 0,
-				totalTokens:       0,
-				totalChats:        0,
-			}
+			agg = &roleAgg{summary: &telem_gen.RoleSummary{
+				RoleID:            roleID,
+				UserCount:         0,
+				TotalCost:         0,
+				CostPerUser:       0,
+				TotalInputTokens:  0,
+				TotalOutputTokens: 0,
+				TotalTokens:       0,
+				TotalChats:        0,
+			}}
 			aggByRole[roleID] = agg
 		}
-		agg.userCount++
-		agg.totalCost += item.TotalCost
-		agg.totalInputTokens += item.TotalInputTokens
-		agg.totalOutputTokens += item.TotalOutputTokens
-		agg.totalTokens += item.TotalTokens
-		agg.totalChats += item.TotalChats
+		s := agg.summary
+		s.UserCount++
+		s.TotalCost += item.TotalCost
+		s.TotalInputTokens += item.TotalInputTokens
+		s.TotalOutputTokens += item.TotalOutputTokens
+		s.TotalTokens += item.TotalTokens
+		s.TotalChats += int64(item.TotalChats) //nolint:gosec // Bounded count
 	}
 
 	roles := make([]*telem_gen.RoleSummary, 0, len(aggByRole))
-	for roleID, agg := range aggByRole {
-		costPerUser := 0.0
-		if agg.userCount > 0 {
-			costPerUser = agg.totalCost / float64(agg.userCount)
+	for _, agg := range aggByRole {
+		rs := agg.summary
+		if rs.UserCount > 0 {
+			rs.CostPerUser = sanitizeFloat64(rs.TotalCost / float64(rs.UserCount))
 		}
-		roles = append(roles, &telem_gen.RoleSummary{
-			RoleID:            roleID,
-			UserCount:         agg.userCount,
-			TotalCost:         sanitizeFloat64(agg.totalCost),
-			CostPerUser:       sanitizeFloat64(costPerUser),
-			TotalInputTokens:  agg.totalInputTokens,
-			TotalOutputTokens: agg.totalOutputTokens,
-			TotalTokens:       agg.totalTokens,
-			TotalChats:        int64(agg.totalChats), //nolint:gosec // Bounded count
-		})
+		rs.TotalCost = sanitizeFloat64(rs.TotalCost)
+		roles = append(roles, rs)
 	}
 
 	// Sort by total cost descending.
