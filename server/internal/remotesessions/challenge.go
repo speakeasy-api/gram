@@ -154,23 +154,14 @@ type Client struct {
 	IssuerURL             string
 	AuthorizationEndpoint string
 	TokenEndpoint         string
-	// ClientScope is the optional explicit override stored on the
-	// remote_session_client. When non-empty the OAuth dance prefers it to
-	// IssuerScopesSupported.
-	ClientScope []string
-	// IssuerScopesSupported is the issuer's advertised scopes_supported.
-	// Used as the fallback scope set when ClientScope is empty.
+	// ClientScope, when non-empty, overrides IssuerScopesSupported in the
+	// OAuth dance.
+	ClientScope           []string
 	IssuerScopesSupported []string
-	// Audience is the optional upstream OAuth audience. When non-empty
-	// the OAuth dance emits the `audience` parameter on the authorize
-	// redirect and on every token endpoint call (code exchange + refresh).
-	Audience    string
-	Passthrough bool
+	Audience              string
+	Passthrough           bool
 }
 
-// resolveScopes returns the scope set the OAuth dance should request:
-// an explicit client-level override if one is configured, otherwise the
-// issuer's advertised scopes_supported.
 func (c Client) resolveScopes() []string {
 	if len(c.ClientScope) > 0 {
 		return c.ClientScope
@@ -205,7 +196,7 @@ func (m *ChallengeManager) ListClients(
 			TokenEndpoint:         conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
 			ClientScope:           r.ClientScope,
 			IssuerScopesSupported: r.ScopesSupported,
-			Audience:              conv.PtrValOr(conv.FromPGText[string](r.ClientAudience), ""),
+			Audience:              conv.FromPGTextOrEmpty[string](r.ClientAudience),
 			Passthrough:           r.Passthrough,
 		})
 	}
@@ -393,7 +384,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	}
 
 	authMethod := ResolveTokenEndpointAuthMethod(clientRow.TokenEndpointAuthMethod.String)
-	audience := conv.PtrValOr(conv.FromPGText[string](clientRow.Audience), "")
+	audience := conv.FromPGTextOrEmpty[string](clientRow.Audience)
 	tok, err := m.exchangeCode(ctx, state, clientRow.ClientID, clientSecret, authMethod, audience, code)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").Log(ctx, logger)
