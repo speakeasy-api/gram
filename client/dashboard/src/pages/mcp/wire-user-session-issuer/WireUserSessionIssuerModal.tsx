@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
 import { useIsAdmin } from "@/contexts/Auth";
+import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
 import { remoteLoginCallbackURL } from "@/lib/externalMcpUserSessions";
 import { Toolset } from "@/lib/toolTypes";
@@ -119,10 +120,11 @@ function WireUserSessionIssuerBody({
   const remoteIssuers = useRemoteSessionIssuers();
   const remoteClients = useRemoteSessionClients();
 
+  const { fetch: authedFetch } = useFetcher();
   const provided = useMemo(
     () =>
       wireUserSessionIssuerMachine.provide({
-        actors: createMigrationServices(client),
+        actors: createMigrationServices(client, authedFetch),
         actions: {
           invalidateOnUserSessionIssuerCreate: () =>
             invalidateAllUserSessionIssuers(queryClient),
@@ -133,7 +135,7 @@ function WireUserSessionIssuerBody({
           invalidateOnToolsetLink: () => invalidateAllToolset(queryClient),
         },
       }),
-    [client, queryClient],
+    [client, queryClient, authedFetch],
   );
 
   if (!defaults || !paradigm) {

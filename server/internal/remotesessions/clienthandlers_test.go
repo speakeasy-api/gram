@@ -2,7 +2,6 @@ package remotesessions_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -85,9 +83,8 @@ func TestCreateRemoteSessionClient_Manual(t *testing.T) {
 	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
 		UserSessionIssuerID:   userIssuerID,
-		ClientID:              &clientID,
+		ClientID:              clientID,
 		ClientSecret:          &clientSecret,
-		AutoRegister:          nil,
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -104,31 +101,69 @@ func TestCreateRemoteSessionClient_Manual(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
-func TestCreateRemoteSessionClient_AutoRegister(t *testing.T) {
+func TestCreateRemoteSessionClient_Manual_WithAuthMethodPost(t *testing.T) {
 	t.Parallel()
 
-	idp := devidptest.Launch(t, devidptest.LaunchOpts{})
 	ctx, ti := newTestService(t)
 
-	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-auto", idp.OAuth21URL+"/register")
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-auto").String()
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-post", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-post").String()
 
-	autoRegister := true
+	clientID := "post-client-id"
+	clientSecret := "post-client-secret"
+	authMethod := "client_secret_post"
+
 	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
-		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerID:   userIssuerID,
-		ClientID:              nil,
-		ClientSecret:          nil,
-		AutoRegister:          &autoRegister,
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
+		RemoteSessionIssuerID:   issuerID,
+		UserSessionIssuerID:     userIssuerID,
+		ClientID:                clientID,
+		ClientSecret:            &clientSecret,
+		TokenEndpointAuthMethod: &authMethod,
+		SessionToken:            nil,
+		ApikeyToken:             nil,
+		ProjectSlugInput:        nil,
 	})
 	require.NoError(t, err)
-	require.True(t, strings.HasPrefix(result.ClientID, "client_"), "dev-idp DCR mints client_<hex> ids")
-	// dev-idp's /register sets client_secret_expires_at=0 per RFC 7591
-	// (0 = never expires), which Gram surfaces as a nil ExpiresAt.
-	require.Nil(t, result.ClientSecretExpiresAt)
+	require.NotNil(t, result.TokenEndpointAuthMethod)
+	require.Equal(t, "client_secret_post", *result.TokenEndpointAuthMethod)
+
+	// Round-trip via Get to confirm the column survives a read after the
+	// transaction closes.
+	fetched, err := ti.service.GetRemoteSessionClient(ctx, &clientsgen.GetRemoteSessionClientPayload{
+		ID:               result.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, fetched.TokenEndpointAuthMethod)
+	require.Equal(t, "client_secret_post", *fetched.TokenEndpointAuthMethod)
+}
+
+func TestCreateRemoteSessionClient_Manual_AuthMethodOmittedStaysNil(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-nil", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-nil").String()
+
+	clientID := "nil-client-id"
+	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID:   issuerID,
+		UserSessionIssuerID:     userIssuerID,
+		ClientID:                clientID,
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		SessionToken:            nil,
+		ApikeyToken:             nil,
+		ProjectSlugInput:        nil,
+	})
+	require.NoError(t, err)
+	// NULL in storage surfaces as a nil pointer; runtime resolves to
+	// client_secret_basic via resolveClientAuthMethod, but the API surface
+	// preserves the unset state.
+	require.Nil(t, result.TokenEndpointAuthMethod)
 }
 
 func TestCreateRemoteSessionClient_RBACForbidden(t *testing.T) {
@@ -151,9 +186,8 @@ func TestCreateRemoteSessionClient_RBACForbidden(t *testing.T) {
 	_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
 		UserSessionIssuerID:   userIssuerID,
-		ClientID:              &clientID,
+		ClientID:              clientID,
 		ClientSecret:          nil,
-		AutoRegister:          nil,
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -174,9 +208,8 @@ func TestGetRemoteSessionClient(t *testing.T) {
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
 		UserSessionIssuerID:   userIssuerID,
-		ClientID:              &clientID,
+		ClientID:              clientID,
 		ClientSecret:          nil,
-		AutoRegister:          nil,
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -216,9 +249,8 @@ func TestListRemoteSessionClients(t *testing.T) {
 		_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 			RemoteSessionIssuerID: issuerID,
 			UserSessionIssuerID:   userIssuerID,
-			ClientID:              &clientID,
+			ClientID:              clientID,
 			ClientSecret:          nil,
-			AutoRegister:          nil,
 			SessionToken:          nil,
 			ApikeyToken:           nil,
 			ProjectSlugInput:      nil,
@@ -301,9 +333,8 @@ func TestUpdateRemoteSessionClient(t *testing.T) {
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
 		UserSessionIssuerID:   userIssuerID,
-		ClientID:              &clientID,
+		ClientID:              clientID,
 		ClientSecret:          nil,
-		AutoRegister:          nil,
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
@@ -315,12 +346,13 @@ func TestUpdateRemoteSessionClient(t *testing.T) {
 
 	newSecret := "rotated-secret"
 	updated, err := ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{
-		ID:                  created.ID,
-		ClientSecret:        &newSecret,
-		UserSessionIssuerID: &otherUserIssuerID,
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
+		ID:                      created.ID,
+		ClientSecret:            &newSecret,
+		UserSessionIssuerID:     &otherUserIssuerID,
+		TokenEndpointAuthMethod: nil,
+		SessionToken:            nil,
+		ApikeyToken:             nil,
+		ProjectSlugInput:        nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, otherUserIssuerID, updated.UserSessionIssuerID)
@@ -329,6 +361,44 @@ func TestUpdateRemoteSessionClient(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientUpdate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestUpdateRemoteSessionClient_SwitchAuthMethod(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-switch", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-switch").String()
+	clientID := "switch-client-id"
+
+	// Start with default (NULL) auth method.
+	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID:   issuerID,
+		UserSessionIssuerID:     userIssuerID,
+		ClientID:                clientID,
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		SessionToken:            nil,
+		ApikeyToken:             nil,
+		ProjectSlugInput:        nil,
+	})
+	require.NoError(t, err)
+	require.Nil(t, created.TokenEndpointAuthMethod)
+
+	post := "client_secret_post"
+	updated, err := ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{
+		ID:                      created.ID,
+		ClientSecret:            nil,
+		UserSessionIssuerID:     nil,
+		TokenEndpointAuthMethod: &post,
+		SessionToken:            nil,
+		ApikeyToken:             nil,
+		ProjectSlugInput:        nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.TokenEndpointAuthMethod)
+	require.Equal(t, "client_secret_post", *updated.TokenEndpointAuthMethod)
 }
 
 func TestDeleteRemoteSessionClient(t *testing.T) {
@@ -343,9 +413,8 @@ func TestDeleteRemoteSessionClient(t *testing.T) {
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 		RemoteSessionIssuerID: issuerID,
 		UserSessionIssuerID:   userIssuerID,
-		ClientID:              &clientID,
+		ClientID:              clientID,
 		ClientSecret:          nil,
-		AutoRegister:          nil,
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
