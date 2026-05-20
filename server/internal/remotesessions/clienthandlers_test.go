@@ -500,6 +500,110 @@ func TestUpdateRemoteSessionClient_SetsScope(t *testing.T) {
 	require.Equal(t, scope, updated.Scope)
 }
 
+func TestCreateRemoteSessionClient_PersistsAudience(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-aud-create", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-aud-create").String()
+
+	clientID := "aud-create-client-id"
+	audience := "https://api.example.com"
+
+	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID:   issuerID,
+		UserSessionIssuerID:     userIssuerID,
+		ClientID:                clientID,
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                &audience,
+		SessionToken:            nil,
+		ApikeyToken:             nil,
+		ProjectSlugInput:        nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.Audience)
+	require.Equal(t, audience, *result.Audience)
+
+	fetched, err := ti.service.GetRemoteSessionClient(ctx, &clientsgen.GetRemoteSessionClientPayload{
+		ID:               result.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, fetched.Audience)
+	require.Equal(t, audience, *fetched.Audience)
+}
+
+func TestCreateRemoteSessionClient_AudienceOmittedStaysNil(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-aud-omit", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-aud-omit").String()
+
+	clientID := "aud-omit-client-id"
+	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID:   issuerID,
+		UserSessionIssuerID:     userIssuerID,
+		ClientID:                clientID,
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+		SessionToken:            nil,
+		ApikeyToken:             nil,
+		ProjectSlugInput:        nil,
+	})
+	require.NoError(t, err)
+	require.Nil(t, result.Audience)
+}
+
+func TestUpdateRemoteSessionClient_SetsAudience(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-aud-update", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-aud-update").String()
+	clientID := "aud-update-client-id"
+
+	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID:   issuerID,
+		UserSessionIssuerID:     userIssuerID,
+		ClientID:                clientID,
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+		SessionToken:            nil,
+		ApikeyToken:             nil,
+		ProjectSlugInput:        nil,
+	})
+	require.NoError(t, err)
+	require.Nil(t, created.Audience)
+
+	audience := "https://api.example.com"
+	updated, err := ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{
+		ID:                      created.ID,
+		ClientSecret:            nil,
+		UserSessionIssuerID:     nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                &audience,
+		SessionToken:            nil,
+		ApikeyToken:             nil,
+		ProjectSlugInput:        nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Audience)
+	require.Equal(t, audience, *updated.Audience)
+}
+
 func TestDeleteRemoteSessionClient(t *testing.T) {
 	t.Parallel()
 

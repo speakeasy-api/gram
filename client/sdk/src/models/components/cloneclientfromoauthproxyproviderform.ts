@@ -25,6 +25,10 @@ export type TokenEndpointAuthMethod = ClosedEnum<
  */
 export type CloneClientFromOAuthProxyProviderForm = {
   /**
+   * Optional upstream OAuth audience to send on the authorize redirect and token exchange for the cloned client.
+   */
+  audience?: string | undefined;
+  /**
    * The oauth_proxy_provider to read client_id / client_secret from. Must live in the caller's project.
    */
   oauthProxyProviderId: string;
@@ -53,6 +57,7 @@ export const TokenEndpointAuthMethod$outboundSchema: z.ZodMiniEnum<
 
 /** @internal */
 export type CloneClientFromOAuthProxyProviderForm$Outbound = {
+  audience?: string | undefined;
   oauth_proxy_provider_id: string;
   remote_session_issuer_id: string;
   scope?: Array<string> | undefined;
@@ -67,6 +72,7 @@ export const CloneClientFromOAuthProxyProviderForm$outboundSchema:
     CloneClientFromOAuthProxyProviderForm
   > = z.pipe(
     z.object({
+      audience: z.optional(z.string()),
       oauthProxyProviderId: z.string(),
       remoteSessionIssuerId: z.string(),
       scope: z.optional(z.array(z.string())),

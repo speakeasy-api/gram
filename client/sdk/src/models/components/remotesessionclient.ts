@@ -28,6 +28,10 @@ export type RemoteSessionClientTokenEndpointAuthMethod = ClosedEnum<
  */
 export type RemoteSessionClient = {
   /**
+   * Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.
+   */
+  audience?: string | undefined;
+  /**
    * The client_id used to identify this client at the issuer's token and authorization endpoints.
    */
   clientId: string;
@@ -78,6 +82,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    audience: z.optional(z.string()),
     client_id: z.string(),
     client_id_issued_at: z.pipe(
       z.iso.datetime({ offset: true }),
