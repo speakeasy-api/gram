@@ -180,6 +180,18 @@ func TestAuthorize_PublicToolsetStampsSubject(t *testing.T) {
 			wantKind: urn.SessionSubjectKindAnonymous,
 		},
 		{
+			// Stale header shouldn't shadow a valid cookie on the same request.
+			name: "stale_header_with_valid_cookie",
+			setupCtx: func() context.Context {
+				return contextvalues.SetSessionTokenInContext(context.Background(), sessionToken)
+			},
+			mutate: func(r *http.Request) {
+				r.Header.Set(constants.SessionHeader, "not-a-real-session-token")
+			},
+			wantKind: urn.SessionSubjectKindUser,
+			wantID:   authCtx.UserID,
+		},
+		{
 			name: "user_bearer_jwt",
 			mutate: func(r *http.Request) {
 				r.Header.Set("Authorization", "Bearer "+bearerUserToken)

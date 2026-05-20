@@ -174,18 +174,20 @@ func (s *Service) tryIdentifyGramUser(ctx context.Context, r *http.Request, endp
 }
 
 func (s *Service) identifyByGramSession(ctx context.Context, r *http.Request) (string, bool) {
-	token := r.Header.Get(constants.SessionHeader)
-	if token == "" {
-		token, _ = contextvalues.GetSessionTokenFromContext(ctx)
+	headerToken := r.Header.Get(constants.SessionHeader)
+	cookieToken, _ := contextvalues.GetSessionTokenFromContext(ctx)
+	// Header and cookie are tried independently — a stale Gram-Session header
+	// shouldn't shadow a valid dashboard cookie on the same request.
+	for _, token := range [2]string{headerToken, cookieToken} {
+		if token == "" {
+			continue
+		}
+		session, err := s.sessions.GetSession(ctx, token)
+		if err == nil && session.UserID != "" {
+			return session.UserID, true
+		}
 	}
-	if token == "" {
-		return "", false
-	}
-	session, err := s.sessions.GetSession(ctx, token)
-	if err != nil || session.UserID == "" {
-		return "", false
-	}
-	return session.UserID, true
+	return "", false
 }
 
 func (s *Service) identifyByUserSessionJWT(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint) (string, bool) {
