@@ -152,6 +152,7 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 		APIKeyID:                  "",
 		JSONSchema:                nil,
 		Reasoning:                 &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
+		CacheControl:              nil,
 		NormalizeOutboundMessages: false,
 	})
 	if err != nil {

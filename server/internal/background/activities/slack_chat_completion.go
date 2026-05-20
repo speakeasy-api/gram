@@ -101,6 +101,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 				Description: "Returns the current date and time in ISO 8601 format.",
 				Parameters:  json.RawMessage(currentDatetimeParamsJSON),
 			},
+			CacheControl: nil,
 		},
 		Executor: func(ctx context.Context, rawArgs string) (string, error) {
 			return time.Now().Format(time.RFC3339), nil
