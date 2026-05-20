@@ -161,7 +161,11 @@ type Client struct {
 	// IssuerScopesSupported is the issuer's advertised scopes_supported.
 	// Used as the fallback scope set when ClientScope is empty.
 	IssuerScopesSupported []string
-	Passthrough           bool
+	// Audience is the optional upstream OAuth audience. When non-empty
+	// the OAuth dance emits the `audience` parameter on the authorize
+	// redirect and on every token endpoint call (code exchange + refresh).
+	Audience    string
+	Passthrough bool
 }
 
 // resolveScopes returns the scope set the OAuth dance should request:
@@ -201,6 +205,7 @@ func (m *ChallengeManager) ListClients(
 			TokenEndpoint:         conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
 			ClientScope:           r.ClientScope,
 			IssuerScopesSupported: r.ScopesSupported,
+			Audience:              conv.PtrValOr(conv.FromPGText[string](r.ClientAudience), ""),
 			Passthrough:           r.Passthrough,
 		})
 	}
@@ -299,6 +304,9 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	if scopes := client.resolveScopes(); len(scopes) > 0 {
 		q.Set("scope", strings.Join(scopes, " "))
 	}
+	if client.Audience != "" {
+		q.Set("audience", client.Audience)
+	}
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }
@@ -385,7 +393,8 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	}
 
 	authMethod := ResolveTokenEndpointAuthMethod(clientRow.TokenEndpointAuthMethod.String)
-	tok, err := m.exchangeCode(ctx, state, clientRow.ClientID, clientSecret, authMethod, code)
+	audience := conv.PtrValOr(conv.FromPGText[string](clientRow.Audience), "")
+	tok, err := m.exchangeCode(ctx, state, clientRow.ClientID, clientSecret, authMethod, audience, code)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").Log(ctx, logger)
 	}
@@ -482,6 +491,7 @@ func (m *ChallengeManager) exchangeCode(
 	externalClientID string,
 	clientSecret string,
 	authMethod TokenEndpointAuthMethod,
+	audience string,
 	code string,
 ) (tokenResponse, error) {
 	form := url.Values{}
@@ -490,6 +500,9 @@ func (m *ChallengeManager) exchangeCode(
 	form.Set("redirect_uri", state.RedirectURI)
 	form.Set("client_id", externalClientID)
 	form.Set("code_verifier", state.CodeVerifier)
+	if audience != "" {
+		form.Set("audience", audience)
+	}
 
 	req, err := newTokenEndpointRequest(ctx, state.TokenEndpoint, form, authMethod, externalClientID, clientSecret)
 	if err != nil {

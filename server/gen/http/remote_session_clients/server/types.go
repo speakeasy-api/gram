@@ -8,6 +8,8 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	remotesessionclients "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -2540,6 +2542,20 @@ func ValidateCreateRemoteSessionClientRequestBody(body *CreateRemoteSessionClien
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
 		}
 	}
+	for _, e := range body.Scope {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
+		if utf8.RuneCountInString(e) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
+		}
+	}
+	if body.Audience != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
+	}
+	if body.Audience != nil {
+		if utf8.RuneCountInString(*body.Audience) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
+		}
+	}
 	return
 }
 
@@ -2569,6 +2585,20 @@ func ValidateCloneClientFromOAuthProxyProviderRequestBody(body *CloneClientFromO
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
 		}
 	}
+	for _, e := range body.Scope {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
+		if utf8.RuneCountInString(e) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
+		}
+	}
+	if body.Audience != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
+	}
+	if body.Audience != nil {
+		if utf8.RuneCountInString(*body.Audience) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
+		}
+	}
 	return
 }
 
@@ -2587,6 +2617,20 @@ func ValidateUpdateRemoteSessionClientRequestBody(body *UpdateRemoteSessionClien
 	if body.TokenEndpointAuthMethod != nil {
 		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
+		}
+	}
+	for _, e := range body.Scope {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
+		if utf8.RuneCountInString(e) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
+		}
+	}
+	if body.Audience != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
+	}
+	if body.Audience != nil {
+		if utf8.RuneCountInString(*body.Audience) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
 		}
 	}
 	return
