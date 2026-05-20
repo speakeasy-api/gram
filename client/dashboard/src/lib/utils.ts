@@ -53,11 +53,12 @@ export function assert(condition: unknown, message: string): asserts condition {
 
 /**
  * Returns true when the dashboard is served from the setup subdomain
- * (setup.getgram.ai in prod, setup.localhost in dev).
+ * (setup.getgram.ai in prod, setup.dev.getgram.ai in dev,
+ * setup.localhost in local dev, setup-pr-*.dev.getgram.ai in preview deploys).
  */
 export function isSetupDomain(): boolean {
   const hostname = window.location.hostname;
-  return hostname.startsWith("setup.");
+  return hostname.startsWith("setup.") || hostname.startsWith("setup-");
 }
 
 export function getCustomDomainCNAME(): string {
