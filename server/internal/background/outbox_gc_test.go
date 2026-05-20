@@ -22,13 +22,10 @@ func TestOutboxGCWorkflow_PartialBatch(t *testing.T) {
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, cutoff time.Time, batchSize int32) (int64, error) {
 			gcCallCount++
-			if gcCallCount == 1 {
-				gotCutoff = cutoff
-				gotBatchSize = batchSize
-				// Partial batch — fewer rows than limit, workflow should sleep then loop again.
-				return int64(outboxGCBatchSize) - 1, nil
-			}
-			return 0, errStop
+			gotCutoff = cutoff
+			gotBatchSize = batchSize
+			// Partial batch — fewer rows than limit, workflow should return nil immediately.
+			return int64(outboxGCBatchSize) - 1, nil
 		},
 		activity.RegisterOptions{Name: "GCOutboxProcessedRows"},
 	)
@@ -36,13 +33,13 @@ func TestOutboxGCWorkflow_PartialBatch(t *testing.T) {
 	env.ExecuteWorkflow(OutboxGCWorkflow)
 
 	require.True(t, env.IsWorkflowCompleted())
-	require.Error(t, env.GetWorkflowError()) // stopped by sentinel
-	require.Equal(t, 2, gcCallCount)         // first partial batch, second errStop after sleep
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, 1, gcCallCount)
 	require.Equal(t, outboxGCBatchSize, gotBatchSize)
 	require.WithinDuration(t, time.Now().Add(-outboxGCRetentionPeriod), gotCutoff, time.Second)
 }
 
-func TestOutboxGCWorkflow_FullBatchSkipsSleep(t *testing.T) {
+func TestOutboxGCWorkflow_FullBatchContinues(t *testing.T) {
 	t.Parallel()
 
 	var suite testsuite.WorkflowTestSuite
@@ -54,13 +51,11 @@ func TestOutboxGCWorkflow_FullBatchSkipsSleep(t *testing.T) {
 			gcCallCount++
 			switch gcCallCount {
 			case 1:
-				// Full batch — workflow must NOT sleep before next poll.
+				// Full batch — workflow must immediately re-poll without sleeping.
 				return int64(outboxGCBatchSize), nil
-			case 2:
-				// Partial batch — workflow sleeps, then loops.
-				return 0, nil
 			default:
-				return 0, errStop
+				// Partial batch — workflow returns nil.
+				return 0, nil
 			}
 		},
 		activity.RegisterOptions{Name: "GCOutboxProcessedRows"},
@@ -69,8 +64,33 @@ func TestOutboxGCWorkflow_FullBatchSkipsSleep(t *testing.T) {
 	env.ExecuteWorkflow(OutboxGCWorkflow)
 
 	require.True(t, env.IsWorkflowCompleted())
-	require.Error(t, env.GetWorkflowError()) // stopped by sentinel
-	require.Equal(t, 3, gcCallCount)         // full batch → immediate re-poll → partial batch → sleep → errStop
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, 2, gcCallCount) // full batch → immediate re-poll → partial batch → return nil
+}
+
+func TestOutboxGCWorkflow_MultipleFullBatches(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	gcCallCount := 0
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ time.Time, _ int32) (int64, error) {
+			gcCallCount++
+			if gcCallCount < 4 {
+				return int64(outboxGCBatchSize), nil
+			}
+			return 0, nil
+		},
+		activity.RegisterOptions{Name: "GCOutboxProcessedRows"},
+	)
+
+	env.ExecuteWorkflow(OutboxGCWorkflow)
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, 4, gcCallCount) // 3 full batches → immediate re-poll each time → partial → return nil
 }
 
 func TestOutboxGCWorkflow_ActivityError(t *testing.T) {
