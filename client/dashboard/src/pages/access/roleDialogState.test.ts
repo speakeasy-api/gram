@@ -337,7 +337,7 @@ const projects = [
 ];
 
 function sel(overrides: Partial<Selector> = {}): Selector {
-  return { resourceId: "*", resourceKind: "mcp_server", ...overrides };
+  return { resourceId: "*", resourceKind: "mcp", ...overrides };
 }
 
 // --- computeRuleLabel ---

@@ -16,6 +16,7 @@ import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
 import type { Role } from "@gram/client/models/components/role.js";
+import type { RoleGrant as SdkRoleGrant } from "@gram/client/models/components/rolegrant.js";
 import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
 import {
   invalidateAllMembers,
@@ -199,7 +200,7 @@ export function CreateRoleDialog({
   // ─── Rule editor state ────────────────────────────────────────
   type DialogStep = "form" | "rule-editor";
   const [dialogStep, setDialogStep] = useState<DialogStep>("form");
-  const [editingScopeSlug, setEditingScopeSlug] = useState<string | null>(null);
+  const [editingScopeSlug, setEditingScopeSlug] = useState<Scope | null>(null);
   const [editingRuleIndex, setEditingRuleIndex] = useState<number>(-1);
   const [draftRule, setDraftRule] = useState<ScopeRule | null>(null);
 
@@ -320,7 +321,7 @@ export function CreateRoleDialog({
     });
   };
 
-  const openRuleEditor = (scopeSlug: string, ruleIndex: number) => {
+  const openRuleEditor = (scopeSlug: Scope, ruleIndex: number) => {
     setEditingScopeSlug(scopeSlug);
     setEditingRuleIndex(ruleIndex);
 
@@ -468,11 +469,7 @@ export function CreateRoleDialog({
   // ─── Submit ───────────────────────────────────────────────────
 
   const handleSubmit = () => {
-    const sdkGrants: {
-      scope: string;
-      effect?: "allow" | "deny";
-      selectors?: Selector[];
-    }[] = [];
+    const sdkGrants: SdkRoleGrant[] = [];
 
     for (const grant of Object.values(grants)) {
       const allowSelectors: Selector[] = [];
