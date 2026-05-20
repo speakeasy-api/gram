@@ -2595,6 +2595,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_marketplace_token_ke
   ON plugin_github_connections (marketplace_token)
   WHERE marketplace_token IS NOT NULL;
 
+-- Per-project marketplace configuration applied to the marketplace.json
+-- generated for Claude Code, Cursor, and Codex. Designed to be extensible:
+-- add new nullable columns here for future settings (description, owner email,
+-- logo URL, etc.) rather than overloading plugin_github_connections, which is
+-- only populated on first GitHub publish.
+CREATE TABLE IF NOT EXISTS project_marketplace_settings (
+  project_id uuid NOT NULL,
+  -- Override for the marketplace name. NULL falls back to the server-side
+  -- default ("speakeasy") so the default lives in code, not data.
+  marketplace_name TEXT CHECK (marketplace_name IS NULL OR (marketplace_name <> '' AND CHAR_LENGTH(marketplace_name) <= 64)),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT project_marketplace_settings_pkey PRIMARY KEY (project_id),
+  CONSTRAINT project_marketplace_settings_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
 -- Risk analysis policies for scanning chat messages against configurable rules.
 -- One workflow per policy drains unanalyzed messages and produces risk_results.
 CREATE TABLE IF NOT EXISTS risk_policies (
