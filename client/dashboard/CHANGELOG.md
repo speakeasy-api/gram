@@ -1,5 +1,16 @@
 # dashboard
 
+## 0.56.0
+
+### Minor Changes
+
+- 639952a: Add a beta Risk Events log under Logs for reviewing and managing policy-flagged or blocked findings.
+
+### Patch Changes
+
+- 93d7919: Keep the OAuth wizard auto-configure path on OAuth Proxy setup with DCR credentials, even when user-session onboarding is enabled for the organization.
+- 3f928eb: Fixes agent log drawer accessibility warnings
+
 ## 0.55.0
 
 ### Minor Changes
