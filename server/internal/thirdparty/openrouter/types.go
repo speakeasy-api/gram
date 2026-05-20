@@ -161,6 +161,15 @@ func GetToolCallID(msg or.ChatMessages) *string {
 	}
 }
 
+// TraceConfig is the OpenRouter `trace` block for distributed trace correlation.
+type TraceConfig struct {
+	TraceID        string `json:"trace_id,omitempty"`
+	TraceName      string `json:"trace_name,omitempty"`
+	SpanName       string `json:"span_name,omitempty"`
+	GenerationName string `json:"generation_name,omitempty"`
+	ParentSpanID   string `json:"parent_span_id,omitempty"`
+}
+
 // OpenAIChatRequest represents the request structure for OpenAI chat completions
 type OpenAIChatRequest struct {
 	Model          string                             `json:"model"`
@@ -171,6 +180,12 @@ type OpenAIChatRequest struct {
 	ResponseFormat *or.ResponseFormat                 `json:"response_format,omitempty"`
 	Reasoning      *Reasoning                         `json:"reasoning,omitempty"`
 	CacheControl   *or.AnthropicCacheControlDirective `json:"cache_control,omitempty"`
+	// OpenRouter caps SessionID at 256 chars and Metadata at 16 entries with
+	// 64-char keys and 512-char values; callers must respect both.
+	SessionID string            `json:"session_id,omitempty"`
+	User      string            `json:"user,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
+	Trace     *TraceConfig      `json:"trace,omitempty"`
 }
 
 // Reasoning mirrors OpenRouter's `reasoning` request parameter. Callers set
