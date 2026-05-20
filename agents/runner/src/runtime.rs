@@ -345,10 +345,10 @@ async fn spawn_thread(
     if !bootstrap.instructions.is_empty() {
         transcript.push(Item::text(ItemKind::System, &bootstrap.instructions));
     }
+    transcript.extend(normalize_history(&bootstrap.history)?);
     for notice in mcp_auth_notices {
         transcript.push(Item::text(ItemKind::User, &notice));
     }
-    transcript.extend(normalize_history(&bootstrap.history)?);
 
     let permissions = CompositePermissionChecker::new(PermissionDecision::Allow).with_policy(
         PathPolicy::new()
