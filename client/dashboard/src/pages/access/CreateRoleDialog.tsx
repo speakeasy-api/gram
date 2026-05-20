@@ -1076,13 +1076,6 @@ export function CreateRoleDialog({
                         prev ? { ...prev, annotations } : null,
                       )
                     }
-                    customTab={draftRule.customTab}
-                    onCustomTabChange={(customTab) =>
-                      setDraftRule((prev) =>
-                        prev ? { ...prev, customTab } : null,
-                      )
-                    }
-                    hideAllOption={draftRule.effect === "deny"}
                     isDeny={draftRule.effect === "deny"}
                     allowedPanels={
                       draftRule.effect === "deny"

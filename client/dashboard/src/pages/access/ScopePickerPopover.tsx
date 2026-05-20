@@ -33,7 +33,6 @@ import { useQueries } from "@tanstack/react-query";
 import type {
   ActivePanel,
   AnnotationHint,
-  CustomTab,
   ResourceType,
   Selector,
 } from "./types";
@@ -51,12 +50,7 @@ interface ScopePickerPopoverProps {
   /** Selected annotation hints for auto-group matching */
   annotations?: AnnotationHint[];
   onChangeAnnotations?: (annotations: AnnotationHint[]) => void;
-  /** Which custom tab is active */
-  customTab?: CustomTab;
-  onCustomTabChange?: (tab: CustomTab) => void;
-  /** Hide the "All" option — used for deny pickers where unrestricted deny is nonsensical */
-  hideAllOption?: boolean;
-  /** Whether this picker is editing a deny rule (affects descriptions). */
+  /** Whether this picker is editing a deny rule (hides "All" option, affects descriptions). */
   isDeny?: boolean;
   /** Restrict which scope-level panels are visible (e.g. ["projects"] for deny rules).
    *  When set, auto-switches to the first allowed panel if current panel isn't in the list. */
@@ -153,9 +147,6 @@ export function ScopePickerPopover({
   onChangeSelectors,
   annotations,
   onChangeAnnotations,
-  customTab,
-  onCustomTabChange,
-  hideAllOption,
   isDeny: isDenyProp,
   allowedPanels,
   allowSelectors,
@@ -186,7 +177,6 @@ export function ScopePickerPopover({
     selectors,
     collectionGroups,
     resourceType,
-    customTab,
   );
   // Use override only when selectors are empty (user just switched mode)
   const activePanel =
@@ -381,7 +371,7 @@ export function ScopePickerPopover({
     includeCollection: boolean;
   }) => (
     <div className="shrink-0 pb-1.5">
-      {!hideAllOption && isPanelAllowed("all") && (
+      {!isDenyProp && isPanelAllowed("all") && (
         <ScopeOption
           label={resourceType === "project" ? "All projects" : "All servers"}
           description={
@@ -654,7 +644,7 @@ export function ScopePickerPopover({
           {customTabs(
             variant === "popover" ? "max-h-[min(340px,50vh)]" : undefined,
           )}
-          {variant === "popover" && (customTab ?? "select") === "select" && (
+          {variant === "popover" && (
             <div className="bg-background border-border shrink-0 rounded-b-lg border-t">
               <button
                 type="button"
