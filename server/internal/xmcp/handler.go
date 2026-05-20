@@ -386,6 +386,11 @@ func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMc
 		NewToolsListShadowMCPInjectInterceptor(s.shadowmcpClient, serverID, projectID, logger),
 	)
 
+	// Resources request chain: free-tier ToolCalls usage limits apply to
+	// resources/read invocations alongside tools/call. Per-resource RBAC
+	// and the resources/list RBAC filter are deferred to a follow-up —
+	// the proxy interceptor surface is in place so they can attach later
+	// without touching the proxy package again.
 	return &proxy.Proxy{
 		GuardianPolicy:          s.guardianPolicy,
 		Logger:                  logger,
@@ -412,5 +417,13 @@ func (s *Service) buildProxy(logger *slog.Logger, server *remotemcprepo.RemoteMc
 			NewToolsListPostHogEventInterceptor(s.posthog, serverID, logger),
 		},
 		ToolsListResponseInterceptors: toolsListRespInterceptors,
+		ResourcesReadRequestInterceptors: []proxy.ResourcesReadRequestInterceptor{
+			s.resourcesReadUsageLimitsInterceptor,
+		},
+		ResourcesReadResponseInterceptors: []proxy.ResourcesReadResponseInterceptor{
+			s.resourcesReadUsageTrackingInterceptor,
+		},
+		ResourcesListRequestInterceptors:  nil,
+		ResourcesListResponseInterceptors: nil,
 	}
 }
