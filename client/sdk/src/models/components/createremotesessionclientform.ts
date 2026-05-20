@@ -25,6 +25,10 @@ export type CreateRemoteSessionClientFormTokenEndpointAuthMethod = ClosedEnum<
  */
 export type CreateRemoteSessionClientForm = {
   /**
+   * Optional upstream OAuth audience to send on the authorize redirect and token exchange.
+   */
+  audience?: string | undefined;
+  /**
    * client_id supplied by the caller.
    */
   clientId: string;
@@ -59,6 +63,7 @@ export const CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema
 
 /** @internal */
 export type CreateRemoteSessionClientForm$Outbound = {
+  audience?: string | undefined;
   client_id: string;
   client_secret?: string | undefined;
   remote_session_issuer_id: string;
@@ -73,6 +78,7 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
   CreateRemoteSessionClientForm
 > = z.pipe(
   z.object({
+    audience: z.optional(z.string()),
     clientId: z.string(),
     clientSecret: z.optional(z.string()),
     remoteSessionIssuerId: z.string(),
