@@ -567,7 +567,7 @@ INSERT INTO function_tool_definitions (
   , $14
   , $15
 )
-RETURNING id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, auth_input, meta, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
+RETURNING id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, tags, input_schema, variables, auth_input, meta, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateFunctionsToolParams struct {
@@ -616,6 +616,7 @@ func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsTo
 		&i.Runtime,
 		&i.Name,
 		&i.Description,
+		&i.Tags,
 		&i.InputSchema,
 		&i.Variables,
 		&i.AuthInput,
