@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-Assistant chat completions no longer generate hidden reasoning tokens. Previously, OpenRouter could route assistant turns through Anthropic variants that produced reasoning output the capture pipeline discarded before storage — yet still billed. The runtime now explicitly disables reasoning on outbound completions, eliminating that silent cost without changing observed assistant behavior.
+Chat completions no longer generate hidden reasoning tokens. Previously, OpenRouter could route requests through models that produced reasoning output Gram discarded before storage — yet still billed. The proxy and every internal completion caller (chat title generation, Slack agent loop, risk policy naming, structured object completion) now explicitly disable reasoning, eliminating that silent cost without changing observed behavior.
