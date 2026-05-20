@@ -1,5 +1,17 @@
 # dashboard
 
+## 0.57.0
+
+### Minor Changes
+
+- 5e00422: Add the initial Remote MCP-backed MCP server management UI under the `gram-remote-mcp` feature flag.
+- f9b43d9: Add deny rules (exceptions) to RBAC role editor, allowing admins to grant broad access then carve out specific resources or tools that a role should not access
+
+### Patch Changes
+
+- 2cdae0e: Fix token graph blanking when filtering by agent type on /insights/costs
+- 8dcf760: update @speakeasy-api/moonshine dependency to 1.36.1
+
 ## 0.56.0
 
 ### Minor Changes
