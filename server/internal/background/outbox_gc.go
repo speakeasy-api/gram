@@ -80,7 +80,10 @@ func AddOutboxGCSchedule(ctx context.Context, temporalEnv *tenv.Environment) err
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &spec
 				input.Description.Schedule.Action = action
-				return &client.ScheduleUpdate{Schedule: &input.Description.Schedule}, nil
+				return &client.ScheduleUpdate{
+					Schedule:              &input.Description.Schedule,
+					TypedSearchAttributes: nil,
+				}, nil
 			},
 		}); err != nil {
 			return fmt.Errorf("update existing outbox gc schedule: %w", err)
