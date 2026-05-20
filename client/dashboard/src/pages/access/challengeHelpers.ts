@@ -1,6 +1,12 @@
 import type { AuthzChallenge } from "@gram/client/models/components/authzchallenge.js";
+import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 
 type Reason = AuthzChallenge["reason"];
+
+/** Keep only buckets that have a scope and a fully-specified resource. */
+export function isDisplayableBucket(b: ChallengeBucket): boolean {
+  return !!b.scope && !!b.resourceKind && !!b.resourceId;
+}
 
 export function getInitials(identifier: string): string {
   const name = identifier.split("@")[0] ?? identifier;

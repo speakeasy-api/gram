@@ -15,6 +15,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { Outcome } from "@gram/client/models/operations/listchallengebuckets.js";
 import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { ChallengesEmptyState } from "@/pages/access/ChallengesTab";
+import { isDisplayableBucket } from "@/pages/access/challengeHelpers";
 import { useChallengeRowColumns } from "@/pages/access/useChallengeRowColumns";
 import { useGrantFlow } from "@/pages/access/useGrantFlow";
 import { Table } from "@speakeasy-api/moonshine";
@@ -231,7 +232,10 @@ function RecentChallenges() {
     limit: 5,
   });
 
-  const buckets = data?.buckets ?? [];
+  const buckets = useMemo(
+    () => (data?.buckets ?? []).filter(isDisplayableBucket),
+    [data?.buckets],
+  );
 
   const challengeRowColumns = useChallengeRowColumns();
 
