@@ -17,15 +17,14 @@ import (
 const (
 	outboxGCScheduleID            = "v1:outbox-gc-schedule"
 	outboxGCWorkflowID            = outboxGCScheduleID + "/scheduled"
-	outboxGCInterval              = 6 * time.Hour
+	outboxGCInterval              = 5 * time.Minute
 	outboxGCRetentionPeriod       = 7 * 24 * time.Hour
 	outboxGCBatchSize       int32 = 100
-	outboxGCSleepInterval         = time.Hour
 )
 
 func OutboxGCWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 10 * time.Minute,
+		StartToCloseTimeout: time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts:    3,
 			InitialInterval:    5 * time.Second,
@@ -50,32 +49,45 @@ func OutboxGCWorkflow(ctx workflow.Context) error {
 
 		workflow.GetLogger(ctx).Info("outbox gc batch completed", "rows_deleted", rows)
 
-		if rows >= int64(outboxGCBatchSize) {
-			continue // batch was full — more rows likely remain
-		}
-
-		if err := workflow.Sleep(ctx, outboxGCSleepInterval); err != nil {
-			return err
+		if rows < int64(outboxGCBatchSize) {
+			return nil // all rows processed — schedule will re-run at next interval
 		}
 	}
 }
 
 func AddOutboxGCSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
-	_, err := temporalEnv.Client().ScheduleClient().Create(ctx, client.ScheduleOptions{
+	sc := temporalEnv.Client().ScheduleClient()
+
+	spec := client.ScheduleSpec{
+		Intervals: []client.ScheduleIntervalSpec{{Every: outboxGCInterval}},
+	}
+	action := &client.ScheduleWorkflowAction{
+		ID:                 outboxGCWorkflowID,
+		Workflow:           OutboxGCWorkflow,
+		TaskQueue:          string(temporalEnv.Queue()),
+		WorkflowRunTimeout: 2 * time.Minute,
+	}
+
+	_, err := sc.Create(ctx, client.ScheduleOptions{
 		ID:      outboxGCScheduleID,
 		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-		Spec: client.ScheduleSpec{
-			Intervals: []client.ScheduleIntervalSpec{{Every: outboxGCInterval}},
-		},
-		Action: &client.ScheduleWorkflowAction{
-			ID:                 outboxGCWorkflowID,
-			Workflow:           OutboxGCWorkflow,
-			TaskQueue:          string(temporalEnv.Queue()),
-			WorkflowRunTimeout: 15 * time.Minute,
-		},
+		Spec:    spec,
+		Action:  action,
 	})
-	if err != nil && !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+	switch {
+	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
+		if err := sc.GetHandle(ctx, outboxGCScheduleID).Update(ctx, client.ScheduleUpdateOptions{
+			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
+				input.Description.Schedule.Spec = &spec
+				input.Description.Schedule.Action = action
+				return &client.ScheduleUpdate{Schedule: &input.Description.Schedule}, nil
+			},
+		}); err != nil {
+			return fmt.Errorf("update existing outbox gc schedule: %w", err)
+		}
+	case err != nil:
 		return fmt.Errorf("create outbox gc schedule: %w", err)
 	}
+
 	return nil
 }
