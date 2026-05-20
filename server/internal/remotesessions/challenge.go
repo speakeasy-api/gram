@@ -271,6 +271,12 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		return "", fmt.Errorf("store remote login state: %w", err)
 	}
 
+	// q.Encode() percent-encodes every value via url.QueryEscape, so an
+	// operator-supplied scope or audience cannot inject extra query
+	// parameters ('&', '=', '?' and control chars all get escaped). The
+	// design-layer Pattern constraints on scope/audience are the
+	// belt-and-braces guard against operator-supplied junk reaching the
+	// upstream provider in the first place.
 	q := u.Query()
 	q.Set("response_type", "code")
 	q.Set("client_id", client.ExternalClientID)

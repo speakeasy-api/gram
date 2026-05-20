@@ -11,6 +11,32 @@ func tokenEndpointAuthMethodEnum() {
 	Enum("client_secret_basic", "client_secret_post")
 }
 
+// scopePattern matches a single RFC 6749 §3.3 scope-token:
+// 1*( %x21 / %x23-5B / %x5D-7E ) — printable ASCII excluding space, ",
+// and \. Used as a per-element constraint on `scope` arrays so the
+// space-joined value sent upstream can be parsed back unambiguously and
+// can't smuggle whitespace or quotes into the authorize redirect.
+const scopePattern = `^[\x21\x23-\x5B\x5D-\x7E]+$`
+
+// audiencePattern matches a non-empty run of printable ASCII with no
+// whitespace — broad enough for URI-shaped audiences (Auth0 style) and
+// bare-identifier audiences (custom IDPs) while rejecting control
+// characters and embedded whitespace at the API boundary.
+const audiencePattern = `^[\x21-\x7E]+$`
+
+func scopeAttribute(description string) {
+	Description(description)
+	Elem(func() {
+		Pattern(scopePattern)
+		MaxLength(128)
+	})
+}
+
+func audienceAttribute() {
+	Pattern(audiencePattern)
+	MaxLength(512)
+}
+
 var _ = Service("remoteSessionClients", func() {
 	Description("Manage remote_session_client records — credentials Gram uses when acting as an OAuth client of a remote_session_issuer. client_secret_encrypted is never returned.")
 	Security(security.Session, security.ProjectSlug)
@@ -200,8 +226,10 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 	Attribute("client_id", String, "client_id supplied by the caller.")
 	Attribute("client_secret", String, "client_secret supplied by the caller. Gram encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
-	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
-	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.")
+	Attribute("scope", ArrayOf(String), func() {
+		scopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
+	})
+	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", audienceAttribute)
 
 	Required("remote_session_issuer_id", "user_session_issuer_id", "client_id")
 })
@@ -219,8 +247,10 @@ var CloneClientFromOAuthProxyProviderForm = Type("CloneClientFromOAuthProxyProvi
 		Format(FormatUUID)
 	})
 	Attribute("token_endpoint_auth_method", String, "How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
-	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance should request for the cloned client. Omit to fall back to the issuer's scopes_supported.")
-	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange for the cloned client.")
+	Attribute("scope", ArrayOf(String), func() {
+		scopeAttribute("Explicit upstream OAuth scopes the dance should request for the cloned client. Omit to fall back to the issuer's scopes_supported.")
+	})
+	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange for the cloned client.", audienceAttribute)
 
 	Required("oauth_proxy_provider_id", "remote_session_issuer_id", "user_session_issuer_id")
 })
@@ -236,8 +266,10 @@ var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func()
 		Format(FormatUUID)
 	})
 	Attribute("token_endpoint_auth_method", String, "Change how the client authenticates at the issuer's token endpoint.", tokenEndpointAuthMethodEnum)
-	Attribute("scope", ArrayOf(String), "Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.")
-	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.")
+	Attribute("scope", ArrayOf(String), func() {
+		scopeAttribute("Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.")
+	})
+	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.", audienceAttribute)
 
 	Required("id")
 })

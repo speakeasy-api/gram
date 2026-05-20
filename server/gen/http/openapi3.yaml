@@ -27423,6 +27423,8 @@ components:
                 audience:
                     type: string
                     description: Optional upstream OAuth audience to send on the authorize redirect and token exchange for the cloned client.
+                    pattern: ^[\x21-\x7E]+$
+                    maxLength: 512
                 oauth_proxy_provider_id:
                     type: string
                     description: The oauth_proxy_provider to read client_id / client_secret from. Must live in the caller's project.
@@ -27435,6 +27437,8 @@ components:
                     type: array
                     items:
                         type: string
+                        pattern: ^[\x21\x23-\x5B\x5D-\x7E]+$
+                        maxLength: 128
                     description: Explicit upstream OAuth scopes the dance should request for the cloned client. Omit to fall back to the issuer's scopes_supported.
                 token_endpoint_auth_method:
                     type: string
@@ -27940,6 +27944,8 @@ components:
                 audience:
                     type: string
                     description: Optional upstream OAuth audience to send on the authorize redirect and token exchange.
+                    pattern: ^[\x21-\x7E]+$
+                    maxLength: 512
                 client_id:
                     type: string
                     description: client_id supplied by the caller.
@@ -27954,6 +27960,8 @@ components:
                     type: array
                     items:
                         type: string
+                        pattern: ^[\x21\x23-\x5B\x5D-\x7E]+$
+                        maxLength: 128
                     description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
                 token_endpoint_auth_method:
                     type: string
@@ -36264,6 +36272,8 @@ components:
                 audience:
                     type: string
                     description: Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.
+                    pattern: ^[\x21-\x7E]+$
+                    maxLength: 512
                 client_secret:
                     type: string
                     description: Rotate the client secret. Gram re-encrypts before persisting.
@@ -36275,6 +36285,8 @@ components:
                     type: array
                     items:
                         type: string
+                        pattern: ^[\x21\x23-\x5B\x5D-\x7E]+$
+                        maxLength: 128
                     description: Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.
                 token_endpoint_auth_method:
                     type: string
