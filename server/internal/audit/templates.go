@@ -61,7 +61,7 @@ func (l *Logger) LogTemplateCreate(ctx context.Context, dbtx repo.DBTX, event Lo
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Template})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.TemplateV1})
 }
 
 type LogTemplateUpdateEvent struct {
@@ -108,7 +108,7 @@ func (l *Logger) LogTemplateUpdate(ctx context.Context, dbtx repo.DBTX, event Lo
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Template})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.TemplateV1})
 }
 
 type LogTemplateDeleteEvent struct {
@@ -155,5 +155,5 @@ func (l *Logger) LogTemplateDelete(ctx context.Context, dbtx repo.DBTX, event Lo
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Template})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.TemplateV1})
 }

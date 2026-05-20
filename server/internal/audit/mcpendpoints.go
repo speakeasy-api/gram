@@ -54,7 +54,7 @@ func (l *Logger) LogMcpEndpointCreate(ctx context.Context, dbtx repo.DBTX, event
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpEndpoint})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpEndpointV1})
 }
 
 type LogMcpEndpointUpdateEvent struct {
@@ -105,7 +105,7 @@ func (l *Logger) LogMcpEndpointUpdate(ctx context.Context, dbtx repo.DBTX, event
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpEndpoint})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpEndpointV1})
 }
 
 type LogMcpEndpointDeleteEvent struct {
@@ -143,5 +143,5 @@ func (l *Logger) LogMcpEndpointDelete(ctx context.Context, dbtx repo.DBTX, event
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpEndpoint})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpEndpointV1})
 }

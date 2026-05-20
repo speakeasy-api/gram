@@ -74,7 +74,7 @@ func (l *Logger) LogVariationUpdateGlobal(ctx context.Context, dbtx repo.DBTX, e
 		AfterSnapshot:  afterSnapshot,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Variation})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.VariationV1})
 }
 
 type LogVariationDeleteGlobalEvent struct {
@@ -120,5 +120,5 @@ func (l *Logger) LogVariationDeleteGlobal(ctx context.Context, dbtx repo.DBTX, e
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Variation})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.VariationV1})
 }

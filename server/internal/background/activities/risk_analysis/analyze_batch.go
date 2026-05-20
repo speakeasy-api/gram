@@ -757,12 +757,12 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 	}
 
 	now := time.Now()
-	var payloads []events.RiskFindingCreatedPayload
+	var payloads []events.RiskFindingCreatedPayloadV1
 	for _, row := range rows {
 		if !row.Found || !row.RuleID.Valid {
 			continue
 		}
-		payloads = append(payloads, events.RiskFindingCreatedPayload{
+		payloads = append(payloads, events.RiskFindingCreatedPayloadV1{
 			ID:                row.ID,
 			ProjectID:         row.ProjectID,
 			OrganizationID:    row.OrganizationID,
@@ -777,7 +777,7 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 		})
 	}
 	if len(payloads) > 0 {
-		if _, err := outbox.AppendBatch(ctx, tx, args.OrganizationID, events.RiskFindingCreated, payloads); err != nil {
+		if _, err := outbox.AppendBatch(ctx, tx, args.OrganizationID, events.RiskFindingCreatedV1, payloads); err != nil {
 			writeSpan.SetStatus(codes.Error, err.Error())
 			return fmt.Errorf("append risk findings to outbox: %w", err)
 		}

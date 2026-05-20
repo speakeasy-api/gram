@@ -56,7 +56,7 @@ func (l *Logger) LogMcpCollectionCreate(ctx context.Context, dbtx repo.DBTX, eve
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpCollection})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpCollectionV1})
 }
 
 type LogMcpCollectionUpdateEvent struct {
@@ -107,7 +107,7 @@ func (l *Logger) LogMcpCollectionUpdate(ctx context.Context, dbtx repo.DBTX, eve
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpCollection})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpCollectionV1})
 }
 
 type LogMcpCollectionDeleteEvent struct {
@@ -145,7 +145,7 @@ func (l *Logger) LogMcpCollectionDelete(ctx context.Context, dbtx repo.DBTX, eve
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpCollection})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpCollectionV1})
 }
 
 type LogMcpCollectionAttachServerEvent struct {
@@ -192,7 +192,7 @@ func (l *Logger) LogMcpCollectionAttachServer(ctx context.Context, dbtx repo.DBT
 		Metadata:       metadata,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpCollection})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpCollectionV1})
 }
 
 type LogMcpCollectionDetachServerEvent struct {
@@ -239,5 +239,5 @@ func (l *Logger) LogMcpCollectionDetachServer(ctx context.Context, dbtx repo.DBT
 		Metadata:       metadata,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpCollection})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpCollectionV1})
 }

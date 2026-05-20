@@ -67,7 +67,7 @@ func (l *Logger) LogPluginCreate(ctx context.Context, dbtx repo.DBTX, event LogP
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Plugin})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.PluginV1})
 }
 
 type LogPluginUpdateEvent struct {
@@ -119,7 +119,7 @@ func (l *Logger) LogPluginUpdate(ctx context.Context, dbtx repo.DBTX, event LogP
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Plugin})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.PluginV1})
 }
 
 type LogPluginDeleteEvent struct {
@@ -158,7 +158,7 @@ func (l *Logger) LogPluginDelete(ctx context.Context, dbtx repo.DBTX, event LogP
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Plugin})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.PluginV1})
 }
 
 type LogPluginServerAddEvent struct {
@@ -215,7 +215,7 @@ func (l *Logger) LogPluginServerAdd(ctx context.Context, dbtx repo.DBTX, event L
 		Metadata:       metadata,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Plugin})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.PluginV1})
 }
 
 type LogPluginServerUpdateEvent struct {
@@ -270,7 +270,7 @@ func (l *Logger) LogPluginServerUpdate(ctx context.Context, dbtx repo.DBTX, even
 		Metadata:       metadata,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Plugin})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.PluginV1})
 }
 
 type LogPluginServerRemoveEvent struct {
@@ -319,7 +319,7 @@ func (l *Logger) LogPluginServerRemove(ctx context.Context, dbtx repo.DBTX, even
 		Metadata:       metadata,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Plugin})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.PluginV1})
 }
 
 type LogPluginAssignmentsSetEvent struct {
@@ -368,7 +368,7 @@ func (l *Logger) LogPluginAssignmentsSet(ctx context.Context, dbtx repo.DBTX, ev
 		Metadata:       metadata,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Plugin})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.PluginV1})
 }
 
 // LogPluginPublishEvent records a single user-initiated publish of all
@@ -423,5 +423,5 @@ func (l *Logger) LogPluginPublish(ctx context.Context, dbtx repo.DBTX, event Log
 		Metadata:       metadata,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Plugin})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.PluginV1})
 }

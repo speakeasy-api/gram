@@ -55,7 +55,7 @@ func (l *Logger) LogProjectCreate(ctx context.Context, dbtx repo.DBTX, event Log
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Project})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ProjectV1})
 }
 
 type LogProjectUpdateEvent struct {
@@ -107,7 +107,7 @@ func (l *Logger) LogProjectUpdate(ctx context.Context, dbtx repo.DBTX, event Log
 		AfterSnapshot:  afterSnapshot,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Project})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ProjectV1})
 }
 
 type LogProjectDeleteEvent struct {
@@ -146,5 +146,5 @@ func (l *Logger) LogProjectDelete(ctx context.Context, dbtx repo.DBTX, event Log
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.Project})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ProjectV1})
 }
