@@ -1,0 +1,2 @@
+-- Modify "remote_session_clients" table
+ALTER TABLE "remote_session_clients" ADD COLUMN "audience" text NULL;

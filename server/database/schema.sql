@@ -865,6 +865,7 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   client_secret_expires_at timestamptz,
   token_endpoint_auth_method TEXT,
   scope TEXT[],
+  audience TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
