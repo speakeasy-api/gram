@@ -286,3 +286,45 @@ Grep `stage="preview"` and `stage="beta"` and delete every match:
 - Inline `<ReleaseStageBadge>` usages — delete the element and unwrap the `flex items-center gap-2` div
 
 There's no other cleanup. The component itself stays in place for the next pre-GA feature.
+
+### Drawer Component Usage
+
+`DrawerContent` requires `DrawerTitle` (and optionally `DrawerDescription`) inside it. Omitting them generates a console error and breaks screen reader accessibility. `DrawerHeader` and `DrawerFooter` are optional layout wrappers.
+
+```tsx
+<Drawer>
+  <DrawerTrigger>Open</DrawerTrigger>
+  <DrawerContent>
+    <DrawerTitle>Session Details</DrawerTitle>
+    <DrawerDescription>Viewing trace for this chat.</DrawerDescription>
+    {/* content */}
+  </DrawerContent>
+</Drawer>
+```
+
+If the title is visually redundant, hide it from sighted users while keeping it for screen readers:
+
+```tsx
+<DrawerTitle className="sr-only">Details</DrawerTitle>
+```
+
+### Dialog Component Usage
+
+`DialogContent` requires `DialogTitle` (and optionally `DialogDescription`) inside it. Omitting them generates a console error and breaks screen reader accessibility. `DialogHeader` and `DialogFooter` are optional layout wrappers.
+
+```tsx
+<Dialog>
+  <DialogTrigger>Open</DialogTrigger>
+  <DialogContent>
+    <DialogTitle>Confirm Action</DialogTitle>
+    <DialogDescription>This cannot be undone.</DialogDescription>
+    {/* content */}
+  </DialogContent>
+</Dialog>
+```
+
+If the title is visually redundant, hide it from sighted users while keeping it for screen readers:
+
+```tsx
+<DialogTitle className="sr-only">Details</DialogTitle>
+```
