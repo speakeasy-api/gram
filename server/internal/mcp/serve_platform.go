@@ -258,6 +258,9 @@ func (s *Service) callPlatformToolsetTool(
 		OwnerKind:   conv.PtrValOrEmpty(desc.OwnerKind, ""),
 		OwnerID:     conv.PtrValOrEmpty(desc.OwnerID, ""),
 		InputSchema: desc.InputSchema,
+		// The toolset slice is authoritative; the runtime's URN registry can
+		// hold a differently scoped variant of the same tool.
+		Executor: matched.Executor,
 	})
 
 	ctx, logger := o11y.EnrichToolCallContext(ctx, s.logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)

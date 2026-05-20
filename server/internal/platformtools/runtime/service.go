@@ -122,7 +122,7 @@ func TriggerExternalTools(db *pgxpool.Pool, app *bgtriggers.App, auditLogger *au
 }
 
 func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, env toolconfig.ToolCallEnv, requestBody io.Reader) (*gateway.PlatformResult, error) {
-	if plan == nil || plan.Kind != gateway.ToolKindPlatform || plan.Descriptor == nil {
+	if plan == nil || plan.Kind != gateway.ToolKindPlatform || plan.Descriptor == nil || plan.Platform == nil {
 		return nil, fmt.Errorf("invalid platform tool plan")
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -139,6 +139,21 @@ func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, e
 		if !s.featureChecker(ctx, authCtx.ActiveOrganizationID, feature) {
 			return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").Log(ctx, s.logger)
 		}
+	}
+
+	// A pinned executor wins over the URN registry: scoped variants of a
+	// platform tool share a URN, so the caller's match is more specific than
+	// what the registry would resolve.
+	if plan.Platform.Executor != nil {
+		var out bytes.Buffer
+		if err := plan.Platform.Executor.Call(ctx, env, requestBody, &out); err != nil {
+			return nil, fmt.Errorf("execute platform tool %s: %w", plan.Descriptor.URN, err)
+		}
+		return &gateway.PlatformResult{
+			StatusCode:  http.StatusOK,
+			ContentType: "application/json",
+			Body:        out.Bytes(),
+		}, nil
 	}
 
 	executor, ok := s.executors[urnStr]

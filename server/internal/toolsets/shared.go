@@ -134,6 +134,7 @@ func (t *Toolsets) extractPlatformToolCallPlan(ctx context.Context, projectID uu
 		OwnerKind:   conv.PtrValOrEmpty(tool.OwnerKind, ""),
 		OwnerID:     conv.PtrValOrEmpty(tool.OwnerID, ""),
 		InputSchema: tool.InputSchema,
+		Executor:    nil,
 	}
 
 	return gateway.NewPlatformToolCallPlan(descriptor, plan), nil
