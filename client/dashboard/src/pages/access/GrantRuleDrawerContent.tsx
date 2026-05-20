@@ -30,7 +30,7 @@ import type {
 import { ANNOTATION_TO_DISPOSITION } from "./types";
 import { computePanelState, type CollectionGroup } from "./computePanelState";
 
-interface ScopePickerPopoverProps {
+interface GrantRuleDrawerContentProps {
   /** The resource type determines which resource list to show */
   resourceType: ResourceType;
   /** The scope slug this picker is for (e.g. "mcp:connect") */
@@ -128,7 +128,7 @@ function useMCPServers(enabled: boolean) {
   }, [data, organization.projects]);
 }
 
-export function ScopePickerPopover({
+export function GrantRuleDrawerContent({
   resourceType,
   scope,
   selectors,
@@ -138,7 +138,7 @@ export function ScopePickerPopover({
   isDeny: isDenyProp,
   allowedPanels,
   allowSelectors,
-}: ScopePickerPopoverProps) {
+}: GrantRuleDrawerContentProps) {
   const organization = useOrganization();
   const mcpServers = useMCPServers(resourceType === "mcp");
   // Override for when user clicks a mode but selectors are still empty

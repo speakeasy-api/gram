@@ -47,7 +47,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useMemo, useState } from "react";
-import { ScopePickerPopover } from "./ScopePickerPopover";
+import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
 import type {
   ActivePanel,
   AnnotationHint,
@@ -1060,7 +1060,7 @@ export function CreateRoleDialog({
               {editingScopeDef && draftRule && (
                 <>
                   {/* Resource picker */}
-                  <ScopePickerPopover
+                  <GrantRuleDrawerContent
                     resourceType={editingScopeDef.resourceType}
                     scope={editingScopeSlug!}
                     selectors={draftRule.selectors}
