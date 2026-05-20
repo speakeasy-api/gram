@@ -107,7 +107,7 @@ type CreateRemoteSessionClientPayload struct {
 	// Omit to fall back to the issuer's scopes_supported.
 	Scope []string
 	// Optional upstream OAuth audience to send on the authorize redirect and token
-	// exchange. Omit to skip the audience parameter entirely.
+	// exchange.
 	Audience *string
 }
 

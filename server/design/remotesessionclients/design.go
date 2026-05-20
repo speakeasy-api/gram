@@ -201,7 +201,7 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 	Attribute("client_secret", String, "client_secret supplied by the caller. Gram encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
 	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
-	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange. Omit to skip the audience parameter entirely.")
+	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.")
 
 	Required("remote_session_issuer_id", "user_session_issuer_id", "client_id")
 })

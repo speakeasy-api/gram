@@ -25,7 +25,7 @@ export type CreateRemoteSessionClientFormTokenEndpointAuthMethod = ClosedEnum<
  */
 export type CreateRemoteSessionClientForm = {
   /**
-   * Optional upstream OAuth audience to send on the authorize redirect and token exchange. Omit to skip the audience parameter entirely.
+   * Optional upstream OAuth audience to send on the authorize redirect and token exchange.
    */
   audience?: string | undefined;
   /**
